@@ -226,9 +226,7 @@ class ObjectiveFunction(IOAble):
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_unscaled(
-                    *self._kwargs_to_args(kwargs, obj.args), constants=const
-                )
+                obj.compute_unscaled(kwargs, constants=const)
                 for obj, const in zip(self.objectives, constants)
             ]
         )
@@ -255,9 +253,7 @@ class ObjectiveFunction(IOAble):
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled(
-                    *self._kwargs_to_args(kwargs, obj.args), constants=const
-                )
+                obj.compute_scaled(kwargs, constants=const)
                 for obj, const in zip(self.objectives, constants)
             ]
         )
@@ -284,9 +280,7 @@ class ObjectiveFunction(IOAble):
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled_error(
-                    *self._kwargs_to_args(kwargs, obj.args), constants=const
-                )
+                obj.compute_scaled_error(kwargs, constants=const)
                 for obj, const in zip(self.objectives, constants)
             ]
         )
@@ -331,7 +325,7 @@ class ObjectiveFunction(IOAble):
         print("Total (sum of squares): {:10.3e}, ".format(f))
         kwargs = self.unpack_state(x)
         for obj, const in zip(self.objectives, constants):
-            obj.print_value(**kwargs, constants=const)
+            obj.print_value(kwargs, constants=const)
         return None
 
     def unpack_state(self, x):
@@ -362,10 +356,6 @@ class ObjectiveFunction(IOAble):
         for arg in self.args:
             kwargs[arg] = jnp.atleast_1d(x[self.x_idx[arg]])
         return kwargs
-
-    def _kwargs_to_args(self, kwargs, args):
-        tuple_args = (kwargs[arg] for arg in args)
-        return tuple_args
 
     def x(self, eq):
         """Return the full state vector from the Equilibrium eq."""
@@ -925,28 +915,9 @@ class _Objective(IOAble, ABC):
                 + "(normalized)"
             )
 
-    def xs(self, eq):
+    def xs(self, *things):
         """Return a tuple of args required by this objective from the Equilibrium eq."""
-        return tuple(getattr(eq, arg) for arg in self.args)
-
-    def _parse_args(self, *args, **kwargs):
-        constants = kwargs.pop("constants", None)
-        assert (len(args) == 0) or (len(kwargs) == 0), (
-            "compute should be called with either positional or keyword arguments,"
-            + " not both"
-        )
-        if len(args):
-            assert len(args) == len(
-                self.args
-            ), f"compute expected {len(self.args)} arguments, got {len(args)}"
-            params = {key: val for key, val in zip(self.args, args)}
-        else:
-            assert all([arg in kwargs for arg in self.args]), (
-                "compute missing required keyword arguments "
-                + f"{set(self.args).difference(kwargs.keys())}"
-            )
-            params = kwargs
-        return params, constants
+        return tuple([t.params_dict for t in things])
 
     @property
     def constants(self):

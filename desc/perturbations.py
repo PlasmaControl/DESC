@@ -20,7 +20,7 @@ from desc.objectives.utils import (
 )
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
-from desc.utils import Timer, get_instance, sort_args
+from desc.utils import Timer, get_instance
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
 
@@ -208,37 +208,30 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dx2_reduced = jnp.zeros_like(x_reduced)
     dx3_reduced = jnp.zeros_like(x_reduced)
 
+    xz = objective.unpack_state(jnp.zeros_like(x))
     # tangent vectors
     tangents = jnp.zeros((objective.dim_x,))
     if "Rb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["R_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
+        A = con.jac_unscaled(xz)["R_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Rb_lmn"]
         tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
     if "Zb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["Z_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
+        A = con.jac_unscaled(xz)["Z_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Zb_lmn"]
         tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
     if "Ra_n" in deltas.keys():
         con = get_instance(constraints, AxisRSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["R_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
+        A = con.jac_unscaled(xz)["R_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Ra_n"]
         tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
     if "Za_n" in deltas.keys():
         con = get_instance(constraints, AxisZSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["Z_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
+        A = con.jac_unscaled(xz)["Z_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Za_n"]
         tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
@@ -614,36 +607,26 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dxdx_reduced = jnp.eye(objective_f.dim_x)[:, unfixed_idx] @ Z
 
     # dx/dc
-    dxdc = jnp.zeros((objective_f.dim_x, 0))
-    if len(
-        [
-            arg
-            for arg in ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "Psi")
-            if arg in deltas.keys()
-        ]
-    ):
-        ordered_args = sort_args(objective_f.args + objective_g.args)
-        x_idx = jnp.concatenate(
-            [objective_f.x_idx[arg] for arg in ordered_args if arg in deltas.keys()]
-        )
-        x_idx = jnp.sort(x_idx)
-        dxdc = jnp.eye(objective_f.dim_x)[:, x_idx]
-    if "Rb_lmn" in deltas.keys():
-        con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["R_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
-        Ainv = jnp.linalg.pinv(A)
-        dxdRb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv
-        dxdc = jnp.hstack((dxdc, dxdRb))
-    if "Zb_lmn" in deltas.keys():
-        con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["Z_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
-        Ainv = jnp.linalg.pinv(A)
-        dxdZb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv
-        dxdc = jnp.hstack((dxdc, dxdZb))
+    dxdc = []
+    xz = objective_f.unpack_state(jnp.zeros_like(xf))
+
+    for arg in deltas:
+        if arg not in ["Rb_lmn", "Zb_lmn"]:
+            x_idx = objective_f.x_idx[arg]
+            dxdc.append(jnp.eye(objective_f.dim_x)[:, x_idx])
+        if arg == "Rb_lmn":
+            con = get_instance(constraints, BoundaryRSelfConsistency)
+            A = con.jac_unscaled(xz)["R_lmn"]
+            Ainv = jnp.linalg.pinv(A)
+            dxdRb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv
+            dxdc.append(dxdRb)
+        if arg == "Zb_lmn":
+            con = get_instance(constraints, BoundaryZSelfConsistency)
+            A = con.jac_unscaled(xz)["Z_lmn"]
+            Ainv = jnp.linalg.pinv(A)
+            dxdZb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv
+            dxdc.append(dxdZb)
+    dxdc = jnp.hstack(dxdc)
 
     # 1st order
     if order > 0:

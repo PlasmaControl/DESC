@@ -508,27 +508,25 @@ class ProximalProjection(ObjectiveFunction):
 
         # dx/dc - goes from the full state to optimization variables
         dxdc = []
+        xz = {arg: np.zeros(self._dimensions[arg]) for arg in self._full_args}
+
         for arg in self._args:
             if arg not in ["Rb_lmn", "Zb_lmn"]:
                 x_idx = self._x_idx_full[arg]
                 dxdc.append(np.eye(self._dim_x_full)[:, x_idx])
             if arg == "Rb_lmn":
                 c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
-                A = c.derivatives["jac_unscaled"]["R_lmn"](
-                    *[jnp.zeros(c.dimensions[arg1]) for arg1 in c.args]
-                )
+                A = c.jac_unscaled(xz)["R_lmn"]
                 Ainv = np.linalg.pinv(A)
                 dxdRb = np.eye(self._dim_x_full)[:, self._x_idx_full["R_lmn"]] @ Ainv
                 dxdc.append(dxdRb)
             if arg == "Zb_lmn":
                 c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
-                A = c.derivatives["jac_unscaled"]["Z_lmn"](
-                    *[jnp.zeros(c.dimensions[arg1]) for arg1 in c.args]
-                )
+                A = c.jac_unscaled(xz)["Z_lmn"]
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
-            self._dxdc = np.hstack(dxdc)
+        self._dxdc = np.hstack(dxdc)
 
     def build(self, eq=None, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.

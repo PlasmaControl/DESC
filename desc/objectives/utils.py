@@ -328,7 +328,9 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     args = np.concatenate((args, objective_args))
     # this is all args used by both constraints and objective
     args = sort_args(args)
-    dimensions = constraints[0].dimensions
+    dimensions = constraints[0]._dimensions
+    xz = {key: jnp.zeros(val) for key, val in dimensions.items()}
+
     dim_x = 0
     x_idx = {}
     for arg in args:
@@ -342,16 +344,9 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     for obj_ind, obj in enumerate(constraints):
         if obj.bounds is not None:
             raise ValueError("Linear constraints must use target instead of bounds.")
-        A_ = {
-            arg: obj.derivatives["jac_scaled"][arg](
-                *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
-            )
-            for arg in args
-        }
+        A_ = obj.jac_scaled(xz)
         # using obj.compute instead of obj.target to allow for correct scale/weight
-        b_ = -obj.compute_scaled_error(
-            *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
-        )
+        b_ = -obj.compute_scaled_error(xz)
         A.append(A_)
         b.append(b_)
 
@@ -408,17 +403,14 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     # check that all constraints are actually satisfiable
     xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
     for con in constraints:
-        res = con.compute_scaled_error(**xp_dict)
-        x = np.concatenate([xp_dict[arg] for arg in con.args])
-        # stuff like density is O(1e19) so need some adjustable tolerance here.
-        if x.size:
-            atol = max(1e-8, np.finfo(x.dtype).eps * np.linalg.norm(x) / x.size)
-        else:
-            atol = 0
+        y1 = con.compute_unscaled(xp_dict)
+        y2 = con.target
+        y1, y2 = np.broadcast_arrays(y1, y2)
         np.testing.assert_allclose(
-            res,
-            0,
-            atol=atol,
+            y1,
+            y2,
+            atol=1e-14,
+            rtol=1e-14,
             err_msg="Incompatible constraints detected, cannot satisfy "
             + f"constraint {con}",
         )

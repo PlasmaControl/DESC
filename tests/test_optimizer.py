@@ -325,33 +325,17 @@ def test_overstepping():
         _units = "(Foo)"
 
         def build(self, eq, *args, **kwargs):
-
+            eq = eq or self._eq
             # objective = just shift x by a lil bit
-            self._args = ["R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi"]
-            self._x0 = (
-                np.concatenate(
-                    [
-                        eq.R_lmn,
-                        eq.Z_lmn,
-                        eq.L_lmn,
-                        eq.p_l,
-                        eq.i_l,
-                        eq.c_l,
-                        np.atleast_1d(eq.Psi),
-                    ]
-                )
-                + 1e-6
-            )
-            self._dim_f = self._x0.size
-            self._check_dimensions()
-            self._set_dimensions(eq)
-            self._set_derivatives()
-            self._built = True
+            self._x0 = {key: val + 1e-6 for key, val in eq.params_dict.items()}
+            self._dim_f = eq.dim_x
+            super().build(eq)
 
-        def compute(self, *args, **kwargs):
-            params, _ = self._parse_args(*args, **kwargs)
-            x = jnp.concatenate([jnp.atleast_1d(params[arg]) for arg in self.args])
-            return x - self._x0
+        def compute(self, params, constants=None):
+            x = jnp.concatenate(
+                [jnp.atleast_1d(params[arg] - self._x0[arg]) for arg in params]
+            )
+            return x
 
     eq = desc.examples.get("DSHAPE")
 

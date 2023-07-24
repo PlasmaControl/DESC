@@ -96,9 +96,26 @@ class BoundaryRSelfConsistency(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
-        """Compute boundary self consistency errror."""
-        params, _ = self._parse_args(*args, **kwargs)
+    def compute(self, params, constants=None):
+        """Compute boundary R self-consistency errors.
+
+        IE, the mismatch between the Fourier-Zernike basis evaluated at rho=1 and the
+        double Fourier series definining the equilibrium LCFS
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            boundary R self-consistency errors.
+
+        """
         return jnp.dot(self._A, params["R_lmn"]) - params["Rb_lmn"]
 
 
@@ -179,9 +196,26 @@ class BoundaryZSelfConsistency(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
-        """Compute boundary self consistency errror."""
-        params, _ = self._parse_args(*args, **kwargs)
+    def compute(self, params, constants=None):
+        """Compute boundary Z self-consistency errors.
+
+        IE, the mismatch between the Fourier-Zernike basis evaluated at rho=1 and the
+        double Fourier series definining the equilibrium LCFS
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            boundary Z self-consistency errors.
+
+        """
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 
 
@@ -251,9 +285,26 @@ class AxisRSelfConsistency(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
-        """Compute axis R self consistency errors."""
-        params, _ = self._parse_args(*args, **kwargs)
+    def compute(self, params, constants=None):
+        """Compute axis R self-consistency errors.
+
+        IE, the mismatch between the Fourier-Zernike basis evaluated at rho=0 and the
+        Fourier series definining the equilibrium axis position
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            axis R self-consistency errors.
+
+        """
         f = jnp.dot(self._A, params["R_lmn"]) - params["Ra_n"]
         return f
 
@@ -324,9 +375,26 @@ class AxisZSelfConsistency(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
-        """Compute axis Z self consistency errors."""
-        params, _ = self._parse_args(*args, **kwargs)
+    def compute(self, params, constants=None):
+        """Compute axis Z self-consistency errors.
+
+        IE, the mismatch between the Fourier-Zernike basis evaluated at rho=0 and the
+        Fourier series definining the equilibrium axis position
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            axis Z self-consistency errors.
+
+        """
         f = jnp.dot(self._A, params["Z_lmn"]) - params["Za_n"]
         return f
 
@@ -472,9 +540,23 @@ class FixBoundaryR(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
-        """Compute deviation from desired boundary."""
-        params, _ = self._parse_args(*args, **kwargs)
+    def compute(self, params, constants=None):
+        """Compute boundary R errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            boundary R errors.
+
+        """
         return jnp.dot(self._A, params["Rb_lmn"])
 
     @property
@@ -624,9 +706,23 @@ class FixBoundaryZ(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
-        """Compute deviation from desired boundary."""
-        params, _ = self._parse_args(*args, **kwargs)
+    def compute(self, params, constants=None):
+        """Compute boundary Z errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            boundary Z errors.
+
+        """
         return jnp.dot(self._A, params["Zb_lmn"])
 
     @property
@@ -715,21 +811,24 @@ class FixLambdaGauge(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, L_lmn, **kwargs):
-        """Compute lambda gauge symmetry errors.
+    def compute(self, params, constants=None):
+        """Compute lambda gauge freedom errors.
 
         Parameters
         ----------
-        L_lmn : ndarray
-            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
         f : ndarray
-            Lambda gauge symmetry errors.
+            gauge freedom errors.
 
         """
-        return jnp.dot(self._A, L_lmn)
+        return jnp.dot(self._A, params["L_lmn"])
 
 
 class FixThetaSFL(_Objective):
@@ -778,13 +877,16 @@ class FixThetaSFL(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, L_lmn, **kwargs):
+    def compute(self, params, constants=None):
         """Compute Theta SFL errors.
 
         Parameters
         ----------
-        L_lmn : ndarray
-            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -792,7 +894,7 @@ class FixThetaSFL(_Objective):
             Theta - Theta SFL errors.
 
         """
-        fixed_params = L_lmn[self._idx]
+        fixed_params = params["L_lmn"][self._idx]
         return fixed_params
 
     @property
@@ -932,13 +1034,16 @@ class FixAxisR(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, Ra_n, **kwargs):
+    def compute(self, params, constants=None):
         """Compute axis R errors.
 
         Parameters
         ----------
-        Ra_n : ndarray
-            Spectral coefficients of R(zeta) on axis
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -946,7 +1051,7 @@ class FixAxisR(_Objective):
             Axis R errors.
 
         """
-        f = jnp.dot(self._A, Ra_n)
+        f = jnp.dot(self._A, params["Ra_n"])
         return f
 
     @property
@@ -1086,13 +1191,16 @@ class FixAxisZ(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, Za_n, **kwargs):
+    def compute(self, params, constants=None):
         """Compute axis Z errors.
 
         Parameters
         ----------
-        Za_n : ndarray
-            Spectral coefficients of Z(zeta) on axis.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -1100,7 +1208,7 @@ class FixAxisZ(_Objective):
             Axis Z errors.
 
         """
-        f = jnp.dot(self._A, Za_n)
+        f = jnp.dot(self._A, params["Za_n"])
         return f
 
     @property
@@ -1231,13 +1339,16 @@ class FixModeR(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, **kwargs):
+    def compute(self, params, constants=None):
         """Compute Fixed mode R errors.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) .
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -1245,7 +1356,7 @@ class FixModeR(_Objective):
             Fixed mode R errors.
 
         """
-        fixed_params = R_lmn[self._idx]
+        fixed_params = params["R_lmn"][self._idx]
         return fixed_params
 
     @property
@@ -1376,13 +1487,16 @@ class FixModeZ(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, Z_lmn, **kwargs):
+    def compute(self, params, constants=None):
         """Compute Fixed mode Z errors.
 
         Parameters
         ----------
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) .
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -1390,7 +1504,7 @@ class FixModeZ(_Objective):
             Fixed mode Z errors.
 
         """
-        fixed_params = Z_lmn[self._idx]
+        fixed_params = params["Z_lmn"][self._idx]
         return fixed_params
 
     @property
@@ -1541,13 +1655,16 @@ class FixSumModesR(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, **kwargs):
+    def compute(self, params, constants=None):
         """Compute Sum mode R errors.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) .
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -1555,7 +1672,7 @@ class FixSumModesR(_Objective):
             Fixed sum mode R errors.
 
         """
-        f = jnp.dot(self._A, R_lmn)
+        f = jnp.dot(self._A, params["R_lmn"])
         return f
 
     @property
@@ -1707,13 +1824,16 @@ class FixSumModesZ(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, Z_lmn, **kwargs):
+    def compute(self, params, constants=None):
         """Compute Sum mode Z errors.
 
         Parameters
         ----------
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) .
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -1721,7 +1841,7 @@ class FixSumModesZ(_Objective):
             Fixed sum mode Z errors.
 
         """
-        f = jnp.dot(self._A, Z_lmn)
+        f = jnp.dot(self._A, params["Z_lmn"])
         return f
 
     @property
@@ -1924,13 +2044,16 @@ class FixPressure(_FixProfile):
             self._normalization = scales["p"]
         super().build(eq, profile, use_jit, verbose)
 
-    def compute(self, p_l, **kwargs):
+    def compute(self, params, constants=None):
         """Compute fixed pressure profile errors.
 
         Parameters
         ----------
-        p_l : ndarray
-            parameters of the pressure profile (Pa).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -1938,7 +2061,7 @@ class FixPressure(_FixProfile):
             Fixed profile errors.
 
         """
-        return p_l[self._idx]
+        return params["p_l"][self._idx]
 
     @property
     def target_arg(self):
@@ -2036,13 +2159,16 @@ class FixIota(_FixProfile):
         profile = eq.iota
         super().build(eq, profile, use_jit, verbose)
 
-    def compute(self, i_l, **kwargs):
+    def compute(self, params, constants=None):
         """Compute fixed iota errors.
 
         Parameters
         ----------
-        i_l : ndarray
-            parameters of the iota profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -2050,7 +2176,7 @@ class FixIota(_FixProfile):
             Fixed profile errors.
 
         """
-        return i_l[self._idx]
+        return params["i_l"][self._idx]
 
     @property
     def target_arg(self):
@@ -2149,13 +2275,16 @@ class FixCurrent(_FixProfile):
             self._normalization = scales["I"]
         super().build(eq, profile, use_jit, verbose)
 
-    def compute(self, c_l, **kwargs):
+    def compute(self, params, constants=None):
         """Compute fixed current errors.
 
         Parameters
         ----------
-        c_l : ndarray
-            parameters of the current profile (A).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -2163,7 +2292,7 @@ class FixCurrent(_FixProfile):
             Fixed profile errors.
 
         """
-        return c_l[self._idx]
+        return params["c_l"][self._idx]
 
     @property
     def target_arg(self):
@@ -2262,13 +2391,16 @@ class FixElectronTemperature(_FixProfile):
             self._normalization = scales["T"]
         super().build(eq, profile, use_jit, verbose)
 
-    def compute(self, Te_l, **kwargs):
+    def compute(self, params, constants=None):
         """Compute fixed electron temperature errors.
 
         Parameters
         ----------
-        Te_l : ndarray
-            parameters of the electron temperature profile (eV).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -2276,7 +2408,7 @@ class FixElectronTemperature(_FixProfile):
             Fixed profile errors.
 
         """
-        return Te_l[self._idx]
+        return params["Te_l"][self._idx]
 
     @property
     def target_arg(self):
@@ -2375,13 +2507,16 @@ class FixElectronDensity(_FixProfile):
             self._normalization = scales["n"]
         super().build(eq, profile, use_jit, verbose)
 
-    def compute(self, ne_l, **kwargs):
+    def compute(self, params, constants=None):
         """Compute fixed electron density errors.
 
         Parameters
         ----------
-        ne_l : ndarray
-            parameters of the electron density profile (1/m^3).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -2389,7 +2524,7 @@ class FixElectronDensity(_FixProfile):
             Fixed profile errors.
 
         """
-        return ne_l[self._idx]
+        return params["ne_l"][self._idx]
 
     @property
     def target_arg(self):
@@ -2488,13 +2623,16 @@ class FixIonTemperature(_FixProfile):
             self._normalization = scales["T"]
         super().build(eq, profile, use_jit, verbose)
 
-    def compute(self, Ti_l, **kwargs):
+    def compute(self, params, constants=None):
         """Compute fixed ion temperature errors.
 
         Parameters
         ----------
-        Ti_l : ndarray
-            parameters of the ion temperature profile (eV).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -2502,7 +2640,7 @@ class FixIonTemperature(_FixProfile):
             Fixed profile errors.
 
         """
-        return Ti_l[self._idx]
+        return params["Ti_l"][self._idx]
 
     @property
     def target_arg(self):
@@ -2600,13 +2738,16 @@ class FixAtomicNumber(_FixProfile):
         profile = eq.atomic_number
         super().build(eq, profile, use_jit, verbose)
 
-    def compute(self, Zeff_l, **kwargs):
+    def compute(self, params, constants=None):
         """Compute fixed atomic number errors.
 
         Parameters
         ----------
-        Zeff_l : ndarray
-            parameters of the current profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -2614,7 +2755,7 @@ class FixAtomicNumber(_FixProfile):
             Fixed profile errors.
 
         """
-        return Zeff_l[self._idx]
+        return params["Zeff_l"][self._idx]
 
     @property
     def target_arg(self):
@@ -2698,13 +2839,16 @@ class FixPsi(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, Psi, **kwargs):
+    def compute(self, params, constants=None):
         """Compute fixed-Psi error.
 
         Parameters
         ----------
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -2712,7 +2856,7 @@ class FixPsi(_Objective):
             Total toroidal magnetic flux error (Wb).
 
         """
-        return Psi
+        return params["Psi"]
 
     @property
     def target_arg(self):

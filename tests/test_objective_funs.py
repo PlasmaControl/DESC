@@ -63,7 +63,7 @@ class TestObjectiveFunction:
                 "Psi": eq.Psi,
             }
             np.testing.assert_allclose(
-                obj.compute_unscaled(**kwargs),
+                obj.compute_unscaled(kwargs),
                 eq.compute(f, grid=obj._transforms["grid"])[f]
                 * obj._transforms["grid"].weights,
             )
@@ -356,21 +356,23 @@ def test_rejit():
             self._dim_f = 1
             super().build(eq, use_jit, verbose)
 
-        def compute(self, R_lmn, **kwargs):
-            return 200 + self.target * self.weight - self.y * R_lmn**3
+        def compute(self, params, constants=None):
+            return 200 + self.target * self.weight - self.y * params["R_lmn"] ** 3
 
     eq = Equilibrium()
     obj = DummyObjective(3, eq=eq)
     obj.build()
-    assert obj.compute_unscaled(4) == 8
-    assert obj.compute_scaled_error(4) == 8
+    assert obj.compute_unscaled({"R_lmn": 4}) == 8
+    assert obj.compute_scaled_error({"R_lmn": 4}) == 8
     obj.target = 1
     obj.weight = 2
-    assert obj.compute(4) == 10  # compute method is not JIT compiled
-    assert obj.compute_scaled_error(4) == 8  # only compute_scaled is JIT compiled
+    assert obj.compute({"R_lmn": 4}) == 10  # compute method is not JIT compiled
+    assert (
+        obj.compute_scaled_error({"R_lmn": 4}) == 8
+    )  # only compute_scaled is JIT compiled
     obj.jit()
-    assert obj.compute(4) == 10
-    assert obj.compute_scaled_error(4) == 18
+    assert obj.compute({"R_lmn": 4}) == 10
+    assert obj.compute_scaled_error({"R_lmn": 4}) == 18
 
     objFun = ObjectiveFunction(obj)
     objFun.build()
@@ -379,7 +381,7 @@ def test_rejit():
     f = objFun.compute_scaled_error(x)
     J = objFun.jac_scaled(x)
     np.testing.assert_allclose(f, [-5598, 402, 396])
-    np.testing.assert_allclose(J, np.diag([-1800, 0, -18]))
+    np.testing.assert_allclose(J[:, objFun.x_idx["R_lmn"]], np.diag([-1800, 0, -18]))
     objFun.objectives[0].target = 3
     objFun.objectives[0].weight = 4
     objFun.objectives[0].y = 2

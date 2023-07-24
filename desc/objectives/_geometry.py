@@ -1114,7 +1114,7 @@ class B_dmin(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1141,7 +1141,7 @@ class B_dmin(_Objective):
         if not np.allclose(plasma_grid.nodes[:, 0], 1):
             warnings.warn("Plasma grid includes interior points, should be rho=1")
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = plasma_grid.num_nodes
         self._data_keys = ["X", "Y", "Z", "|B|"]
         self._args = get_params(
             self._data_keys, has_axis=plasma_grid.axis.size or surface_grid.axis.size
@@ -1220,8 +1220,9 @@ class B_dmin(_Objective):
 
         B_dmin_data = []
         for x, y, z, mag_B in zip(data["X"], data["Y"], data["Z"], data["|B|"]):
-            plasma_coords = np.array([x, y, z])
-            dists = np.linalg.norm(plasma_coords - self._surface_coords, axis=-1)
+            dists = jnp.linalg.norm(
+                jnp.array([x, y, z]) - self._surface_coords, axis=-1
+            )
             d_min = dists.min()
             B_dmin_data.append(mag_B * d_min)
 

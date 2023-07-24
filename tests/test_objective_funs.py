@@ -18,6 +18,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    B_dmin,
     BScaleLength,
     Elongation,
     Energy,
@@ -856,3 +857,30 @@ def test_jax_softmax_and_softmin():
     # as alpha -> infinity, softmin -> min
     softmin = jax_softmin(arr, alpha=100)
     np.testing.assert_almost_equal(softmin, np.min(arr))
+
+
+@pytest.mark.unit
+def test_bd_min_objective():
+    """Test for B field/coil distance objective function."""
+    eq = get("HELIOTRON_lowres")
+    winding_surf1 = FourierRZToroidalSurface(
+        R_lmn=[10, 3], Z_lmn=[-3], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
+    )
+    winding_surf2 = FourierRZToroidalSurface(
+        R_lmn=[10, 4], Z_lmn=[-4], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
+    )
+
+    grid = LinearGrid(rho=np.array(1.0), M=4, N=4, NFP=eq.NFP)
+
+    obj1 = B_dmin(winding_surf1, eq=eq, normalize=False, plasma_grid=grid)
+    obj2 = B_dmin(winding_surf2, eq=eq, normalize=False, plasma_grid=grid)
+    with pytest.warns(UserWarning):
+        obj1.build()
+    with pytest.warns(UserWarning):
+        obj2.build()
+
+    L1 = obj1.compute_unscaled(*obj1.xs(eq))
+    L2 = obj2.compute_unscaled(*obj2.xs(eq))
+
+    # second surface is further away, so should have larger obj
+    np.testing.assert_array_less(L1, L2)

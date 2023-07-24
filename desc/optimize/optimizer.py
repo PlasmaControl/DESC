@@ -151,15 +151,15 @@ class Optimizer(IOAble):
             # need to include self consistency constraints
             linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
         if len(linear_constraints):
-            objective = LinearConstraintProjection(objective, linear_constraints, eq=eq)
+            objective = LinearConstraintProjection(objective, linear_constraints)
             if nonlinear_constraint is not None:
                 nonlinear_constraint = LinearConstraintProjection(
-                    nonlinear_constraint, linear_constraints, eq=eq
+                    nonlinear_constraint, linear_constraints
                 )
         if not objective.built:
-            objective.build(eq, verbose=verbose)
+            objective.build(verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
-            nonlinear_constraint.build(eq, verbose=verbose)
+            nonlinear_constraint.build(verbose=verbose)
         if nonlinear_constraint is not None:
             objective, nonlinear_constraint = combine_args(
                 objective, nonlinear_constraint
@@ -183,13 +183,13 @@ class Optimizer(IOAble):
             try:
                 objective.compile(mode, verbose)
             except ValueError:
-                objective.build(eq, verbose=verbose)
+                objective.build(verbose=verbose)
                 objective.compile(mode, verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.compiled:
             try:
                 nonlinear_constraint.compile("lsq", verbose)
             except ValueError:
-                nonlinear_constraint.build(eq, verbose=verbose)
+                nonlinear_constraint.build(verbose=verbose)
                 nonlinear_constraint.compile("lsq", verbose)
 
         if objective.scalar and (not optimizers[method]["scalar"]):

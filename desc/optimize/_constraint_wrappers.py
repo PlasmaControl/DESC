@@ -39,13 +39,11 @@ class LinearConstraintProjection(ObjectiveFunction):
     constraints : tuple of Objective
         Linear constraints to enforce. Should be a tuple or list of Objective,
         and must all be linear.
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the objectives.
     verbose : int, optional
         Level of output.
     """
 
-    def __init__(self, objective, constraints, eq=None, verbose=1):
+    def __init__(self, objective, constraints, verbose=1):
         assert isinstance(objective, ObjectiveFunction), (
             "objective should be instance of ObjectiveFunction." ""
         )
@@ -62,15 +60,12 @@ class LinearConstraintProjection(ObjectiveFunction):
         # don't want to compile this, just use the compiled objective
         self._use_jit = False
         self._compiled = False
-        self._eq = eq
 
-    def build(self, eq=None, use_jit=None, verbose=1):
+    def build(self, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
             Note: unused by this class, should pass to sub-objectives directly.
@@ -78,7 +73,6 @@ class LinearConstraintProjection(ObjectiveFunction):
             Level of output.
 
         """
-        eq = eq or self._eq
         timer = Timer()
         timer.start("Linear constraint projection build")
 
@@ -86,10 +80,10 @@ class LinearConstraintProjection(ObjectiveFunction):
         # with this directly, so if the user wants to manually rebuild they should
         # do it before this wrapper is created for them.
         if not self._objective.built:
-            self._objective.build(eq, verbose=verbose)
+            self._objective.build(verbose=verbose)
         for con in self._constraints:
             if not con.built:
-                con.build(eq, verbose=verbose)
+                con.build(verbose=verbose)
 
         # kludge for now since ProximalProjection can't take extra args
         if isinstance(self._objective, ProximalProjection):

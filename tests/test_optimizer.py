@@ -488,7 +488,7 @@ def test_wrappers():
         _ = LinearConstraintProjection(obj, con)
     with pytest.raises(ValueError):
         _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
-    ob = LinearConstraintProjection(ObjectiveFunction(obj), con, eq=eq)
+    ob = LinearConstraintProjection(ObjectiveFunction(obj), con)
     ob.build()
     assert ob.built
 

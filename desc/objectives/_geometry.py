@@ -1226,4 +1226,4 @@ class B_dmin(_Objective):
             d_min = dists.min()
             B_dmin_data.append(mag_B * d_min)
 
-        return B_dmin_data
+        return jnp.atleast_1d(B_dmin_data)

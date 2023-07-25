@@ -49,7 +49,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer_mn",
-    label="w_{Boozer,m,n}",
+    label="w_{\\mathrm{Boozer},m,n}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to "
@@ -83,7 +83,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer",
-    label="w_{Boozer}",
+    label="w_{\\mathrm{Boozer}}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -102,7 +102,7 @@ def _w(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer_t",
-    label="\\partial_{\\theta} w_{Boozer}",
+    label="\\partial_{\\theta} w_{\\mathrm{Boozer}}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -121,7 +121,7 @@ def _w_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer_z",
-    label="\\partial_{\\zeta} w_{Boozer}",
+    label="\\partial_{\\zeta} w_{\\mathrm{Boozer}}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -253,7 +253,7 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|B|_mn",
-    label="B_{mn}^{Boozer}",
+    label="B_{mn}^{\\mathrm{Boozer}}",
     units="T",
     units_long="Tesla",
     description="Boozer harmonics of magnetic field",
@@ -279,7 +279,7 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B modes",
-    label="Boozer modes",
+    label="\\mathrm{Boozer~modes}",
     units="~",
     units_long="None",
     description="Boozer harmonics",

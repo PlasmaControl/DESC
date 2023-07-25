@@ -13,7 +13,17 @@ from desc.transform import Transform
 from desc.utils import Index
 
 
-def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=1e-6):
+def map_coordinates(  # noqa: C901
+    eq,
+    coords,
+    inbasis,
+    outbasis=("rho", "theta", "zeta"),
+    guess=None,
+    period=(np.inf, np.inf, np.inf),
+    tol=1e-6,
+    maxiter=30,
+    **kwargs,
+):
     """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
 
     First solves for the computational coordinates that correspond to inbasis, then
@@ -32,15 +42,28 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
         Labels for input and output coordinates, eg ("R", "phi", "Z") or
         ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
         same as the compute function data key
+    guess : None or ndarray, shape(k,3)
+        Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
+        coresponding to coords in inbasis. If None, heuristics are used based on
+        in basis and a nearest neighbor search on a coarse grid.
+    period : tuple of float
+        Assumed periodicity for each quantity in inbasis.
+        Use np.inf to denote no periodicity.
     tol : float
         Stopping tolerance.
     maxiter : int > 0
         Maximum number of Newton iterations
-    rhomin : float
-        Minimum allowable value of rho (to avoid singularity at rho=0)
 
+    Returns
+    -------
+    coords : ndarray, shape(k,3)
+        Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
+        for coordinates where root finding did not succeed, possibly because the
+        coordinate is not in the plasma volume.
 
     """
+    inbasis = list(inbasis)
+    outbasis = list(outbasis)
     assert (
         np.isfinite(maxiter) and maxiter > 0
     ), f"maxiter must be a positive integer, got {maxiter}"
@@ -52,6 +75,13 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
             key in data_index.keys()
         ), f"don't have recipe to compute partial derivative {key}"
 
+    rhomin = kwargs.pop("rhomin", tol / 10)
+    alpha = kwargs.pop("backtrack_frac", 0.1)
+    maxls = kwargs.pop("max_backtrack", 10)
+    assert len(kwargs) == 0, f"map_coordinates got unexpected kwargs: {kwargs.keys()}"
+    period = np.asarray(period)
+    coords = coords % period
+
     # can't use AD or jit compile this because of grid stuff
     def compute(y, basis):
         data = eq.compute(basis, grid=Grid(y, sort=False))
@@ -60,7 +90,8 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
 
     def residual(y):
         xk = compute(y, inbasis)
-        return xk - coords
+        r = xk % period - coords % period
+        return jnp.where(r > period / 2, -period + r, r)
 
     def jac(y):
         J = compute(y, basis_derivs)
@@ -71,10 +102,9 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
     def fixup(y):
         r, t, z = y.T
         # negative rho -> flip theta
-        t = jnp.where(r < 0, (t + np.pi) % (2 * np.pi), t % (2 * np.pi))
+        t = jnp.where(r < 0, (t + np.pi), t)
         r = jnp.abs(r)
         r = jnp.clip(r, rhomin, 1)
-        z = z % (2 * np.pi)
         y = jnp.array([r, t, z]).T
         return y
 
@@ -85,21 +115,43 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
         )
     )
 
-    # nearest neighbor search on coarse grid for initial guess
-    yg = ConcentricGrid(L=eq.L_grid, M=eq.M_grid, N=int(eq.N_grid * eq.NFP)).nodes
-    xg = compute(yg, inbasis)
-    idx = jnp.zeros(len(coords)).astype(int)
-    coords = jnp.asarray(coords)
+    yk = guess
+    if yk is None:
+        # nearest neighbor search on coarse grid for initial guess
+        rho_g = theta_g = zeta_g = None
+        if "rho" in inbasis:
+            rho_g = np.unique(coords[:, inbasis.index("rho")])
+        else:
+            rho_g = np.linspace(0, 1, eq.L_grid + 1)
+        if "theta" in inbasis:
+            theta_g = np.unique(coords[:, inbasis.index("theta")])
+        elif "theta_PEST" in inbasis:  # lambda is usually small
+            theta_g = np.unique(coords[:, inbasis.index("theta_PEST")])
+        else:
+            theta_g = np.linspace(0, 2 * np.pi, 2 * eq.M_grid + 1)
+        if "zeta" in inbasis:
+            zeta_g = np.unique(coords[:, inbasis.index("zeta")])
+        elif "phi" in inbasis:
+            zeta_g = np.unique(coords[:, inbasis.index("phi")])
+        else:
+            zeta_g = np.linspace(0, 2 * np.pi, 2 * eq.N_grid * eq.NFP + 1)
 
-    def _distance_body(i, idx):
-        distance = jnp.linalg.norm(coords[i] - xg, axis=-1)
-        k = jnp.argmin(distance)
-        idx = put(idx, i, k)
-        return idx
+        yg = LinearGrid(rho=rho_g, theta=theta_g, zeta=zeta_g).nodes
+        xg = compute(yg, inbasis)
+        idx = jnp.zeros(len(coords)).astype(int)
+        coords = jnp.asarray(coords)
 
-    idx = fori_loop(0, len(coords), _distance_body, idx)
-    yk = yg[idx]
-    alpha = 0.5
+        def _distance_body(i, idx):
+            d = (coords[i] % period) - (xg % period)
+            d = jnp.where(d > period / 2, period - d, d)
+            distance = jnp.linalg.norm(d, axis=-1)
+            k = jnp.argmin(distance)
+            idx = put(idx, i, k)
+            return idx
+
+        idx = fori_loop(0, len(coords), _distance_body, idx)
+        yk = yg[idx]
+
     yk = fixup(yk)
     resk = residual(yk)
 
@@ -109,7 +161,7 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
         J = jac(yk)
         d = lstsq(J, resk)
         alphak = jnp.ones(yk.shape[0])
-        for j in range(10):
+        for j in range(maxls):
             # backtracking line search
             yt = fixup(yk - alphak[:, None] * d)
             res = residual(yt)
@@ -138,7 +190,9 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
 
     yk = jnp.vstack([r, t, z]).T
 
-    out = compute(yk, outbasis)
+    data = eq.compute(outbasis, grid=Grid(yk, sort=False))
+    out = jnp.stack([data[k] for k in outbasis], axis=-1)
+
     return out
 
 
@@ -426,7 +480,7 @@ def to_sfl(
     N_grid : int, optional
         toroidal spatial resolution to use for fit to new basis. Default = 2*N
     rcond : float, optional
-        cutoff for small singular values in least squares fit.
+        cutoff for small singular values in the least squares fit.
     copy : bool, optional
         Whether to update the existing equilibrium or make a copy (Default).
 

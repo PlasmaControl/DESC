@@ -5,11 +5,13 @@ import numpy as np
 import pytest
 
 from desc.basis import (
+    ChebyshevDoubleFourierBasis,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
     PowerSeries,
     ZernikePolynomial,
+    chebyshev,
     fourier,
     polyder_vec,
     polyval_vec,
@@ -125,6 +127,19 @@ class TestBasis:
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_chebyshev(self):
+        """Test chebyshev function for Chebyshev polynomial evaluation."""
+        l = np.array([0, 1, 2])
+        r = np.linspace(0, 1, 11)  # rho coordinates
+
+        correct_vals = np.array([np.ones_like(r), 2 * r - 1, 8 * r**2 - 8 * r + 1]).T
+        values = chebyshev(r[:, np.newaxis], l, dr=0)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+        with pytest.raises(NotImplementedError):
+            chebyshev(r[:, np.newaxis], l, dr=1)
 
     @pytest.mark.unit
     def test_zernike_radial(self):
@@ -246,6 +261,10 @@ class TestBasis:
         zpf.change_resolution(L=6, M=3)
         assert zpf.num_modes == 16
 
+        cdf = ChebyshevDoubleFourierBasis(L=2, M=2, N=0)
+        cdf.change_resolution(L=3, M=2, N=1)
+        assert cdf.num_modes == 60
+
         fz = FourierZernikeBasis(L=3, M=3, N=0)
         fz.change_resolution(L=3, M=3, N=1)
         assert fz.num_modes == 30
@@ -304,3 +323,46 @@ class TestBasis:
         basis = ZernikePolynomial(L=2, M=3)
         fz = basis.evaluate(nodes, derivatives=[0, 0, 1])
         assert np.all(fz == 0)
+
+    @pytest.mark.unit
+    def test_basis_resolutions_assert_integers(self):
+        """Test that basis modes are asserted as integers."""
+        L = 3.0
+        M = 3.0
+        N = 3.0
+
+        basis = PowerSeries(L=L)
+        assert isinstance(basis.L, int)
+        assert basis.L == 3
+
+        basis = FourierSeries(N=N)
+        assert isinstance(basis.N, int)
+        assert basis.N == 3
+
+        basis = DoubleFourierSeries(M=M, N=N)
+        assert isinstance(basis.M, int)
+        assert isinstance(basis.N, int)
+        assert basis.M == 3
+        assert basis.N == 3
+
+        basis = ZernikePolynomial(L=L, M=M)
+        assert isinstance(basis.M, int)
+        assert isinstance(basis.L, int)
+        assert basis.M == 3
+        assert basis.L == 3
+
+        L = 3.1
+        M = 3.1
+        N = 3.1
+
+        with pytest.raises(AssertionError):
+            PowerSeries(L=L)
+
+        with pytest.raises(AssertionError):
+            FourierSeries(N=N)
+
+        with pytest.raises(AssertionError):
+            DoubleFourierSeries(M=M, N=N)
+
+        with pytest.raises(AssertionError):
+            ZernikePolynomial(L=L, M=M)

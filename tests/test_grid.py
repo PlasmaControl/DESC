@@ -5,7 +5,7 @@ import pytest
 from scipy import special
 
 from desc.basis import FourierZernikeBasis
-from desc.compute.utils import compress, surface_averages, surface_integrals
+from desc.compute.utils import surface_averages
 from desc.equilibrium import Equilibrium
 from desc.grid import (
     ConcentricGrid,
@@ -545,7 +545,7 @@ class TestGrid:
             "Psi": 1.0,
             "pressure": np.array([[0, 0]]),
             "iota": np.array([[0, 0]]),
-            "surface": np.array([[0, 0, 0, R, 0], [0, 1, 0, r, 0], [0, -1, 0, 0, r]]),
+            "surface": np.array([[0, 0, 0, R, 0], [0, 1, 0, r, 0], [0, -1, 0, 0, -r]]),
             "spectral_indexing": "ansi",
             "bdry_mode": "lcfs",
             "node_pattern": "quad",
@@ -572,42 +572,45 @@ class TestGrid:
     @pytest.mark.unit
     def test_change_resolution(self):
         """Test changing grid resolution."""
+
+        def test(grid, *desired_resolution):
+            assert (grid.L, grid.M, grid.N, grid.NFP) == desired_resolution
+            assert grid.num_rho == grid.unique_rho_idx.size
+            assert grid.num_theta == grid.unique_theta_idx.size
+            assert grid.num_zeta == grid.unique_zeta_idx.size
+            np.testing.assert_equal(
+                (grid.unique_rho_idx, grid.inverse_rho_idx),
+                np.unique(grid.nodes[:, 0], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_equal(
+                (grid.unique_theta_idx, grid.inverse_theta_idx),
+                np.unique(grid.nodes[:, 1], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_equal(
+                (grid.unique_zeta_idx, grid.inverse_zeta_idx),
+                np.unique(grid.nodes[:, 2], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_array_equal(
+                grid.axis, np.nonzero(grid.nodes[:, 0] == 0)[0]
+            )
+            # test that changing NFP updated the nodes
+            assert np.isclose(
+                grid.nodes[grid.unique_zeta_idx[-1], 2],
+                (grid.num_zeta - 1) / grid.num_zeta * 2 * np.pi / grid.NFP,
+            )
+
         lg = LinearGrid(1, 2, 3)
-        lg.change_resolution(2, 3, 4)
-        assert lg.L == 2
-        assert lg.M == 3
-        assert lg.N == 4
-
+        lg.change_resolution(2, 3, 4, 5)
+        test(lg, 2, 3, 4, 5)
         qg = QuadratureGrid(1, 2, 3)
-        qg.change_resolution(2, 3, 4)
-        assert qg.L == 2
-        assert qg.M == 3
-        assert qg.N == 4
-
+        qg.change_resolution(2, 3, 4, 5)
+        test(qg, 2, 3, 4, 5)
         cg = ConcentricGrid(2, 3, 4)
-        cg.change_resolution(3, 4, 5)
-        assert cg.L == 3
-        assert cg.M == 4
-        assert cg.N == 5
-
-    @pytest.mark.unit
-    def test_enforce_symmetry_sum(self):
-        """Test that enforce_symmetry sums dtheta to 2pi.
-
-        Relies on correctness of surface_integrals.
-        """
-
-        def test(grid):
-            # check if theta nodes cover the circumference of the theta curve
-            dtheta_sums = surface_integrals(grid, q=1 / grid.spacing[:, 2])
-            np.testing.assert_allclose(dtheta_sums, 2 * np.pi * grid.num_zeta)
-
-        # Before enforcing symmetry,
-        # this grid has 2 surfaces near axis lacking theta > pi nodes.
-        # These edge cases should be handled correctly.
-        # Otherwise, a dimension mismatch or broadcast error should be raised.
-        test(ConcentricGrid(L=20, M=3, N=2, sym=True))
-        test(LinearGrid(L=20, M=3, N=2, sym=True))
+        cg.change_resolution(3, 4, 5, 2)
+        test(cg, 3, 4, 5, 2)
+        cg = ConcentricGrid(2, 3, 4)
+        cg.change_resolution(cg.L, cg.M, cg.N, NFP=5)
+        test(cg, cg.L, cg.M, cg.N, 5)
 
     @pytest.mark.unit
     def test_enforce_symmetry(self):
@@ -629,7 +632,7 @@ class TestGrid:
         lg_2._enforce_symmetry()
         np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
-        lg_2._scale_weights()
+        lg_2._weights = lg_2._scale_weights()
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
         np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 
@@ -730,7 +733,7 @@ class TestGrid:
 
             # compute average for each surface in grid
             values = transform.transform(coeffs)
-            numerical_avg = compress(grid, surface_averages(grid, values))
+            numerical_avg = surface_averages(grid, values, expand_out=False)
             if isinstance(grid, ConcentricGrid):
                 # values closest to axis are never accurate enough
                 numerical_avg = numerical_avg[1:]
@@ -785,7 +788,7 @@ class TestGrid:
                 dr[-1] = 1 - (r_unique[-2] + r_unique[-1]) / 2
             else:
                 dr = 1 / grid.num_rho
-            expected_integral = np.sum(dr * compress(grid, function_of_rho))
+            expected_integral = np.sum(dr * function_of_rho[grid.unique_rho_idx])
             true_integral = np.log(1.35 / 0.35)
             midpoint_rule_error_bound = np.max(dr) ** 2 / 24 * (2 / 0.35**3)
             right_riemann_error_bound = dr * (1 / 0.35 - 1 / 1.35)

@@ -1,8 +1,154 @@
 """Utility functions used in optimization problems."""
 
+import copy
+
 import numpy as np
 
-from desc.backend import cond, jit, jnp
+from desc.backend import cond, jit, jnp, put
+from desc.utils import Index
+
+
+def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
+    """Convert inequality constraints to bounds using slack variables.
+
+    We do this by introducing slack variables s
+
+    ie, lb < con(x) < ub --> con(x) - s == 0, lb < s < ub
+
+    A new state vector z is defined as [x, s] and the problem
+    is transformed into one that has only equality constraints
+    and simple bounds on the variables z
+
+    Parameters
+    ----------
+    x0 : ndarray
+        Starting point for primal variables
+    fun, grad, hess : callable
+        Functions for computing the objective and derivatives
+    constraint : scipy.optimize.NonlinearConstraint
+        constraint object of both equality and inequality constraints
+    bounds : tuple
+        lower and upper bounds for primal variables x
+
+    Returns
+    -------
+    z0 : ndarray
+        Starting point for primal + slack variables
+    fun, grad, hess : callable
+        functions for computing objective and derivatives wrt z
+    constraint : scipy.optimize.NonlinearConstraint
+        constraint containing just equality constraints
+    bounds : tuple
+        lower and upper bounds on combined variable z
+    z2xs : callable
+        function for splitting combined variable z into primal
+        and slack variables x and s
+
+    """
+    c0 = constraint.fun(x0)
+    ncon = c0.size
+    bounds = tuple(jnp.broadcast_to(bi, x0.shape) for bi in bounds)
+    cbounds = (constraint.lb, constraint.ub)
+    cbounds = tuple(jnp.broadcast_to(bi, c0.shape) for bi in cbounds)
+    lbs, ubs = cbounds
+    lbx, ubx = bounds
+
+    ineq_mask = lbs != ubs
+    eq_mask = lbs == ubs
+    eq_target = lbs[~ineq_mask]
+    nslack = jnp.sum(ineq_mask)
+    zbounds = (
+        jnp.concatenate([lbx, lbs[ineq_mask]]),
+        jnp.concatenate([ubx, ubs[ineq_mask]]),
+    )
+    s0 = c0[ineq_mask]
+    s0 = jnp.clip(s0, lbs[ineq_mask], ubs[ineq_mask])
+    z0 = jnp.concatenate([x0, s0])
+    target = jnp.zeros(c0.size)
+    target = put(target, eq_mask, eq_target)
+
+    def z2xs(z):
+        return z[: len(z) - nslack], z[len(z) - nslack :]
+
+    def fun_wrapped(z, *args):
+        x, s = z2xs(z)
+        return fun(x, *args)
+
+    if hess is None:
+        # assume grad is really jac of least squares
+        def grad_wrapped(z, *args):
+            x, s = z2xs(z)
+            g = grad(x, *args)
+            return jnp.hstack([g, jnp.zeros((g.shape[0], nslack))])
+
+    else:
+
+        def grad_wrapped(z, *args):
+            x, s = z2xs(z)
+            g = grad(x, *args)
+            return jnp.concatenate([g, jnp.zeros(nslack)])
+
+    if callable(hess):
+
+        def hess_wrapped(z, *args):
+            x, s = z2xs(z)
+            H = hess(x, *args)
+            return jnp.pad(H, (0, nslack))
+
+    else:  # using BFGS
+        hess_wrapped = hess
+
+    def confun_wrapped(z, *args):
+        x, s = z2xs(z)
+        c = constraint.fun(x, *args)
+        sbig = jnp.zeros(ncon)
+        sbig = put(sbig, ineq_mask, s)
+        return c - sbig - target
+
+    def conjac_wrapped(z, *args):
+        x, s = z2xs(z)
+        J = constraint.jac(x, *args)
+        I = jnp.eye(nslack)
+        Js = jnp.zeros((ncon, nslack))
+        Js = put(Js, Index[ineq_mask, :], -I)
+        return jnp.hstack([J, Js])
+
+    if callable(constraint.hess):
+
+        def conhess_wrapped(z, y, *args):
+            x, s = z2xs(z)
+            H = constraint.hess(x, y, *args)
+            return jnp.pad(H, (0, nslack))
+
+    else:  # using BFGS
+        conhess_wrapped = constraint.hess
+
+    if hasattr(constraint, "vjp"):
+
+        def vjp_wrapped(y, z, *args):
+            x, s = z2xs(z)
+            I = jnp.eye(nslack)
+            Js = jnp.zeros((ncon, nslack))
+            Js = put(Js, Index[ineq_mask, :], -I)
+            vjpx = constraint.vjp(y, x, *args)
+            vjps = jnp.dot(y, Js)
+            return jnp.concatenate([vjpx, vjps])
+
+    else:
+
+        def vjp_wrapped(y, z, *args):
+            J = conjac_wrapped(z, *args)
+            return jnp.dot(y, J)
+
+    newcon = copy.copy(constraint)
+    newcon.fun = confun_wrapped
+    newcon.jac = conjac_wrapped
+    newcon.hess = conhess_wrapped
+    newcon.lb = target
+    newcon.ub = target
+    newcon.vjp = vjp_wrapped
+
+    return z0, fun_wrapped, grad_wrapped, hess_wrapped, newcon, zbounds, z2xs
 
 
 @jit
@@ -191,7 +337,7 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
     return 0.5 * q + l
 
 
-def print_header_nonlinear(constrained=False):
+def print_header_nonlinear(constrained=False, *args):
     """Print a pretty header."""
     s = "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
         "Iteration",
@@ -202,12 +348,21 @@ def print_header_nonlinear(constrained=False):
         "Optimality",
     )
     if constrained:
-        s += "{:^24}".format("Constraint violation")
+        s += "{:^15}".format("Constr viol.")
+    for arg in args:
+        s += "{:^15}".format(arg)
     print(s)
 
 
 def print_iteration_nonlinear(
-    iteration, nfev, cost, cost_reduction, step_norm, optimality, constr_violation=None
+    iteration,
+    nfev,
+    cost,
+    cost_reduction,
+    step_norm,
+    optimality,
+    constr_violation=None,
+    *args,
 ):
     """Print a line of optimizer output."""
     if iteration is None or abs(iteration) == np.inf:
@@ -223,27 +378,29 @@ def print_iteration_nonlinear(
     if cost is None or abs(cost) == np.inf:
         cost = " " * 15
     else:
-        cost = "{:^15.4e}".format(cost)
+        cost = "{: ^15.3e}".format(cost)
 
     if cost_reduction is None or abs(cost_reduction) == np.inf:
         cost_reduction = " " * 15
     else:
-        cost_reduction = "{:^15.2e}".format(cost_reduction)
+        cost_reduction = "{: ^15.3e}".format(cost_reduction)
 
     if step_norm is None or abs(step_norm) == np.inf:
         step_norm = " " * 15
     else:
-        step_norm = "{:^15.2e}".format(step_norm)
+        step_norm = "{:^15.3e}".format(step_norm)
 
     if optimality is None or abs(optimality) == np.inf:
         optimality = " " * 15
     else:
-        optimality = "{:^15.2e}".format(optimality)
+        optimality = "{:^15.3e}".format(optimality)
     s = "{}{}{}{}{}{}".format(
         iteration, nfev, cost, cost_reduction, step_norm, optimality
     )
     if constr_violation is not None:
-        s += "{:^24.2e}".format(constr_violation)
+        s += "{:^15.3e}".format(constr_violation)
+    for arg in args:
+        s += "{:^15.3e}".format(arg)
     print(s)
 
 

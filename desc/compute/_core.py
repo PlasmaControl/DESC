@@ -265,7 +265,7 @@ def _zeta_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="theta_sfl",
+    name="theta_PEST",
     label="\\vartheta",
     units="rad",
     units_long="radians",
@@ -277,13 +277,13 @@ def _zeta_z(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["theta", "lambda"],
 )
-def _theta_sfl(params, transforms, profiles, data, **kwargs):
-    data["theta_sfl"] = data["theta"] + data["lambda"]
+def _theta_PEST(params, transforms, profiles, data, **kwargs):
+    data["theta_PEST"] = (data["theta"] + data["lambda"]) % (2 * jnp.pi)
     return data
 
 
 @register_compute_fun(
-    name="theta_sfl_r",
+    name="theta_PEST_r",
     label="\\partial_{\\rho} \\vartheta",
     units="rad",
     units_long="radians",
@@ -296,13 +296,13 @@ def _theta_sfl(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["lambda_r"],
 )
-def _theta_sfl_r(params, transforms, profiles, data, **kwargs):
-    data["theta_sfl_r"] = data["lambda_r"]
+def _theta_PEST_r(params, transforms, profiles, data, **kwargs):
+    data["theta_PEST_r"] = data["lambda_r"]
     return data
 
 
 @register_compute_fun(
-    name="theta_sfl_t",
+    name="theta_PEST_t",
     label="\\partial_{\\theta} \\vartheta",
     units="rad",
     units_long="radians",
@@ -315,13 +315,13 @@ def _theta_sfl_r(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["lambda_t"],
 )
-def _theta_sfl_t(params, transforms, profiles, data, **kwargs):
-    data["theta_sfl_t"] = 1 + data["lambda_t"]
+def _theta_PEST_t(params, transforms, profiles, data, **kwargs):
+    data["theta_PEST_t"] = 1 + data["lambda_t"]
     return data
 
 
 @register_compute_fun(
-    name="theta_sfl_z",
+    name="theta_PEST_z",
     label="\\partial_{\\zeta} \\vartheta",
     units="rad",
     units_long="radians",
@@ -334,8 +334,8 @@ def _theta_sfl_t(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["lambda_z"],
 )
-def _theta_sfl_z(params, transforms, profiles, data, **kwargs):
-    data["theta_sfl_z"] = data["lambda_z"]
+def _theta_PEST_z(params, transforms, profiles, data, **kwargs):
+    data["theta_PEST_z"] = data["lambda_z"]
     return data
 
 
@@ -344,16 +344,16 @@ def _theta_sfl_z(params, transforms, profiles, data, **kwargs):
     label="\\alpha",
     units="~",
     units_long="None",
-    description="Field line label",
+    description="Field line label, defined on [0, 2pi)",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["theta_sfl", "zeta", "iota"],
+    data=["theta_PEST", "zeta", "iota"],
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
-    data["alpha"] = data["theta_sfl"] - data["iota"] * data["zeta"]
+    data["alpha"] = (data["theta_PEST"] - data["iota"] * data["zeta"]) % (2 * jnp.pi)
     return data
 
 

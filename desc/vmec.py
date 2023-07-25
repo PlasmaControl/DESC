@@ -19,11 +19,9 @@ from desc.objectives import (
     ObjectiveFunction,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
-)
-from desc.objectives.utils import (
-    factorize_linear_constraints,
     maybe_add_self_consistency,
 )
+from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import Timer

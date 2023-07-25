@@ -12,12 +12,9 @@ from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     get_fixed_boundary_constraints,
-)
-from desc.objectives.utils import (
-    align_jacobian,
-    factorize_linear_constraints,
     maybe_add_self_consistency,
 )
+from desc.objectives.utils import align_jacobian, factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
 from desc.utils import Timer, get_instance

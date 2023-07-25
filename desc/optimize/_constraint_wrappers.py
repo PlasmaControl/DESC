@@ -8,13 +8,10 @@ from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     ObjectiveFunction,
-)
-from desc.objectives.utils import (
-    align_jacobian,
-    factorize_linear_constraints,
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
+from desc.objectives.utils import align_jacobian, factorize_linear_constraints
 from desc.utils import Timer, get_instance
 
 from .utils import compute_jac_scale, f_where_x

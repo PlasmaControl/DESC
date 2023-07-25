@@ -541,9 +541,11 @@ class GXWrapper(_Objective):
             #get coordinate system
             rho = np.sqrt(self.psi)
             iota = fi(rho)
+            if iota > 0:
+                iota = -1*iota
             zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iota),(np.pi*self.npol-self.alpha)/np.abs(iota),2*self.nzgrid+1)
             thetas = iota/np.abs(iota)*self.alpha*np.ones(len(zeta)) + iota*zeta
-
+            
 
             rhoa = rho*np.ones(len(zeta))
             c = np.vstack([rhoa,thetas,zeta]).T
@@ -569,7 +571,7 @@ class GXWrapper(_Objective):
             "B_theta", "B_zeta", "B_rho", "|B|_t", "|B|_z",
             "B^theta", "B^zeta_r", "B^theta_r", "B^zeta",
             "e_theta", "e_theta_r", "e_zeta_r", "e_zeta",
-            "p_r"
+            "p_r","grad(psi)"
         ]
 
         if verbose > 0:
@@ -638,6 +640,10 @@ class GXWrapper(_Objective):
 
         iotas = fi(np.sqrt(self.psi))
         shears = fs(np.sqrt(self.psi))
+
+        if iotas > 0:
+            iotas = iotas*-1
+            shears = shears*-1
         
         print("iotas is " + str(iotas))
         zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iotas),(np.pi*self.npol-self.alpha)/np.abs(iotas),2*self.nzgrid+1)
@@ -713,7 +719,7 @@ class GXWrapper(_Objective):
         jac = data['sqrt(g)']
         #gbdrift0 = (B_t*dB_z - B_z*dB_t)*2*rho*psib/jac
         #gbdrift0 with negative sign?
-        gbdrift0 = -psib/np.abs(psib)*shat * 2 / modB**3 / rho*(B_t*dB_z - B_z*dB_t)*psib/jac * 2 * rho
+        gbdrift0 =  -psib/np.abs(psib)*shat * 2 / modB**3 / rho*(B_t*dB_z - B_z*dB_t)*psib/jac * 2 * rho
         cvdrift0 = gbdrift0
 
         #calculate gbdrift and cvdrift
@@ -754,7 +760,6 @@ class GXWrapper(_Objective):
 
 
         self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0)
-        #t = str(time.time())
         t = str(self.t)
         path_geo_old = self.path_geo + '.out'
         path_in_old = self.path_in + '.in'
@@ -771,19 +776,11 @@ class GXWrapper(_Objective):
         
         stdout = 'stdout.out_' + t
         stderr = 'stderr.out_' + t
-#        cmd = self.path + '/gx ' + ' ' + path_in_new
-#        cmd ='srun -N 1 -t 00:10:00 --ntasks=1 --gpus-per-task=1 --exact --overcommit ' + self.path + '/gx' + ' ' + path_in_new
-
-
-#        out = run_gx_bash(cmd=cmd,stdout=stdout,stderr=stderr)
-#        out_res = out.result()
         self.run_gx(t)
 
         out_file = self.path_in + '_' + t + '.nc'
         ds = nc.Dataset(out_file)
 
-        #ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc')
-        #ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx.nc')
         
         qflux = ds['Fluxes/qflux']
         qflux = qflux[int(len(qflux)/2):]
@@ -796,11 +793,8 @@ class GXWrapper(_Objective):
         
         weighted_birkhoff = weighted_birkhoff.reshape((len(qflux),1))
         qflux_avg = np.sum(weighted_birkhoff*qflux/norm)
-#        qflux_avg = jnp.mean(qflux[int(len(qflux)/2):]) 
         print(qflux_avg)
         ds.close() 
-        #os.rename('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc','/scratch/gpfs/pk2354/DESC/GX/gx_old.nc')
-        #os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap_old.out')
 
         
         return jnp.atleast_1d(qflux_avg)

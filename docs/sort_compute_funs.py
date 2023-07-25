@@ -16,7 +16,6 @@ def get_matches(fun, pattern):
     """Return all matches of ``pattern`` in source code of function ``fun``."""
     src = inspect.getsource(fun)
     matches = pattern.findall(src)
-    matches = [s.replace("'", "").replace('"', "") for s in matches]
     return matches
 
 

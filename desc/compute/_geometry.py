@@ -234,24 +234,6 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="n_rho",
-    label="\\hat{\\mathbf{n}}_{\\rho}",
-    units="~",
-    units_long="None",
-    description="Unit normal vector to constant rho surface",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^rho"],
-)
-def _n_rho(params, transforms, profiles, data, **kwargs):
-    data["n_rho"] = (data["e^rho"].T / jnp.linalg.norm(data["e^rho"])).T
-    return data
-
-
-@register_compute_fun(
     name="L_sff",
     label="L_{sff}",
     units="m",

@@ -95,7 +95,7 @@ class QuasisymmetryBoozer(_Objective):
             + "{:10.3e} "
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -108,6 +108,7 @@ class QuasisymmetryBoozer(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
@@ -140,6 +141,12 @@ class QuasisymmetryBoozer(_Objective):
             helicity=self.helicity,
             NFP=self._transforms["B"].basis.NFP,
         )
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+            "matrix": self._matrix,
+            "idx": self._idx,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -177,15 +184,17 @@ class QuasisymmetryBoozer(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        B_mn = self._matrix @ data["|B|_mn"]
-        return B_mn[self._idx]
+        B_mn = constants["matrix"] @ data["|B|_mn"]
+        return B_mn[constants["idx"]]
 
     @property
     def helicity(self):
@@ -283,7 +292,7 @@ class QuasisymmetryTwoTerm(_Objective):
             + "{:10.3e} "
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -296,6 +305,7 @@ class QuasisymmetryTwoTerm(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -312,6 +322,10 @@ class QuasisymmetryTwoTerm(_Objective):
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -347,15 +361,16 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
-            helicity=self.helicity,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        return data["f_C"] * self._transforms["grid"].weights
+        return data["f_C"] * constants["transforms"]["grid"].weights
 
     @property
     def helicity(self):
@@ -441,7 +456,7 @@ class QuasisymmetryTripleProduct(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -454,6 +469,7 @@ class QuasisymmetryTripleProduct(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -470,6 +486,10 @@ class QuasisymmetryTripleProduct(_Objective):
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -507,14 +527,16 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        return data["f_T"] * self._transforms["grid"].weights
+        return data["f_T"] * constants["transforms"]["grid"].weights
 
 
 class Isodynamicity(_Objective):
@@ -581,7 +603,7 @@ class Isodynamicity(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -594,6 +616,7 @@ class Isodynamicity(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -610,6 +633,10 @@ class Isodynamicity(_Objective):
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -641,11 +668,13 @@ class Isodynamicity(_Objective):
             Isodynamicity error at each node (~).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        return data["isodynamicity"] * self._transforms["grid"].weights
+        return data["isodynamicity"] * constants["transforms"]["grid"].weights

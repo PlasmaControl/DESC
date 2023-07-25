@@ -75,7 +75,7 @@ class AspectRatio(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -88,6 +88,7 @@ class AspectRatio(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -104,6 +105,10 @@ class AspectRatio(_Objective):
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -127,12 +132,14 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         return data["R0/a"]
 
@@ -196,7 +203,7 @@ class Elongation(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -209,6 +216,7 @@ class Elongation(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -225,6 +233,10 @@ class Elongation(_Objective):
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -248,12 +260,14 @@ class Elongation(_Objective):
             Elongation, dimensionless.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         return data["a_major/a_minor"]
 
@@ -317,7 +331,7 @@ class Volume(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -330,6 +344,7 @@ class Volume(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -346,6 +361,10 @@ class Volume(_Objective):
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -373,12 +392,14 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         return data["V"]
 
@@ -476,31 +497,7 @@ class PlasmaVesselDistance(_Objective):
             name=name,
         )
 
-    def print_value(self, *args, **kwargs):
-        """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
-
-        if self._normalize:
-            print(
-                "Maximum "
-                + self._print_value_fmt.format(jnp.max(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Minimum "
-                + self._print_value_fmt.format(jnp.min(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Average "
-                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
-                + "(normalized)"
-            )
-
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -513,6 +510,7 @@ class PlasmaVesselDistance(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._surface_grid is None:
             surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -552,6 +550,11 @@ class PlasmaVesselDistance(_Objective):
             grid=plasma_grid,
             has_axis=plasma_grid.axis.size or surface_grid.axis.size,
         )
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+            "surface_coords": self._surface_coords,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -579,21 +582,47 @@ class PlasmaVesselDistance(_Objective):
             For each point in the surface grid, approximate distance to plasma.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
         d = jnp.linalg.norm(
-            plasma_coords[:, None, :] - self._surface_coords[None, :, :], axis=-1
+            plasma_coords[:, None, :] - constants["surface_coords"][None, :, :], axis=-1
         )
         if self._use_softmin:  # do softmin
             return jnp.apply_along_axis(jax_softmin, 0, d, self._alpha)
         else:  # do hardmin
             return d.min(axis=0)
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
+
+        if self._normalize:
+            print(
+                "Maximum "
+                + self._print_value_fmt.format(jnp.max(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Minimum "
+                + self._print_value_fmt.format(jnp.min(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average "
+                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
+                + "(normalized)"
+            )
 
 
 class MeanCurvature(_Objective):
@@ -660,7 +689,7 @@ class MeanCurvature(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -673,6 +702,7 @@ class MeanCurvature(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -689,6 +719,10 @@ class MeanCurvature(_Objective):
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -716,12 +750,14 @@ class MeanCurvature(_Objective):
             Mean curvature at each point (m^-1).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         return data["curvature_H"]
 
@@ -793,7 +829,7 @@ class PrincipalCurvature(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -806,6 +842,7 @@ class PrincipalCurvature(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -822,6 +859,10 @@ class PrincipalCurvature(_Objective):
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -849,12 +890,14 @@ class PrincipalCurvature(_Objective):
             Max absolute principal curvature at each point (m^-1).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         return jnp.maximum(jnp.abs(data["curvature_k1"]), jnp.abs(data["curvature_k2"]))
 
@@ -921,7 +964,7 @@ class BScaleLength(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -934,6 +977,7 @@ class BScaleLength(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -950,6 +994,10 @@ class BScaleLength(_Objective):
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -985,11 +1033,13 @@ class BScaleLength(_Objective):
             Magnetic field scale length at each point (m).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         return data["L_grad(B)"]

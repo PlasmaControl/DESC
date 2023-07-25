@@ -15,6 +15,7 @@ __all__ = [
     "FourierSeries",
     "DoubleFourierSeries",
     "ZernikePolynomial",
+    "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
 ]
 
@@ -33,7 +34,6 @@ class Basis(IOAble, ABC):
     ]
 
     def __init__(self):
-
         self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()
@@ -52,18 +52,18 @@ class Basis(IOAble, ABC):
             "cos",
             "cosine",
             "even",
+            "cos(t)",
             False,
             None,
         ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
-            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+            self._modes = self.modes[sign(self.modes[:, 1]) == sign(self.modes[:, 2])]
         elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
-            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+            self._modes = self.modes[sign(self.modes[:, 1]) != sign(self.modes[:, 2])]
         elif self.sym == "even":  # even powers of rho
-            non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
-            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+            self._modes = self.modes[self.modes[:, 0] % 2 == 0]
+        elif self.sym == "cos(t)":  # cos(m*t) terms only
+            self._modes = self.modes[sign(self.modes[:, 1]) >= 0]
         elif self.sym is None:
             self._sym = False
 
@@ -150,15 +150,30 @@ class Basis(IOAble, ABC):
         """int: Maximum radial resolution."""
         return self.__dict__.setdefault("_L", 0)
 
+    @L.setter
+    def L(self, L):
+        assert int(L) == L, "Basis Resolution must be an integer!"
+        self._L = int(L)
+
     @property
     def M(self):
         """int:  Maximum poloidal resolution."""
         return self.__dict__.setdefault("_M", 0)
 
+    @M.setter
+    def M(self, M):
+        assert int(M) == M, "Basis Resolution must be an integer!"
+        self._M = int(M)
+
     @property
     def N(self):
         """int: Maximum toroidal resolution."""
         return self.__dict__.setdefault("_N", 0)
+
+    @N.setter
+    def N(self, N):
+        assert int(N) == N, "Basis Resolution must be an integer!"
+        self._N = int(N)
 
     @property
     def NFP(self):
@@ -217,10 +232,9 @@ class PowerSeries(Basis):
     """
 
     def __init__(self, L, sym="even"):
-
-        self._L = L
-        self._M = 0
-        self._N = 0
+        self.L = L
+        self.M = 0
+        self.N = 0
         self._NFP = 1
         self._sym = sym
         self._spectral_indexing = "linear"
@@ -280,6 +294,7 @@ class PowerSeries(Basis):
 
         r, t, z = nodes.T
         l, m, n = modes.T
+
         if unique:
             _, ridx, routidx = np.unique(
                 r, return_index=True, return_inverse=True, axis=0
@@ -306,7 +321,7 @@ class PowerSeries(Basis):
 
         """
         if L != self.L:
-            self._L = L
+            self.L = L
             self._modes = self._get_modes(self.L)
             self._set_up()
 
@@ -330,10 +345,9 @@ class FourierSeries(Basis):
     """
 
     def __init__(self, N, NFP=1, sym=False):
-
-        self._L = 0
-        self._M = 0
-        self._N = N
+        self.L = 0
+        self.M = 0
+        self.N = N
         self._NFP = NFP
         self._sym = sym
         self._spectral_indexing = "linear"
@@ -393,7 +407,8 @@ class FourierSeries(Basis):
             return np.array([]).reshape((len(nodes), 0))
 
         r, t, z = nodes.T
-        n = modes[:, 2]
+        l, m, n = modes.T
+
         if unique:
             _, zidx, zoutidx = np.unique(
                 z, return_index=True, return_inverse=True, axis=0
@@ -407,9 +422,10 @@ class FourierSeries(Basis):
         toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
         if unique:
             toroidal = toroidal[zoutidx][:, noutidx]
+
         return toroidal
 
-    def change_resolution(self, N, NFP=None):
+    def change_resolution(self, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -418,11 +434,14 @@ class FourierSeries(Basis):
             Maximum toroidal resolution.
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
 
         """
         self._NFP = NFP if NFP is not None else self.NFP
         if N != self.N:
-            self._N = N
+            self.N = N
+            self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.N)
             self._set_up()
 
@@ -448,10 +467,9 @@ class DoubleFourierSeries(Basis):
     """
 
     def __init__(self, M, N, NFP=1, sym=False):
-
-        self._L = 0
-        self._M = M
-        self._N = N
+        self.L = 0
+        self.M = M
+        self.N = N
         self._NFP = NFP
         self._sym = sym
         self._spectral_indexing = "linear"
@@ -519,8 +537,8 @@ class DoubleFourierSeries(Basis):
             return np.array([]).reshape((len(nodes), 0))
 
         r, t, z = nodes.T
-        m = modes[:, 1]
-        n = modes[:, 2]
+        l, m, n = modes.T
+
         if unique:
             _, tidx, toutidx = np.unique(
                 t, return_index=True, return_inverse=True, axis=0
@@ -544,9 +562,10 @@ class DoubleFourierSeries(Basis):
         if unique:
             poloidal = poloidal[toutidx][:, moutidx]
             toroidal = toroidal[zoutidx][:, noutidx]
+
         return poloidal * toroidal
 
-    def change_resolution(self, M, N, NFP=None):
+    def change_resolution(self, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -557,6 +576,8 @@ class DoubleFourierSeries(Basis):
             Maximum toroidal resolution.
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
 
         Returns
         -------
@@ -564,9 +585,10 @@ class DoubleFourierSeries(Basis):
 
         """
         self._NFP = NFP if NFP is not None else self.NFP
-        if M != self.M or N != self.N:
-            self._M = M
-            self._N = N
+        if M != self.M or N != self.N or sym != self.sym:
+            self.M = M
+            self.N = N
+            self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.M, self.N)
             self._set_up()
 
@@ -605,10 +627,9 @@ class ZernikePolynomial(Basis):
     """
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
-
-        self._L = L
-        self._M = M
-        self._N = 0
+        self.L = L
+        self.M = M
+        self.N = 0
         self._NFP = 1
         self._sym = sym
         self._spectral_indexing = spectral_indexing
@@ -659,7 +680,7 @@ class ZernikePolynomial(Basis):
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
         default_L = {"ansi": M, "fringe": 2 * M}
         L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self._L = L
+        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -725,8 +746,9 @@ class ZernikePolynomial(Basis):
             return np.array([]).reshape((len(nodes), 0))
 
         r, t, z = nodes.T
+        l, m, n = modes.T
         lm = modes[:, :2]
-        m = modes[:, 1]
+
         if unique:
             _, ridx, routidx = np.unique(
                 r, return_index=True, return_inverse=True, axis=0
@@ -758,9 +780,10 @@ class ZernikePolynomial(Basis):
         if unique:
             radial = radial[routidx][:, lmoutidx]
             poloidal = poloidal[toutidx][:, moutidx]
+
         return radial * poloidal
 
-    def change_resolution(self, L, M):
+    def change_resolution(self, L, M, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -769,14 +792,154 @@ class ZernikePolynomial(Basis):
             Maximum radial resolution.
         M : int
             Maximum poloidal resolution.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
 
         """
-        if L != self.L or M != self.M:
-            self._L = L
-            self._M = M
+        if L != self.L or M != self.M or sym != self.sym:
+            self.L = L
+            self.M = M
+            self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
             )
+            self._set_up()
+
+
+class ChebyshevDoubleFourierBasis(Basis):
+    """3D basis: tensor product of Chebyshev poynomials and two Fourier series.
+
+    Fourier series in both the poloidal and toroidal coordinates.
+
+    Parameters
+    ----------
+    L : int
+        Maximum radial resolution.
+    M : int
+        Maximum poloidal resolution.
+    N : int
+        Maximum toroidal resolution.
+    NFP : int
+        Number of field periods.
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+
+    """
+
+    def __init__(self, L, M, N, NFP=1, sym=False):
+        self.L = L
+        self.M = M
+        self.N = N
+        self._NFP = NFP
+        self._sym = sym
+        self._spectral_indexing = "linear"
+
+        self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
+
+        super().__init__()
+
+    def _get_modes(self, L=0, M=0, N=0):
+        """Get mode numbers for Chebyshev-Fourier series.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resoltuion.
+        M : int
+            Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        dim_pol = 2 * M + 1
+        dim_tor = 2 * N + 1
+        l = np.arange(L + 1)
+        m = np.arange(dim_pol) - M
+        n = np.arange(dim_tor) - N
+        ll, mm, nn = np.meshgrid(l, m, n)
+        ll = ll.reshape((-1, 1), order="F")
+        mm = mm.reshape((-1, 1), order="F")
+        nn = nn.reshape((-1, 1), order="F")
+        y = np.hstack([ll, mm, nn])
+        return y
+
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used).
+        unique : bool, optional
+            whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            Basis functions evaluated at nodes.
+
+        """
+        if modes is None:
+            modes = self.modes
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
+
+        r, t, z = nodes.T
+        l, m, n = modes.T
+
+        radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
+        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+        toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
+
+        return radial * poloidal * toroidal
+
+    def change_resolution(self, L, M, N, NFP=None, sym=None):
+        """Change resolution of the basis to the given resolutions.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+        M : int
+            Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
+
+        """
+        self._NFP = NFP if NFP is not None else self.NFP
+        if L != self.L or M != self.M or N != self.N or sym != self.sym:
+            self._L = L
+            self._M = M
+            self._N = N
+            self._sym = sym if sym is not None else self.sym
+            self._modes = self._get_modes(self.L, self.M, self.N)
             self._set_up()
 
 
@@ -821,10 +984,9 @@ class FourierZernikeBasis(Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
-
-        self._L = L
-        self._M = M
-        self._N = N
+        self.L = L
+        self.M = M
+        self.N = N
         self._NFP = NFP
         self._sym = sym
         self._spectral_indexing = spectral_indexing
@@ -877,7 +1039,7 @@ class FourierZernikeBasis(Basis):
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
         default_L = {"ansi": M, "fringe": 2 * M}
         L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self._L = L
+        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -942,11 +1104,12 @@ class FourierZernikeBasis(Basis):
             modes = self.modes
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
+
         # TODO: avoid duplicate calculations when mixing derivatives
         r, t, z = nodes.T
+        l, m, n = modes.T
         lm = modes[:, :2]
-        m = modes[:, 1]
-        n = modes[:, 2]
+
         if unique:
             _, ridx, routidx = np.unique(
                 r, return_index=True, return_inverse=True, axis=0
@@ -987,9 +1150,10 @@ class FourierZernikeBasis(Basis):
             radial = radial[routidx][:, lmoutidx]
             poloidal = poloidal[toutidx][:, moutidx]
             toroidal = toroidal[zoutidx][:, noutidx]
+
         return radial * poloidal * toroidal
 
-    def change_resolution(self, L, M, N, NFP=None):
+    def change_resolution(self, L, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -1002,13 +1166,20 @@ class FourierZernikeBasis(Basis):
             Maximum toroidal resolution.
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
 
         """
         self._NFP = NFP if NFP is not None else self.NFP
-        if L != self.L or M != self.M or N != self.N:
-            self._L = L
-            self._M = M
-            self._N = N
+        if L != self.L or M != self.M or N != self.N or sym != self.sym:
+            self.L = L
+            self.M = M
+            self.N = N
+            self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
             )
@@ -1160,7 +1331,7 @@ def zernike_radial_coeffs(l, m, exact=True):
     return c
 
 
-def zernike_radial_poly(rho, l, m, dr=0):
+def zernike_radial_poly(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
     Evaluates basis functions using numpy to
@@ -1171,7 +1342,7 @@ def zernike_radial_poly(rho, l, m, dr=0):
 
     Parameters
     ----------
-    rho : ndarray, shape(N,)
+    r : ndarray, shape(N,)
         radial coordinates to evaluate basis
     l : ndarray of int, shape(K,)
         radial mode number(s)
@@ -1191,7 +1362,7 @@ def zernike_radial_poly(rho, l, m, dr=0):
     coeffs = polyder_vec(coeffs, dr)
     # this should give accuracy of ~1e-10 in the eval'd polynomials
     prec = int(0.4 * lmax + 8.4)
-    return polyval_vec(coeffs, rho, prec=prec).T
+    return polyval_vec(coeffs, r, prec=prec).T
 
 
 def zernike_radial(r, l, m, dr=0):
@@ -1254,8 +1425,8 @@ def zernike_radial(r, l, m, dr=0):
         )
     else:
         raise NotImplementedError(
-            "Analytic radial derivatives of zernike polynomials for order>3 "
-            + "have not been implemented"
+            "Analytic radial derivatives of Zernike polynomials for order>3 "
+            + "have not been implemented."
         )
     return s * jnp.where((l - m) % 2 == 0, out, 0)
 
@@ -1302,6 +1473,36 @@ def powers(rho, l, dr=0):
     coeffs = power_coeffs(l)
     coeffs = polyder_vec(np.fliplr(coeffs), dr)
     return polyval_vec(coeffs, rho).T
+
+
+def chebyshev(r, l, dr=0):
+    """Shifted Chebyshev polynomial.
+
+    Parameters
+    ----------
+    rho : ndarray, shape(N,)
+        radial coordinates to evaluate basis
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    dr : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        basis function(s) evaluated at specified points
+
+    """
+    x = 2 * r - 1  # shift
+    x, l, dr = map(jnp.asarray, (x, l, dr))
+    if dr == 0:
+        return jnp.cos(l * jnp.arccos(x))
+    else:
+        # dy/dr = dy/dx * dx/dr = dy/dx * 2
+        raise NotImplementedError(
+            "Analytic radial derivatives of Chebyshev polynomials "
+            + "have not been implemented."
+        )
 
 
 @jit

@@ -2900,10 +2900,10 @@ def _min_tz_modB(params, transforms, profiles, data, **kwargs):
     description="Maximum field strength on each flux surface",
     dim=1,
     params=[],
-    transforms={},
+    transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["min_tz |B|", "max_tz |B|"],
+    data=["|B|"],
 )
 def _max_tz_modB(params, transforms, profiles, data, **kwargs):
     data["max_tz |B|"] = surface_max(transforms["grid"], data["|B|"])

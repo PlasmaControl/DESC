@@ -779,7 +779,7 @@ class InputReader:
         f.close()
 
     @staticmethod
-    def write_descout_to_input(filename, inputs, header=""):
+    def descout_to_input(filename, inputs, header=""):
         """Generate a DESC input file from a DESC output file
 
         Parameters
@@ -820,66 +820,43 @@ class InputReader:
         }.items():
             f.write(key + " = {}\n".format(" " + str(eval("eq0.{0}".format(val)))))
 
-        f.write("\n\n# continuation parameters\n")
-        try:
-            f.write("bdry_ratio = {}\n".format(eq0._bdry_ratio))
-        except:
-            print("bdry_ratio not given in the output. Setting to 1...")
-            f.write("bdry_ratio = {}\n".format(int(1)))
-
-        try:
-            f.write("pres_ratio = {}\n".format(eq0._pres_ratio))
-        except:
-            print("pres_ratio not given in the output. Setting to 1...")
-            f.write("pres_ratio = {}\n".format(int(1)))
-
-        try:
-            f.write("curr_ratio = {}\n".format(eq0._curr_ratio))
-        except:
-            print("curr_ratio not given in the output. Setting to 1...")
-            f.write("curr_ratio = {}\n".format(int(1)))
-
-        try:
-            f.write("pert_order = {}\n".format(eq0._pert_order))
-        except:
-            print("pert_order not given in the output. Setting to 2...")
-            f.write("pert_order = {}\n".format(int(2)))
+        print("DESC will automatically choose continuation parameters..\n")
 
         f.write("\n\n# solver tolerances\n")
         try:
             f.write("ftol = {}\n".format(eq0._bdry_ratio))
-        except:
+        except AttributeError:
             print("ftol not given in the output. Setting to 1E-2...")
             f.write("ftol = {}\n".format(float(1e-2)))
 
         try:
             f.write("xtol = {}\n".format(eq0._pres_ratio))
-        except:
+        except AttributeError:
             print("xtol not given in the output. Setting to 1E-6...")
             f.write("xtol = {}\n".format(float(1e-6)))
 
         try:
             f.write("gtol = {}\n".format(eq0._curr_ratio))
-        except:
+        except AttributeError:
             print("gtol not given in the output. Setting to 1E-6...")
             f.write("gtol = {}\n".format(float(1e-6)))
 
         try:
             f.write("maxiter = {}\n".format(eq0._pert_order))
-        except:
+        except AttributeError:
             print("maxiter not given in the output. Setting to 100...")
             f.write("maxiter = {}\n".format(int(100)))
 
         f.write("\n\n# solver methods\n")
         try:
             f.write("optimizer = {}\n".format(eq0._optimizer))
-        except:
-            print("Optimizer not given in the output. Setting to lsq-exact...")
+        except AttributeError:
+            print("Optimizer absent in the output. Setting to lsq-exact...")
             f.write("optimizer = {}\n".format("lsq-exact"))
 
         try:
             f.write("objective = {}\n".format(eq0._objective))
-        except:
+        except AttributeError:
             print("Objective not given in the output. Setting to force...")
             f.write("objective = {}\n".format("force"))
 
@@ -901,7 +878,6 @@ class InputReader:
                 eq0.iota.__class__.__name__ == "PowerSeriesProfile"
             ), "Equilibrium must have power series profiles for ascii io"
             char = "i"
-
             if len(pres_profile1) >= len(iota_profile1):
                 pres_profile = pres_profile1
 
@@ -910,14 +886,12 @@ class InputReader:
             else:
                 pres_profile1 = np.zeros((len(iota_profile1),))
                 pres_profile[: len(pres_profile)] = pres_profile
-        except:
+        except AttributeError:
             curr_profile1 = eq0._current.params.tolist()
-
             assert (
                 eq0.current.__class__.__name__ == "PowerSeriesProfile"
             ), "Equilibrium must have power series profiles for ascii io"
             char = "c"
-
             if len(pres_profile1) >= len(curr_profile1):
                 pres_profile = pres_profile1
 
@@ -946,7 +920,6 @@ class InputReader:
         f.write("\n# fixed-boundary surface shape\n")
         # boundary paramters
         if eq0.sym:
-            nbdry = len(np.nonzero(eq0.Rb_lmn)[0]) + len(np.nonzero(eq0.Zb_lmn)[0])
             for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
                 if abs(eq0.Rb_lmn[k]) > 1e-4:
                     f.write(

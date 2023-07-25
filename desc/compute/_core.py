@@ -46,7 +46,7 @@ def _0(params, transforms, profiles, data, **kwargs):
     label="\\rho",
     units="~",
     units_long="None",
-    description="Radial coordinate, proportional to the square root"
+    description="Radial coordinate, proportional to the square root "
     + "of the toroidal flux",
     dim=1,
     params=[],

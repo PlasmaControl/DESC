@@ -57,8 +57,8 @@ class AspectRatio(_Objective):
         target=None,
         bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="aspect ratio",
     ):
@@ -185,8 +185,8 @@ class Elongation(_Objective):
         target=None,
         bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="elongation",
     ):

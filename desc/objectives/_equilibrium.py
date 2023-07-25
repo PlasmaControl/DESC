@@ -215,13 +215,6 @@ class ForceBalance(_Objective):
 
         return jnp.concatenate([fr, fb])
 
-    """
-    def compute_scaled(self, *args, **kwargs):
-        "Compute and apply the target/bounds, weighting, and normalization."
-        w = jnp.sqrt(self._transforms["grid"].weights)
-        return super().compute_scaled(*args, **kwargs) * jnp.tile(w, 2)
-    """
-
 
 class RadialForceBalance(_Objective):
     r"""Radial MHD force balance.
@@ -399,12 +392,6 @@ class RadialForceBalance(_Objective):
         )
         f = data["F_rho"] * data["|grad(rho)|"]
         return f * data["sqrt(g)"] * constants["transforms"]["grid"].weights
-
-    def compute_scaled(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(
-            self._transforms["grid"].weights
-        )
 
 
 class HelicalForceBalance(_Objective):
@@ -585,12 +572,6 @@ class HelicalForceBalance(_Objective):
         )
         f = data["F_helical"] * data["|e^helical|"]
         return f * data["sqrt(g)"] * constants["transforms"]["grid"].weights
-
-    def compute_scaled(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(
-            self._transforms["grid"].weights
-        )
 
 
 class Energy(_Objective):
@@ -961,10 +942,3 @@ class CurrentDensity(_Objective):
         jz = data["J^zeta"] * data["sqrt(g)"] * constants["transforms"]["grid"].weights
 
         return jnp.concatenate([jr, jt, jz])
-
-    """
-    def compute_scaled(self, *args, **kwargs):
-        "Compute and apply the target/bounds, weighting, and normalization."
-        w = jnp.sqrt(self._transforms["grid"].weights)
-        return super().compute_scaled(*args, **kwargs) * jnp.tile(w, 3)
-    """

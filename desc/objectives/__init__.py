@@ -10,7 +10,6 @@ from ._equilibrium import (
 )
 from ._generic import (
     GenericObjective,
-    MirrorRatio,
     ObjectiveFromUser,
     RotationalTransform,
     ToroidalCurrent,
@@ -19,7 +18,6 @@ from ._geometry import (
     AspectRatio,
     BScaleLength,
     Elongation,
-    FluxGradient,
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,
@@ -48,19 +46,16 @@ from .linear_objectives import (
     FixElectronTemperature,
     FixIonTemperature,
     FixIota,
-    FixLambda,
     FixLambdaGauge,
     FixModeR,
     FixModeZ,
     FixOmni,
     FixPressure,
     FixPsi,
-    FixR,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
     FixWell,
-    FixZ,
     StraightBmaxContour,
 )
 from .objective_funs import ObjectiveFunction

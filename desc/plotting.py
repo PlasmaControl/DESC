@@ -875,7 +875,6 @@ def plot_3d(
 def plot_fsa(
     eq,
     name,
-    axis=False,
     with_sqrt_g=True,
     log=False,
     rho=20,
@@ -894,8 +893,6 @@ def plot_fsa(
         Object from which to plot.
     name : str
         Name of variable to plot.
-    axis : bool, optional
-        Whether to include the axis (rho=0). Default is False.
     with_sqrt_g : bool, optional
         Whether to weight the surface average with sqrt(g), the 3-D Jacobian
         determinant of flux coordinate system. Default is True.
@@ -962,10 +959,7 @@ def plot_fsa(
 
     """
     if np.isscalar(rho) and (int(rho) == rho):
-        if axis:
-            rho = np.flipud(np.linspace(1, 0, rho + 1, endpoint=True))
-        else:
-            rho = np.linspace(1 / rho, 1, rho)
+        rho = np.linspace(1, 0, rho + 1)
     else:
         rho = np.atleast_1d(rho)
     if M is None:

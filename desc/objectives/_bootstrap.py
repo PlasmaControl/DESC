@@ -62,7 +62,7 @@ class BootstrapRedlConsistency(_Objective):
 
     _scalar = False
     _linear = False
-    _units = "(T A m^-2)"
+    _units = "(T A m^{-2})"
     _print_value_fmt = "Bootstrap current self-consistency: {:10.3e} "
 
     def __init__(
@@ -77,7 +77,6 @@ class BootstrapRedlConsistency(_Objective):
         helicity=(1, 0),
         name="Bootstrap current self-consistency (Redl)",
     ):
-
         if target is None and bounds is None:
             target = 0
         assert (len(helicity) == 2) and (int(helicity[1]) == helicity[1])

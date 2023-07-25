@@ -2,7 +2,7 @@
 
 # global parameters
 sym = 1
-NFP =   3
+NFP = 3
 Psi = 0.49707021
 
 # spectral resolution

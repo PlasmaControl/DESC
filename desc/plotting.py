@@ -965,14 +965,18 @@ def plot_fsa(
 
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
 
-    if "<" + name + ">" in data_index and with_sqrt_g != {
-        "sqrt(g)",
-        "V_r(r)",
-    }.isdisjoint(data_index["<" + name + ">"]["dependencies"]["data"]):
-        # Allows computing more involved magnetic axis limits.
-        # Last condition should ensure that the <name> is the desired surface
-        # average (i.e. computed with/without the sqrt(g) factor).
-        name = "<" + name + ">"
+    if "<" + name + ">" in data_index:
+        # If we identify the quantity to plot as something in data_index, then
+        # we may be able to compute more involved magnetic axis limits.
+        deps = data_index["<" + name + ">"]["dependencies"]["data"]
+        if with_sqrt_g == ("sqrt(g)" in deps or "V_r(r)" in deps):
+            # When we denote a quantity as ``<name>`` in data_index, we have
+            # marked it a surface average of ``name``. This does not specify
+            # the type of surface average however (i.e. with/without the sqrt(g)
+            # factor). The above conditional guard should ensure that the
+            # surface average we have the recipe to compute in data_index is the
+            # desired surface average.
+            name = "<" + name + ">"
     values, label = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )

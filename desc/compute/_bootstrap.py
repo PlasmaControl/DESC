@@ -42,7 +42,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     ``f_t`` has a standard definition in neoclassical theory:
 
     .. math::
-        f_t = 1 - \frac{3}{4} \langle |B|^2 \rangle \int_0^{1/Bmax}
+        f_t = 1 - \frac{3}{4} \langle \lvert B \rvert^2 \rangle \int_0^{1/Bmax}
             \frac{\lambda\; d\lambda}{\langle \sqrt{1 - \lambda B} \rangle}
 
     where :math:`\langle \ldots \rangle` is a flux surface average.
@@ -62,11 +62,11 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     V_r = grid.compress(
         grid.replace_at_axis(data["V_r(r)"], lambda: data["V_rr(r)"], copy=True)
     )
-    compute_averages = surface_averages_map(grid, expand_out=False)
+    compute_surface_averages = surface_averages_map(grid, expand_out=False)
 
     # Sum over the lambda grid points, using fori_loop for efficiency.
     def body_fun(jlambda, lambda_integral):
-        flux_surf_avg_term = compute_averages(
+        flux_surf_avg_term = compute_surface_averages(
             jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax),
             sqrt_g=sqrt_g,
             denominator=V_r,

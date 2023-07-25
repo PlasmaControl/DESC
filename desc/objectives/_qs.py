@@ -8,7 +8,7 @@ from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
@@ -79,7 +79,7 @@ class QuasisymmetryBoozer(_Objective):
         self.M_booz = M_booz
         self.N_booz = N_booz
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -108,7 +108,8 @@ class QuasisymmetryBoozer(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
@@ -157,7 +158,7 @@ class QuasisymmetryBoozer(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute quasi-symmetry Boozer harmonics error.
@@ -268,7 +269,7 @@ class QuasisymmetryTwoTerm(_Objective):
         self._grid = grid
         self.helicity = helicity
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -297,7 +298,8 @@ class QuasisymmetryTwoTerm(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -326,7 +328,7 @@ class QuasisymmetryTwoTerm(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"] ** 3 / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute quasi-symmetry two-term errors.
@@ -431,7 +433,7 @@ class QuasisymmetryTripleProduct(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -453,7 +455,8 @@ class QuasisymmetryTripleProduct(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -484,7 +487,7 @@ class QuasisymmetryTripleProduct(_Objective):
                 scales["B"] ** 4 / scales["a"] ** 2 / jnp.sqrt(self._dim_f)
             )
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute quasi-symmetry triple product errors.
@@ -570,7 +573,7 @@ class Isodynamicity(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -592,7 +595,8 @@ class Isodynamicity(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -617,7 +621,7 @@ class Isodynamicity(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute isodynamicity errors.

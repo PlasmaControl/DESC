@@ -9,7 +9,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.geometry.utils import rpz2xyz
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.utils import Timer
+from desc.utils import Timer, setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -66,7 +66,7 @@ class AspectRatio(_Objective):
             target = 2
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -88,7 +88,8 @@ class AspectRatio(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -113,7 +114,7 @@ class AspectRatio(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute aspect ratio.
@@ -194,7 +195,7 @@ class Elongation(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -216,7 +217,8 @@ class Elongation(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -241,7 +243,7 @@ class Elongation(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute elongation.
@@ -322,7 +324,7 @@ class Volume(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -344,7 +346,8 @@ class Volume(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -373,7 +376,7 @@ class Volume(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["V"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute plasma volume.
@@ -488,7 +491,7 @@ class PlasmaVesselDistance(_Objective):
         self._use_softmin = use_softmin
         self._alpha = alpha
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -510,7 +513,8 @@ class PlasmaVesselDistance(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._surface_grid is None:
             surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -561,7 +565,7 @@ class PlasmaVesselDistance(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"] / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute plasma-surface distance.
@@ -678,7 +682,7 @@ class MeanCurvature(_Objective):
             bounds = (-np.inf, 0)
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -700,7 +704,8 @@ class MeanCurvature(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -729,7 +734,7 @@ class MeanCurvature(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["a"] / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute mean curvature.
@@ -818,7 +823,7 @@ class PrincipalCurvature(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -840,7 +845,8 @@ class PrincipalCurvature(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -869,7 +875,7 @@ class PrincipalCurvature(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["a"] / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute max absolute principal curvature.
@@ -955,7 +961,7 @@ class BScaleLength(_Objective):
             bounds = (1, np.inf)
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -977,7 +983,8 @@ class BScaleLength(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -1006,7 +1013,7 @@ class BScaleLength(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["R0"] / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute magnetic field scale length.

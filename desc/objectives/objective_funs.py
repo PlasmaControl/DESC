@@ -8,7 +8,8 @@ import numpy as np
 from desc.backend import jit, jnp, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
-from desc.utils import Timer, is_broadcastable, sort_args
+from desc.optimizeable import Optimizeable
+from desc.utils import Timer, flatten_list, is_broadcastable, sort_args, sort_things
 
 
 class ObjectiveFunction(IOAble):
@@ -642,14 +643,19 @@ class ObjectiveFunction(IOAble):
             [jnp.ones(obj.dim_f) * obj.weight for obj in self.objectives]
         )
 
+    @property
+    def things(self):
+        """list: Optimizeable things that this objective is tied to."""
+        return sort_things([obj.things for obj in self._objectives])
+
 
 class _Objective(IOAble, ABC):
     """Objective (or constraint) used in the optimization of an Equilibrium.
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    things : Optimizeable or tuple/list of Optimizeable
+        Objects that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
@@ -685,7 +691,7 @@ class _Objective(IOAble, ABC):
 
     def __init__(
         self,
-        eq=None,
+        things=None,
         target=0,
         bounds=None,
         weight=1,
@@ -707,18 +713,18 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        self._eq = eq
-        if eq is None:
+        if things is None:
             warnings.warn(
                 FutureWarning(
                     "Creating an Objective without specifying the Equilibrium to"
                     " optimize is deprecated, in the future this will raise an error."
                 )
             )
+        self._things = flatten_list([things], True)
 
-    def _set_dimensions(self, eq):
+    def _set_dimensions(self, things):
         """Set state vector component dimensions."""
-        self._dimensions = eq.dimensions.copy()
+        self._dimensions = [thing.dimensions.copy() for thing in things]
 
     def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""
@@ -811,14 +817,14 @@ class _Objective(IOAble, ABC):
             self.jit()
 
     @abstractmethod
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, things=None, use_jit=True, verbose=1):
         """Build constant arrays."""
-        eq = eq or self._eq
+        things = self.things
         self._check_dimensions()
         self._set_derivatives()
         # kludge for now
-        self._args = eq.optimizeable_params
-        self._dimensions = eq.dimensions
+        self._args = things[0].optimizeable_params
+        self._dimensions = things[0].dimensions
         if use_jit is not None:
             self._use_jit = use_jit
         if self._use_jit:
@@ -1007,3 +1013,17 @@ class _Objective(IOAble, ABC):
     def name(self):
         """Name of objective function (str)."""
         return self._name
+
+    @property
+    def things(self):
+        """list: Optimizeable things that this objective is tied to."""
+        if not hasattr(self, "_things"):
+            self._things = []
+        return self._things
+
+    @things.setter
+    def things(self, new):
+        if not isinstance(new, (tuple, list)):
+            new = [new]
+        assert all(isinstance(x, Optimizeable) for x in new)
+        self._things = list(new)

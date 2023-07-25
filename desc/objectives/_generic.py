@@ -8,7 +8,7 @@ from desc.compute import data_index
 from desc.compute.utils import compress, get_profiles, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.profiles import Profile
-from desc.utils import Timer
+from desc.utils import Timer, setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -98,7 +98,7 @@ class ObjectiveFromUser(_Objective):
         self._fun = fun
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -120,7 +120,8 @@ class ObjectiveFromUser(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
         else:
@@ -155,7 +156,7 @@ class ObjectiveFromUser(_Objective):
             "profiles": self._profiles,
         }
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute the quantity.
@@ -241,7 +242,7 @@ class GenericObjective(_Objective):
         self.f = f
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -268,7 +269,8 @@ class GenericObjective(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
         else:
@@ -288,7 +290,7 @@ class GenericObjective(_Objective):
             "profiles": self._profiles,
         }
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute the quantity.
@@ -371,7 +373,7 @@ class ToroidalCurrent(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -393,7 +395,8 @@ class ToroidalCurrent(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
                 L=eq.L_grid,
@@ -432,7 +435,7 @@ class ToroidalCurrent(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["I"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute toroidal current.
@@ -552,7 +555,7 @@ class RotationalTransform(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -574,7 +577,8 @@ class RotationalTransform(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
                 L=eq.L_grid,
@@ -609,7 +613,7 @@ class RotationalTransform(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute rotational transform profile errors.

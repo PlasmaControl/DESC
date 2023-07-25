@@ -9,7 +9,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import compress
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -85,7 +85,7 @@ class BootstrapRedlConsistency(_Objective):
         self._grid = grid
         self.helicity = helicity
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -107,7 +107,8 @@ class BootstrapRedlConsistency(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,
@@ -193,7 +194,7 @@ class BootstrapRedlConsistency(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"] * scales["J"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute the bootstrap current self-consistency objective.

@@ -8,7 +8,7 @@ from termcolor import colored
 from desc.io import IOAble
 from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
 from desc.objectives.utils import combine_args, maybe_add_self_consistency
-from desc.utils import Timer
+from desc.utils import Timer, get_instance
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 
@@ -67,7 +67,7 @@ class Optimizer(IOAble):
     # TODO: add copy argument and return the equilibrium?
     def optimize(  # noqa: C901 - FIXME: simplify this
         self,
-        eq,
+        things,
         objective,
         constraints=(),
         ftol=None,
@@ -83,8 +83,8 @@ class Optimizer(IOAble):
 
         Parameters
         ----------
-        eq : Equilibrium
-            Initial equilibrium.
+        things : Optimizeable or tuple/list of Optmizeable
+            Things to optimize, eg Equilibrium.
         objective : ObjectiveFunction
             Objective function to optimize.
         constraints : tuple of Objective, optional
@@ -136,6 +136,14 @@ class Optimizer(IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
+        if not isinstance(things, (list, tuple)):
+            things = [things]
+
+        # need local import to avoid circular dependencies
+        from desc.equilibrium import Equilibrium
+
+        eq = get_instance(things, Equilibrium)
+
         options = {} if options is None else options
         # TODO: document options
         timer = Timer()
@@ -147,7 +155,7 @@ class Optimizer(IOAble):
             eq, objective, nonlinear_constraint, self.method, options
         )
 
-        if not isinstance(objective, ProximalProjection):
+        if not isinstance(objective, ProximalProjection) and eq is not None:
             # need to include self consistency constraints
             linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
         if len(linear_constraints):
@@ -331,6 +339,8 @@ def _maybe_wrap_nonlinear_constraints(
     eq, objective, nonlinear_constraint, method, options
 ):
     """Use ProximalProjection to handle nonlinear constraints."""
+    if eq is None:  # not deal with an equilibrium problem -> no ProximalProjection
+        return eq, nonlinear_constraint
     wrapper, method = _parse_method(method)
     if nonlinear_constraint is None:
         if wrapper is not None:

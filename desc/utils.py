@@ -546,3 +546,16 @@ def sort_args(args):
     sort things in reverse lexicographical order.
     """
     return sorted(set(list(args)))[::-1]
+
+
+def sort_things(things):
+    """Sort a list of things by their class and instance name."""
+    things = list(set(things))
+    names = [t.__class__.__name__ + getattr(t, "name", "") for t in things]
+    # TODO: make this error message more clear
+    assert len(set(names)) == len(
+        things
+    ), "Duplicate object names detected, cannot determine unique ordering."
+    things_named = list(zip(names, things))
+    things_named = sorted(things_named)
+    return [thing for thing, name in things_named]

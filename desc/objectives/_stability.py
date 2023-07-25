@@ -7,7 +7,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import compress
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -70,7 +70,7 @@ class MercierStability(_Objective):
             bounds = (0, np.inf)
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -92,7 +92,8 @@ class MercierStability(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,
@@ -127,7 +128,7 @@ class MercierStability(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["Psi"] ** 2
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute the Mercier stability criterion.
@@ -254,7 +255,7 @@ class MagneticWell(_Objective):
             bounds = (0, np.inf)
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -275,7 +276,8 @@ class MagneticWell(_Objective):
         verbose : int, optional
             Level of output.
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,
@@ -306,7 +308,7 @@ class MagneticWell(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute a magnetic well parameter.

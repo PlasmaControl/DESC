@@ -14,6 +14,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import zernike_radial, zernike_radial_coeffs
+from desc.utils import setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -51,7 +52,7 @@ class BoundaryRSelfConsistency(_Objective):
 
         self._surface_label = surface_label
         super().__init__(
-            eq=eq,
+            things=eq,
             target=0,
             bounds=None,
             weight=1,
@@ -73,7 +74,8 @@ class BoundaryRSelfConsistency(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         modes = eq.surface.R_basis.modes
         idx = np.arange(eq.surface.R_basis.num_modes)
 
@@ -93,7 +95,7 @@ class BoundaryRSelfConsistency(_Objective):
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute boundary R self-consistency errors.
@@ -150,7 +152,7 @@ class BoundaryZSelfConsistency(_Objective):
 
         self._surface_label = surface_label
         super().__init__(
-            eq=eq,
+            things=eq,
             target=0,
             bounds=None,
             weight=1,
@@ -172,7 +174,8 @@ class BoundaryZSelfConsistency(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         modes = eq.surface.Z_basis.modes
         idx = np.arange(eq.surface.Z_basis.num_modes)
 
@@ -192,7 +195,7 @@ class BoundaryZSelfConsistency(_Objective):
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute boundary Z self-consistency errors.
@@ -244,7 +247,7 @@ class AxisRSelfConsistency(_Objective):
     ):
 
         super().__init__(
-            eq=eq,
+            things=eq,
             target=0,
             weight=1,
             name=name,
@@ -265,7 +268,8 @@ class AxisRSelfConsistency(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         ns = eq.axis.R_basis.modes[:, 2]
         self._dim_f = ns.size
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
@@ -280,7 +284,7 @@ class AxisRSelfConsistency(_Objective):
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute axis R self-consistency errors.
@@ -333,7 +337,7 @@ class AxisZSelfConsistency(_Objective):
     ):
 
         super().__init__(
-            eq=eq,
+            things=eq,
             target=0,
             weight=1,
             name=name,
@@ -354,7 +358,8 @@ class AxisZSelfConsistency(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         ns = eq.axis.Z_basis.modes[:, 2]
         self._dim_f = ns.size
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
@@ -369,7 +374,7 @@ class AxisZSelfConsistency(_Objective):
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute axis Z self-consistency errors.
@@ -456,7 +461,7 @@ class FixBoundaryR(_Objective):
         self._target_from_user = target
         self._surface_label = surface_label
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -478,7 +483,8 @@ class FixBoundaryR(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -533,7 +539,7 @@ class FixBoundaryR(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute boundary R errors.
@@ -621,7 +627,7 @@ class FixBoundaryZ(_Objective):
         self._target_from_user = target
         self._surface_label = surface_label
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -643,7 +649,8 @@ class FixBoundaryZ(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -698,7 +705,7 @@ class FixBoundaryZ(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute boundary Z errors.
@@ -753,7 +760,7 @@ class FixLambdaGauge(_Objective):
     ):
 
         super().__init__(
-            eq=eq,
+            things=eq,
             target=0,
             bounds=None,
             weight=1,
@@ -775,7 +782,8 @@ class FixLambdaGauge(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         L_basis = eq.L_basis
 
         if L_basis.sym:
@@ -803,7 +811,7 @@ class FixLambdaGauge(_Objective):
 
         self._dim_f = self._A.shape[0]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute lambda gauge freedom errors.
@@ -845,7 +853,7 @@ class FixThetaSFL(_Objective):
 
     def __init__(self, eq=None, name="Theta SFL"):
 
-        super().__init__(eq=eq, target=0, weight=1, name=name)
+        super().__init__(things=eq, target=0, weight=1, name=name)
 
     def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -860,7 +868,8 @@ class FixThetaSFL(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         idx = np.arange(eq.L_basis.num_modes)
         modes_idx = idx
         self._idx = idx
@@ -869,7 +878,7 @@ class FixThetaSFL(_Objective):
 
         self.target = np.zeros_like(modes_idx)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute Theta SFL errors.
@@ -948,7 +957,7 @@ class FixAxisR(_Objective):
         self._modes = modes
         self._target_from_user = target
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -970,7 +979,8 @@ class FixAxisR(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
 
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
@@ -1026,7 +1036,7 @@ class FixAxisR(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute axis R errors.
@@ -1105,7 +1115,7 @@ class FixAxisZ(_Objective):
         self._modes = modes
         self._target_from_user = target
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1127,7 +1137,8 @@ class FixAxisZ(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
 
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
@@ -1183,7 +1194,7 @@ class FixAxisZ(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute axis Z errors.
@@ -1268,7 +1279,7 @@ class FixModeR(_Objective):
             )
         self._target_from_user = target
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1290,7 +1301,8 @@ class FixModeR(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
@@ -1331,7 +1343,7 @@ class FixModeR(_Objective):
                 )
             self.target = self._target_from_user[modes_idx]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute Fixed mode R errors.
@@ -1416,7 +1428,7 @@ class FixModeZ(_Objective):
             )
         self._target_from_user = target
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1438,7 +1450,8 @@ class FixModeZ(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
@@ -1479,7 +1492,7 @@ class FixModeZ(_Objective):
                 )
             self.target = self._target_from_user[modes_idx]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute Fixed mode Z errors.
@@ -1579,7 +1592,7 @@ class FixSumModesR(_Objective):
                 )
         self._target_from_user = target
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1601,7 +1614,8 @@ class FixSumModesR(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
@@ -1647,7 +1661,7 @@ class FixSumModesR(_Objective):
         if self._target_from_user is None:
             self.target = np.dot(sum_weights.T, eq.R_lmn[self._idx])
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute Sum mode R errors.
@@ -1747,7 +1761,7 @@ class FixSumModesZ(_Objective):
                 )
         self._target_from_user = target
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1769,7 +1783,8 @@ class FixSumModesZ(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
@@ -1816,7 +1831,7 @@ class FixSumModesZ(_Objective):
         if self._target_from_user is None:
             self.target = np.dot(sum_weights.T, eq.Z_lmn[self._idx])
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute Sum mode Z errors.
@@ -1903,7 +1918,7 @@ class _FixProfile(_Objective, ABC):
         self._indices = indices
         self._target_from_user = target
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1927,7 +1942,8 @@ class _FixProfile(_Objective, ABC):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if self._profile is None or self._profile.params.size != eq.L + 1:
             self._profile = profile
 
@@ -1944,7 +1960,7 @@ class _FixProfile(_Objective, ABC):
         if self._target_from_user is None:
             self.target = self._profile.params[self._idx]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
 
 class FixPressure(_FixProfile):
@@ -2026,7 +2042,8 @@ class FixPressure(_FixProfile):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if eq.pressure is None:
             raise RuntimeError(
                 "Attempting to fix pressure on an equilibrium with no "
@@ -2144,7 +2161,8 @@ class FixIota(_FixProfile):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if eq.iota is None:
             raise RuntimeError(
                 "Attempt to fix rotational transform on an equilibrium with no "
@@ -2257,7 +2275,8 @@ class FixCurrent(_FixProfile):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if eq.current is None:
             raise RuntimeError(
                 "Attempting to fix toroidal current on an equilibrium with no "
@@ -2373,7 +2392,8 @@ class FixElectronTemperature(_FixProfile):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if eq.electron_temperature is None:
             raise RuntimeError(
                 "Attempting to fix electron temperature on an equilibrium with no "
@@ -2489,7 +2509,8 @@ class FixElectronDensity(_FixProfile):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if eq.electron_density is None:
             raise RuntimeError(
                 "Attempting to fix electron density on an equilibrium with no "
@@ -2605,7 +2626,8 @@ class FixIonTemperature(_FixProfile):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if eq.ion_temperature is None:
             raise RuntimeError(
                 "Attempting to fix ion temperature on an equilibrium with no "
@@ -2723,7 +2745,8 @@ class FixAtomicNumber(_FixProfile):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if eq.atomic_number is None:
             raise RuntimeError(
                 "Attempting to fix atomic number on an equilibrium with no "
@@ -2799,7 +2822,7 @@ class FixPsi(_Objective):
     ):
         self._target_from_user = target
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -2821,7 +2844,8 @@ class FixPsi(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         self._dim_f = 1
 
         if self._target_from_user is None:
@@ -2831,7 +2855,7 @@ class FixPsi(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["Psi"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute fixed-Psi error.

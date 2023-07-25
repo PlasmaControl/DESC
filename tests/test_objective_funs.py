@@ -350,7 +350,7 @@ def test_rejit():
     class DummyObjective(_Objective):
         def __init__(self, y, eq=None, target=0, weight=1, name="dummy"):
             self.y = y
-            super().__init__(eq=eq, target=target, weight=weight, name=name)
+            super().__init__(things=eq, target=target, weight=weight, name=name)
 
         def build(self, eq=None, use_jit=True, verbose=1):
             self._dim_f = 1

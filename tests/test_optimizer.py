@@ -349,7 +349,7 @@ def test_overstepping():
             self._built = True
 
         def compute(self, *args, **kwargs):
-            params = self._parse_args(*args, **kwargs)
+            params, _ = self._parse_args(*args, **kwargs)
             x = jnp.concatenate([jnp.atleast_1d(params[arg]) for arg in self.args])
             return x - self._x0
 
@@ -358,7 +358,7 @@ def test_overstepping():
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(eq=eq), use_jit=False)
     # make gradient super noisy so it stalls
-    objective.jac_scaled = lambda x: objective._jac_scaled(x) + 1e2 * (
+    objective.jac_scaled = lambda x, *args: objective._jac_scaled(x) + 1e2 * (
         np.random.random((objective._dim_f, x.size)) - 0.5
     )
 
@@ -382,7 +382,7 @@ def test_overstepping():
         FixIota(eq=eq),
         FixPsi(eq=eq),
     )
-    optimizer = Optimizer("lsq-exact")
+    optimizer = Optimizer("proximal-lsq-exact")
     eq1, history = eq.optimize(
         objective=objective,
         constraints=constraints,
@@ -463,6 +463,7 @@ def test_scipy_fail_message():
             gtol=1e-12,
         )
         assert "Maximum number of iterations has been exceeded" in result["message"]
+    eq._node_pattern = "quad"
     objectives = Energy(eq=eq)
     obj = ObjectiveFunction(objectives)
     for opt in ["scipy-trust-exact"]:
@@ -561,25 +562,29 @@ def test_wrappers():
 @pytest.mark.slow
 def test_all_optimizers():
     """Just tests that the optimizers run without error, eg tests for the wrappers."""
-    eq = desc.examples.get("SOLOVEV")
-    fobj = ObjectiveFunction(ForceBalance(eq=eq))
-    eobj = ObjectiveFunction(Energy(eq=eq))
+    eqf = desc.examples.get("SOLOVEV")
+    eqe = eqf.copy()
+    eqe._node_pattern = "quad"
+    fobj = ObjectiveFunction(ForceBalance(eq=eqf))
+    eobj = ObjectiveFunction(Energy(eq=eqe))
     fobj.build()
     eobj.build()
     constraints = (
-        FixBoundaryR(eq=eq),
-        FixBoundaryZ(eq=eq),
-        FixIota(eq=eq),
-        FixPressure(eq=eq),
-        FixPsi(eq=eq),
+        FixBoundaryR(eq=eqe),
+        FixBoundaryZ(eq=eqe),
+        FixIota(eq=eqe),
+        FixPressure(eq=eqe),
+        FixPsi(eq=eqe),
     )
 
     for opt in optimizers:
         print("TESTING ", opt)
         if optimizers[opt]["scalar"]:
             obj = eobj
+            eq = eqe
         else:
             obj = fobj
+            eq = eqf
         eq.solve(
             objective=obj,
             constraints=constraints,
@@ -657,7 +662,8 @@ def test_scipy_constrained_solve():
 def test_solve_with_x_scale():
     """Make sure we can manually specify x_scale when solving/optimizing."""
     # basically just tests that it runs without error
-    eq = Equilibrium(L=2, M=2, N=2, pressure=np.array([1000, -2000, 1000]))
+    with pytest.warns(UserWarning, match="pressure profile is not an even"):
+        eq = Equilibrium(L=2, M=2, N=2, pressure=np.array([1000, -2000, 1000]))
     scale = jnp.concatenate(
         [
             (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),

@@ -203,10 +203,12 @@ class InputReader:
         else:
             file = fname
         file.seek(0)
+        lines = file.readlines()
+        file.close()
 
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
 
-        for line in file:
+        for line in lines:
 
             # check if VMEC input file format
             isVMEC = re.search(r"&INDATA", line)

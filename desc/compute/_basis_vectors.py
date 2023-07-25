@@ -73,7 +73,7 @@ def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e_theta / sqrt(g)",
+    name="e_theta/sqrt(g)",
     label="\\mathbf{e}_{\\theta} / \\sqrt{g}",
     units="m",
     units_long="meters",
@@ -87,7 +87,7 @@ def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["e_theta_r", "sqrt(g)_r"],
 )
 def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
-    data["e_theta / sqrt(g)"] = transforms["grid"].replace_at_axis(
+    data["e_theta/sqrt(g)"] = transforms["grid"].replace_at_axis(
         (data["e_theta"].T / data["sqrt(g)"]).T,
         lambda: (data["e_theta_r"].T / data["sqrt(g)_r"]).T,
     )
@@ -144,10 +144,10 @@ def _e_sub_phi(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta / sqrt(g)", "e_zeta"],
+    data=["e_theta/sqrt(g)", "e_zeta"],
 )
 def _e_sup_rho(params, transforms, profiles, data, **kwargs):
-    data["e^rho"] = cross(data["e_theta / sqrt(g)"], data["e_zeta"])
+    data["e^rho"] = cross(data["e_theta/sqrt(g)"], data["e_zeta"])
     return data
 
 
@@ -188,7 +188,7 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e^theta sqrt(g)",
+    name="e^theta*sqrt(g)",
     label="\\mathbf{e}^{\\theta} \\sqrt{g}",
     units="m^{2}",
     units_long="square meters",
@@ -201,7 +201,7 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     data=["e_rho", "e_zeta"],
 )
 def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
-    data["e^theta sqrt(g)"] = cross(data["e_zeta"], data["e_rho"])
+    data["e^theta*sqrt(g)"] = cross(data["e_zeta"], data["e_rho"])
     return data
 
 
@@ -216,10 +216,10 @@ def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^theta sqrt(g)", "sqrt(g)"],
+    data=["e^theta*sqrt(g)", "sqrt(g)"],
 )
 def _e_sup_theta(params, transforms, profiles, data, **kwargs):
-    data["e^theta"] = (data["e^theta sqrt(g)"].T / data["sqrt(g)"]).T
+    data["e^theta"] = (data["e^theta*sqrt(g)"].T / data["sqrt(g)"]).T
     return data
 
 
@@ -234,10 +234,10 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_theta / sqrt(g)"],
+    data=["e_rho", "e_theta/sqrt(g)"],
 )
 def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
-    data["e^zeta"] = cross(data["e_rho"], data["e_theta / sqrt(g)"])
+    data["e^zeta"] = cross(data["e_rho"], data["e_theta/sqrt(g)"])
     return data
 
 

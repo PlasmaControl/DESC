@@ -2554,7 +2554,7 @@ def _B_mag_rz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|_r", "|B|_t", "|B|_z", "e^rho", "e^theta sqrt(g)", "e^zeta", "sqrt(g)"],
+    data=["|B|_r", "|B|_t", "|B|_z", "e^rho", "e^theta*sqrt(g)", "e^zeta", "sqrt(g)"],
     axis_limit_data=["|B|_rt", "sqrt(g)_r"],
 )
 def _grad_B(params, transforms, profiles, data, **kwargs):
@@ -2563,7 +2563,7 @@ def _grad_B(params, transforms, profiles, data, **kwargs):
         + transforms["grid"].replace_at_axis(
             data["|B|_t"] / data["sqrt(g)"], lambda: data["|B|_rt"] / data["sqrt(g)_r"]
         )
-        * data["e^theta sqrt(g)"].T
+        * data["e^theta*sqrt(g)"].T
         + data["|B|_z"] * data["e^zeta"].T
     ).T
     return data
@@ -2946,7 +2946,7 @@ def _curl_B_x_B_zeta(params, transforms, profiles, data, **kwargs):
         "J^rho",
         "(curl(B)xB)_zeta",
         "e^rho",
-        "e^theta sqrt(g)",
+        "e^theta*sqrt(g)",
         "e^zeta",
     ],
 )
@@ -2954,7 +2954,7 @@ def _curl_B_x_B(params, transforms, profiles, data, **kwargs):
     # (curl(B)xB)_theta e^theta refactored to resolve indeterminacy at axis.
     data["curl(B)xB"] = (
         data["(curl(B)xB)_rho"] * data["e^rho"].T
-        - mu_0 * data["B^zeta"] * data["J^rho"] * data["e^theta sqrt(g)"].T
+        - mu_0 * data["B^zeta"] * data["J^rho"] * data["e^theta*sqrt(g)"].T
         + data["(curl(B)xB)_zeta"] * data["e^zeta"].T
     ).T
     return data
@@ -3323,7 +3323,7 @@ def _kappa_g(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B_r", "B_t", "B_z", "e^rho", "e^theta sqrt(g)", "e^zeta", "sqrt(g)"],
+    data=["B_r", "B_t", "B_z", "e^rho", "e^theta*sqrt(g)", "e^zeta", "sqrt(g)"],
     axis_limit_data=["B_rt", "sqrt(g)_r"],
 )
 def _grad_B_vec(params, transforms, profiles, data, **kwargs):
@@ -3335,7 +3335,7 @@ def _grad_B_vec(params, transforms, profiles, data, **kwargs):
         (data["B_r"][:, jnp.newaxis, :] * data["e^rho"][:, :, jnp.newaxis])
         + (
             B_t_over_sqrt_g[:, jnp.newaxis, :]
-            * data["e^theta sqrt(g)"][:, :, jnp.newaxis]
+            * data["e^theta*sqrt(g)"][:, :, jnp.newaxis]
         )
         + (data["B_z"][:, jnp.newaxis, :] * data["e^zeta"][:, :, jnp.newaxis])
     )

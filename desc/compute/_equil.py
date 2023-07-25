@@ -121,13 +121,13 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
         "J^theta*sqrt(g)",
         "e_rho",
         "e_zeta",
-        "e_theta / sqrt(g)",
+        "e_theta/sqrt(g)",
     ],
 )
 def _J(params, transforms, profiles, data, **kwargs):
     data["J"] = (
         data["J^rho"] * data["e_rho"].T
-        + data["J^theta*sqrt(g)"] * data["e_theta / sqrt(g)"].T
+        + data["J^theta*sqrt(g)"] * data["e_theta/sqrt(g)"].T
         + data["J^zeta"] * data["e_zeta"].T
     ).T
     return data
@@ -484,13 +484,13 @@ def _F_helical(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["F_rho", "F_zeta", "e^rho", "e^zeta", "B^zeta", "J^rho", "e^theta sqrt(g)"],
+    data=["F_rho", "F_zeta", "e^rho", "e^zeta", "B^zeta", "J^rho", "e^theta*sqrt(g)"],
 )
 def _F(params, transforms, profiles, data, **kwargs):
     # F_theta e^theta refactored as below to resolve indeterminacy at axis.
     data["F"] = (
         data["F_rho"] * data["e^rho"].T
-        - data["B^zeta"] * data["J^rho"] * data["e^theta sqrt(g)"].T
+        - data["B^zeta"] * data["J^rho"] * data["e^theta*sqrt(g)"].T
         + data["F_zeta"] * data["e^zeta"].T
     ).T
     return data

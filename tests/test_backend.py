@@ -19,7 +19,7 @@ def test_put():
 def test_sign():
     """Test modified sign function to return +1 for x=0."""
     assert sign(4) == 1
-    assert sign(0) == 1 == sign(-0)
+    assert sign(0) == 1
     assert sign(-10.3) == -1
 
 

@@ -16,17 +16,14 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.objectives import (
-    AxisRSelfConsistency,
-    AxisZSelfConsistency,
-    BoundaryRSelfConsistency,
-    BoundaryZSelfConsistency,
-    FixAxisR,
-    FixAxisZ,
-    FixBoundaryR,
-    FixBoundaryZ,
     ObjectiveFunction,
+    get_fixed_axis_constraints,
+    get_fixed_boundary_constraints,
 )
-from desc.objectives.utils import factorize_linear_constraints
+from desc.objectives.utils import (
+    factorize_linear_constraints,
+    maybe_add_self_consistency,
+)
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import Timer
@@ -182,24 +179,17 @@ class VMECIO:
 
         # apply boundary conditions
 
-        constraints = (
-            FixAxisR(eq=eq),
-            FixAxisZ(eq=eq),
-            AxisRSelfConsistency(eq=eq),
-            AxisZSelfConsistency(eq=eq),
-            FixBoundaryR(eq=eq),
-            FixBoundaryZ(eq=eq),
-            BoundaryRSelfConsistency(eq=eq),
-            BoundaryZSelfConsistency(eq=eq),
-        )
+        constraints = get_fixed_axis_constraints(
+            profiles=False, eq=eq
+        ) + get_fixed_boundary_constraints(iota=eq.iota, eq=eq)
+        constraints = maybe_add_self_consistency(eq, constraints)
         objective = ObjectiveFunction(constraints, verbose=0)
         objective.build()
         _, _, _, _, _, project, recover = factorize_linear_constraints(
             constraints, objective.args
         )
         args = objective.unpack_state(recover(project(objective.x(eq))))
-        for key, value in args.items():
-            setattr(eq, key, value)
+        eq.params_dict = args
 
         # now we flip the orientation at the very end
         eq = ensure_positive_jacobian(eq)

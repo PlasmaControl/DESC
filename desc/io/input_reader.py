@@ -788,7 +788,6 @@ class InputReader:
 
         eq = load(inputs)
         eq0 = eq[-1]
-        
 
         f.write(header + "\n")
 
@@ -806,9 +805,7 @@ class InputReader:
             "M_grid": "M_grid",
             "N_grid": "N_grid",
         }.items():
-            f.write(
-                key + " = {}\n".format(" " + str(eval("eq0.{0}".format(val))))
-            )
+            f.write(key + " = {}\n".format(" " + str(eval("eq0.{0}".format(val)))))
 
         f.write("\n")
 
@@ -844,19 +841,19 @@ class InputReader:
             f.write("ftol = {}\n".format(eq0._bdry_ratio))
         except:
             print("ftol not given in the output. Setting to 1E-2...")
-            f.write("ftol = {}\n".format(float(1E-2)))
+            f.write("ftol = {}\n".format(float(1e-2)))
 
         try:
             f.write("xtol = {}\n".format(eq0._pres_ratio))
         except:
             print("xtol not given in the output. Setting to 1E-6...")
-            f.write("xtol = {}\n".format(float(1E-6)))
+            f.write("xtol = {}\n".format(float(1e-6)))
 
         try:
             f.write("gtol = {}\n".format(eq0._curr_ratio))
         except:
             print("gtol not given in the output. Setting to 1E-6...")
-            f.write("gtol = {}\n".format(float(1E-6)))
+            f.write("gtol = {}\n".format(float(1e-6)))
 
         try:
             f.write("maxiter = {}\n".format(eq0._pert_order))
@@ -888,9 +885,9 @@ class InputReader:
         assert (
             eq0.pressure.__class__.__name__ == "PowerSeriesProfile"
         ), "Equilibrium must have power series profiles for ascii io"
-        
+
         pres_profile1 = eq0._pressure.params.tolist()
-        
+
         try:
             iota_profile1 = eq0._iota.params.tolist()
             assert (
@@ -901,11 +898,11 @@ class InputReader:
             if len(pres_profile1) >= len(iota_profile1):
                 pres_profile = pres_profile1
 
-                iota_profile = np.zeros((len(pres_profile), ))
-                iota_profile[:len(iota_profile1)] = iota_profile1
+                iota_profile = np.zeros((len(pres_profile),))
+                iota_profile[: len(iota_profile1)] = iota_profile1
             else:
-                pres_profile1 = np.zeros((len(iota_profile1), ))
-                pres_profile[:len(pres_profile)] = pres_profile
+                pres_profile1 = np.zeros((len(iota_profile1),))
+                pres_profile[: len(pres_profile)] = pres_profile
         except:
             curr_profile1 = eq0._current.params.tolist()
 
@@ -917,21 +914,24 @@ class InputReader:
             if len(pres_profile1) >= len(curr_profile1):
                 pres_profile = pres_profile1
 
-                curr_profile = np.zeros((len(pres_profile), ))
-                curr_profile[:len(curr_profile1)] = curr_profile1
+                curr_profile = np.zeros((len(pres_profile),))
+                curr_profile[: len(curr_profile1)] = curr_profile1
             else:
-                pres_profile1 = np.zeros((len(curr_profile1), ))
-                pres_profile[:len(curr_profile)] = pres_profile
+                pres_profile1 = np.zeros((len(curr_profile1),))
+                pres_profile[: len(curr_profile)] = pres_profile
 
-        
         for l in range(len(pres_profile)):
             if char == "i":
                 f.write(
-                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), pres_profile[l], char, iota_profile[l])
+                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
+                        int(l), pres_profile[l], char, iota_profile[l]
+                    )
                 )
             else:
                 f.write(
-                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), pres_profile[l], char, curr_profile[l])
+                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
+                        int(l), pres_profile[l], char, curr_profile[l]
+                    )
                 )
 
         f.write("\n")
@@ -941,14 +941,14 @@ class InputReader:
         if eq0.sym:
             nbdry = len(np.nonzero(eq0.Rb_lmn)[0]) + len(np.nonzero(eq0.Zb_lmn)[0])
             for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
-                if abs(eq0.Rb_lmn[k]) > 1E-4:
+                if abs(eq0.Rb_lmn[k]) > 1e-4:
                     f.write(
                         "m: {:3d} n: {:3d} R1 = {:16.8E} Z1 = {:16.8E}\n".format(
                             m, n, eq0.Rb_lmn[k], 0
                         )
                     )
             for k, (l, m, n) in enumerate(eq0.surface.Z_basis.modes):
-                if abs(eq0.Zb_lmn[k]) > 1E-4:
+                if abs(eq0.Zb_lmn[k]) > 1e-4:
                     f.write(
                         "m: {:3d} n: {:3d} R1 = {:16.8E} Z1 = {:16.8E}\n".format(
                             m, n, 0, eq0.Zb_lmn[k]
@@ -956,17 +956,21 @@ class InputReader:
                     )
         else:
             for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
-                if abs(eq0.Rb_lmn[k]) > 5E-5 or abs(eq0.Zb_lmn[k]) > 5E-5:
+                if abs(eq0.Rb_lmn[k]) > 5e-5 or abs(eq0.Zb_lmn[k]) > 5e-5:
                     f.write(
                         "m: {:3d} n: {:3d} R1 = {:16.8E} Z1 = {:16.8E}\n".format(
                             m, n, eq0.Rb_lmn[k], eq0.Zb_lmn[k]
                         )
                     )
-        
+
         f.write("\n# magnetic axis initial guess\n")
         for k in range(5):
             (R0, Z0) = eq0.axis.get_coeffs(k)
-            f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(k), R0.item(), Z0.item()))
+            f.write(
+                "n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(
+                    int(k), R0.item(), Z0.item()
+                )
+            )
 
         f.close()
 

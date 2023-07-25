@@ -19,6 +19,8 @@ import dill
 #eq = desc.io.load("/scratch/gpfs/pk2354/DESC/desc/examples/NCSX_output.h5")[-1]
 #eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/intermediate8_3.h5')
 #eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/input.nfp4_QH_output.h5')[-1]
+eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/nfp4_QH_vmec_to_desc.h5')
+print("resolution is " + str(eq.M))
 #eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/swap_gx_end_case16_n1_all_4.h5')
 #eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/swap_gx_end_case18_n1_all_6.h5')
 #eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/swap_gx_end_case20_n1_all_3.h5')
@@ -27,11 +29,11 @@ import dill
 #eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/precise_qh2.h5')
 #eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/swap_gx_intermediate_case2_n_3_i_31.h5')
 #eq.change_resolution(M=6,L=6,N=4,M_grid=12,L_grid=12,N_grid=8)
-eq = desc.io.load('/scratch/gpfs/pk2354/DESC/W7X_output.h5')[-1]
+#eq = desc.io.load('/scratch/gpfs/pk2354/DESC/W7X_output.h5')[-1]
 #eq = desc.io.load('/scratch/gpfs/pk2354/DESC/examples/VMEC/input.BEER_output.h5')[-1]
-#eq = desc.io.load('/scratch/gpfs/pk2354/DESC/desc/examples/W7-X_output.h5')[-1]
+#eq = desc.io.load('/scratch/gpfs/pk2354/DESC_constrained2/desc/examples/W7-X_output.h5')[-1]
 print('loaded eq')
-gxw = GXWrapper(eq=eq,psi=0.5,nzgrid=64,t=1,alpha=np.pi/2,npol=2)
+gxw = GXWrapper(eq=eq,psi=0.5,nzgrid=64,t=2,alpha=0.0,npol=2)
 
 qflux = gxw.compute(R_lmn=eq.R_lmn,Z_lmn=eq.Z_lmn,L_lmn=eq.L_lmn,i_l=eq.i_l,c_l=eq.c_l,p_l=eq.p_l,Psi=eq.Psi,ne_l=eq.ne_l, Ti_l=eq.Ti_l, Zeff_l=eq.Zeff_l, Te_l=eq.Te_l)
 

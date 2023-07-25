@@ -541,8 +541,6 @@ class GXWrapper(_Objective):
             #get coordinate system
             rho = np.sqrt(self.psi)
             iota = fi(rho)
-            if iota > 0:
-                iota = -1*iota
             zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iota),(np.pi*self.npol-self.alpha)/np.abs(iota),2*self.nzgrid+1)
             thetas = iota/np.abs(iota)*self.alpha*np.ones(len(zeta)) + iota*zeta
             
@@ -641,9 +639,6 @@ class GXWrapper(_Objective):
         iotas = fi(np.sqrt(self.psi))
         shears = fs(np.sqrt(self.psi))
 
-        if iotas > 0:
-            iotas = iotas*-1
-            shears = shears*-1
         
         print("iotas is " + str(iotas))
         zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iotas),(np.pi*self.npol-self.alpha)/np.abs(iotas),2*self.nzgrid+1)
@@ -675,7 +670,6 @@ class GXWrapper(_Objective):
         #normalizations       
         Lref = data_eq['a']
         Bref = 2*np.abs(psib)/Lref**2
-        print("Bref is " + str(Bref))
         #calculate bmag
         modB = data['|B|']
         bmag = modB/Bref
@@ -708,7 +702,7 @@ class GXWrapper(_Objective):
         gds2 = grad_alpha**2 * Lref**2 *self.psi
         #gds21 with negative sign?
 
-        gds21 = shat/Bref * grad_psi_dot_grad_alpha
+        gds21 = -iotas/np.abs(iotas) * shat/Bref * grad_psi_dot_grad_alpha
         gds22 = (shat/(Lref*Bref))**2 /self.psi * grad_psi**2*data['g^rr']
 
         #calculate gbdrift0 and cvdrift0
@@ -719,7 +713,7 @@ class GXWrapper(_Objective):
         jac = data['sqrt(g)']
         #gbdrift0 = (B_t*dB_z - B_z*dB_t)*2*rho*psib/jac
         #gbdrift0 with negative sign?
-        gbdrift0 =  -psib/np.abs(psib)*shat * 2 / modB**3 / rho*(B_t*dB_z - B_z*dB_t)*psib/jac * 2 * rho
+        gbdrift0 = -iotas/np.abs(iotas) * -psib/np.abs(psib)*shat * 2 / modB**3 / rho*(B_t*dB_z - B_z*dB_t)*psib/jac * 2 * rho
         cvdrift0 = gbdrift0
 
         #calculate gbdrift and cvdrift

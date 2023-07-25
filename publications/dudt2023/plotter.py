@@ -7,7 +7,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import desc.io
 from desc.basis import DoubleFourierSeries
-from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.transform import Transform
@@ -194,7 +193,7 @@ if fields:
     B_transform = Transform(grid_plot, basis)
     # omnigenous
     data = eq_pol.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
-    iota = compress(grid, data["iota"])
+    iota = grid.compress(data["iota"])
     BB = B_transform.transform(data["|B|_mn"]).reshape(
         (grid_plot.num_theta, grid_plot.num_zeta), order="F"
     )
@@ -226,7 +225,7 @@ if fields:
     )
     # quasi-symmetric
     data = eq_pol_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
-    iota = compress(grid, data["iota"])
+    iota = grid.compress(data["iota"])
     BB = B_transform.transform(data["|B|_mn"]).reshape(
         (grid_plot.num_theta, grid_plot.num_zeta), order="F"
     )
@@ -275,7 +274,7 @@ if fields:
     B_transform = Transform(grid_plot, basis)
     # omnigenous
     data = eq_hel.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
-    iota = compress(grid, data["iota"])
+    iota = grid.compress(data["iota"])
     BB = B_transform.transform(data["|B|_mn"]).reshape(
         (grid_plot.num_theta, grid_plot.num_zeta), order="F"
     )
@@ -306,7 +305,7 @@ if fields:
     )
     # quasi-symmetric
     data = eq_hel_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
-    iota = compress(grid, data["iota"])
+    iota = grid.compress(data["iota"])
     BB = B_transform.transform(data["|B|_mn"]).reshape(
         (grid_plot.num_theta, grid_plot.num_zeta), order="F"
     )
@@ -354,7 +353,7 @@ if fields:
     B_transform = Transform(grid_plot, basis)
     # omnigenous
     data = eq_tor.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
-    iota = compress(grid, data["iota"])
+    iota = grid.compress(data["iota"])
     BB = B_transform.transform(data["|B|_mn"]).reshape(
         (grid_plot.num_theta, grid_plot.num_zeta), order="F"
     )
@@ -385,7 +384,7 @@ if fields:
     )
     # quasi-symmetric
     data = eq_tor_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
-    iota = compress(grid, data["iota"])
+    iota = grid.compress(data["iota"])
     BB = B_transform.transform(data["|B|_mn"]).reshape(
         (grid_plot.num_theta, grid_plot.num_zeta), order="F"
     )
@@ -547,7 +546,7 @@ if OPinvarinat:
     ax0.set_ylabel(r"$\langle \Delta J \rangle / \langle J \rangle$")
     ax0.legend(loc="upper right")
     ax0.set_xlim([0, 1])
-    ax0.set_ylim([1e-5, 1e-1])
+    ax0.set_ylim([1e-4, 1e0])
     # dJ/drho
     dJds_Goodman = np.load("publications/dudt2023/dJds_Goodman.npy")
     dJds_Dudt = np.load("publications/dudt2023/dJds_Dudt.npy")
@@ -560,7 +559,7 @@ if OPinvarinat:
     ax1.set_ylabel(r"$\langle dJ/ds \rangle / \langle J \rangle$")
     ax1.set_xlabel(r"$(B - B_{min}) / (B_{max} - B_{min})$")
     ax1.set_xlim([0, 1])
-    ax1.set_ylim([1e-3, 2e0])
+    ax1.set_ylim([1e-3, 1e1])
     fig.tight_layout()
     if save:
         plt.savefig("publications/dudt2023/OPinvarinat.png")

@@ -8,6 +8,8 @@ import re
 import warnings
 from datetime import datetime
 
+from .equilibrium_io import load
+
 import numpy as np
 from termcolor import colored
 
@@ -170,7 +172,7 @@ class InputReader:
             "ftol": np.atleast_1d(None),
             "xtol": np.atleast_1d(None),
             "gtol": np.atleast_1d(None),
-            "maxiter": np.atleast_1d(None),
+            "nfev": np.atleast_1d(None),
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
@@ -339,18 +341,7 @@ class InputReader:
                 flag = True
             match = re.search(r"nfev", argument, re.IGNORECASE)
             if match:
-                warnings.warn(
-                    DeprecationWarning("nfev is deprecated, please use maxiter instead")
-                )
-                inputs["maxiter"] = np.array(
-                    [None if i == 0 else int(i) for i in numbers]
-                )
-                flag = True
-            match = re.search(r"maxiter", argument, re.IGNORECASE)
-            if match:
-                inputs["maxiter"] = np.array(
-                    [None if i == 0 else int(i) for i in numbers]
-                )
+                inputs["nfev"] = np.array([None if i == 0 else int(i) for i in numbers])
                 flag = True
 
             # solver methods
@@ -592,7 +583,7 @@ class InputReader:
             "ftol",
             "xtol",
             "gtol",
-            "maxiter",
+            "nfev",
         ]
         arr_len = 0
         for a in arrs:
@@ -655,109 +646,6 @@ class InputReader:
         return inputs_list
 
     @staticmethod
-    def desc_output2input(filename, inputs, header=""):
-        """Generate a DESC input file from a DESC output file
-
-        Parameters
-        ----------
-        filename : str or path-like
-            name of the file to create
-        input : str or path-like
-            name of the DESC equilibrium object
-        header : str
-            text to print at the top of the file
-
-        """
-        # open the file, unless its already open
-        if not isinstance(filename, io.IOBase):
-            f = open(filename, "w+")
-        else:
-            f = filename
-        f.seek(0)
-        f.write(header + "\n")
-
-        eq = load(inputs)[-1]
-
-        f.write("# global parameters\n")
-        f.write("sym = {:1d} \n".format(eq.sym))
-        f.write("NFP = {:3d} \n".format(int(eq.NFP)))
-        f.write("Psi = {:.8f} \n".format(eq.Psi))
-
-        f.write("\n# spectral resolution\n")
-        f.write("L_rad" + "= {}\n".format(", ".join(eq0.L)))
-        f.write("M_pol" + "= {}\n".format(", ".join(eq0.M)))
-        f.write("N_tor" + "= {}\n".format(", ".join(eq0.N)))
-        f.write("L_grid" + "= {}\n".format(", ".join(eq0.L_grid)))
-        f.write("M_grid" + "= {}\n".format(", ".join(eq0.M_grid)))
-        f.write("N_grid" + "= {}\n".format(", ".join(eq0.N_grid)))
-
-        f.write("\n# continuation parameters\n")
-        f.write("bdry_ratio"+ " = {} \n".format(", ".join(eq.bdry_ratio)))
-        f.write("pres_ratio"+ " = {} \n".format(", ".join(eq.pres_ratio)))
-        f.write("curr_ratio"+ " = {} \n".format(", ".join(eq.curr_ratio)))
-        f.write("pert_order"+ " = {} \n".format(", ".join(eq.pert_order)))
-
-        #f.write("\n# solver tolerances\n")
-        #for key in ["ftol", "xtol", "gtol", "maxiter"]:
-        #    inputs_not_None = []
-        #    for inp in inputs:
-        #        if inp[key] is not None:
-        #            inputs_not_None.append(inp)
-        #    if not inputs_not_None:  # an  empty list evals to False
-        #        continue  # don't write line if all input tolerance are None
-
-        #    f.write(
-        #        key
-        #        + " = {}\n".format(
-        #            ", ".join([str(inp[key]) for inp in inputs_not_None])
-        #        )
-        #    )
-
-        #f.write("\n# solver methods\n")
-        #f.write("optimizer = {}\n".format(inputs[0]["optimizer"]))
-        #f.write("objective = {}\n".format(inputs[0]["objective"]))
-        #f.write("bdry_mode = {}\n".format(inputs[0]["bdry_mode"]))
-        #f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
-        #f.write("node_pattern = {}\n".format(inputs[0]["node_pattern"]))
-
-        #f.write("\n# pressure and rotational transform/current profiles\n")
-        #if "iota" in inputs[-1].keys():
-        #    char = "i"
-        #    profile = inputs[-1]["iota"]
-        #elif "current" in inputs[-1].keys():
-        #    char = "c"
-        #    profile = inputs[-1]["current"]
-        #ls = np.unique(np.concatenate([inputs[-1]["pressure"][:, 0], profile[:, 0]]))
-        #for l in ls:
-        #    idx = np.where(l == inputs[-1]["pressure"][:, 0])[0]
-        #    if len(idx):
-        #        p = inputs[-1]["pressure"][idx[0], 1]
-        #    else:
-        #        p = 0.0
-        #    idx = np.where(l == profile[:, 0])[0]
-        #    if len(idx):
-        #        i = profile[idx[0], 1]
-        #    else:
-        #        i = 0.0
-        #    f.write(
-        #        "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), p, char, i)
-        #    )
-
-        #f.write("\n# fixed-boundary surface shape\n")
-        #for (l, m, n, R1, Z1) in inputs[-1]["surface"]:
-        #    f.write(
-        #        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
-        #            int(l), int(m), int(n), R1, Z1
-        #        )
-        #    )
-
-        #f.write("\n# magnetic axis initial guess\n")
-        #for (n, R0, Z0) in inputs[0]["axis"]:
-        #    f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
-
-        #f.close()
-
-    @staticmethod
     def write_desc_input(filename, inputs, header=""):  # noqa: C901 - fxn too complex
         """Generate a DESC input file from a dictionary of parameters.
 
@@ -769,6 +657,7 @@ class InputReader:
             dictionary of input parameters
         header : str
             text to print at the top of the file
+
         """
         # open the file, unless its already open
         if not isinstance(filename, io.IOBase):
@@ -817,7 +706,7 @@ class InputReader:
             )
 
         f.write("\n# solver tolerances\n")
-        for key in ["ftol", "xtol", "gtol", "maxiter"]:
+        for key in ["ftol", "xtol", "gtol", "nfev"]:
             inputs_not_None = []
             for inp in inputs:
                 if inp[key] is not None:
@@ -873,6 +762,211 @@ class InputReader:
         f.write("\n# magnetic axis initial guess\n")
         for (n, R0, Z0) in inputs[0]["axis"]:
             f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
+
+        f.close()
+
+    @staticmethod
+    def write_descout_to_input(filename, inputs, header=""):
+        """Generate a DESC input file from a DESC output file
+
+        Parameters
+        ----------
+        filename : str or path-like
+            name of the file to create
+        inputs : str or path-like
+            dictionary of input parameters
+        header : str
+            text to print at the top of the file
+
+        """
+        # open the file, unless its already open
+        if not isinstance(filename, io.IOBase):
+            f = open(filename, "w+")
+        else:
+            f = filename
+        f.seek(0)
+
+        eq = load(inputs)
+        eq0 = eq[-1]
+        
+
+        f.write(header + "\n")
+
+        f.write("# global parameters\n")
+        f.write("sym = {:1d} \n".format(eq0.sym))
+        f.write("NFP = {:3d} \n".format(int(eq0.NFP)))
+        f.write("Psi = {:.8f} \n".format(eq0.Psi))
+
+        f.write("\n# spectral resolution\n")
+        for key, val in {
+            "L_rad": "L",
+            "M_pol": "M",
+            "N_tor": "N",
+            "L_grid": "L_grid",
+            "M_grid": "M_grid",
+            "N_grid": "N_grid",
+        }.items():
+            f.write(
+                key + " = {}\n".format(" " + str(eval("eq0.{0}".format(val))))
+            )
+
+        f.write("\n")
+
+        f.write("\n# continuation parameters\n")
+        try:
+            f.write("bdry_ratio = {}\n".format(eq0._bdry_ratio))
+        except:
+            print("bdry_ratio not given in the output. Setting to 1...")
+            f.write("bdry_ratio = {}\n".format(int(1)))
+
+        try:
+            f.write("pres_ratio = {}\n".format(eq0._pres_ratio))
+        except:
+            print("pres_ratio not given in the output. Setting to 1...")
+            f.write("pres_ratio = {}\n".format(int(1)))
+
+        try:
+            f.write("curr_ratio = {}\n".format(eq0._curr_ratio))
+        except:
+            print("curr_ratio not given in the output. Setting to 1...")
+            f.write("curr_ratio = {}\n".format(int(1)))
+
+        try:
+            f.write("pert_order = {}\n".format(eq0._pert_order))
+        except:
+            print("pert_order not given in the output. Setting to 2...")
+            f.write("pert_order = {}\n".format(int(2)))
+
+        f.write("\n")
+
+        f.write("\n# solver tolerances\n")
+        try:
+            f.write("ftol = {}\n".format(eq0._bdry_ratio))
+        except:
+            print("ftol not given in the output. Setting to 1E-2...")
+            f.write("ftol = {}\n".format(float(1E-2)))
+
+        try:
+            f.write("xtol = {}\n".format(eq0._pres_ratio))
+        except:
+            print("xtol not given in the output. Setting to 1E-6...")
+            f.write("xtol = {}\n".format(float(1E-6)))
+
+        try:
+            f.write("gtol = {}\n".format(eq0._curr_ratio))
+        except:
+            print("gtol not given in the output. Setting to 1E-6...")
+            f.write("gtol = {}\n".format(float(1E-6)))
+
+        try:
+            f.write("maxiter = {}\n".format(eq0._pert_order))
+        except:
+            print("maxiter not given in the output. Setting to 100...")
+            f.write("maxiter = {}\n".format(int(100)))
+
+        f.write("\n")
+
+        f.write("\n# solver methods\n")
+        try:
+            f.write("optimizer = {}\n".format(eq0._optimizer))
+        except:
+            print("Optimizer not given in the output. Setting to lsq-exact...")
+            f.write("optimizer = {}\n".format("lsq-exact"))
+
+        try:
+            f.write("objective = {}\n".format(eq0._objective))
+        except:
+            print("Objective not given in the output. Setting to force...")
+            f.write("objective = {}\n".format("force"))
+
+        f.write("spectral_indexing = {}\n".format(eq0._spectral_indexing))
+        f.write("node_pattern = {}\n".format(eq0._node_pattern))
+
+        f.write("\n# pressure and rotational transform/current profiles\n")
+
+        # can't import other stuff in io due to circular imports, so have to check by name
+        assert (
+            eq0.pressure.__class__.__name__ == "PowerSeriesProfile"
+        ), "Equilibrium must have power series profiles for ascii io"
+        
+        pres_profile1 = eq0._pressure.params.tolist()
+        
+        try:
+            iota_profile1 = eq0._iota.params.tolist()
+            assert (
+                eq0.iota.__class__.__name__ == "PowerSeriesProfile"
+            ), "Equilibrium must have power series profiles for ascii io"
+            char = "i"
+
+            if len(pres_profile1) >= len(iota_profile1):
+                pres_profile = pres_profile1
+
+                iota_profile = np.zeros((len(pres_profile), ))
+                iota_profile[:len(iota_profile1)] = iota_profile1
+            else:
+                pres_profile1 = np.zeros((len(iota_profile1), ))
+                pres_profile[:len(pres_profile)] = pres_profile
+        except:
+            curr_profile1 = eq0._current.params.tolist()
+
+            assert (
+                eq0.current.__class__.__name__ == "PowerSeriesProfile"
+            ), "Equilibrium must have power series profiles for ascii io"
+            char = "c"
+
+            if len(pres_profile1) >= len(curr_profile1):
+                pres_profile = pres_profile1
+
+                curr_profile = np.zeros((len(pres_profile), ))
+                curr_profile[:len(curr_profile1)] = curr_profile1
+            else:
+                pres_profile1 = np.zeros((len(curr_profile1), ))
+                pres_profile[:len(curr_profile)] = pres_profile
+
+        
+        for l in range(len(pres_profile)):
+            if char == "i":
+                f.write(
+                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), pres_profile[l], char, iota_profile[l])
+                )
+            else:
+                f.write(
+                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), pres_profile[l], char, curr_profile[l])
+                )
+
+        f.write("\n")
+
+        f.write("\n# fixed-boundary surface shape\n")
+        # boundary paramters
+        if eq0.sym:
+            nbdry = len(np.nonzero(eq0.Rb_lmn)[0]) + len(np.nonzero(eq0.Zb_lmn)[0])
+            for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
+                if abs(eq0.Rb_lmn[k]) > 1E-4:
+                    f.write(
+                        "m: {:3d} n: {:3d} R1 = {:16.8E} Z1 = {:16.8E}\n".format(
+                            m, n, eq0.Rb_lmn[k], 0
+                        )
+                    )
+            for k, (l, m, n) in enumerate(eq0.surface.Z_basis.modes):
+                if abs(eq0.Zb_lmn[k]) > 1E-4:
+                    f.write(
+                        "m: {:3d} n: {:3d} R1 = {:16.8E} Z1 = {:16.8E}\n".format(
+                            m, n, 0, eq0.Zb_lmn[k]
+                        )
+                    )
+        else:
+            for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
+                if abs(eq0.Rb_lmn[k]) > 5E-5 or abs(eq0.Zb_lmn[k]) > 5E-5:
+                    f.write(
+                        "m: {:3d} n: {:3d} R1 = {:16.8E} Z1 = {:16.8E}\n".format(
+                            m, n, eq0.Rb_lmn[k], eq0.Zb_lmn[k]
+                        )
+                    )
+        
+        f.write("\n# magnetic axis initial guess\n")
+        for k in range(5):
+            (R0, Z0) = eq0.axis.get_coeffs(k)
+            f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(k), R0.item(), Z0.item()))
 
         f.close()
 
@@ -943,7 +1037,7 @@ class InputReader:
             "ftol": None,
             "xtol": None,
             "gtol": None,
-            "maxiter": None,
+            "nfev": None,
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
@@ -960,97 +1054,16 @@ class InputReader:
         pres_scale = 1.0
         curr_tor = None
 
-        # find start of namelist (&INDATA)
-        vmeclines = vmec_file.readlines()
-        for i, line in enumerate(vmeclines):
-            if line.find("&INDATA") != -1:
-                start_ind = i
-                continue
-            elif line.find("&") != -1:  # only care about the INDATA section
-                end_ind = i
-                break
-            elif i == len(vmeclines) - 1:
-                end_ind = i
-        vmeclines = vmeclines[start_ind + 1 : end_ind]
-
-        ## Loop which makes multi-line inputs a single line
-        vmeclines_no_multiline = []
-        for line in vmeclines:
-            comment = line.find("!")
-            line = (line.strip() + " ")[0:comment].strip()
-            equal_ind = line.find("=")
-
-            # ignore blank lines or leftover comment !'s
-            if line.isspace() or line == "" or line == r"!":
-                continue
-            if equal_ind != -1:
-                vmeclines_no_multiline.append(line)
-            else:  # is a multi-line input,append the line to the previous
-                vmeclines_no_multiline[-1] += " " + line
-
-        ## remove duplicate lines
-        vmec_no_multiline_no_duplicates = []
-        already_read_names = []
-        already_read = False
-
-        # it is easiest to find first instances of something, but
-        # we want to keep only the last instance of each duplicate
-        # as that is the behavior VMEC has,
-        # so we will read through the lines reversed
-        vmeclines_no_multiline.reverse()
-
-        for line in vmeclines_no_multiline:
-            comment = line.find("!")
-            line = (line.strip() + " ")[0:comment].strip()
-            equal_ind = line.find("=")
-
-            # ignore blank lines or leftover comment !'s
-            if line.isspace() or line == "" or line == r"!":
-                continue
-            if equal_ind != -1:
-                # add name of variable to already_read_names
-                input_name = line[0:equal_ind].strip()
-                if input_name not in already_read_names:
-                    already_read_names.append(input_name)
-                    vmec_no_multiline_no_duplicates.append(line)
-                    already_read = False
-                else:
-                    warnings.warn(
-                        colored(
-                            f"Detected multiple inputs for {input_name}! "
-                            + "DESC will default to using the last one.",
-                            "yellow",
-                        )
-                    )
-                    already_read = True
-            # make sure if it is a duplicate line,
-            # to skip the multi-line associated with it
-            elif not already_read:
-                # is a multi-line input,append the line to the previous
-                vmec_no_multiline_no_duplicates[-1] += " " + line
-
-        # undo the reverse so the file we write looks as expected
-        vmec_no_multiline_no_duplicates.reverse()
-
-        ## read the inputs for use in DESC
-        for line in vmec_no_multiline_no_duplicates:
+        for line in vmec_file:
             comment = line.find("!")
             command = (line.strip() + " ")[0:comment]
+
             # global parameters
             if re.search(r"LFREEB\s*=\s*T", command, re.IGNORECASE):
-                warnings.warn(
-                    colored(
-                        "Using free-boundary mode! DESC will run as fixed-boundary.",
-                        "yellow",
-                    )
-                )
+                warnings.warn(colored("Using free-boundary mode!", "yellow"))
             if re.search(r"LRFP\s*=\s*T", command, re.IGNORECASE):
                 warnings.warn(
-                    colored(
-                        "Using poloidal flux instead of toroidal flux! "
-                        + " DESC will read as toroidal flux.",
-                        "yellow",
-                    )
+                    colored("Using poloidal flux instead of toroidal flux!", "yellow")
                 )
             match = re.search(r"LASYM\s*=\s*[TF]", command, re.IGNORECASE)
             if match:
@@ -1119,11 +1132,7 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 if numbers[0] != 0:
-                    warnings.warn(
-                        colored(
-                            "GAMMA is not 0.0, DESC will set this to 0.0.", "yellow"
-                        )
-                    )
+                    warnings.warn(colored("GAMMA is not 0.0", "yellow"))
             match = re.search(r"BLOAT\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -1240,7 +1249,7 @@ class InputReader:
                     n = k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 1] = numbers[k]
+                        inputs["axis"][idx[0], 1] += numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1255,12 +1264,11 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                # ignore the n=0 since it should always be zero for sin terms
-                for k in range(1, len(numbers)):
+                for k in range(len(numbers)):
                     n = -k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 1] = -numbers[k]
+                        inputs["axis"][idx[0], 1] += -numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1279,7 +1287,7 @@ class InputReader:
                     n = k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 2] = numbers[k]
+                        inputs["axis"][idx[0], 2] += numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1294,12 +1302,11 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                # ignore the n=0 since it should always be zero for sin terms
-                for k in range(1, len(numbers)):
+                for k in range(len(numbers)):
                     n = -k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 2] = -numbers[k]
+                        inputs["axis"][idx[0], 2] += -numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"

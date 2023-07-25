@@ -577,9 +577,10 @@ class PowerSeriesProfile(Profile):
     Parameters
     ----------
     params: array-like
-        Coefficients of the series. If modes is not supplied, assumed to be in ascending
-        order with no missing values. If modes is given, coefficients can be in any
-        order or indexing.
+        Coefficients of the series. Assumed to be zero if not specified.
+        If modes is not supplied, assumed to be in ascending  order with no
+        missing values. If modes is given, coefficients can be in any order or
+        indexing.
     modes : array-like
         Mode numbers for the associated coefficients. eg a[modes[i]] = params[i]
     grid : Grid

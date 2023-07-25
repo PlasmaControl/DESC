@@ -1,4 +1,13 @@
-"""Compute functions for bootstrap current."""
+"""Compute functions for bootstrap current.
+
+Notes
+-----
+Some quantities require additional work to compute at the magnetic axis.
+A Python lambda function is used to lazily compute the magnetic axis limits
+of these quantities. These lambda functions are evaluated only when the
+computational grid has a node on the magnetic axis to avoid potentially
+expensive computations.
+"""
 
 from scipy.constants import elementary_charge
 from scipy.special import roots_legendre
@@ -186,17 +195,15 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
 
     # Redl eq (14):
     X32e = f_t / (
-        (
-            1
-            + 0.23 * (1 - 0.96 * f_t) * jnp.sqrt(nu_e) / jnp.sqrt(Zeff)
-            + 0.13
-            * (1 - 0.38 * f_t)
-            * nu_e
-            / (Zeff * Zeff)
-            * (
-                jnp.sqrt(1 + 2 * jnp.sqrt(Zeff - 1))
-                + f_t * f_t * jnp.sqrt((0.075 + 0.25 * (Zeff - 1) ** 2) * nu_e)
-            )
+        1
+        + 0.23 * (1 - 0.96 * f_t) * jnp.sqrt(nu_e) / jnp.sqrt(Zeff)
+        + 0.13
+        * (1 - 0.38 * f_t)
+        * nu_e
+        / (Zeff * Zeff)
+        * (
+            jnp.sqrt(1 + 2 * jnp.sqrt(Zeff - 1))
+            + f_t * f_t * jnp.sqrt((0.075 + 0.25 * (Zeff - 1) ** 2) * nu_e)
         )
     )
 
@@ -278,8 +285,8 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
 
     # Store all results in the J_dot_B_data dictionary:
     # These two variables look unused, but they are used.
-    nu_e_star = nu_e
-    nu_i_star = nu_i
+    nu_e_star = nu_e  # noqa: F841
+    nu_i_star = nu_i  # noqa: F841
     variables = [
         "rho",
         "ne",

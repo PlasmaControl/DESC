@@ -1,3 +1,14 @@
+"""Compute functions for coordinate system basis vectors.
+
+Notes
+-----
+Some quantities require additional work to compute at the magnetic axis.
+A Python lambda function is used to lazily compute the magnetic axis limits
+of these quantities. These lambda functions are evaluated only when the
+computational grid has a node on the magnetic axis to avoid potentially
+expensive computations.
+"""
+
 from desc.backend import jnp
 
 from .data_index import register_compute_fun

@@ -1,4 +1,13 @@
-"""Compute functions for magnetic field quantities."""
+"""Compute functions for magnetic field quantities.
+
+Notes
+-----
+Some quantities require additional work to compute at the magnetic axis.
+A Python lambda function is used to lazily compute the magnetic axis limits
+of these quantities. These lambda functions are evaluated only when the
+computational grid has a node on the magnetic axis to avoid potentially
+expensive computations.
+"""
 
 from scipy.constants import mu_0
 

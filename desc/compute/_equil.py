@@ -1,4 +1,13 @@
-"""Compute functions for equilibrium objectives, ie Force and MHD energy."""
+"""Compute functions for equilibrium objectives, i.e. Force and MHD energy.
+
+Notes
+-----
+Some quantities require additional work to compute at the magnetic axis.
+A Python lambda function is used to lazily compute the magnetic axis limits
+of these quantities. These lambda functions are evaluated only when the
+computational grid has a node on the magnetic axis to avoid potentially
+expensive computations.
+"""
 
 from scipy.constants import mu_0
 
@@ -33,7 +42,7 @@ def _J_sup_rho(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="J^theta sqrt(g)",
+    name="J^theta*sqrt(g)",
     label="J^{\\theta} \\sqrt{g}",
     units="A",
     units_long="Amperes",
@@ -47,7 +56,7 @@ def _J_sup_rho(params, transforms, profiles, data, **kwargs):
     data=["B_rho_z", "B_zeta_r"],
 )
 def _J_sup_theta_sqrt_g(params, transforms, profiles, data, **kwargs):
-    data["J^theta sqrt(g)"] = (data["B_rho_z"] - data["B_zeta_r"]) / mu_0
+    data["J^theta*sqrt(g)"] = (data["B_rho_z"] - data["B_zeta_r"]) / mu_0
     return data
 
 
@@ -62,10 +71,10 @@ def _J_sup_theta_sqrt_g(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)", "J^theta sqrt(g)"],
+    data=["sqrt(g)", "J^theta*sqrt(g)"],
 )
 def _J_sup_theta(params, transforms, profiles, data, **kwargs):
-    data["J^theta"] = data["J^theta sqrt(g)"] / data["sqrt(g)"]
+    data["J^theta"] = data["J^theta*sqrt(g)"] / data["sqrt(g)"]
     return data
 
 
@@ -109,7 +118,7 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     data=[
         "J^rho",
         "J^zeta",
-        "J^theta sqrt(g)",
+        "J^theta*sqrt(g)",
         "e_rho",
         "e_zeta",
         "e_theta / sqrt(g)",
@@ -118,14 +127,14 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
 def _J(params, transforms, profiles, data, **kwargs):
     data["J"] = (
         data["J^rho"] * data["e_rho"].T
-        + data["J^theta sqrt(g)"] * data["e_theta / sqrt(g)"].T
+        + data["J^theta*sqrt(g)"] * data["e_theta / sqrt(g)"].T
         + data["J^zeta"] * data["e_zeta"].T
     ).T
     return data
 
 
 @register_compute_fun(
-    name="J sqrt(g)",
+    name="J*sqrt(g)",
     label="\\mathbf{J} \\sqrt{g}",
     units="A m",
     units_long="Ampere meters",
@@ -148,7 +157,7 @@ def _J(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _J_sqrt_g(params, transforms, profiles, data, **kwargs):
-    data["J sqrt(g)"] = (
+    data["J*sqrt(g)"] = (
         (data["B_zeta_t"] - data["B_theta_z"]) * data["e_rho"].T
         + (data["B_rho_z"] - data["B_zeta_r"]) * data["e_theta"].T
         + (data["B_theta_r"] - data["B_rho_t"]) * data["e_zeta"].T
@@ -157,7 +166,7 @@ def _J_sqrt_g(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="(J sqrt(g))_r",
+    name="(J*sqrt(g))_r",
     label="\\partial_{\\rho} (\\mathbf{J} \\sqrt{g})",
     units="A m",
     units_long="Ampere meters",
@@ -189,7 +198,7 @@ def _J_sqrt_g(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _J_sqrt_g_r(params, transforms, profiles, data, **kwargs):
-    data["(J sqrt(g))_r"] = (
+    data["(J*sqrt(g))_r"] = (
         (data["B_zeta_rt"] - data["B_theta_rz"]) * data["e_rho"].T
         + (data["B_zeta_t"] - data["B_theta_z"]) * data["e_rho_r"].T
         + (data["B_rho_rz"] - data["B_zeta_rr"]) * data["e_theta"].T
@@ -357,12 +366,12 @@ def _J_dot_B(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["J sqrt(g)", "B", "V_r(r)"],
-    axis_limit_data=["(J sqrt(g))_r", "V_rr(r)"],
+    data=["J*sqrt(g)", "B", "V_r(r)"],
+    axis_limit_data=["(J*sqrt(g))_r", "V_rr(r)"],
 )
 def _J_dot_B_fsa(params, transforms, profiles, data, **kwargs):
     J = transforms["grid"].replace_at_axis(
-        data["J sqrt(g)"], lambda: data["(J sqrt(g))_r"], copy=True
+        data["J*sqrt(g)"], lambda: data["(J*sqrt(g))_r"], copy=True
     )
     data["<J*B>"] = surface_averages(
         transforms["grid"],

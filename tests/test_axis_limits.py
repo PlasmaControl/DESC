@@ -146,7 +146,7 @@ def assert_is_continuous(
     names = [x for x in names if not ("Boozer" in x or "_mn" in x or x == "B modes")]
 
     rho = np.linspace(0, 1, 10) * delta
-    grid = LinearGrid(rho=rho, M=8, N=8, NFP=eq.NFP, sym=eq.sym)
+    grid = LinearGrid(rho=rho, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
     assert grid.axis.size
     integrate = surface_integrals_map(grid)
     data = eq.compute(names, grid=grid)
@@ -248,11 +248,11 @@ class TestAxisLimits:
         deps = {"psi_r", "sqrt(g)"}
         axis_limit_deps = {"psi_rr", "sqrt(g)_r"}
         eq = Equilibrium()
-        grid = LinearGrid(L=2, M=2, N=2, axis=False)
+        grid = LinearGrid(L=2, M=1, N=1, axis=False)
         assert not grid.axis.size
         data = eq.compute(name, grid=grid).keys()
         assert name in data and deps < data and axis_limit_deps.isdisjoint(data)
-        grid = LinearGrid(L=2, M=2, N=2, axis=True)
+        grid = LinearGrid(L=2, M=1, N=1, axis=True)
         assert grid.axis.size
         data = eq.compute(name, grid=grid)
         assert name in data and deps | axis_limit_deps < data.keys()
@@ -263,9 +263,9 @@ class TestAxisLimits:
         """Test that only quantities which lack limits do not evaluate at axis."""
 
         def test(eq):
-            grid = LinearGrid(L=2, M=2, N=2, sym=eq.sym, NFP=eq.NFP, axis=True)
+            grid = LinearGrid(L=1, M=1, N=1, sym=eq.sym, NFP=eq.NFP, axis=True)
             at_axis = grid.nodes[:, 0] == 0
-            assert at_axis.any()
+            assert at_axis.any() and not at_axis.all()
             data = eq.compute(list(data_index.keys()), grid=grid)
             for key in data_index:
                 if _skip_this(eq, key):
@@ -305,8 +305,8 @@ class TestAxisLimits:
             "J": {atol: 0.5},
             "B0_rr": {rtol: 1e-02},
             "B_rr": {atol: 1e00},
-            "(J sqrt(g))_r": {atol: 1e00},
-            "J^theta sqrt(g)": {atol: 1.5},
+            "(J*sqrt(g))_r": {atol: 1e00},
+            "J^theta*sqrt(g)": {atol: 1.5},
             "B^theta_r": {atol: 1e-2},
             "B^theta_rr": {rtol: 1e-02},
             "J_R": {atol: 1e00},

@@ -442,7 +442,6 @@ class VMECIO:
         if eq.iota is not None:
             iotaf[:] = -eq.iota(r_full)  # negative sign for negative Jacobian
         else:
-            # value closest to axis will be nan
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_full, NFP=NFP)
             iotaf[:] = -grid.compress(eq.compute("iota", grid=grid)["iota"])
 
@@ -562,7 +561,7 @@ class VMECIO:
                 "G",
                 "<J*B>",
                 "sqrt(g)",
-                "J^theta sqrt(g)",
+                "J^theta*sqrt(g)",
                 "J^zeta",
                 "D_Mercier",
             ],
@@ -599,7 +598,7 @@ class VMECIO:
         jcuru.units = "A/m^3"
         jcuru[:] = surface_averages(
             grid,
-            data["J^theta sqrt(g)"] / (2 * data["rho"]),
+            data["J^theta*sqrt(g)"] / (2 * data["rho"]),
             sqrt_g=data["sqrt(g)"],
             expand_out=False,
         )
@@ -811,7 +810,7 @@ class VMECIO:
         # full grid quantities
         full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
         data_full_grid = eq.compute(
-            ["J", "B_rho", "B_theta", "B_zeta", "J^theta sqrt(g)"], grid=full_grid
+            ["J", "B_rho", "B_theta", "B_zeta", "J^theta*sqrt(g)"], grid=full_grid
         )
 
         # Jacobian
@@ -1111,9 +1110,9 @@ class VMECIO:
         if verbose > 1:
             timer.disp("B_zeta")
 
-        timer.start("J^theta sqrt(g)")
+        timer.start("J^theta*sqrt(g)")
         if verbose > 0:
-            print("Saving J^theta sqrt(g)")
+            print("Saving J^theta*sqrt(g)")
         currumnc = file.createVariable(
             "currumnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -1132,7 +1131,7 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            (data_full_grid["J^theta sqrt(g)"] / (2 * data_full_grid["rho"]))
+            (data_full_grid["J^theta*sqrt(g)"] / (2 * data_full_grid["rho"]))
             .reshape(
                 (full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta), order="F"
             )
@@ -1156,9 +1155,9 @@ class VMECIO:
             currumns[0, :] = (
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
-        timer.stop("J^theta sqrt(g)")
+        timer.stop("J^theta*sqrt(g)")
         if verbose > 1:
-            timer.disp("J^theta sqrt(g)")
+            timer.disp("J^theta*sqrt(g)")
 
         timer.start("J^zeta sqrt(g)")
         if verbose > 0:

@@ -74,13 +74,13 @@ def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
 
 
 # arbitrary choice
-L = 6
-M = 6
-N = 3
-NFP = 5
+L = 5
+M = 5
+N = 2
+NFP = 3
 
 
-class TestSurfaceComputeUtils:
+class TestComputeUtils:
     """Tests for compute utilities related to surface averaging, etc."""
 
     @pytest.mark.unit
@@ -443,8 +443,8 @@ class TestSurfaceComputeUtils:
                 err_msg=str(type(grid)) + " " + str(grid.sym),
             )
 
-        M = 10
-        M_grid = 23
+        M = 5
+        M_grid = 13
         test(
             QuadratureGrid(L=M_grid, M=M_grid, N=0), FourierZernikeBasis(L=M, M=M, N=0)
         )
@@ -464,7 +464,7 @@ class TestSurfaceComputeUtils:
     def test_surface_min_max(self):
         """Test the surface_min and surface_max functions."""
         for grid_type in [LinearGrid, QuadratureGrid, ConcentricGrid]:
-            grid = grid_type(L=3, M=4, N=5, NFP=3)
+            grid = grid_type(L=L, M=M, N=N, NFP=NFP)
             rho = grid.nodes[:, 0]
             theta = grid.nodes[:, 1]
             zeta = grid.nodes[:, 2]
@@ -477,7 +477,8 @@ class TestSurfaceComputeUtils:
             Bmax_alt = np.zeros(grid.num_rho)
             Bmin_alt = np.zeros(grid.num_rho)
             for j in range(grid.num_rho):
-                Bmax_alt[j] = np.max(B[grid.inverse_rho_idx == j])
-                Bmin_alt[j] = np.min(B[grid.inverse_rho_idx == j])
+                mask = grid.inverse_rho_idx == j
+                Bmax_alt[j] = np.max(B[mask])
+                Bmin_alt[j] = np.min(B[mask])
             np.testing.assert_allclose(Bmax_alt, grid.compress(surface_max(grid, B)))
             np.testing.assert_allclose(Bmin_alt, grid.compress(surface_min(grid, B)))

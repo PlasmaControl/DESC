@@ -544,7 +544,7 @@ def _get_grid_surface(grid, surface_label):
 
     Returns
     -------
-    unique_size : ndarray
+    unique_size : int
         The number of the unique values of the surface_label.
     inverse_idx : ndarray
         Indexing array to go from unique values to full grid.

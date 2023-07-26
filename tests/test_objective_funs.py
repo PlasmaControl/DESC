@@ -39,7 +39,7 @@ from desc.objectives import (
     Volume,
 )
 from desc.objectives.objective_funs import _Objective
-from desc.objectives.utils import jax_softmax, jax_softmin
+from desc.objectives.utils import softmax, softmin
 from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -834,25 +834,25 @@ def test_objective_target_bounds():
 
 
 @pytest.mark.unit
-def test_jax_softmax_and_softmin():
+def test_softmax_and_softmin():
     """Test softmax and softmin function."""
     arr = np.arange(-17, 17, 5)
     # expect this to not be equal to the max but rather be more
     # since softmax is a conservative estimate of the max
-    softmax = jax_softmax(arr, alpha=1)
-    assert softmax >= np.max(arr)
+    sftmax = softmax(arr, alpha=1)
+    assert sftmax >= np.max(arr)
 
     # expect this to be equal to the max
     # as alpha -> infinity, softmax -> max
-    softmax = jax_softmax(arr, alpha=100)
-    np.testing.assert_almost_equal(softmax, np.max(arr))
+    sftmax = softmax(arr, alpha=100)
+    np.testing.assert_almost_equal(sftmax, np.max(arr))
 
     # expect this to not be equal to the min but rather be less
     # since softmin is a conservative estimate of the min
-    softmin = jax_softmin(arr, alpha=1)
-    assert softmin <= np.min(arr)
+    sftmin = softmin(arr, alpha=1)
+    assert sftmin <= np.min(arr)
 
     # expect this to be equal to the min
     # as alpha -> infinity, softmin -> min
-    softmin = jax_softmin(arr, alpha=100)
-    np.testing.assert_almost_equal(softmin, np.min(arr))
+    sftmin = softmin(arr, alpha=100)
+    np.testing.assert_almost_equal(sftmin, np.min(arr))

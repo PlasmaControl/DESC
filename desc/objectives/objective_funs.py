@@ -11,6 +11,8 @@ from desc.io import IOAble
 from desc.optimizeable import Optimizeable
 from desc.utils import Timer, flatten_list, is_broadcastable, sort_args, sort_things
 
+from .utils import map_params
+
 
 class ObjectiveFunction(IOAble):
     """Objective function comprised of one or more Objectives.
@@ -54,17 +56,6 @@ class ObjectiveFunction(IOAble):
         self._args = list(np.concatenate([obj.args for obj in self.objectives]))
         self._args += list(args)
         self._args = sort_args(self._args)
-        self._set_state_vector()
-
-    def _set_state_vector(self):
-        """Set state vector components, dimensions, and indices."""
-        self._dimensions = self.objectives[0].dimensions
-
-        self._dim_x = 0
-        self._x_idx = {}
-        for arg in self.args:
-            self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
-            self._dim_x += self.dimensions[arg]
 
     def _set_derivatives(self):
         """Set up derivatives of the objective functions."""
@@ -221,12 +212,14 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        kwargs = self.unpack_state(x)
+        params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_unscaled(kwargs, constants=const)
+                obj.compute_unscaled(
+                    *map_params(params, obj, self.things), constants=const
+                )
                 for obj, const in zip(self.objectives, constants)
             ]
         )
@@ -248,12 +241,14 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        kwargs = self.unpack_state(x)
+        params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled(kwargs, constants=const)
+                obj.compute_scaled(
+                    *map_params(params, obj, self.things), constants=const
+                )
                 for obj, const in zip(self.objectives, constants)
             ]
         )
@@ -275,12 +270,14 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        kwargs = self.unpack_state(x)
+        params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled_error(kwargs, constants=const)
+                obj.compute_scaled_error(
+                    *map_params(params, obj, self.things), constants=const
+                )
                 for obj, const in zip(self.objectives, constants)
             ]
         )
@@ -323,9 +320,9 @@ class ObjectiveFunction(IOAble):
         else:
             f = jnp.sum(self.compute_scaled(x, constants=constants) ** 2) / 2
         print("Total (sum of squares): {:10.3e}, ".format(f))
-        kwargs = self.unpack_state(x)
+        params = self.unpack_state(x)
         for obj, const in zip(self.objectives, constants):
-            obj.print_value(kwargs, constants=const)
+            obj.print_value(*map_params(params, obj, self.things), constants=const)
         return None
 
     def unpack_state(self, x):
@@ -338,8 +335,9 @@ class ObjectiveFunction(IOAble):
 
         Returns
         -------
-        kwargs : dict
-            Dictionary of the state components with argument names as keys.
+        params : list of dict
+            List of parameter dictionary for each optimizeable object tied to the
+            ObjectiveFunction.
 
         """
         if not self.built:
@@ -352,17 +350,17 @@ class ObjectiveFunction(IOAble):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        kwargs = {}
-        for arg in self.args:
-            kwargs[arg] = jnp.atleast_1d(x[self.x_idx[arg]])
-        return kwargs
+        xs_splits = np.cumsum([t.dim_x for t in self.things])
+        xs = jnp.split(x, xs_splits)
+        params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
+        return params
 
-    def x(self, eq):
-        """Return the full state vector from the Equilibrium eq."""
-        x = np.zeros((self.dim_x,))
-        for arg in self.args:
-            x[self.x_idx[arg]] = getattr(eq, arg)
-        return x
+    def x(self, *things):
+        """Return the full state vector from the Optimizeable objects things."""
+        # TODO: also check resolution etc?
+        assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
+        xs = [t.pack_params(t.params_dict) for t in things]
+        return jnp.concatenate(xs)
 
     def grad(self, x, constants=None):
         """Compute gradient vector of scalar form of the objective wrt x."""
@@ -580,21 +578,9 @@ class ObjectiveFunction(IOAble):
         return self._args
 
     @property
-    def dimensions(self):
-        """dict: Dimensions of the argument given by the dict keys."""
-        return self._dimensions
-
-    @property
-    def x_idx(self):
-        """dict: Indices of the components of the state vector."""
-        return self._x_idx
-
-    @property
     def dim_x(self):
         """int: Dimensional of the state vector."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._dim_x
+        return sum(t.dim_x for t in self.things)
 
     @property
     def dim_f(self):
@@ -980,11 +966,6 @@ class _Objective(IOAble, ABC):
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
         return ""
-
-    @property
-    def dimensions(self):
-        """dict: Dimensions of the argument given by the dict keys."""
-        return self._dimensions
 
     @property
     def dim_f(self):

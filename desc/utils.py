@@ -550,12 +550,12 @@ def sort_args(args):
 
 def sort_things(things):
     """Sort a list of things by their class and instance name."""
-    things = list(set(things))
+    things = list(set(flatten_list(things, True)))
     names = [t.__class__.__name__ + getattr(t, "name", "") for t in things]
     # TODO: make this error message more clear
     assert len(set(names)) == len(
         things
     ), "Duplicate object names detected, cannot determine unique ordering."
-    things_named = list(zip(names, things))
-    things_named = sorted(things_named)
-    return [thing for thing, name in things_named]
+    named_things = list(zip(names, things))
+    named_things = sorted(named_things)
+    return [thing for name, thing in named_things]

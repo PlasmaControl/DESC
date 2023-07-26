@@ -143,38 +143,6 @@ def factorize_linear_constraints(
     return xp, A_full, b_full, Z, unfixed_idx, project, recover
 
 
-def align_jacobian(Fx, objective_f, objective_g):
-    """Pad Jacobian with zeros in the right places so that the arguments line up.
-
-    Parameters
-    ----------
-    Fx : ndarray
-        Jacobian wrt args the objective_f takes
-    objective_f : ObjectiveFunction
-        Objective corresponding to Fx
-    objective_g : ObjectiveFunction
-        Other objective we want to align Jacobian against
-
-    Returns
-    -------
-    A : ndarray
-        Jacobian matrix, reordered and padded so that it broadcasts
-        correctly against the other Jacobian
-    """
-    x_idx = objective_f.x_idx
-    args = objective_f.args
-
-    dim_f = Fx.shape[:1]
-    A = {arg: Fx.T[x_idx[arg]] for arg in args}
-    allargs = np.concatenate([objective_f.args, objective_g.args])
-    allargs = sort_args(allargs)
-    for arg in allargs:
-        if arg not in A.keys():
-            A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
-    A = jnp.concatenate([A[arg] for arg in allargs])
-    return A.T
-
-
 def jax_softmax(arr, alpha):
     """JAX softmax implementation.
 
@@ -251,3 +219,8 @@ def combine_args(*objectives):
         obj.set_args(*args)
 
     return objectives
+
+
+def map_params(params, objective, things):
+    """Return a list of parameters for the things objective is tied to."""
+    return [p for p, t in zip(params, things) if t in objective.things]

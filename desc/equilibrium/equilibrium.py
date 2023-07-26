@@ -1671,10 +1671,7 @@ class Equilibrium(IOAble, Optimizeable):
         if verbose > 0:
             print("Start of solver")
             objective.print_value(objective.x(eq))
-        for key, value in result["history"].items():
-            # don't set nonexistent profile (values are empty ndarrays)
-            if value[-1].size:
-                setattr(eq, key, value[-1])
+        eq.params_dict = result["history"][-1][0]
 
         if verbose > 0:
             print("End of solver")
@@ -1774,10 +1771,9 @@ class Equilibrium(IOAble, Optimizeable):
             objective.print_value(objective.x(eq))
             for con in constraints:
                 con.print_value(*con.xs(eq))
-        for key, value in result["history"].items():
-            # don't set nonexistent profile (values are empty ndarrays)
-            if value[-1].size:
-                setattr(eq, key, value[-1])
+
+        eq.params_dict = result["history"][-1][0]
+
         if verbose > 0:
             print("End of solver")
             objective.print_value(objective.x(eq))

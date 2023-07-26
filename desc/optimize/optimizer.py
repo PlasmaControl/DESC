@@ -267,13 +267,7 @@ class Optimizer(IOAble):
         if isinstance(objective, ProximalProjection):
             result["history"] = objective.history
         else:
-            result["history"] = {}
-            for arg in objective.args:
-                result["history"][arg] = []
-            for x in result["allx"]:
-                kwargs = objective.unpack_state(x)
-                for arg in kwargs:
-                    result["history"][arg].append(kwargs[arg])
+            result["history"] = [objective.unpack_state(xi) for xi in result["allx"]]
 
         timer.stop("Solution time")
 

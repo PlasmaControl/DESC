@@ -381,7 +381,7 @@ def test_rejit():
     f = objFun.compute_scaled_error(x)
     J = objFun.jac_scaled(x)
     np.testing.assert_allclose(f, [-5598, 402, 396])
-    np.testing.assert_allclose(J[:, objFun.x_idx["R_lmn"]], np.diag([-1800, 0, -18]))
+    np.testing.assert_allclose(J[:, eq.x_idx["R_lmn"]], np.diag([-1800, 0, -18]))
     objFun.objectives[0].target = 3
     objFun.objectives[0].weight = 4
     objFun.objectives[0].y = 2

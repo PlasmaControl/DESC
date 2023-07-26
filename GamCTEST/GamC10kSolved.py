@@ -160,45 +160,39 @@ for i in range(0, bpstep):
     e_theta_i = np.zeros(len(B))
     curB_min = B_reflect
 
-    for j in range(0, nsteps):
-        if not (in_well) and B_reflect < B[j]:  # not in well and shouldn't be
+    where_above_strength = np.where(B > B_reflect)[0]
+
+    well_start_inds = np.where(np.diff(where_above_strength) > 1)[0]
+    well_start = (
+        where_above_strength[well_start_inds] + 1 + 1
+    )  # second +1 is to match stellopt
+    well_end = (
+        where_above_strength[well_start_inds + 1] - 2
+    )  # the -2 is not supposed to be here IDT, but stellopt has it like this
+    # B[well_end] > B_reflect actually, so that B[well_start:well_end] is the whole well
+    assert (
+        well_start.size == well_end.size
+    )  # make sure same number of starts and stops have been found
+    # assert np.all(
+    #     well_end - well_start >= 0
+    # )  # make sure ends are before or equal to starts
+    # remove ones ends which are the same as starts
+    equal_inds = well_end == well_start
+    np.delete(well_end, equal_inds)
+    np.delete(well_start, equal_inds)
+
+    total_wells = well_start.size
+
+    # also need to find the grad_psi and e_theta at the local B min of each B well
+    for start, end in zip(well_start, well_end):
+        if start >= end:
             continue
-
-        if in_well and B_reflect < B[j]:  # in well, but just exited
-            in_well = 0
-            well_end.append(
-                j - 2
-            )  # add well end location to well_end (in stellopt they use j-2 instead of j-1, not sure why)
-
-            grad_psi_i[well_start[cur_well] : well_end[cur_well]] = grad_psi_min
-            e_theta_i[well_start[cur_well] : well_end[cur_well]] = e_theta_min
-
-            curB_min = B_reflect
-            e_theta_min = 0
-            grad_psi_min = 1e10
-
-        if not (in_well) and B_reflect > B[j]:  # not in well but entering one
-            in_well = 1
-            well_start.append(
-                j + 1
-            )  # add well start location to well_start (in stellopt they use j+1 instead of j, not sure why)
-            cur_well += 1
-
-        if (
-            in_well and B_reflect > B[j]
-        ):  # in well and should be there. This always runs if the previous 'if' runs
-            if B[j] < curB_min:
-                curB_min = B[j]
-                grad_psi_min = grad_psi_mag[
-                    j
-                ]  # grad_psi_mag replaces grad_psi_norm from Stellopt
-                e_theta_min = e_theta[j]
-
-    # if we ended in a well, decrease cur_well by 1 so that total_wells is one smaller and the ending well is avoided
-    if in_well:
-        cur_well -= 1
-
-    total_wells = cur_well
+        cur_well_e_theta = e_theta[start:end]
+        cur_well_grad_psi_mag = grad_psi_mag[start:end]
+        cur_well_B = B[start:end]
+        B_min_index = np.argmin(cur_well_B)
+        grad_psi_i[start:end] = cur_well_grad_psi_mag[B_min_index]
+        e_theta_i[start:end] = cur_well_e_theta[B_min_index]
 
     # print(total_wells)
     # print(B_reflect)
@@ -209,7 +203,7 @@ for i in range(0, bpstep):
     vrovervt = 0
 
     # loop to compute important quantities at each step of b'
-    for k in range(1, total_wells + 1):
+    for k in range(total_wells):
 
         in_well_inds = np.arange(well_start[k], well_end[k])
         sqrt_bbb = np.sqrt(1 - B[in_well_inds] / B_reflect)

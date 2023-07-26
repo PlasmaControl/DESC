@@ -68,8 +68,16 @@ coords1 = eq.map_coordinates(
     coords=coords,
     inbasis=["rho", "alpha", "zeta"],
     outbasis=["rho", "theta", "zeta"],
-    period=[np.inf, (2 * np.pi), (2 * np.pi / eq.NFP)],
+    period=[
+        np.inf,
+        (2 * np.pi),
+        np.inf,
+    ],  # we dont want a period on zeta, because it can cause discontinuities in theta
 )
+# reason is alpha = zeta + iota * theta*
+# if zeta is modded by 2pi/NFP, then after each field period, it is as if we are trying to
+# find the theta* for the point (alpha, zeta=0), which is DIFFERENT from (alpha,zeta=2pi/NFP)
+
 # print(coords1)
 
 coords1 = coords1.at[:, 2].set(coords[:, 2])

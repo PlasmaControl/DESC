@@ -56,24 +56,39 @@ alpha = eq.compute("alpha", grid=grid)["alpha"] % (2 * np.pi)
 from desc.compute.utils import cross, dot
 from desc.grid import Grid
 
+# get iota at this surface to use for initial guess
+iota = eq.compute("iota", grid=Grid(np.array([[np.sqrt(s), 0, 0]])))["iota"]
+
+
 stepswithin2pi = 100
 nfulltransits = 100
 
 coords = np.ones((stepswithin2pi * nfulltransits, 3))
 coords[:, 0] = coords[:, 0] * np.sqrt(s)
-coords[:, 1] = coords[:, 1] * 2
-coords[:, 2] = np.arange(0, nfulltransits * 2 * np.pi, 2 * np.pi / stepswithin2pi)
+coords[:, 2] = np.linspace(0, nfulltransits * 2 * np.pi, stepswithin2pi * nfulltransits)
+guess = coords.copy()
 
+alpha = 0
+coords[:, 1] = coords[:, 1] * alpha  # set which field line we want
+
+# for initial guess, alpha = zeta + iota*theta*
+# rearrange for theta* and approx theta* ~ theta
+# theta = (alpha - zeta) / iota
+# as initial guess
+guess[:, 1] = (alpha - guess[:, 2]) / iota
+print(guess)
+
+t1 = time()
+print("starting map coords")
 coords1 = eq.map_coordinates(
     coords=coords,
     inbasis=["rho", "alpha", "zeta"],
     outbasis=["rho", "theta", "zeta"],
-    period=[
-        np.inf,
-        (2 * np.pi),
-        np.inf,
-    ],  # we dont want a period on zeta, because it can cause discontinuities in theta
-)
+    period=[np.inf, 2 * np.pi, np.inf],
+    guess=guess,
+)  # (2 * np.pi / eq.NFP)],
+# )
+print(f"map coords finished, took {time() - t1} seconds")
 # reason is alpha = zeta + iota * theta*
 # if zeta is modded by 2pi/NFP, then after each field period, it is as if we are trying to
 # find the theta* for the point (alpha, zeta=0), which is DIFFERENT from (alpha,zeta=2pi/NFP)

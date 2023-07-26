@@ -412,6 +412,7 @@ def test_correct_indexing_passed_modes():
         FixBoundaryZ(eq=eq, modes=Z_modes, normalize=False),
         BoundaryRSelfConsistency(eq=eq),
         BoundaryZSelfConsistency(eq=eq),
+        FixPressure(eq=eq),
     )
     for con in constraints:
         con.build(verbose=0)
@@ -428,11 +429,11 @@ def test_correct_indexing_passed_modes():
     x2 = recover(project(x1))
 
     atol = 2e-15
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
+    np.testing.assert_allclose(x1, x2, atol=atol)
+    np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -478,6 +479,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
         FixBoundaryZ(eq=eq, modes=Z_modes, normalize=False, target=target_Z),
         BoundaryRSelfConsistency(eq=eq),
         BoundaryZSelfConsistency(eq=eq),
+        FixPressure(eq=eq),
     )
     for con in constraints:
         con.build(eq, verbose=0)
@@ -494,11 +496,11 @@ def test_correct_indexing_passed_modes_and_passed_target():
     x2 = recover(project(x1))
 
     atol = 2e-15
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
+    np.testing.assert_allclose(x1, x2, atol=atol)
+    np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -544,6 +546,7 @@ def test_correct_indexing_passed_modes_axis():
             sum_weights=np.ones(2),
         ),
         FixSumModesZ(eq=eq, modes=np.array([[3, 3, -3], [4, 4, -4]]), normalize=False),
+        FixPressure(eq=eq),
     )
     for con in constraints:
         con.build(verbose=0)
@@ -560,11 +563,11 @@ def test_correct_indexing_passed_modes_axis():
     x2 = recover(project(x1))
 
     atol = 2e-15
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
+    np.testing.assert_allclose(x1, x2, atol=atol)
+    np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -653,6 +656,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             ),
             normalize=False,
         ),
+        FixPressure(eq=eq),
     )
     for con in constraints:
         con.build(verbose=0)
@@ -669,11 +673,11 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     x2 = recover(project(x1))
 
     atol = 2e-15
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
+    np.testing.assert_allclose(x1, x2, atol=atol)
+    np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
 @pytest.mark.unit

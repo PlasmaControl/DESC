@@ -69,6 +69,7 @@ iota = eq.compute("iota", grid=Grid(np.array([[np.sqrt(s), 0, 0]])))["iota"]
 # differing numbers of NFP
 stepswithin2pi = 100
 nfulltransits = 100
+# FIXME: make stepswithinFP = stepswithin2pi*eq.NFP
 
 coords = np.ones((stepswithin2pi * nfulltransits, 3))
 coords[:, 0] = coords[:, 0] * np.sqrt(s)

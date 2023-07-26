@@ -34,10 +34,12 @@ from desc.objectives import (
     FixThetaSFL,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
+    get_equilibrium_objective,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
 )
+from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile
 
 # TODO: check for all bdryR things if work when False is passed in
@@ -301,28 +303,11 @@ def test_factorize_linear_constraints_asserts():
         con.build(verbose=0)
     constraints[3].bounds = (0, 1)  # bounds on FixPsi
 
-    from desc.objectives.utils import factorize_linear_constraints
-
-    args = (
-        "R_lmn",
-        "Z_lmn",
-        "L_lmn",
-        "p_l",
-        "i_l",
-        "c_l",
-        "Psi",
-        "Te_l",
-        "ne_l",
-        "Ti_l",
-        "Zeff_l",
-        "Ra_n",
-        "Za_n",
-        "Rb_lmn",
-        "Zb_lmn",
-    )
+    objective = get_equilibrium_objective(eq, "force")
+    objective.build()
     with pytest.raises(ValueError):
         xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            constraints, args
+            constraints, objective
         )
 
 
@@ -417,12 +402,10 @@ def test_correct_indexing_passed_modes():
     for con in constraints:
         con.build(verbose=0)
     objective.build()
-    objective.set_args("Rb_lmn", "Zb_lmn")
-    from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
-        objective.args,
+        objective,
     )
 
     x1 = objective.x(eq)
@@ -484,12 +467,10 @@ def test_correct_indexing_passed_modes_and_passed_target():
     for con in constraints:
         con.build(eq, verbose=0)
     objective.build(eq)
-    objective.set_args("Rb_lmn", "Zb_lmn")
-    from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
-        objective.args,
+        objective,
     )
 
     x1 = objective.x(eq)
@@ -551,12 +532,10 @@ def test_correct_indexing_passed_modes_axis():
     for con in constraints:
         con.build(verbose=0)
     objective.build()
-    objective.set_args("Ra_n", "Za_n")
-    from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
-        objective.args,
+        objective,
     )
 
     x1 = objective.x(eq)
@@ -661,12 +640,10 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     for con in constraints:
         con.build(verbose=0)
     objective.build()
-    objective.set_args("Ra_n", "Za_n")
-    from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
-        objective.args,
+        objective,
     )
 
     x1 = objective.x(eq)

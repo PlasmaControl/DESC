@@ -32,6 +32,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     Volume,
+    get_fixed_boundary_constraints,
 )
 from desc.objectives.objective_funs import _Objective
 from desc.optimize import (
@@ -555,25 +556,22 @@ def test_all_optimizers():
     eobj = ObjectiveFunction(Energy(eq=eqe))
     fobj.build()
     eobj.build()
-    constraints = (
-        FixBoundaryR(eq=eqe),
-        FixBoundaryZ(eq=eqe),
-        FixIota(eq=eqe),
-        FixPressure(eq=eqe),
-        FixPsi(eq=eqe),
-    )
+    econ = get_fixed_boundary_constraints(eq=eqe)
+    fcon = get_fixed_boundary_constraints(eq=eqf)
 
     for opt in optimizers:
         print("TESTING ", opt)
         if optimizers[opt]["scalar"]:
             obj = eobj
             eq = eqe
+            con = econ
         else:
             obj = fobj
             eq = eqf
+            con = fcon
         eq.solve(
             objective=obj,
-            constraints=constraints,
+            constraints=con,
             optimizer=opt,
             verbose=3,
             copy=True,

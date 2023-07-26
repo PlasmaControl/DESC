@@ -11,7 +11,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
-from desc.utils import Timer, get_instance, sort_args
+from desc.utils import Timer, get_instance
 
 from .utils import compute_jac_scale, f_where_x
 
@@ -82,18 +82,8 @@ class LinearConstraintProjection(ObjectiveFunction):
             if not con.built:
                 con.build(verbose=verbose)
 
-        # kludge for now since ProximalProjection can't take extra args
-        if isinstance(self._objective, ProximalProjection):
-            args = self._objective.args
-        else:
-            args = np.concatenate([obj.args for obj in self._constraints])
-            args = np.concatenate((args, self._objective.args))
-        # this is all args used by both constraints and objective
-        self._args = sort_args(args)
         self._dim_f = self._objective.dim_f
         self._scalar = self._objective.scalar
-        self._objective.set_args(*self._args)
-        self.set_args()
         (
             self._xp,
             self._A,
@@ -104,8 +94,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._recover,
         ) = factorize_linear_constraints(
             self._constraints,
-            self._args,
-            kludge=isinstance(self._objective, ProximalProjection),
+            self._objective,
         )
         self._dim_x = self._objective.dim_x
         self._dim_x_reduced = self._Z.shape[1]
@@ -153,8 +142,9 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         Returns
         -------
-        kwargs : dict
-            Dictionary of the state components with argument names as keys.
+        params : list of dict
+            List of parameter dictionary for each optimizeable object tied to the
+            ObjectiveFunction.
 
         """
         if x.size != self._dim_x_reduced:
@@ -444,41 +434,12 @@ class ProximalProjection(ObjectiveFunction):
         self._compiled = False
         self._eq = eq
 
-    def set_args(self, *args):
-        """Set which arguments the objective should expect.
-
-        Defaults to args from all sub-objectives. Additional arguments can be passed in.
-        """
-        # this is everything taken by either objective
-        self._full_args = (
-            self._constraint.args
-            + self._objective.args
-            + list(np.concatenate([obj.args for obj in self._linear_constraints]))
-        )
-        self._full_args = sort_args(self._full_args)
-
-        # arguments being optimized are all args, but with internal degrees of freedom
-        # replaced by boundary terms
-        self._args = self._full_args.copy() + list(args)
-        self._args = sort_args(self._args)
-        if "L_lmn" in self._args:
-            self._args.remove("L_lmn")
-        if "Ra_n" in self._args:
-            self._args.remove("Ra_n")
-        if "Za_n" in self._args:
-            self._args.remove("Za_n")
-        if "R_lmn" in self._args:
-            self._args.remove("R_lmn")
-            if "Rb_lmn" not in self._args:
-                self._args.append("Rb_lmn")
-        if "Z_lmn" in self._args:
-            self._args.remove("Z_lmn")
-            if "Zb_lmn" not in self._args:
-                self._args.append("Zb_lmn")
-        self._args = sort_args(self._args)
-        self._set_state_vector()
-
     def _set_state_vector(self):
+
+        self._full_args = self._eq.optimizeable_params.copy()
+        self._args = self._eq.optimizeable_params.copy()
+        for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
+            self._args.remove(arg)
         (
             xp,
             A,
@@ -487,7 +448,7 @@ class ProximalProjection(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(self._linear_constraints, self._full_args)
+        ) = factorize_linear_constraints(self._linear_constraints, self._objective)
 
         # dx/dc - goes from the full state to optimization variables
         dxdc = []
@@ -529,14 +490,14 @@ class ProximalProjection(ObjectiveFunction):
         timer = Timer()
         timer.start("Proximal projection build")
 
-        self._eq = eq.copy()
+        self._eq = eq
         self._linear_constraints = get_fixed_boundary_constraints(
             eq=eq,
-            iota=self._eq.iota is not None,
-            kinetic=self._eq.electron_temperature is not None,
+            iota=self._eq.iota,
+            kinetic=self._eq.electron_temperature,
         )
         self._linear_constraints = maybe_add_self_consistency(
-            eq, self._linear_constraints
+            self._eq, self._linear_constraints
         )
 
         # we don't always build here because in ~all cases the user doesn't interact
@@ -556,9 +517,7 @@ class ProximalProjection(ObjectiveFunction):
         else:
             self._scalar = False
 
-        self.set_args()
-        self._objective.set_args(*self._full_args)
-        self._constraint.set_args(*self._full_args)
+        self._set_state_vector()
         # history and caching
         self._x_old = self.x(eq)
         self._allx = [self._x_old]
@@ -598,7 +557,7 @@ class ProximalProjection(ObjectiveFunction):
 
         xs_splits = np.cumsum([self._eq.dimensions[arg] for arg in self._args])
         params = {arg: xs for arg, xs in zip(self._args, jnp.split(x, xs_splits))}
-        return params
+        return [params]
 
     def x(self, *things):
         """Return the full state vector from the Optimizeable objects things."""
@@ -651,8 +610,8 @@ class ProximalProjection(ObjectiveFunction):
         if xopt.size > 0 and xeq.size > 0:
             pass
         else:
-            x_dict = self.unpack_state(x)
-            x_dict_old = self.unpack_state(self._x_old)
+            x_dict = self.unpack_state(x)[0]
+            x_dict_old = self.unpack_state(self._x_old)[0]
             deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
             self._eq = self._eq.perturb(
                 objective=self._constraint,

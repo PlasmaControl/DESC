@@ -3,6 +3,8 @@
 Functions in this module should not depend on any other submodules in desc.objectives.
 """
 
+import warnings
+
 import numpy as np
 from jax import lax
 from jax.scipy.special import logsumexp
@@ -11,9 +13,7 @@ from desc.backend import jnp, put
 from desc.utils import Index, flatten_list, sort_args, svd_inv_null
 
 
-def factorize_linear_constraints(
-    constraints, objective_args, kludge=False
-):  # noqa: C901
+def factorize_linear_constraints(constraints, objective):  # noqa: C901
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -25,8 +25,8 @@ def factorize_linear_constraints(
     ----------
     constraints : tuple of Objectives
         linear objectives/constraints to factorize for projection method.
-    objective_args : list of str
-        names of all arguments used by the desired objective.
+    objective : ObjectiveFunction
+        Objective being optimized.
 
     Returns
     -------
@@ -45,37 +45,50 @@ def factorize_linear_constraints(
         and recovering x from y.
 
     """
+    for con in constraints:
+        for thing in con.things:
+            if thing not in objective.things:
+                warnings.warn(
+                    f"Optimizeable object {thing} is constrained"
+                    + " but not included in Objective"
+                )
     # set state vector
-    if kludge:
-        args = objective_args
-    else:
-        args = np.concatenate([obj.args for obj in constraints])
-        args = np.concatenate((args, objective_args))
-    # this is all args used by both constraints and objective
-    args = sort_args(args)
-    dimensions = constraints[0]._dimensions
-    xz = {key: jnp.zeros(val) for key, val in dimensions.items()}
-
-    dim_x = 0
-    x_idx = {}
-    for arg in args:
-        x_idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
-        dim_x += dimensions[arg]
+    xz = objective.unpack_state(np.zeros(objective.dim_x))
+    xp = jnp.zeros(objective.dim_x)  # particular solution to Ax=b
     A = []
     b = []
-    xp = jnp.zeros(dim_x)  # particular solution to Ax=b
+
+    from desc.optimize import ProximalProjection
+
+    prox_flag = isinstance(objective, ProximalProjection)
 
     # linear constraint matrices for each objective
-    for obj_ind, obj in enumerate(constraints):
-        if obj.bounds is not None:
-            raise ValueError("Linear constraints must use target instead of bounds.")
-        A_ = obj.jac_scaled(xz)
+    for con in constraints:
+        if con.bounds is not None:
+            raise ValueError(
+                f"Linear constraint {con} must use target instead of bounds."
+            )
+        A_per_thing = []
+        # computing A matrix for each constraint for each thing in the optimization
+        for thing in objective.things:
+            if thing in con.things:
+                # for now we implicitly assume that each linear constraint is bound to
+                # only 1  thing, to generalize we need to make jac_scaled work for all
+                # positional args not just the first one.
+                A_ = con.jac_scaled(map_params(xz, con, objective.things)[0])
+            else:
+                A_ = {
+                    arg: jnp.zeros((con.dim_f, dimx))
+                    for arg, dimx in thing.dimensions.items()
+                }
+            args = objective._args if prox_flag else thing.optimizeable_params
+            A_per_thing.append(jnp.hstack([A_[arg] for arg in args]))
         # using obj.compute instead of obj.target to allow for correct scale/weight
-        b_ = -obj.compute_scaled_error(xz)
-        A.append(A_)
+        b_ = -con.compute_scaled_error(map_params(xz, con, objective.things)[0])
+        A.append(A_per_thing)
         b.append(b_)
 
-    A_full = jnp.vstack([jnp.hstack([Ai[arg] for arg in args]) for Ai in A])
+    A_full = jnp.vstack([jnp.hstack(Ai) for Ai in A])
     b_full = jnp.concatenate(b)
     # fixed just means there is a single element in A, so A_ij*x_j = b_i
     fixed_rows = np.where(np.count_nonzero(A_full, axis=1) == 1)[0]
@@ -122,13 +135,13 @@ def factorize_linear_constraints(
 
     def recover(x_reduced):
         """Recover the full state vector from the reduced optimization vector."""
-        dx = put(jnp.zeros(dim_x), unfixed_idx, Z @ x_reduced)
+        dx = put(jnp.zeros(objective.dim_x), unfixed_idx, Z @ x_reduced)
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 
     # check that all constraints are actually satisfiable
-    xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
+    xp_ = objective.unpack_state(xp)
     for con in constraints:
-        y1 = con.compute_unscaled(xp_dict)
+        y1 = con.compute_unscaled(*map_params(xp_, con, objective.things))
         y2 = con.target
         y1, y2 = np.broadcast_arrays(y1, y2)
         np.testing.assert_allclose(

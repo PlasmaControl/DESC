@@ -186,7 +186,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective.args
+        constraints, objective
     )
     timer.stop("linear constraint factorize")
     if verbose > 1:
@@ -231,21 +231,23 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
     # all other perturbations besides the boundary
     other_args = [
-        arg for arg in objective.args if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]
+        arg
+        for arg in eq.optimizeable_params
+        if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]
     ]
     if len([arg for arg in other_args if arg in deltas.keys()]):
         dc = jnp.concatenate(
             [
                 deltas[arg]
                 for arg in other_args
-                if arg in deltas.keys() and arg in objective.args
+                if arg in deltas.keys() and arg in eq.optimizeable_params
             ]
         )
         x_idx = jnp.concatenate(
             [
                 eq.x_idx[arg]
                 for arg in other_args
-                if arg in deltas.keys() and arg in objective.args
+                if arg in deltas.keys() and arg in eq.optimizeable_params
             ]
         )
         tangents += jnp.eye(eq.dim_x)[:, x_idx] @ dc
@@ -387,7 +389,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective.args
+        constraints, objective
     )
 
     # update other attributes
@@ -578,7 +580,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         unfixed_idx,
         project,
         recover,
-    ) = factorize_linear_constraints(constraints, objective_f.args)
+    ) = factorize_linear_constraints(constraints, objective_f)
 
     # state vector
     xf = objective_f.x(eq)
@@ -712,12 +714,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # 2nd order
     if order > 1:
 
-        idx = jnp.array([], dtype=int)
-        for arg in objective_f.args:
-            if arg not in objective_g.args:
-                idx = jnp.concatenate((idx, eq.x_idx[arg]))
-        dxf_dxg = jnp.delete(jnp.eye(eq.dim_x), idx, 1)
-
         # 2nd partial derivatives of f objective wrt both x and c
         if verbose > 0:
             print("Computing d^2f")
@@ -732,7 +728,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing d^2g")
         timer.start("d^2g computation")
-        tangents_g = (dxdx_reduced @ dx1_reduced + dxdc @ dc1) @ dxf_dxg
+        tangents_g = dxdx_reduced @ dx1_reduced + dxdc @ dc1
         RHS_2g = (
             0.5 * objective_g.jvp_scaled((tangents_g, tangents_g), xg) + GxFx @ RHS_2f
         )
@@ -787,7 +783,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective_f.args
+        constraints, objective_f
     )
 
     # update other attributes

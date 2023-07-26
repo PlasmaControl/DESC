@@ -184,7 +184,7 @@ class VMECIO:
         objective = ObjectiveFunction(constraints, verbose=0)
         objective.build()
         _, _, _, _, _, project, recover = factorize_linear_constraints(
-            constraints, objective.args
+            constraints, objective
         )
         args = objective.unpack_state(recover(project(objective.x(eq))))[0]
         eq.params_dict = args

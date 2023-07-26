@@ -1655,6 +1655,10 @@ class Equilibrium(IOAble, Optimizeable):
                 + "on master branch."
             )
 
+        objective.things = eq
+        for con in constraints:
+            con.things = eq
+
         result = optimizer.optimize(
             eq,
             objective,
@@ -1751,6 +1755,10 @@ class Equilibrium(IOAble, Optimizeable):
             eq = self.copy()
         else:
             eq = self
+
+        objective.things = eq
+        for con in constraints:
+            con.things = eq
 
         result = optimizer.optimize(
             eq,
@@ -1864,6 +1872,8 @@ class Equilibrium(IOAble, Optimizeable):
                 print("Optimization Step {}".format(iteration))
                 print("====================")
                 print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
+            objective.things = eq
+            constraint.things = eq
 
             # perturb + solve
             (
@@ -1880,6 +1890,8 @@ class Equilibrium(IOAble, Optimizeable):
                 copy=True,
                 **perturb_options,
             )
+            objective.things = eq_new
+            constraint.things = eq_new
             eq_new.solve(objective=constraint, **solve_options)
 
             # update trust region radius

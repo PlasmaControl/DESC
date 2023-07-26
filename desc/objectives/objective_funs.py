@@ -9,7 +9,7 @@ from desc.backend import jit, jnp, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizeable import Optimizeable
-from desc.utils import Timer, flatten_list, is_broadcastable, sort_args, sort_things
+from desc.utils import Timer, errorif, flatten_list, is_broadcastable, sort_things
 
 from .utils import map_params
 
@@ -47,15 +47,6 @@ class ObjectiveFunction(IOAble):
         self._deriv_mode = deriv_mode
         self._built = False
         self._compiled = False
-
-    def set_args(self, *args):
-        """Set which arguments the objective should expect.
-
-        Defaults to args from all sub-objectives. Additional arguments can be passed in.
-        """
-        self._args = list(np.concatenate([obj.args for obj in self.objectives]))
-        self._args += list(args)
-        self._args = sort_args(self._args)
 
     def _set_derivatives(self):
         """Set up derivatives of the objective functions."""
@@ -186,7 +177,6 @@ class ObjectiveFunction(IOAble):
         else:
             self._scalar = False
 
-        self.set_args()
         self._set_derivatives()
         if self.use_jit:
             self.jit()
@@ -573,11 +563,6 @@ class ObjectiveFunction(IOAble):
         return self._compiled
 
     @property
-    def args(self):
-        """list: Names (str) of arguments to the compute functions."""
-        return self._args
-
-    @property
     def dim_x(self):
         """int: Dimensional of the state vector."""
         return sum(t.dim_x for t in self.things)
@@ -634,6 +619,32 @@ class ObjectiveFunction(IOAble):
         """list: Optimizeable things that this objective is tied to."""
         return sort_things([obj.things for obj in self._objectives])
 
+    @things.setter
+    def things(self, new):
+        if not isinstance(new, (tuple, list)):
+            new = [new]
+        assert all(isinstance(x, Optimizeable) for x in new)
+        # in general this is a hard problem, since we don't really know which object
+        # to replace with which if there are multiple of the same type, but we can
+        # do our best and throw an error if we can't figure it out here.
+        inclasses = {thing.__class__ for thing in new}
+        classes = {thing.__class__ for thing in self.things}
+        errorif(
+            len(inclasses) != len(new) or len(classes) != len(self.things),
+            ValueError,
+            "Cannot unambiguosly parse Optimizeable objects to individual Objectives,"
+            + " try setting Objective.things on each sub Objective individually.",
+        )
+        # now we know that new and self.things contains instances of unique classes, so
+        # we should be able to just replace like with like
+        for obj in self.objectives:
+            objthings = obj.things.copy()
+            for i, thing1 in enumerate(obj.things):
+                for thing2 in new:
+                    if type(thing1) == type(thing2):
+                        objthings[i] = thing2
+            obj.things = objthings
+
 
 class _Objective(IOAble, ABC):
     """Objective (or constraint) used in the optimization of an Equilibrium.
@@ -669,7 +680,6 @@ class _Objective(IOAble, ABC):
         "_target",
         "_weight",
         "_name",
-        "_args",
         "_normalize",
         "_normalize_target",
         "_normalization",
@@ -707,10 +717,6 @@ class _Objective(IOAble, ABC):
                 )
             )
         self._things = flatten_list([things], True)
-
-    def _set_dimensions(self, things):
-        """Set state vector component dimensions."""
-        self._dimensions = [thing.dimensions.copy() for thing in things]
 
     def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""
@@ -805,12 +811,8 @@ class _Objective(IOAble, ABC):
     @abstractmethod
     def build(self, things=None, use_jit=True, verbose=1):
         """Build constant arrays."""
-        things = self.things
         self._check_dimensions()
         self._set_derivatives()
-        # kludge for now
-        self._args = things[0].optimizeable_params
-        self._dimensions = things[0].dimensions
         if use_jit is not None:
             self._use_jit = use_jit
         if self._use_jit:
@@ -956,11 +958,6 @@ class _Objective(IOAble, ABC):
     def built(self):
         """bool: Whether the transforms have been precomputed (or not)."""
         return self._built
-
-    @property
-    def args(self):
-        """list: Names (str) of arguments to the compute functions."""
-        return self._args
 
     @property
     def target_arg(self):

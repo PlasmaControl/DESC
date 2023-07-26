@@ -24,8 +24,6 @@ On Your Local Machine
 
 **Or from GitHub (for development builds)**
 
-`Option 1 tested to work on M1 Macbook on 5-3-23`
-
 First download the repository from GitHub.
 
 .. code-block:: sh
@@ -36,6 +34,8 @@ First download the repository from GitHub.
 Now pick one of the installation options below.
 
 Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+
+`Option 1 tested to work on M1 Macbook on 5-3-23`
 
 .. code-block:: sh
 
@@ -179,7 +179,7 @@ On Clusters with IBM Power Architecture
 If pre-built JAX binaries are not available, you will first need to build JAX from source.
 More info can be found here: https://jax.readthedocs.io/en/latest/developer.html
 
-The following are instructions tested to work on the Traverse supercomputer at Princeton:
+These instructions were tested and confirmed to work on the Traverse supercomputer at Princeton as of 7-10-2023.
 
 .. code-block:: sh
 

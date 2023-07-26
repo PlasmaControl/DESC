@@ -862,7 +862,7 @@ def test_jax_softmax_and_softmin():
 @pytest.mark.unit
 def test_bd_min_objective():
     """Test for B field/coil distance objective function."""
-    eq = get("HELIOTRON_lowres")
+    eq = get("HELIOTRON")
     winding_surf1 = FourierRZToroidalSurface(
         R_lmn=[10, 3], Z_lmn=[-3], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
     )

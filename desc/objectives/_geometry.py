@@ -1171,6 +1171,7 @@ class B_dmin(_Objective):
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
+            "surface_coords": self._surface_coords,
         }
 
         timer.stop("Precomputing transforms")
@@ -1218,12 +1219,12 @@ class B_dmin(_Objective):
             profiles=self._profiles,
         )
 
-        B_dmin_data = []
-        for x, y, z, mag_B in zip(data["X"], data["Y"], data["Z"], data["|B|"]):
-            dists = jnp.linalg.norm(
-                jnp.array([x, y, z]) - self._surface_coords, axis=-1
-            )
-            d_min = dists.min()
-            B_dmin_data.append(mag_B * d_min)
+        d = jnp.linalg.norm(
+            jnp.array([data["X"], data["Y"], data["Z"]]).T[:, None, :]
+            - constants["surface_coords"][None, :, :],
+            axis=-1,
+        )
+        dmin_data = d.min(axis=-1)
+        B_dmin_data = [d_min * B for d_min, B in zip(dmin_data, data["|B|"])]
 
         return jnp.atleast_1d(B_dmin_data)

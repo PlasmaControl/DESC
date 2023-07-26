@@ -78,7 +78,6 @@ coords[:, 1] = coords[:, 1] * alpha  # set which field line we want
 guess[:, 1] = (alpha - guess[:, 2]) / iota
 print(guess)
 
-t1 = time()
 print("starting map coords")
 coords1 = eq.map_coordinates(
     coords=coords,
@@ -88,7 +87,6 @@ coords1 = eq.map_coordinates(
     guess=guess,
 )  # (2 * np.pi / eq.NFP)],
 # )
-print(f"map coords finished, took {time() - t1} seconds")
 # reason is alpha = zeta + iota * theta*
 # if zeta is modded by 2pi/NFP, then after each field period, it is as if we are trying to
 # find the theta* for the point (alpha, zeta=0), which is DIFFERENT from (alpha,zeta=2pi/NFP)

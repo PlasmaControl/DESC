@@ -625,3 +625,49 @@ def test_transform_pytree():
     x = np.random.random(basis.num_modes)
     np.testing.assert_allclose(foo(x, transform), transform.transform(x))
     np.testing.assert_allclose(bar(x), transform.transform(x))
+
+
+@pytest.mark.unit
+def test_NFP_warning():
+    """Make sure we only warn about basis/grid NFP in cases where it matters."""
+    rho = np.linspace(0, 1, 20)
+    g01 = LinearGrid(rho=rho, L=5, N=0, NFP=1)
+    g02 = LinearGrid(rho=rho, L=5, N=0, NFP=2)
+    g21 = LinearGrid(rho=rho, L=5, N=5, NFP=1)
+    g22 = LinearGrid(rho=rho, L=5, N=5, NFP=2)
+    b01 = FourierZernikeBasis(L=2, M=2, N=0, NFP=1)
+    b02 = FourierZernikeBasis(L=2, M=2, N=0, NFP=2)
+    b21 = FourierZernikeBasis(L=2, M=2, N=2, NFP=1)
+    b22 = FourierZernikeBasis(L=2, M=2, N=2, NFP=2)
+
+    # No toroidal nodes, shouldn't warn
+    _ = Transform(g01, b01)
+    _ = Transform(g01, b02)
+    _ = Transform(g01, b21)
+    _ = Transform(g01, b22)
+
+    # No toroidal nodes, shouldn't warn
+    _ = Transform(g02, b01)
+    _ = Transform(g02, b02)
+    _ = Transform(g02, b21)
+    _ = Transform(g02, b22)
+
+    # toroidal nodes but no toroidal modes, no warning
+    _ = Transform(g21, b01)
+    # toroidal nodes but no toroidal modes, no warning
+    _ = Transform(g21, b02)
+    # toroidal nodes and modes, but equal nfp, no warning
+    _ = Transform(g21, b21)
+    # toroidal modes and nodes and unequal NFP -> warning
+    with pytest.warns(UserWarning):
+        _ = Transform(g21, b22)
+
+    # no toroidal modes, no warning
+    _ = Transform(g22, b01)
+    # no toroidal modes, no warning
+    _ = Transform(g22, b02)
+    # toroidal modes and nodes and unequal NFP -> warning
+    with pytest.warns(UserWarning):
+        _ = Transform(g22, b21)
+    # toroidal nodes and modes, but equal nfp, no warning
+    _ = Transform(g22, b22)

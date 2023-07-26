@@ -106,34 +106,53 @@ wellGamma_c = 0
 bigGamma_c = 0
 
 # compute important quantities in DESC.
-grad_psi_mag = eq.compute("|grad(psi)|", grid2)["|grad(psi)|"]
-grad_psi = eq.compute("grad(psi)", grid2)["grad(psi)"]
-grad_zeta_mag = eq.compute("|grad(zeta)|", grid2)["|grad(zeta)|"]
-grad_zeta = eq.compute("e^zeta", grid2)["e^zeta"]
-grad_B = eq.compute("grad(|B|)", grid2)["grad(|B|)"]
-e_theta = np.linalg.norm(eq.compute("e_theta", grid2)["e_theta"], axis=-1)
-kappa_g = eq.compute("kappa_g", grid2)["kappa_g"]
-psi = eq.compute("psi", grid2)["psi"]
-Bsupz = eq.compute("B^zeta", grid2)["B^zeta"]
+
+data_names = [
+    "|grad(psi)|",
+    "grad(psi)",
+    "|grad(zeta)|",
+    "e^zeta",
+    "grad(|B|)",
+    "e_theta",
+    "kappa_g",
+    "psi",
+    "B^zeta",
+    "B_R",
+    "B_phi",
+    "B_Z",
+    "iota_r",
+    "X",
+    "Y",
+    "Z",
+]
+data = eq.compute(data_names, grid2)
+
+grad_psi_mag = data["|grad(psi)|"]
+grad_psi = data["grad(psi)"]
+grad_zeta_mag = data["|grad(zeta)|"]
+grad_zeta = data["e^zeta"]
+grad_B = data["grad(|B|)"]
+e_theta = np.linalg.norm(data["e_theta"], axis=-1)
+kappa_g = data["kappa_g"]
+psi = data["psi"]
+Bsupz = data["B^zeta"]
 dBsupzdpsi = grad_B[:, 2] * 2 * np.pi / psi
 dBdpsi = grad_B[:, 2] * 2 * np.pi / psi
 
-Br = eq.compute("B_R", grid2)["B_R"]
-Bphi = eq.compute("B_phi", grid2)["B_phi"]
+Br = data["B_R"]
+Bphi = data["B_phi"]
 zeta = coords1[:, 2]
 Bxyz = np.zeros((len(B), 3))
 Bxyz[:, 0] = Br * np.cos(zeta) - Bphi * np.sin(zeta)
 Bxyz[:, 1] = Br * np.sin(zeta) + Bphi * np.cos(zeta)
-Bxyz[:, 2] = eq.compute("B_Z", grid2)["B_Z"]
+Bxyz[:, 2] = data["B_Z"]
 
-dVdb_t1 = (
-    eq.compute("iota_r", grid2)["iota_r"] * dot(cross(grad_psi, Bxyz), grad_zeta) / B
-)
+dVdb_t1 = data["iota_r"] * dot(cross(grad_psi, Bxyz), grad_zeta) / B
 
 # finding basic arc length of each segment
-x = eq.compute("X", grid2)["X"]
-y = eq.compute("Y", grid2)["Y"]
-z = eq.compute("Z", grid2)["Z"]
+x = data["X"]
+y = data["Y"]
+z = data["Z"]
 ds = np.sqrt(
     np.add(np.square(np.diff(x)), np.square(np.diff(y)), np.square(np.diff(z)))
 )

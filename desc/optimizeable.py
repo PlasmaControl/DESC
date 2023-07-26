@@ -40,7 +40,10 @@ class Optimizeable(ABC):
     @property
     def params_dict(self):
         """dict: dictionary of arrays of optimizeable parameters."""
-        return {key: getattr(self, key) for key in self.optimizeable_params}
+        return {
+            key: jnp.asarray(getattr(self, key)).copy()
+            for key in self.optimizeable_params
+        }
 
     @params_dict.setter
     def params_dict(self, d):
@@ -66,6 +69,13 @@ class Optimizeable(ABC):
             idx[arg] = jnp.arange(dim_x, dim_x + dimensions[arg])
             dim_x += dimensions[arg]
         return idx
+
+    @property
+    def dim_x(self):
+        """int: total number of optimizeable parameters."""
+        return sum(
+            jnp.asarray(getattr(self, key)).size for key in self.optimizeable_params
+        )
 
     def pack_params(self, p):
         """Convert a dictionary of parameters into a single array.

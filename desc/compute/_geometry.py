@@ -247,6 +247,8 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     data=["n_rho", "e_theta_t"],
 )
 def _L_sff_rho(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["L_sff_rho"] = dot(data["e_theta_t"], data["n_rho"])
     return data
 
@@ -265,6 +267,8 @@ def _L_sff_rho(params, transforms, profiles, data, **kwargs):
     data=["n_rho", "e_theta_z"],
 )
 def _M_sff_rho(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["M_sff_rho"] = dot(data["e_theta_z"], data["n_rho"])
     return data
 
@@ -283,6 +287,8 @@ def _M_sff_rho(params, transforms, profiles, data, **kwargs):
     data=["n_rho", "e_zeta_z"],
 )
 def _N_sff_rho(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["N_sff_rho"] = dot(data["e_zeta_z"], data["n_rho"])
     return data
 
@@ -302,7 +308,7 @@ def _N_sff_rho(params, transforms, profiles, data, **kwargs):
 )
 def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
     # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+    # https://en.wikipedia.org/wiki/Parametric_surface
     E = data["g_tt"]
     F = data["g_tz"]
     G = data["g_zz"]
@@ -334,7 +340,7 @@ def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
 )
 def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
     # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+    # https://en.wikipedia.org/wiki/Parametric_surface
     E = data["g_tt"]
     F = data["g_tz"]
     G = data["g_zz"]
@@ -365,6 +371,8 @@ def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
     data=["curvature_k1_rho", "curvature_k2_rho"],
 )
 def _curvature_K_rho(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["curvature_K_rho"] = data["curvature_k1_rho"] * data["curvature_k2_rho"]
     return data
 
@@ -383,6 +391,8 @@ def _curvature_K_rho(params, transforms, profiles, data, **kwargs):
     data=["curvature_k1_rho", "curvature_k2_rho"],
 )
 def _curvature_H_rho(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["curvature_H_rho"] = (data["curvature_k1_rho"] + data["curvature_k2_rho"]) / 2
     return data
 
@@ -401,6 +411,8 @@ def _curvature_H_rho(params, transforms, profiles, data, **kwargs):
     data=["n_theta", "e_zeta_z"],
 )
 def _L_sff_theta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["L_sff_theta"] = dot(data["e_zeta_z"], data["n_theta"])
     return data
 
@@ -419,6 +431,8 @@ def _L_sff_theta(params, transforms, profiles, data, **kwargs):
     data=["n_theta", "e_zeta_r"],
 )
 def _M_sff_theta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["M_sff_theta"] = dot(data["e_zeta_r"], data["n_theta"])
     return data
 
@@ -437,6 +451,8 @@ def _M_sff_theta(params, transforms, profiles, data, **kwargs):
     data=["n_theta", "e_rho_r"],
 )
 def _N_sff_theta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["N_sff_theta"] = dot(data["e_rho_r"], data["n_theta"])
     return data
 
@@ -456,10 +472,10 @@ def _N_sff_theta(params, transforms, profiles, data, **kwargs):
 )
 def _curvature_k1_theta(params, transforms, profiles, data, **kwargs):
     # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
-    E = data["g_rr"]
+    # https://en.wikipedia.org/wiki/Parametric_surface
+    E = data["g_zz"]
     F = data["g_rz"]
-    G = data["g_zz"]
+    G = data["g_rr"]
     L = data["L_sff_theta"]
     M = data["M_sff_theta"]
     N = data["N_sff_theta"]
@@ -488,10 +504,10 @@ def _curvature_k1_theta(params, transforms, profiles, data, **kwargs):
 )
 def _curvature_k2_theta(params, transforms, profiles, data, **kwargs):
     # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
-    E = data["g_rr"]
+    # https://en.wikipedia.org/wiki/Parametric_surface
+    E = data["g_zz"]
     F = data["g_rz"]
-    G = data["g_zz"]
+    G = data["g_rr"]
     L = data["L_sff_theta"]
     M = data["M_sff_theta"]
     N = data["N_sff_theta"]
@@ -519,6 +535,8 @@ def _curvature_k2_theta(params, transforms, profiles, data, **kwargs):
     data=["curvature_k1_theta", "curvature_k2_theta"],
 )
 def _curvature_K_theta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["curvature_K_theta"] = data["curvature_k1_theta"] * data["curvature_k2_theta"]
     return data
 
@@ -537,6 +555,8 @@ def _curvature_K_theta(params, transforms, profiles, data, **kwargs):
     data=["curvature_k1_theta", "curvature_k2_theta"],
 )
 def _curvature_H_theta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["curvature_H_theta"] = (
         data["curvature_k1_theta"] + data["curvature_k2_theta"]
     ) / 2
@@ -557,6 +577,8 @@ def _curvature_H_theta(params, transforms, profiles, data, **kwargs):
     data=["n_zeta", "e_rho_r"],
 )
 def _L_sff_zeta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["L_sff_zeta"] = dot(data["e_rho_r"], data["n_zeta"])
     return data
 
@@ -575,6 +597,8 @@ def _L_sff_zeta(params, transforms, profiles, data, **kwargs):
     data=["n_zeta", "e_rho_t"],
 )
 def _M_sff_zeta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["M_sff_zeta"] = dot(data["e_rho_t"], data["n_zeta"])
     return data
 
@@ -593,6 +617,8 @@ def _M_sff_zeta(params, transforms, profiles, data, **kwargs):
     data=["n_zeta", "e_theta_t"],
 )
 def _N_sff_zeta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["N_sff_zeta"] = dot(data["e_theta_t"], data["n_zeta"])
     return data
 
@@ -612,7 +638,7 @@ def _N_sff_zeta(params, transforms, profiles, data, **kwargs):
 )
 def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
     # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+    # https://en.wikipedia.org/wiki/Parametric_surface
     E = data["g_rr"]
     F = data["g_rt"]
     G = data["g_tt"]
@@ -644,7 +670,7 @@ def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
 )
 def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
     # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+    # https://en.wikipedia.org/wiki/Parametric_surface
     E = data["g_rr"]
     F = data["g_rt"]
     G = data["g_tt"]
@@ -675,6 +701,8 @@ def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
     data=["curvature_k1_zeta", "curvature_k2_zeta"],
 )
 def _curvature_K_zeta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["curvature_K_zeta"] = data["curvature_k1_zeta"] * data["curvature_k2_zeta"]
     return data
 
@@ -693,6 +721,8 @@ def _curvature_K_zeta(params, transforms, profiles, data, **kwargs):
     data=["curvature_k1_zeta", "curvature_k2_zeta"],
 )
 def _curvature_H_zeta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface
     data["curvature_H_zeta"] = (
         data["curvature_k1_zeta"] + data["curvature_k2_zeta"]
     ) / 2

@@ -72,8 +72,6 @@ class QuasisymmetryBoozer(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        assert len(helicity) == 2
-        assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
         self._grid = grid
         self.helicity = helicity
         self.M_booz = M_booz

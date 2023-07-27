@@ -928,19 +928,6 @@ class _Objective(IOAble, ABC):
         if not is_broadcastable((self.dim_f,), self.weight.shape):
             raise ValueError("len(weight) != dim_f")
 
-    def update_target(self, eq):
-        """Update target values using an Equilibrium.
-
-        Parameters
-        ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
-
-        """
-        self.target = np.atleast_1d(getattr(eq, self.target_arg, self.target))
-        if self._use_jit:
-            self.jit()
-
     @abstractmethod
     def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays."""
@@ -1101,11 +1088,6 @@ class _Objective(IOAble, ABC):
     def args(self):
         """list: Names (str) of arguments to the compute functions."""
         return self._args
-
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return ""
 
     @property
     def dimensions(self):

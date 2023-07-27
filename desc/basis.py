@@ -1440,7 +1440,7 @@ def zernike_radial(r, l, m, dr=0):
     else:
         raise NotImplementedError(
             "Analytic radial derivatives of Zernike polynomials for order>4 "
-            + "have not been implemented"
+            + "have not been implemented."
         )
     return s * jnp.where((l - m) % 2 == 0, out, 0)
 

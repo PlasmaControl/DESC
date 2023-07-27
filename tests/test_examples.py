@@ -36,6 +36,7 @@ from desc.objectives.utils import get_NAE_constraints
 from desc.optimize import Optimizer
 from desc.plotting import plot_boozer_surface
 from desc.profiles import PowerSeriesProfile
+from desc.regcoil import run_regcoil
 from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
@@ -789,3 +790,46 @@ class TestGetExample:
                 -1.36284423e07,
             ],
         )
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_axisymmetric():
+    """Test axisymmetric regcoil solution."""
+    # make a simple axisymmetric vacuum equilibrium
+    eq = Equilibrium()
+    # no phi_SV is needed since it is axisymmetric,
+    # so phi_mn should be zero when running REGCOIL
+    # especially with a nonzero alpha
+    phi_mn_opt, _, _, G, phi_fxn, _, chi_B = run_regcoil(
+        basis_M=1,
+        basis_N=1,
+        eqname=eq,
+        eval_grid_M=10,
+        eval_grid_N=10,
+        source_grid_M=40,
+        source_grid_N=40,
+        alpha=1e-12,
+    )
+    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-12)
+    np.testing.assert_allclose(chi_B, 0, atol=1e-26)
+
+    grid = LinearGrid(N=10, M=10)
+    correct_phi = G * grid.nodes[:, 2] / 2 / np.pi
+    np.testing.assert_allclose(phi_fxn(grid), correct_phi, atol=1e-16)
+
+    # test with alpha large, should have no phi_mn
+    phi_mn_opt, _, _, G, phi_fxn, _, chi_B = run_regcoil(
+        basis_M=1,
+        basis_N=1,
+        eqname=eq,
+        eval_grid_M=10,
+        eval_grid_N=10,
+        source_grid_M=40,
+        source_grid_N=40,
+        alpha=10,
+    )
+    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-16)
+    np.testing.assert_allclose(chi_B, 0, atol=1e-26)
+    np.testing.assert_allclose(phi_fxn(grid), correct_phi, atol=1e-16)

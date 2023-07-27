@@ -9,6 +9,7 @@ import numpy as np
 from scipy.constants import mu_0
 
 from desc.basis import DoubleFourierSeries
+from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.geometry.utils import rpz2xyz, rpz2xyz_vec
 from desc.grid import LinearGrid
@@ -69,6 +70,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     external_TF_fraction=0,
     jac=None,
     return_A=False,
+    show_plots=False,
 ):
     """Python regcoil to find single-valued current potential.
 
@@ -133,8 +135,13 @@ def run_regcoil(  # noqa: C901 fxn too complex
     """
     # TODO: add defaults for grid values, as stated in docstring
     ##### Load in DESC equilbrium #####
-    eqfv = load(eqname)
-    eq = eqfv
+    if isinstance(eqname, str):
+        eqfv = load(eqname)
+        eq = eqfv
+    elif isinstance(eqname, Equilibrium):
+        eq = eqname
+    else:
+        raise TypeError(f"not a valid input for eqname, got {type(eqname)}")
     if hasattr(eq, "__len__"):
         eq = eq[-1]
     ########### calculate quantities on DESC  plasma surface #############
@@ -282,7 +289,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     saddles_exists_bools = []
     ncontours = 20
 
-    if scan:
+    if scan and show_plots:
         plt.figure(figsize=(10, 8))
         plt.rcParams.update({"font.size": 24})
         plt.scatter(alphas, chi2Bs, label="python regcoil")
@@ -298,7 +305,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
             list(set(map(int, np.linspace(1, nlambda, numPlots))))
         )
         numPlots = len(ilambda_to_plot)
-        print("ilambda_to_plot:", ilambda_to_plot)
 
         numCols = int(np.ceil(np.sqrt(numPlots)))
         numRows = int(np.ceil(numPlots * 1.0 / numCols))
@@ -380,19 +386,21 @@ def run_regcoil(  # noqa: C901 fxn too complex
             )
         plt.savefig("Scan.png")
 
-    plt.figure(figsize=(10, 10))
-    plt.rcParams.update({"font.size": 26})
-    plt.figure(figsize=(8, 8))
-    plt.contourf(
-        egrid.nodes[egrid.unique_zeta_idx, 2],
-        egrid.nodes[egrid.unique_theta_idx, 1],
-        (Bn_tot).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
-    )
-    plt.ylabel("theta")
-    plt.xlabel("zeta")
-    plt.title("Bnormal on plasma surface")
-    plt.colorbar()
-    plt.xlim([0, 2 * np.pi / eq.NFP])
+    if show_plots:
+
+        plt.figure(figsize=(10, 10))
+        plt.rcParams.update({"font.size": 26})
+        plt.figure(figsize=(8, 8))
+        plt.contourf(
+            egrid.nodes[egrid.unique_zeta_idx, 2],
+            egrid.nodes[egrid.unique_theta_idx, 1],
+            (Bn_tot).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
+        )
+        plt.ylabel("theta")
+        plt.xlabel("zeta")
+        plt.title("Bnormal on plasma surface")
+        plt.colorbar()
+        plt.xlim([0, 2 * np.pi / eq.NFP])
 
     phi = curr_pot_trans.transform(phi_mn_opt)
 
@@ -401,55 +409,57 @@ def run_regcoil(  # noqa: C901 fxn too complex
         + G / 2 / np.pi * curr_pot_trans.grid.nodes[:, 2]
         + I / 2 / np.pi * curr_pot_trans.grid.nodes[:, 1]
     )
-    plt.figure(figsize=(10, 10))
-    plt.rcParams.update({"font.size": 18})
-    plt.figure(figsize=(8, 8))
-    plt.contourf(
-        sgrid.nodes[sgrid.unique_zeta_idx, 2],
-        sgrid.nodes[sgrid.unique_theta_idx, 1],
-        (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
-        levels=ncontours,
-    )
-    plt.colorbar()
-    plt.contour(
-        sgrid.nodes[sgrid.unique_zeta_idx, 2],
-        sgrid.nodes[sgrid.unique_theta_idx, 1],
-        (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
-        levels=ncontours,
-    )
-    plt.ylabel("theta")
-    plt.xlabel("zeta")
-    plt.title("Total Current Potential on winding surface")
 
-    plt.xlim([0, 2 * np.pi / eq.NFP])
+    if show_plots:
+        plt.figure(figsize=(10, 10))
+        plt.rcParams.update({"font.size": 18})
+        plt.figure(figsize=(8, 8))
+        plt.contourf(
+            sgrid.nodes[sgrid.unique_zeta_idx, 2],
+            sgrid.nodes[sgrid.unique_theta_idx, 1],
+            (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
+            levels=ncontours,
+        )
+        plt.colorbar()
+        plt.contour(
+            sgrid.nodes[sgrid.unique_zeta_idx, 2],
+            sgrid.nodes[sgrid.unique_theta_idx, 1],
+            (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
+            levels=ncontours,
+        )
+        plt.ylabel("theta")
+        plt.xlabel("zeta")
+        plt.title("Total Current Potential on winding surface")
 
-    plt.figure()
+        plt.xlim([0, 2 * np.pi / eq.NFP])
 
-    plt.contour(
-        egrid.nodes[egrid.unique_zeta_idx, 2],
-        egrid.nodes[egrid.unique_theta_idx, 1],
-        (Bn_ext).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
-        levels=ncontours,
-    )
-    plt.ylabel("theta")
-    plt.xlabel("zeta")
-    plt.title("external coil current B normal on plasma surface")
+        plt.figure()
 
-    plt.xlim([0, 2 * np.pi / eq.NFP])
+        plt.contour(
+            egrid.nodes[egrid.unique_zeta_idx, 2],
+            egrid.nodes[egrid.unique_theta_idx, 1],
+            (Bn_ext).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
+            levels=ncontours,
+        )
+        plt.ylabel("theta")
+        plt.xlabel("zeta")
+        plt.title("external coil current B normal on plasma surface")
 
-    plt.figure()
+        plt.xlim([0, 2 * np.pi / eq.NFP])
 
-    plt.contour(
-        egrid.nodes[egrid.unique_zeta_idx, 2],
-        egrid.nodes[egrid.unique_theta_idx, 1],
-        (B_GI_normal).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
-        levels=ncontours,
-    )
-    plt.ylabel("theta")
-    plt.xlabel("zeta")
-    plt.title("G and I B normal on plasma surface")
+        plt.figure()
 
-    plt.xlim([0, 2 * np.pi / eq.NFP])
+        plt.contour(
+            egrid.nodes[egrid.unique_zeta_idx, 2],
+            egrid.nodes[egrid.unique_theta_idx, 1],
+            (B_GI_normal).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
+            levels=ncontours,
+        )
+        plt.ylabel("theta")
+        plt.xlabel("zeta")
+        plt.title("G and I B normal on plasma surface")
+
+        plt.xlim([0, 2 * np.pi / eq.NFP])
 
     def phi_total_function(grid):
         """Helper fxn to calculate the total phi given a LinearGrid."""
@@ -471,6 +481,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 G,
                 phi_total_function,
                 TF_B,
+                chi_B,
                 lowest_idx_without_saddles,
                 A,
             )
@@ -487,6 +498,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 lowest_idx_without_saddles,
             )
     if return_A:
-        return phi_mn_opt, curr_pot_trans, I, G, phi_total_function, TF_B, A
+        return phi_mn_opt, curr_pot_trans, I, G, phi_total_function, TF_B, chi_B, A
     else:
-        return phi_mn_opt, curr_pot_trans, I, G, phi_total_function, TF_B
+        return phi_mn_opt, curr_pot_trans, I, G, phi_total_function, TF_B, chi_B

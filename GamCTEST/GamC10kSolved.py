@@ -59,16 +59,10 @@ from desc.grid import Grid
 # get iota at this surface to use for initial guess
 iota = eq.compute("iota", grid=Grid(np.array([[np.sqrt(s), 0, 0]])))["iota"]
 
-# FIXME: This should realy be "stepswithin1fieldperiod"
-# since, with this stepswithin2pi=100,
-# if I have a 1 field period device I'd have 100 steps per field period
-# while if I had a 10 field period device I'd only have 10 steps per field period
-# which is likely not enough to resolve the field structure
-# so we want this to really be the steps per field period
-# to keep discretization resolution level consistent across
-# differing numbers of NFP
-stepswithin2pi = 100
+# keep steps within one field period consistent by multiplying by NFP
+stepswithin1FP = 100
 nfulltransits = 100
+stepswithin2pi = stepswithin1FP * eq.NFP
 
 coords = np.ones((stepswithin2pi * nfulltransits, 3))
 coords[:, 0] = coords[:, 0] * np.sqrt(s)

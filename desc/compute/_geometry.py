@@ -316,7 +316,7 @@ def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
     M = data["M_sff_rho"]
     N = data["N_sff_rho"]
     a = E * G - F**2
-    b = F * M - L * G - E * N
+    b = 2 * F * M - L * G - E * N
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
@@ -348,7 +348,7 @@ def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
     M = data["M_sff_rho"]
     N = data["N_sff_rho"]
     a = E * G - F**2
-    b = F * M - L * G - E * N
+    b = 2 * F * M - L * G - E * N
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
@@ -480,7 +480,7 @@ def _curvature_k1_theta(params, transforms, profiles, data, **kwargs):
     M = data["M_sff_theta"]
     N = data["N_sff_theta"]
     a = E * G - F**2
-    b = F * M - L * G - E * N
+    b = 2 * F * M - L * G - E * N
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
@@ -512,7 +512,7 @@ def _curvature_k2_theta(params, transforms, profiles, data, **kwargs):
     M = data["M_sff_theta"]
     N = data["N_sff_theta"]
     a = E * G - F**2
-    b = F * M - L * G - E * N
+    b = 2 * F * M - L * G - E * N
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
@@ -646,7 +646,7 @@ def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
     M = data["M_sff_zeta"]
     N = data["N_sff_zeta"]
     a = E * G - F**2
-    b = F * M - L * G - E * N
+    b = 2 * F * M - L * G - E * N
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
@@ -678,7 +678,7 @@ def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
     M = data["M_sff_zeta"]
     N = data["N_sff_zeta"]
     a = E * G - F**2
-    b = F * M - L * G - E * N
+    b = 2 * F * M - L * G - E * N
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)

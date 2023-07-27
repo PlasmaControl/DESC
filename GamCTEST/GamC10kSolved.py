@@ -1,8 +1,12 @@
+from desc import set_device
+set_device("gpu")
+
 # running a job array with SLURM
 import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import jax.numpy as jnp
 
 import desc.io
 from desc.examples import get
@@ -50,23 +54,23 @@ eq = desc.io.load(name + "_solved.h5")
 # eq = get("W7-X")
 
 grid = LinearGrid(rho=1, M=40, N=41, axis=False, NFP=eq.NFP, sym=False)
-alpha = eq.compute("alpha", grid=grid)["alpha"] % (2 * np.pi)
+alpha = eq.compute("alpha", grid=grid)["alpha"] % (2 * jnp.pi)
 
 
 from desc.compute.utils import cross, dot
 from desc.grid import Grid
 
 # get iota at this surface to use for initial guess
-iota = eq.compute("iota", grid=Grid(np.array([[np.sqrt(s), 0, 0]])))["iota"]
+iota = eq.compute("iota", grid=Grid(jnp.array([[jnp.sqrt(s), 0, 0]])))["iota"]
 
 # keep steps within one field period consistent by multiplying by NFP
 stepswithin1FP = 100
 nfulltransits = 100
 stepswithin2pi = stepswithin1FP * eq.NFP
 
-coords = np.ones((stepswithin2pi * nfulltransits, 3))
-coords[:, 0] = coords[:, 0] * np.sqrt(s)
-coords[:, 2] = np.linspace(0, nfulltransits * 2 * np.pi, stepswithin2pi * nfulltransits)
+coords = jnp.ones((stepswithin2pi * nfulltransits, 3))
+coords[:, 0] = coords[:, 0] * jnp.sqrt(s)
+coords[:, 2] = jnp.linspace(0, nfulltransits * 2 * jnp.pi, stepswithin2pi * nfulltransits)
 guess = coords.copy()
 
 alpha = 0
@@ -83,9 +87,9 @@ coords1 = eq.map_coordinates(
     coords=coords,
     inbasis=["rho", "alpha", "zeta"],
     outbasis=["rho", "theta", "zeta"],
-    period=[np.inf, 2 * np.pi, np.inf],
+    period=[jnp.inf, 2 * jnp.pi, jnp.inf],
     guess=guess,
-)  # (2 * np.pi / eq.NFP)],
+)  # (2 * jnp.pi / eq.NFP)],
 # )
 # reason is alpha = zeta + iota * theta*
 # if zeta is modded by 2pi/NFP, then after each field period, it is as if we are trying to
@@ -97,9 +101,9 @@ coords1 = coords1.at[:, 2].set(coords[:, 2])
 
 # print('mapped coords')
 
-# print(np.any(np.isnan(coords1)))
+# print(jnp.any(jnp.isnan(coords1)))
 # print(coords1)
-# print(np.where(np.isnan(coords1)))
+# print(jnp.where(jnp.isnan(coords1)))
 
 grid2 = Grid(coords1)
 # print(grid2)
@@ -111,16 +115,16 @@ B = eq.compute("|B|", grid2)["|B|"]
 # plt.ylabel("|B|")
 # plt.xlabel("zeta")
 
-maxB = np.nanmax(B)
+maxB = jnp.nanmax(B)
 # print(maxB)
-minB = np.nanmin(np.abs(B))
+minB = jnp.nanmin(jnp.abs(B))
 # print(minB)
 
 bpstep = 80  # iterations through b'
 nsteps = len(
     B
 )  # steps along each field line (equal to number of B values we have, for now)
-bp = np.zeros(bpstep)
+bp = jnp.zeros(bpstep)
 deltabp = (maxB - minB) / (minB * bpstep)
 
 wellGamma_c = 0
@@ -153,19 +157,19 @@ grad_psi = data["grad(psi)"]
 grad_zeta_mag = data["|grad(zeta)|"]
 grad_zeta = data["e^zeta"]
 grad_B = data["grad(|B|)"]
-e_theta = np.linalg.norm(data["e_theta"], axis=-1)
+e_theta = jnp.linalg.norm(data["e_theta"], axis=-1)
 kappa_g = data["kappa_g"]
 psi = data["psi"]
 Bsupz = data["B^zeta"]
-dBsupzdpsi = grad_B[:, 2] * 2 * np.pi / psi
-dBdpsi = grad_B[:, 2] * 2 * np.pi / psi
+dBsupzdpsi = grad_B[:, 2] * 2 * jnp.pi / psi
+dBdpsi = grad_B[:, 2] * 2 * jnp.pi / psi
 
 Br = data["B_R"]
 Bphi = data["B_phi"]
 zeta = coords1[:, 2]
-Bxyz = np.zeros((len(B), 3))
-Bxyz[:, 0] = Br * np.cos(zeta) - Bphi * np.sin(zeta)
-Bxyz[:, 1] = Br * np.sin(zeta) + Bphi * np.cos(zeta)
+Bxyz = jnp.zeros((len(B), 3))
+Bxyz[:, 0] = Br * jnp.cos(zeta) - Bphi * jnp.sin(zeta)
+Bxyz[:, 1] = Br * jnp.sin(zeta) + Bphi * jnp.cos(zeta)
 Bxyz[:, 2] = data["B_Z"]
 
 dVdb_t1 = data["iota_r"] * dot(cross(grad_psi, Bxyz), grad_zeta) / B
@@ -174,8 +178,8 @@ dVdb_t1 = data["iota_r"] * dot(cross(grad_psi, Bxyz), grad_zeta) / B
 x = data["X"]
 y = data["Y"]
 z = data["Z"]
-ds = np.sqrt(
-    np.add(np.square(np.diff(x)), np.square(np.diff(y)), np.square(np.diff(z)))
+ds = jnp.sqrt(
+    jnp.add(jnp.square(jnp.diff(x)), jnp.square(jnp.diff(y)), jnp.square(jnp.diff(z)))
 )
 
 # integrating dl/b
@@ -195,14 +199,14 @@ for i in range(0, bpstep):
     cur_well = 0
 
     grad_psi_min = 1e10
-    grad_psi_i = np.ones(len(B)) * 1e10
+    grad_psi_i = jnp.ones(len(B)) * 1e10
     e_theta_min = 0
-    e_theta_i = np.zeros(len(B))
+    e_theta_i = jnp.zeros(len(B))
     curB_min = B_reflect
 
-    where_above_strength = np.where(B > B_reflect)[0]
+    where_above_strength = jnp.where(B > B_reflect)[0]
 
-    well_start_inds = np.where(np.diff(where_above_strength) > 1)[0]
+    well_start_inds = jnp.where(jnp.diff(where_above_strength) > 1)[0]
     well_start = (
         where_above_strength[well_start_inds] + 1 + 1
     )  # second +1 is to match stellopt
@@ -213,13 +217,13 @@ for i in range(0, bpstep):
     assert (
         well_start.size == well_end.size
     )  # make sure same number of starts and stops have been found
-    # assert np.all(
+    # assert jnp.all(
     #     well_end - well_start >= 0
     # )  # make sure ends are before or equal to starts
     # remove ones ends which are the same as starts
     equal_inds = well_end == well_start
-    np.delete(well_end, equal_inds)
-    np.delete(well_start, equal_inds)
+    jnp.delete(well_end, equal_inds)
+    jnp.delete(well_start, equal_inds)
 
     total_wells = well_start.size
 
@@ -230,7 +234,7 @@ for i in range(0, bpstep):
         cur_well_e_theta = e_theta[start:end]
         cur_well_grad_psi_mag = grad_psi_mag[start:end]
         cur_well_B = B[start:end]
-        B_min_index = np.argmin(cur_well_B)
+        B_min_index = jnp.argmin(cur_well_B)
         grad_psi_i[start:end] = cur_well_grad_psi_mag[B_min_index]
         e_theta_i[start:end] = cur_well_e_theta[B_min_index]
 
@@ -245,15 +249,15 @@ for i in range(0, bpstep):
     # loop to compute important quantities at each step of b'
     for k in range(total_wells):
 
-        in_well_inds = np.arange(well_start[k], well_end[k])
-        sqrt_bbb = np.sqrt(1 - B[in_well_inds] / B_reflect)
+        in_well_inds = jnp.arange(well_start[k], well_end[k])
+        sqrt_bbb = jnp.sqrt(1 - B[in_well_inds] / B_reflect)
         ds_in_well = ds[in_well_inds]
         bp_in_well = bp[i]
         bp_in_well_sqrd = bp[i] ** 2
 
-        dIdb = np.sum(ds_in_well / bp_in_well_sqrd / sqrt_bbb) / 2 / minB
+        dIdb = jnp.sum(ds_in_well / bp_in_well_sqrd / sqrt_bbb) / 2 / minB
 
-        dgdb = np.sum(
+        dgdb = jnp.sum(
             ds_in_well
             * grad_psi_mag[in_well_inds]
             * kappa_g[in_well_inds]
@@ -262,7 +266,7 @@ for i in range(0, bpstep):
             / B[in_well_inds]
             * (sqrt_bbb + 1 / sqrt_bbb)
         )
-        dbigGdb = np.sum(
+        dbigGdb = jnp.sum(
             dBdpsi[in_well_inds]
             * ds_in_well
             / B_reflect
@@ -272,7 +276,7 @@ for i in range(0, bpstep):
             * (sqrt_bbb + 1 / sqrt_bbb)
         )
 
-        dVdb = np.sum(
+        dVdb = jnp.sum(
             (
                 dVdb_t1[in_well_inds]
                 - (
@@ -301,11 +305,11 @@ for i in range(0, bpstep):
         else:
             vrovervt = 0
 
-        gamma_c = 2 * np.arctan(vrovervt) / np.pi
+        gamma_c = 2 * jnp.arctan(vrovervt) / jnp.pi
 
         wellGamma_c += gamma_c * gamma_c * dIdb
 
-    bigGamma_c += wellGamma_c * np.pi / 2 / np.sqrt(2) * deltabp
+    bigGamma_c += wellGamma_c * jnp.pi / 2 / jnp.sqrt(2) * deltabp
 
 bigGamma_c = bigGamma_c / dloverb
 

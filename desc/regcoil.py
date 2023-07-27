@@ -1,5 +1,4 @@
 """Python implementation of REGCOIL algorithm."""
-
 import time
 
 import jax
@@ -21,16 +20,16 @@ from desc.transform import Transform
 ######################### Define functions #######################
 @jax.jit
 def biot_loop(re, rs, J, dV):
-    """Biot-savart law calculation, returns B in cartesian coordinates.
+    """Generic biot savart law.
 
     Parameters
     ----------
     re : ndarray, shape(n_eval_pts, 3)
-        evaluation points in cartesian
+        evaluation points
     rs : ndarray, shape(n_src_pts, 3)
-        source points in cartesian
+        source points
     J : ndarray, shape(n_src_pts, 3)
-        current density vector at source points in cartesian
+        current density vector at source points
     dV : ndarray, shape(n_src_pts)
         volume element at source points
     """
@@ -49,39 +48,58 @@ def biot_loop(re, rs, J, dV):
     return 1e-7 * jax.lax.fori_loop(0, J.shape[0], body, B)
 
 
+######################################################################
+
+
 def run_regcoil(  # noqa: C901 fxn too complex
     eqname,
     helicity_ratio=0,
     alpha=0,
     basis_M=16,
     basis_N=16,
-    grid_M=15,
-    grid_N=None,
+    source_grid_M=15,
+    source_grid_N=15,
+    eval_grid_M=15,
+    eval_grid_N=15,
     winding_surf=None,
     scan=False,
     nscan=30,
     scan_lower=-30,
     scan_upper=-1,
     external_TF_fraction=0,
+    jac=None,
+    return_A=False,
 ):
-    """Python regcoil to find single-valued current.
+    """Python regcoil to find single-valued current potential.
 
     Parameters
     ----------
-    eqname: str, name of DESC eq to calculate the current on the
-        winding surface which makes Bnormal=0 on LCFS
+    eqname: str, name of DESC eq to calculate the current on the winding surface which
+     makes Bnormal=0 on LCFS
     helicity_ratio: int, used to determine if coils are modular (0) or helical (!=0)
     alpha: float, regularization parameter, >0, regularizes minimization of Bn
         with minimization of K on winding surface
         i.e. larger alpha, simpler coilset and smaller currents, but worse Bn
     basis_M: int, poloidal resolution of Single valued partof current potential
     basis_N: int, Toroidal resolution of Single valued partof current potential
-    grid_M: int, poloidal resolution of source and eval grids
-    grid_N: int, Toroidal resolution of source and eval grids, defaults to grid_M*NFP
-    winding_surf: FourierRZToroidalSurface, surface to find current potential on.
-         If None, defaults to NT_tao circular torus
-    scan: bool, whether to scan over alpha values starting from 0
-        and ending at the given alpha and return a plot of the chiB vs alpha
+    source_grid_M: int, poloidal resolution of source grid, defaults to basis_M*2
+    source_grid_N: int, Toroidal resolution of source grid, defaults to basis_N*NFP*2
+    NOTE: this grid resolution should be at least basis_N*NFP*2 in order to properly
+          resolve the current potential on the winding surface
+    eval_grid_M: int, poloidal resolution of evaluation grid on plasma surface,
+                defaults to basis_M*3
+    Eval_grid_N: int, Toroidal resolution of evaluation grid, defaults to basis_N*3
+    NOTE: this grid resolution may need to be much higher than the basis resolution
+        used in order to accurately resolve the Bnormal distribution,
+        think for example of a uniform continuous poloidal current density which
+        creates a simple 1/R Tf field. That field's Bnormal distribution will
+        require many Fourier modes to describe on the surface
+        of a stellarator like W7-X.
+
+    winding_surf: FourierRZToroidalSurface, surface to find
+        current potential on. If None, defaults to NT_tao circular torus
+    scan: bool, whether to scan over alpha values starting from 0 and ending
+     at the given alpha and return a plot of the chiB vs alpha
     nscan: int, number of alpha values to scan over
     scan_lower: int, default -30, power of 10 (i.e. 10^(-30)) that is the
         lower bound of the alpha values to scan over
@@ -90,11 +108,14 @@ def run_regcoil(  # noqa: C901 fxn too complex
     external_TF_fraction: float, default 0
         how much TF is provided by coils external to the
         winding surface being considered.
+    jac: jacobian to use (must agree in size with eq basis, grid and basis res)
 
     Returns
     -------
     phi_mn_opt: array, the double fourier series coefficients for the
          single-valued part of the current potential
+         if scan=True, this is a list of length n_scan containing
+         the phi_mn corresponding to each scanned value of alpha
     curr_pot_trans: Transform, transform for the basis used for the phi_mn_opt,
          can find value of phi_SV with curr_pot_trans.transform(phi_mn_opt)
     I: float, net toroidal current linking the plasma and coils,
@@ -106,16 +127,20 @@ def run_regcoil(  # noqa: C901 fxn too complex
     phi_total_function: fxn, accepts a LinearGrid object (or any grid),
          and returns the total current potential on that grid. Convenience function.
     TF_B: ToroidalMagneticField, the TF provided by external TF coils.
+    lowest_idx_without_saddles: int, the lowest index of the
+        phi_mn_opt array that has contours without saddle coils.
+        only returned if scan=True
     """
+    # TODO: add defaults for grid values, as stated in docstring
     ##### Load in DESC equilbrium #####
     eqfv = load(eqname)
     eq = eqfv
+    if hasattr(eq, "__len__"):
+        eq = eq[-1]
+    ########### calculate quantities on DESC  plasma surface #############
 
-    ############### calculate quantities on DESC  plasma surface ###############
-    if grid_N is None:
-        grid_N = basis_N * eq.NFP
-    sgrid = LinearGrid(M=grid_M, N=grid_N)  # source must be for all NFP still
-    egrid = sgrid
+    sgrid = LinearGrid(M=source_grid_M, N=source_grid_N)  # source grid must have NFP=1
+    egrid = LinearGrid(M=eval_grid_M, N=eval_grid_N, NFP=eq.NFP)
     edata = eq.compute(["e^rho", "R", "Z", "phi", "e_theta", "e_zeta"], egrid)
 
     ne = jnp.cross(
@@ -141,7 +166,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
             NFP=1,  # number of (toroidal) field periods
         )
     # make basis for current potential double fourier series
-    curr_pot_basis = DoubleFourierSeries(M=basis_M, N=basis_M, NFP=eq.NFP)
+    curr_pot_basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=eq.NFP)
     curr_pot_trans = Transform(sgrid, curr_pot_basis, derivs=1, build=True)
 
     # calc quantities on winding surface (source)
@@ -153,7 +178,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     phi_mn = jnp.zeros(curr_pot_basis.num_modes)
 
     # calculate net enclosed poloidal and toroidal currents
-    G_tot = eq.compute("G", grid=egrid)["G"][0] / mu_0 * 2 * np.pi  # poloidal
+    G_tot = eq.compute("G", grid=sgrid)["G"][0] / mu_0 * 2 * np.pi  # poloidal
     # 2pi factor is present in regcoil code
     #  https://github.com/landreman/regcoil/blob
     # /99f9abf8b0b0c6ec7bb6e7975dbee5e438808162/regcoil_init_plasma_mod.f90#L500
@@ -172,10 +197,10 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     # define fxns to calculate Bnormal from SV part of phi and from secular part
     def B_from_K_SV(phi_mn, I, G, re, rs, rs_t, rs_z, ne):
-        """B from periodic part of K i.e. V^{SV}_{normal}{phi_sv} from REGCOIL eq 4."""
+        """B from single value part of K from REGCOIL eqn 4."""
         phi_t = curr_pot_trans.transform(phi_mn, dt=1)
         phi_z = curr_pot_trans.transform(phi_mn, dz=1)
-        ns_mag = np.linalg.norm(np.cross(rs_t, rs_z), axis=1)
+        ns_mag = jnp.linalg.norm(jnp.cross(rs_t, rs_z), axis=1)
         K = -(phi_t * (1 / ns_mag) * rs_z.T).T + (phi_z * (1 / ns_mag) * rs_t.T).T
         dV = sgrid.weights * jnp.linalg.norm(jnp.cross(rs_t, rs_z, axis=-1), axis=-1)
         B = biot_loop(
@@ -185,9 +210,9 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     def B_from_K_secular(I, G, re, rs, rs_t, rs_z, ne):
         """B from secular part of K, i.e. B^GI_{normal} from REGCOIL eqn 4."""
-        phi_t = I / (2 * np.pi)
-        phi_z = G / (2 * np.pi)
-        ns_mag = np.linalg.norm(np.cross(rs_t, rs_z), axis=1)
+        phi_t = I / (2 * jnp.pi)
+        phi_z = G / (2 * jnp.pi)
+        ns_mag = jnp.linalg.norm(jnp.cross(rs_t, rs_z), axis=1)
         K = -(phi_t * (1 / ns_mag) * rs_z.T).T + (phi_z * (1 / ns_mag) * rs_t.T).T
         dV = sgrid.weights * jnp.linalg.norm(jnp.cross(rs_t, rs_z, axis=-1), axis=-1)
         B = biot_loop(
@@ -196,11 +221,15 @@ def run_regcoil(  # noqa: C901 fxn too complex
         return jnp.sum(B * ne, axis=-1)
 
     # $B$ is linear in $K$ as long as the geometry is fixed
-    #  so just need to evaluate the Jacobian
+    # so just need to evaluate the jacobian
     t_start = time.time()
-    print("Starting Jacobian Calculation")
-    A = jax.jacfwd(B_from_K_SV)(phi_mn, I, G, re, rs, rs_t, rs_z, ne)
-    print(f"Jacobian Calculation finished, took {time.time()-t_start} s")
+    if jac is None:
+        print("Starting Jacobian Calculation")
+        A = jax.jacfwd(B_from_K_SV)(phi_mn, I, G, re, rs, rs_t, rs_z, ne)
+        print(f"Jacobian Calculation finished, took {time.time()-t_start} s")
+    else:
+        A = jac
+        print("Using passed-in Jacobian")
 
     B_GI_normal = B_from_K_secular(I, G, re, rs, rs_t, rs_z, ne)
     Bn = np.zeros_like(B_GI_normal)
@@ -210,11 +239,12 @@ def run_regcoil(  # noqa: C901 fxn too complex
     else:
         TF_B = ToroidalMagneticField(B0=mu_0 * G_ext / 2 / jnp.pi, R0=R0_ves)
         Bn_ext = B_from_K_secular(0, G_ext, re, rs, rs_t, rs_z, ne)
+        # TODO: check that this is the same as calculating B from TF_B...
 
     rhs = -(Bn + Bn_ext + B_GI_normal).T @ A
 
-    # alpha is regularization param,
-    # if >0, makes simpler coils (less current density), but worse Bnormal
+    # alpha is regularization param, if >0,
+    # makes simpler coils (less current density), but worse Bn
     alphas = (
         [alpha]
         if not scan
@@ -233,11 +263,12 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
         # calculate phi
         phi_mn_opt = jnp.linalg.pinv(A.T @ A + alpha * jnp.eye(A.shape[1])) @ rhs
+
         phi_mns.append(phi_mn_opt)
 
         Bn_SV = A @ phi_mn_opt
         Bn_tot = Bn_SV + Bn + B_GI_normal + Bn_ext
-        chi_B = np.sum(Bn_tot * Bn_tot * ne_mag)
+        chi_B = np.sum(Bn_tot * Bn_tot * ne_mag * egrid.weights)
         chi2Bs.append(chi_B)
         printstring = f"chi^2 B = {chi_B:1.5e}"
         print(printstring)
@@ -294,23 +325,26 @@ def run_regcoil(  # noqa: C901 fxn too complex
             plt.rcParams.update({"font.size": 18})
 
             cdata = plt.contour(
-                egrid.nodes[egrid.unique_zeta_idx, 2],
-                egrid.nodes[egrid.unique_theta_idx, 1],
-                (phi_tot).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
+                sgrid.nodes[sgrid.unique_zeta_idx, 2],
+                sgrid.nodes[sgrid.unique_theta_idx, 1],
+                (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
                 levels=ncontours,
             )
             plt.ylabel("theta")
             plt.xlabel("zeta")
             plt.title(
                 f"lambda= {alphas[ilambda_to_plot[whichPlot] - 1]:1.5e}"
-                + "f index = {ilambda_to_plot[whichPlot] - 1}",
+                + f" index = {ilambda_to_plot[whichPlot] - 1}",
                 fontsize="x-small",
             )
             plt.colorbar()
             plt.xlim([0, 2 * np.pi / eq.NFP])
             saddles_exist_in_potential = False
             for j in range(ncontours):
-                p = cdata.collections[j].get_paths()[0]
+                try:
+                    p = cdata.collections[j].get_paths()[0]
+                except Exception:
+                    continue
                 v = p.vertices
                 temp_zeta = v[:, 0]
                 if np.abs(temp_zeta[-1] - temp_zeta[0]) < 1e-2:
@@ -327,7 +361,10 @@ def run_regcoil(  # noqa: C901 fxn too complex
             verticalalignment="top",
             fontsize="small",
         )
-        if np.any(saddles_exists_bools):
+        if not np.any(saddles_exists_bools):
+            lowest_idx_without_saddles = 0
+            pass
+        elif np.any(saddles_exists_bools):
             lowest_idx_without_saddles = np.where(np.asarray(saddles_exists_bools))[0][
                 0
             ]
@@ -336,10 +373,12 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 + f" = {alphas[lowest_idx_without_saddles]:1.5e}"
             )
         else:
+            lowest_idx_without_saddles = -1
             print(
                 "No alpha value yielded a current potential without"
                 + " saddle coil contours or badly behaved contours!!"
             )
+        plt.savefig("Scan.png")
 
     plt.figure(figsize=(10, 10))
     plt.rcParams.update({"font.size": 26})
@@ -356,6 +395,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     plt.xlim([0, 2 * np.pi / eq.NFP])
 
     phi = curr_pot_trans.transform(phi_mn_opt)
+
     phi_tot = (
         phi
         + G / 2 / np.pi * curr_pot_trans.grid.nodes[:, 2]
@@ -365,21 +405,49 @@ def run_regcoil(  # noqa: C901 fxn too complex
     plt.rcParams.update({"font.size": 18})
     plt.figure(figsize=(8, 8))
     plt.contourf(
-        egrid.nodes[egrid.unique_zeta_idx, 2],
-        egrid.nodes[egrid.unique_theta_idx, 1],
-        (phi_tot).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
+        sgrid.nodes[sgrid.unique_zeta_idx, 2],
+        sgrid.nodes[sgrid.unique_theta_idx, 1],
+        (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
         levels=ncontours,
     )
     plt.colorbar()
     plt.contour(
-        egrid.nodes[egrid.unique_zeta_idx, 2],
-        egrid.nodes[egrid.unique_theta_idx, 1],
-        (phi_tot).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
+        sgrid.nodes[sgrid.unique_zeta_idx, 2],
+        sgrid.nodes[sgrid.unique_theta_idx, 1],
+        (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
         levels=ncontours,
     )
     plt.ylabel("theta")
     plt.xlabel("zeta")
-    plt.title("Total Current Potential on plasma surface")
+    plt.title("Total Current Potential on winding surface")
+
+    plt.xlim([0, 2 * np.pi / eq.NFP])
+
+    plt.figure()
+
+    plt.contour(
+        egrid.nodes[egrid.unique_zeta_idx, 2],
+        egrid.nodes[egrid.unique_theta_idx, 1],
+        (Bn_ext).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
+        levels=ncontours,
+    )
+    plt.ylabel("theta")
+    plt.xlabel("zeta")
+    plt.title("external coil current B normal on plasma surface")
+
+    plt.xlim([0, 2 * np.pi / eq.NFP])
+
+    plt.figure()
+
+    plt.contour(
+        egrid.nodes[egrid.unique_zeta_idx, 2],
+        egrid.nodes[egrid.unique_theta_idx, 1],
+        (B_GI_normal).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
+        levels=ncontours,
+    )
+    plt.ylabel("theta")
+    plt.xlabel("zeta")
+    plt.title("G and I B normal on plasma surface")
 
     plt.xlim([0, 2 * np.pi / eq.NFP])
 
@@ -394,6 +462,31 @@ def run_regcoil(  # noqa: C901 fxn too complex
         )
 
     if scan:
-        return phi_mns, alphas, curr_pot_trans, I, G, phi_total_function, TF_B
+        if return_A:
+            return (
+                phi_mns,
+                alphas,
+                curr_pot_trans,
+                I,
+                G,
+                phi_total_function,
+                TF_B,
+                lowest_idx_without_saddles,
+                A,
+            )
 
-    return phi_mn_opt, curr_pot_trans, I, G, phi_total_function, TF_B
+        else:
+            return (
+                phi_mns,
+                alphas,
+                curr_pot_trans,
+                I,
+                G,
+                phi_total_function,
+                TF_B,
+                lowest_idx_without_saddles,
+            )
+    if return_A:
+        return phi_mn_opt, curr_pot_trans, I, G, phi_total_function, TF_B, A
+    else:
+        return phi_mn_opt, curr_pot_trans, I, G, phi_total_function, TF_B

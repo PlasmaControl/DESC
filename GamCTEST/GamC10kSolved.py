@@ -54,9 +54,6 @@ eq = desc.io.load(name + "_solved.h5")
 
 # eq = get("W7-X")
 
-grid = LinearGrid(rho=1, M=40, N=41, axis=False, NFP=eq.NFP, sym=False)
-alpha = eq.compute("alpha", grid=grid)["alpha"] % (2 * jnp.pi)
-
 
 from desc.compute.utils import cross, dot
 from desc.grid import Grid
@@ -111,41 +108,27 @@ coords1 = coords1.at[:, 2].set(coords[:, 2])
 grid2 = Grid(coords1)
 # print(grid2)
 
-B = eq.compute("|B|", grid2)["|B|"]
-# print(B)
-
-# plt.plot(coords1[:,2],B)
-# plt.ylabel("|B|")
-# plt.xlabel("zeta")
-
-maxB = jnp.nanmax(B)
-# print(maxB)
-minB = jnp.nanmin(jnp.abs(B))
-# print(minB)
-
-bpstep = 80  # iterations through b'
-nsteps = len(
-    B
-)  # steps along each field line (equal to number of B values we have, for now)
-bp = jnp.zeros(bpstep)
-deltabp = (maxB - minB) / (minB * bpstep)
 
 wellGamma_c = 0
 bigGamma_c = 0
 
 # compute important quantities in DESC.
 
+psi = eq.Psi  # might need to be normalized by 2pi
+
 data_names = [
     "|grad(psi)|",
     "grad(psi)",
     "|grad(zeta)|",
     "e^zeta",
-    "grad(|B|)",
+    "|B|",
+    "|B|_r",
     "e_theta",
     "kappa_g",
-    "psi",
     "B^zeta",
+    "B^zeta_r",
     "B_R",
+    "psi_r",
     "B_phi",
     "B_Z",
     "iota_r",
@@ -159,17 +142,16 @@ grad_psi_mag = data["|grad(psi)|"]
 grad_psi = data["grad(psi)"]
 grad_zeta_mag = data["|grad(zeta)|"]
 grad_zeta = data["e^zeta"]
-grad_B = data["grad(|B|)"]
 e_theta = jnp.linalg.norm(data["e_theta"], axis=-1)
 kappa_g = data["kappa_g"]
-psi = data["psi"]
 Bsupz = data["B^zeta"]
-dBsupzdpsi = grad_B[:, 2] * 2 * jnp.pi / psi
-dBdpsi = grad_B[:, 2] * 2 * jnp.pi / psi
+dBsupzdpsi = data["B^zeta_r"] * 2 * jnp.pi / data["psi_r"]
+dBdpsi = data["|B|_r"] * 2 * jnp.pi / data["psi_r"]  # might need 2pi
 
 Br = data["B_R"]
 Bphi = data["B_phi"]
 zeta = coords1[:, 2]
+B = data["|B|"]
 Bxyz = jnp.zeros((len(B), 3))
 Bxyz[:, 0] = Br * jnp.cos(zeta) - Bphi * jnp.sin(zeta)
 Bxyz[:, 1] = Br * jnp.sin(zeta) + Bphi * jnp.cos(zeta)
@@ -184,6 +166,20 @@ z = data["Z"]
 ds = jnp.sqrt(
     jnp.add(jnp.square(jnp.diff(x)), jnp.square(jnp.diff(y)), jnp.square(jnp.diff(z)))
 )
+
+
+maxB = jnp.nanmax(B)
+
+minB = jnp.nanmin(jnp.abs(B))
+
+
+bpstep = 80  # iterations through b'
+nsteps = len(
+    B
+)  # steps along each field line (equal to number of B values we have, for now)
+bp = jnp.zeros(bpstep)
+deltabp = (maxB - minB) / (minB * bpstep)
+
 
 # integrating dl/b
 dloverb = 0

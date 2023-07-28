@@ -13,7 +13,7 @@ def register_compute_fun(
     profiles,
     coordinates,
     data,
-    parameterization="desc.equilibrium.Equilibrium",
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
     axis_limit_data=None,
     **kwargs,
 ):
@@ -82,9 +82,9 @@ def register_compute_fun(
         }
         for p in parameterization:
             flag = False
-            for base_name, aliases in _aliases.items():
-                if p in aliases or p == base_name:
-                    data_index[base_name][name] = d.copy()
+            for base_class, superclasses in _class_inheritance.items():
+                if p in superclasses or p == base_class:
+                    data_index[base_class][name] = d.copy()
                     flag = True
             if not flag:
                 raise ValueError(
@@ -95,74 +95,40 @@ def register_compute_fun(
     return _decorator
 
 
-# we register things by their full module.class name, but sometimes we might refer
-# to it via import path or just class name
-# also allows us to handle subclasses whos data_index stuff should inherit
+# This allows us to handle subclasses whos data_index stuff should inherit
 # from parent classes.
 # This is the least bad solution I've found, since everything else requires
 # crazy circular imports
 # could maybe make this fancier with a registry of compute-able objects?
-_aliases = {
-    "desc.equilibrium.equilibrium.Equilibrium": [
-        "desc.equilibrium.Equilibrium",
-        "Equilibrium",
-    ],
+_class_inheritance = {
+    "desc.equilibrium.equilibrium.Equilibrium": [],
     "desc.geometry.curve.FourierRZCurve": [
-        "desc.geometry.FourierRZCurve",
-        "FourierRZCurve",
         "desc.geometry.core.Curve",
-        "desc.geometry.Curve",
-        "Curve",
     ],
     "desc.geometry.curve.FourierXYZCurve": [
-        "desc.geometry.FourierXYZCurve",
-        "FourierXYZCurve",
         "desc.geometry.core.Curve",
-        "desc.geometry.Curve",
-        "Curve",
     ],
     "desc.geometry.curve.FourierPlanarCurve": [
-        "desc.geometry.FourierPlanarCurve",
-        "FourierPlanarCurve",
         "desc.geometry.core.Curve",
-        "desc.geometry.Curve",
-        "Curve",
     ],
     "desc.geometry.surface.FourierRZToroidalSurface": [
-        "desc.geometry.FourierRZToroidalSurface",
-        "FourierRZToroidalSurface",
         "desc.geometry.core.Surface",
-        "desc.geometry.Surface",
-        "Surface",
     ],
     "desc.geometry.surface.ZernikeRZToroidalSection": [
-        "desc.geometry.ZernikeRZToroidalSection",
-        "ZernikeRZToroidalSection",
         "desc.geometry.core.Surface",
-        "desc.geometry.Surface",
-        "Surface",
     ],
     "desc.coils.FourierRZCoil": [
-        "desc.geometry.FourierRZCurve",
-        "FourierRZCurve",
+        "desc.geometry.curve.FourierRZCurve",
         "desc.geometry.core.Curve",
-        "desc.geometry.Curve",
-        "Curve",
     ],
     "desc.coils.FourierXYZCoil": [
-        "desc.geometry.FourierXYZCurve",
-        "FourierXYZCurve",
+        "desc.geometry.curve.FourierXYZCurve",
         "desc.geometry.core.Curve",
-        "desc.geometry.Curve",
-        "Curve",
     ],
     "desc.coils.FourierPlanarCoil": [
-        "desc.geometry.FourierPlanarCurve",
-        "FourierPlanarCurve",
+        "desc.geometry.curve.FourierPlanarCurve",
         "desc.geometry.core.Curve",
-        "desc.geometry.Curve",
-        "Curve",
     ],
 }
 
-data_index = {p: {} for p in _aliases.keys()}
+data_index = {p: {} for p in _class_inheritance.keys()}

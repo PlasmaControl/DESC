@@ -3426,8 +3426,64 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^rho"],
+    data=["e_theta", "e_zeta", "|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _n_rho(params, transforms, profiles, data, **kwargs):
-    data["n_rho"] = (data["e^rho"].T / jnp.linalg.norm(data["e^rho"], axis=-1)).T
+    # equal to e^rho / |e^rho| but works correctly for surfaces as well that don't have
+    # contravariant basis defined
+    data["n_rho"] = (
+        cross(data["e_theta"], data["e_zeta"]) / data["|e_theta x e_zeta|"][:, None]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="n_theta",
+    label="\\hat{\\mathbf{n}}_{\\theta}",
+    units="~",
+    units_long="None",
+    description="Unit vector normal to constant theta surface (direction of e^theta)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_zeta", "|e_zeta x e_rho|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _n_theta(params, transforms, profiles, data, **kwargs):
+    data["n_theta"] = (
+        cross(data["e_zeta"], data["e_rho"]) / data["|e_zeta x e_rho|"][:, None]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="n_zeta",
+    label="\\hat{\\mathbf{n}}_{\\zeta}",
+    units="~",
+    units_long="None",
+    description="Unit vector normal to constant zeta surface (direction of e^zeta)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_theta", "|e_rho x e_theta|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _n_zeta(params, transforms, profiles, data, **kwargs):
+    data["n_zeta"] = (
+        cross(data["e_rho"], data["e_theta"]) / data["|e_rho x e_theta|"][:, None]
+    )
     return data

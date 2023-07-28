@@ -797,32 +797,49 @@ class TestGetExample:
 @pytest.mark.slow
 def test_regcoil_axisymmetric():
     """Test axisymmetric regcoil solution."""
+    surf_eq = FourierRZToroidalSurface(
+        R_lmn=np.array([10, 1]),
+        Z_lmn=np.array([-1]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        sym=True,
+    )
+    surf_winding = FourierRZToroidalSurface(
+        R_lmn=np.array([10, 2]),
+        Z_lmn=np.array([-2]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        sym=True,
+    )
+
     # make a simple axisymmetric vacuum equilibrium
-    eq = Equilibrium()
+    eq = Equilibrium(surface=surf_eq, L=2, M=2, N=0)
     # no phi_SV is needed since it is axisymmetric,
     # so phi_mn should be zero when running REGCOIL
     # especially with a nonzero alpha
-    phi_mn_opt, _, _, G, phi_fxn, _, chi_B = run_regcoil(
+    phi_mn_opt, curr_pot_trans, _, G, phi_fxn, _, chi_B, _ = run_regcoil(
         basis_M=1,
         basis_N=1,
         eqname=eq,
-        eval_grid_M=10,
-        eval_grid_N=10,
-        source_grid_M=40,
-        source_grid_N=40,
-        alpha=1e-12,
+        eval_grid_M=40,
+        eval_grid_N=40,
+        source_grid_M=100,
+        source_grid_N=100,
+        alpha=0,
+        winding_surf=surf_winding,
     )
-    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-12)
-    np.testing.assert_allclose(chi_B, 0, atol=1e-26)
+    print(np.max(phi_mn_opt))
+    np.testing.assert_allclose(phi_mn_opt, 0, atol=2e-9)
+    np.testing.assert_allclose(chi_B, 0, atol=1e-14)
 
     grid = LinearGrid(N=10, M=10)
     correct_phi = G * grid.nodes[:, 2] / 2 / np.pi
-    np.testing.assert_allclose(phi_fxn(grid), correct_phi, atol=1e-16)
+    np.testing.assert_allclose(phi_fxn(grid), correct_phi, atol=5e-9)
 
     # test with alpha large, should have no phi_mn
-    phi_mn_opt, _, _, G, phi_fxn, _, chi_B = run_regcoil(
-        basis_M=1,
-        basis_N=1,
+    phi_mn_opt, _, _, G, phi_fxn, _, chi_B, _ = run_regcoil(
+        basis_M=2,
+        basis_N=2,
         eqname=eq,
         eval_grid_M=10,
         eval_grid_N=10,

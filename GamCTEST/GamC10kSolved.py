@@ -1,13 +1,20 @@
-from desc.grid import LinearGrid
-from desc.examples import get
-import matplotlib.pyplot as plt
-import numpy as np
-import desc.io
+from desc import set_device
+
+set_device("gpu")
 
 # running a job array with SLURM
 import os
+
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
+
+import desc.io
+from desc.examples import get
+from desc.grid import LinearGrid
+
 idx = int(os.environ["SLURM_ARRAY_TASK_ID"])
-s = ((idx % 50)+1) / 50
+s = ((idx % 50) + 1) / 50
 
 if idx < 50:
     name = "QA1"
@@ -41,148 +48,197 @@ elif idx < 700 and idx >= 650:
 eq = desc.io.load(name + "_solved.h5")
 
 # from desc.vmec import VMECIO
-# eq = VMECIO.load("wout_QA4n.nc") 
+# eq = VMECIO.load("wout_QA4n.nc")
 # eq.save("wout_QA4n.h5")
 # print('loaded eq')
 
 # eq = get("W7-X")
 
-grid = LinearGrid(rho=1,M=40,N=41,axis=False,NFP=eq.NFP,sym=False)
-alpha = eq.compute("alpha",grid=grid)["alpha"] % (2*np.pi)
 
-
-
-from desc.compute.utils import dot, cross
+from desc.compute.utils import cross, dot
 from desc.grid import Grid
 
-stepswithin2pi = 100
+# get iota at this surface to use for initial guess
+iota = eq.compute("iota", grid=Grid(jnp.array([[jnp.sqrt(s), 0, 0]])))["iota"]
+
+# keep steps within one field period consistent by multiplying by NFP
+stepswithin1FP = 100
 nfulltransits = 100
-        
-coords = np.ones((stepswithin2pi*nfulltransits,3))
-coords[:,0] = coords[:,0] * np.sqrt(s)
-coords[:,1] = coords[:,1] * 2
-coords[:,2] = np.arange(0, nfulltransits*2*np.pi,2*np.pi/stepswithin2pi)
+stepswithin2pi = stepswithin1FP * eq.NFP
 
-coords1 = eq.map_coordinates(coords = coords, inbasis = ["rho", "alpha", "zeta"], 
-                             outbasis = ["rho", "theta", "zeta"], period = [np.inf, (2*np.pi), (2*np.pi/eq.NFP)])
-#print(coords1)
+coords = jnp.ones((stepswithin2pi * nfulltransits, 3))
+coords[:, 0] = coords[:, 0] * jnp.sqrt(s)
+coords[:, 2] = jnp.linspace(
+    0, nfulltransits * 2 * jnp.pi, stepswithin2pi * nfulltransits
+)
+guess = coords.copy()
 
-coords1 = coords1.at[:,2].set(coords[:,2])
+alpha = 0
+coords[:, 1] = coords[:, 1] * alpha  # set which field line we want
 
-#print('mapped coords')
+# for initial guess, alpha = zeta + iota*theta*
+# rearrange for theta* and approx theta* ~ theta
+# theta = (alpha - zeta) / iota
+# as initial guess
+guess[:, 1] = (alpha - guess[:, 2]) / iota
 
-# print(np.any(np.isnan(coords1)))
+print("starting map coords")
+coords1 = eq.map_coordinates(
+    coords=coords,
+    inbasis=["rho", "alpha", "zeta"],
+    outbasis=["rho", "theta", "zeta"],
+    period=[jnp.inf, 2 * jnp.pi, jnp.inf],
+    guess=guess,
+)  # (2 * jnp.pi / eq.NFP)],
+# )
+# reason is alpha = zeta + iota * theta*
+# if zeta is modded by 2pi/NFP, then after each field period, it is as if we are trying to
+# find the theta* for the point (alpha, zeta=0), which is DIFFERENT from (alpha,zeta=2pi/NFP)
+
 # print(coords1)
-# print(np.where(np.isnan(coords1)))
+
+coords1 = coords1.at[:, 2].set(coords[:, 2])
+
+# print('mapped coords')
+
+# print(jnp.any(jnp.isnan(coords1)))
+# print(coords1)
+# print(jnp.where(jnp.isnan(coords1)))
 
 grid2 = Grid(coords1)
-#print(grid2)
+# print(grid2)
 
-B = eq.compute('|B|',grid2)['|B|']
-# print(B)
-
-# plt.plot(coords1[:,2],B)
-# plt.ylabel("|B|")
-# plt.xlabel("zeta")
-
-maxB = np.nanmax(B)
-#print(maxB)
-minB = np.nanmin(np.abs(B))
-#print(minB)
-
-bpstep = 80   # iterations through b'
-nsteps = len(B)  # steps along each field line (equal to number of B values we have, for now)
-bp = np.zeros(bpstep)
-deltabp = (maxB - minB) / (minB*bpstep)
 
 wellGamma_c = 0
 bigGamma_c = 0
 
-# compute important quantities in DESC. 
-grad_psi_mag = eq.compute('|grad(psi)|', grid2)['|grad(psi)|']
-grad_psi = eq.compute('grad(psi)', grid2)['grad(psi)']
-grad_zeta_mag = eq.compute('|grad(zeta)|', grid2)['|grad(zeta)|']
-grad_zeta = eq.compute('e^zeta', grid2)['e^zeta']
-grad_B = eq.compute('grad(|B|)', grid2)['grad(|B|)']
-e_theta = np.linalg.norm(eq.compute('e_theta', grid2)['e_theta'], axis = -1)
-kappa_g = eq.compute('kappa_g', grid2)['kappa_g']
-psi = eq.compute('psi', grid2)['psi']
-Bsupz = eq.compute('B^zeta', grid2)['B^zeta']
-dBsupzdpsi = grad_B[:,2]*2*np.pi/psi
-dBdpsi = grad_B[:,2]*2*np.pi/psi
+# compute important quantities in DESC.
 
-Br = eq.compute('B_R', grid2)['B_R']
-Bphi = eq.compute('B_phi', grid2)['B_phi']
-zeta = coords1[:,2]
-Bxyz = np.zeros((len(B),3))
-Bxyz[:,0] = Br*np.cos(zeta) - Bphi*np.sin(zeta)
-Bxyz[:,1] = Br*np.sin(zeta) + Bphi*np.cos(zeta)
-Bxyz[:,2] = eq.compute('B_Z', grid2)['B_Z']
+psi = eq.Psi  # might need to be normalized by 2pi
 
-dVdb_t1 = eq.compute('iota_r', grid2)['iota_r'] * dot(cross(grad_psi, Bxyz), grad_zeta) / B
+data_names = [
+    "|grad(psi)|",
+    "grad(psi)",
+    "|grad(zeta)|",
+    "e^zeta",
+    "|B|",
+    "|B|_r",
+    "e_theta",
+    "kappa_g",
+    "B^zeta",
+    "B^zeta_r",
+    "B_R",
+    "psi_r",
+    "B_phi",
+    "B_Z",
+    "iota_r",
+    "X",
+    "Y",
+    "Z",
+]
+data = eq.compute(data_names, grid2)
+
+grad_psi_mag = data["|grad(psi)|"]
+grad_psi = data["grad(psi)"]
+grad_zeta_mag = data["|grad(zeta)|"]
+grad_zeta = data["e^zeta"]
+e_theta = jnp.linalg.norm(data["e_theta"], axis=-1)
+kappa_g = data["kappa_g"]
+Bsupz = data["B^zeta"]
+dBsupzdpsi = data["B^zeta_r"] * 2 * jnp.pi / data["psi_r"]
+dBdpsi = data["|B|_r"] * 2 * jnp.pi / data["psi_r"]  # might need 2pi
+
+Br = data["B_R"]
+Bphi = data["B_phi"]
+zeta = coords1[:, 2]
+B = data["|B|"]
+Bxyz = jnp.zeros((len(B), 3))
+Bxyz[:, 0] = Br * jnp.cos(zeta) - Bphi * jnp.sin(zeta)
+Bxyz[:, 1] = Br * jnp.sin(zeta) + Bphi * jnp.cos(zeta)
+Bxyz[:, 2] = data["B_Z"]
+
+dVdb_t1 = data["iota_r"] * dot(cross(grad_psi, Bxyz), grad_zeta) / B
 
 # finding basic arc length of each segment
-x = eq.compute('X', grid2)['X']
-y = eq.compute('Y', grid2)['Y']
-z = eq.compute('Z', grid2)['Z']
-ds = np.sqrt(np.add(np.square(np.diff(x)), np.square(np.diff(y)), np.square(np.diff(z))))
+x = data["X"]
+y = data["Y"]
+z = data["Z"]
+ds = jnp.sqrt(
+    jnp.add(jnp.square(jnp.diff(x)), jnp.square(jnp.diff(y)), jnp.square(jnp.diff(z)))
+)
+
+
+maxB = jnp.nanmax(B)
+
+minB = jnp.nanmin(jnp.abs(B))
+
+
+bpstep = 80  # iterations through b'
+nsteps = len(
+    B
+)  # steps along each field line (equal to number of B values we have, for now)
+bp = jnp.zeros(bpstep)
+deltabp = (maxB - minB) / (minB * bpstep)
+
 
 # integrating dl/b
 dloverb = 0
 for j in range(0, nsteps - 1):
-    dloverb += ds[j]/B[j]
+    dloverb += ds[j] / B[j]
 
 # making the b prime array
 for i in range(0, bpstep):
-    bp[i] = 1+ ((maxB-minB) * (i-0.5) / (minB*bpstep))
-    
+    bp[i] = 1 + ((maxB - minB) * (i - 0.5) / (minB * bpstep))
+
 for i in range(0, bpstep):
-    B_reflect = minB*bp[i]
+    B_reflect = minB * bp[i]
     in_well = 0
     well_start = [0]
     well_end = [0]
     cur_well = 0
 
-    grad_psi_min = 1E10
-    grad_psi_i = np.ones(len(B)) * 1E10
+    grad_psi_min = 1e10
+    grad_psi_i = jnp.ones(len(B)) * 1e10
     e_theta_min = 0
-    e_theta_i = np.zeros(len(B))
+    e_theta_i = jnp.zeros(len(B))
     curB_min = B_reflect
 
-    for j in range(0, nsteps):   
-        if not(in_well) and B_reflect < B[j]:   # not in well and shouldn't be
-            continue 
-            
-        if in_well and B_reflect < B[j]:    # in well, but just exited
-            in_well = 0
-            well_end.append(j-2)    # add well end location to well_end (in stellopt they use j-2 instead of j-1, not sure why)
+    where_above_strength = jnp.where(B > B_reflect)[0]
 
-            grad_psi_i[well_start[cur_well]:well_end[cur_well]] = grad_psi_min
-            e_theta_i[well_start[cur_well]:well_end[cur_well]] = e_theta_min
-            
-            curB_min = B_reflect
-            e_theta_min = 0
-            grad_psi_min = 1E10
-            
-        if not(in_well) and B_reflect > B[j]:   # not in well but entering one
-            in_well = 1
-            well_start.append(j+1)     # add well start location to well_start (in stellopt they use j+1 instead of j, not sure why)
-            cur_well +=1
+    well_start_inds = jnp.where(jnp.diff(where_above_strength) > 1)[0]
+    well_start = (
+        where_above_strength[well_start_inds] + 1 + 1
+    )  # second +1 is to match stellopt
+    well_end = (
+        where_above_strength[well_start_inds + 1] - 2
+    )  # the -2 is not supposed to be here IDT, but stellopt has it like this
+    # B[well_end] > B_reflect actually, so that B[well_start:well_end] is the whole well
+    assert (
+        well_start.size == well_end.size
+    )  # make sure same number of starts and stops have been found
+    # assert jnp.all(
+    #     well_end - well_start >= 0
+    # )  # make sure ends are before or equal to starts
+    # remove ones ends which are the same as starts
+    equal_inds = well_end == well_start
+    jnp.delete(well_end, equal_inds)
+    jnp.delete(well_start, equal_inds)
 
-        if in_well and B_reflect > B[j]:    # in well and should be there. This always runs if the previous 'if' runs
-            if B[j] < curB_min:
-                curB_min = B[j]
-                grad_psi_min = grad_psi_mag[j]   # grad_psi_mag replaces grad_psi_norm from Stellopt
-                e_theta_min = e_theta[j]
+    total_wells = well_start.size
 
-    # if we ended in a well, decrease cur_well by 1 so that total_wells is one smaller and the ending well is avoided
-    if in_well:
-        cur_well -= 1         
-    
-    total_wells = cur_well
+    # also need to find the grad_psi and e_theta at the local B min of each B well
+    for start, end in zip(well_start, well_end):
+        if start >= end:
+            continue
+        cur_well_e_theta = e_theta[start:end]
+        cur_well_grad_psi_mag = grad_psi_mag[start:end]
+        cur_well_B = B[start:end]
+        B_min_index = jnp.argmin(cur_well_B)
+        grad_psi_i[start:end] = cur_well_grad_psi_mag[B_min_index]
+        e_theta_i[start:end] = cur_well_e_theta[B_min_index]
 
-    #print(total_wells)
-    #print(B_reflect)
+    # print(total_wells)
+    # print(B_reflect)
     # print(well_start)
     # print(well_end)
     # print(grad_psi_i)
@@ -190,65 +246,75 @@ for i in range(0, bpstep):
     vrovervt = 0
 
     # loop to compute important quantities at each step of b'
-    for k in range(1,total_wells+1):
-        dIdb = 0
-        dgdb = 0
-        dbigGdb = 0
-        dVdb = 0
+    for k in range(total_wells):
 
-        # loop to sum over each well for each quantity
-        for j in range(well_start[k],well_end[k]):
-            # additional check that we are in a valid well
-            if grad_psi_i[j] == 1E10 or e_theta_i[j] == 0: continue
+        in_well_inds = jnp.arange(well_start[k], well_end[k])
+        sqrt_bbb = jnp.sqrt(1 - B[in_well_inds] / B_reflect)
+        ds_in_well = ds[in_well_inds]
+        bp_in_well = bp[i]
+        bp_in_well_sqrd = bp[i] ** 2
 
-            # intermedite quantity to make other calculations easier
-            sqrt_bbb = np.sqrt(1 - B[j]/B_reflect)
+        dIdb = jnp.sum(ds_in_well / bp_in_well_sqrd / sqrt_bbb) / 2 / minB
 
-            # dIdb
-            temp = ds[j]/2/minB/bp[i]/bp[i] / sqrt_bbb
-            dIdb = dIdb + temp
-                
-            # dgdb
-            temp = ds[j] * grad_psi_mag[j] * kappa_g[j]
-            temp = temp/bp[i]/bp[i]/2/B[j]
-            temp = temp*(sqrt_bbb + 1/sqrt_bbb)
-            dgdb = dgdb + temp
+        dgdb = jnp.sum(
+            ds_in_well
+            * grad_psi_mag[in_well_inds]
+            * kappa_g[in_well_inds]
+            / bp_in_well_sqrd
+            / 2
+            / B[in_well_inds]
+            * (sqrt_bbb + 1 / sqrt_bbb)
+        )
+        dbigGdb = jnp.sum(
+            dBdpsi[in_well_inds]
+            * ds_in_well
+            / B_reflect
+            / bp_in_well
+            / B[in_well_inds]
+            / 2
+            * (sqrt_bbb + 1 / sqrt_bbb)
+        )
 
-            # dbigGdb 
-            temp = dBdpsi[j] *ds[j] /B_reflect / bp[i] / B[j] / 2
-            temp = temp*(sqrt_bbb + 1/sqrt_bbb)
-            dbigGdb = dbigGdb + temp
-
-            # dVdb
-            temp = dVdb_t1[j] - (2 * dBdpsi[j] - B[j]/Bsupz[j]*dBsupzdpsi[j]) 
-            temp = temp * 1.5 * ds[j] / B[j] / B_reflect * sqrt_bbb
-            dVdb = dVdb + temp
-     
-        # print('dIdb: ' + str(dIdb))
-        # print('dgdb: ' + str(dgdb))
-        # print('dbigGdb: ' + str(dbigGdb))
-        # print('dVdb: ' + str(dVdb))
+        dVdb = jnp.sum(
+            (
+                dVdb_t1[in_well_inds]
+                - (
+                    2 * dBdpsi[in_well_inds]
+                    - B[in_well_inds] / Bsupz[in_well_inds] * dBsupzdpsi[in_well_inds]
+                )
+            )
+            * 1.5
+            * ds_in_well
+            / B[in_well_inds]
+            / B_reflect
+            * sqrt_bbb
+        )
 
         # if the well start and well end are not the same point, compute vr/vt (radial drift / torodial drift)
         if well_start[k] < well_end[k]:
-            temp = dgdb/grad_psi_i[well_start[k]]/dIdb / minB / e_theta_i[well_start[k]]
-            temp = temp / (dbigGdb/dIdb + 2/3 * dVdb/dIdb)
+            temp = (
+                dgdb
+                / grad_psi_i[well_start[k]]
+                / dIdb
+                / minB
+                / e_theta_i[well_start[k]]
+            )
+            temp = temp / (dbigGdb / dIdb + 2 / 3 * dVdb / dIdb)
             vrovervt = temp
-        else: 
+        else:
             vrovervt = 0
 
+        gamma_c = 2 * jnp.arctan(vrovervt) / jnp.pi
 
-        gamma_c = 2 * np.arctan(vrovervt) / np.pi
-        
         wellGamma_c += gamma_c * gamma_c * dIdb
 
-    bigGamma_c += wellGamma_c * np.pi/2/np.sqrt(2)*deltabp
+    bigGamma_c += wellGamma_c * jnp.pi / 2 / jnp.sqrt(2) * deltabp
 
-bigGamma_c  = bigGamma_c / dloverb
+bigGamma_c = bigGamma_c / dloverb
 
 print(bigGamma_c)
 
-file = name + '_10kSolved.txt'
-f=open(file,'a')
+file = name + "_10kSolved.txt"
+f = open(file, "a")
 f.write(f"{s:1.2f}, {bigGamma_c:1.3e}\n")
 f.close()

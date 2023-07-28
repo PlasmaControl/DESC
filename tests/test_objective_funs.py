@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from scipy.constants import mu_0
 
+import desc.examples
 from desc.backend import jnp
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
@@ -248,6 +249,31 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+        # also make sure helicity is set correctly
+        eq1 = desc.examples.get("precise_QA")
+        eq2 = desc.examples.get("precise_QH")
+
+        helicity_QA = (1, 0)
+        helicity_QH = (1, eq2.NFP)
+
+        # precise_QA should have lower QA than QH
+        obj = QuasisymmetryTwoTerm(eq=eq1, helicity=helicity_QA)
+        obj.build()
+        f1 = obj.compute_scalar(*obj.xs(eq1))
+        obj.helicity = helicity_QH
+        obj.build()
+        f2 = obj.compute_scalar(*obj.xs(eq1))
+        assert f1 < f2
+
+        # precise_QH should have lower QH than QA
+        obj = QuasisymmetryTwoTerm(eq=eq2, helicity=helicity_QH)
+        obj.build()
+        f1 = obj.compute_scalar(*obj.xs(eq2))
+        obj.helicity = helicity_QA
+        obj.build()
+        f2 = obj.compute_scalar(*obj.xs(eq2))
+        assert f1 < f2
 
     @pytest.mark.unit
     def test_qs_tripleproduct(self):

@@ -727,7 +727,7 @@ class MeanCurvature(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["curvature_H"]
+        self._data_keys = ["curvature_H_rho"]
         self._args = get_params(
             self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
@@ -782,7 +782,7 @@ class MeanCurvature(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["curvature_H"]
+        return data["curvature_H_rho"]
 
 
 class PrincipalCurvature(_Objective):
@@ -872,7 +872,7 @@ class PrincipalCurvature(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["curvature_k1", "curvature_k2"]
+        self._data_keys = ["curvature_k1_rho", "curvature_k2_rho"]
         self._args = get_params(
             self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
@@ -927,7 +927,9 @@ class PrincipalCurvature(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return jnp.maximum(jnp.abs(data["curvature_k1"]), jnp.abs(data["curvature_k2"]))
+        return jnp.maximum(
+            jnp.abs(data["curvature_k1_rho"]), jnp.abs(data["curvature_k2_rho"])
+        )
 
 
 class BScaleLength(_Objective):

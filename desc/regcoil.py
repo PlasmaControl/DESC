@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.constants import mu_0
 
+from desc.backend import jit
 from desc.basis import DoubleFourierSeries
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
@@ -68,9 +69,14 @@ def run_regcoil(  # noqa: C901 fxn too complex
     scan_lower=-30,
     scan_upper=-1,
     external_TF_fraction=0,
+    external_TF_scan=False,
+    external_TF_scan_upper=1.0,
+    external_TF_scan_lower=0,
+    external_TF_scan_n=10,
     jac=None,
     return_A=False,
     show_plots=False,
+    verbose=1,
 ):
     """Python regcoil to find single-valued current potential.
 
@@ -110,7 +116,20 @@ def run_regcoil(  # noqa: C901 fxn too complex
     external_TF_fraction: float, default 0
         how much TF is provided by coils external to the
         winding surface being considered.
+    external_TF_fraction_scan: bool, default False
+        whether to scan over TF fraction
+    external_TF_fraction_scan_upper: float, default 1.0
+        upper limit of TF fraction scan
+    external_TF_fraction_scan_upper: float, default 0.0
+        lower limit of TF fraction scan
+    external_TF_fraction_scann: int, default 10
+        number of steps in TF fraction scan
     jac: jacobian to use (must agree in size with eq basis, grid and basis res)
+    return_A: bool, default False, whether to return the jacobian matrix A
+        jacobian of the Bnormal on the plasma surface wrt the phi_mn coeffs
+    show_plots: bool, default false
+        whether to show plots or not
+    verbose: int, level of verbosity
 
     Returns
     -------
@@ -118,6 +137,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
          single-valued part of the current potential
          if scan=True, this is a list of length n_scan containing
          the phi_mn corresponding to each scanned value of alpha
+         if external_TF_scan=True, is a dict of the TF fractions
+         and the entries are the arrays of phi_mn for different alpha
     curr_pot_trans: Transform, transform for the basis used for the phi_mn_opt,
          can find value of phi_SV with curr_pot_trans.transform(phi_mn_opt)
     I: float, net toroidal current linking the plasma and coils,
@@ -182,25 +203,12 @@ def run_regcoil(  # noqa: C901 fxn too complex
     )  # surface normal on winding surface
     rs_t = winding_surf.compute_coordinates(grid=sgrid, dt=1)
     rs_z = winding_surf.compute_coordinates(grid=sgrid, dz=1)
-    phi_mn = jnp.zeros(curr_pot_basis.num_modes)
 
     # calculate net enclosed poloidal and toroidal currents
     G_tot = eq.compute("G", grid=sgrid)["G"][0] / mu_0 * 2 * np.pi  # poloidal
     # 2pi factor is present in regcoil code
     #  https://github.com/landreman/regcoil/blob
     # /99f9abf8b0b0c6ec7bb6e7975dbee5e438808162/regcoil_init_plasma_mod.f90#L500
-    assert (
-        external_TF_fraction >= 0 and external_TF_fraction <= 1
-    ), "external_TF_fraction must be a float between 0 and 1!"
-
-    G_ext = external_TF_fraction * G_tot
-
-    G = G_tot - G_ext
-
-    if helicity_ratio == 0:  # modular coils
-        I = 0  # toroidal
-    else:
-        I = G / helicity_ratio / eq.NFP  # toroidal
 
     # define fxns to calculate Bnormal from SV part of phi and from secular part
     def B_from_K_SV(phi_mn, I, G, re, rs, rs_t, rs_z, ne):
@@ -229,108 +237,242 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     # $B$ is linear in $K$ as long as the geometry is fixed
     # so just need to evaluate the jacobian
-    t_start = time.time()
+
     if jac is None:
-        print("Starting Jacobian Calculation")
-        A = jax.jacfwd(B_from_K_SV)(phi_mn, I, G, re, rs, rs_t, rs_z, ne)
-        print(f"Jacobian Calculation finished, took {time.time()-t_start} s")
+        if external_TF_scan:
+            A_fun = jit(jax.jacfwd(B_from_K_SV))
+        else:
+            A_fun = jax.jacfwd(B_from_K_SV)
     else:
         A = jac
         print("Using passed-in Jacobian")
 
-    B_GI_normal = B_from_K_secular(I, G, re, rs, rs_t, rs_z, ne)
-    Bn = np.zeros_like(B_GI_normal)
-    if external_TF_fraction == 0:
-        Bn_ext = np.zeros_like(B_GI_normal)
-        TF_B = ToroidalMagneticField(B0=0, R0=R0_ves)
+    if not external_TF_scan:
+        external_TFs = [external_TF_fraction]
     else:
-        TF_B = ToroidalMagneticField(B0=mu_0 * G_ext / 2 / jnp.pi, R0=R0_ves)
-        Bn_ext = B_from_K_secular(0, G_ext, re, rs, rs_t, rs_z, ne)
-        # TODO: check that this is the same as calculating B from TF_B...
-
-    rhs = -(Bn + Bn_ext + B_GI_normal).T @ A
-
-    # alpha is regularization param, if >0,
-    # makes simpler coils (less current density), but worse Bn
-    alphas = (
-        [alpha]
-        if not scan
-        else jnp.concatenate(
-            (jnp.array([0.0]), jnp.logspace(scan_lower, scan_upper, nscan))
-        )
-    )
-    chi2Bs = []
-    phi_mns = []
-
-    for alpha in alphas:
-        printstring = f"Calculating Phi_SV for alpha = {alpha:1.5e}"
-        print(
-            "#" * len(printstring) + "\n" + printstring + "\n" + "#" * len(printstring)
+        external_TFs = np.linspace(
+            external_TF_scan_lower,
+            external_TF_scan_upper,
+            external_TF_scan_n,
+            endpoint=True,
         )
 
-        # calculate phi
-        phi_mn_opt = jnp.linalg.pinv(A.T @ A + alpha * jnp.eye(A.shape[1])) @ rhs
+    all_phi_mns = {}
 
-        phi_mns.append(phi_mn_opt)
+    for i, external_TF_fraction in enumerate(external_TFs):
+        assert (
+            external_TF_fraction >= 0 and external_TF_fraction <= 1
+        ), "external_TF_fraction must be a float between 0 and 1!"
 
-        Bn_SV = A @ phi_mn_opt
-        Bn_tot = Bn_SV + Bn + B_GI_normal + Bn_ext
-        chi_B = np.sum(Bn_tot * Bn_tot * ne_mag * egrid.weights)
-        chi2Bs.append(chi_B)
-        printstring = f"chi^2 B = {chi_B:1.5e}"
-        print(printstring)
-        printstring = f"min Bnormal = {np.min(Bn_tot):1.5e}"
-        print(printstring)
-        printstring = f"Max Bnormal = {np.max(Bn_tot):1.5e}"
-        print(printstring)
-        printstring = f"Avg Bnormal = {np.mean(Bn_tot):1.5e}"
-        print(printstring)
-    lowest_idx_without_saddles = -1
-    saddles_exists_bools = []
-    ncontours = 20
+        G_ext = external_TF_fraction * G_tot
 
-    if scan and show_plots:
-        plt.figure(figsize=(10, 8))
-        plt.rcParams.update({"font.size": 24})
-        plt.scatter(alphas, chi2Bs, label="python regcoil")
-        plt.xlabel("alpha (regularization parameter)")
-        plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
-        plt.yscale("log")
-        plt.xscale("log")
+        G = G_tot - G_ext
 
-        nlambda = len(chi2Bs)
-        max_nlambda_for_contour_plots = 16
-        numPlots = min(nlambda, max_nlambda_for_contour_plots)
-        ilambda_to_plot = np.sort(
-            list(set(map(int, np.linspace(1, nlambda, numPlots))))
-        )
-        numPlots = len(ilambda_to_plot)
+        if helicity_ratio == 0:  # modular coils
+            I = 0  # toroidal
+        else:
+            I = G / helicity_ratio / eq.NFP  # toroidal
+        # initialize phi_mn
+        phi_mn = jnp.zeros(curr_pot_basis.num_modes)
+        # calculate jacobian A at this external TF fraction
+        t_start = time.time()
+        print(f"Starting Jacobian Calculation {i}/{len(external_TFs)}")
+        A = A_fun(phi_mn, I, G, re, rs, rs_t, rs_z, ne)
+        print(f"Jacobian Calculation finished, took {time.time()-t_start} s")
 
-        numCols = int(np.ceil(np.sqrt(numPlots)))
-        numRows = int(np.ceil(numPlots * 1.0 / numCols))
+        B_GI_normal = B_from_K_secular(I, G, re, rs, rs_t, rs_z, ne)
+        Bn = np.zeros_like(B_GI_normal)
+        if external_TF_fraction == 0:
+            Bn_ext = np.zeros_like(B_GI_normal)
+            TF_B = ToroidalMagneticField(B0=0, R0=1)
+        else:
+            TF_B = ToroidalMagneticField(B0=mu_0 * G_ext / 2 / jnp.pi, R0=R0_ves)
+            Bn_ext = B_from_K_secular(0, G_ext, re, rs, rs_t, rs_z, ne)
+            # TODO: check that this is the same as calculating B from TF_B...
 
-        mpl.rc("xtick", labelsize=7)
-        mpl.rc("ytick", labelsize=7)
+        rhs = -(Bn + Bn_ext + B_GI_normal).T @ A
 
-        ########################################################
-        # Plot total current potential
-        ########################################################
-
-        plt.figure(figsize=(15, 8))
-
-        for whichPlot in range(numPlots):
-            plt.subplot(numRows, numCols, whichPlot + 1)
-            phi_mn_opt = phi_mns[ilambda_to_plot[whichPlot] - 1]
-            phi = curr_pot_trans.transform(phi_mn_opt)
-
-            phi_tot = (
-                phi
-                + G / 2 / np.pi * curr_pot_trans.grid.nodes[:, 2]
-                + I / 2 / np.pi * curr_pot_trans.grid.nodes[:, 1]
+        # alpha is regularization param, if >0,
+        # makes simpler coils (less current density), but worse Bn
+        alphas = (
+            [alpha]
+            if not scan
+            else jnp.concatenate(
+                (jnp.array([0.0]), jnp.logspace(scan_lower, scan_upper, nscan))
             )
-            plt.rcParams.update({"font.size": 18})
+        )
+        chi2Bs = []
+        phi_mns = []
 
-            cdata = plt.contour(
+        for alpha in alphas:
+            printstring = f"Calculating Phi_SV for alpha = {alpha:1.5e}"
+            if verbose > 0:
+                print(
+                    "#" * len(printstring)
+                    + "\n"
+                    + printstring
+                    + "\n"
+                    + "#" * len(printstring)
+                )
+
+            # calculate phi
+            phi_mn_opt = jnp.linalg.pinv(A.T @ A + alpha * jnp.eye(A.shape[1])) @ rhs
+
+            phi_mns.append(phi_mn_opt)
+
+            Bn_SV = A @ phi_mn_opt
+            Bn_tot = Bn_SV + Bn + B_GI_normal + Bn_ext
+            chi_B = np.sum(Bn_tot * Bn_tot * ne_mag * egrid.weights)
+            chi2Bs.append(chi_B)
+            if verbose > 1:
+                printstring = f"chi^2 B = {chi_B:1.5e}"
+                print(printstring)
+                printstring = f"min Bnormal = {np.min(Bn_tot):1.5e}"
+                print(printstring)
+                printstring = f"Max Bnormal = {np.max(Bn_tot):1.5e}"
+                print(printstring)
+                printstring = f"Avg Bnormal = {np.mean(Bn_tot):1.5e}"
+                print(printstring)
+        all_phi_mns[external_TF_fraction] = phi_mns
+        lowest_idx_without_saddles = -1
+        saddles_exists_bools = []
+        ncontours = 20
+
+        if scan and show_plots:
+            plt.figure(figsize=(10, 8))
+            plt.rcParams.update({"font.size": 24})
+            plt.scatter(alphas, chi2Bs, label="python regcoil")
+            plt.xlabel("alpha (regularization parameter)")
+            plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
+            plt.yscale("log")
+            plt.xscale("log")
+
+            nlambda = len(chi2Bs)
+            max_nlambda_for_contour_plots = 16
+            numPlots = min(nlambda, max_nlambda_for_contour_plots)
+            ilambda_to_plot = np.sort(
+                list(set(map(int, np.linspace(1, nlambda, numPlots))))
+            )
+            numPlots = len(ilambda_to_plot)
+
+            numCols = int(np.ceil(np.sqrt(numPlots)))
+            numRows = int(np.ceil(numPlots * 1.0 / numCols))
+
+            mpl.rc("xtick", labelsize=7)
+            mpl.rc("ytick", labelsize=7)
+            plt.title(f"External TF fraction = {external_TF_fraction}")
+
+            ########################################################
+            # Plot total current potential
+            ########################################################
+
+            plt.figure(figsize=(15, 8))
+
+            for whichPlot in range(numPlots):
+                plt.subplot(numRows, numCols, whichPlot + 1)
+                phi_mn_opt = phi_mns[ilambda_to_plot[whichPlot] - 1]
+                phi = curr_pot_trans.transform(phi_mn_opt)
+
+                phi_tot = (
+                    phi
+                    + G / 2 / np.pi * curr_pot_trans.grid.nodes[:, 2]
+                    + I / 2 / np.pi * curr_pot_trans.grid.nodes[:, 1]
+                )
+                plt.rcParams.update({"font.size": 18})
+
+                cdata = plt.contour(
+                    sgrid.nodes[sgrid.unique_zeta_idx, 2],
+                    sgrid.nodes[sgrid.unique_theta_idx, 1],
+                    (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
+                    levels=ncontours,
+                )
+                plt.ylabel("theta")
+                plt.xlabel("zeta")
+                plt.title(
+                    f"lambda= {alphas[ilambda_to_plot[whichPlot] - 1]:1.5e}"
+                    + f" index = {ilambda_to_plot[whichPlot] - 1}",
+                    fontsize="x-small",
+                )
+                plt.colorbar()
+                plt.xlim([0, 2 * np.pi / eq.NFP])
+                saddles_exist_in_potential = False
+                for j in range(ncontours):
+                    try:
+                        p = cdata.collections[j].get_paths()[0]
+                    except Exception:
+                        continue
+                    v = p.vertices
+                    temp_zeta = v[:, 0]
+                    if np.abs(temp_zeta[-1] - temp_zeta[0]) < 1e-2:
+                        saddles_exist_in_potential = True
+                        break
+                saddles_exists_bools.append(saddles_exist_in_potential)
+
+            plt.tight_layout()
+            plt.figtext(
+                0.5,
+                0.995,
+                "Total current potential"
+                + f" at External TF fraction = {external_TF_fraction}",
+                horizontalalignment="center",
+                verticalalignment="top",
+                fontsize="small",
+            )
+            if not np.any(saddles_exists_bools):
+                lowest_idx_without_saddles = 0
+                pass
+            elif np.any(saddles_exists_bools):
+                lowest_idx_without_saddles = np.where(np.asarray(saddles_exists_bools))[
+                    0
+                ][0]
+                print(
+                    "Lowest alpha value without saddle coil contours in potential"
+                    + f" = {alphas[lowest_idx_without_saddles]:1.5e}"
+                )
+            else:
+                lowest_idx_without_saddles = -1
+                print(
+                    "No alpha value yielded a current potential without"
+                    + " saddle coil contours or badly behaved contours!!"
+                )
+            plt.savefig(f"Scan_ext_TF{external_TF_fraction}.png")
+
+        if show_plots:
+
+            plt.figure(figsize=(10, 10))
+            plt.rcParams.update({"font.size": 26})
+            plt.figure(figsize=(8, 8))
+            plt.contourf(
+                egrid.nodes[egrid.unique_zeta_idx, 2],
+                egrid.nodes[egrid.unique_theta_idx, 1],
+                (Bn_tot).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
+            )
+            plt.ylabel("theta")
+            plt.xlabel("zeta")
+            plt.title("Bnormal on plasma surface")
+            plt.colorbar()
+            plt.xlim([0, 2 * np.pi / eq.NFP])
+
+        phi = curr_pot_trans.transform(phi_mn_opt)
+
+        phi_tot = (
+            phi
+            + G / 2 / np.pi * curr_pot_trans.grid.nodes[:, 2]
+            + I / 2 / np.pi * curr_pot_trans.grid.nodes[:, 1]
+        )
+
+        if show_plots and not scan:
+            plt.figure(figsize=(10, 10))
+            plt.rcParams.update({"font.size": 18})
+            plt.figure(figsize=(8, 8))
+            plt.contourf(
+                sgrid.nodes[sgrid.unique_zeta_idx, 2],
+                sgrid.nodes[sgrid.unique_theta_idx, 1],
+                (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
+                levels=ncontours,
+            )
+            plt.colorbar()
+            plt.contour(
                 sgrid.nodes[sgrid.unique_zeta_idx, 2],
                 sgrid.nodes[sgrid.unique_theta_idx, 1],
                 (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
@@ -338,128 +480,37 @@ def run_regcoil(  # noqa: C901 fxn too complex
             )
             plt.ylabel("theta")
             plt.xlabel("zeta")
-            plt.title(
-                f"lambda= {alphas[ilambda_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ilambda_to_plot[whichPlot] - 1}",
-                fontsize="x-small",
-            )
-            plt.colorbar()
+            plt.title("Total Current Potential on winding surface")
+
             plt.xlim([0, 2 * np.pi / eq.NFP])
-            saddles_exist_in_potential = False
-            for j in range(ncontours):
-                try:
-                    p = cdata.collections[j].get_paths()[0]
-                except Exception:
-                    continue
-                v = p.vertices
-                temp_zeta = v[:, 0]
-                if np.abs(temp_zeta[-1] - temp_zeta[0]) < 1e-2:
-                    saddles_exist_in_potential = True
-                    break
-            saddles_exists_bools.append(saddles_exist_in_potential)
+        if show_plots and external_TF_scan:
+            plt.figure()
 
-        plt.tight_layout()
-        plt.figtext(
-            0.5,
-            0.995,
-            "Total current potential",
-            horizontalalignment="center",
-            verticalalignment="top",
-            fontsize="small",
-        )
-        if not np.any(saddles_exists_bools):
-            lowest_idx_without_saddles = 0
-            pass
-        elif np.any(saddles_exists_bools):
-            lowest_idx_without_saddles = np.where(np.asarray(saddles_exists_bools))[0][
-                0
-            ]
-            print(
-                "Lowest alpha value without saddle coil contours in potential"
-                + f" = {alphas[lowest_idx_without_saddles]:1.5e}"
+            plt.contour(
+                egrid.nodes[egrid.unique_zeta_idx, 2],
+                egrid.nodes[egrid.unique_theta_idx, 1],
+                (Bn_ext).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
+                levels=ncontours,
             )
-        else:
-            lowest_idx_without_saddles = -1
-            print(
-                "No alpha value yielded a current potential without"
-                + " saddle coil contours or badly behaved contours!!"
+            plt.ylabel("theta")
+            plt.xlabel("zeta")
+            plt.title("external coil current B normal on plasma surface")
+
+            plt.xlim([0, 2 * np.pi / eq.NFP])
+
+            plt.figure()
+
+            plt.contour(
+                egrid.nodes[egrid.unique_zeta_idx, 2],
+                egrid.nodes[egrid.unique_theta_idx, 1],
+                (B_GI_normal).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
+                levels=ncontours,
             )
-        plt.savefig("Scan.png")
+            plt.ylabel("theta")
+            plt.xlabel("zeta")
+            plt.title("G and I B normal on plasma surface")
 
-    if show_plots:
-
-        plt.figure(figsize=(10, 10))
-        plt.rcParams.update({"font.size": 26})
-        plt.figure(figsize=(8, 8))
-        plt.contourf(
-            egrid.nodes[egrid.unique_zeta_idx, 2],
-            egrid.nodes[egrid.unique_theta_idx, 1],
-            (Bn_tot).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
-        )
-        plt.ylabel("theta")
-        plt.xlabel("zeta")
-        plt.title("Bnormal on plasma surface")
-        plt.colorbar()
-        plt.xlim([0, 2 * np.pi / eq.NFP])
-
-    phi = curr_pot_trans.transform(phi_mn_opt)
-
-    phi_tot = (
-        phi
-        + G / 2 / np.pi * curr_pot_trans.grid.nodes[:, 2]
-        + I / 2 / np.pi * curr_pot_trans.grid.nodes[:, 1]
-    )
-
-    if show_plots:
-        plt.figure(figsize=(10, 10))
-        plt.rcParams.update({"font.size": 18})
-        plt.figure(figsize=(8, 8))
-        plt.contourf(
-            sgrid.nodes[sgrid.unique_zeta_idx, 2],
-            sgrid.nodes[sgrid.unique_theta_idx, 1],
-            (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
-            levels=ncontours,
-        )
-        plt.colorbar()
-        plt.contour(
-            sgrid.nodes[sgrid.unique_zeta_idx, 2],
-            sgrid.nodes[sgrid.unique_theta_idx, 1],
-            (phi_tot).reshape(sgrid.num_theta, sgrid.num_zeta, order="F"),
-            levels=ncontours,
-        )
-        plt.ylabel("theta")
-        plt.xlabel("zeta")
-        plt.title("Total Current Potential on winding surface")
-
-        plt.xlim([0, 2 * np.pi / eq.NFP])
-
-        plt.figure()
-
-        plt.contour(
-            egrid.nodes[egrid.unique_zeta_idx, 2],
-            egrid.nodes[egrid.unique_theta_idx, 1],
-            (Bn_ext).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
-            levels=ncontours,
-        )
-        plt.ylabel("theta")
-        plt.xlabel("zeta")
-        plt.title("external coil current B normal on plasma surface")
-
-        plt.xlim([0, 2 * np.pi / eq.NFP])
-
-        plt.figure()
-
-        plt.contour(
-            egrid.nodes[egrid.unique_zeta_idx, 2],
-            egrid.nodes[egrid.unique_theta_idx, 1],
-            (B_GI_normal).reshape(egrid.num_theta, egrid.num_zeta, order="F"),
-            levels=ncontours,
-        )
-        plt.ylabel("theta")
-        plt.xlabel("zeta")
-        plt.title("G and I B normal on plasma surface")
-
-        plt.xlim([0, 2 * np.pi / eq.NFP])
+            plt.xlim([0, 2 * np.pi / eq.NFP])
 
     def phi_total_function(grid):
         """Helper fxn to calculate the total phi given a LinearGrid."""
@@ -471,33 +522,31 @@ def run_regcoil(  # noqa: C901 fxn too complex
             + I / 2 / np.pi * trans.grid.nodes[:, 1]
         )
 
-    if scan:
-        if return_A:
-            return (
-                phi_mns,
-                alphas,
-                curr_pot_trans,
-                I,
-                G,
-                phi_total_function,
-                TF_B,
-                chi_B,
-                lowest_idx_without_saddles,
-                A,
-            )
+    if not external_TF_scan:
+        all_phi_mns = all_phi_mns[list(all_phi_mns.keys())[0]]
+    if not scan and not external_TF_scan:
+        all_phi_mns = all_phi_mns[0]
 
-        else:
-            return (
-                phi_mns,
-                alphas,
-                curr_pot_trans,
-                I,
-                G,
-                phi_total_function,
-                TF_B,
-                lowest_idx_without_saddles,
-            )
-    if return_A:
-        return phi_mn_opt, curr_pot_trans, I, G, phi_total_function, TF_B, chi_B, A
-    else:
-        return phi_mn_opt, curr_pot_trans, I, G, phi_total_function, TF_B, chi_B
+    if scan:
+        return (
+            all_phi_mns,
+            alphas,
+            curr_pot_trans,
+            I,
+            G,
+            phi_total_function,
+            TF_B,
+            chi_B,
+            lowest_idx_without_saddles,
+        )
+
+    return (
+        all_phi_mns,
+        curr_pot_trans,
+        I,
+        G,
+        phi_total_function,
+        TF_B,
+        chi_B,
+        lowest_idx_without_saddles,
+    )

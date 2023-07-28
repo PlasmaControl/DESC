@@ -20,7 +20,7 @@ from .data_index import register_compute_fun
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -48,7 +48,7 @@ def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_rho_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -73,7 +73,7 @@ def _e_rho_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_theta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -103,7 +103,7 @@ def _e_theta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_zeta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -132,7 +132,7 @@ def _e_zeta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_rho_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -155,7 +155,7 @@ def _e_rho_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_rho_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -178,7 +178,7 @@ def _e_rho_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_rho_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -201,7 +201,7 @@ def _e_rho_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_theta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -226,7 +226,7 @@ def _e_theta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_theta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -256,7 +256,7 @@ def _e_theta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_theta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -284,7 +284,7 @@ def _e_theta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_zeta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -309,7 +309,7 @@ def _e_zeta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_zeta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -339,7 +339,7 @@ def _e_zeta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     profiles=[],
     coordinates="tz",
     data=[],
-    parameterization="desc.geometry.FourierRZToroidalSurface",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_zeta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -371,7 +371,7 @@ def _e_zeta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _x_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -401,7 +401,7 @@ def _x_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_rho_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -431,7 +431,7 @@ def _e_rho_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_theta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -459,7 +459,7 @@ def _e_theta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwar
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_zeta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -484,7 +484,7 @@ def _e_zeta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwarg
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_rho_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -514,7 +514,7 @@ def _e_rho_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwar
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_rho_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -542,7 +542,7 @@ def _e_rho_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwar
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_rho_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -567,7 +567,7 @@ def _e_rho_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwar
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_theta_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -597,7 +597,7 @@ def _e_theta_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kw
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_theta_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -625,7 +625,7 @@ def _e_theta_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kw
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_theta_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -648,7 +648,7 @@ def _e_theta_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kw
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_zeta_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -671,7 +671,7 @@ def _e_zeta_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwa
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_zeta_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
@@ -694,7 +694,7 @@ def _e_zeta_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwa
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.geometry.ZernikeRZToroidalSection",
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
     basis="basis",
 )
 def _e_zeta_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):

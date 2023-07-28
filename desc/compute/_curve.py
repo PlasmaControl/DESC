@@ -17,7 +17,7 @@ from .utils import cross, dot
     profiles=[],
     coordinates="s",
     data=[],
-    parameterization="desc.geometry.Curve",
+    parameterization="desc.geometry.core.Curve",
 )
 def _s(params, transforms, profiles, data, **kwargs):
     data["s"] = transforms["grid"].nodes[:, 2]
@@ -54,7 +54,7 @@ def _rotation_matrix_from_normal(normal):
     profiles=[],
     coordinates="s",
     data=["s"],
-    parameterization="desc.geometry.FourierPlanarCurve",
+    parameterization="desc.geometry.curve.FourierPlanarCurve",
     basis="basis",
 )
 def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
@@ -90,7 +90,7 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["s"],
-    parameterization="desc.geometry.FourierPlanarCurve",
+    parameterization="desc.geometry.curve.FourierPlanarCurve",
     basis="basis",
 )
 def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
@@ -132,7 +132,7 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["s"],
-    parameterization="desc.geometry.FourierPlanarCurve",
+    parameterization="desc.geometry.curve.FourierPlanarCurve",
     basis="basis",
 )
 def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
@@ -179,7 +179,7 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["s"],
-    parameterization="desc.geometry.FourierPlanarCurve",
+    parameterization="desc.geometry.curve.FourierPlanarCurve",
     basis="basis",
 )
 def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
@@ -235,7 +235,7 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=[],
-    parameterization="desc.geometry.FourierRZCurve",
+    parameterization="desc.geometry.curve.FourierRZCurve",
     basis="basis",
 )
 def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
@@ -269,7 +269,7 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=[],
-    parameterization="desc.geometry.FourierRZCurve",
+    parameterization="desc.geometry.curve.FourierRZCurve",
     basis="basis",
 )
 def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
@@ -304,7 +304,7 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=[],
-    parameterization="desc.geometry.FourierRZCurve",
+    parameterization="desc.geometry.curve.FourierRZCurve",
     basis="basis",
 )
 def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
@@ -343,7 +343,7 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=[],
-    parameterization="desc.geometry.FourierRZCurve",
+    parameterization="desc.geometry.curve.FourierRZCurve",
     basis="basis",
 )
 def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
@@ -383,7 +383,7 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=[],
-    parameterization="desc.geometry.FourierXYZCurve",
+    parameterization="desc.geometry.curve.FourierXYZCurve",
     basis="basis",
 )
 def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
@@ -416,7 +416,7 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=[],
-    parameterization="desc.geometry.FourierXYZCurve",
+    parameterization="desc.geometry.curve.FourierXYZCurve",
     basis="basis",
 )
 def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
@@ -453,7 +453,7 @@ def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=[],
-    parameterization="desc.geometry.FourierXYZCurve",
+    parameterization="desc.geometry.curve.FourierXYZCurve",
     basis="basis",
 )
 def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
@@ -490,7 +490,7 @@ def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=[],
-    parameterization="desc.geometry.FourierXYZCurve",
+    parameterization="desc.geometry.curve.FourierXYZCurve",
     basis="basis",
 )
 def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
@@ -521,7 +521,7 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x_s"],
-    parameterization="desc.geometry.Curve",
+    parameterization="desc.geometry.core.Curve",
 )
 def _frenet_tangent(params, transforms, profiles, data, **kwargs):
     data["frenet_tangent"] = (
@@ -542,7 +542,7 @@ def _frenet_tangent(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x_ss"],
-    parameterization="desc.geometry.Curve",
+    parameterization="desc.geometry.core.Curve",
 )
 def _frenet_normal(params, transforms, profiles, data, **kwargs):
     data["frenet_normal"] = (
@@ -563,7 +563,7 @@ def _frenet_normal(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["frenet_tangent", "frenet_normal"],
-    parameterization="desc.geometry.Curve",
+    parameterization="desc.geometry.core.Curve",
 )
 def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     data["frenet_binormal"] = cross(
@@ -584,7 +584,7 @@ def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x_s", "x_ss"],
-    parameterization="desc.geometry.Curve",
+    parameterization="desc.geometry.core.Curve",
 )
 def _curvature(params, transforms, profiles, data, **kwargs):
     dxn = jnp.linalg.norm(data["x_s"], axis=-1)[:, jnp.newaxis]
@@ -606,7 +606,7 @@ def _curvature(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x_s", "x_ss", "x_sss"],
-    parameterization="desc.geometry.Curve",
+    parameterization="desc.geometry.core.Curve",
 )
 def _torsion(params, transforms, profiles, data, **kwargs):
     dxd2x = cross(data["x_s"], data["x_ss"])
@@ -626,7 +626,7 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["s", "x_s"],
-    parameterization="desc.geometry.Curve",
+    parameterization="desc.geometry.core.Curve",
 )
 def _length(params, transforms, profiles, data, **kwargs):
     T = jnp.linalg.norm(data["x_s"], axis=-1)

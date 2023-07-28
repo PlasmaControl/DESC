@@ -172,23 +172,14 @@ maxB = jnp.nanmax(B)
 
 minB = jnp.nanmin(jnp.abs(B))
 
-
-bpstep = 80  # iterations through b'
-nsteps = len(
-    B
-)  # steps along each field line (equal to number of B values we have, for now)
-bp = jnp.zeros(bpstep)
-deltabp = (maxB - minB) / (minB * bpstep)
-
+nsteps = len(B)  # steps along each field line (equal to number of B values we have, for now)
 
 # integrating dl/b
-dloverb = 0
-for j in range(0, nsteps - 1):
-    dloverb += ds[j] / B[j]
+dloverb = jnp.sum(ds/B[:-1])
 
-# making the b prime array
-for i in range(0, bpstep):
-    bp[i] = 1 + ((maxB - minB) * (i - 0.5) / (minB * bpstep))
+bpstep = 80  # iterations through b'
+deltabp = (maxB - minB) / (minB * bpstep)
+bp = 1+ (deltabp*jnp.linspace(-0.5, bpstep-1.5, bpstep))
 
 for i in range(0, bpstep):
     B_reflect = minB * bp[i]

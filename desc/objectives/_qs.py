@@ -72,8 +72,6 @@ class QuasisymmetryBoozer(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        assert len(helicity) == 2
-        assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
         self._grid = grid
         self.helicity = helicity
         self.M_booz = M_booz
@@ -334,6 +332,7 @@ class QuasisymmetryTwoTerm(_Objective):
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
+            "helicity": self.helicity,
         }
 
         timer.stop("Precomputing transforms")
@@ -379,6 +378,7 @@ class QuasisymmetryTwoTerm(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
+            helicity=constants["helicity"],
         )
         return data["f_C"] * constants["transforms"]["grid"].weights
 

@@ -112,10 +112,14 @@ def test_write_desc_input_Nones(tmpdir_factory):
 
 @pytest.mark.unit
 def test_descout_to_input(tmpdir_factory):
-    """Test converting DESC output to a DESC input file. To do that we covert a DESC output file to
-    an input file, denoted by desc_input_converted. We compare the boundary Fourier coefficients of
-    this file with the true values of the Fourier coefficients, given in desc_input_truth"""
+    """
+    Test converting DESC output to a DESC input file.
 
+    To do that, we convert a DESC output file to a DESC input file
+    named desc_input_converted. We compare the boundary Fourier
+    coefficients of this file with the true values of the Fourier
+    coefficients given in desc_input_truth.
+    """
     outfile_path = "./tests/inputs/LandremanPaul2022_QA_reactorScale_lowRes.h5"
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("input_LandremanPaul_QA")
@@ -168,7 +172,7 @@ def test_descout_to_input(tmpdir_factory):
     j = int(counter0)
 
     # Compare the Fourier modes and ensure that they match, i.e,, found0 = 1
-    if mfirst0 == True:
+    if mfirst0 is True:
         while i < np.minimum(counter1 + 20, len(lines_converted)) and found0 == 1:
             m1_idx = int(eval(lines_converted[i].split("\t")[1].split(":")[1]))
             n1_idx = int(eval(lines_converted[i].split("\t")[2].split(":")[1]))
@@ -230,9 +234,6 @@ def test_descout_to_input(tmpdir_factory):
             i += 1
 
     assert found0 == 1
-    ## skip first 3 lines as they have date and pwd info
-    # for line1, line2 in zip(lines_correct[3:], lines_converted[4:]):
-    #    assert line1.strip() == line2.strip()
 
 
 @pytest.mark.unit

@@ -779,7 +779,7 @@ class InputReader:
         f.close()
 
     @staticmethod
-    def descout_to_input(filename, inputs, header=""):
+    def descout_to_input(filename, inputs, header="DESC-generated-input-file"):
         """Generate a DESC input file from a DESC output file
 
         Parameters
@@ -800,7 +800,10 @@ class InputReader:
         f.seek(0)
 
         eq = load(inputs)
-        eq0 = eq[-1]
+        try:
+            eq0 = eq[-1]
+        except TypeError:
+            eq0 = eq
 
         f.write(header + "\n")
 
@@ -921,25 +924,25 @@ class InputReader:
         # boundary paramters
         if eq0.sym:
             for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
-                if abs(eq0.Rb_lmn[k]) > 1e-4:
+                if abs(eq0.Rb_lmn[k]) > 5e-5:
                     f.write(
-                        "m: {:3d} n: {:3d} R1 = {:16.8E} Z1 = {:16.8E}\n".format(
-                            m, n, eq0.Rb_lmn[k], 0
+                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
+                            int(0), m, n, eq0.Rb_lmn[k], 0
                         )
                     )
             for k, (l, m, n) in enumerate(eq0.surface.Z_basis.modes):
-                if abs(eq0.Zb_lmn[k]) > 1e-4:
+                if abs(eq0.Zb_lmn[k]) > 5e-5:
                     f.write(
-                        "m: {:3d} n: {:3d} R1 = {:16.8E} Z1 = {:16.8E}\n".format(
-                            m, n, 0, eq0.Zb_lmn[k]
+                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
+                            int(0), m, n, 0, eq0.Zb_lmn[k]
                         )
                     )
         else:
             for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
                 if abs(eq0.Rb_lmn[k]) > 5e-5 or abs(eq0.Zb_lmn[k]) > 5e-5:
                     f.write(
-                        "m: {:3d} n: {:3d} R1 = {:16.8E} Z1 = {:16.8E}\n".format(
-                            m, n, eq0.Rb_lmn[k], eq0.Zb_lmn[k]
+                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
+                            int(0), m, n, eq0.Rb_lmn[k], eq0.Zb_lmn[k]
                         )
                     )
 

@@ -111,6 +111,131 @@ def test_write_desc_input_Nones(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_descout_to_input(tmpdir_factory):
+    """Test converting DESC output to a DESC input file. To do that we covert a DESC output file to
+    an input file, denoted by desc_input_converted. We compare the boundary Fourier coefficients of
+    this file with the true values of the Fourier coefficients, given in desc_input_truth"""
+
+    outfile_path = "./tests/inputs/LandremanPaul2022_QA_reactorScale_lowRes.h5"
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    tmp_path = tmpdir.join("input_LandremanPaul_QA")
+    tmpout_path = tmpdir.join("LandremanPaul2022_QA_reactorScale_lowRes.h5")
+    shutil.copyfile(outfile_path, tmpout_path)
+
+    ir = InputReader()
+    ir.descout_to_input(str(tmp_path), str(tmpout_path))
+    desc_input_truth = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes"
+    desc_input_converted = tmp_path
+
+    with open(desc_input_truth) as f:
+        lines_correct = f.readlines()
+    with open(desc_input_converted) as f:
+        lines_converted = f.readlines()
+
+    # Count the lines before the boundary modes
+    counter0 = int(0)
+    found0 = int(0)
+    while found0 != 1:
+        if (
+            lines_correct[counter0].split("\n")[0].replace(" ", "")
+            == "#fixed-boundarysurfaceshape"
+        ):
+            found0 = 1
+            counter0 += 1
+        else:
+            counter0 += 1
+
+    counter1 = int(0)
+    found0 = int(0)
+    while found0 != 1:
+        if (
+            lines_converted[counter1].split("\n")[0].replace(" ", "")
+            == "#fixed-boundarysurfaceshape"
+        ):
+            found0 = 1
+            counter1 += 1
+        else:
+            counter1 += 1
+
+    # Tells us if the m mode number comes before n in the input file.
+    mfirst0 = (
+        lines_correct[counter0].split("\t")[1].split(":")[0].replace(" ", "") == "m"
+    )
+
+    found0 = 1
+
+    i = int(counter1)
+    j = int(counter0)
+
+    # Compare the Fourier modes and ensure that they match, i.e,, found0 = 1
+    if mfirst0 == True:
+        while i < np.minimum(counter1 + 20, len(lines_converted)) and found0 == 1:
+            m1_idx = int(eval(lines_converted[i].split("\t")[1].split(":")[1]))
+            n1_idx = int(eval(lines_converted[i].split("\t")[2].split(":")[1]))
+            R11 = eval(lines_converted[i].split("\t")[3].split("=")[1])
+            Z11 = eval(lines_converted[i].split("\t")[4].split("=")[1])
+            j = counter0
+            found0 = 0
+            while j < int(len(lines_correct)) and found0 == 0:
+                m0_idx = int(eval(lines_correct[j].split("\t")[1].split(":")[1]))
+                n0_idx = int(eval(lines_correct[j].split("\t")[2].split(":")[1]))
+                R10 = eval(lines_correct[j].split("\t")[3].split("=")[1])
+                Z10 = eval(lines_correct[j].split("\t")[4].split("=")[1])
+                if m0_idx == m1_idx and n0_idx == n1_idx:
+                    if (
+                        np.minimum(
+                            np.linalg.norm(np.array([R11, Z11]) - np.array([R10, Z10])),
+                            np.linalg.norm(np.array([R11, Z11]) + np.array([R10, Z10])),
+                        )
+                        < 1e-3
+                    ):
+                        found0 = 1
+                    else:
+                        found0 = 0
+                    j = len(lines_correct)
+                else:
+                    j += 1
+            i += 1
+    else:
+        while i < counter1 + 10 and found0 == 1:
+            m1_idx = int(eval(lines_converted[i].split("\t")[1].split(":")[1]))
+            n1_idx = int(eval(lines_converted[i].split("\t")[2].split(":")[1]))
+            R11 = eval(lines_converted[i].split("\t")[3].split("=")[1])
+            Z11 = eval(lines_converted[i].split("\t")[4].split("=")[1])
+            j = counter0
+            found0 = 0
+            while j < int(len(lines_correct)) and found0 == 0:
+                m0_idx = int(eval(lines_correct[j].split("\t")[2].split(":")[1]))
+                n0_idx = int(eval(lines_correct[j].split("\t")[1].split(":")[1]))
+                R10 = eval(lines_correct[j].split("\t")[3].split("=")[1])
+                Z10 = eval(lines_correct[j].split("\t")[4].split("=")[1])
+                if m0_idx == m1_idx and n0_idx == n1_idx:
+                    print(
+                        np.array([m1_idx, n1_idx, R11, Z11]),
+                        np.array([m0_idx, n0_idx, R10, Z10]),
+                    )
+                    if (
+                        np.minimum(
+                            np.linalg.norm(np.array([R11, Z11]) - np.array([R10, Z10])),
+                            np.linalg.norm(np.array([R11, Z11]) + np.array([R10, Z10])),
+                        )
+                        < 1e-3
+                    ):
+                        found0 = 1
+                    else:
+                        found0 = 0
+                    j = len(lines_correct)
+                else:
+                    j += 1
+            i += 1
+
+    assert found0 == 1
+    ## skip first 3 lines as they have date and pwd info
+    # for line1, line2 in zip(lines_correct[3:], lines_converted[4:]):
+    #    assert line1.strip() == line2.strip()
+
+
+@pytest.mark.unit
 def test_near_axis_input_files():
     """Test that DESC and VMEC input files generated by pyQSC give the same inputs."""
     vmec_path = ".//tests//inputs//input.QSC_r2_5.5_vmec"

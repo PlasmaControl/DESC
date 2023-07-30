@@ -59,6 +59,7 @@ class Transform(IOAble):
 
         if (
             not np.all(self.grid.nodes[:, 2] == 0)
+            and self.basis.N != 0
             and not (self.grid.NFP == self.basis.NFP)
             and grid.node_pattern != "custom"
         ):

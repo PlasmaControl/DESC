@@ -138,15 +138,19 @@ class ForceBalance(_Objective):
             "F_helical",
             "|e^helical|",
         ]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
             "transforms": self._transforms,
@@ -202,6 +206,7 @@ class ForceBalance(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -323,15 +328,19 @@ class RadialForceBalance(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
             "transforms": self._transforms,
@@ -387,6 +396,7 @@ class RadialForceBalance(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -504,15 +514,19 @@ class HelicalForceBalance(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
             "transforms": self._transforms,
@@ -568,6 +582,7 @@ class HelicalForceBalance(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -696,15 +711,19 @@ class Energy(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["W"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
             "transforms": self._transforms,
@@ -760,6 +779,7 @@ class Energy(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -882,15 +902,19 @@ class CurrentDensity(_Objective):
 
         self._dim_f = 3 * grid.num_nodes
         self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
             "transforms": self._transforms,
@@ -936,6 +960,7 @@ class CurrentDensity(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

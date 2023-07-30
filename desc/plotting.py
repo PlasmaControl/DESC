@@ -271,7 +271,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Computed quantity.
 
     """
-    if name not in data_index:
+    if name not in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
         raise ValueError("Unrecognized value '{}'.".format(name))
     assert component in [
         None,
@@ -286,13 +286,13 @@ def _compute(eq, name, grid, component=None, reshape=True):
         "Z": 2,
     }
 
-    label = data_index[name]["label"]
+    label = data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         data = eq.compute(name, grid=grid)[name]
 
-    if data_index[name]["dim"] > 1:
+    if data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["dim"] > 1:
         if component is None:
             data = np.linalg.norm(data, axis=-1)
             label = "|" + label + "|"
@@ -304,7 +304,13 @@ def _compute(eq, name, grid, component=None, reshape=True):
             else:
                 label += r"\phi"
 
-    label = r"$" + label + "~(" + data_index[name]["units"] + ")$"
+    label = (
+        r"$"
+        + label
+        + "~("
+        + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
+        + ")$"
+    )
 
     if reshape:
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
@@ -461,7 +467,10 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     # sample the entire surface. Computing this on a 1-D grid would return a
     # misleading plot.
     default_L = 100
-    if data_index[name]["coordinates"] == "r":
+    if (
+        data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+        == "r"
+    ):
         if grid is None:
             return plot_fsa(
                 eq,
@@ -666,8 +675,14 @@ def plot_2d(
         ax.set_title(
             "%s / %s"
             % (
-                "$" + data_index[name]["label"] + "$",
-                "$" + data_index[norm_name]["label"] + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
+                + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
+                    "label"
+                ]
+                + "$",
             )
         )
     _set_tight_layout(fig)
@@ -959,7 +974,10 @@ def plot_fsa(
 
     """
     if np.isscalar(rho) and (int(rho) == rho):
-        if data_index[name]["coordinates"] == "r":
+        if (
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+            == "r"
+        ):
             # OK to plot origin for most quantities denoted as functions of rho
             rho = np.flipud(np.linspace(1, 0, rho + 1, endpoint=True))
         else:
@@ -980,7 +998,10 @@ def plot_fsa(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
     label = label.split("~")
-    if data_index[name]["coordinates"] == "r":
+    if (
+        data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+        == "r"
+    ):
         # If the quantity is a surface function, averaging it again has no
         # effect, regardless of whether sqrt(g) is used.
         # So we avoid surface averaging it and forgo the <> around the label.
@@ -1027,8 +1048,14 @@ def plot_fsa(
         ax.set_ylabel(
             "%s / %s"
             % (
-                "$" + data_index[name]["label"] + "$",
-                "$" + data_index[norm_name]["label"] + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
+                + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
+                    "label"
+                ]
+                + "$",
             ),
             fontsize=ylabel_fontsize,
         )
@@ -1217,9 +1244,9 @@ def plot_section(
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
             "$"
-            + data_index[name]["label"]
+            + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
             + "$ ($"
-            + data_index[name]["units"]
+            + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
             + "$)"
             + ", $\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
                 eq.NFP * phi[i] / (2 * np.pi)
@@ -1229,8 +1256,16 @@ def plot_section(
             ax[i].set_title(
                 "%s / %s, %s"
                 % (
-                    "$" + data_index[name]["label"] + "$",
-                    "$" + data_index[norm_name]["label"] + "$",
+                    "$"
+                    + data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                        "label"
+                    ]
+                    + "$",
+                    "$"
+                    + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
+                        "label"
+                    ]
+                    + "$",
                     "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
                         eq.NFP * phi[i] / (2 * np.pi)
                     ),
@@ -2163,7 +2198,7 @@ def plot_boozer_modes(
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(
-            "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -2328,10 +2363,10 @@ def plot_boozer_surface(
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     transforms_compute = get_transforms(
-        "|B|_mn", eq=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+        "|B|_mn", obj=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
     )
     transforms_plot = get_transforms(
-        "|B|_mn", eq=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+        "|B|_mn", obj=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -2521,7 +2556,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
             transforms = get_transforms(
-                "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+                "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
             )
             if i == 0:  # only need to do this once for the first rho surface
                 matrix, modes, idx = ptolemy_linear_transform(

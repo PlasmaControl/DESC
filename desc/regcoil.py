@@ -73,8 +73,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
     external_TF_scan_upper=1.0,
     external_TF_scan_lower=0,
     external_TF_scan_n=10,
-    jac=None,
-    return_A=False,
     show_plots=False,
     verbose=1,
     dirname=".",
@@ -125,9 +123,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
         lower limit of TF fraction scan
     external_TF_fraction_scann: int, default 10
         number of steps in TF fraction scan
-    jac: jacobian to use (must agree in size with eq basis, grid and basis res)
-    return_A: bool, default False, whether to return the jacobian matrix A
-        jacobian of the Bnormal on the plasma surface wrt the phi_mn coeffs
     show_plots: bool, default false
         whether to show plots or not
     verbose: int, level of verbosity
@@ -241,14 +236,10 @@ def run_regcoil(  # noqa: C901 fxn too complex
     # $B$ is linear in $K$ as long as the geometry is fixed
     # so just need to evaluate the jacobian
 
-    if jac is None:
-        if external_TF_scan:
-            A_fun = jit(jax.jacfwd(B_from_K_SV))
-        else:
-            A_fun = jax.jacfwd(B_from_K_SV)
+    if external_TF_scan:
+        A_fun = jit(jax.jacfwd(B_from_K_SV))
     else:
-        A = jac
-        print("Using passed-in Jacobian")
+        A_fun = jax.jacfwd(B_from_K_SV)
 
     if not external_TF_scan:
         external_TFs = [external_TF_fraction]

@@ -27,9 +27,11 @@ from desc.objectives import (
     ForceBalance,
     HelicalForceBalance,
     ObjectiveFunction,
+    PlasmaVesselDistance,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
+    Volume,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
 )
@@ -719,6 +721,47 @@ def test_NAE_QIC_solve():
     # Eliminate the poloidal angle to focus on the toroidal behaviour
     B_av_nae = np.mean(B_nae, axis=1)
     np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=2e-2)
+
+
+@pytest.mark.unit
+def test_multiobject_optimization():
+    """Test for optimizing multiple objects at once."""
+    eq = Equilibrium(L=4, M=4, N=0, iota=2)
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 2.1],
+        Z_lmn=[0, -2],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+    )
+    surf.change_resolution(M=4, N=0)
+    constraints = (
+        ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
+        FixPressure(eq=eq),
+        FixIota(eq=eq),
+        FixPsi(eq=eq),
+        PlasmaVesselDistance(surface=surf, eq=eq, target=1),
+    )
+
+    objective = ObjectiveFunction(
+        (
+            Volume(eq=eq, target=eq.compute("V")["V"] * 2),
+            AspectRatio(eq=eq, target=10),
+        )
+    )
+
+    eq.solve(verbose=3)
+
+    optimizer = Optimizer("lsq-auglag")
+    result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=500
+    )
+
+    eq.params_dict = result["history"][-1][0]
+    surf.params_dict = result["history"][-1][1]
+
+    np.testing.assert_allclose(
+        constraints[-1].compute(*constraints[-1].xs(eq, surf)), 1, atol=1e-3
+    )
 
 
 class TestGetExample:

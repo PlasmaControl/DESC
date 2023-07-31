@@ -10,7 +10,7 @@ from jax import lax
 from jax.scipy.special import logsumexp
 
 from desc.backend import jnp, put
-from desc.utils import Index, flatten_list, sort_args, svd_inv_null
+from desc.utils import Index, sort_things, svd_inv_null
 
 
 def factorize_linear_constraints(constraints, objective):  # noqa: C901
@@ -70,7 +70,7 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
             )
         A_per_thing = []
         # computing A matrix for each constraint for each thing in the optimization
-        for thing in objective.things:
+        for thing in objective._all_things:
             if thing in con.things:
                 # for now we implicitly assume that each linear constraint is bound to
                 # only 1  thing, to generalize we need to make jac_scaled work for all
@@ -225,12 +225,13 @@ def combine_args(*objectives):
     objectives : ObjectiveFunction
         Original ObjectiveFunctions modified to take the same state vector.
     """
-    args = flatten_list([obj.args for obj in objectives])
-    args = sort_args(args)
-
+    things = sort_things([obj.things for obj in objectives])
     for obj in objectives:
-        obj.set_args(*args)
-
+        extras = []
+        for thing in things:
+            if thing not in obj.things:
+                extras.append(thing)
+        obj._extra_things = extras
     return objectives
 
 

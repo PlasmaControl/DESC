@@ -163,6 +163,10 @@ class Optimizer(IOAble):
         if not isinstance(objective, ProximalProjection) and eq is not None:
             # need to include self consistency constraints
             linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
+        if nonlinear_constraint is not None:
+            objective, nonlinear_constraint = combine_args(
+                objective, nonlinear_constraint
+            )
         if len(linear_constraints):
             objective = LinearConstraintProjection(objective, linear_constraints)
             if nonlinear_constraint is not None:
@@ -173,10 +177,6 @@ class Optimizer(IOAble):
             objective.build(verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
             nonlinear_constraint.build(verbose=verbose)
-        if nonlinear_constraint is not None:
-            objective, nonlinear_constraint = combine_args(
-                objective, nonlinear_constraint
-            )
         if len(linear_constraints) and not isinstance(x_scale, str):
             # need to project x_scale down to correct size
             Z = objective._Z
@@ -215,7 +215,7 @@ class Optimizer(IOAble):
                 )
             )
 
-        x0 = objective.x(eq)
+        x0 = objective.x(*things)
 
         stoptol = _get_default_tols(
             method,
@@ -279,6 +279,9 @@ class Optimizer(IOAble):
             )
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)
+
+        # TODO: do we want to update the objects and return them here?
+        # or at least separate out the "optimal" result from the history?
 
         return result
 

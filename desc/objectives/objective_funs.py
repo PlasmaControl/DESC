@@ -208,7 +208,7 @@ class ObjectiveFunction(IOAble):
         f = jnp.concatenate(
             [
                 obj.compute_unscaled(
-                    *map_params(params, obj, self.things), constants=const
+                    *map_params(params, obj, self._all_things), constants=const
                 )
                 for obj, const in zip(self.objectives, constants)
             ]
@@ -237,7 +237,7 @@ class ObjectiveFunction(IOAble):
         f = jnp.concatenate(
             [
                 obj.compute_scaled(
-                    *map_params(params, obj, self.things), constants=const
+                    *map_params(params, obj, self._all_things), constants=const
                 )
                 for obj, const in zip(self.objectives, constants)
             ]
@@ -266,7 +266,7 @@ class ObjectiveFunction(IOAble):
         f = jnp.concatenate(
             [
                 obj.compute_scaled_error(
-                    *map_params(params, obj, self.things), constants=const
+                    *map_params(params, obj, self._all_things), constants=const
                 )
                 for obj, const in zip(self.objectives, constants)
             ]
@@ -312,7 +312,7 @@ class ObjectiveFunction(IOAble):
         print("Total (sum of squares): {:10.3e}, ".format(f))
         params = self.unpack_state(x)
         for obj, const in zip(self.objectives, constants):
-            obj.print_value(*map_params(params, obj, self.things), constants=const)
+            obj.print_value(*map_params(params, obj, self._all_things), constants=const)
         return None
 
     def unpack_state(self, x):
@@ -340,15 +340,15 @@ class ObjectiveFunction(IOAble):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs_splits = np.cumsum([t.dim_x for t in self.things])
+        xs_splits = np.cumsum([t.dim_x for t in self._all_things])
         xs = jnp.split(x, xs_splits)
-        params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
+        params = [t.unpack_params(xi) for t, xi in zip(self._all_things, xs)]
         return params
 
     def x(self, *things):
         """Return the full state vector from the Optimizeable objects things."""
         # TODO: also check resolution etc?
-        assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
+        assert [type(t1) == type(t2) for t1, t2 in zip(things, self._all_things)]
         xs = [t.pack_params(t.params_dict) for t in things]
         return jnp.concatenate(xs)
 
@@ -565,7 +565,7 @@ class ObjectiveFunction(IOAble):
     @property
     def dim_x(self):
         """int: Dimensional of the state vector."""
-        return sum(t.dim_x for t in self.things)
+        return sum(t.dim_x for t in self._all_things)
 
     @property
     def dim_f(self):
@@ -613,6 +613,13 @@ class ObjectiveFunction(IOAble):
         return jnp.concatenate(
             [jnp.ones(obj.dim_f) * obj.weight for obj in self.objectives]
         )
+
+    @property
+    def _all_things(self):
+        """list: all things known to this objective, used and unused."""
+        if not hasattr(self, "_extra_things"):
+            self._extra_things = []
+        return sort_things(self.things + self._extra_things)
 
     @property
     def things(self):

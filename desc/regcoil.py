@@ -77,6 +77,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     return_A=False,
     show_plots=False,
     verbose=1,
+    dirname=".",
 ):
     """Python regcoil to find single-valued current potential.
 
@@ -130,6 +131,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
     show_plots: bool, default false
         whether to show plots or not
     verbose: int, level of verbosity
+    dirname: where to save figures, defaults to current directory
+            should not include the trailing '/'
 
     Returns
     -------
@@ -435,7 +438,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
                     "No alpha value yielded a current potential without"
                     + " saddle coil contours or badly behaved contours!!"
                 )
-            plt.savefig(f"Scan_ext_TF{external_TF_fraction}.png")
+            plt.savefig(f"{dirname}/Scan_ext_TF{external_TF_fraction}.png")
 
         if show_plots:
 

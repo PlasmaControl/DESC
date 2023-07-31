@@ -1,5 +1,6 @@
 from desc import set_device
 
+# if GPU is available, use it. If not, will run on CPU without any issues
 set_device("gpu")
 import os
 import subprocess
@@ -55,7 +56,7 @@ phi_mns, alphas, curr_pot_trans2, I2, G, phi_total_function, B0, chiBs, ind = (
     eval_grid_M=40,
     eval_grid_N=40,
     source_grid_M=50,
-    source_grid_N=300,
+    source_grid_N=300,  # this must be at least 2*basis_N*NFP, if not higher
     nscan=10,
     scan_upper=-3,
     external_TF_scan=False,

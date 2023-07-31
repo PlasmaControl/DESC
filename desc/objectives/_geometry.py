@@ -7,6 +7,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute.utils import surface_averages, surface_integrals
 from desc.geometry.utils import rpz2xyz
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
@@ -1136,10 +1137,9 @@ class B_dmin(_Objective):
             plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             plasma_grid = self._plasma_grid
+
         if not np.allclose(surface_grid.nodes[:, 0], 1):
             warnings.warn("Surface grid includes off-surface pts, should be rho=1")
-        if not np.allclose(plasma_grid.nodes[:, 0], 1):
-            warnings.warn("Plasma grid includes interior points, should be rho=1")
 
         self._dim_f = plasma_grid.num_nodes
         self._data_keys = ["X", "Y", "Z", "|B|"]
@@ -1225,6 +1225,16 @@ class B_dmin(_Objective):
             axis=-1,
         )
         dmin_data = d.min(axis=-1)
-        B_dmin_data = [d_min * B for d_min, B in zip(dmin_data, data["|B|"])]
+        B_dmin_data = jnp.array([d_min * B for d_min, B in zip(dmin_data, data["|B|"])])
 
-        return jnp.atleast_1d(B_dmin_data)
+        _, inverse, counts = np.unique(
+            self._plasma_grid.nodes[:, 0], return_inverse=True, return_counts=True
+        )
+        number_of_samples_per_surface = counts[inverse]
+        B_dmin_mean = surface_averages(grid=self._plasma_grid, q=B_dmin_data)
+        B_dmin_variance = surface_integrals(
+            grid=self._plasma_grid, q=(B_dmin_data - B_dmin_mean) ** 2
+        ) / (number_of_samples_per_surface - 1)
+        B_dmin_variance = self._plasma_grid.compress(B_dmin_variance)
+
+        return jnp.atleast_1d(B_dmin_variance)

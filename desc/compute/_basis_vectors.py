@@ -3427,10 +3427,6 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta", "|e_theta x e_zeta|"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
 )
 def _n_rho(params, transforms, profiles, data, **kwargs):
     # equal to e^rho / |e^rho| but works correctly for surfaces as well that don't have
@@ -3453,10 +3449,6 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_zeta", "|e_zeta x e_rho|"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
 )
 def _n_theta(params, transforms, profiles, data, **kwargs):
     data["n_theta"] = (
@@ -3477,10 +3469,6 @@ def _n_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_theta", "|e_rho x e_theta|"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
 )
 def _n_zeta(params, transforms, profiles, data, **kwargs):
     data["n_zeta"] = (

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from desc.coils import CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil
-from desc.geometry import FourierRZCurve
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 
@@ -97,6 +97,16 @@ class TestCoilSet:
         assert all([coil.grid.N == 32 for coil in coils])
         B_approx = coils.compute_magnetic_field([10, 0, 0], basis="rpz")[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
+
+        surf = FourierRZToroidalSurface(
+            R_lmn=np.array([10, 0.1]),
+            Z_lmn=np.array([-0.1]),
+            modes_R=np.array([[0, 0], [1, 0]]),
+            modes_Z=np.array([[-1, 0]]),
+        )
+
+        B_normal = coils.compute_Bnormal(surf)
+        np.testing.assert_allclose(B_normal, 0, atol=1e-9)
 
     @pytest.mark.unit
     def test_from_symmetry(self):
@@ -295,13 +305,18 @@ def test_save_and_load_MAKEGRID_coils(tmpdir_factory):
 
 
 @pytest.mark.unit
-def test_save_and_load_MAKEGRID_coils_Planar(tmpdir_factory):
-    """Test saving and reloading CoilSet with PlanarCoil from MAKEGRID file."""
+def test_save_and_load_MAKEGRID_coils_angular(tmpdir_factory):
+    """Test saving and reloading CoilSet linspaced angular from MAKEGRID file."""
     tmpdir = tmpdir_factory.mktemp("coil_files")
-    path = tmpdir.join("coils.MAKEGRID_format_planar_coil")
+    path = tmpdir.join("coils.MAKEGRID_format_angular_coil")
 
-    # make a coilset with a single FourierPlanarCoil
-    coilset = CoilSet(FourierPlanarCoil(r_n=np.array([2, 0]), modes=np.array([0, 1])))
+    # make a coilset with angular coilset
+    N = 50
+    coil = FourierPlanarCoil()
+    coil.current = 1
+    coilset = CoilSet.linspaced_angular(coil, n=N)
+    coilset.grid = 32
+
     grid = LinearGrid(N=200, endpoint=True)
     coilset.save_in_MAKEGRID_format(str(path), grid=grid)
 
@@ -339,6 +354,19 @@ def test_save_and_load_MAKEGRID_coils_Planar(tmpdir_factory):
     np.testing.assert_allclose(X1, X2, atol=1e-15)
     np.testing.assert_allclose(Y1, Y2, atol=1e-15)
     np.testing.assert_allclose(Z1, Z2, atol=1e-15)
+
+    # check Bnormal on torus and ensure is near zero
+    surf = FourierRZToroidalSurface(
+        R_lmn=np.array([10, 0.1]),
+        Z_lmn=np.array([-0.1]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+    )
+
+    B_normal = coilset.compute_Bnormal(surf)
+    np.testing.assert_allclose(B_normal, 0, atol=1e-9)
+    B_normal = coilset2.compute_Bnormal(surf)
+    np.testing.assert_allclose(B_normal, 0, atol=1e-9)
 
 
 @pytest.mark.unit

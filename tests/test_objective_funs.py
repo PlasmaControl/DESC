@@ -509,7 +509,7 @@ def test_plasma_vessel_distance():
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
     obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, a_s - a_p)
 
     # for unequal M, should have error of order M_spacing*a_p
@@ -519,7 +519,7 @@ def test_plasma_vessel_distance():
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
     obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq, surface))
     assert abs(d.min() - (a_s - a_p)) < 1e-14
     assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 1] * a_p
 
@@ -530,7 +530,7 @@ def test_plasma_vessel_distance():
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
     obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq, surface))
     assert abs(d.min() - (a_s - a_p)) < 1e-14
     assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0
 
@@ -552,7 +552,7 @@ def test_plasma_vessel_distance():
         use_softmin=True,
     )
     obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq, surface))
     assert np.all(np.abs(d) < a_s - a_p)
 
     # for large enough alpha, should be same as actual min
@@ -565,7 +565,7 @@ def test_plasma_vessel_distance():
         alpha=100,
     )
     obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, a_s - a_p)
 
 
@@ -700,10 +700,10 @@ def test_plasma_vessel_distance_print(capsys):
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
     obj.build()
-    d = obj.compute_unscaled(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, a_s - a_p)
 
-    obj.print_value(*obj.xs(eq))
+    obj.print_value(*obj.xs(eq, surface))
     out = capsys.readouterr()
 
     corr_out = str(

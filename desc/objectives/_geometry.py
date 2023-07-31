@@ -491,7 +491,7 @@ class PlasmaVesselDistance(_Objective):
         self._use_softmin = use_softmin
         self._alpha = alpha
         super().__init__(
-            things=eq,
+            things=[eq, self._surface],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -513,7 +513,6 @@ class PlasmaVesselDistance(_Objective):
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._surface_grid is None:
             surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
@@ -529,32 +528,36 @@ class PlasmaVesselDistance(_Objective):
             warnings.warn("Plasma grid includes interior points, should be rho=1")
 
         self._dim_f = surface_grid.num_nodes
-        self._data_keys = ["R", "phi", "Z"]
+        self._equil_data_keys = ["R", "phi", "Z"]
+        self._surface_data_keys = ["x"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._surface_coords = self._surface.compute(
-            "x", grid=surface_grid, basis="xyz"
-        )["x"]
-        self._profiles = get_profiles(
-            self._data_keys,
+        self._equil_profiles = get_profiles(
+            self._equil_data_keys,
             obj=eq,
             grid=plasma_grid,
-            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+            has_axis=plasma_grid.axis.size,
         )
-        self._transforms = get_transforms(
-            self._data_keys,
+        self._equil_transforms = get_transforms(
+            self._equil_data_keys,
             obj=eq,
             grid=plasma_grid,
-            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+            has_axis=plasma_grid.axis.size,
+        )
+        self._surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=self._surface,
+            grid=surface_grid,
+            has_axis=surface_grid.axis.size,
         )
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
-            "surface_coords": self._surface_coords,
+            "equil_transforms": self._equil_transforms,
+            "equil_profiles": self._equil_profiles,
+            "surface_transforms": self._surface_transforms,
         }
 
         timer.stop("Precomputing transforms")
@@ -567,13 +570,15 @@ class PlasmaVesselDistance(_Objective):
 
         super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, equil_params, surface_params, constants=None):
         """Compute plasma-surface distance.
 
         Parameters
         ----------
-        params : dict
+        equil_params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        surface_params : dict
+            Dictionary of surface degrees of freedom, eg Surface.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -588,15 +593,24 @@ class PlasmaVesselDistance(_Objective):
             constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
+            self._equil_data_keys,
+            params=equil_params,
+            transforms=constants["equil_transforms"],
+            profiles=constants["equil_profiles"],
         )
         plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+        surface_coords = compute_fun(
+            self._surface,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
+            basis="xyz",
+        )["x"]
         d = jnp.linalg.norm(
-            plasma_coords[:, None, :] - constants["surface_coords"][None, :, :], axis=-1
+            plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1
         )
+
         if self._use_softmin:  # do softmin
             return jnp.apply_along_axis(jax_softmin, 0, d, self._alpha)
         else:  # do hardmin

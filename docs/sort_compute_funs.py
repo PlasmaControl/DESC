@@ -11,27 +11,21 @@ import sys
 
 import desc.compute
 
-
-def get_matches(fun, pattern):
-    """Return all matches of ``pattern`` in source code of function ``fun``."""
-    src = inspect.getsource(fun)
-    matches = pattern.findall(src)
-    return matches
-
-
-# Gather all compute function source code and map to quantity name.
-src_codes = {}
-pattern_name = re.compile(r"(?<=name=)[^,]+")
+# Gather all compute function source code and map quantity name to source code.
+source_codes = {}
+pattern = re.compile(r"(?<=name=)[^,]+")
 for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
     if module_name == sys.argv[1]:
         for _, fun in inspect.getmembers(module, inspect.isfunction):
+            source_code = inspect.getsource(fun)
             # quantities that this function computes
-            name = get_matches(fun, pattern_name)
-            if len(name) > 0:  # skip imported functions
-                src_codes[name[0]] = inspect.getsource(fun)
+            matches = pattern.findall(source_code)
+            if matches:  # skip imported functions
+                source_codes[matches[0]] = source_code
 
 # Write compute functions sorted by name to file.
 with open(sys.argv[2], "w") as output_file:
-    for name in sorted(src_codes):
-        output_file.write(src_codes[name])
-        output_file.write("\n\n")
+    for name in sorted(source_codes):
+        output_file.write("\n")
+        output_file.write(source_codes[name])
+        output_file.write("\n")

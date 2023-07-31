@@ -486,7 +486,7 @@ class CoilSet(Coil, MutableSequence):
         return cls(*coilset)
 
     @classmethod
-    def from_makegrid_coilfile(cls, coil_file, method="cubic2", grid=None):
+    def from_makegrid_coilfile(cls, coil_file, method="cubic", grid=None):
         """Create a CoilSet of XYZCoils from a MAKEGRID-formatted coil txtfile.
 
         Parameters

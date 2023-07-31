@@ -40,6 +40,8 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
 
     Parameters
     ----------
+    parameterization : str, class, or instance
+        Type of object to compute for, eg Equilibrium, Curve, etc.
     names : str or array-like of str
         Name(s) of the quantity(s) to compute.
     params : dict of ndarray
@@ -64,7 +66,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         names = [names]
     for name in names:
         if name not in data_index[p]:
-            raise ValueError("Unrecognized value '{}'.".format(name))
+            raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
     allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma", "basis"}
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:

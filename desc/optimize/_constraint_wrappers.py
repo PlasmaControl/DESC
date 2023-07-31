@@ -636,11 +636,13 @@ class ProximalProjection(ObjectiveFunction):
             self._eq.params_dict = xd
             self.history.append([self._eq.params_dict])
             for con in self._linear_constraints:
-                con.update_target(self._eq)
+                if hasattr(con, "update_target"):
+                    con.update_target(self._eq)
         else:
             self._eq.params_dict = self.history[-1][0]
             for con in self._linear_constraints:
-                con.update_target(self._eq)
+                if hasattr(con, "update_target"):
+                    con.update_target(self._eq)
         return xopt, xeq
 
     def compute_scaled(self, x, constants=None):

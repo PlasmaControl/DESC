@@ -20,6 +20,26 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
+class _FixedObjective(_Objective):
+
+    _fixed = True
+    _linear = True
+    _scalar = False
+
+    def update_target(self, eq):
+        """Update target values using an Equilibrium.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium that will be optimized to satisfy the Objective.
+
+        """
+        self.target = np.atleast_1d(getattr(eq, self._target_arg, self.target))
+        if self._use_jit:
+            self.jit()
+
+
 class BoundaryRSelfConsistency(_Objective):
     """Ensure that the boundary and interior surfaces are self consistent.
 
@@ -400,7 +420,7 @@ class AxisZSelfConsistency(_Objective):
         return f
 
 
-class FixBoundaryR(_Objective):
+class FixBoundaryR(_FixedObjective):
     """Boundary condition on the R boundary parameters.
 
     Parameters
@@ -438,9 +458,7 @@ class FixBoundaryR(_Objective):
     `basis.modes` which may be different from the order that was passed in.
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = False
+    _target_arg = "Rb_lmn"
     _units = "(m)"
     _print_value_fmt = "R boundary error: {:10.3e} "
 
@@ -560,13 +578,8 @@ class FixBoundaryR(_Objective):
         """
         return jnp.dot(self._A, params["Rb_lmn"])
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Rb_lmn"
 
-
-class FixBoundaryZ(_Objective):
+class FixBoundaryZ(_FixedObjective):
     """Boundary condition on the Z boundary parameters.
 
     Parameters
@@ -604,9 +617,7 @@ class FixBoundaryZ(_Objective):
     `basis.modes` which may be different from the order that was passed in.
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = False
+    _target_arg = "Zb_lmn"
     _units = "(m)"
     _print_value_fmt = "Z boundary error: {:10.3e} "
 
@@ -725,11 +736,6 @@ class FixBoundaryZ(_Objective):
 
         """
         return jnp.dot(self._A, params["Zb_lmn"])
-
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Zb_lmn"
 
 
 class FixLambdaGauge(_Objective):
@@ -900,13 +906,8 @@ class FixThetaSFL(_Objective):
         fixed_params = params["L_lmn"][self._idx]
         return fixed_params
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "L_lmn"
 
-
-class FixAxisR(_Objective):
+class FixAxisR(_FixedObjective):
     """Fixes magnetic axis R coefficients.
 
     Parameters
@@ -936,9 +937,7 @@ class FixAxisR(_Objective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = False
+    _target_arg = "Ra_n"
     _units = "(m)"
     _print_value_fmt = "R axis error: {:10.3e} "
 
@@ -1058,13 +1057,8 @@ class FixAxisR(_Objective):
         f = jnp.dot(self._A, params["Ra_n"])
         return f
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Ra_n"
 
-
-class FixAxisZ(_Objective):
+class FixAxisZ(_FixedObjective):
     """Fixes magnetic axis Z coefficients.
 
     Parameters
@@ -1094,9 +1088,7 @@ class FixAxisZ(_Objective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = False
+    _target_arg = "Za_n"
     _units = "(m)"
     _print_value_fmt = "Z axis error: {:10.3e} "
 
@@ -1216,13 +1208,8 @@ class FixAxisZ(_Objective):
         f = jnp.dot(self._A, params["Za_n"])
         return f
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Za_n"
 
-
-class FixModeR(_Objective):
+class FixModeR(_FixedObjective):
     """Fixes Fourier-Zernike R coefficients.
 
     Parameters
@@ -1254,9 +1241,7 @@ class FixModeR(_Objective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "R_lmn"
     _units = "(m)"
     _print_value_fmt = "Fixed-R modes error: {:10.3e} "
 
@@ -1365,13 +1350,8 @@ class FixModeR(_Objective):
         fixed_params = params["R_lmn"][self._idx]
         return fixed_params
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "R_lmn"
 
-
-class FixModeZ(_Objective):
+class FixModeZ(_FixedObjective):
     """Fixes Fourier-Zernike Z coefficients.
 
     Parameters
@@ -1403,9 +1383,7 @@ class FixModeZ(_Objective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "Z_lmn"
     _units = "(m)"
     _print_value_fmt = "Fixed-Z modes error: {:10.3e} "
 
@@ -1514,13 +1492,8 @@ class FixModeZ(_Objective):
         fixed_params = params["Z_lmn"][self._idx]
         return fixed_params
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Z_lmn"
 
-
-class FixSumModesR(_Objective):
+class FixSumModesR(_FixedObjective):
     """Fixes a linear sum of Fourier-Zernike R coefficients.
 
     Parameters
@@ -1558,9 +1531,8 @@ class FixSumModesR(_Objective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = False
+    _target_arg = "R_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
     _print_value_fmt = "Fixed-R sum modes error: {:10.3e} "
 
@@ -1683,13 +1655,8 @@ class FixSumModesR(_Objective):
         f = jnp.dot(self._A, params["R_lmn"])
         return f
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "R_lmn"
 
-
-class FixSumModesZ(_Objective):
+class FixSumModesZ(_FixedObjective):
     """Fixes a linear sum of Fourier-Zernike Z coefficients.
 
     Parameters
@@ -1727,9 +1694,8 @@ class FixSumModesZ(_Objective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = False
+    _target_arg = "Z_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
     _print_value_fmt = "Fixed-Z sum modes error: {:10.3e} "
 
@@ -1853,13 +1819,8 @@ class FixSumModesZ(_Objective):
         f = jnp.dot(self._A, params["Z_lmn"])
         return f
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Z_lmn"
 
-
-class _FixProfile(_Objective, ABC):
+class _FixProfile(_FixedObjective, ABC):
     """Fixes profile coefficients (or values, for SplineProfile).
 
     Parameters
@@ -1896,9 +1857,6 @@ class _FixProfile(_Objective, ABC):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
     _print_value_fmt = "Fix-profile error: {:10.3e} "
 
     def __init__(
@@ -1998,9 +1956,7 @@ class FixPressure(_FixProfile):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "p_l"
     _units = "(Pa)"
     _print_value_fmt = "Fixed-pressure profile error: {:10.3e} "
 
@@ -2074,11 +2030,6 @@ class FixPressure(_FixProfile):
         """
         return params["p_l"][self._idx]
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "p_l"
-
 
 class FixIota(_FixProfile):
     """Fixes rotational transform coefficients.
@@ -2117,9 +2068,7 @@ class FixIota(_FixProfile):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "i_l"
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed-iota profile error: {:10.3e} "
 
@@ -2190,11 +2139,6 @@ class FixIota(_FixProfile):
         """
         return params["i_l"][self._idx]
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "i_l"
-
 
 class FixCurrent(_FixProfile):
     """Fixes toroidal current profile coefficients.
@@ -2231,9 +2175,7 @@ class FixCurrent(_FixProfile):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "c_l"
     _units = "(A)"
     _print_value_fmt = "Fixed-current profile error: {:10.3e} "
 
@@ -2307,11 +2249,6 @@ class FixCurrent(_FixProfile):
         """
         return params["c_l"][self._idx]
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "c_l"
-
 
 class FixElectronTemperature(_FixProfile):
     """Fixes electron temperature profile coefficients.
@@ -2348,9 +2285,7 @@ class FixElectronTemperature(_FixProfile):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "Te_l"
     _units = "(eV)"
     _print_value_fmt = "Fixed-electron-temperature profile error: {:10.3e} "
 
@@ -2424,11 +2359,6 @@ class FixElectronTemperature(_FixProfile):
         """
         return params["Te_l"][self._idx]
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Te_l"
-
 
 class FixElectronDensity(_FixProfile):
     """Fixes electron density profile coefficients.
@@ -2465,9 +2395,7 @@ class FixElectronDensity(_FixProfile):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "ne_l"
     _units = "(m^-3)"
     _print_value_fmt = "Fixed-electron-density profile error: {:10.3e} "
 
@@ -2541,11 +2469,6 @@ class FixElectronDensity(_FixProfile):
         """
         return params["ne_l"][self._idx]
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "ne_l"
-
 
 class FixIonTemperature(_FixProfile):
     """Fixes ion temperature profile coefficients.
@@ -2582,9 +2505,7 @@ class FixIonTemperature(_FixProfile):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "Ti_l"
     _units = "(eV)"
     _print_value_fmt = "Fixed-ion-temperature profile error: {:10.3e} "
 
@@ -2658,11 +2579,6 @@ class FixIonTemperature(_FixProfile):
         """
         return params["Ti_l"][self._idx]
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Ti_l"
-
 
 class FixAtomicNumber(_FixProfile):
     """Fixes effective atomic number profile coefficients.
@@ -2701,9 +2617,7 @@ class FixAtomicNumber(_FixProfile):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "Zeff_l"
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed-atomic-number profile error: {:10.3e} "
 
@@ -2774,13 +2688,8 @@ class FixAtomicNumber(_FixProfile):
         """
         return params["Zeff_l"][self._idx]
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Zeff_l"
 
-
-class FixPsi(_Objective):
+class FixPsi(_FixedObjective):
     """Fixes total toroidal magnetic flux within the last closed flux surface.
 
     Parameters
@@ -2804,9 +2713,7 @@ class FixPsi(_Objective):
 
     """
 
-    _scalar = True
-    _linear = True
-    _fixed = True
+    _target_arg = "Psi"
     _units = "(Wb)"
     _print_value_fmt = "Fixed-Psi error: {:10.3e} "
 
@@ -2875,8 +2782,3 @@ class FixPsi(_Objective):
 
         """
         return params["Psi"]
-
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Psi"

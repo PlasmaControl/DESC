@@ -7,6 +7,7 @@ from netCDF4 import Dataset
 
 from desc.backend import fori_loop, jit, jnp, odeint
 from desc.derivatives import Derivative
+from desc.geometry import FourierRZToroidalSurface
 from desc.geometry.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid
 from desc.interpolate import _approx_df, interp2d, interp3d
@@ -831,7 +832,7 @@ def field_line_integrate(
     return r, z
 
 
-class CurrentPotentialField(MagneticField):
+class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     """Magnetic field due to a surface current potential.
 
         surface current K is assumed given by
@@ -864,6 +865,8 @@ class CurrentPotentialField(MagneticField):
 
 
     """
+
+    _io_attrs_ = MagneticField._io_attrs_ + FourierRZToroidalSurface._io_attrs_
 
     def __init__(
         self,

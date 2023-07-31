@@ -51,7 +51,6 @@ class LinearConstraintProjection(ObjectiveFunction):
                     + "cannot handle nonlinear constraint {}.".format(con)
                 )
         self._objective = objective
-        self._objectives = [objective]
         self._constraints = constraints
         self._built = False
         # don't want to compile this, just use the compiled objective
@@ -344,30 +343,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = self._objective.vjp_unscaled(v, x)
         return df[self._unfixed_idx] @ self._Z
 
-    @property
-    def constants(self):
-        """list: constant parameters for each sub-objective."""
-        return self._objective.constants
-
-    @property
-    def target_scaled(self):
-        """ndarray: target vector."""
-        return self._objective.target_scaled
-
-    @property
-    def bounds_scaled(self):
-        """tuple: lower and upper bounds for residual vector."""
-        return self._objective.bounds_scaled
-
-    @property
-    def weights(self):
-        """ndarray: weight vector."""
-        return self._objective.weights
-
-    @property
-    def things(self):
-        """list: Optimizeable things that this objective is tied to."""
-        return self._objective.things
+    def __getattr__(self, name):
+        """For other attributes we defer to the base objective."""
+        return getattr(self._objective, name)
 
 
 class ProximalProjection(ObjectiveFunction):
@@ -848,22 +826,6 @@ class ProximalProjection(ObjectiveFunction):
         """list: constant parameters for each sub-objective."""
         return [self._objective.constants, self._constraint.constants]
 
-    @property
-    def target_scaled(self):
-        """ndarray: target vector."""
-        return self._objective.target_scaled
-
-    @property
-    def bounds_scaled(self):
-        """tuple: lower and upper bounds for residual vector."""
-        return self._objective.bounds_scaled
-
-    @property
-    def weights(self):
-        """ndarray: weight vector."""
-        return self._objective.weights
-
-    @property
-    def things(self):
-        """list: Optimizeable things that this objective is tied to."""
-        return self._objective.things
+    def __getattr__(self, name):
+        """For other attributes we defer to the base objective."""
+        return getattr(self._objective, name)

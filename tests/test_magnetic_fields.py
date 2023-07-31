@@ -161,7 +161,7 @@ class TestMagneticFields:
         np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-14)
 
     @pytest.mark.unit
-    def test_Bnormal_save_and_load_HLEIOTRON(self, tmpdir_factory):
+    def test_Bnormal_save_and_load_HELIOTRON(self, tmpdir_factory):
         """Tests Bnormal save/load for simple toroidal field with HELIOTRON."""
         ### test on simple field with stellarator
         tmpdir = tmpdir_factory.mktemp("BNORM_files")

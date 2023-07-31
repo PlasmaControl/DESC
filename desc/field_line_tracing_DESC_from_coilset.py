@@ -25,7 +25,6 @@ from desc.magnetic_fields import (
     field_line_integrate,
 )
 from desc.plotting import plot_1d, plot_2d, plot_comparison, plot_surfaces
-from utils import get_coilset_from_MAKEGRID_or_regcoil
 
 ################## Inputs ################
 # coil .txt file in MAKEGRID format
@@ -36,7 +35,6 @@ from utils import get_coilset_from_MAKEGRID_or_regcoil
 
 
 # Field line tracing
-
 
 
 # first arg : coil file

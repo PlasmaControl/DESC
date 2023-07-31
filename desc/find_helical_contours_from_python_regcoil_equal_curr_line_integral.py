@@ -15,7 +15,6 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
-from utils import get_coilset_from_MAKEGRID_or_regcoil
 
 # make this a fxn that takes in the phi_MN and does the usual thing
 # does theta convention matter for this?

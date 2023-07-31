@@ -1328,7 +1328,7 @@ class XYZCurve(Curve):
         knots=None,
         period=None,
         grid=None,
-        method="cubic2",
+        method="cubic",
         name="",
     ):
         super().__init__(name)

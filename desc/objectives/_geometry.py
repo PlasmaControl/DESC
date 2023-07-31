@@ -1085,7 +1085,7 @@ class B_dmin(_Objective):
 
     _scalar = False
     _linear = False
-    _units = "(T*m)"
+    _units = "(T^2 * m^2)"
     _print_value_fmt = "|B|*d_min: {:10.3e} "
 
     def __init__(
@@ -1180,7 +1180,7 @@ class B_dmin(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] * scales["a"]
+            self._normalization = (scales["B"] * scales["a"]) ** 2
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

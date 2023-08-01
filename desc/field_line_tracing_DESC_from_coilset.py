@@ -2,7 +2,7 @@
 
 from desc import set_device
 
-set_device("gpu")
+# set_device("gpu")
 import os
 
 # %matplotlib inline
@@ -47,8 +47,9 @@ def field_trace_from_coilset(coils, eqname, ntransit=100, dirname=None):
     r = 36.5 / 1000
 
     if isinstance(coils, str):
-        coils = CoilSet.from_makegrid_coilfile(coils)
         dirname = f"{coils.strip('.txt')}"
+        coils = CoilSet.from_makegrid_coilfile(coils)
+        
     else:
         assert isinstance(coils, Coil)
         dirname = dirname if dirname else eqname

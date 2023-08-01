@@ -3,7 +3,7 @@ from scipy.io import netcdf_file
 
 from desc import set_device
 
-set_device("gpu")
+# set_device("gpu")
 import copy
 import os
 import sys

@@ -980,10 +980,12 @@ def plot_fsa(
 
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
 
-    if "<" + name + ">" in data_index:
+    if "<" + name + ">" in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
         # If we identify the quantity to plot as something in data_index, then
         # we may be able to compute more involved magnetic axis limits.
-        deps = data_index["<" + name + ">"]["dependencies"]["data"]
+        deps = data_index["desc.equilibrium.equilibrium.Equilibrium"]["<" + name + ">"][
+            "dependencies"
+        ]["data"]
         if with_sqrt_g == ("sqrt(g)" in deps or "V_r(r)" in deps):
             # When we denote a quantity as ``<name>`` in data_index, we have
             # marked it a surface average of ``name``. This does not specify

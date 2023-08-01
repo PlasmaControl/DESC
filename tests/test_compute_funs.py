@@ -1157,3 +1157,112 @@ def test_compute_averages():
     grid = LinearGrid(rho=[0.3], theta=[np.pi / 3], zeta=[0])
     out = eq.compute("A", grid=grid)
     np.testing.assert_allclose(out["A"], np.pi)
+
+
+@pytest.mark.unit
+def test_covariant_basis_vectors(DummyStellarator):
+    """Test calculation of covariant basis vectors by comparing to finite diff of x."""
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
+    keys = [
+        "e_rho",
+        "e_rho_r",
+        "e_rho_rr",
+        "e_rho_rrr",
+        "e_rho_rrt",
+        "e_rho_rrz",
+        "e_rho_rt",
+        "e_rho_rtt",
+        "e_rho_rtz",
+        "e_rho_rz",
+        "e_rho_rzz",
+        "e_rho_t",
+        "e_rho_tt",
+        "e_rho_tz",
+        "e_rho_z",
+        "e_rho_zz",
+        "e_theta",
+        "e_theta_r",
+        "e_theta_rr",
+        "e_theta_rrr",
+        "e_theta_rrt",
+        "e_theta_rrz",
+        "e_theta_rt",
+        "e_theta_rtt",
+        "e_theta_rtz",
+        "e_theta_rz",
+        "e_theta_rzz",
+        "e_theta_t",
+        "e_theta_tt",
+        "e_theta_tz",
+        "e_theta_z",
+        "e_theta_zz",
+        "e_zeta",
+        "e_zeta_r",
+        "e_zeta_rr",
+        "e_zeta_rrr",
+        "e_zeta_rrt",
+        "e_zeta_rrz",
+        "e_zeta_rt",
+        "e_zeta_rtt",
+        "e_zeta_rtz",
+        "e_zeta_rz",
+        "e_zeta_rzz",
+        "e_zeta_t",
+        "e_zeta_tt",
+        "e_zeta_tz",
+        "e_zeta_z",
+        "e_zeta_zz",
+    ]
+    grids = {
+        "r": LinearGrid(1000, 0, 0, NFP=eq.NFP),
+        "t": LinearGrid(0, 1000, 0, NFP=eq.NFP),
+        "z": LinearGrid(0, 0, 1000, NFP=eq.NFP),
+    }
+
+    for key in keys:
+        print(key)
+        split = key.split("_")
+        # higher order finite differences are unstable, so we only ever do 1 order
+        # eg compare e_rho vs fd of x, e_rho_t vs fd of e_rho etc.
+        if len(split) == 2:  # stuff like e_rho, e_theta
+            base = ["X", "Y", "Z"]
+            deriv = split[-1][0]
+        else:
+            deriv = split[-1]
+            if len(deriv) == 1:  # first derivative of basis vector
+                base = [split[0] + "_" + split[1]]
+            else:
+                base = [split[0] + "_" + split[1] + "_" + deriv[:-1]]
+                deriv = deriv[-1]
+
+        grid = grids[deriv]
+        data = eq.compute([key] + base + ["phi"], grid=grid)
+        data[key] = rpz2xyz_vec(data[key], phi=data["phi"]).reshape(
+            (grid.num_theta, grid.num_rho, grid.num_zeta, -1), order="F"
+        )
+        if base == ["X", "Y", "Z"]:
+            base = np.array([data["X"], data["Y"], data["Z"]]).T.reshape(
+                (grid.num_theta, grid.num_rho, grid.num_zeta, -1), order="F"
+            )
+
+        else:
+            base = rpz2xyz_vec(data[base[0]], phi=data["phi"]).reshape(
+                (grid.num_theta, grid.num_rho, grid.num_zeta, -1), order="F"
+            )
+
+        spacing = {
+            "r": grid.spacing[0, 0],
+            "t": grid.spacing[0, 1],
+            "z": grid.spacing[0, 2] / grid.NFP,
+        }
+
+        dx = np.apply_along_axis(my_convolve, 0, base, FD_COEF_1_4) / spacing[deriv]
+        np.testing.assert_allclose(
+            data[key][4:-4],
+            dx[4:-4],
+            rtol=1e-6,
+            atol=1e-6,
+            err_msg=key,
+        )

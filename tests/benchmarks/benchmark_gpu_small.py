@@ -119,6 +119,7 @@ def test_objective_compile_heliotron(benchmark):
     def setup():
         eq = desc.examples.get("HELIOTRON")
         objective = get_equilibrium_objective(eq)
+        objective.build()
         args = (
             objective,
             eq,
@@ -141,6 +142,7 @@ def test_objective_compile_dshape_current(benchmark):
     def setup():
         eq = desc.examples.get("DSHAPE_current")
         objective = get_equilibrium_objective(eq)
+        objective.build()
         args = (
             objective,
             eq,
@@ -163,6 +165,7 @@ def test_objective_compile_atf(benchmark):
     def setup():
         eq = desc.examples.get("ATF")
         objective = get_equilibrium_objective(eq)
+        objective.build()
         args = (
             objective,
             eq,
@@ -183,6 +186,7 @@ def test_objective_compute_heliotron(benchmark):
     """Benchmark computing objective."""
     eq = desc.examples.get("HELIOTRON")
     objective = get_equilibrium_objective(eq)
+    objective.build()
     objective.compile()
     x = objective.x(eq)
 
@@ -199,6 +203,7 @@ def test_objective_compute_dshape_current(benchmark):
     """Benchmark computing objective."""
     eq = desc.examples.get("DSHAPE_current")
     objective = get_equilibrium_objective(eq)
+    objective.build()
     objective.compile()
     x = objective.x(eq)
 
@@ -215,6 +220,7 @@ def test_objective_compute_atf(benchmark):
     """Benchmark computing objective."""
     eq = desc.examples.get("ATF")
     objective = get_equilibrium_objective(eq)
+    objective.build()
     objective.compile()
     x = objective.x(eq)
 
@@ -231,6 +237,7 @@ def test_objective_jac_heliotron(benchmark):
     """Benchmark computing jacobian."""
     eq = desc.examples.get("HELIOTRON")
     objective = get_equilibrium_objective(eq)
+    objective.build()
     objective.compile()
     x = objective.x(eq)
 
@@ -247,6 +254,7 @@ def test_objective_jac_dshape_current(benchmark):
     """Benchmark computing jacobian."""
     eq = desc.examples.get("DSHAPE_current")
     objective = get_equilibrium_objective(eq)
+    objective.build()
     objective.compile()
     x = objective.x(eq)
 
@@ -263,6 +271,7 @@ def test_objective_jac_atf(benchmark):
     """Benchmark computing jacobian."""
     eq = desc.examples.get("ATF")
     objective = get_equilibrium_objective(eq)
+    objective.build()
     objective.compile()
     x = objective.x(eq)
 
@@ -281,6 +290,7 @@ def test_perturb_1(benchmark):
     def setup():
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
+        objective.build()
         constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
@@ -313,6 +323,7 @@ def test_perturb_2(benchmark):
     def setup():
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
+        objective.build()
         constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)

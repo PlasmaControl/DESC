@@ -1020,7 +1020,14 @@ def plot_fsa(
                 name[:-3] + "_r" + name[-3:],
                 name[:-3] + "r" + name[-3:],
             )
-            values_r = next((get_value(x) for x in schemes if x in data_index), np.nan)
+            values_r = next(
+                (
+                    get_value(x)
+                    for x in schemes
+                    if x in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+                ),
+                np.nan,
+            )
             if (np.isfinite(values) & np.isfinite(values_r))[grid.axis].all():
                 # Otherwise cannot compute axis limit in this agnostic manner.
                 sqrt_g = grid.replace_at_axis(sqrt_g, get_value("sqrt(g)_r"), copy=True)
@@ -1037,7 +1044,10 @@ def plot_fsa(
         # integration replaced nans with 0, put them back
         values = np.where(is_nan, np.nan, values)
         plot_data_ylabel_key = f"<{name}>_fsa"
-    if data_index[name]["coordinates"] != "":
+    if (
+        data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+        != ""
+    ):
         values = grid.compress(values)
 
     if norm_F:

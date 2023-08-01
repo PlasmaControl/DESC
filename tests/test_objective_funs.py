@@ -283,7 +283,7 @@ class TestObjectiveFunction:
             obj = QuasisymmetryTripleProduct(eq=eq)
             obj.build()
             ft = obj.compute_unscaled(*obj.xs(eq))
-            np.testing.assert_allclose(ft, 0)
+            np.testing.assert_allclose(ft, 0, atol=5e-35)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))

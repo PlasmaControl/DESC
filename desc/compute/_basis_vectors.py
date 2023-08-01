@@ -2919,9 +2919,10 @@ def _e_sub_zeta_rtt(params, transforms, profiles, data, **kwargs):
             + 2 * data["omega_t"] * data["R_rtz"]
             + 2 * data["R_rt"] * data["omega_tz"]
             + 2 * data["R_t"] * data["omega_rtz"]
-            + data["R_rtt"]
             + data["omega_rz"] * data["R_tt"]
             + (1 + data["omega_z"]) * data["R_rtt"]
+            + data["R_rz"] * data["omega_tt"]
+            + data["R_z"] * data["omega_rtt"]
             - data["R_r"]
             * ((1 + data["omega_z"]) * data["omega_t"] ** 2 - data["omega_ttz"])
             - data["R"]

@@ -157,7 +157,7 @@ def assert_is_continuous(
     names = [x for x in names if not ("Boozer" in x or "_mn" in x or x == "B modes")]
 
     num_points = 15
-    rho = np.linspace(start=0, stop=1, num=15) * delta
+    rho = np.linspace(start=0, stop=1, num=num_points) * delta
     grid = LinearGrid(rho=rho, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
     assert grid.axis.size
     integrate = surface_integrals_map(grid)

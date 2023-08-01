@@ -12,6 +12,8 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 
+data_index = data_index["desc.equilibrium.equilibrium.Equilibrium"]
+
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
 # functions tend toward zero as the magnetic axis is approached and that

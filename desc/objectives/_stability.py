@@ -105,15 +105,19 @@ class MercierStability(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["D_Mercier"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -167,6 +171,7 @@ class MercierStability(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -302,15 +307,19 @@ class MagneticWell(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["magnetic well"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -360,6 +369,7 @@ class MagneticWell(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

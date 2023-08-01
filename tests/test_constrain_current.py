@@ -16,14 +16,18 @@ class _ExactValueProfile:
     def __init__(self, eq, grid, profile_name):
         names = []
         dr = 0
-        while profile_name + "_" * bool(dr) + "r" * dr in data_index:
+        while (
+            profile_name + "_" * bool(dr) + "r" * dr
+            in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+        ):
             names += [profile_name + "_" * bool(dr) + "r" * dr]
             dr += 1
         data = compute_fun(
+            parameterization="desc.equilibrium.equilibrium.Equilibrium",
             names=names,
-            params=get_params(keys=names, eq=eq, has_axis=grid.axis.size),
-            transforms=get_transforms(keys=names, eq=eq, grid=grid),
-            profiles=get_profiles(keys=names, eq=eq, grid=grid),
+            params=get_params(keys=names, obj=eq, has_axis=grid.axis.size),
+            transforms=get_transforms(keys=names, obj=eq, grid=grid),
+            profiles=get_profiles(keys=names, obj=eq, grid=grid),
         )
         self.output = {dr: data[name] for dr, name in enumerate(names)}
 
@@ -58,7 +62,7 @@ class TestConstrainCurrent:
         incorrect.
         """
         names = ["iota", "iota_r"]
-        while names[-1] + "r" in data_index:
+        while names[-1] + "r" in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
             names += [names[-1] + "r"]
 
         def test(stellarator, grid_type):
@@ -70,9 +74,9 @@ class TestConstrainCurrent:
                 kwargs["axis"] = True
             grid = grid_type(**kwargs)
 
-            params = get_params(keys=names, eq=eq, has_axis=grid.axis.size)
-            transforms = get_transforms(keys=names, eq=eq, grid=grid)
-            profiles = get_profiles(keys=names, eq=eq, grid=grid)
+            params = get_params(keys=names, obj=eq, has_axis=grid.axis.size)
+            transforms = get_transforms(keys=names, obj=eq, grid=grid)
+            profiles = get_profiles(keys=names, obj=eq, grid=grid)
             # Compute rotational transform directly from the power series which
             # defines it.
             desired = {
@@ -85,6 +89,7 @@ class TestConstrainCurrent:
                 eq=eq, grid=grid, profile_name="current"
             )
             actual = compute_fun(
+                parameterization="desc.equilibrium.equilibrium.Equilibrium",
                 names=names,
                 params=dict(params, c_l=None, i_l=None),
                 transforms=transforms,
@@ -139,7 +144,7 @@ class TestConstrainCurrent:
         iota are incorrect.
         """
         names = ["current", "current_r"]
-        while names[-1] + "r" in data_index:
+        while names[-1] + "r" in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
             names += [names[-1] + "r"]
 
         def test(stellarator, grid_type):
@@ -151,9 +156,9 @@ class TestConstrainCurrent:
                 kwargs["axis"] = True
             grid = grid_type(**kwargs)
 
-            params = get_params(keys=names, eq=eq, has_axis=grid.axis.size)
-            transforms = get_transforms(keys=names, eq=eq, grid=grid)
-            profiles = get_profiles(keys=names, eq=eq, grid=grid)
+            params = get_params(keys=names, obj=eq, has_axis=grid.axis.size)
+            transforms = get_transforms(keys=names, obj=eq, grid=grid)
+            profiles = get_profiles(keys=names, obj=eq, grid=grid)
             # Compute toroidal current directly from the power series which
             # defines it. Recall that vacuum objective sets a current profile.
             desired = {
@@ -166,6 +171,7 @@ class TestConstrainCurrent:
                 eq=eq, grid=grid, profile_name="iota"
             )
             actual = compute_fun(
+                parameterization="desc.equilibrium.equilibrium.Equilibrium",
                 names=names,
                 params=dict(params, c_l=None, i_l=None),
                 transforms=transforms,

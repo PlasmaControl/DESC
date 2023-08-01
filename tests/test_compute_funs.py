@@ -1130,7 +1130,7 @@ def test_compute_anything():
     """Make sure we can compute anything without errors."""
     eq = Equilibrium(1, 1, 1)
     grid = LinearGrid(1, 1, 1)
-    for key in data_index:
+    for key in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
         data = eq.compute(key, grid=grid)
         assert key in data
 

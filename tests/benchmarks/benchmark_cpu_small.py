@@ -166,10 +166,7 @@ def test_objective_compile_atf(benchmark):
         eq = desc.examples.get("ATF")
         objective = get_equilibrium_objective()
         objective.build(eq)
-        args = (
-            objective,
-            eq,
-        )
+        args = (objective, eq)
         kwargs = {}
         return args, kwargs
 

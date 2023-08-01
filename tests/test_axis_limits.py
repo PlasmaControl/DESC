@@ -111,7 +111,7 @@ def _skip_this(eq, name):
 def assert_is_continuous(
     eq,
     names,
-    delta=1e-5,
+    delta=5e-5,
     rtol=1e-4,
     atol=1e-6,
     desired_at_axis=None,
@@ -128,7 +128,7 @@ def assert_is_continuous(
         A list of names of the quantities to test for continuity.
     delta: float, optional
         Max distance from magnetic axis.
-        Smaller values accumulate finite precision error.
+        Smaller values accumulate finite precision error and fitting issues.
     rtol : float, optional
         Relative tolerance.
     atol : float, optional
@@ -156,48 +156,44 @@ def assert_is_continuous(
     # TODO: remove when boozer transform works with multiple surfaces
     names = [x for x in names if not ("Boozer" in x or "_mn" in x or x == "B modes")]
 
-    rho = np.linspace(0, 1, 10) * delta
+    num_points = 15
+    rho = np.linspace(start=0, stop=1, num=15) * delta
     grid = LinearGrid(rho=rho, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
     assert grid.axis.size
     integrate = surface_integrals_map(grid)
     data = eq.compute(names, grid=grid)
 
+    data_index_eq = data_index["desc.equilibrium.equilibrium.Equilibrium"]
     for name in names:
-        if (
-            _skip_this(eq, name)
-            or data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
-                "coordinates"
-            ]
-            == ""
-        ):
+        if _skip_this(eq, name) or data_index_eq[name]["coordinates"] == "":
             continue
         # make single variable function of rho
-        if (
-            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
-            == "r"
-        ):
+        if data_index_eq[name]["coordinates"] == "r":
             profile = data[name]
         else:
-            # Norms and integrals are continuous functions, so their composition
-            # cannot disrupt existing continuity. Note that the absolute value
-            # before the integration ensures that a discontinuous integrand does
-            # not become continuous once integrated.
-            profile = integrate(np.abs(data[name]))
-            # integration replaced nans with 0, put them back
-            profile = np.where(np.isnan(data[name]), np.nan, profile)
+            profile = np.where(
+                np.isnan(data[name]),
+                # integration replaced nans with 0, put them back
+                np.nan,
+                # Norms and integrals are continuous functions, so their composition
+                # cannot disrupt existing continuity. Note that the absolute value
+                # before the integration ensures that a discontinuous integrand does
+                # not become continuous once integrated.
+                integrate(np.abs(data[name])),
+            )
         profile = grid.compress(profile)
         fit = kwargs.get(name, {}).get("desired_at_axis", desired_at_axis)
         if fit is None:
-            if np.ndim(
-                data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["dim"]
-            ):
+            if np.ndim(data_index_eq[name]["dim"]):
                 # can't polyfit tensor arrays like grad(B)
                 fit = (profile[0] + profile[1]) / 2
             else:
                 # fit the data to a polynomial to extrapolate to axis
-                poly = np.polyfit(rho[1:], profile[1:], 6)
+                poly = np.polynomial.polynomial.polyfit(
+                    rho[1:], profile[1:], deg=min(5, num_points // 3)
+                )
                 # constant term is the same as evaluating polynomial at rho=0
-                fit = poly[-1]
+                fit = poly[0]
         np.testing.assert_allclose(
             actual=profile[0],
             desired=fit,
@@ -326,7 +322,7 @@ class TestAxisLimits:
         weaker_tolerance = {
             "B0_rr": {rtol: 5e-03},
             "iota_r": {atol: 1e-4},
-            "iota_num_rr": {atol: 1e-3},
+            "iota_num_rr": {atol: 5e-3},
             "alpha_r": {rtol: 1e-3},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})

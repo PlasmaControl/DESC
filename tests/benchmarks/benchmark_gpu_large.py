@@ -252,7 +252,7 @@ def test_perturb_1(SOLOVEV, benchmark):
     def setup():
         eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
         objective = get_equilibrium_objective(eq)
-        objective.build()
+        objective.build(eq)
 
         constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]
@@ -286,7 +286,7 @@ def test_perturb_2(SOLOVEV, benchmark):
     def setup():
         eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
         objective = get_equilibrium_objective(eq)
-        objective.build()
+        objective.build(eq)
 
         constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]

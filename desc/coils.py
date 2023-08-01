@@ -486,7 +486,7 @@ class CoilSet(Coil, MutableSequence):
         return cls(*coilset)
 
     @classmethod
-    def from_makegrid_coilfile(cls, coil_file, method="cubic2", grid=None):
+    def from_makegrid_coilfile(cls, coil_file, method="cubic", grid=None):
         """Create a CoilSet of XYZCoils from a MAKEGRID-formatted coil txtfile.
 
         Parameters
@@ -505,13 +505,25 @@ class CoilSet(Coil, MutableSequence):
         """
         coils = []  # list of XYZCoils
         coilinds = []
+        names = []
 
         # read in the coils file
         with open(coil_file) as f:
             lines = f.readlines()
             for i, line in enumerate(lines):
-                if line.find("Modular") != -1:
+                if (
+                    line.find("periods") != -1
+                    or line.find("begin filament") != -1
+                    or line.find("end") != -1
+                ):
+                    continue  # skip headers and last line
+                if (
+                    len(line.split()) != 4
+                    and line.find("mirror") == -1
+                    and line.strip()  # ensure not counting blank lines
+                ):
                     coilinds.append(i)
+                    names.append(" ".join(line.split()[4:]))
                 if line.find("mirror") != -1:
                     coilinds.append(i)
         for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
@@ -524,7 +536,15 @@ class CoilSet(Coil, MutableSequence):
             tempz = np.append(coords[:, 2], np.array([coords[0, 2]]))
 
             coils.append(
-                XYZCoil(coords[:, -1][0], tempx, tempy, tempz, grid=grid, method=method)
+                XYZCoil(
+                    coords[:, -1][0],
+                    tempx,
+                    tempy,
+                    tempz,
+                    grid=grid,
+                    method=method,
+                    name=names[i],
+                )
             )
 
         return CoilSet(*coils)
@@ -615,10 +635,11 @@ class CoilSet(Coil, MutableSequence):
         with open(coilsFilename) as f:
             lines = f.readlines()
         for i in range(len(coil_end_inds)):
+            name = self.coils[i].name if self.coils[i].name != "" else "1 Modular"
             real_end_ind = int(
                 np.sum(coil_end_inds[0 : i + 1]) + 2
             )  # to account for the 3 header lines
-            lines[real_end_ind] = lines[real_end_ind].strip("\n") + " 1 Modular\n"
+            lines[real_end_ind] = lines[real_end_ind].strip("\n") + f" {name}\n"
         with open(coilsFilename, "w") as f:
             f.writelines(lines)
 

@@ -273,7 +273,9 @@ def test_plot_fsa_axis_limit():
     assert grid.axis.size
 
     name = "J*B"
-    assert "<" + name + ">" in data_index, "Test with a different quantity."
+    assert (
+        "<" + name + ">" in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
     # should forward computation to compute function
     _, _, plot_data = plot_fsa(
         eq=eq,
@@ -290,7 +292,9 @@ def test_plot_fsa_axis_limit():
     np.testing.assert_allclose(plot_data["<" + name + ">"], desired, equal_nan=False)
 
     name = "B0"
-    assert "<" + name + ">" not in data_index, "Test with a different quantity."
+    assert (
+        "<" + name + ">" not in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
     # should automatically compute axis limit
     _, _, plot_data = plot_fsa(
         eq=eq,
@@ -313,7 +317,9 @@ def test_plot_fsa_axis_limit():
     )
 
     name = "|B|"
-    assert "<" + name + ">" in data_index, "Test with a different quantity."
+    assert (
+        "<" + name + ">" in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
     _, _, plot_data = plot_fsa(
         eq=eq,
         name=name,

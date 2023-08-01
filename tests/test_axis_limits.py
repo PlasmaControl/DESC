@@ -12,8 +12,6 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 
-data_index = data_index["desc.equilibrium.equilibrium.Equilibrium"]
-
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
 # functions tend toward zero as the magnetic axis is approached and that
@@ -28,6 +26,14 @@ not_finite_limits = {
     "D_shear",  # may not exist for all configurations
     "D_well",
     "J^theta",
+    "curvature_H_rho",
+    "curvature_H_zeta",
+    "curvature_K_rho",
+    "curvature_K_zeta",
+    "curvature_k1_rho",
+    "curvature_k1_zeta",
+    "curvature_k2_rho",
+    "curvature_k2_zeta",
     "e^helical",
     "e^theta",
     "e^theta_r",
@@ -76,14 +82,17 @@ def grow_seeds(seeds, search_space):
     """
     out = seeds.copy()
     for key in search_space:
-        deps = data_index[key]["full_with_axis_dependencies"]["data"]
+        deps = data_index["desc.equilibrium.equilibrium.Equilibrium"][key][
+            "full_with_axis_dependencies"
+        ]["data"]
         if not seeds.isdisjoint(deps):
             out.add(key)
     return out
 
 
 not_implemented_limits = grow_seeds(
-    not_implemented_limits, data_index.keys() - not_finite_limits
+    not_implemented_limits,
+    data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
 )
 
 
@@ -154,10 +163,19 @@ def assert_is_continuous(
     data = eq.compute(names, grid=grid)
 
     for name in names:
-        if _skip_this(eq, name) or data_index[name]["coordinates"] == "":
+        if (
+            _skip_this(eq, name)
+            or data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                "coordinates"
+            ]
+            == ""
+        ):
             continue
         # make single variable function of rho
-        if data_index[name]["coordinates"] == "r":
+        if (
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+            == "r"
+        ):
             profile = data[name]
         else:
             # Norms and integrals are continuous functions, so their composition
@@ -170,7 +188,9 @@ def assert_is_continuous(
         profile = grid.compress(profile)
         fit = kwargs.get(name, {}).get("desired_at_axis", desired_at_axis)
         if fit is None:
-            if np.ndim(data_index[name]["dim"]):
+            if np.ndim(
+                data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["dim"]
+            ):
                 # can't polyfit tensor arrays like grad(B)
                 fit = (profile[0] + profile[1]) / 2
             else:
@@ -226,22 +246,23 @@ class TestAxisLimits:
                     for key in keys:
                         queried_deps[key] = deps
 
-        for key, val in data_index.items():
-            deps = val["dependencies"]
-            data = set(deps["data"])
-            axis_limit_data = set(deps["axis_limit_data"])
-            profiles = set(deps["profiles"])
-            params = set(deps["params"])
-            # assert no duplicate dependencies
-            assert len(data) == len(deps["data"]), key
-            assert len(axis_limit_data) == len(deps["axis_limit_data"]), key
-            assert data.isdisjoint(axis_limit_data), key
-            assert len(profiles) == len(deps["profiles"]), key
-            assert len(params) == len(deps["params"]), key
-            # assert correct dependencies are queried
-            assert queried_deps[key]["data"] == data | axis_limit_data, key
-            assert queried_deps[key]["profiles"] == profiles, key
-            assert queried_deps[key]["params"] == params, key
+        for parameterization in data_index:
+            for key, val in data_index[parameterization].items():
+                deps = val["dependencies"]
+                data = set(deps["data"])
+                axis_limit_data = set(deps["axis_limit_data"])
+                profiles = set(deps["profiles"])
+                params = set(deps["params"])
+                # assert no duplicate dependencies
+                assert len(data) == len(deps["data"]), key
+                assert len(axis_limit_data) == len(deps["axis_limit_data"]), key
+                assert data.isdisjoint(axis_limit_data), key
+                assert len(profiles) == len(deps["profiles"]), key
+                assert len(params) == len(deps["params"]), key
+                # assert correct dependencies are queried
+                assert queried_deps[key]["data"] == data | axis_limit_data, key
+                assert queried_deps[key]["profiles"] == profiles, key
+                assert queried_deps[key]["params"] == params, key
 
     @pytest.mark.unit
     def test_axis_limit_api(self):
@@ -268,8 +289,11 @@ class TestAxisLimits:
             grid = LinearGrid(L=1, M=1, N=1, sym=eq.sym, NFP=eq.NFP, axis=True)
             at_axis = grid.nodes[:, 0] == 0
             assert at_axis.any() and not at_axis.all()
-            data = eq.compute(list(data_index.keys()), grid=grid)
-            for key in data_index:
+            data = eq.compute(
+                list(data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()),
+                grid=grid,
+            )
+            for key in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
                 if _skip_this(eq, key):
                     continue
                 is_finite = np.isfinite(data[key])
@@ -287,8 +311,11 @@ class TestAxisLimits:
         # It is possible for a discontinuity to propagate across dependencies,
         # so this test does not make sense for keys that rely on discontinuous
         # keys as dependencies.
-        finite_discontinuous = {"curvature_k1", "curvature_k2"}
-        continuous = data_index.keys() - not_finite_limits
+        finite_discontinuous = set()
+        continuous = (
+            data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()
+            - not_finite_limits
+        )
         continuous -= grow_seeds(finite_discontinuous, continuous)
 
         # The need for a weaker tolerance on these keys may be due to large

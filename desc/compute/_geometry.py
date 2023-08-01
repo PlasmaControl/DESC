@@ -389,19 +389,10 @@ def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    # Both roots are of the indeterminate form 0/0, but computing their
-    # limits to find the curvature at the magnetic axis is invalid because
-    # the principle curvatures are the eigenvalues of a matrix that is
-    # singular (with rank 0) at the magnetic axis. Hence, the limit of the
-    # indeterminate ratio may be an extraneous solution.
-    # To compute the curvature in this limit, notice that the second fundamental
-    # form becomes the zero map.
-    data["curvature_k1_rho"] = transforms["grid"].replace_at_axis(
-        jnp.maximum(r1, r2), 0
-    )
-    data["curvature_k2_rho"] = transforms["grid"].replace_at_axis(
-        jnp.minimum(r1, r2), 0
-    )
+    # In the axis limit, the matrix of the first fundamental form is singular,
+    # so the eigenvalues of the shape operator do not exist.
+    data["curvature_k1_rho"] = jnp.maximum(r1, r2)
+    data["curvature_k2_rho"] = jnp.minimum(r1, r2)
     return data
 
 
@@ -432,19 +423,10 @@ def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    # Both roots are of the indeterminate form 0/0, but computing their
-    # limits to find the curvature at the magnetic axis is invalid because
-    # the principle curvatures are the eigenvalues of a matrix that is
-    # singular (with rank 0) at the magnetic axis. Hence, the limit of the
-    # indeterminate ratio may be an extraneous solution.
-    # To compute the curvature in this limit, notice that the second fundamental
-    # form becomes the zero map.
-    data["curvature_k1_rho"] = transforms["grid"].replace_at_axis(
-        jnp.maximum(r1, r2), 0
-    )
-    data["curvature_k2_rho"] = transforms["grid"].replace_at_axis(
-        jnp.minimum(r1, r2), 0
-    )
+    # In the axis limit, the matrix of the first fundamental form is singular,
+    # so the eigenvalues of the shape operator do not exist.
+    data["curvature_k1_rho"] = jnp.maximum(r1, r2)
+    data["curvature_k2_rho"] = jnp.minimum(r1, r2)
     return data
 
 
@@ -741,6 +723,8 @@ def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    # In the axis limit, the matrix of the first fundamental form is singular,
+    # so the eigenvalues of the shape operator do not exist.
     data["curvature_k1_zeta"] = jnp.maximum(r1, r2)
     data["curvature_k2_zeta"] = jnp.minimum(r1, r2)
     return data
@@ -773,6 +757,8 @@ def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    # In the axis limit, the matrix of the first fundamental form is singular,
+    # so the eigenvalues of the shape operator do not exist.
     data["curvature_k1_zeta"] = jnp.maximum(r1, r2)
     data["curvature_k2_zeta"] = jnp.minimum(r1, r2)
     return data

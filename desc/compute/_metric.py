@@ -177,6 +177,71 @@ def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="|e_rho x e_theta|_r",
+    label="\\partial_{\\rho} |e_{\\rho} \\times e_{\\theta}|",
+    units="m^{2}",
+    units_long="square meters",
+    description="2D Jacobian determinant for constant zeta surface"
+    " derivative wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_theta", "e_rho_r", "e_theta_r"],
+)
+def _e_rho_x_e_theta_r(params, transforms, profiles, data, **kwargs):
+    a = cross(data["e_rho"], data["e_theta"])
+    a_r = cross(data["e_rho_r"], data["e_theta"]) + cross(
+        data["e_rho"], data["e_theta_r"]
+    )
+    # The limit of a sequence and the norm function can be interchanged
+    # because norms are continuous functions. Likewise with dot product.
+    # Then lim |e^zeta| = |lim e^zeta| != 0.
+    # lim (dot(e^zeta, a_r) / |e^zeta|) = dot(lim e^zeta, lim a_r) / lim |e^zeta|
+    # The vectors converge to the same limit.
+    data["|e_rho x e_theta|_r"] = transforms["grid"].replace_at_axis(
+        dot(a, a_r) / jnp.linalg.norm(a, axis=-1), lambda: jnp.linalg.norm(a_r, axis=-1)
+    )
+    return data
+
+
+@register_compute_fun(
+    name="|e_rho x e_theta|_rr",
+    label="\\partial_{\\rho \\rho} |e_{\\rho} \\times e_{\\theta}|",
+    units="m^{2}",
+    units_long="square meters",
+    description="2D Jacobian determinant for constant zeta surface"
+    + " second derivative wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_theta", "e_rho_r", "e_theta_r", "e_rho_rr", "e_theta_rr"],
+)
+def _e_rho_x_e_theta_rr(params, transforms, profiles, data, **kwargs):
+    a = cross(data["e_rho"], data["e_theta"])
+    a_r = cross(data["e_rho_r"], data["e_theta"]) + cross(
+        data["e_rho"], data["e_theta_r"]
+    )
+    a_rr = (
+        cross(data["e_rho_rr"], data["e_theta"])
+        + 2 * cross(data["e_rho_r"], data["e_theta_r"])
+        + cross(data["e_rho"], data["e_theta_rr"])
+    )
+    norm_a = jnp.linalg.norm(a, axis=-1)
+    norm_a_r = jnp.linalg.norm(a_r, axis=-1)
+    # The limit eventually reduces to a form where the technique used to compute
+    # lim |e_rho x e_theta|_r can be applied.
+    data["|e_rho x e_theta|_rr"] = transforms["grid"].replace_at_axis(
+        (norm_a_r**2 + dot(a, a_rr) - (dot(a, a_r) / norm_a) ** 2) / norm_a,
+        lambda: dot(a_r, a_rr) / norm_a_r,
+    )
+    return data
+
+
+@register_compute_fun(
     name="sqrt(g)_r",
     label="\\partial_{\\rho} \\sqrt{g}",
     units="m^{3}",

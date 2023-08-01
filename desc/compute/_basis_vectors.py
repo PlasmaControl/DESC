@@ -3427,12 +3427,16 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta", "|e_theta x e_zeta|"],
+    axis_limit_data=["e_theta_r", "|e_theta x e_zeta|_r"],
 )
 def _n_rho(params, transforms, profiles, data, **kwargs):
     # equal to e^rho / |e^rho| but works correctly for surfaces as well that don't have
     # contravariant basis defined
-    data["n_rho"] = (
-        cross(data["e_theta"], data["e_zeta"]) / data["|e_theta x e_zeta|"][:, None]
+    data["n_rho"] = transforms["grid"].replace_at_axis(
+        (cross(data["e_theta"], data["e_zeta"]).T / data["|e_theta x e_zeta|"]).T,
+        lambda: (
+            cross(data["e_theta_r"], data["e_zeta"]).T / data["|e_theta x e_zeta|_r"]
+        ).T,
     )
     return data
 
@@ -3452,8 +3456,8 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
 )
 def _n_theta(params, transforms, profiles, data, **kwargs):
     data["n_theta"] = (
-        cross(data["e_zeta"], data["e_rho"]) / data["|e_zeta x e_rho|"][:, None]
-    )
+        cross(data["e_zeta"], data["e_rho"]).T / data["|e_zeta x e_rho|"]
+    ).T
     return data
 
 
@@ -3469,9 +3473,13 @@ def _n_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_theta", "|e_rho x e_theta|"],
+    axis_limit_data=["e_theta_r", "|e_rho x e_theta|_r"],
 )
 def _n_zeta(params, transforms, profiles, data, **kwargs):
-    data["n_zeta"] = (
-        cross(data["e_rho"], data["e_theta"]) / data["|e_rho x e_theta|"][:, None]
+    data["n_zeta"] = transforms["grid"].replace_at_axis(
+        (cross(data["e_rho"], data["e_theta"]).T / data["|e_rho x e_theta|"]).T,
+        lambda: (
+            cross(data["e_rho"], data["e_theta_r"]).T / data["|e_rho x e_theta|_r"]
+        ).T,
     )
     return data

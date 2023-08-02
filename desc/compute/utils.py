@@ -24,8 +24,6 @@ arg_order = (
     "ne_l",
     "Ti_l",
     "Zeff_l",
-    "Ra_n",
-    "Za_n",
     "Rb_lmn",
     "Zb_lmn",
 )
@@ -1222,3 +1220,51 @@ def surface_min(grid, x, surface_label="rho"):
     # masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]  # noqa: E501,E800
     # mins = jnp.amin(x[jnp.newaxis, :], axis=1, initial=jnp.inf, where=masks)  # noqa: E501,E800
     return expand(grid, mins, surface_label)
+
+def array_flatten_op(arr1, arr2):
+    """Get a modified version of arr1 where each well (group of nonzero values) is changed to 
+    the value with the index corresponding to the minimum value along arr2 in that well
+
+    Parameters
+    ----------
+    arr1 : array
+        wells to be flattened (grad psi or e theta in gamma_c case)
+    arr1 : array, same length as arr1
+        values to use in flattening (B in gamma_c case)
+
+    Returns
+    -------
+    arr1 : array
+        modified input arr1 with flattened wells corresponding to minimum arr2 values
+    """
+    start = jnp.where(jnp.logical_and(arr1 != 0, jnp.roll(arr1, 1) ==0))[0]
+    end = jnp.where(jnp.logical_and(arr1 != 0, jnp.roll(arr1, -1) ==0))[0]
+    min_indices = seg_argmin_op(arr1,arr2,start,end)
+    for i in range(len(min_indices)):
+        arr1 = arr1.at[start[i]:end[i]+1].set(arr1[min_indices[i]])
+    return arr1
+
+def seg_argmin_op(arr1, arr2, start, end):
+    """Get indice of minimum values in arr2 in each segment of arr1 (group of nonzero values)
+
+    Parameters
+    ----------
+    arr1 : array
+        wells to be flattened (grad psi or e theta in gamma_c case)
+    arr1 : array, same length as arr1
+        values to use in flattening (B in gamma_c case)
+    start: array, # of wells long
+        indice of start of every well
+    end: array, same length as start
+        indice of start of every well
+
+    Returns
+    -------
+    min_indices : array
+        indices of minimum values in arr2 for each arr1 well.
+    """
+    min_indices = jnp.zeros_like(start)
+    for i in range(len(start)):
+        ind_inwell = jnp.argmin(arr2[start[i]:end[i]+1])
+        min_indices = min_indices.at[i].set(start[i] + ind_inwell)
+    return min_indices

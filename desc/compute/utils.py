@@ -1,6 +1,7 @@
 """Functions for flux surface averages and vector algebra operations."""
 
 import copy
+import inspect
 import warnings
 
 import numpy as np
@@ -41,15 +42,27 @@ profile_names = {
 }
 
 
+def _parse_parameterization(p):
+    if isinstance(p, str):
+        return p
+    klass = p.__class__
+    module = klass.__module__
+    if module == "builtins":
+        return klass.__qualname__  # avoid outputs like 'builtins.str'
+    return module + "." + klass.__qualname__
+
+
 def _sort_args(args):
     return [arg for arg in arg_order if arg in args]
 
 
-def compute(names, params, transforms, profiles, data=None, **kwargs):
+def compute(parameterization, names, params, transforms, profiles, data=None, **kwargs):
     """Compute the quantity given by name on grid.
 
     Parameters
     ----------
+    parameterization : str, class, or instance
+        Type of object to compute for, eg Equilibrium, Curve, etc.
     names : str or array-like of str
         Name(s) of the quantity(s) to compute.
     params : dict of ndarray
@@ -69,27 +82,31 @@ def compute(names, params, transforms, profiles, data=None, **kwargs):
         Computed quantity and intermediate variables.
 
     """
+    p = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]
     for name in names:
-        if name not in data_index:
-            raise ValueError("Unrecognized value '{}'.".format(name))
+        if name not in data_index[p]:
+            raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
     allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma"}
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
 
     for name in names:
-        assert _has_params(name, params), f"Don't have params to compute {name}"
-        assert _has_profiles(name, profiles), f"Don't have profiles to compute {name}"
+        assert _has_params(name, params, p), f"Don't have params to compute {name}"
+        assert _has_profiles(
+            name, profiles, p
+        ), f"Don't have profiles to compute {name}"
         assert _has_transforms(
-            name, transforms
+            name, transforms, p
         ), f"Don't have transforms to compute {name}"
 
     if data is None:
         data = {}
 
     data = _compute(
+        p,
         names,
         params=params,
         transforms=transforms,
@@ -100,16 +117,21 @@ def compute(names, params, transforms, profiles, data=None, **kwargs):
     return data
 
 
-def _compute(names, params, transforms, profiles, data=None, **kwargs):
+def _compute(
+    parameterization, names, params, transforms, profiles, data=None, **kwargs
+):
     """Same as above but without checking inputs for faster recursion."""
     for name in names:
         if name in data:
             # don't compute something that's already been computed
             continue
-        if not has_dependencies(name, params, transforms, profiles, data):
+        if not has_dependencies(
+            parameterization, name, params, transforms, profiles, data
+        ):
             # then compute the missing dependencies
             data = _compute(
-                data_index[name]["dependencies"]["data"],
+                parameterization,
+                data_index[parameterization][name]["dependencies"]["data"],
                 params=params,
                 transforms=transforms,
                 profiles=profiles,
@@ -118,7 +140,10 @@ def _compute(names, params, transforms, profiles, data=None, **kwargs):
             )
             if transforms["grid"].axis.size:
                 data = _compute(
-                    data_index[name]["dependencies"]["axis_limit_data"],
+                    parameterization,
+                    data_index[parameterization][name]["dependencies"][
+                        "axis_limit_data"
+                    ],
                     params=params,
                     transforms=transforms,
                     profiles=profiles,
@@ -126,17 +151,21 @@ def _compute(names, params, transforms, profiles, data=None, **kwargs):
                     **kwargs,
                 )
         # now compute the quantity
-        data = data_index[name]["fun"](params, transforms, profiles, data, **kwargs)
+        data = data_index[parameterization][name]["fun"](
+            params, transforms, profiles, data, **kwargs
+        )
     return data
 
 
-def get_data_deps(keys, has_axis=False):
+def get_data_deps(keys, obj, has_axis=False):
     """Get list of data keys needed to compute a given quantity.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
 
@@ -145,22 +174,23 @@ def get_data_deps(keys, has_axis=False):
     deps : list of str
         Names of quantities needed to compute key
     """
+    p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
 
     def _get_deps_1_key(key):
         if has_axis:
-            if "full_with_axis_dependencies" in data_index[key]:
-                return data_index[key]["full_with_axis_dependencies"]["data"]
-        elif "full_dependencies" in data_index[key]:
-            return data_index[key]["full_dependencies"]["data"]
-        deps = data_index[key]["dependencies"]["data"]
+            if "full_with_axis_dependencies" in data_index[p][key]:
+                return data_index[p][key]["full_with_axis_dependencies"]["data"]
+        elif "full_dependencies" in data_index[p][key]:
+            return data_index[p][key]["full_dependencies"]["data"]
+        deps = data_index[p][key]["dependencies"]["data"]
         if len(deps) == 0:
             return deps
         out = deps.copy()  # to avoid modifying the data_index
         for dep in deps:
             out += _get_deps_1_key(dep)
         if has_axis:
-            axis_limit_deps = data_index[key]["dependencies"]["axis_limit_data"]
+            axis_limit_deps = data_index[p][key]["dependencies"]["axis_limit_data"]
             out += axis_limit_deps.copy()  # to be safe
             for dep in axis_limit_deps:
                 out += _get_deps_1_key(dep)
@@ -172,13 +202,15 @@ def get_data_deps(keys, has_axis=False):
     return sorted(list(set(out)))
 
 
-def get_derivs(keys, has_axis=False):
+def get_derivs(keys, obj, has_axis=False):
     """Get dict of derivative orders needed to compute a given quantity.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
 
@@ -188,18 +220,19 @@ def get_derivs(keys, has_axis=False):
         Orders of derivatives needed to compute key.
         Keys for R, Z, L, etc
     """
+    p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
 
     def _get_derivs_1_key(key):
         if has_axis:
-            if "full_with_axis_dependencies" in data_index[key]:
-                return data_index[key]["full_with_axis_dependencies"]["transforms"]
-        elif "full_dependencies" in data_index[key]:
-            return data_index[key]["full_dependencies"]["transforms"]
-        deps = [key] + get_data_deps(key, has_axis=has_axis)
+            if "full_with_axis_dependencies" in data_index[p][key]:
+                return data_index[p][key]["full_with_axis_dependencies"]["transforms"]
+        elif "full_dependencies" in data_index[p][key]:
+            return data_index[p][key]["full_dependencies"]["transforms"]
+        deps = [key] + get_data_deps(key, p, has_axis=has_axis)
         derivs = {}
         for dep in deps:
-            for key, val in data_index[dep]["dependencies"]["transforms"].items():
+            for key, val in data_index[p][dep]["dependencies"]["transforms"].items():
                 if key not in derivs:
                     derivs[key] = []
                 derivs[key] += val
@@ -215,15 +248,15 @@ def get_derivs(keys, has_axis=False):
     return {key: np.unique(val, axis=0).tolist() for key, val in derivs.items()}
 
 
-def get_profiles(keys, eq=None, grid=None, has_axis=False, **kwargs):
+def get_profiles(keys, obj, grid=None, has_axis=False, **kwargs):
     """Get profiles needed to compute a given quantity on a given grid.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index.
-    eq : Equilibrium
-        Equilibrium to compute quantity for.
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     grid : Grid
         Grid to compute quantity on.
     has_axis : bool
@@ -237,19 +270,18 @@ def get_profiles(keys, eq=None, grid=None, has_axis=False, **kwargs):
         otherwise, returns a dict of Profiles
         Keys for pressure, iota, etc.
     """
+    p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
     has_axis = has_axis or (grid is not None and grid.axis.size)
-    deps = list(keys) + get_data_deps(keys, has_axis=has_axis)
+    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis)
     profs = []
     for key in deps:
-        profs += data_index[key]["dependencies"]["profiles"]
-    # kludge for now to always get all profiles until we break up compute funs
-    profs += ["iota", "current"]
+        profs += data_index[p][key]["dependencies"]["profiles"]
     profs = sorted(list(set(profs)))
-    if eq is None:
+    if isinstance(obj, str) or inspect.isclass(obj):
         return profs
     # need to use copy here because profile may be None
-    profiles = {name: copy.deepcopy(getattr(eq, name)) for name in profs}
+    profiles = {name: copy.deepcopy(getattr(obj, name)) for name in profs}
     if grid is None:
         return profiles
     for val in profiles.values():
@@ -258,46 +290,47 @@ def get_profiles(keys, eq=None, grid=None, has_axis=False, **kwargs):
     return profiles
 
 
-def get_params(keys, eq=None, has_axis=False, **kwargs):
+def get_params(keys, obj, has_axis=False, **kwargs):
     """Get parameters needed to compute a given quantity.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
-    eq : Equilibrium
-        Equilibrium to compute quantity for.
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
 
     Returns
     -------
-    profiles : list of str or dict of ndarray
+    params : list of str or dict of ndarray
         Parameters needed to compute key.
         If eq is None, returns a list of the names of params needed
         otherwise, returns a dict of ndarray with keys for R_lmn, Z_lmn, etc.
     """
+    p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-    deps = list(keys) + get_data_deps(keys, has_axis=has_axis)
+    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis)
     params = []
     for key in deps:
-        params += data_index[key]["dependencies"]["params"]
+        params += data_index[p][key]["dependencies"]["params"]
     params = _sort_args(list(set(params)))
-    if eq is None:
+    if isinstance(obj, str) or inspect.isclass(obj):
         return params
-    params = {name: np.atleast_1d(getattr(eq, name)).copy() for name in params}
+    params = {name: np.atleast_1d(getattr(obj, name)).copy() for name in params}
     return params
 
 
-def get_transforms(keys, eq, grid, **kwargs):
+def get_transforms(keys, obj, grid, **kwargs):
     """Get transforms needed to compute a given quantity on a given grid.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
-    eq : Equilibrium
-        Equilibrium to compute quantity for.
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     grid : Grid
         Grid to compute quantity on
 
@@ -312,47 +345,49 @@ def get_transforms(keys, eq, grid, **kwargs):
     from desc.transform import Transform
 
     keys = [keys] if isinstance(keys, str) else keys
-    derivs = get_derivs(keys, has_axis=grid.axis.size)
+    derivs = get_derivs(keys, obj, has_axis=grid.axis.size)
     transforms = {"grid": grid}
-    for c in ["R", "L", "Z"]:
-        if c in derivs:
+    for c in derivs.keys():
+        if hasattr(obj, c + "_basis"):
             transforms[c] = Transform(
-                grid, getattr(eq, c + "_basis"), derivs=derivs[c], build=True
+                grid, getattr(obj, c + "_basis"), derivs=derivs[c], build=True
             )
-    if "B" in derivs:
-        transforms["B"] = Transform(
-            grid,
-            DoubleFourierSeries(
-                M=kwargs.get("M_booz", 2 * eq.M),
-                N=kwargs.get("N_booz", 2 * eq.N),
-                NFP=eq.NFP,
-                sym=eq.R_basis.sym,
-            ),
-            derivs=derivs["B"],
-            build=True,
-            build_pinv=True,
-        )
-    if "w" in derivs:
-        transforms["w"] = Transform(
-            grid,
-            DoubleFourierSeries(
-                M=kwargs.get("M_booz", 2 * eq.M),
-                N=kwargs.get("N_booz", 2 * eq.N),
-                NFP=eq.NFP,
-                sym=eq.Z_basis.sym,
-            ),
-            derivs=derivs["w"],
-            build=True,
-            build_pinv=True,
-        )
+        elif c == "B":
+            transforms["B"] = Transform(
+                grid,
+                DoubleFourierSeries(
+                    M=kwargs.get("M_booz", 2 * obj.M),
+                    N=kwargs.get("N_booz", 2 * obj.N),
+                    NFP=obj.NFP,
+                    sym=obj.R_basis.sym,
+                ),
+                derivs=derivs["B"],
+                build=True,
+                build_pinv=True,
+            )
+        elif c == "w":
+            transforms["w"] = Transform(
+                grid,
+                DoubleFourierSeries(
+                    M=kwargs.get("M_booz", 2 * obj.M),
+                    N=kwargs.get("N_booz", 2 * obj.N),
+                    NFP=obj.NFP,
+                    sym=obj.Z_basis.sym,
+                ),
+                derivs=derivs["w"],
+                build=True,
+                build_pinv=True,
+            )
     return transforms
 
 
-def has_dependencies(qty, params, transforms, profiles, data):
+def has_dependencies(parameterization, qty, params, transforms, profiles, data):
     """Determine if we have the ingredients needed to compute qty.
 
     Parameters
     ----------
+    parameterization : str or class
+        Type of thing we're checking dependencies for. eg desc.equilibrium.Equilibrium
     qty : str
         Name of something from the data index.
     params : dict of ndarray
@@ -370,47 +405,52 @@ def has_dependencies(qty, params, transforms, profiles, data):
         Whether we have what we need.
     """
     return (
-        _has_data(qty, data)
-        and (not transforms["grid"].axis.size or _has_axis_limit_data(qty, data))
-        and _has_params(qty, params)
-        and _has_profiles(qty, profiles)
-        and _has_transforms(qty, transforms)
+        _has_data(qty, data, parameterization)
+        and (
+            not transforms["grid"].axis.size
+            or _has_axis_limit_data(qty, data, parameterization)
+        )
+        and _has_params(qty, params, parameterization)
+        and _has_profiles(qty, profiles, parameterization)
+        and _has_transforms(qty, transforms, parameterization)
     )
 
 
-def _has_data(qty, data):
-    deps = data_index[qty]["dependencies"]["data"]
+def _has_data(qty, data, parameterization):
+    p = _parse_parameterization(parameterization)
+    deps = data_index[p][qty]["dependencies"]["data"]
     return all(d in data for d in deps)
 
 
-def _has_axis_limit_data(qty, data):
-    deps = data_index[qty]["dependencies"]["axis_limit_data"]
+def _has_axis_limit_data(qty, data, parameterization):
+    p = _parse_parameterization(parameterization)
+    deps = data_index[p][qty]["dependencies"]["axis_limit_data"]
     return all(d in data for d in deps)
 
 
-def _has_params(qty, params):
-    deps = data_index[qty]["dependencies"]["params"]
+def _has_params(qty, params, parameterization):
+    p = _parse_parameterization(parameterization)
+    deps = data_index[p][qty]["dependencies"]["params"]
     return all(d in params for d in deps)
 
 
-def _has_profiles(qty, profiles):
-    deps = data_index[qty]["dependencies"]["profiles"]
+def _has_profiles(qty, profiles, parameterization):
+    p = _parse_parameterization(parameterization)
+    deps = data_index[p][qty]["dependencies"]["profiles"]
     return all(d in profiles for d in deps)
 
 
-def _has_transforms(qty, transforms):
+def _has_transforms(qty, transforms, parameterization):
+    p = _parse_parameterization(parameterization)
     flags = {}
-    derivs = data_index[qty]["dependencies"]["transforms"]
-    for key in ["R", "Z", "L", "w", "B"]:
-        if key not in derivs:
-            flags[key] = True
-        elif key not in transforms:
+    derivs = data_index[p][qty]["dependencies"]["transforms"]
+    for key in derivs.keys():
+        if key not in transforms:
             return False
         else:
             flags[key] = np.array(
                 [d in transforms[key].derivatives.tolist() for d in derivs[key]]
             ).all()
-
     return all(flags.values())
 
 

@@ -284,7 +284,7 @@ class TestFourierXYZCurve:
     def test_asserts(self):
         """Test error checking when creating FourierXYZCurve."""
         c = FourierXYZCurve()
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError):
             c.compute_coordinates(dt=4)
         with pytest.raises(TypeError):
             c.grid = [1, 2, 3]

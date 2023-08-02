@@ -36,17 +36,7 @@ M = 20
 N = 20
 NFP = 4
 # this takes <1 min on GPU on Della, but can take ~20 minutes on CPU on Dario's laptop
-phi_mns, alphas, curr_pot_trans2, I2, G, phi_total_function, B0, chiBs, ind = (
-    phi_mns,
-    alphas,
-    curr_pot_trans2,
-    I2,
-    G,
-    phi_total_function,
-    B0,
-    chiBs,
-    ind,
-) = run_regcoil(
+phi_mns, alphas, curr_pot_trans2, I2, G, phi_total_function, B0, chiBs, ind = run_regcoil(
     eqname,
     alpha=alpha,
     helicity_ratio=-1,

@@ -109,12 +109,6 @@ calc_BNORM_from_coilset(coilset, eqname, alpha=alpha, step=step)
 
 
 # ### field line trace with coils ###
-subprocess.run(
-    [
-        "python",
-        f"desc/field_line_tracing_DESC_from_coilset.py",
-        coilsFilename,
-        eqname,
-        str(25),
-    ]
-)
+from desc.field_line_tracing_DESC_from_coilset import field_trace_from_coilset
+
+field_trace_from_coilset(coilsFilename, eqname, 25)

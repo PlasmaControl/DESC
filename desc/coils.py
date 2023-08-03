@@ -504,7 +504,7 @@ class CoilSet(Coil, MutableSequence):
             default grid for computation
         """
         coils = []  # list of XYZCoils
-        coilinds = []
+        coilinds = [2]  # always start at the 3rd line
         names = []
 
         # read in the coils file
@@ -515,17 +515,36 @@ class CoilSet(Coil, MutableSequence):
                     line.find("periods") != -1
                     or line.find("begin filament") != -1
                     or line.find("end") != -1
+                    or line.find("mirror") != -1
                 ):
                     continue  # skip headers and last line
                 if (
                     len(line.split()) != 4
-                    and line.find("mirror") == -1
                     and line.strip()  # ensure not counting blank lines
                 ):
                     coilinds.append(i)
                     names.append(" ".join(line.split()[4:]))
-                if line.find("mirror") != -1:
-                    coilinds.append(i)
+        if len(lines[3].split()) != 4:
+            raise OSError(
+                "4th line in file must be the start of the first coil!"
+                + "Expected a line of length 4 (after .split()),"
+                + f"instead got length {lines[3].split()}"
+            )
+        header_lines_not_as_expected = np.array(
+            [
+                len(lines[0].split()) != 2,
+                len(lines[1].split()) != 2,
+                len(lines[2].split()) != 2,
+            ]
+        )
+        if np.any(header_lines_not_as_expected):
+            raise OSError(
+                "first 3 lines in file must be the header lines,"
+                + " each of length 2 (after .split())!"
+                + f"Line(s) {lines[np.where(header_lines_not_as_expected)[0]]}"
+                + " is not length 2"
+            )
+
         for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
             coords = np.genfromtxt(lines[start + 1 : end])
             if i % 20 == 0:

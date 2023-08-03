@@ -267,6 +267,9 @@ def desc_to_csv(  # noqa
         data_configurations["ZBC"] = np.zeros_like(s)
 
     # profiles
+    # TODO: make dict of different classes of Profile and
+    # the corresponding type of profile, to support more than just
+    # power series
     data_configurations["pressure_profile_type"] = "power_series"
     data_configurations["pressure_profile_data1"] = eq.pressure.basis.modes[
         :, 0

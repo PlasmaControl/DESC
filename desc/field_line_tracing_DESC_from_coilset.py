@@ -1,11 +1,8 @@
-# git checkout dp/coils for this script to work
 
 from desc import set_device
 
-# set_device("gpu")
 import os
 
-# %matplotlib inline
 import sys
 import time
 
@@ -34,7 +31,6 @@ from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
 # vacuum equilibrium to compare against
 ################# outputs #################
 # poincare plot at phi=0 of the surfaces
-# plot of Bnormal on the LCFS from the coils
 
 
 # Field line tracing
@@ -47,7 +43,7 @@ def field_trace_from_coilset(coils, eqname, ntransit=100, dirname=None):
     r = 36.5 / 1000
 
     if isinstance(coils, str):
-        dirname = f"{coils.strip('.txt')}"
+        dirname = dirname if dirname f"{coils.strip('.txt')}"
         coils = CoilSet.from_makegrid_coilfile(coils)
         
     else:

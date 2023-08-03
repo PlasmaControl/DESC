@@ -9,3 +9,4 @@ nvgpu
 psutil
 scipy >= 1.5.0, < 1.11.0
 termcolor
+diffrax

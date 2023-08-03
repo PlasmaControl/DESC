@@ -3,9 +3,18 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+from diffrax import (
+    AbstractSolver,
+    DiscreteTerminatingEvent,
+    ODETerm,
+    PIDController,
+    SaveAt,
+    Tsit5,
+    diffeqsolve,
+)
 from netCDF4 import Dataset
 
-from desc.backend import jit, jnp, odeint
+from desc.backend import jit, jnp
 from desc.derivatives import Derivative
 from desc.geometry.utils import rpz2xyz_vec, xyz2rpz
 from desc.grid import Grid
@@ -747,9 +756,18 @@ class ScalarPotentialField(MagneticField):
 
 
 def field_line_integrate(
-    r0, z0, phis, field, params={}, rtol=1e-8, atol=1e-8, maxstep=1000
+    r0,
+    z0,
+    phis,
+    field,
+    params={},
+    rtol=1e-8,
+    atol=1e-8,
+    maxstep=1000,
+    solver=Tsit5(),
+    terminating_event=None,
 ):
-    """Trace field lines by integration.
+    """Trace field lines by integration, using diffrax package.
 
     Parameters
     ----------
@@ -767,6 +785,16 @@ def field_line_integrate(
         relative and absolute tolerances for ode integration
     maxstep : int
         maximum number of steps between different phis
+    solver: diffrax.Solver
+        diffrax Solver object to use in integration,
+        defaults to Tsit5(), a RK45 explicit solver
+    terminating_event_fxn: fxn
+        Function which takes as input the state of the ODE solution at each timestep and
+        outputs a bool which, if True, terminates the solve at that timestep.
+        NOTE: If the solve is terminated early, the output returned is still
+        length(phis), however all values from the step point the fxn evaluated
+        to True and on will be inf
+
 
     Returns
     -------
@@ -774,6 +802,16 @@ def field_line_integrate(
         arrays of r, z coordinates at specified phi angles
 
     """
+    if not isinstance(solver, AbstractSolver):
+        try:
+            # maybe they passed in the correct object but did not
+            # instantiate it
+            solver = solver()
+        except TypeError:
+            raise TypeError(
+                "Expected a diffrax Solver object as solver,"
+                + f"instead got type {type(solver)}!"
+            )
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
     rshape = r0.shape
@@ -782,7 +820,7 @@ def field_line_integrate(
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
 
     @jit
-    def odefun(rpz, s):
+    def odefun(s, rpz, args):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
         br, bp, bz = field.compute_magnetic_field(rpz, params, basis="rpz").T
@@ -790,8 +828,28 @@ def field_line_integrate(
             [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
         ).squeeze()
 
-    intfun = lambda x: odeint(odefun, x, phis, rtol=rtol, atol=atol, mxstep=maxstep)
+    # diffrax parameters
+    stepsize_controller = PIDController(rtol=rtol, atol=atol)
+    terminating_event = (
+        DiscreteTerminatingEvent(terminating_event) if terminating_event else None
+    )
+    term = ODETerm(odefun)
+    saveat = SaveAt(ts=phis)
+
+    intfun = lambda x: diffeqsolve(
+        term,
+        solver,
+        y0=x,
+        t0=phis[0],
+        t1=phis[-1],
+        saveat=saveat,
+        max_steps=maxstep,
+        dt0=None,  # have diffrax automatically choose it
+        stepsize_controller=stepsize_controller,
+        discrete_terminating_event=terminating_event,
+    ).ys
+
     x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
-    r = x[:, :, 0].T.reshape((len(phis), *rshape))
-    z = x[:, :, 2].T.reshape((len(phis), *rshape))
+    r = x[:, :, 0].squeeze().T.reshape((len(phis), *rshape))
+    z = x[:, :, 2].squeeze().T.reshape((len(phis), *rshape))
     return r, z

@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+from diffrax import Dopri5
 
 from desc.backend import jnp
 from desc.magnetic_fields import (
@@ -130,3 +131,37 @@ class TestMagneticFields:
         r, z = field_line_integrate(r0, z0, phis, field)
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+
+    @pytest.mark.unit
+    def test_field_line_integrate_long(self):
+        """Test field line integration for long distance along line."""
+        # q=4, field line should rotate 1/4 turn after 1 toroidal transit
+        # from outboard midplane to top center
+        field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
+        r0 = [10.001]
+        z0 = [0.0]
+        phis = [0, 2 * np.pi * 25]
+        r, z = field_line_integrate(r0, z0, phis, field, solver=Dopri5)
+        np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+
+    def test_field_line_integrate_early_terminate(self):
+        """Test field line integration with early termination criterion."""
+        # q=4, field line should rotate 1/4 turn after 1 toroidal transit
+        # from outboard midplane to top center
+        # early terminate at 2pi, if fails to terminate correctly
+        # then the assert statements would not hold
+        field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
+        r0 = [10.001]
+        z0 = [0.0]
+        phis = [0, 2 * np.pi, 2 * np.pi * 2]
+
+        def cond_fxn(state, **kwargs):
+            return jnp.any(state.y[1] > 8)
+
+        r, z = field_line_integrate(r0, z0, phis, field, terminating_event=cond_fxn)
+        np.testing.assert_allclose(r[1], 10, rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(z[1], 0.001, rtol=1e-6, atol=1e-6)
+        # if early terinated, the values at the un-integrated phi points are inf
+        assert np.isinf(r[-1])
+        assert np.isinf(z[-1])

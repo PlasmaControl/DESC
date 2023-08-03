@@ -370,7 +370,7 @@ def test_save_and_load_MAKEGRID_coils_angular(tmpdir_factory):
 
 
 @pytest.mark.unit
-def test_save_MAKEGRID_coils_assert(tmpdir_factory):
+def test_save_MAKEGRID_coils_assert_NFP(tmpdir_factory):
     """Test saving CoilSet that with incompatible NFP throws an error."""
     Ncoils = 22
     input_path = f"./tests/inputs/coils.MAKEGRID_format_{Ncoils}_coils"
@@ -383,6 +383,22 @@ def test_save_MAKEGRID_coils_assert(tmpdir_factory):
     path = tmpdir.join("coils.MAKEGRID_format_desc")
     with pytest.raises(AssertionError):
         coilset.save_in_MAKEGRID_format(str(path), NFP=3)
+
+
+@pytest.mark.unit
+def test_load_MAKEGRID_coils_header_asserts(tmpdir_factory):
+    """Test loading in CoilSets from incorrect MAKEGRID format files throws error."""
+    Ncoils = 22
+    input_path = f"./tests/inputs/coils.MAKEGRID_format_{Ncoils}_coils_header_too_long"
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    tmp_path = tmpdir.join("coils.MAKEGRID_format_{Ncoils}_coils_header_too_long")
+    shutil.copyfile(input_path, tmp_path)
+    with pytest.raises(IOError):
+        CoilSet.from_makegrid_coilfile(str(tmp_path))
+    input_path = f"./tests/inputs/coils.MAKEGRID_format_{Ncoils}_coils_header_too_short"
+    shutil.copyfile(input_path, tmp_path)
+    with pytest.raises(IOError):
+        CoilSet.from_makegrid_coilfile(str(tmp_path))
 
 
 @pytest.mark.unit

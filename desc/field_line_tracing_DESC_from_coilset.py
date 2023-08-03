@@ -43,7 +43,7 @@ def field_trace_from_coilset(coils, eqname, ntransit=100, dirname=None):
     r = 36.5 / 1000
 
     if isinstance(coils, str):
-        dirname = dirname if dirname f"{coils.strip('.txt')}"
+        dirname = dirname if dirname else f"{coils.strip('.txt')}"
         coils = CoilSet.from_makegrid_coilfile(coils)
         
     else:

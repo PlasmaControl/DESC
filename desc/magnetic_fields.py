@@ -794,6 +794,9 @@ def field_line_integrate(
         NOTE: If the solve is terminated early, the output returned is still
         length(phis), however all values from the step point the fxn evaluated
         to True and on will be inf
+        state has attributes such a state.y (array of length 3 with current (R,phi,Z))
+        see diffrax documentation for more in-depth information
+
 
 
     Returns

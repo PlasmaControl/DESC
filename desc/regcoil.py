@@ -429,7 +429,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
                     "No alpha value yielded a current potential without"
                     + " saddle coil contours or badly behaved contours!!"
                 )
-            plt.savefig(f"{dirname}/Scan_ext_TF{external_TF_fraction}.png")
+            plt.savefig(f"{dirname}/Scan_ext_TF{external_TF_fraction}_M{basis_M}_N{basis_N}.png")
 
         if show_plots:
 

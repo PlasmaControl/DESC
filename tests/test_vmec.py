@@ -313,6 +313,56 @@ def test_load_then_save(TmpDir):
     file2.close()
 
 
+@pytest.mark.slow
+@pytest.mark.unit
+def test_axis_surf_after_load():
+    """Tests if loading VMEC solution preserves axis and surface."""
+    input_path = "./tests/inputs/wout_HELIOTRON.nc"
+
+    eq = VMECIO.load(input_path, profile="iota")
+    assert eq.is_nested()
+    f = Dataset(input_path)
+
+    surf1 = eq.surface
+    surf2 = eq.get_surface_at(rho=1)
+    axis1 = eq.axis
+    axis2 = eq.get_axis()
+
+    np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn, atol=1e-14)
+    np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn, atol=1e-14)
+
+    np.testing.assert_allclose(axis1.R_n, axis2.R_n, atol=1e-14)
+    np.testing.assert_allclose(axis1.Z_n, axis2.Z_n, atol=1e-14)
+
+    # surface
+    rm, rn, Rb_cs, Rb_cc = ptolemy_identity_rev(
+        surf1.R_basis.modes[:, 1],
+        surf1.R_basis.modes[:, 2],
+        np.where(surf1.R_basis.modes[:, 1] < 0, -surf1.R_lmn, surf1.R_lmn)[None, :],
+    )
+
+    zm, zn, Zb_cs, Zb_cc = ptolemy_identity_rev(
+        surf1.Z_basis.modes[:, 1],
+        surf1.Z_basis.modes[:, 2],
+        np.where(surf1.Z_basis.modes[:, 1] < 0, -surf1.Z_lmn, surf1.Z_lmn)[None, :],
+    )
+
+    rmnc = f.variables["rmnc"][:].filled()
+    zmns = f.variables["zmns"][:].filled()
+
+    # axis
+    rax_cc = f.variables["raxis_cc"][:].filled()
+    zax_cs = -f.variables["zaxis_cs"][:].filled()
+
+    np.testing.assert_allclose(rmnc[-1], Rb_cc.squeeze(), atol=1e-14)
+    np.testing.assert_allclose(zmns[-1], Zb_cs.squeeze(), atol=1e-14)
+
+    np.testing.assert_allclose(rax_cc, axis1.R_n, atol=1e-14)
+    np.testing.assert_allclose(zax_cs[1:][::-1], axis1.Z_n, atol=1e-14)
+
+    f.close()
+
+
 @pytest.mark.unit
 def test_vmec_save_asym(TmpDir):
     """Tests that saving a non-symmetric equilibrium runs without errors."""

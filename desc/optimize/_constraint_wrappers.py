@@ -63,11 +63,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         # don't want to compile this, just use the compiled objective
         self._use_jit = False
         self._compiled = False
+        self._eq = eq
 
-        if eq is not None:
-            self.build(eq, verbose=verbose)
-
-    def build(self, eq, use_jit=None, verbose=1):
+    def build(self, eq=None, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -81,6 +79,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             Level of output.
 
         """
+        eq = eq or self._eq
         timer = Timer()
         timer.start("Linear constraint projection build")
 
@@ -175,13 +174,15 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x)
         return self._objective.unpack_state(x)
 
-    def compute_unscaled(self, x_reduced):
+    def compute_unscaled(self, x_reduced, constants=None):
         """Compute the unscaled form of the objective function.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -190,16 +191,18 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         x = self.recover(x_reduced)
-        f = self._objective.compute_unscaled(x)
+        f = self._objective.compute_unscaled(x, constants)
         return f
 
-    def compute_scaled(self, x_reduced):
+    def compute_scaled(self, x_reduced, constants=None):
         """Compute the objective function and apply weighting / normalization.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -208,16 +211,18 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         x = self.recover(x_reduced)
-        f = self._objective.compute_scaled(x)
+        f = self._objective.compute_scaled(x, constants)
         return f
 
-    def compute_scaled_error(self, x_reduced):
+    def compute_scaled_error(self, x_reduced, constants=None):
         """Compute the objective function and apply weighting / bounds.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -226,16 +231,18 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         x = self.recover(x_reduced)
-        f = self._objective.compute_scaled_error(x)
+        f = self._objective.compute_scaled_error(x, constants)
         return f
 
-    def compute_scalar(self, x_reduced):
+    def compute_scalar(self, x_reduced, constants=None):
         """Compute the scalar form of the objective function.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -244,15 +251,17 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         x = self.recover(x_reduced)
-        return self._objective.compute_scalar(x)
+        return self._objective.compute_scalar(x, constants)
 
-    def grad(self, x_reduced):
+    def grad(self, x_reduced, constants=None):
         """Compute gradient of the sum of squares of residuals.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -260,16 +269,18 @@ class LinearConstraintProjection(ObjectiveFunction):
             gradient vector.
         """
         x = self.recover(x_reduced)
-        df = self._objective.grad(x)
+        df = self._objective.grad(x, constants)
         return df[self._unfixed_idx] @ self._Z
 
-    def hess(self, x_reduced):
+    def hess(self, x_reduced, constants=None):
         """Compute Hessian of the sum of squares of residuals.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -277,16 +288,18 @@ class LinearConstraintProjection(ObjectiveFunction):
             Hessian matrix.
         """
         x = self.recover(x_reduced)
-        df = self._objective.hess(x)
+        df = self._objective.hess(x, constants)
         return self._Z.T @ df[self._unfixed_idx, :][:, self._unfixed_idx] @ self._Z
 
-    def jac_unscaled(self, x_reduced):
+    def jac_unscaled(self, x_reduced, constants):
         """Compute Jacobian of the vector objective function without weighting / bounds.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -294,16 +307,18 @@ class LinearConstraintProjection(ObjectiveFunction):
             Jacobian matrix.
         """
         x = self.recover(x_reduced)
-        df = self._objective.jac_unscaled(x)
+        df = self._objective.jac_unscaled(x, constants)
         return df[:, self._unfixed_idx] @ self._Z
 
-    def jac_scaled(self, x_reduced):
+    def jac_scaled(self, x_reduced, constants=None):
         """Compute Jacobian of the vector objective function with weighting / bounds.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -311,7 +326,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             Jacobian matrix.
         """
         x = self.recover(x_reduced)
-        df = self._objective.jac_scaled(x)
+        df = self._objective.jac_scaled(x, constants)
         return df[:, self._unfixed_idx] @ self._Z
 
     def vjp_scaled(self, v, x_reduced):
@@ -347,6 +362,11 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x_reduced)
         df = self._objective.vjp_unscaled(v, x)
         return df[self._unfixed_idx] @ self._Z
+
+    @property
+    def constants(self):
+        """list: constant parameters for each sub-objective."""
+        return self._objective.constants
 
     @property
     def target_scaled(self):
@@ -426,9 +446,7 @@ class ProximalProjection(ObjectiveFunction):
         # don't want to compile this, just use the compiled objective and constraint
         self._use_jit = False
         self._compiled = False
-
-        if eq is not None:
-            self.build(eq, verbose=verbose)
+        self._eq = eq
 
     def set_args(self, *args):
         """Set which arguments the objective should expect.
@@ -449,6 +467,10 @@ class ProximalProjection(ObjectiveFunction):
         self._args = [arg for arg in arg_order if arg in self._args]
         if "L_lmn" in self._args:
             self._args.remove("L_lmn")
+        if "Ra_n" in self._args:
+            self._args.remove("Ra_n")
+        if "Za_n" in self._args:
+            self._args.remove("Za_n")
         if "R_lmn" in self._args:
             self._args.remove("R_lmn")
             if "Rb_lmn" not in self._args:
@@ -511,7 +533,7 @@ class ProximalProjection(ObjectiveFunction):
             dxdZb = np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]] @ Ainv
             self._dxdc = np.hstack((self._dxdc, dxdZb))
 
-    def build(self, eq, use_jit=None, verbose=1):  # noqa: C901
+    def build(self, eq=None, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
 
         Parameters
@@ -525,15 +547,19 @@ class ProximalProjection(ObjectiveFunction):
             Level of output.
 
         """
+        eq = eq or self._eq
         timer = Timer()
         timer.start("Proximal projection build")
 
         self._eq = eq.copy()
         self._linear_constraints = get_fixed_boundary_constraints(
+            eq=eq,
             iota=self._eq.iota is not None,
             kinetic=self._eq.electron_temperature is not None,
         )
-        self._linear_constraints = maybe_add_self_consistency(self._linear_constraints)
+        self._linear_constraints = maybe_add_self_consistency(
+            eq, self._linear_constraints
+        )
 
         # we don't always build here because in ~all cases the user doesn't interact
         # with this directly, so if the user wants to manually rebuild they should
@@ -644,23 +670,27 @@ class ProximalProjection(ObjectiveFunction):
                 if val.size:
                     setattr(self._eq, arg, val)
             for con in self._linear_constraints:
-                con.update_target(self._eq)
+                if hasattr(con, "update_target"):
+                    con.update_target(self._eq)
         else:
             for arg in arg_order:
                 val = self.history[arg][-1].copy()
                 if val.size:
                     setattr(self._eq, arg, val)
             for con in self._linear_constraints:
-                con.update_target(self._eq)
+                if hasattr(con, "update_target"):
+                    con.update_target(self._eq)
         return xopt, xeq
 
-    def compute_scaled(self, x):
+    def compute_scaled(self, x, constants=None):
         """Compute the objective function and apply weights/normalization.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -668,16 +698,20 @@ class ProximalProjection(ObjectiveFunction):
             Objective function value(s).
 
         """
+        if constants is None:
+            constants = self.constants
         xopt, _ = self._update_equilibrium(x, store=False)
-        return self._objective.compute_scaled(xopt)
+        return self._objective.compute_scaled(xopt, constants[0])
 
-    def compute_scaled_error(self, x):
+    def compute_scaled_error(self, x, constants=None):
         """Compute the error between target and objective and apply weights etc.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -685,16 +719,20 @@ class ProximalProjection(ObjectiveFunction):
             Objective function value(s).
 
         """
+        if constants is None:
+            constants = self.constants
         xopt, _ = self._update_equilibrium(x, store=False)
-        return self._objective.compute_scaled_error(xopt)
+        return self._objective.compute_scaled_error(xopt, constants[0])
 
-    def compute_unscaled(self, x):
+    def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -702,33 +740,39 @@ class ProximalProjection(ObjectiveFunction):
             Objective function value(s).
 
         """
+        if constants is None:
+            constants = self.constants
         xopt, _ = self._update_equilibrium(x, store=False)
-        return self._objective.compute_unscaled(xopt)
+        return self._objective.compute_unscaled(xopt, constants[0])
 
-    def grad(self, x):
+    def grad(self, x, constants=None):
         """Compute gradient of the sum of squares of residuals.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
         g : ndarray
             gradient vector.
         """
-        f = jnp.atleast_1d(self.compute_scaled_error(x))
-        J = self.jac_scaled(x)
+        f = jnp.atleast_1d(self.compute_scaled_error(x, constants))
+        J = self.jac_scaled(x, constants)
         return f.T @ J
 
-    def jac_unscaled(self, x):
+    def jac_unscaled(self, x, constants=None):
         """Compute Jacobian of the vector objective function without weights / bounds.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -737,24 +781,28 @@ class ProximalProjection(ObjectiveFunction):
         """
         raise NotImplementedError("Unscaled jacobian of proximal projection is hard.")
 
-    def jac_scaled(self, x):
+    def jac_scaled(self, x, constants=None):
         """Compute Jacobian of the vector objective function with weights / bounds.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
         J : ndarray
             Jacobian matrix.
         """
+        if constants is None:
+            constants = self.constants
         xg, xf = self._update_equilibrium(x, store=True)
 
         # Jacobian matrices wrt combined state vectors
-        Fx = self._constraint.jac_scaled(xf)
-        Gx = self._objective.jac_scaled(xg)
+        Fx = self._constraint.jac_scaled(xf, constants[1])
+        Gx = self._objective.jac_scaled(xg, constants[0])
         Fx = align_jacobian(Fx, self._constraint, self._objective)
         Gx = align_jacobian(Gx, self._objective, self._constraint)
 
@@ -783,7 +831,7 @@ class ProximalProjection(ObjectiveFunction):
         LHS = Gxh @ (Fxh_inv @ Fc) - Gc
         return -LHS
 
-    def hess(self, x):
+    def hess(self, x, constants=None):
         """Compute Hessian of the sum of squares of residuals.
 
         Uses the "small residual approximation" where the Hessian is replaced by
@@ -793,13 +841,15 @@ class ProximalProjection(ObjectiveFunction):
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
         H : ndarray
             Hessian matrix.
         """
-        J = self.jac_scaled(x)
+        J = self.jac_scaled(x, constants)
         return J.T @ J
 
     def vjp_scaled(self, v, x):
@@ -831,6 +881,11 @@ class ProximalProjection(ObjectiveFunction):
 
         """
         raise NotImplementedError
+
+    @property
+    def constants(self):
+        """list: constant parameters for each sub-objective."""
+        return [self._objective.constants, self._constraint.constants]
 
     @property
     def target_scaled(self):

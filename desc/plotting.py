@@ -18,7 +18,7 @@ from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import compress, surface_averages
 from desc.grid import Grid, LinearGrid
-from desc.utils import flatten_list
+from desc.utils import flatten_list, parse_argname_change
 from desc.vmec_utils import ptolemy_linear_transform
 
 __all__ = [
@@ -31,6 +31,7 @@ __all__ = [
     "plot_boundaries",
     "plot_boundary",
     "plot_coefficients",
+    "plot_coils",
     "plot_comparison",
     "plot_fsa",
     "plot_grid",
@@ -100,6 +101,25 @@ rcParams["axes.prop_cycle"] = color_cycle
 _AXIS_LABELS_RTZ = [r"$\rho$", r"$\theta$", r"$\zeta$"]
 _AXIS_LABELS_RPZ = [r"$R ~(\mathrm{m})$", r"$\phi$", r"$Z ~(\mathrm{m})$"]
 _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m})$"]
+
+
+def _set_tight_layout(fig):
+    # compat layer to deal with API changes in mpl 3.6.0
+    if int(matplotlib._version.version.split(".")[1]) < 6:
+        fig.set_tight_layout(True)
+    else:
+        fig.set_layout_engine("tight")
+
+
+def _get_cmap(name, n=None):
+    # compat layer to deal with API changes in mpl 3.6.0
+    if int(matplotlib._version.version.split(".")[1]) < 6:
+        return matplotlib.cm.get_cmap(name, n)
+    else:
+        c = matplotlib.colormaps[name]
+        if n is not None:
+            c = c.resampled(n)
+        return c
 
 
 def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
@@ -251,7 +271,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Computed quantity.
 
     """
-    if name not in data_index:
+    if name not in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
         raise ValueError("Unrecognized value '{}'.".format(name))
     assert component in [
         None,
@@ -266,13 +286,13 @@ def _compute(eq, name, grid, component=None, reshape=True):
         "Z": 2,
     }
 
-    label = data_index[name]["label"]
+    label = data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         data = eq.compute(name, grid=grid)[name]
 
-    if data_index[name]["dim"] > 1:
+    if data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["dim"] > 1:
         if component is None:
             data = np.linalg.norm(data, axis=-1)
             label = "|" + label + "|"
@@ -284,7 +304,13 @@ def _compute(eq, name, grid, component=None, reshape=True):
             else:
                 label += r"\phi"
 
-    label = r"$" + label + "~(" + data_index[name]["units"] + ")$"
+    label = (
+        r"$"
+        + label
+        + "~("
+        + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
+        + ")$"
+    )
 
     if reshape:
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
@@ -315,7 +341,8 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         Valid keyword arguments are:
 
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        title_font_size: integer, font size of the title
+        title_fontsize: integer, font size of the title
+        xlabel_fontsize: integer, font size of the x axis label
 
     Returns
     -------
@@ -351,7 +378,8 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         xlabel += "|n|"
 
     fig, ax = _format_ax(ax, rows=1, cols=3, figsize=kwargs.pop("figsize", None))
-    title_font_size = kwargs.pop("title_font_size", None)
+    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
 
     assert (
         len(kwargs) == 0
@@ -367,15 +395,14 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1), np.abs(eq.L_lmn), "bo"
     )
 
-    ax[0, 0].set_xlabel(xlabel)
-    ax[0, 1].set_xlabel(xlabel)
-    ax[0, 2].set_xlabel(xlabel)
+    ax[0, 0].set_xlabel(xlabel, fontsize=xlabel_fontsize)
+    ax[0, 1].set_xlabel(xlabel, fontsize=xlabel_fontsize)
+    ax[0, 2].set_xlabel(xlabel, fontsize=xlabel_fontsize)
 
-    ax[0, 0].set_title("$|R_{lmn}|$", fontsize=title_font_size)
-    ax[0, 1].set_title("$|Z_{lmn}|$", fontsize=title_font_size)
-    ax[0, 2].set_title("$|\\lambda_{lmn}|$", fontsize=title_font_size)
-
-    fig.set_tight_layout(True)
+    ax[0, 0].set_title("$|R_{lmn}|$", fontsize=title_fontsize)
+    ax[0, 1].set_title("$|Z_{lmn}|$", fontsize=title_fontsize)
+    ax[0, 2].set_title("$|\\lambda_{lmn}|$", fontsize=title_fontsize)
+    _set_tight_layout(fig)
 
     return fig, ax
 
@@ -440,7 +467,10 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     # sample the entire surface. Computing this on a 1-D grid would return a
     # misleading plot.
     default_L = 100
-    if data_index[name]["coordinates"] == "r":
+    if (
+        data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+        == "r"
+    ):
         if grid is None:
             return plot_fsa(
                 eq,
@@ -500,7 +530,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     xlabel = _AXIS_LABELS_RTZ[plot_axes[0]]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     plot_data = {}
     plot_data[xlabel.strip("$").strip("\\")] = grid.nodes[:, plot_axes[0]]
     plot_data[name] = data
@@ -542,13 +572,13 @@ def plot_2d(
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
-        * ``title_font_size``: integer, font size of the title
         * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
           which element to plot. Default is the norm of the vector.
-        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
-        * ``levels``: int or array-like, passed to contourf
+        * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
 
     Returns
     -------
@@ -614,7 +644,7 @@ def plot_2d(
         )
     contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
-    title_font_size = kwargs.pop("title_font_size", None)
+    title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert len(kwargs) == 0, f"plot_2d got unexpected keyword argument: {kwargs.keys()}"
@@ -640,16 +670,22 @@ def plot_2d(
     ylabel = _AXIS_LABELS_RTZ[plot_axes[0]]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
-    ax.set_title(label, fontsize=title_font_size)
+    ax.set_title(label, fontsize=title_fontsize)
     if norm_F:
         ax.set_title(
             "%s / %s"
             % (
-                "$" + data_index[name]["label"] + "$",
-                "$" + data_index[norm_name]["label"] + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
+                + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
+                    "label"
+                ]
+                + "$",
             )
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     plot_data = {}
     plot_data[xlabel.strip("$").strip("\\")] = xx
     plot_data[ylabel.strip("$").strip("\\")] = yy
@@ -703,14 +739,14 @@ def plot_3d(
           matplotlib)
         * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
           which element to plot. Default is the norm of the vector.
-        * ``alpha``: float btwn [0,1.0], the transparency of the plotted surface
-        * ``title_font_size``: integer, font size of the title
-        * ``elev``: float, elevation orientation angle of 3D plot (in the z plane)
-        * ``azim``: float, azimuthal orientation angle of 3D plot (in the x,y plane)
-        * ``dist``: float, distance from the camera to the center point of the plot
+        * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``zlabel_fontsize``: float, fontsize of the zlabel
+        * ``alpha``: float btwn [0,1.0], the transparency of the plotted surface
+        * ``elev``: float, elevation orientation angle of 3D plot (in the z plane)
+        * ``azim``: float, azimuthal orientation angle of 3D plot (in the x,y plane)
+        * ``dist``: float, distance from the camera to the center point of the plot
 
     Returns
     -------
@@ -782,7 +818,7 @@ def plot_3d(
     m = plt.cm.ScalarMappable(cmap=plt.cm.jet, norm=norm)
     m.set_array([])
     alpha = kwargs.pop("alpha", 1)
-    title_font_size = kwargs.pop("title_font_size", None)
+    title_fontsize = kwargs.pop("title_fontsize", None)
 
     elev = kwargs.pop("elev", None)
     azim = kwargs.pop("azim", None)
@@ -811,8 +847,8 @@ def plot_3d(
     ax.set_xlabel(_AXIS_LABELS_XYZ[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(_AXIS_LABELS_XYZ[1], fontsize=ylabel_fontsize)
     ax.set_zlabel(_AXIS_LABELS_XYZ[2], fontsize=zlabel_fontsize)
-    ax.set_title(label, fontsize=title_font_size)
-    fig.set_tight_layout(True)
+    ax.set_title(label, fontsize=title_fontsize)
+    _set_tight_layout(fig)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
     x_limits = ax.get_xlim3d()
@@ -938,7 +974,10 @@ def plot_fsa(
 
     """
     if np.isscalar(rho) and (int(rho) == rho):
-        if data_index[name]["coordinates"] == "r":
+        if (
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+            == "r"
+        ):
             # OK to plot origin for most quantities denoted as functions of rho
             rho = np.flipud(np.linspace(1, 0, rho + 1, endpoint=True))
         else:
@@ -959,7 +998,10 @@ def plot_fsa(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
     label = label.split("~")
-    if data_index[name]["coordinates"] == "r":
+    if (
+        data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+        == "r"
+    ):
         # If the quantity is a surface function, averaging it again has no
         # effect, regardless of whether sqrt(g) is used.
         # So we avoid surface averaging it and forgo the <> around the label.
@@ -1006,12 +1048,18 @@ def plot_fsa(
         ax.set_ylabel(
             "%s / %s"
             % (
-                "$" + data_index[name]["label"] + "$",
-                "$" + data_index[norm_name]["label"] + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
+                + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
+                    "label"
+                ]
+                + "$",
             ),
             fontsize=ylabel_fontsize,
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["rho"] = rho
@@ -1061,13 +1109,14 @@ def plot_section(
           matplotlib)
         * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
           which element to plot. Default is the norm of the vector.
-        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
-        * ``levels``: int or array-like, passed to contourf
-        * ``nphi``: int, number of equispaced phi planes to plot sections at (default
-          1 for axisymmetry and 6 for non-axisymmetry)
-        * ``title_font_size``: integer, font size of the title
+        * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
+        * ``phi``: float, int or array-like. Toroidal angles to plot. If an integer,
+          plot that number equally spaced in [0,2pi/NFP). Default 1 for axisymmetry and
+          6 for non-axisymmetry
 
     Returns
     -------
@@ -1088,32 +1137,30 @@ def plot_section(
         fig, ax = plot_section(eq, "J^rho")
 
     """
-    if "nzeta" in kwargs:
-        warnings.warn(
-            FutureWarning(
-                "argument nzeta has been renamed to nphi, "
-                + "nzeta will be removed in a future release"
-            )
-        )
-        kwargs["nphi"] = kwargs.pop("nzeta")
+    phi = kwargs.pop("phi", (1 if eq.N == 0 else 6))
+    phi = parse_argname_change(phi, kwargs, "nzeta", "phi")
+    phi = parse_argname_change(phi, kwargs, "nphi", "phi")
+
+    if isinstance(phi, numbers.Integral):
+        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
+    phi = np.atleast_1d(phi)
+    nphi = len(phi)
     if grid is None:
-        if eq.N == 0:
-            nphi = int(kwargs.pop("nphi", 1))
-        else:
-            nphi = int(kwargs.pop("nphi", 6))
         nfp = eq.NFP
         grid_kwargs = {
             "L": 25,
             "NFP": nfp,
             "axis": False,
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
-            "zeta": np.linspace(0, 2 * np.pi / nfp, nphi, endpoint=False),
+            "zeta": phi,
         }
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        phi = np.unique(grid.nodes[:, 2])
         coords = eq.map_coordinates(
-            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         )
         grid = Grid(coords, sort=False)
 
@@ -1122,7 +1169,10 @@ def plot_section(
         nphi = phi.size
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         coords = eq.map_coordinates(
-            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         )
         grid = Grid(coords, sort=False)
     rows = np.floor(np.sqrt(nphi)).astype(int)
@@ -1172,7 +1222,7 @@ def plot_section(
         )
     contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
-    title_font_size = kwargs.pop("title_font_size", None)
+    title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
@@ -1194,9 +1244,9 @@ def plot_section(
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
             "$"
-            + data_index[name]["label"]
+            + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
             + "$ ($"
-            + data_index[name]["units"]
+            + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
             + "$)"
             + ", $\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
                 eq.NFP * phi[i] / (2 * np.pi)
@@ -1206,15 +1256,23 @@ def plot_section(
             ax[i].set_title(
                 "%s / %s, %s"
                 % (
-                    "$" + data_index[name]["label"] + "$",
-                    "$" + data_index[norm_name]["label"] + "$",
+                    "$"
+                    + data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                        "label"
+                    ]
+                    + "$",
+                    "$"
+                    + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
+                        "label"
+                    ]
+                    + "$",
                     "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
                         eq.NFP * phi[i] / (2 * np.pi)
                     ),
                 ),
-                fontsize=title_font_size,
+                fontsize=title_fontsize,
             )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["R"] = R
@@ -1244,7 +1302,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     theta : int or array-like
         Values of theta to plot contours of.
         If an integer, plot that many contours linearly spaced in (0,2pi).
-    phi : int or array-like or None
+    phi : float, int or array-like or None
         Values of phi to plot contours at.
         If an integer, plot that many contours linearly spaced in (0,2pi).
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
@@ -1279,7 +1337,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         * ``axis_alpha``: float, transparency of the axis plotted point
         * ``axis_marker``: str, markerstyle to use for the axis plotted point
         * ``axis_size``: float, markersize to use for the axis plotted point
-        * ``title_font_size``: integer, font size of the title
+        * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
 
@@ -1302,14 +1360,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         fig, ax = plot_surfaces(eq)
 
     """
-    if "zeta" in kwargs:
-        warnings.warn(
-            FutureWarning(
-                "argument zeta has been renamed to phi, "
-                + "zeta will be removed in a future release"
-            )
-        )
-        phi = kwargs.pop("zeta")
+    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
 
     NR = kwargs.pop("NR", 50)
     NT = kwargs.pop("NT", 180)
@@ -1328,7 +1379,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     axis_marker = kwargs.pop("axis_marker", "o")
     axis_size = kwargs.pop("axis_size", 36)
     label = kwargs.pop("label", "")
-    title_font_size = kwargs.pop("title_font_size", None)
+    title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
@@ -1340,21 +1391,15 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     nfp = eq.NFP
     if isinstance(rho, numbers.Integral):
         rho = np.linspace(0, 1, rho + 1)  # offset to ignore axis
-    else:
-        rho = np.atleast_1d(rho)
+    rho = np.atleast_1d(rho)
     if isinstance(theta, numbers.Integral):
         theta = np.linspace(0, 2 * np.pi, theta, endpoint=False)
-    else:
-        theta = np.atleast_1d(theta)
+    theta = np.atleast_1d(theta)
+
+    phi = (1 if eq.N == 0 else 6) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(0, 2 * np.pi / nfp, phi)
-    elif phi is None:
-        if eq.N == 0:
-            phi = np.array([0])
-        else:
-            phi = np.linspace(0, 2 * np.pi / nfp, 6, endpoint=False)
-    else:
-        phi = np.atleast_1d(phi)
+        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
+    phi = np.atleast_1d(phi)
     nphi = len(phi)
 
     grid_kwargs = {
@@ -1367,7 +1412,10 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     rnr, rnt, rnz = r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta
     r_grid = Grid(
         eq.map_coordinates(
-            r_grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            r_grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         ),
         sort=False,
     )
@@ -1384,7 +1432,10 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
         v_grid = Grid(
             eq.map_coordinates(
-                t_grid.nodes, ["rho", "theta_sfl", "phi"], ["rho", "theta", "zeta"]
+                t_grid.nodes,
+                ["rho", "theta_PEST", "phi"],
+                ["rho", "theta", "zeta"],
+                period=(np.inf, 2 * np.pi, 2 * np.pi),
             ),
             sort=False,
         )
@@ -1461,9 +1512,9 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
             "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
-            fontsize=title_font_size,
+            fontsize=title_fontsize,
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data["rho_R_coords"] = Rr
     plot_data["rho_Z_coords"] = Zr
@@ -1480,7 +1531,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
     ----------
     eq : Equilibrium
         Object from which to plot.
-    phi : int or array-like or None
+    phi : float, int or array-like or None
         Values of phi to plot boundary surface at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
@@ -1499,14 +1550,15 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
+        * ``xlabel_fontsize``: float, fontsize of the x label
+        * ``ylabel_fontsize``: float, fontsize of the y label
+        * ``legend_fontsize``: float, fontsize of the legend
         * ``cmap``: colormap to use for plotting, discretized into len(phi) colors
-        * ``colors``: array of colors to use for each phi angle
+        * ``color``: array of colors to use for each phi angle
         * ``ls``: array of line styles to use for each phi angle
         * ``lw``: array of line widths to use for each phi angle
         * ``marker``: str, marker style to use for the axis plotted points
         * ``size``: float, marker size to use for the axis plotted points
-        * ``label_fontsize``: float, fontsize of the x and y labels
-        * ``legend_fontsize``: float, fontsize of the legend
 
     Returns
     -------
@@ -1527,38 +1579,28 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
         fig, ax = plot_boundary(eq)
 
     """
-    if "zeta" in kwargs:
-        warnings.warn(
-            FutureWarning(
-                "argument zeta has been renamed to phi, "
-                + "zeta will be removed in a future release"
-            )
-        )
-        phi = kwargs.pop("zeta")
+    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
 
     figsize = kwargs.pop("figsize", None)
     cmap = kwargs.pop("cmap", "rainbow")
-    colors = kwargs.pop("colors", None)
+    colors = kwargs.pop("color", None)
     ls = kwargs.pop("ls", None)
     lw = kwargs.pop("lw", None)
     marker = kwargs.pop("marker", "x")
     size = kwargs.pop("size", 36)
-    label_fontsize = kwargs.pop("label_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+
     legend_fontsize = kwargs.pop("legend_fontsize", None)
 
     assert (
         len(kwargs) == 0
     ), f"plot boundary got unexpected keyword argument: {kwargs.keys()}"
 
+    phi = (1 if eq.N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
         phi = np.linspace(0, 2 * np.pi / eq.NFP, phi + 1)  # +1 to include pi and 2pi
-    elif phi is None:
-        if eq.N == 0:
-            phi = np.array([0])
-        else:
-            phi = np.linspace(0, 2 * np.pi / eq.NFP, 4 + 1)
-    else:
-        phi = np.atleast_1d(phi)
+    phi = np.atleast_1d(phi)
     nphi = len(phi)
 
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
@@ -1568,13 +1610,16 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     grid = Grid(
         eq.map_coordinates(
-            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         ),
         sort=False,
     )
 
     if colors is None:
-        colors = matplotlib.cm.get_cmap(cmap, nz - 1)(np.linspace(0, 1, nz - 1))
+        colors = _get_cmap(cmap, nz - 1)(np.linspace(0, 1, nz - 1))
     if lw is None:
         lw = 1
     if isinstance(lw, int):
@@ -1612,12 +1657,12 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
                 s=size,
             )
 
-    ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=label_fontsize)
-    ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=label_fontsize)
+    ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
+    ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
     ax.tick_params(labelbottom=True, labelleft=True)
 
     fig.legend(fontsize=legend_fontsize)
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["R"] = R
@@ -1638,7 +1683,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         Equilibria to plot.
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
-    phi : int or array-like or None
+    phi : float, int or array-like or None
         Values of phi to plot boundary surface at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
@@ -1655,12 +1700,14 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
+        * ``xlabel_fontsize``: float, fontsize of the x label
+        * ``ylabel_fontsize``: float, fontsize of the y label
+        * ``legend``: bool, whether to display legend or not
+        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
         * ``cmap``: colormap to use for plotting, discretized into len(eqs) colors
-        * ``colors``: array of colors to use for each Equilibrium
-        * ``ls``: array of line styles to use for each Equilibrium
-        * ``lw``: array of line widths to use for each Equilibrium
-        * ``label_fontsize``: float, fontsize of the x and y labels
-        * ``legend_fontsize``: float, fontsize of the legend
+        * ``color``: list of colors to use for each Equilibrium
+        * ``ls``: list of str, line styles to use for each Equilibrium
+        * ``lw``: list of floats, line widths to use for each Equilibrium
 
     Returns
     -------
@@ -1681,38 +1728,29 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         fig, ax = plot_boundaries((eq1, eq2, eq3))
 
     """
-    if "zeta" in kwargs:
-        warnings.warn(
-            FutureWarning(
-                "argument zeta has been renamed to phi, "
-                + "zeta will be removed in a future release"
-            )
-        )
-        phi = kwargs.pop("zeta")
+    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
 
     figsize = kwargs.pop("figsize", None)
     cmap = kwargs.pop("cmap", "rainbow")
-    colors = kwargs.pop("colors", None)
+    colors = kwargs.pop("color", None)
     ls = kwargs.pop("ls", None)
     lw = kwargs.pop("lw", None)
-    label_fontsize = kwargs.pop("label_fontsize", None)
-    legend_fontsize = kwargs.pop("legend_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
-    assert (
-        len(kwargs) == 0
-    ), f"plot boundaries got unexpected keyword argument: {kwargs.keys()}"
-
-    if phi is None:
-        phi = 4
-    if isinstance(phi, int):
-        phi = phi + 1  # include phi = 2*pi
+    phi = (1 if eqs[-1].N == 0 else 4) if phi is None else phi
+    if isinstance(phi, numbers.Integral):
+        phi = np.linspace(
+            0, 2 * np.pi / eqs[-1].NFP, phi + 1
+        )  # +1 to include pi and 2pi
+    phi = np.atleast_1d(phi)
 
     neq = len(eqs)
 
     if labels is None:
         labels = [str(i) for i in range(neq)]
     if colors is None:
-        colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+        colors = _get_cmap(cmap, neq)(np.linspace(0, 1, neq))
     if lw is None:
         lw = 1
     if np.isscalar(lw):
@@ -1731,13 +1769,16 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         grid_kwargs = {
             "NFP": eqs[i].NFP,
             "theta": 100,
-            "zeta": phi if eqs[i].N > 0 else 2,
+            "zeta": phi,
         }
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
             eqs[i].map_coordinates(
-                grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+                grid.nodes,
+                ["rho", "theta", "phi"],
+                ["rho", "theta", "zeta"],
+                period=(np.inf, 2 * np.pi, 2 * np.pi),
             ),
             sort=False,
         )
@@ -1761,12 +1802,17 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
             if j == 0:
                 line.set_label(labels[i])
 
-    ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=label_fontsize)
-    ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=label_fontsize)
+    ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
+    ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
     ax.tick_params(labelbottom=True, labelleft=True)
 
-    fig.legend(fontsize=legend_fontsize)
-    fig.set_tight_layout(True)
+    if any(labels) and kwargs.pop("legend", True):
+        fig.legend(**kwargs.pop("legend_kw", {}))
+    _set_tight_layout(fig)
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot boundaries got unexpected keyword argument: {kwargs.keys()}"
 
     if return_data:
         return fig, ax, plot_data
@@ -1781,9 +1827,9 @@ def plot_comparison(
     phi=None,
     ax=None,
     cmap="rainbow",
-    colors=None,
-    lws=None,
-    linestyles=None,
+    color=None,
+    lw=None,
+    ls=None,
     labels=None,
     return_data=False,
     **kwargs,
@@ -1800,7 +1846,7 @@ def plot_comparison(
     theta : int or array-like
         Values of theta to plot contours of.
         If an integer, plot that many contours linearly spaced in (0,2pi).
-    phi : int or array-like or None
+    phi : float, int or array-like or None
         Values of phi to plot contours at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
@@ -1808,12 +1854,12 @@ def plot_comparison(
         Axis to plot on.
     cmap : str or matplotlib ColorMap
         Colormap to use for plotting, discretized into len(eqs) colors.
-    colors : array-like
+    color : array-like
         Array the same length as eqs of colors to use for each equilibrium.
         Overrides `cmap`.
-    lws : array-like
+    lw : array-like
         Array the same length as eqs of line widths to use for each equilibrium
-    linestyles : array-like
+    ls : array-like
         Array the same length as eqs of linestyles to use for each equilibrium.
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
@@ -1830,7 +1876,7 @@ def plot_comparison(
           matplotlib)
         * ``legend``: bool, whether to display legend or not
         * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
-        * ``title_font_size``: integer, font size of the title
+        * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
 
@@ -1858,40 +1904,33 @@ def plot_comparison(
                                  )
 
     """
-    if "zeta" in kwargs:
-        warnings.warn(
-            FutureWarning(
-                "argument zeta has been renamed to phi, "
-                + "zeta will be removed in a future release"
-            )
-        )
-        phi = kwargs.pop("zeta")
+    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
+    color = parse_argname_change(color, kwargs, "colors", "color")
+    ls = parse_argname_change(ls, kwargs, "linestyles", "ls")
+    lw = parse_argname_change(lw, kwargs, "lws", "lw")
 
     figsize = kwargs.pop("figsize", None)
-    title_font_size = kwargs.pop("title_font_size", None)
+    title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     neq = len(eqs)
-    if colors is None:
-        colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
-    if lws is None:
-        lws = [1 for i in range(neq)]
-    if linestyles is None:
-        linestyles = ["-" for i in range(neq)]
+    if color is None:
+        color = _get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+    if lw is None:
+        lw = [1 for i in range(neq)]
+    if ls is None:
+        ls = ["-" for i in range(neq)]
     if labels is None:
         labels = [str(i) for i in range(neq)]
     N = np.max([eq.N for eq in eqs])
     nfp = eqs[0].NFP
+
+    phi = (1 if N == 0 else 6) if phi is None else phi
     if isinstance(phi, numbers.Integral):
         phi = np.linspace(0, 2 * np.pi / nfp, phi, endpoint=False)
-    elif phi is None:
-        if N == 0:
-            phi = np.array([0])
-        else:
-            phi = np.linspace(0, 2 * np.pi / nfp, 6, endpoint=False)
-    else:
-        phi = np.atleast_1d(phi)
+    phi = np.atleast_1d(phi)
     nphi = len(phi)
+
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
 
@@ -1923,21 +1962,21 @@ def plot_comparison(
             theta,
             phi,
             ax,
-            theta_color=colors[i % len(colors)],
-            theta_ls=linestyles[i % len(linestyles)],
-            theta_lw=lws[i % len(lws)],
-            rho_color=colors[i % len(colors)],
-            rho_ls=linestyles[i % len(linestyles)],
-            rho_lw=lws[i % len(lws)],
-            lcfs_color=colors[i % len(colors)],
-            lcfs_ls=linestyles[i % len(linestyles)],
-            lcfs_lw=lws[i % len(lws)],
-            axis_color=colors[i % len(colors)],
+            theta_color=color[i % len(color)],
+            theta_ls=ls[i % len(ls)],
+            theta_lw=lw[i % len(lw)],
+            rho_color=color[i % len(color)],
+            rho_ls=ls[i % len(ls)],
+            rho_lw=lw[i % len(lw)],
+            lcfs_color=color[i % len(color)],
+            lcfs_ls=ls[i % len(ls)],
+            lcfs_lw=lw[i % len(lw)],
+            axis_color=color[i % len(color)],
             axis_alpha=0,
             axis_marker="o",
             axis_size=0,
             label=labels[i % len(labels)],
-            title_font_size=title_font_size,
+            title_fontsize=title_fontsize,
             xlabel_fontsize=xlabel_fontsize,
             ylabel_fontsize=ylabel_fontsize,
             return_data=True,
@@ -1983,7 +2022,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         * ``lw``: float, linewidth of plotted coils
         * ``ls``: str, linestyle of plotted coils
         * ``color``: str, color of plotted coils
-        * ``cmap``: str, colormap to be passed to matplotlib.cm.get_cmap()
+        * ``cmap``: str, name of colormap
 
     Returns
     -------
@@ -2003,7 +2042,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     cbar = False
     if color == "current":
         cbar = True
-        cmap = matplotlib.cm.get_cmap(kwargs.pop("cmap", "Spectral"))
+        cmap = _get_cmap(kwargs.pop("cmap", "Spectral"))
         currents = flatten_list(coils.current)
         norm = matplotlib.colors.Normalize(vmin=np.min(currents), vmax=np.max(currents))
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
@@ -2118,6 +2157,11 @@ def plot_boozer_modes(
           matplotlib)
         * ``lw``: float, linewidth
         * ``ls``: str, linestyle
+        * ``legend``: bool, whether to display legend or not
+        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+
 
     Returns
     -------
@@ -2148,11 +2192,13 @@ def plot_boozer_modes(
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
     linestyle = kwargs.pop("ls", "-")
     linewidth = kwargs.pop("lw", 2)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(
-            "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -2206,8 +2252,9 @@ def plot_boozer_modes(
     plot_data["B modes"] = modes
     plot_data["rho"] = rho
 
-    ax.set_xlabel(_AXIS_LABELS_RTZ[0])
-    ax.set_ylabel(r"$B_{M,N}$ in Boozer coordinates $(T)$")
+    ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
+    ax.set_ylabel(r"$B_{M,N}$ in Boozer coordinates $(T)$", fontsize=ylabel_fontsize)
+
     if kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
 
@@ -2215,7 +2262,7 @@ def plot_boozer_modes(
         len(kwargs) == 0
     ), f"plot boozer modes got unexpected keyword argument: {kwargs.keys()}"
 
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     if return_data:
         return fig, ax, plot_data
 
@@ -2267,7 +2314,9 @@ def plot_boozer_surface(
           matplotlib)
         * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf
-        * ``title_font_size``: integer, font size of the title
+        * ``title_fontsize``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -2309,13 +2358,15 @@ def plot_boozer_surface(
 
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
-    title_font_size = kwargs.pop("title_font_size", None)
+    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     transforms_compute = get_transforms(
-        "|B|_mn", eq=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+        "|B|_mn", obj=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
     )
     transforms_plot = get_transforms(
-        "|B|_mn", eq=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+        "|B|_mn", obj=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -2373,11 +2424,11 @@ def plot_boozer_surface(
         alphas = np.hstack((alpha1, alpha2))
         ax.plot(zeta, alphas, color="k", ls="-", lw=2)
 
-    ax.set_xlabel(r"$\zeta_{Boozer}$")
-    ax.set_ylabel(r"$\theta_{Boozer}$")
-    ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_font_size)
+    ax.set_xlabel(r"$\zeta_{Boozer}$", fontsize=xlabel_fontsize)
+    ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
+    ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
 
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     plot_data = {}
     plot_data["zeta_Boozer"] = zz
     plot_data["theta_Boozer"] = tt
@@ -2435,15 +2486,20 @@ def plot_qs_error(  # noqa: 16 fxn too complex
           matplotlib)
         * ``ls``: list of strs of length 3, linestyles to use for the 3 different
           qs metrics
-        * ``colors``: list of strs of length 3, colors to use for the 3 different
+        * ``lw``: list of float of length 3, linewidths to use for the 3 different
           qs metrics
-        * ``markers``: list of strs of length 3, markers to use for the 3 different
+        * ``color``: list of strs of length 3, colors to use for the 3 different
+          qs metrics
+        * ``marker``: list of strs of length 3, markers to use for the 3 different
           qs metrics
         * ``labels``:  list of strs of length 3, labels to use for the 3 different
           qs metrics
         * ``ylabel``: str, ylabel to use for plot
         * ``legend``: bool, whether to display legend or not
         * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``labels``: list of strs of length 3, labels to apply to each QS error metric
 
     Returns
     -------
@@ -2464,6 +2520,12 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         fig, ax = plot_qs_error(eq, helicity=(1, eq.NFP), log=True)
 
     """
+    colors = kwargs.pop("color", ["r", "b", "g"])
+    markers = kwargs.pop("marker", ["o", "o", "o"])
+    labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_T$"])
+    colors = parse_argname_change(colors, kwargs, "colors", "color")
+    markers = parse_argname_change(markers, kwargs, "markers", "marker")
+
     if rho is None:
         rho = np.linspace(1, 0, num=20, endpoint=False)
     elif np.isscalar(rho) and rho > 1:
@@ -2474,9 +2536,10 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
     ls = kwargs.pop("ls", ["-", "-", "-"])
-    colors = kwargs.pop("colors", ["r", "b", "g"])
-    markers = kwargs.pop("markers", ["o", "o", "o"])
-    labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_T$"])
+    lw = kwargs.pop("lw", [1, 1, 1])
+    ylabel = kwargs.pop("ylabel", False)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("yxlabel_fontsize", None)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -2493,7 +2556,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
             transforms = get_transforms(
-                "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+                "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
             )
             if i == 0:  # only need to do this once for the first rho surface
                 matrix, modes, idx = ptolemy_linear_transform(
@@ -2545,6 +2608,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[0 % len(colors)],
                 marker=markers[0 % len(markers)],
                 label=labels[0 % len(labels)],
+                lw=lw[0 % len(lw)],
             )
         if fC:
             ax.semilogy(
@@ -2554,6 +2618,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[1 % len(colors)],
                 marker=markers[1 % len(markers)],
                 label=labels[1 % len(labels)],
+                lw=lw[1 % len(lw)],
             )
         if fT:
             ax.semilogy(
@@ -2563,6 +2628,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[2 % len(colors)],
                 marker=markers[2 % len(markers)],
                 label=labels[2 % len(labels)],
+                lw=lw[2 % len(lw)],
             )
     else:
         if fB:
@@ -2573,6 +2639,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[0 % len(colors)],
                 marker=markers[0 % len(markers)],
                 label=labels[0 % len(labels)],
+                lw=lw[0 % len(lw)],
             )
         if fC:
             ax.plot(
@@ -2582,6 +2649,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[1 % len(colors)],
                 marker=markers[1 % len(markers)],
                 label=labels[1 % len(labels)],
+                lw=lw[1 % len(lw)],
             )
         if fT:
             ax.plot(
@@ -2591,9 +2659,13 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[2 % len(colors)],
                 marker=markers[2 % len(markers)],
                 label=labels[2 % len(labels)],
+                lw=lw[2 % len(lw)],
             )
 
-    ax.set_xlabel(_AXIS_LABELS_RTZ[0])
+    ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
+    if ylabel:
+        ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
+
     if kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
 
@@ -2601,7 +2673,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         len(kwargs) == 0
     ), f"plot qs error got unexpected keyword argument: {kwargs.keys()}"
 
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     if return_data:
         return fig, ax, plot_data
 
@@ -2626,7 +2698,7 @@ def plot_grid(grid, return_data=False, **kwargs):
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
-        * ``title_font_size``: integer, font size of the title
+        * ``title_fontsize``: integer, font size of the title
 
     Returns
     -------
@@ -2651,7 +2723,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     """
     fig = plt.figure(figsize=kwargs.pop("figsize", (4, 4)))
     ax = plt.subplot(projection="polar")
-    title_font_size = kwargs.pop("title_font_size", None)
+    title_fontsize = kwargs.pop("title_fontsize", None)
 
     assert (
         len(kwargs) == 0
@@ -2701,9 +2773,9 @@ def plot_grid(grid, return_data=False, **kwargs):
                 grid.node_pattern,
             ),
             pad=20,
-            fontsize=title_font_size,
+            fontsize=title_fontsize,
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["rho"] = nodes[:, 0]
@@ -2734,7 +2806,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
         * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
-        * ``title_font_size``: integer, font size of the title
+        * ``title_fontsize``: integer, font size of the title
 
     Returns
     -------
@@ -2759,7 +2831,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         fig, ax = plot_basis(basis)
 
     """
-    title_font_size = kwargs.pop("title_font_size", None)
+    title_fontsize = kwargs.pop("title_fontsize", None)
 
     if basis.__class__.__name__ == "PowerSeries":
         lmax = abs(basis.modes[:, 0]).max()
@@ -2783,9 +2855,9 @@ def plot_basis(basis, return_data=False, **kwargs):
         ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
         ax.set_title(
             "{}, $L={}$".format(basis.__class__.__name__, basis.L),
-            fontsize=title_font_size,
+            fontsize=title_fontsize,
         )
-        fig.set_tight_layout(True)
+        _set_tight_layout(fig)
         if return_data:
             return fig, ax, plot_data
 
@@ -2798,10 +2870,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
         f = basis.evaluate(grid.nodes)
-        plot_data = {}
-        plot_data["n"] = basis.modes[:, 2]
-        plot_data["amplitude"] = []
-        plot_data["zeta"] = z
+        plot_data = {"n": basis.modes[:, 2], "amplitude": [], "zeta": z}
 
         for fi, n in zip(f.T, basis.modes[:, 2]):
             ax.plot(z, fi, label="$n={:d}$".format(int(n)))
@@ -2815,9 +2884,9 @@ def plot_basis(basis, return_data=False, **kwargs):
         ax.set_yticks([-1, -0.5, 0, 0.5, 1])
         ax.set_title(
             "{}, $N={}$, $NFP={}$".format(basis.__class__.__name__, basis.N, basis.NFP),
-            fontsize=title_font_size,
+            fontsize=title_fontsize,
         )
-        fig.set_tight_layout(True)
+        _set_tight_layout(fig)
         if return_data:
             return fig, ax, plot_data
 
@@ -2841,12 +2910,13 @@ def plot_basis(basis, return_data=False, **kwargs):
         )
         ax = np.empty((2 * mmax + 1, 2 * nmax + 1), dtype=object)
         f = basis.evaluate(grid.nodes)
-        plot_data = {}
-        plot_data["m"] = basis.modes[:, 1]
-        plot_data["n"] = basis.modes[:, 2]
-        plot_data["amplitude"] = []
-        plot_data["zeta"] = z
-        plot_data["theta"] = t
+        plot_data = {
+            "m": basis.modes[:, 1],
+            "n": basis.modes[:, 2],
+            "amplitude": [],
+            "zeta": z,
+            "theta": t,
+        }
 
         for fi, m, n in zip(f.T, basis.modes[:, 1], basis.modes[:, 2]):
             ax[mmax + m, nmax + n] = plt.subplot(gs[mmax + m + 1, n + nmax])
@@ -2893,7 +2963,7 @@ def plot_basis(basis, return_data=False, **kwargs):
                 basis.__class__.__name__, basis.M, basis.N, basis.NFP
             ),
             y=0.98,
-            fontsize=title_font_size,
+            fontsize=title_fontsize,
         )
         if return_data:
             return fig, ax, plot_data
@@ -2953,9 +3023,9 @@ def plot_basis(basis, return_data=False, **kwargs):
                 basis.__class__.__name__, basis.L, basis.M, basis.spectral_indexing
             ),
             y=0.98,
-            fontsize=title_font_size,
+            fontsize=title_fontsize,
         )
-        fig.set_tight_layout(True)
+        _set_tight_layout(fig)
         if return_data:
             return fig, ax, plot_data
 
@@ -3348,7 +3418,7 @@ def plot_field_lines_sfl(
     ax.set_title(
         "%d Magnetic Field Lines Traced On $\\rho=%1.2f$ Surface" % (n_lines, rho)
     )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
     x_limits = ax.get_xlim3d()
@@ -3539,7 +3609,7 @@ def plot_field_lines_real_space(
     ax.set_title(
         "%d Magnetic Field Lines Traced On $\\rho=%1.2f$ Surface" % (n_lines, rho)
     )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
     x_limits = ax.get_xlim3d()

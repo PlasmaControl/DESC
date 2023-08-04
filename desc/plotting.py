@@ -16,7 +16,7 @@ from termcolor import colored
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
-from desc.compute.utils import surface_averages
+from desc.compute.utils import surface_averages_map
 from desc.grid import Grid, LinearGrid
 from desc.utils import flatten_list, parse_argname_change
 from desc.vmec_utils import ptolemy_linear_transform
@@ -998,7 +998,6 @@ def plot_fsa(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
     label = label.split("~")
-    get_value = lambda x: _compute(eq, x, grid, reshape=False)[0]
     if (
         data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
         == "r"
@@ -1010,10 +1009,15 @@ def plot_fsa(
         # So we avoid surface averaging it and forgo the <> around the label.
         label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
         plot_data_ylabel_key = f"{name}"
+        if (
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+            == "r"
+        ):
+            values = grid.compress(values)
     else:
-        is_nan = np.isnan(values)
+        compute_surface_averages = surface_averages_map(grid, expand_out=False)
         if with_sqrt_g:  # flux surface average
-            sqrt_g = get_value("sqrt(g)")
+            sqrt_g = _compute(eq, "sqrt(g)", grid, reshape=False)[0]
             # Attempt to compute the magnetic axis limit.
             # Compute derivative depending on various naming schemes.
             # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
@@ -1024,7 +1028,7 @@ def plot_fsa(
             )
             values_r = next(
                 (
-                    get_value(x)
+                    _compute(eq, x, grid, reshape=False)[0]
                     for x in schemes
                     if x in data_index["desc.equilibrium.equilibrium.Equilibrium"]
                 ),
@@ -1032,30 +1036,30 @@ def plot_fsa(
             )
             if (np.isfinite(values) & np.isfinite(values_r))[grid.axis].all():
                 # Otherwise cannot compute axis limit in this agnostic manner.
-                sqrt_g = grid.replace_at_axis(sqrt_g, get_value("sqrt(g)_r"), copy=True)
-            values = surface_averages(grid=grid, q=values, sqrt_g=sqrt_g)
+                sqrt_g = grid.replace_at_axis(
+                    sqrt_g, _compute(eq, "sqrt(g)_r", grid, reshape=False)[0], copy=True
+                )
+            averages = compute_surface_averages(values, sqrt_g=sqrt_g)
             label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
         else:  # theta average
-            values = surface_averages(grid=grid, q=values)
+            averages = compute_surface_averages(values)
             label = (
                 r"$\langle "
                 + label[0][1:]
                 + r" \rangle_{\theta}~"
                 + "~".join(label[1:])
             )
-        # integration replaced nans with 0, put them back
-        values = np.where(is_nan, np.nan, values)
+        # True if values has nan on a given surface.
+        is_nan = compute_surface_averages(np.isnan(values)).astype(bool)
+        # The integration replaced nan with 0.
+        # Put them back to avoid misleading plot (e.g. cusp near the magnetic axis).
+        values = np.where(is_nan, np.nan, averages)
         plot_data_ylabel_key = f"<{name}>_fsa"
-    if (
-        data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
-        != ""
-    ):
-        values = grid.compress(values)
 
     if norm_F:
         # normalize force by B pressure gradient
         norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
-        norm_data = get_value(norm_name)
+        norm_data = _compute(eq, norm_name, grid, reshape=False)[0]
         values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot

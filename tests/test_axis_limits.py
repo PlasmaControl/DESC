@@ -157,23 +157,27 @@ def assert_is_continuous(
     names = [x for x in names if not ("Boozer" in x or "_mn" in x or x == "B modes")]
 
     num_points = 15
-    rho = np.linspace(start=0, stop=1, num=num_points) * delta
+    rho = np.linspace(start=0, stop=delta, num=num_points)
     grid = LinearGrid(rho=rho, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
     assert grid.axis.size
-    integrate = surface_integrals_map(grid)
+    integrate = surface_integrals_map(grid, expand_out=False)
     data = eq.compute(names, grid=grid)
 
     data_index_eq = data_index["desc.equilibrium.equilibrium.Equilibrium"]
     for name in names:
         if _skip_this(eq, name) or data_index_eq[name]["coordinates"] == "":
+            # can't check continuity of global scaler quantity
             continue
         # make single variable function of rho
         if data_index_eq[name]["coordinates"] == "r":
-            profile = data[name]
+            # already single variable function of rho
+            profile = grid.compress(data[name])
         else:
+            # integrate out theta and zeta dependence
             profile = np.where(
-                np.isnan(data[name]),
-                # integration replaced nans with 0, put them back
+                # True if integrand has nan on a given surface.
+                integrate(np.isnan(data[name])).astype(bool),
+                # The integration below replaces nan with 0; put them back.
                 np.nan,
                 # Norms and integrals are continuous functions, so their composition
                 # cannot disrupt existing continuity. Note that the absolute value
@@ -181,7 +185,6 @@ def assert_is_continuous(
                 # not become continuous once integrated.
                 integrate(np.abs(data[name])),
             )
-        profile = grid.compress(profile)
         fit = kwargs.get(name, {}).get("desired_at_axis", desired_at_axis)
         if fit is None:
             if np.ndim(data_index_eq[name]["dim"]):

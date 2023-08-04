@@ -19,7 +19,7 @@ from desc.io import load
 from desc.magnetic_fields import (
     SumMagneticField,
     ToroidalMagneticField,
-    field_line_integrate,
+    field_line_integrate,MagneticField
 )
 from desc.plotting import plot_1d, plot_2d, plot_comparison, plot_surfaces
 from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
@@ -47,7 +47,7 @@ def field_trace_from_coilset(coils, eqname, ntransit=100, dirname=None):
         coils = CoilSet.from_makegrid_coilfile(coils)
         
     else:
-        assert isinstance(coils, Coil)
+        assert isinstance(coils, MagneticField)
         dirname = dirname if dirname else eqname
 
     t0 = time.time()

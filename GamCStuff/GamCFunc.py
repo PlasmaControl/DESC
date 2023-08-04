@@ -9,10 +9,30 @@ from desc.examples import get
 from desc.grid import LinearGrid
 
 def GammaC(name, s, nfulltransits, stepswithin1FP, bpstep, alpha = 0):
+    """Get the Gamma_c value for a specified surface
+
+    parameters:
+    name: string
+        The name of the equillibrium file to be used
+    s: float (0-1] 
+        The s value of the surface desired
+    nfulltransits: integer
+        number of full transits over the surface, higher numbers take longer but are more accurate
+    stepswithin1FP: integer
+        number of steps within 1 field period, higher numbers take longer but are more accurate
+    bpstep: integer
+        number of different b' values to evaluate at, higher numbers (probably) give more accuracy
+    alpha: float (0-2pi] 
+        starting field line label (generally does not matter if nfulltransits is high enough)
+
+    returns:
+    bigGamma_c: float
+        The value of gamma_c
+    """
    
     start_time = time.time()
    
-    eq = desc.io.load(name + "_solved.h5")
+    eq = desc.io.load(name)
     
     # get iota at this surface to use for initial guess
     iota = eq.compute("iota", grid=Grid(jnp.array([[jnp.sqrt(s), 0, 0]])))["iota"]

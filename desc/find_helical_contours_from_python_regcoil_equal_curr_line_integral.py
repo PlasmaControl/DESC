@@ -140,47 +140,6 @@ def find_helical_coils(
             + net_poloidal_current / 2 / np.pi
         )
 
-    def surf_current_and_surf_normal_vec(theta, zeta):
-        # this fxn returns K mag * ns
-        theta_DESC_surf = theta
-        nodes_surf = np.vstack(
-            (
-                np.zeros_like(theta_DESC_surf.flatten(order="F")),
-                theta_DESC_surf.flatten(order="F"),
-                zeta.flatten(order="F"),
-            )
-        ).T
-        sgrid = Grid(nodes_surf, sort=False)
-        rs_t = winding_surf.compute_coordinates(
-            grid=sgrid, dt=1
-        )  # must negate this bc of the differing theta conventions
-        rs_z = winding_surf.compute_coordinates(grid=sgrid, dz=1)
-        # ns = winding_surf.compute_normal(grid=sgrid)
-        ns_mag = np.linalg.norm(np.cross(rs_t, rs_z), axis=1)
-
-        phi_t = phi_tot_fun_theta_deriv_vec(theta, zeta)
-        phi_z = phi_tot_fun_zeta_deriv_vec(theta, zeta)
-
-        K = -(phi_t * rs_z.T).T + (phi_z * rs_t.T).T
-
-        return np.linalg.norm(K, axis=1)
-
-    @jax.jit
-    def surf_current_vec_contravariant_zeta_times_R_times_g_tt_jit(sgrid, trans_temp):
-
-        Rs = winding_surf.compute_coordinates(grid=sgrid, basis="rpz")[:, 0]
-        rs_t = winding_surf.compute_coordinates(grid=sgrid, dt=1)
-        rs_z = winding_surf.compute_coordinates(grid=sgrid, dz=1)
-        ns_mag = np.linalg.norm(cross(rs_t, rs_z), axis=1)
-
-        phi_t = phi_tot_fun_theta_deriv_vec_jit(sgrid, trans_temp)
-        g_tt = dot(rs_t, rs_t)
-
-        # "vector" is the K vector in terms of grad(theta) and grad(zeta)
-        K_sup_zeta = -phi_t * (1 / ns_mag)
-
-        return K_sup_zeta * Rs * jnp.sqrt(g_tt)
-
     def surf_current_vec_contravariant_zeta_times_R_times_g_tt(sgrid):
 
         Rs = winding_surf.compute_coordinates(grid=sgrid, basis="rpz")[:, 0]
@@ -239,7 +198,6 @@ def find_helical_coils(
     contour_zeta = []
     contour_theta = []
 
-    numCoils = 0
     for j in range(numCoilsFound):
         try:
             p = cdata.collections[j].get_paths()[0]
@@ -274,11 +232,8 @@ def find_helical_coils(
 
     def get_integration_points_and_line_elems(
         contour_theta_halfway,
-        contour_zeta_halfway,
         contours_were_sorted,
-        node_skip=2,
         nthetas=50,
-        dphi_method="RHS",
     ):
         # simply gets the theta pts btwn the halfway contours for each coil contour
         # and the dtheta for each given the ntheta
@@ -333,7 +288,6 @@ def find_helical_coils(
         """
         N_trial_contours = len(contours) - 1
         # contours is the decision variable
-        # we can sort contours manually? probably, maybe
         contour_zeta = []
         contour_theta = []
         if not contours[1] - contours[0] > 1:
@@ -472,9 +426,6 @@ def find_helical_coils(
             plt.xlabel("zeta")
             plt.ylabel("theta")
 
-            # plt.xlim([0,1])
-            # plt.ylim([0,6*np.sign(phi_slope)])
-
         ################################################################
         # integrate surface current over the areas for each coil
         # to find the current for each coil
@@ -513,12 +464,12 @@ def find_helical_coils(
         for coords, line_elems in zip(coil_nodes_line, coil_line_elements):
             gtt_sqrt = np.abs(surf_g_tt(coords[0], coords[1]))
             approx_length += np.sum(gtt_sqrt * line_elems)
-            # print(f"area of this strip:",np.sum(ns*area_elems))
             len_elem_sum += np.sum(line_elems)
+        length_diff = jnp.abs(true_length - approx_length)
+        print(f" Difference in length approx and true length: {length_diff}")
         area_elem_diff = np.abs(2 * np.pi - len_elem_sum)
         if area_elem_diff > 0.1:
             print(f"line elem sum diff is large! {area_elem_diff:1.4e}")
-        # print(f"Current Variance: {variance:1.4e}")
 
         if not return_full_info:
             return variance
@@ -577,7 +528,6 @@ def find_helical_coils(
         return contour_theta, contour_zeta
 
     N_trial_contours = desirednumcoils
-    numcoils = desirednumcoils
     # flip is so the contour levels are increasing (this may not be necessary dep. on contour direction)
     # adding extra contour above and below the ones we care about, so we can then find halfway point...
 
@@ -628,8 +578,9 @@ def find_helical_coils(
     )
     contour_theta, contour_zeta = find_full_coil_contours(contours)
 
-    # TODO: use a DESC surface object to do this
-    FourierRZToroidalSurface.compute_coordinates
+    ################################################################
+    # Find the XYZ points in real space of the coil contours
+    ################################################################
     contour_X = []
     contour_Y = []
     contour_Z = []
@@ -644,12 +595,6 @@ def find_helical_coils(
         contour_X.append(coords[:, 0])
         contour_Y.append(coords[:, 1])
         contour_Z.append(coords[:, 2])
-
-    ################################################################
-    # Find the XYZ points in real space of the coil contours
-    ################################################################
-    ###### read in the nescin.out file for the winding surface geometry ####
-    # assumes the nescin.out file exists in this same directory
     fig = plt.figure(figsize=(12, 12))
     ax = fig.add_subplot(projection="3d")
     for j in range(len(contour_X)):
@@ -675,7 +620,6 @@ def find_helical_coils(
 
     ################
 
-    coilsFilename = coilsFilename
     # Write coils file
     write_coil = True
     if write_coil:

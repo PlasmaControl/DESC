@@ -73,7 +73,7 @@ def find_helical_coils(
 
         winding_surf = FourierRZToroidalSurface(
             R_lmn=np.array([R0_ves, -a_ves]),  # boundary coefficients in m
-            Z_lmn=np.array([-a_ves]),
+            Z_lmn=np.array([a_ves]),
             modes_R=np.array([[0, 0], [1, 0]]),  # [M, N] boundary Fourier modes
             modes_Z=np.array([[-1, 0]]),
             NFP=1,  # number of (toroidal) field periods
@@ -147,7 +147,7 @@ def find_helical_coils(
         rs_z = winding_surf.compute_coordinates(grid=sgrid, dz=1)
         ns_mag = np.linalg.norm(cross(rs_t, rs_z), axis=1)
 
-        phi_t = phi_tot_fun_theta_deriv_vec(sgrid.nodes[:, 0], sgrid.nodes[:, 1])
+        phi_t = phi_tot_fun_theta_deriv_vec(sgrid.nodes[:, 1], sgrid.nodes[:, 2])
         g_tt = dot(rs_t, rs_t)
 
         # "vector" is the K vector in terms of grad(theta) and grad(zeta)
@@ -374,9 +374,7 @@ def find_helical_coils(
 
         coil_nodes_line, coil_line_elements = get_integration_points_and_line_elems(
             contour_theta_halfway,
-            contour_zeta_halfway,
             contours_were_sorted,
-            node_skip=2,
             nthetas=nthetas,
         )
 

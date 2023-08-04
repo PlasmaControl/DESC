@@ -1053,6 +1053,13 @@ class B_dmin(_Objective):
     grid to a point on the plasma grid and the magnitude of the magnetic
     field (|B|) at that point. Then minimizes the function |B|*d_min
 
+    NOTE: When use_softmin=True, ensures that alpha*values passed in is
+    at least >1, otherwise the softmin will return inaccurate approximations
+    of the minimum. Will automatically multiply array values by 2 / min_val if the min
+    of alpha*array is <1. This is to avoid inaccuracies that arise when values <1
+    are present in the softmin, which can cause inaccurate mins or even incorrect
+    signs of the softmin versus the actual min.
+
     Parameters
     ----------
     surface : Surface
@@ -1078,6 +1085,13 @@ class B_dmin(_Objective):
         Collocation grid containing the nodes to evaluate surface geometry at.
     plasma_grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
+    use_softmin: Bool, use softmin or hard min.
+    alpha: float, parameter used for softmin. The larger alpha, the closer the softmin
+        approximates the hardmin. softmin -> hardmin as alpha -> infinity.
+        if alpha*array < 1, the underlying softmin will automatically multiply
+        the array by 2/min_val to ensure that alpha*array>1. Making alpha larger
+        than this minimum value will make the softmin a more accurate approximation
+        of the true min.
     name : str
         Name of the objective function.
 
@@ -1099,6 +1113,8 @@ class B_dmin(_Objective):
         normalize_target=True,
         surface_grid=None,
         plasma_grid=None,
+        use_softmin=False,
+        alpha=1.0,
         name="B_dmin",
     ):
         if target is None and bounds is None:
@@ -1106,6 +1122,8 @@ class B_dmin(_Objective):
         self._surface = surface
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
+        self._use_softmin = use_softmin
+        self._alpha = alpha
         super().__init__(
             eq=eq,
             target=target,
@@ -1224,7 +1242,12 @@ class B_dmin(_Objective):
             - constants["surface_coords"][None, :, :],
             axis=-1,
         )
-        dmin_data = d.min(axis=-1)
+
+        if self._use_softmin:  # do softmin
+            dmin_data = jnp.apply_along_axis(jax_softmin, 0, d, self._alpha)
+        else:  # do hardmin
+            dmin_data = d.min(axis=-1)
+
         B_dmin_data = jnp.array([d_min * B for d_min, B in zip(dmin_data, data["|B|"])])
 
         _, inverse, counts = np.unique(

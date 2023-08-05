@@ -13,6 +13,7 @@ from desc.compute.utils import (
     surface_integrals_transform,
     surface_max,
     surface_min,
+    surface_variance,
 )
 from desc.examples import get
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
@@ -371,6 +372,40 @@ class TestComputeUtils:
             surface_averages(grid, data["|B|"]),
             np.mean(data["|B|"]),
             err_msg="average without sqrt(g) fail",
+        )
+
+    @pytest.mark.unit
+    def test_surface_variance(self):
+        """Test that variance over surfaces are computed correctly with unit weights."""
+        grid = LinearGrid(L=L, M=M, N=N, NFP=1)
+        # something arbitrary
+        q = np.abs(np.sin(np.arange(grid.num_nodes)))
+
+        # Check correctness of mean calculation.
+        mean = grid.expand(
+            q.reshape((grid.num_zeta, -1)).mean(axis=-1),
+            surface_label="zeta",
+        )
+        # number of samples per surface
+        n = grid.num_rho * grid.num_theta
+        ds = grid.spacing[:, :2].prod(axis=1)
+        np.testing.assert_allclose(
+            # divide out differential area to turn integral into finite sum
+            surface_integrals(grid, q / ds, surface_label="zeta") / n,
+            desired=mean,
+        )
+        np.testing.assert_allclose(
+            actual=surface_averages(grid, q, surface_label="zeta"),
+            desired=mean,
+        )
+
+        # Test if sample variance formula reduces to
+        # \sum_{i=1}^{n} (q_i - q_mean)^2 / (n - 1)
+        # on LinearGrid when weights are not given.
+        np.testing.assert_allclose(
+            actual=surface_variance(grid, q, surface_label="zeta"),
+            desired=surface_integrals(grid, (q - mean) ** 2 / ds, surface_label="zeta")
+            / (n - 1),
         )
 
     @pytest.mark.unit

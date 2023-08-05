@@ -377,9 +377,9 @@ class TestComputeUtils:
     @pytest.mark.unit
     def test_surface_variance(self):
         """Test that variance over surfaces are computed correctly with unit weights."""
-        grid = LinearGrid(L=L, M=M, N=N, NFP=1)
+        grid = LinearGrid(L=L, M=M, N=N, NFP=NFP)
         # something arbitrary
-        q = np.abs(np.sin(np.arange(grid.num_nodes)))
+        q = np.arange(grid.num_nodes)
 
         # Check correctness of mean calculation.
         mean = grid.expand(
@@ -390,8 +390,7 @@ class TestComputeUtils:
         n = grid.num_rho * grid.num_theta
         ds = grid.spacing[:, :2].prod(axis=1)
         np.testing.assert_allclose(
-            # divide out differential area to turn integral into finite sum
-            surface_integrals(grid, q / ds, surface_label="zeta") / n,
+            actual=surface_integrals(grid, q / ds, surface_label="zeta") / n,
             desired=mean,
         )
         np.testing.assert_allclose(

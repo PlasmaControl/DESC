@@ -1211,7 +1211,21 @@ def surface_variance(
     surface_label="rho",
     expand_out=True,
 ):
-    """Compute the (unbiased) sample variance of ``q`` on each surface of the grid.
+    r"""Compute the (unbiased) sample variance of ``q`` on each surface of the grid.
+
+    Computes the following quantity on each surface of the grid.
+
+    .. math::
+        \frac{n}{n-1} \frac{\sum_{i=1}^{n} (q_i - \bar{q})^2 w_i}{\sum_{i=1}^{n} w_i}
+
+    where :math:`\bar{q}` is the mean value of :math:`q`,
+    :math:`n` is the number of samples, and
+    :math:`w_i` is the weight assigned to :math:`q_i`.
+
+    When all weights :math:`w_i` are equal, this reduces to
+
+     .. math::
+        \frac{1}{n-1} \sum_{i=1}^{n} (q_i - \bar{q})^2
 
     Parameters
     ----------
@@ -1220,11 +1234,8 @@ def surface_variance(
     q : ndarray
         Quantity to compute the sample variance.
     weights : ndarray
-        Weight assigned to each sample of q.
+        Weight assigned to each sample of ``q``.
         A candidate for this parameter is the surface area Jacobian.
-        Reduces to the common sample variance formula
-        sum_{i=1}^{n} (q_i - q_mean)^2 / (n - 1)
-        when weights are constant over a grid with evenly spaced nodes.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the variance over.
     expand_out : bool
@@ -1236,7 +1247,7 @@ def surface_variance(
     Returns
     -------
     variance : ndarray
-        Variance of the input over each surface in the grid.
+        Variance of the input ``q`` over each surface in the grid.
         By default, the returned array has the same shape as the input.
 
     """
@@ -1245,11 +1256,8 @@ def surface_variance(
     n = jnp.bincount(inverse_idx, length=unique_size)
     compute_averages = surface_averages_map(grid, surface_label, expand_out=False)
     # compute variance in two passes to avoid catastrophic round off error
-    mean = compute_averages(q, weights)
-    diff_square = (q - grid.expand(mean, surface_label)) ** 2
-    # normalization factor is N = n / sum_{i=1}^{n} w_i
-    # variance = N / (n-1) * sum_{i=1}^{n} (q_i - q_mean)^2 * w_i
-    variance = (n / (n - 1) * compute_averages(diff_square, weights).T).T
+    mean = grid.expand(compute_averages(q, weights), surface_label)
+    variance = (n / (n - 1) * compute_averages((q - mean) ** 2, weights).T).T
     return grid.expand(variance, surface_label) if expand_out else variance
 
 

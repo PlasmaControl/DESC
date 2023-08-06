@@ -1,7 +1,7 @@
 from desc.backend import jnp
-from desc.geometry.utils import rpz2xyz, rpz2xyz_vec
 
 from .data_index import register_compute_fun
+from .geom_utils import rpz2xyz, rpz2xyz_vec
 
 
 @register_compute_fun(

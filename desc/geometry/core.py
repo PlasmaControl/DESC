@@ -6,12 +6,11 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute.utils import compute as compute_fun
+from desc.compute import compute as compute_fun
+from desc.compute.geom_utils import reflection_matrix, rotation_matrix
 from desc.compute.utils import get_params, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import IOAble
-
-from .utils import reflection_matrix, rotation_matrix
 
 
 class Curve(IOAble, ABC):

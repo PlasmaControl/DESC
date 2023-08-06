@@ -624,7 +624,7 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    coordinates="s",
+    coordinates="",
     data=["s", "x_s"],
     parameterization="desc.geometry.core.Curve",
 )

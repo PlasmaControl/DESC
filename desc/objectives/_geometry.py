@@ -7,7 +7,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.compute.utils import surface_averages, surface_integrals
+from desc.compute.utils import surface_variance
 from desc.geometry.utils import rpz2xyz
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
@@ -1250,14 +1250,8 @@ class B_dmin(_Objective):
 
         B_dmin_data = jnp.array([d_min * B for d_min, B in zip(dmin_data, data["|B|"])])
 
-        _, inverse, counts = np.unique(
-            self._plasma_grid.nodes[:, 0], return_inverse=True, return_counts=True
+        B_dmin_variance = surface_variance(
+            grid=self._plasma_grid, q=B_dmin_data, expand_out=False
         )
-        number_of_samples_per_surface = counts[inverse]
-        B_dmin_mean = surface_averages(grid=self._plasma_grid, q=B_dmin_data)
-        B_dmin_variance = surface_integrals(
-            grid=self._plasma_grid, q=(B_dmin_data - B_dmin_mean) ** 2
-        ) / (number_of_samples_per_surface - 1)
-        B_dmin_variance = self._plasma_grid.compress(B_dmin_variance)
 
         return jnp.atleast_1d(B_dmin_variance)

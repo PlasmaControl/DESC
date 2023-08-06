@@ -884,3 +884,28 @@ def test_bd_min_objective():
 
     # second surface is further away, so should have larger obj
     np.testing.assert_array_less(L1, L2)
+
+    # test softmin, for large enough alpha, should be same as actual min
+    obj1 = B_dmin(
+        winding_surf1,
+        eq=eq,
+        normalize=False,
+        plasma_grid=grid,
+        use_softmin=True,
+        alpha=1000,
+    )
+    obj2 = B_dmin(
+        winding_surf2,
+        eq=eq,
+        normalize=False,
+        plasma_grid=grid,
+        use_softmin=True,
+        alpha=1000,
+    )
+    with pytest.warns(UserWarning):
+        obj1.build()
+    with pytest.warns(UserWarning):
+        obj2.build()
+
+    # second surface is further away, so should have larger obj
+    np.testing.assert_array_less(L1, L2)

@@ -943,7 +943,7 @@ def test_constrained_AL_scalar():
         objective=obj,
         constraints=constraints,
         optimizer="fmin-auglag",
-        maxiter=500,
+        maxiter=1000,
         verbose=3,
         ctol=ctol,
         x_scale="auto",

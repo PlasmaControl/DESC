@@ -1216,16 +1216,47 @@ def surface_variance(
     Computes the following quantity on each surface of the grid.
 
     .. math::
-        \frac{n}{n-1} \frac{\sum_{i=1}^{n} (q_i - \bar{q})^2 w_i}{\sum_{i=1}^{n} w_i}
+        \frac{n_e}{n_e - 1}
+        \frac{ \sum_{i=1}^{n} (q_i - \bar{q})^2 w_i }{ \sum_{i=1}^{n} w_i }
 
-    where :math:`\bar{q}` is the mean value of :math:`q`,
-    :math:`n` is the number of samples, and
-    :math:`w_i` is the weight assigned to :math:`q_i`.
+    where :math:`w_i` is the weight assigned to :math:`q_i`,
+    :math:`\bar{q}` is the weighted mean of :math:`q`,
+    :math:`n` is the number of samples on a surface, and
+    :math:`n_e` is the effective number of samples on a surface defined as
+
+    .. math::
+        (\sum_{i=1}^{n} w_i)^2 / (\sum_{i=1}^{n} w_i^2)
 
     When all weights :math:`w_i` are equal, this reduces to
 
-     .. math::
+    .. math::
         \frac{1}{n-1} \sum_{i=1}^{n} (q_i - \bar{q})^2
+
+    Notes
+    -----
+    There are three different methods to unbias the variance of a weighted
+    sample so that the computed variance better estimates the true variance.
+    Whether the method is correct for a particular use case depends on what
+    the weights assigned to each sample represent.
+
+    This function implements the first case, where the weights are not random
+    and are intended to assign more weight to some samples for reasons unrelated
+    to differences in uncertainty between samples.
+    See https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights.
+
+    The second case is when the weights are intended to assign more weight to
+    samples with less uncertainty.
+    See https://en.wikipedia.org/wiki/Inverse-variance_weighting.
+    The unbiased sample variance for this case is obtained by replacing the
+    effective number of samples in the formula this function implements,
+    :math:`n_e` with the actual number of samples :math:`n`.
+
+    Both the first and second case converge to the unbiased sample variance when
+    all the weights are equal. However, using one for the incorrect use case
+    can yield large error.
+
+    The third case is when the weights denote the integer frequency of each sample.
+    See https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Frequency_weights.
 
     Parameters
     ----------
@@ -1235,7 +1266,7 @@ def surface_variance(
         Quantity to compute the sample variance.
     weights : ndarray
         Weight assigned to each sample of ``q``.
-        A candidate for this parameter is the surface area Jacobian.
+        A good candidate for this parameter is the surface area Jacobian.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the variance over.
     expand_out : bool
@@ -1251,13 +1282,22 @@ def surface_variance(
         By default, the returned array has the same shape as the input.
 
     """
-    unique_size, inverse_idx, _, _ = _get_grid_surface(grid, surface_label)
-    # number of samples per surface
-    n = jnp.bincount(inverse_idx, length=unique_size)
-    compute_averages = surface_averages_map(grid, surface_label, expand_out=False)
+    _, _, spacing, _ = _get_grid_surface(grid, surface_label)
+    integrate = surface_integrals_map(grid, surface_label, expand_out=False)
+
+    v1 = integrate(weights)
+    v2 = integrate(weights**2 * spacing.prod(axis=-1))
+    # effective number of samples per surface
+    n = v1**2 / v2
+    # analogous to Bessel's bias correction
+    correction = n / (n - 1)
+
+    # TODO: add 'weights' parameter to surface_integrals() to simplify transposing
     # compute variance in two passes to avoid catastrophic round off error
-    mean = grid.expand(compute_averages(q, weights), surface_label)
-    variance = (n / (n - 1) * compute_averages((q - mean) ** 2, weights).T).T
+    q = jnp.atleast_1d(q)
+    mean = (integrate((weights * q.T).T).T / v1).T
+    mean = grid.expand(mean, surface_label)
+    variance = (correction * integrate((weights * ((q - mean) ** 2).T).T).T / v1).T
     return grid.expand(variance, surface_label) if expand_out else variance
 
 

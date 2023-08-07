@@ -376,35 +376,40 @@ class TestComputeUtils:
 
     @pytest.mark.unit
     def test_surface_variance(self):
-        """Test that variance over surfaces are computed correctly with unit weights."""
+        """Test that variance is computed correctly when weights are equal."""
         grid = LinearGrid(L=L, M=M, N=N, NFP=NFP)
+
+        # actual number of samples per surface
+        n = grid.num_rho * grid.num_theta
+        np.testing.assert_allclose(np.bincount(grid.inverse_zeta_idx), desired=n)
+
         # something arbitrary
         q = np.arange(grid.num_nodes)
-
         # Check correctness of mean calculation.
         mean = grid.expand(
             q.reshape((grid.num_zeta, -1)).mean(axis=-1),
             surface_label="zeta",
         )
-        # number of samples per surface
-        n = grid.num_rho * grid.num_theta
-        ds = grid.spacing[:, :2].prod(axis=1)
+        ds = grid.spacing[:, :2].prod(axis=-1)
         np.testing.assert_allclose(
-            actual=surface_integrals(grid, q / ds, surface_label="zeta") / n,
+            surface_integrals(grid, q / ds, surface_label="zeta") / n,
             desired=mean,
         )
         np.testing.assert_allclose(
-            actual=surface_averages(grid, q, surface_label="zeta"),
+            surface_averages(grid, q, surface_label="zeta"),
             desired=mean,
         )
 
-        # Test if sample variance formula reduces to
-        # \sum_{i=1}^{n} (q_i - q_mean)^2 / (n - 1)
-        # on LinearGrid when weights are not given.
+        # Test that implementation of unbiased estimate of weighted sample
+        # variance converges to the unweighted sample variance with Bessel's
+        # correction: \sum_{i=1}^{n} (q_i - q_mean)^2 / (n - 1)
+        # when all weights are equal.
+        unbiased_unweighted_sample_variance = surface_integrals(
+            grid, (q - mean) ** 2 / ds, surface_label="zeta"
+        ) / (n - 1)
         np.testing.assert_allclose(
-            actual=surface_variance(grid, q, surface_label="zeta"),
-            desired=surface_integrals(grid, (q - mean) ** 2 / ds, surface_label="zeta")
-            / (n - 1),
+            surface_variance(grid, q, weights=np.e, surface_label="zeta"),
+            desired=unbiased_unweighted_sample_variance,
         )
 
     @pytest.mark.unit

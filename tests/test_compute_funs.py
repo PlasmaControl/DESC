@@ -1089,7 +1089,8 @@ def test_compare_quantities_to_vmec():
     betatotal = fid.variables["betatotal"][()]
     fid.close()
 
-    eq = EquilibriaFamily.load(desc_file)[-1]
+    with pytest.warns(RuntimeWarning, match="Save attribute '_current'"):
+        eq = EquilibriaFamily.load(desc_file)[-1]
 
     # Compare 0D quantities:
     grid = QuadratureGrid(eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
@@ -1115,7 +1116,7 @@ def test_compute_everything():
     """Make sure we can compute everything without errors."""
     eq = Equilibrium(1, 1, 1)
     grid = LinearGrid(1, 1, 1)
-    for key in data_index.keys():
+    for key in data_index["desc.equilibrium.equilibrium.Equilibrium"].keys():
         data = eq.compute(key, grid=grid)
         assert key in data
 

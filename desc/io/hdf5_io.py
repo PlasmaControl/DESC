@@ -349,17 +349,24 @@ class hdf5Writer(hdf5IO, Writer):
         loc = self.resolve_where(where)
         loc.create_dataset("__class__", data="dict")
         for key in thedict.keys():
-            try:
-                data = thedict[key]
-                compression = (
-                    "gzip"
-                    if isinstance(data, np.ndarray) and np.asarray(data).size > 1
-                    else None
-                )
-                loc.create_dataset(key, data=data, compression=compression)
-            except TypeError:
+            if isinstance(thedict[key], list):
                 group = loc.create_group(key)
-                self.write_obj(thedict[key], group)
+                self.write_list(thedict[key], where=group)
+            elif isinstance(thedict[key], dict):
+                group = loc.create_group(key)
+                self.write_dict(thedict[key], where=group)
+            else:
+                try:
+                    data = thedict[key]
+                    compression = (
+                        "gzip"
+                        if isinstance(data, np.ndarray) and np.asarray(data).size > 1
+                        else None
+                    )
+                    loc.create_dataset(key, data=data, compression=compression)
+                except TypeError:
+                    group = loc.create_group(key)
+                    self.write_obj(thedict[key], group)
 
     def write_list(self, thelist, where=None):
         """Write list to file in group specified by where argument.
@@ -375,14 +382,21 @@ class hdf5Writer(hdf5IO, Writer):
         loc = self.resolve_where(where)
         loc.create_dataset("__class__", data="list")
         for i in range(len(thelist)):
-            try:
-                data = thelist[i]
-                compression = (
-                    "gzip"
-                    if isinstance(data, np.ndarray) and np.asarray(data).size > 1
-                    else None
-                )
-                loc.create_dataset(str(i), data=data, compression=compression)
-            except TypeError:
+            if isinstance(thelist[i], list):
                 subloc = loc.create_group(str(i))
-                self.write_obj(thelist[i], where=subloc)
+                self.write_list(thelist[i], where=subloc)
+            elif isinstance(thelist[i], dict):
+                subloc = loc.create_group(str(i))
+                self.write_dict(thelist[i], where=subloc)
+            else:
+                try:
+                    data = thelist[i]
+                    compression = (
+                        "gzip"
+                        if isinstance(data, np.ndarray) and np.asarray(data).size > 1
+                        else None
+                    )
+                    loc.create_dataset(str(i), data=data, compression=compression)
+                except TypeError:
+                    subloc = loc.create_group(str(i))
+                    self.write_obj(thelist[i], where=subloc)

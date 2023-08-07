@@ -134,6 +134,27 @@ class TestRZCurve:
         with pytest.raises(TypeError):
             c.grid = [1, 2, 3]
 
+    @pytest.mark.unit
+    def test_to_FourierXYZCurve(self):
+        """Test conversion to XYZCurve."""
+        rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
+        xyz = rz.to_FourierXYZCurve(N=2)
+
+        np.testing.assert_allclose(
+            rz.compute_curvature(), xyz.compute_curvature(grid=rz.grid)
+        )
+        np.testing.assert_allclose(
+            rz.compute_torsion(), xyz.compute_torsion(grid=rz.grid)
+        )
+        np.testing.assert_allclose(
+            rz.compute_length(), xyz.compute_length(grid=rz.grid)
+        )
+        np.testing.assert_allclose(
+            rz.compute_coordinates(basis="rpz"),
+            xyz.compute_coordinates(basis="rpz", grid=rz.grid),
+            atol=1e-12,
+        )
+
 
 class TestXYZCurve:
     """Tests for FourierXYZCurve class."""
@@ -235,7 +256,7 @@ class TestXYZCurve:
     def test_asserts(self):
         """Test error checking when creating FourierXYZCurve."""
         c = FourierXYZCurve()
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError):
             c.compute_coordinates(dt=4)
         with pytest.raises(TypeError):
             c.grid = [1, 2, 3]

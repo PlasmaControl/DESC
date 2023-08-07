@@ -1,6 +1,81 @@
 Changelog
 =========
 
+v0.9.2
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.9.1...v0.9.2)
+
+Improvements
+- Improves robustness and speed of ``map_coordinates``.
+- Adds axis parameters ``Ra_n`` and ``Za_n`` as optimizable DoF when using standard
+constrained optimization methods (ie, not ``ProximalProjection``).
+- Adds method to convert ``FourierRZCurve`` to ``FourierXYZCurve``.
+- Makes DESC classes compatible with JAX pytrees.
+- Adds Chebyshev polynomials as basis function (for future use).
+
+Breaking changes
+- Renames ``theta_sfl`` to ``theta_PEST`` in compute functions to avoid confusion with
+other straight field line coordinate systems.
+- Makes plotting kwargs a bit more uniform. ``zeta``, ``nzeta``, ``nphi`` have all been
+superceded by ``phi`` which can be an integer for equally spaced angles or a float or
+array of float to specify angles manually.
+
+Bug fixes
+- Avoids accidentally overwriting equilibria during automatic continuation method.
+
+New Contributors
+
+- \@rahulgaur104 made their first contribution in https://github.com/PlasmaControl/DESC/pull/576
+
+
+v0.9.1
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.9.0...v0.9.1)
+
+
+Deprecations
+- Creating an ``Objective`` without specifying the ``Equilibrium`` or other object to be
+ optimized is deprecated, and in the future will raise an error. 
+ - Passing in an ``Equilibrium`` when creating an ``Objective`` no longer builds the 
+ objective immediately.
+ - ``Objective.build`` can now be called without arguments, assuming the object to be
+ optimized was specified when the objective was created.
+- Removes ``Equilibrium.solved`` attribute as it was generally unused and occasionally
+caused issues when saving to VMEC format.
+
+New Features
+- Adds ``deriv_mode="looped"`` option to ``desc.objectives.ObjectiveFunction`` for 
+computing derivative matrices. This is slightly slower but much more memory efficient 
+than the default ``"batched"`` option. 
+- Adds BFGS option for augmented Lagrangian optimizers.
+- Adds utility functions for computing line integrals, vector valued integrals, and 
+integral transforms in ``desc.compute.utils``.
+- Adds ``method="monotonic-0"`` to ``desc.interpolate.interp1d``, which enforces 
+monotonicity and zero slope at the endpoints.
+- Adds ``rho`` argument to ``desc.plotting.plot_boozer_surface`` to specify the desired
+surface, rather than having to create custom grids. Also adds a ``fieldlines`` argument
+for overlaying magnetic field lines on the Boozer strength plot.
+- DESC objects with a ``change_resolution`` method now allow changing symmetry type.
+
+Minor Changes
+- Augmented Lagrangian methods now use a default starting Lagrange multiplier of 0, rather
+than the least squares estimate which can be a bad approximation if the starting point
+is far from optimal. The old behavior can be recovered by passing 
+``"initial_multipliers": "least_squares"`` as part of ``options`` when calling ``optimize``.
+- Enforces periodicity convention for ``alpha`` and ``theta_sfl`` - They are both now
+defined to be between 0 and 2pi.
+
+Bug Fixes
+- Flips sign of current loading/saving VMEC data to account for negative Jacobian.
+- Increases default resolution for computing magnetic field harmonics in ``desc.plotting.plot_qs_error``
+to avoid aliasing.
+- Ensures that ``Basis.L`` , ``Basis.M``, ``Basis.N`` are all integers.
+- Removes duplicated entries in the ``data_index``
+- Fixes a bug in the normalization of the radial unit vector.
+
+
 v0.9.0
 ------
 

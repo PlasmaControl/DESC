@@ -144,17 +144,17 @@ class Optimizer(IOAble):
 
         linear_constraints, nonlinear_constraint = _parse_constraints(constraints)
         objective, nonlinear_constraint = _maybe_wrap_nonlinear_constraints(
-            objective, nonlinear_constraint, self.method, options
+            eq, objective, nonlinear_constraint, self.method, options
         )
 
         if not isinstance(objective, ProximalProjection):
             # need to include self consistency constraints
-            linear_constraints = maybe_add_self_consistency(linear_constraints)
+            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
         if len(linear_constraints):
-            objective = LinearConstraintProjection(objective, linear_constraints)
+            objective = LinearConstraintProjection(objective, linear_constraints, eq=eq)
             if nonlinear_constraint is not None:
                 nonlinear_constraint = LinearConstraintProjection(
-                    nonlinear_constraint, linear_constraints
+                    nonlinear_constraint, linear_constraints, eq=eq
                 )
         if not objective.built:
             objective.build(eq, verbose=verbose)
@@ -327,7 +327,9 @@ def _parse_constraints(constraints):
     return linear_constraints, nonlinear_constraints
 
 
-def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, options):
+def _maybe_wrap_nonlinear_constraints(
+    eq, objective, nonlinear_constraint, method, options
+):
     """Use ProximalProjection to handle nonlinear constraints."""
     wrapper, method = _parse_method(method)
     if nonlinear_constraint is None:
@@ -357,6 +359,7 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
             constraint=nonlinear_constraint,
             perturb_options=perturb_options,
             solve_options=solve_options,
+            eq=eq,
         )
         nonlinear_constraint = None
     return objective, nonlinear_constraint

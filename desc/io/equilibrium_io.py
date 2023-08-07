@@ -68,7 +68,7 @@ def load(load_from, file_format=None):
             )
     else:
         raise ValueError("Unknown file format: {}".format(file_format))
-    # to set other secondary stuff that wasnt saved possibly:
+    # to set other secondary stuff that wasn't saved possibly:
     if hasattr(obj, "_set_up"):
         obj._set_up()
     return obj

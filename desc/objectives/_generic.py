@@ -135,21 +135,26 @@ class ObjectiveFromUser(_Objective):
 
         self._data_keys = getvars(self._fun)
         dummy_data = {}
+        p = "desc.equilibrium.equilibrium.Equilibrium"
         for key in self._data_keys:
-            assert key in data_index, f"Don't know how to compute {key}"
-            if data_index[key]["dim"] == 0:
+            assert key in data_index[p], f"Don't know how to compute {key}"
+            if data_index[p][key]["dim"] == 0:
                 dummy_data[key] = jnp.array(0.0)
             else:
-                dummy_data[key] = jnp.empty((grid.num_nodes, data_index[key]["dim"]))
+                dummy_data[key] = jnp.empty((grid.num_nodes, data_index[p][key]["dim"]))
 
         self._fun_wrapped = lambda data: self._fun(grid, data)
         import jax
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -175,6 +180,7 @@ class ObjectiveFromUser(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -246,7 +252,11 @@ class GenericObjective(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
-        self._units = "(" + data_index[self.f]["units"] + ")"
+        self._units = (
+            "("
+            + data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["units"]
+            + ")"
+        )
 
     def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -267,16 +277,20 @@ class GenericObjective(_Objective):
         else:
             grid = self._grid
 
-        self._data_keys = [self.f]
-        if data_index[self.f]["dim"] == 0:
+        p = "desc.equilibrium.equilibrium.Equilibrium"
+        if data_index[p][self.f]["dim"] == 0:
             self._dim_f = 1
             self._scalar = True
         else:
-            self._dim_f = grid.num_nodes * data_index[self.f]["dim"]
+            self._dim_f = grid.num_nodes * data_index[p][self.f]["dim"]
             self._scalar = False
-        self._args = get_params(self.f, has_axis=grid.axis.size)
-        self._profiles = get_profiles(self.f, eq=eq, grid=grid)
-        self._transforms = get_transforms(self.f, eq=eq, grid=grid)
+        self._args = get_params(
+            self.f,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
+        self._profiles = get_profiles(self.f, obj=eq, grid=grid)
+        self._transforms = get_transforms(self.f, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -302,7 +316,8 @@ class GenericObjective(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            self._data_keys,
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self.f,
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
@@ -402,15 +417,19 @@ class ToroidalCurrent(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["current"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -454,6 +473,7 @@ class ToroidalCurrent(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -591,15 +611,19 @@ class RotationalTransform(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["iota"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -639,6 +663,7 @@ class RotationalTransform(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

@@ -52,9 +52,15 @@ class TestAxisLimits:
         grid = LinearGrid(rho=rho, M=7, N=7, NFP=eq.NFP, sym=eq.sym)
         assert grid.axis.size
         quantity = eq.compute(name, grid=grid)[name]
-        if data_index[name]["coordinates"] == "r":
+        if (
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+            == "r"
+        ):
             quantity = compress(grid, quantity)
-        elif data_index[name]["coordinates"] != "":
+        elif (
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+            != ""
+        ):
             quantity = surface_averages(grid, quantity, expand_out=False)
         assert np.isfinite(quantity).all()
         # check continuity

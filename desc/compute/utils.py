@@ -1249,11 +1249,11 @@ def surface_variance(
     See https://en.wikipedia.org/wiki/Inverse-variance_weighting.
     The unbiased sample variance for this case is obtained by replacing the
     effective number of samples in the formula this function implements,
-    :math:`n_e` with the actual number of samples :math:`n`.
+    :math:`n_e`, with the actual number of samples :math:`n`.
 
     Both the first and second case converge to the unbiased sample variance when
-    all the weights are equal. However, using one for the incorrect use case
-    can yield large error.
+    all the weights are equal. When the weights are not equal, however, they may
+    produce very different results.
 
     The third case is when the weights denote the integer frequency of each sample.
     See https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Frequency_weights.
@@ -1292,7 +1292,6 @@ def surface_variance(
     # analogous to Bessel's bias correction
     correction = n / (n - 1)
 
-    # TODO: add 'weights' parameter to surface_integrals() to simplify transposing
     # compute variance in two passes to avoid catastrophic round off error
     q = jnp.atleast_1d(q)
     mean = (integrate((weights * q.T).T).T / v1).T

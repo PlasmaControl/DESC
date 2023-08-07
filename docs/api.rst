@@ -17,6 +17,18 @@ Basis
     desc.basis.ChebyshevDoubleFourierBasis
     desc.basis.FourierZernikeBasis
 
+Coils
+*****
+
+.. autosummary::
+    :toctree: _api/basis/
+    :recursive:
+    :template: class.rst
+
+    desc.coils.FourierRZCoil
+    desc.coils.FourierXYZCoil
+    desc.coils.FourierPlanarCoil
+    desc.coils.CoilSet
 
 Continuation
 ************
@@ -103,6 +115,22 @@ IO
 
     desc.io.InputReader
     desc.io.load
+
+Magnetic Fields
+**************
+
+.. autosummary::
+    :toctree: _api/basis/
+    :recursive:
+
+    desc.magnetic_fields.ScaledMagneticField
+    desc.magnetic_fields.SumMagneticField
+    desc.magnetic_fields.ToroidalMagneticField
+    desc.magnetic_fields.VerticalMagneticField
+    desc.magnetic_fields.PoloidalMagneticField
+    desc.magnetic_fields.SplineMagneticField
+    desc.magnetic_fields.ScalarPotentialField
+    desc.magnetic_fields.field_line_integrate
 
 Objective Functions
 *******************

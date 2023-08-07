@@ -400,16 +400,21 @@ class TestComputeUtils:
             desired=mean,
         )
 
-        # Test that implementation of unbiased estimate of weighted sample
-        # variance converges to the unweighted sample variance with Bessel's
-        # correction: \sum_{i=1}^{n} (q_i - q_mean)^2 / (n - 1)
+        # Test that implementation of weighted sample variance converges to the
+        # biased and unbiased, respectively, unweighted sample variance:
+        # \sum_{i=1}^{n} (q_i - q_mean)^2 / n
+        # \sum_{i=1}^{n} (q_i - q_mean)^2 / (n - 1)
         # when all weights are equal.
-        unbiased_unweighted_sample_variance = surface_integrals(
-            grid, (q - mean) ** 2 / ds, surface_label="zeta"
-        ) / (n - 1)
+        mean_diff = surface_integrals(grid, (q - mean) ** 2 / ds, surface_label="zeta")
+        np.testing.assert_allclose(
+            surface_variance(
+                grid, q, weights=np.e, unbiased=False, surface_label="zeta"
+            ),
+            desired=mean_diff / n,
+        )
         np.testing.assert_allclose(
             surface_variance(grid, q, weights=np.e, surface_label="zeta"),
-            desired=unbiased_unweighted_sample_variance,
+            desired=mean_diff / (n - 1),
         )
 
     @pytest.mark.unit

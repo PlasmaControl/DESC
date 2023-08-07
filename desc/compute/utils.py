@@ -1219,7 +1219,9 @@ def surface_variance(
         \frac{n_e}{n_e - 1}
         \frac{ \sum_{i=1}^{n} (q_i - \bar{q})^2 w_i }{ \sum_{i=1}^{n} w_i }
 
-    where :math:`w_i` is the weight assigned to :math:`q_i`,
+    where :math:`w_i` is the weight assigned to :math:`q_i` given by the product
+    of ``weights[i]`` and the differential surface area element (not already
+    weighted by the area Jacobian) at the node where ``q[i]`` is evaluated,
     :math:`\bar{q}` is the weighted mean of :math:`q`,
     :math:`n` is the number of samples on a surface, and
     :math:`n_e` is the effective number of samples on a surface defined as

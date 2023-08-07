@@ -1219,7 +1219,8 @@ def surface_variance(
         \frac{n_e}{n_e - 1}
         \frac{ \sum_{i=1}^{n} (q_i - \bar{q})^2 w_i }{ \sum_{i=1}^{n} w_i }
 
-    where :math:`w_i` is the weight assigned to :math:`q_i` given by the product
+    where
+    :math:`w_i` is the weight assigned to :math:`q_i` given by the product
     of ``weights[i]`` and the differential surface area element (not already
     weighted by the area Jacobian) at the node where ``q[i]`` is evaluated,
     :math:`\bar{q}` is the weighted mean of :math:`q`,
@@ -1229,36 +1230,36 @@ def surface_variance(
     .. math::
         (\sum_{i=1}^{n} w_i)^2 / (\sum_{i=1}^{n} w_i^2)
 
-    When all weights :math:`w_i` are equal, this reduces to
+    As the weights :math:`w_i` approach each other, :math:`n_e` approaches
+    :math:`n`, and the output converges to
 
     .. math::
         \frac{1}{n-1} \sum_{i=1}^{n} (q_i - \bar{q})^2
 
     Notes
     -----
-    There are three different methods to unbias the variance of a weighted
-    sample so that the computed variance better estimates the true variance.
-    Whether the method is correct for a particular use case depends on what
-    the weights assigned to each sample represent.
+        There are three different methods to unbias the variance of a weighted
+        sample so that the computed variance better estimates the true variance.
+        Whether the method is correct for a particular use case depends on what
+        the weights assigned to each sample represent.
 
-    This function implements the first case, where the weights are not random
-    and are intended to assign more weight to some samples for reasons unrelated
-    to differences in uncertainty between samples.
-    See https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights.
+        This function implements the first case, where the weights are not random
+        and are intended to assign more weight to some samples for reasons
+        unrelated to differences in uncertainty between samples. See
+        https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights.
 
-    The second case is when the weights are intended to assign more weight to
-    samples with less uncertainty.
-    See https://en.wikipedia.org/wiki/Inverse-variance_weighting.
-    The unbiased sample variance for this case is obtained by replacing the
-    effective number of samples in the formula this function implements,
-    :math:`n_e`, with the actual number of samples :math:`n`.
+        The second case is when the weights are intended to assign more weight
+        to samples with less uncertainty. See
+        https://en.wikipedia.org/wiki/Inverse-variance_weighting.
+        The unbiased sample variance for this case is obtained by replacing the
+        effective number of samples in the formula this function implements,
+        :math:`n_e`, with the actual number of samples :math:`n`.
 
-    Both the first and second case converge to the unbiased sample variance when
-    all the weights are equal. When the weights are not equal, however, they may
-    produce very different results.
-
-    The third case is when the weights denote the integer frequency of each sample.
-    See https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Frequency_weights.
+        The third case is when the weights denote the integer frequency of each
+        sample. See
+        https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Frequency_weights.
+        This is indeed a distinct case from the above two because here the
+        weights encode additional information about the distribution.
 
     Parameters
     ----------
@@ -1280,7 +1281,7 @@ def surface_variance(
     Returns
     -------
     variance : ndarray
-        Variance of the input ``q`` over each surface in the grid.
+        Variance of the given weighted sample over each surface in the grid.
         By default, the returned array has the same shape as the input.
 
     """
@@ -1290,12 +1291,12 @@ def surface_variance(
     v1 = integrate(weights)
     v2 = integrate(weights**2 * spacing.prod(axis=-1))
     # effective number of samples per surface
-    n = v1**2 / v2
+    n_e = v1**2 / v2
     # analogous to Bessel's bias correction
-    correction = n / (n - 1)
+    correction = n_e / (n_e - 1)
 
-    # compute variance in two passes to avoid catastrophic round off error
     q = jnp.atleast_1d(q)
+    # compute variance in two passes to avoid catastrophic round off error
     mean = (integrate((weights * q.T).T).T / v1).T
     mean = grid.expand(mean, surface_label)
     variance = (correction * integrate((weights * ((q - mean) ** 2).T).T).T / v1).T

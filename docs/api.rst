@@ -117,7 +117,7 @@ IO
     desc.io.load
 
 Magnetic Fields
-**************
+***************
 
 .. autosummary::
     :toctree: _api/basis/

@@ -122,20 +122,28 @@ class FourierRZCoil(Coil, FourierRZCurve):
         from desc.coils import FourierRZCoil
         from desc.grid import LinearGrid
         import numpy as np
-        I=10
-        mu0 = 4*np.pi * 1e-7
-        R_coil=10
+
+        I = 10
+        mu0 = 4 * np.pi * 1e-7
+        R_coil = 10
         # circular coil given by R(phi) = 10
-        coil = FourierRZCoil(current=I,
-            R_n=R_coil,Z_n=0,modes_R=[0], grid=LinearGrid(N=100))
+        coil = FourierRZCoil(
+            current=I, R_n=R_coil, Z_n=0, modes_R=[0], grid=LinearGrid(N=100)
+        )
         z0 = 10
         field_evaluated = coil.compute_magnetic_field(
-            np.array([[0,0,0],[0,0,z0]]), basis = "rpz")
-        np.testing.assert_allclose(field_evaluated[0,:],
-             np.array([0,0,mu0*I /2 / R_coil]),atol=1e-8)
-        np.testing.assert_allclose(field_evaluated[1,:],
-         np.array([0,0,mu0*I /2 * R_coil**2 /(R_coil**2 + z0**2)**(3/2)]),
-         atol=1e-8)
+            np.array([[0, 0, 0], [0, 0, z0]]), basis="rpz"
+        )
+        np.testing.assert_allclose(
+            field_evaluated[0, :], np.array([0, 0, mu0 * I / 2 / R_coil]), atol=1e-8
+        )
+        np.testing.assert_allclose(
+            field_evaluated[1, :],
+            np.array(
+                [0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]
+            ),
+            atol=1e-8,
+        )
 
     """
 
@@ -179,21 +187,32 @@ class FourierXYZCoil(Coil, FourierXYZCurve):
         from desc.coils import FourierXYZCoil
         from desc.grid import LinearGrid
         import numpy as np
-        I=10
-        mu0 = 4*np.pi * 1e-7
-        R_coil=10
+
+        I = 10
+        mu0 = 4 * np.pi * 1e-7
+        R_coil = 10
         # circular coil given by X(phi) = 10*cos(phi), Y(phi) = 10*sin(phi)
-        coil = FourierXYZCoil(current=I,
-            X_n=[0,R_coil,0],Y_n=[0,0,R_coil],Z_n=[0,0,0],
-            modes=[0,1,-1], grid=LinearGrid(N=100))
+        coil = FourierXYZCoil(
+            current=I,
+            X_n=[0, R_coil, 0],
+            Y_n=[0, 0, R_coil],
+            Z_n=[0, 0, 0],
+            modes=[0, 1, -1],
+            grid=LinearGrid(N=100),
+        )
         z0 = 10
         field_evaluated = coil.compute_magnetic_field(
-            np.array([[0,0,0],[0,0,z0]]), basis = "rpz")
-        np.testing.assert_allclose(field_evaluated[0,:],
-             np.array([0,0,mu0*I /2 / R_coil]),atol=1e-8)
-        np.testing.assert_allclose(field_evaluated[1,:],
-             np.array([0,0,mu0*I /2 * R_coil**2 /(R_coil**2 + z0**2)**(3/2)]),
-             atol=1e-8)
+            np.array([[0, 0, 0], [0, 0, z0]]), basis="rpz"
+        )
+        np.testing.assert_allclose(
+            field_evaluated[0, :], np.array([0, 0, mu0 * I / 2 / R_coil]), atol=1e-8
+        )
+        np.testing.assert_allclose(
+            field_evaluated[1, :],
+            np.array([0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]),
+            atol=1e-8,
+        )
+
 
     """
 
@@ -243,23 +262,32 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
         from desc.coils import FourierPlanarCoil
         from desc.grid import LinearGrid
         import numpy as np
-        I=10
-        mu0 = 4*np.pi * 1e-7
-        R_coil=10
+
+        I = 10
+        mu0 = 4 * np.pi * 1e-7
+        R_coil = 10
         # circular coil given by center at (0,0,0)
         # and normal vector in Z direction (0,0,1) and radius 10
-        coil = FourierPlanarCoil(current=I,
-                center=[0,0,0],
-                normal=[0,0,1],r_n=R_coil,modes=[0], grid=LinearGrid(N=100))
+        coil = FourierPlanarCoil(
+            current=I,
+            center=[0, 0, 0],
+            normal=[0, 0, 1],
+            r_n=R_coil,
+            modes=[0],
+            grid=LinearGrid(N=100),
+        )
         z0 = 10
         field_evaluated = coil.compute_magnetic_field(
-            np.array([[0,0,0],[0,0,z0]]), basis = "rpz")
+            np.array([[0, 0, 0], [0, 0, z0]]), basis="rpz"
+        )
         np.testing.assert_allclose(
-            field_evaluated[0,:], np.array([0,0,mu0*I /2 / R_coil]),atol=1e-8)
+            field_evaluated[0, :], np.array([0, 0, mu0 * I / 2 / R_coil]), atol=1e-8
+        )
         np.testing.assert_allclose(
-            field_evaluated[1,:],
-             np.array([0,0,mu0*I /2 * R_coil**2 /(R_coil**2 + z0**2)**(3/2)]),
-             atol=1e-8)
+            field_evaluated[1, :],
+            np.array([0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]),
+            atol=1e-8,
+        )
 
     """
 

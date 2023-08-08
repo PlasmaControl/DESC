@@ -1160,7 +1160,7 @@ class B_dmin(_Objective):
             warnings.warn("Surface grid includes off-surface pts, should be rho=1")
 
         self._dim_f = plasma_grid.num_nodes
-        self._data_keys = ["X", "Y", "Z", "|B|"]
+        self._data_keys = ["X", "Y", "Z", "|B|", "|e_theta x e_zeta|"]
         self._args = get_params(
             self._data_keys, has_axis=plasma_grid.axis.size or surface_grid.axis.size
         )
@@ -1251,7 +1251,10 @@ class B_dmin(_Objective):
         B_dmin_data = jnp.array([d_min * B for d_min, B in zip(dmin_data, data["|B|"])])
 
         B_dmin_variance = surface_variance(
-            grid=self._plasma_grid, q=B_dmin_data, expand_out=False
+            grid=self._plasma_grid,
+            q=B_dmin_data,
+            expand_out=False,
+            weights=data["|e_theta x e_zeta|"],
         )
 
         return jnp.atleast_1d(B_dmin_variance)

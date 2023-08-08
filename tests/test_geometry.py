@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.geometry.utils import (
+from desc.compute.geom_utils import (
     rotation_matrix,
     rpz2xyz,
     rpz2xyz_vec,

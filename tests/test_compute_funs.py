@@ -6,9 +6,15 @@ from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
 import desc.examples
-from desc.compute import data_index
+from desc.compute import data_index, rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.geometry.utils import rpz2xyz_vec
+from desc.geometry import (
+    FourierPlanarCurve,
+    FourierRZCurve,
+    FourierRZToroidalSurface,
+    FourierXYZCurve,
+    ZernikeRZToroidalSection,
+)
 from desc.grid import LinearGrid, QuadratureGrid
 
 # convolve kernel is reverse of FD coeffs
@@ -1133,6 +1139,35 @@ def test_compute_anything():
     for key in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
         data = eq.compute(key, grid=grid)
         assert key in data
+
+
+@pytest.mark.unit
+def test_curve_compute_everything():
+    """Make sure we can compute every curve thing without errors."""
+    curves = {
+        "desc.geometry.curve.FourierXYZCurve": FourierXYZCurve(),
+        "desc.geometry.curve.FourierRZCurve": FourierRZCurve(),
+        "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(),
+    }
+
+    for p, thing in curves.items():
+        for key in data_index[p].keys():
+            data = thing.compute(key)
+            assert key in data
+
+
+@pytest.mark.unit
+def test_surface_compute_everything():
+    """Make sure we can compute every surface thing without errors."""
+    surfaces = {
+        "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(),
+        "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(),
+    }
+
+    for p, thing in surfaces.items():
+        for key in data_index[p].keys():
+            data = thing.compute(key)
+            assert key in data
 
 
 @pytest.mark.unit

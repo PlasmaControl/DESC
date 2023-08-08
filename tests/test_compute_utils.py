@@ -360,8 +360,8 @@ class TestComputeUtils:
         """Test integration against less general methods."""
         grid = ConcentricGrid(L=L, M=M, N=N, NFP=NFP)
         ds = grid.spacing[:, :2].prod(axis=-1)
-        # something arbitrary
-        q = np.arange(grid.num_nodes)
+        # something arbitrary that will give different average across surfaces
+        q = np.arange(grid.num_nodes) ** 2
         # The predefined grids sort nodes in zeta surface chunks.
         # To compute a quantity local to a surface, we can reshape it into zeta
         # surface chunks and compute across the chunks.
@@ -379,8 +379,8 @@ class TestComputeUtils:
         """Test averaging against less general methods."""
         # test on zeta surfaces
         grid = LinearGrid(L=L, M=M, N=N, NFP=NFP)
-        # something arbitrary
-        q = np.arange(grid.num_nodes)
+        # something arbitrary that will give different average across surfaces
+        q = np.arange(grid.num_nodes) ** 2
         # The predefined grids sort nodes in zeta surface chunks.
         # To compute a quantity local to a surface, we can reshape it into zeta
         # surface chunks and compute across the chunks.
@@ -421,23 +421,12 @@ class TestComputeUtils:
     def test_surface_variance(self):
         """Test correctness of variance against less general methods."""
         grid = LinearGrid(L=L, M=M, N=N, NFP=NFP)
-        # something arbitrary
-        q = np.arange(grid.num_nodes)
-
+        # something arbitrary that will give different variance across surfaces
+        q = np.arange(grid.num_nodes) ** 2
         # The predefined grids sort nodes in zeta surface chunks.
         # To compute a quantity local to a surface, we can reshape it into zeta
         # surface chunks and compute across the chunks.
-        chunks = grid.expand(q.reshape((grid.num_zeta, -1)), surface_label="zeta")
-        # Test weighted sample variance converges to unweighted sample variance
-        # when all weights are equal.
-        np.testing.assert_allclose(
-            surface_variance(grid, q, np.e, bias=True, surface_label="zeta"),
-            desired=chunks.var(axis=-1),
-        )
-        np.testing.assert_allclose(
-            surface_variance(grid, q, np.e, surface_label="zeta"),
-            desired=chunks.var(axis=-1, ddof=1),
-        )
+        chunks = q.reshape((grid.num_zeta, -1))
 
         # Test weighted sample variance with different weights.
         # positive weights to prevent cancellations that may hide implementation error
@@ -449,19 +438,30 @@ class TestComputeUtils:
             grid, q, weights, surface_label="zeta", expand_out=False
         )
         # The ds weights are built into the surface variance function.
-        # So weights_for_np_cov should be ds * weights.
-        # Since ds is constant on LinearGrid, we should still get the same
-        # result if we don't multiply by ds.
-        weights_for_np_cov = weights.reshape((grid.num_zeta, -1))
+        # So weights for np.cov should be ds * weights. Since ds is constant on
+        # LinearGrid, we need to get the same result if we don't multiply by ds.
+        weights = weights.reshape((grid.num_zeta, -1))
         for i in range(grid.num_zeta):
             np.testing.assert_allclose(
                 biased[i],
-                desired=np.cov(chunks[i], bias=True, aweights=weights_for_np_cov[i]),
+                desired=np.cov(chunks[i], bias=True, aweights=weights[i]),
             )
             np.testing.assert_allclose(
                 unbiased[i],
-                desired=np.cov(chunks[i], aweights=weights_for_np_cov[i]),
+                desired=np.cov(chunks[i], aweights=weights[i]),
             )
+
+        # Test weighted sample variance converges to unweighted sample variance
+        # when all weights are equal.
+        chunks = grid.expand(chunks, surface_label="zeta")
+        np.testing.assert_allclose(
+            surface_variance(grid, q, np.e, bias=True, surface_label="zeta"),
+            desired=chunks.var(axis=-1),
+        )
+        np.testing.assert_allclose(
+            surface_variance(grid, q, np.e, surface_label="zeta"),
+            desired=chunks.var(axis=-1, ddof=1),
+        )
 
     @pytest.mark.unit
     def test_min_max(self):

@@ -400,21 +400,21 @@ class TestComputeUtils:
             desired=mean,
         )
 
+        diff = ((q - mean) ** 2).reshape((grid.num_zeta, -1)).sum(axis=-1)
         # Test that implementation of weighted sample variance converges to the
         # biased and unbiased, respectively, unweighted sample variance:
-        # \sum_{i=1}^{n} (q_i - q_mean)^2 / n
-        # \sum_{i=1}^{n} (q_i - q_mean)^2 / (n - 1)
+        # \sum_{i=1}^{n} (q_i - mean)^2 / n
+        biased = grid.expand(diff / n, surface_label="zeta")
+        # \sum_{i=1}^{n} (q_i - mean)^2 / (n - 1)
+        unbiased = grid.expand(diff / (n - 1), surface_label="zeta")
         # when all weights are equal.
-        mean_diff = surface_integrals(grid, (q - mean) ** 2 / ds, surface_label="zeta")
         np.testing.assert_allclose(
-            surface_variance(
-                grid, q, weights=np.e, unbiased=False, surface_label="zeta"
-            ),
-            desired=mean_diff / n,
+            surface_variance(grid, q, np.e, unbiased=False, surface_label="zeta"),
+            desired=biased,
         )
         np.testing.assert_allclose(
-            surface_variance(grid, q, weights=np.e, surface_label="zeta"),
-            desired=mean_diff / (n - 1),
+            surface_variance(grid, q, np.e, surface_label="zeta"),
+            desired=unbiased,
         )
 
     @pytest.mark.unit

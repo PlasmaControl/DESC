@@ -360,7 +360,7 @@ class TestComputeUtils:
         """Test integration against less general methods."""
         grid = ConcentricGrid(L=L, M=M, N=N, NFP=NFP)
         ds = grid.spacing[:, :2].prod(axis=-1)
-        # something arbitrary that will give different average across surfaces
+        # something arbitrary that will give different sum across surfaces
         q = np.arange(grid.num_nodes) ** 2
         # The predefined grids sort nodes in zeta surface chunks.
         # To compute a quantity local to a surface, we can reshape it into zeta

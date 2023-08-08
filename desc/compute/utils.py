@@ -1208,7 +1208,7 @@ def surface_variance(
     grid,
     q,
     weights=jnp.array([1.0]),
-    unbiased=True,
+    bias=False,
     surface_label="rho",
     expand_out=True,
 ):
@@ -1272,11 +1272,11 @@ def surface_variance(
     weights : ndarray
         Weight assigned to each sample of ``q``.
         A good candidate for this parameter is the surface area Jacobian.
-    unbiased : bool
-        If this condition is set to false, then the biased estimator of the
-        sample variance is returned. This is desirable if you are only
-        concerned with computing the variance of the given set of numbers and
-        not the distribution the numbers are sampled from.
+    bias : bool
+        If this condition is true, then the biased estimator of the sample
+        variance is returned. This is desirable if you are only concerned with
+        computing the variance of the given set of numbers and not the
+        distribution the numbers are (potentially) sampled from.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the variance over.
     expand_out : bool
@@ -1300,7 +1300,7 @@ def surface_variance(
     # effective number of samples per surface
     n_e = v1**2 / v2
     # analogous to Bessel's bias correction
-    correction = n_e / (n_e - bool(unbiased))
+    correction = n_e / (n_e - (not bias))
 
     q = jnp.atleast_1d(q)
     # compute variance in two passes to avoid catastrophic round off error

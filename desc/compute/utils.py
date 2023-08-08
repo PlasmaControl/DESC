@@ -1296,7 +1296,7 @@ def surface_variance(
     integrate = surface_integrals_map(grid, surface_label, expand_out=False)
 
     v1 = integrate(weights)
-    v2 = integrate(weights**2 * spacing.prod(axis=-1))
+    v2 = integrate(weights**2 * jnp.prod(spacing, axis=-1))
     # effective number of samples per surface
     n_e = v1**2 / v2
     # analogous to Bessel's bias correction

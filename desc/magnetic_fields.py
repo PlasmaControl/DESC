@@ -6,7 +6,7 @@ import numpy as np
 from netCDF4 import Dataset
 
 from desc.backend import fori_loop, jit, jnp, odeint
-from desc.compute.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid
@@ -887,24 +887,35 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     def __init__(
         self,
         potential,
-        surface,
         surface_grid,
         params={},
         potential_dtheta=None,
         potential_dzeta=None,
+        R_lmn=None,
+        Z_lmn=None,
+        modes_R=None,
+        modes_Z=None,
+        NFP=1,
+        sym="auto",
+        rho=1,
+        name="",
+        check_orientation=True,
     ):
         self._potential = potential
-        self._surface = surface
         self._surface_grid = surface_grid
         self._params = params
         if potential_dtheta:
             self._potential_t = potential_dtheta
         else:
-            self._potential_t = Derivative(potential, argnum=0, mode="grad")
+            self._potential_t = Derivative(potential, argnum=0)
         if potential_dzeta:
             self._potential_z = potential_dzeta
         else:
-            self._potential_z = Derivative(potential, argnum=1, mode="grad")
+            self._potential_z = Derivative(potential, argnum=1)
+
+        super().__init__(
+            R_lmn, Z_lmn, modes_R, modes_Z, NFP, sym, rho, name, check_orientation
+        )
 
         # K can/should be precomputed I think
         self._compute_surface_current()
@@ -920,6 +931,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
             self._surface_grid = new
             # recompute K if surface grid changed
             self._compute_surface_current()
+        # TODO: if surface properties are changed, should also recompute
 
     @property
     def params(self):
@@ -941,13 +953,10 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
 
         # surface is the source of current density for the magnetic field
         # compute source positions rs, and their theta/zeta derivatives
-        self._rs = self._surface.compute_coordinates(grid=surface_grid, basis="xyz")
-        self._rs_t = self._surface.compute_coordinates(
-            grid=surface_grid, dt=1, basis="xyz"
-        )
-        self._rs_z = self._surface.compute_coordinates(
-            grid=surface_grid, dz=1, basis="xyz"
-        )
+        data = self.compute(["x", "e_theta", "e_zeta"], grid=surface_grid, basis="xyz")
+        self._rs = data["x"]
+        self._rs_t = data["e_theta"]
+        self._rs_z = data["e_zeta"]
         theta = surface_grid.nodes[:, 1]
         zeta = surface_grid.nodes[:, 2]
         # compute the dV element for  the surface needed for biot savart

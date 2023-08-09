@@ -129,6 +129,11 @@ _class_inheritance = {
         "desc.geometry.curve.FourierPlanarCurve",
         "desc.geometry.core.Curve",
     ],
+    "desc.magnetic_fields.CurrentPotentialField": [
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
+        "desc.magnetic_fields.MagneticField",
+    ],
 }
 
 data_index = {p: {} for p in _class_inheritance.keys()}

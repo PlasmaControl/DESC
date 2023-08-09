@@ -1159,7 +1159,7 @@ class B_dmin(_Objective):
         if not np.allclose(surface_grid.nodes[:, 0], 1):
             warnings.warn("Surface grid includes off-surface pts, should be rho=1")
 
-        self._dim_f = plasma_grid.num_nodes
+        self._dim_f = plasma_grid.num_rho
         self._data_keys = ["X", "Y", "Z", "|B|", "|e_theta x e_zeta|"]
         self._args = get_params(
             self._data_keys, has_axis=plasma_grid.axis.size or surface_grid.axis.size

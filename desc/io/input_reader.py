@@ -563,6 +563,8 @@ class InputReader:
         else:
             del inputs["iota"]
 
+        # flags can be true will all coefficients being zero
+        # if all coefficients of pres, iota and current are zero, ignore flags
         if inputs["objective"] == "vacuum" and (
             (pres_flag and np.linalg.norm(inputs["pressure"][:, 1]) > 1e-8)
             or (iota_flag and np.linalg.norm(inputs["iota"][:, 1]) > 1e-8)
@@ -897,7 +899,7 @@ class InputReader:
                     pres_profile[1::2] = eq0._pressure.params
                     iota_profile[0:orderi:2] = eq0._iota.params
                     case = 2
-                elif eq0._pressure_basis.sym == "odd" and eq0._iota.basis.sym == "even":
+                elif eq0._pressure_basis.sym == "odd" and eq0._iota.basis.sym == "odd":
                     pres_profile[1::2] = eq0._pressure.params
                     iota_profile[1:orderi:2] = eq0._iota.params
                     case = 3
@@ -919,7 +921,7 @@ class InputReader:
                     pres_profile[1:orderp:2] = eq0._pressure.params
                     iota_profile[0::2] = eq0._iota.params
                     case = 2
-                elif eq0._pressure_basis.sym == "odd" and eq0._iota.basis.sym == "even":
+                elif eq0._pressure_basis.sym == "odd" and eq0._iota.basis.sym == "odd":
                     pres_profile[1:orderp:2] = eq0._pressure.params
                     iota_profile[1::2] = eq0._iota.params
                     case = 3
@@ -959,8 +961,7 @@ class InputReader:
                     curr_profile[0:orderc:2] = eq0._current.params
                     case = 2
                 elif (
-                    eq0._pressure_basis.sym == "odd"
-                    and eq0._current.basis.sym == "even"
+                    eq0._pressure_basis.sym == "odd" and eq0._current.basis.sym == "off"
                 ):
                     pres_profile[1::2] = eq0._pressure.params
                     curr_profile[1:orderc:2] = eq0._current.params

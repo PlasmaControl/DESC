@@ -132,19 +132,29 @@ def test_descout_to_input(tmpdir_factory):
     ir1 = InputReader(cl_args=[str(tmp_path)])
     arr1 = ir1.parse_inputs()[-1]["surface"]
     arr1 = arr1[arr1[:, 1].argsort()]
+    arr1mneg = arr1[arr1[:, 1] < 0]
+    arr1mpos = arr1[arr1[:, 1] >= 0]
 
     desc_input_truth = "./tests/inputs/LandremanPaul2022_QA_reactorScale_lowRes"
     ir2 = InputReader(cl_args=[str(desc_input_truth)])
     arr2 = ir2.parse_inputs()[-1]["surface"]
     arr2 = arr2[arr2[:, 1].argsort()]
+    arr2mneg = arr2[arr2[:, 1] < 0]
+    arr2mpos = arr2[arr2[:, 1] >= 0]
 
     found = 0
     if (
         np.minimum(
-            np.linalg.norm(arr1[:, 2:] - arr2[:, 2:]),
-            np.linalg.norm(arr1[:, 2:] + arr2[:, 2:]),
+            np.linalg.norm(arr1mneg[:, 3:] - arr2mneg[:, 3:]),
+            np.linalg.norm(arr1mneg[:, 3:] + arr2mneg[:, 3:]),
         )
-        < 1e-5
+        <= 1e-8
+    ) and (
+        np.minimum(
+            np.linalg.norm(arr1mpos[:, 3:] - arr2mpos[:, 3:]),
+            np.linalg.norm(arr1mpos[:, 3:] + arr2mpos[:, 3:]),
+        )
+        <= 1e-8
     ):
         found = 1
 

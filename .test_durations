@@ -76,7 +76,7 @@
     "tests/test_compute_funs.py::test_BdotgradB": 4.226151214003039,
     "tests/test_compute_funs.py::test_boozer_transform": 1.326571810997848,
     "tests/test_compute_funs.py::test_compare_quantities_to_vmec": 9.29286608100665,
-    "tests/test_compute_funs.py::test_compute_anything": 154.27346869101166,
+    "tests/test_compute_funs.py::test_equilibrium_compute_everything": 154.27346869101166,
     "tests/test_compute_funs.py::test_compute_averages": 4.706544874003157,
     "tests/test_compute_funs.py::test_compute_grad_p_volume_avg": 0.792815654000151,
     "tests/test_compute_funs.py::test_currents": 4.251725698006339,

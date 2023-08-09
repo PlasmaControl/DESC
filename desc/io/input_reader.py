@@ -554,6 +554,27 @@ class InputReader:
         if curr_flag and iota_flag:
             raise OSError(colored("Cannot specify both iota and current.", "red"))
 
+        # flags can be true will all coefficients being zero
+        # if all coefficients of pres, iota and current are zero, ignore flags
+        if curr_flag:
+            if inputs["objective"] == "vacuum" and (
+                (pres_flag and (np.linalg.norm(inputs["pressure"][:, 1]) > 1e-8))
+                or (curr_flag and (np.linalg.norm(inputs["current"][:, 1]) > 1e-8))
+            ):
+                warnings.warn(
+                    "Vacuum objective does not use any profiles, "
+                    + "ignoring presssure, iota, and current"
+                )
+        else:
+            if inputs["objective"] == "vacuum" and (
+                (pres_flag and (np.linalg.norm(inputs["pressure"][:, 1]) > 1e-8))
+                or (iota_flag and (np.linalg.norm(inputs["iota"][:, 1]) > 1e-8))
+            ):
+                warnings.warn(
+                    "Vacuum objective does not use any profiles, "
+                    + "ignoring presssure, iota, and current"
+                )
+
         # remove unused profile
         if iota_flag:
             if inputs["objective"] != "vacuum":
@@ -563,26 +584,6 @@ class InputReader:
         else:
             del inputs["iota"]
 
-        # flags can be true will all coefficients being zero
-        # if all coefficients of pres, iota and current are zero, ignore flags
-        if curr_flag:
-            if inputs["objective"] == "vacuum" and (
-                (pres_flag and np.linalg.norm(inputs["pressure"][:, 1]) > 1e-8)
-                or (curr_flag and np.linalg.norm(inputs["current"][:, 1]) > 1e-8)
-            ):
-                warnings.warn(
-                    "Vacuum objective does not use any profiles, "
-                    + "ignoring presssure, iota, and current"
-                )
-        else:
-            if inputs["objective"] == "vacuum" and (
-                (pres_flag and np.linalg.norm(inputs["pressure"][:, 1]) > 1e-8)
-                or (iota_flag and np.linalg.norm(inputs["iota"][:, 1]) > 1e-8)
-            ):
-                warnings.warn(
-                    "Vacuum objective does not use any profiles, "
-                    + "ignoring presssure, iota, and current"
-                )
         # sort axis array
         inputs["axis"] = inputs["axis"][inputs["axis"][:, 0].argsort()]
 
@@ -803,7 +804,6 @@ class InputReader:
         maxiter=100,
         optimizer="lsq-exact",
         objective="force",
-        **kwargs,
     ):
         """Generate a DESC input file from a DESC output file.
 
@@ -851,14 +851,14 @@ class InputReader:
             f.write(f"{key} = {getattr(eq0, val)}\n")
 
         f.write("\n\n# solver tolerances\n")
-        f.write(f"ftol = {kwargs['ftol']}\n")
-        f.write(f"xtol = {kwargs['xtol']}\n")
-        f.write(f"gtol = {kwargs['gtol']}\n")
-        f.write(f"maxiter = {kwargs['maxiter']}\n")
+        f.write(f"ftol = {ftol}\n")
+        f.write(f"xtol = {xtol}\n")
+        f.write(f"gtol = {gtol}\n")
+        f.write(f"maxiter = {maxiter}\n")
 
         f.write("\n\n# solver methods\n")
-        f.write(f"maxiter = {kwargs['optimizer']}\n")
-        f.write(f"objective = {kwargs['objective']}\n")
+        f.write(f"optimizer = {optimizer}\n")
+        f.write(f"objective = {objective}\n")
         f.write("spectral_indexing = {}\n".format(eq0._spectral_indexing))
         f.write("node_pattern = {}\n".format(eq0._node_pattern))
 

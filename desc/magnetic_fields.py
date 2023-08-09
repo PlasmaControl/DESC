@@ -991,28 +991,33 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
 
         # surface is the source of current density for the magnetic field
         # compute source positions rs, and their theta/zeta derivatives
+        # store in "rpz" basis so can rotate them during compute_magnetic_field
         data = self.compute(["x", "e_theta", "e_zeta"], grid=surface_grid, basis="xyz")
-        self._rs = data["x"]
-        self._rs_t = data["e_theta"]
-        self._rs_z = data["e_zeta"]
+        self._rs = xyz2rpz_vec(data["x"], phi=self.surface_grid.nodes[:, 2])
         theta = surface_grid.nodes[:, 1]
         zeta = surface_grid.nodes[:, 2]
-        # compute the dV element for  the surface needed for biot savart
-        self._dV = surface_grid.weights * jnp.linalg.norm(
-            jnp.cross(self._rs_t, self._rs_z, axis=-1), axis=-1
-        )
+        # compute the dV element for the surface needed for biot savart
+        self._dV = (
+            surface_grid.weights
+            * jnp.linalg.norm(
+                jnp.cross(data["e_theta"], data["e_zeta"], axis=-1), axis=-1
+            )
+            / surface_grid.NFP
+        )  # divide by NFP here so that the NFP loop
+        # in compute_magnetic_field is correct
 
         # compute the potential derivatives on the surface
         phi_t = self._potential_t(theta, zeta)
         phi_z = self._potential_z(theta, zeta)
 
         # compute surface normal magnitude
-        ns_mag = jnp.linalg.norm(np.cross(self._rs_t, self._rs_z), axis=1)
+        ns_mag = jnp.linalg.norm(jnp.cross(data["e_theta"], data["e_zeta"]), axis=1)
 
         # compute K = n x nabla(Phi)
-        self._K = (
-            -(phi_t * (1 / ns_mag) * self._rs_z.T).T
-            + (phi_z * (1 / ns_mag) * self._rs_t.T).T
+        self._K = xyz2rpz_vec(
+            -(phi_t * (1 / ns_mag) * data["e_zeta"].T).T
+            + (phi_z * (1 / ns_mag) * data["e_theta"].T).T,
+            phi=self.surface_grid.nodes[:, 2],
         )
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
@@ -1043,7 +1048,23 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         if (params is None) or (len(params) == 0):
             params = self._params
 
-        B = biot_savart_general(coords, self._rs, self._K, self._dV)
+        def nfp_loop(j, f):
+            # calc (or actually just rotate?) rs, rs_t, rz_t
+            phi = (
+                self.surface_grid.nodes[:, 2] + j * 2 * jnp.pi / self.surface_grid.NFP
+            ) % (2 * jnp.pi)
+            rs = rpz2xyz_vec(self._rs, phi=phi)
+            K = rpz2xyz_vec(self._K, phi=phi)
+            fj = biot_savart_general(
+                coords,
+                rs,
+                K,
+                self._dV,
+            )
+            f += fj
+            return f
+
+        B = fori_loop(0, self.surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
         if basis == "rpz":
             B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
         return B

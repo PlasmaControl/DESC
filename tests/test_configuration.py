@@ -419,9 +419,7 @@ class TestGetSurfaces:
         rho = 0.5
         surf = eq.get_surface_at(rho=rho)
         assert surf.rho == rho
-        np.testing.assert_allclose(
-            surf.compute_surface_area(), 4 * np.pi**2 * R0 * rho
-        )
+        np.testing.assert_allclose(surf.compute("S")["S"], 4 * np.pi**2 * R0 * rho)
 
     @pytest.mark.unit
     def test_get_zeta_surface(self):
@@ -430,7 +428,7 @@ class TestGetSurfaces:
         surf = eq.get_surface_at(zeta=np.pi)
         assert surf.zeta == np.pi
         rho = 1
-        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * rho**2)
+        np.testing.assert_allclose(surf.compute("A")["A"], np.pi * rho**2)
 
     @pytest.mark.unit
     def test_get_theta_surface(self):
@@ -458,7 +456,7 @@ def test_magnetic_axis(HELIOTRON_vac):
     grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))
 
     data = eq.compute(["R", "Z"], grid=grid)
-    coords = axis.compute_coordinates(grid=grid)
+    coords = axis.compute("x", grid=grid)["x"]
 
     np.testing.assert_allclose(coords[:, 0], data["R"])
     np.testing.assert_allclose(coords[:, 2], data["Z"])

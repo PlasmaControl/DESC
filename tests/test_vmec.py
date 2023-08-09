@@ -370,7 +370,7 @@ def test_vmec_save_asym(TmpDir):
     VMECIO.save(eq, output_path)
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
 def test_vmec_save_1(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""
@@ -555,7 +555,7 @@ def test_vmec_save_1(VMEC_save):
     )
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
 def test_vmec_save_2(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""

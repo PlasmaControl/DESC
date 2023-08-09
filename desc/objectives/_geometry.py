@@ -6,8 +6,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms
-from desc.geometry.utils import rpz2xyz
+from desc.compute import get_params, get_profiles, get_transforms, rpz2xyz
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
 
@@ -584,9 +583,9 @@ class PlasmaVesselDistance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._surface_coords = self._surface.compute_coordinates(
-            grid=surface_grid, basis="xyz"
-        )
+        self._surface_coords = self._surface.compute(
+            "x", grid=surface_grid, basis="xyz"
+        )["x"]
         self._profiles = get_profiles(
             self._data_keys,
             obj=eq,

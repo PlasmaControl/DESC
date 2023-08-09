@@ -28,7 +28,7 @@ for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
                 # matches[0] is the thing this function says it computes, e.g. x
                 # while function_name is e.g. _x_ZernikeRZToroidalSection
                 if function_name in source_codes:
-                    raise ValueError("Can't sort when things have named the same.")
+                    raise ValueError("Can't sort when things have same name.")
                 source_codes[function_name] = source_code
 
 # Write functions sorted to file.

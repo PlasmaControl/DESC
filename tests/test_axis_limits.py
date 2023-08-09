@@ -221,14 +221,14 @@ def get_matches(fun, pattern):
 
 
 def get_parameterization(fun, default="desc.equilibrium.equilibrium.Equilibrium"):
-    """Get parameterization of thing this function computes."""
+    """Get parameterization of thing computed by function ``fun``."""
     pattern = re.compile(r'parameterization=(?:\[([^]]+)]|"([^"]+)")')
     decorator = inspect.getsource(fun).partition("def ")[0]
     matches = pattern.findall(decorator)
     # if list was found, split strings in list, else string was found so just get that
     matches = [match[0].split(",") if match[0] else [match[1]] for match in matches]
     # flatten the list
-    matches = {match.strip().strip('"') for sublist in matches for match in sublist}
+    matches = {s.strip().strip('"') for sublist in matches for s in sublist}
     matches.discard("")
     return matches if matches else {default}
 

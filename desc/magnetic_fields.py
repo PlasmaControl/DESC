@@ -6,9 +6,9 @@ import numpy as np
 from netCDF4 import Dataset
 
 from desc.backend import fori_loop, jit, jnp, odeint
+from desc.compute.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
-from desc.geometry.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
@@ -833,7 +833,7 @@ def field_line_integrate(
 
 
 class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
-    """Magnetic field due to a surface current potential.
+    """Magnetic field due to a surface current potential on a toroidal surface.
 
         surface current K is assumed given by
         K = n x nabla(Phi)
@@ -849,9 +849,6 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         function to compute the current potential. Should have a signature of
         the form potential(theta,zeta,*params) -> ndarray.
         theta,zeta are poloidal and toroidal angles on the surface
-    surface : FourierRZToroidalSurface
-        winding surface on which the surface current described by
-        the current potential lies.
     surface_grid : Grid,
         grid upon which to evaluate the surface current density K
     params : dict, optional
@@ -862,6 +859,25 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     potential_dzeta: callable
         function to compute the theta derivative of the current potential
         if None, will use AD to calculate
+        R_lmn, Z_lmn : array-like, shape(k,)
+        Fourier coefficients for R and Z in cylindrical coordinates
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry. Default is "auto" which enforces if
+        modes are symmetric. If True, non-symmetric modes will be truncated.
+    rho : float [0,1]
+        flux surface label for the toroidal surface
+    name : str
+        name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
 
 
     """
@@ -882,13 +898,13 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         self._surface_grid = surface_grid
         self._params = params
         if potential_dtheta:
-            self.Phi_t = potential_dtheta
+            self._potential_t = potential_dtheta
         else:
-            self.Phi_t = Derivative(potential, argnum=0, mode="grad")
+            self._potential_t = Derivative(potential, argnum=0, mode="grad")
         if potential_dzeta:
-            self.Phi_z = potential_dzeta
+            self._potential_z = potential_dzeta
         else:
-            self.Phi_z = Derivative(potential, argnum=1, mode="grad")
+            self._potential_z = Derivative(potential, argnum=1, mode="grad")
 
         # K can/should be precomputed I think
         self._compute_surface_current()
@@ -940,8 +956,8 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         )
 
         # compute the potential derivatives on the surface
-        phi_t = self.Phi_t(theta, zeta, **self._params)
-        phi_z = self.Phi_z(theta, zeta, **self._params)
+        phi_t = self._potential_t(theta, zeta, **self._params)
+        phi_z = self._potential_z(theta, zeta, **self._params)
 
         # compute surface normal magnitude
         ns_mag = jnp.linalg.norm(np.cross(self._rs_t, self._rs_z), axis=1)

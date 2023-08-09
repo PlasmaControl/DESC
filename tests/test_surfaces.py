@@ -17,33 +17,24 @@ class TestFourierRZToroidalSurface:
         """Test calculation of surface area."""
         s = FourierRZToroidalSurface()
         grid = LinearGrid(M=24, N=24)
-        s.grid = grid
-
         area = 4 * np.pi**2 * 10
-        np.testing.assert_allclose(s.compute_surface_area(), area)
-        np.testing.assert_allclose(s.compute_surface_area(grid=10), area)
-        np.testing.assert_allclose(s.compute_surface_area(grid=(10, 15)), area)
+        np.testing.assert_allclose(s.compute("S", grid=grid)["S"], area)
 
     @pytest.mark.unit
     def test_normal(self):
         """Test calculation of surface normal vector."""
         s = FourierRZToroidalSurface()
         grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
-        s.grid = grid
-        N = s.compute_normal()
+        N = s.compute("n_rho", grid=grid)["n_rho"]
         np.testing.assert_allclose(N[0], [0, 0, -1], atol=1e-14)
         grid = LinearGrid(theta=0.0, zeta=0.0)
-        s.grid = grid
-        N = s.compute_normal(basis="xyz")
+        N = s.compute("n_rho", grid=grid)["n_rho"]
         np.testing.assert_allclose(N[0], [1, 0, 0], atol=1e-12)
 
     @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting attributes of surface."""
         c = FourierRZToroidalSurface()
-        grid = LinearGrid(L=0, M=2, N=2)
-        c.grid = grid
-        assert grid.eq(c.grid)
 
         R, Z = c.get_coeffs(0, 0)
         np.testing.assert_allclose(R, 10)
@@ -82,7 +73,6 @@ class TestFourierRZToroidalSurface:
         assert c.NFP == 3
         assert c.R_basis.NFP == 3
         assert c.Z_basis.NFP == 3
-        assert c.grid.NFP == 3
 
     @pytest.mark.unit
     def test_from_input_file(self):
@@ -133,12 +123,19 @@ class TestFourierRZToroidalSurface:
         """Tests for gaussian, mean, principle curvatures."""
         s = FourierRZToroidalSurface()
         grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
-        s.grid = grid
-        K, H, k1, k2 = s.compute_curvature()
-        np.testing.assert_allclose(K, 0)
-        np.testing.assert_allclose(H, -1 / 2)
-        np.testing.assert_allclose(k1, 0)
-        np.testing.assert_allclose(k2, -1)
+        data = s.compute(
+            [
+                "curvature_K_rho",
+                "curvature_H_rho",
+                "curvature_k1_rho",
+                "curvature_k2_rho",
+            ],
+            grid=grid,
+        )
+        np.testing.assert_allclose(data["curvature_K_rho"], 0)
+        np.testing.assert_allclose(data["curvature_H_rho"], -1 / 2)
+        np.testing.assert_allclose(data["curvature_k1_rho"], 0)
+        np.testing.assert_allclose(data["curvature_k2_rho"], -1)
 
 
 class TestZernikeRZToroidalSection:
@@ -149,29 +146,21 @@ class TestZernikeRZToroidalSection:
         """Test calculation of surface area."""
         s = ZernikeRZToroidalSection()
         grid = LinearGrid(L=10, M=10)
-        s.grid = grid
-
         area = np.pi * 1**2
-        np.testing.assert_allclose(s.compute_surface_area(), area)
-        np.testing.assert_allclose(s.compute_surface_area(grid=15), area)
-        np.testing.assert_allclose(s.compute_surface_area(grid=(5, 5)), area)
+        np.testing.assert_allclose(s.compute("A", grid=grid)["A"], area)
 
     @pytest.mark.unit
     def test_normal(self):
         """Test calculation of surface normal vector."""
         s = ZernikeRZToroidalSection()
-        grid = LinearGrid(L=8, M=4, N=0)
-        s.grid = grid
-        N = s.compute_normal(basis="xyz")
+        grid = LinearGrid(L=8, M=4, N=0, axis=False)
+        N = s.compute("n_zeta", grid=grid)["n_zeta"]
         np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
 
     @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting surface attributes."""
         c = ZernikeRZToroidalSection()
-        grid = LinearGrid(L=2, M=2, N=0)
-        c.grid = grid
-        assert grid.eq(c.grid)
 
         R, Z = c.get_coeffs(0, 0)
         np.testing.assert_allclose(R, 10)
@@ -212,12 +201,19 @@ class TestZernikeRZToroidalSection:
         """
         s = ZernikeRZToroidalSection()
         grid = LinearGrid(theta=np.pi / 2, rho=0.5)
-        s.grid = grid
-        K, H, k1, k2 = s.compute_curvature()
-        np.testing.assert_allclose(K, 0)
-        np.testing.assert_allclose(H, 0)
-        np.testing.assert_allclose(k1, 0)
-        np.testing.assert_allclose(k2, 0)
+        data = s.compute(
+            [
+                "curvature_K_zeta",
+                "curvature_H_zeta",
+                "curvature_k1_zeta",
+                "curvature_k2_zeta",
+            ],
+            grid=grid,
+        )
+        np.testing.assert_allclose(data["curvature_K_zeta"], 0)
+        np.testing.assert_allclose(data["curvature_H_zeta"], 0)
+        np.testing.assert_allclose(data["curvature_k1_zeta"], 0)
+        np.testing.assert_allclose(data["curvature_k2_zeta"], 0)
 
 
 @pytest.mark.unit

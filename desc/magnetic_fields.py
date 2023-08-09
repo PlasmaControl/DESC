@@ -863,7 +863,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     potential_dzeta: callable
         function to compute the theta derivative of the current potential
         if None, will use AD to calculate
-        R_lmn, Z_lmn : array-like, shape(k,)
+    R_lmn, Z_lmn : array-like, shape(k,)
         Fourier coefficients for R and Z in cylindrical coordinates
     modes_R : array-like, shape(k,2)
         poloidal and toroidal mode numbers [m,n] for R_lmn.
@@ -883,10 +883,16 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         unless you are sure the parameterization you have given is right handed
         (ie, e_theta x e_zeta points outward from the surface).
 
-
     """
 
-    _io_attrs_ = MagneticField._io_attrs_ + FourierRZToroidalSurface._io_attrs_
+    _io_attrs_ = (
+        MagneticField._io_attrs_
+        + FourierRZToroidalSurface._io_attrs_
+        + [
+            "_surface_grid",
+            "_params",
+        ]
+    )
 
     def __init__(
         self,

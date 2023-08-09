@@ -126,10 +126,7 @@ class TestMagneticFields:
 
         field = CurrentPotentialField(
             potential=potential,
-            R_lmn=surface.R_lmn,
-            Z_lmn=surface.Z_lmn,
-            modes_R=surface._R_basis.modes[:, 1:],
-            modes_Z=surface._Z_basis.modes[:, 1:],
+            surface=surface,
             surface_grid=LinearGrid(M=120, N=120, NFP=1),
             params=params,
             potential_dtheta=None,

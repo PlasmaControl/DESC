@@ -882,6 +882,10 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         ensure that this surface has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
         (ie, e_theta x e_zeta points outward from the surface).
+    surface: FourierRZToroidalSurface, optional, default None
+        Existing FourierRZToroidalSurface object to create a
+        CurrentPotentialField with, if provided will use this
+        object's R_lmn, Z_lmn etc instead of the passed-in values
 
     """
 
@@ -910,10 +914,25 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         rho=1,
         name="",
         check_orientation=True,
+        surface=None,
     ):
         self._potential = potential
         self._surface_grid = surface_grid
         self._params = params
+
+        if surface:
+            if not isinstance(surface, FourierRZToroidalSurface):
+                raise TypeError(
+                    "Expected type FourierRZToroidalSurface for argument surface, "
+                    f"instead got type {type(surface)}"
+                )
+            R_lmn = surface.R_lmn
+            Z_lmn = surface.Z_lmn
+            modes_R = surface._R_basis.modes[:, 1:]
+            modes_Z = surface._Z_basis.modes[:, 1:]
+            NFP = surface.NFP
+            sym = surface.sym
+            rho = surface.rho
 
         super().__init__(
             R_lmn, Z_lmn, modes_R, modes_Z, NFP, sym, rho, name, check_orientation

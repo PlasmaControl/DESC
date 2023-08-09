@@ -565,16 +565,24 @@ class InputReader:
 
         # flags can be true will all coefficients being zero
         # if all coefficients of pres, iota and current are zero, ignore flags
-        if inputs["objective"] == "vacuum" and (
-            (pres_flag and np.linalg.norm(inputs["pressure"][:, 1]) > 1e-8)
-            or (iota_flag and np.linalg.norm(inputs["iota"][:, 1]) > 1e-8)
-            or (curr_flag and np.linalg.norm(inputs["current"][:, 1]) > 1e-8)
-        ):
-            warnings.warn(
-                "Vacuum objective does not use any profiles, "
-                + "ignoring presssure, iota, and current"
-            )
-
+        if curr_flag:
+            if inputs["objective"] == "vacuum" and (
+                (pres_flag and np.linalg.norm(inputs["pressure"][:, 1]) > 1e-8)
+                or (curr_flag and np.linalg.norm(inputs["current"][:, 1]) > 1e-8)
+            ):
+                warnings.warn(
+                    "Vacuum objective does not use any profiles, "
+                    + "ignoring presssure, iota, and current"
+                )
+        else:
+            if inputs["objective"] == "vacuum" and (
+                (pres_flag and np.linalg.norm(inputs["pressure"][:, 1]) > 1e-8)
+                or (iota_flag and np.linalg.norm(inputs["iota"][:, 1]) > 1e-8)
+            ):
+                warnings.warn(
+                    "Vacuum objective does not use any profiles, "
+                    + "ignoring presssure, iota, and current"
+                )
         # sort axis array
         inputs["axis"] = inputs["axis"][inputs["axis"][:, 0].argsort()]
 
@@ -789,6 +797,12 @@ class InputReader:
         filename,
         inputs,
         header="#DESC-generated input file",
+        ftol=1e-2,
+        xtol=1e-6,
+        gtol=1e-6,
+        maxiter=100,
+        optimizer="lsq-exact",
+        objective="force",
         **kwargs,
     ):
         """Generate a DESC input file from a DESC output file.
@@ -837,37 +851,14 @@ class InputReader:
             f.write(f"{key} = {getattr(eq0, val)}\n")
 
         f.write("\n\n# solver tolerances\n")
-        if "ftol" in kwargs:
-            f.write(f"ftol = {kwargs['ftol']}\n")
-        else:
-            f.write("ftol = {}\n".format(1e-2))
-
-        if "xtol" in kwargs:
-            f.write(f"xtol = {kwargs['xtol']}\n")
-        else:
-            f.write("xtol = {}\n".format(1e-6))
-
-        if "gtol" in kwargs:
-            f.write(f"gtol = {kwargs['gtol']}\n")
-        else:
-            f.write("gtol = {}\n".format(1e-6))
-
-        if "maxiter" in kwargs:
-            f.write(f"maxiter = {kwargs['maxiter']}\n")
-        else:
-            f.write("maxiter = {}\n".format(100))
+        f.write(f"ftol = {kwargs['ftol']}\n")
+        f.write(f"xtol = {kwargs['xtol']}\n")
+        f.write(f"gtol = {kwargs['gtol']}\n")
+        f.write(f"maxiter = {kwargs['maxiter']}\n")
 
         f.write("\n\n# solver methods\n")
-        if "optimizer" in kwargs:
-            f.write(f"maxiter = {kwargs['optimizer']}\n")
-        else:
-            f.write("optimizer = {}\n".format("lsq-exact"))
-
-        if "objective" in kwargs:
-            f.write(f"objective = {kwargs['objective']}\n")
-        else:
-            f.write("objective = {}\n".format("force"))
-
+        f.write(f"maxiter = {kwargs['optimizer']}\n")
+        f.write(f"objective = {kwargs['objective']}\n")
         f.write("spectral_indexing = {}\n".format(eq0._spectral_indexing))
         f.write("node_pattern = {}\n".format(eq0._node_pattern))
 

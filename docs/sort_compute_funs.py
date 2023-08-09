@@ -1,7 +1,7 @@
 """Sort the compute functions and print to specified output.
 
 First command line argument is module name, e.g. "_basis_vectors".
-Second command line output is file to print to,
+Second command line argument is output file to print to,
 e.g. "sorted_basis_vectors.txt".
 """
 
@@ -11,21 +11,29 @@ import sys
 
 import desc.compute
 
-# Gather all compute function source code and map quantity name to source code.
+preamble = ""
+
+# Gather all compute function source code and map name to source code.
 source_codes = {}
 pattern = re.compile(r"(?<=name=)[^,]+")
 for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
     if module_name == sys.argv[1]:
-        for _, fun in inspect.getmembers(module, inspect.isfunction):
+        # everything in the module until the first compute function
+        # (import statements, etc.)
+        preamble = inspect.getsource(module).partition("@register_compute_fun")[0]
+        for function_name, fun in inspect.getmembers(module, inspect.isfunction):
             source_code = inspect.getsource(fun)
-            # quantities that this function computes
             matches = pattern.findall(source_code)
             if matches:  # skip imported functions
-                source_codes[matches[0]] = source_code
+                # matches[0] is the thing this function says it computes, e.g. x
+                # while function_name is e.g. _x_ZernikeRZToroidalSection
+                if function_name in source_codes:
+                    raise ValueError("Can't sort when things have named the same.")
+                source_codes[function_name] = source_code
 
-# Write compute functions sorted by name to file.
+# Write functions sorted to file.
 with open(sys.argv[2], "w") as output_file:
-    for name in sorted(source_codes):
-        output_file.write("\n")
-        output_file.write(source_codes[name])
-        output_file.write("\n")
+    output_file.write(preamble)
+    for function_name in sorted(source_codes):
+        output_file.write(source_codes[function_name])
+        output_file.write("\n\n")

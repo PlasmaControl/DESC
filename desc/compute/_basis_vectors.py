@@ -196,6 +196,10 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
     data["e^theta*sqrt(g)"] = cross(data["e_zeta"], data["e_rho"])

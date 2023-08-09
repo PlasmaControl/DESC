@@ -7,6 +7,7 @@ import pytest
 
 import desc.compute
 from desc.compute import data_index
+from desc.compute.data_index import _class_inheritance
 from desc.compute.utils import surface_integrals_map
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -16,7 +17,7 @@ from desc.grid import LinearGrid
 # made to compute the magnetic axis limit can be reduced to assuming that these
 # functions tend toward zero as the magnetic axis is approached and that
 # d^2𝜓/(d𝜌)^2 and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
-# Also d^n𝜓/(d𝜌)^n for n > 3 is assumed zero everywhere.
+# Also, d^n𝜓/(d𝜌)^n for n > 3 is assumed zero everywhere.
 zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
 
 not_finite_limits = {
@@ -216,8 +217,21 @@ def get_matches(fun, pattern):
     # attempt to remove comments
     src = "\n".join(line.partition("#")[0] for line in src.splitlines())
     matches = pattern.findall(src)
-    matches = {s.replace("'", "").replace('"', "") for s in matches}
+    matches = {s.strip().strip('"') for s in matches}
     return matches
+
+
+def get_parameterization(fun, default="desc.equilibrium.equilibrium.Equilibrium"):
+    """Get parameterization of thing computed by function ``fun``."""
+    pattern = re.compile(r'parameterization=(?:\[([^]]+)]|"([^"]+)")')
+    decorator = inspect.getsource(fun).partition("def ")[0]
+    matches = pattern.findall(decorator)
+    # if list was found, split strings in list, else string was found so just get that
+    matches = [match[0].split(",") if match[0] else [match[1]] for match in matches]
+    # flatten the list
+    matches = {s.strip().strip('"') for sublist in matches for s in sublist}
+    matches.discard("")
+    return matches if matches else {default}
 
 
 class TestAxisLimits:
@@ -227,41 +241,55 @@ class TestAxisLimits:
     def test_data_index_deps(self):
         """Ensure developers do not add extra (or forget needed) dependencies."""
         queried_deps = {}
-        pattern_keys = re.compile(r"(?<!_)data\[(.*?)\] =")
-        pattern_data = re.compile(r"(?<!_)data\[(.*?)\]")
-        pattern_profiles = re.compile(r"profiles\[(.*?)\]")
-        pattern_params = re.compile(r"params\[(.*?)\]")
+
+        pattern_names = re.compile(r"(?<!_)data\[(.*?)] =")
+        pattern_data = re.compile(r"(?<!_)data\[(.*?)]")
+        pattern_profiles = re.compile(r"profiles\[(.*?)]")
+        pattern_params = re.compile(r"params\[(.*?)]")
         for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
-            if module_name[0] == "_":
-                for _, fun in inspect.getmembers(module, inspect.isfunction):
-                    # quantities that this function computes
-                    keys = get_matches(fun, pattern_keys)
-                    # dependencies queried in source code of this function
-                    deps = {
-                        "data": get_matches(fun, pattern_data) - keys,
-                        "profiles": get_matches(fun, pattern_profiles),
-                        "params": get_matches(fun, pattern_params),
-                    }
-                    for key in keys:
-                        queried_deps[key] = deps
+            if module_name[0] != "_":
+                continue
+            for _, fun in inspect.getmembers(module, inspect.isfunction):
+                # quantities that this function computes
+                names = get_matches(fun, pattern_names)
+                # dependencies queried in source code of this function
+                deps = {
+                    "data": get_matches(fun, pattern_data) - names,
+                    "profiles": get_matches(fun, pattern_profiles),
+                    "params": get_matches(fun, pattern_params),
+                }
+                parameterization = get_parameterization(fun)
+                # some functions compute multiple things, e.g. curvature
+                for name in names:
+                    # same logic as desc.compute.data_index.py
+                    for p in parameterization:
+                        for base_class, superclasses in _class_inheritance.items():
+                            if p in superclasses or p == base_class:
+                                queried_deps.setdefault(base_class, {})[name] = deps
 
         for parameterization in data_index:
-            for key, val in data_index[parameterization].items():
+            for name, val in data_index[parameterization].items():
+                err_msg = f"Parameterization: {parameterization}. Name: {name}."
                 deps = val["dependencies"]
                 data = set(deps["data"])
                 axis_limit_data = set(deps["axis_limit_data"])
                 profiles = set(deps["profiles"])
                 params = set(deps["params"])
                 # assert no duplicate dependencies
-                assert len(data) == len(deps["data"]), key
-                assert len(axis_limit_data) == len(deps["axis_limit_data"]), key
-                assert data.isdisjoint(axis_limit_data), key
-                assert len(profiles) == len(deps["profiles"]), key
-                assert len(params) == len(deps["params"]), key
+                assert len(data) == len(deps["data"]), err_msg
+                assert len(axis_limit_data) == len(deps["axis_limit_data"]), err_msg
+                assert data.isdisjoint(axis_limit_data), err_msg
+                assert len(profiles) == len(deps["profiles"]), err_msg
+                assert len(params) == len(deps["params"]), err_msg
                 # assert correct dependencies are queried
-                assert queried_deps[key]["data"] == data | axis_limit_data, key
-                assert queried_deps[key]["profiles"] == profiles, key
-                assert queried_deps[key]["params"] == params, key
+                assert (
+                    queried_deps[parameterization][name]["data"]
+                    == data | axis_limit_data
+                ), err_msg
+                assert (
+                    queried_deps[parameterization][name]["profiles"] == profiles
+                ), err_msg
+                assert queried_deps[parameterization][name]["params"] == params, err_msg
 
     @pytest.mark.unit
     def test_axis_limit_api(self):
@@ -283,26 +311,23 @@ class TestAxisLimits:
     @pytest.mark.unit
     def test_limit_existence(self):
         """Test that only quantities which lack limits do not evaluate at axis."""
-
-        def test(eq):
-            grid = LinearGrid(L=1, M=1, N=1, sym=eq.sym, NFP=eq.NFP, axis=True)
-            at_axis = grid.nodes[:, 0] == 0
-            assert at_axis.any() and not at_axis.all()
-            data = eq.compute(
-                list(data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()),
-                grid=grid,
-            )
-            for key in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
-                if _skip_this(eq, key):
-                    continue
-                is_finite = np.isfinite(data[key])
-                if key in not_finite_limits:
-                    assert np.all(is_finite.T ^ at_axis), key
-                else:
-                    assert np.all(is_finite), key
-
-        test(get("W7-X"))  # fixed iota
-        test(get("QAS"))  # fixed current
+        # sufficient to test fixed current
+        eq = get("QAS")
+        grid = LinearGrid(L=1, M=1, N=1, sym=eq.sym, NFP=eq.NFP, axis=True)
+        at_axis = grid.nodes[:, 0] == 0
+        assert at_axis.any() and not at_axis.all()
+        data = eq.compute(
+            list(data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()),
+            grid=grid,
+        )
+        for key in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
+            if _skip_this(eq, key):
+                continue
+            is_finite = np.isfinite(data[key])
+            if key in not_finite_limits:
+                assert np.all(is_finite.T ^ at_axis), key
+            else:
+                assert np.all(is_finite), key
 
     @pytest.mark.unit
     def test_continuous_limits(self):

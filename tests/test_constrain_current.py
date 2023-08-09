@@ -42,7 +42,7 @@ class TestConstrainCurrent:
     attached to the description of GitHub pull request #556.
     """
 
-    @pytest.mark.regression
+    @pytest.mark.unit
     @pytest.mark.solve
     def test_iota_to_current_and_back(self, DSHAPE):
         """Test we can recover the rotational transform in simple cases.
@@ -124,7 +124,7 @@ class TestConstrainCurrent:
         test(DSHAPE, ConcentricGrid)
         test(DSHAPE, LinearGrid)
 
-    @pytest.mark.regression
+    @pytest.mark.unit
     @pytest.mark.solve
     def test_current_to_iota_and_back(self, HELIOTRON_vac):
         """Test we can recover the enclosed net toroidal current in simple cases.

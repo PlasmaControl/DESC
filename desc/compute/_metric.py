@@ -90,6 +90,10 @@ def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_theta_x_e_zeta_r(params, transforms, profiles, data, **kwargs):
     a = cross(data["e_theta"], data["e_zeta"])
@@ -120,6 +124,10 @@ def _e_theta_x_e_zeta_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r", "e_theta_rr", "e_zeta_rr"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
     a = cross(data["e_theta"], data["e_zeta"])
@@ -201,6 +209,10 @@ def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_theta", "e_rho_r", "e_theta_r"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_rho_x_e_theta_r(params, transforms, profiles, data, **kwargs):
     a = cross(data["e_rho"], data["e_theta"])
@@ -231,6 +243,10 @@ def _e_rho_x_e_theta_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_theta", "e_rho_r", "e_theta_r", "e_rho_rr", "e_theta_rr"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_rho_x_e_theta_rr(params, transforms, profiles, data, **kwargs):
     a = cross(data["e_rho"], data["e_theta"])

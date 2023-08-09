@@ -1132,8 +1132,8 @@ def test_compare_quantities_to_vmec():
 
 @pytest.mark.unit
 @pytest.mark.slow
-def test_compute_anything():
-    """Make sure we can compute anything without errors."""
+def test_equilibrium_compute_everything():
+    """Make sure we can compute every equilibrium thing without errors."""
     eq = Equilibrium(1, 1, 1)
     grid = LinearGrid(1, 1, 1)
     for key in data_index["desc.equilibrium.equilibrium.Equilibrium"]:

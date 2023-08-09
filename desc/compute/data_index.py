@@ -46,7 +46,7 @@ def register_compute_fun(
         a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty.
-    parameterization: str
+    parameterization: str or list of str
         Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
         or `desc.equilibrium.Equilibrium`.
     axis_limit_data : list of str

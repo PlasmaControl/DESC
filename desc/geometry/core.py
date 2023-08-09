@@ -6,13 +6,18 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute.utils import compute as compute_fun
-from desc.compute.utils import get_params, get_transforms
+from desc.compute import compute as compute_fun
+from desc.compute import data_index
+from desc.compute.geom_utils import reflection_matrix, rotation_matrix
+from desc.compute.utils import (
+    _parse_parameterization,
+    get_data_deps,
+    get_params,
+    get_transforms,
+)
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import IOAble
 from desc.optimizeable import Optimizeable
-
-from .utils import reflection_matrix, rotation_matrix
 
 
 class Curve(IOAble, Optimizeable, ABC):
@@ -81,6 +86,33 @@ class Curve(IOAble, Optimizeable, ABC):
         if data is None:
             data = {}
         profiles = {}
+
+        p = _parse_parameterization(self)
+        deps = list(set(get_data_deps(names, obj=p) + names))
+        dep0d = [
+            dep
+            for dep in deps
+            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
+        ]
+        calc0d = bool(len(dep0d))
+        # see if the grid we're already using will work for desired qtys
+        if calc0d and (grid.N >= 2 * self.N + 5) and isinstance(grid, LinearGrid):
+            calc0d = False
+
+        if calc0d:
+            grid0d = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=True)
+            data0d = compute_fun(
+                self,
+                dep0d,
+                params=params,
+                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
+                profiles={},
+                data=None,
+                **kwargs,
+            )
+            # these should all be 0d quantities so don't need to compress/expand
+            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            data.update(data0d)
 
         data = compute_fun(
             self,
@@ -224,13 +256,15 @@ class Surface(IOAble, Optimizeable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            NFP = self.NFP if hasattr(self, "NFP") else 1
             if hasattr(self, "rho"):  # constant rho surface
                 grid = LinearGrid(
-                    rho=np.array(self.rho), M=2 * self.M + 5, N=2 * self.N + 5, NFP=NFP
+                    rho=np.array(self.rho),
+                    M=2 * self.M + 5,
+                    N=2 * self.N + 5,
+                    NFP=self.NFP,
                 )
             elif hasattr(self, "zeta"):  # constant zeta surface
-                grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=NFP)
+                grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
                 grid._nodes[:, 2] = self.zeta
         if params is None:
             params = get_params(names, obj=self)
@@ -239,6 +273,54 @@ class Surface(IOAble, Optimizeable, ABC):
         if data is None:
             data = {}
         profiles = {}
+
+        p = _parse_parameterization(self)
+        deps = list(set(get_data_deps(names, obj=p) + names))
+        dep0d = [
+            dep
+            for dep in deps
+            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
+        ]
+        calc0d = bool(len(dep0d))
+        # see if the grid we're already using will work for desired qtys
+        if calc0d and hasattr(self, "rho"):  # constant rho surface
+            if (
+                (grid.N >= 2 * self.N + 5)
+                and (grid.M > 2 * self.M + 5)
+                and isinstance(grid, LinearGrid)
+            ):
+                calc0d = False
+            else:
+                grid0d = LinearGrid(
+                    rho=np.array(self.rho),
+                    M=2 * self.M + 5,
+                    N=2 * self.N + 5,
+                    NFP=self.NFP,
+                )
+        elif calc0d and hasattr(self, "zeta"):  # constant zeta surface
+            if (
+                (grid.L >= self.L + 1)
+                and (grid.M > 2 * self.M + 5)
+                and isinstance(grid, QuadratureGrid)
+            ):
+                calc0d = False
+            else:
+                grid0d = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
+                grid0d._nodes[:, 2] = self.zeta
+
+        if calc0d:
+            data0d = compute_fun(
+                self,
+                dep0d,
+                params=params,
+                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
+                profiles={},
+                data=None,
+                **kwargs,
+            )
+            # these should all be 0d quantities so don't need to compress/expand
+            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            data.update(data0d)
 
         data = compute_fun(
             self,

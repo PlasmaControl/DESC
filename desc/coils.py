@@ -6,8 +6,8 @@ from collections.abc import MutableSequence
 import numpy as np
 
 from desc.backend import jnp
+from desc.compute import rpz2xyz, xyz2rpz_vec
 from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
-from desc.geometry.utils import rpz2xyz, xyz2rpz_vec
 from desc.grid import Grid
 from desc.magnetic_fields import MagneticField, biot_savart
 from desc.optimizeable import Optimizeable, optimizeable_parameter

@@ -1,7 +1,7 @@
 from desc.backend import jnp
-from desc.geometry.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 from .data_index import register_compute_fun
+from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from .utils import cross, dot
 
 
@@ -624,7 +624,7 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    coordinates="s",
+    coordinates="",
     data=["s", "x_s"],
     parameterization="desc.geometry.core.Curve",
 )

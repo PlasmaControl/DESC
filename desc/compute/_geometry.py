@@ -32,7 +32,7 @@ def _V(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="r",
+    coordinates="",
     data=["e_theta", "e_zeta", "x"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
 )

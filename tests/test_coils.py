@@ -20,10 +20,9 @@ class TestCoil:
         By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 0])
         coil = FourierXYZCoil(I)
-        coil.grid = LinearGrid(zeta=100, endpoint=True)
-        assert coil.grid.num_nodes == 100
+        grid = LinearGrid(zeta=100, endpoint=True)
         B_approx = coil.compute_magnetic_field(
-            Grid([[10, y, 0], [10, -y, 0]]), basis="xyz"
+            Grid([[10, y, 0], [10, -y, 0]]), basis="xyz", grid=grid
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
@@ -55,9 +54,7 @@ class TestCoilSet:
         )
         coils.current = I
         np.testing.assert_allclose(coils.current, I)
-        coils.grid = 32
-        assert coils.grid.N == 32
-        B_approx = coils.compute_magnetic_field([0, 0, z[-1]], basis="xyz")[0]
+        B_approx = coils.compute_magnetic_field([0, 0, z[-1]], basis="xyz", grid=32)[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit
@@ -71,9 +68,7 @@ class TestCoilSet:
         coil = FourierPlanarCoil()
         coil.current = I
         coils = CoilSet.linspaced_angular(coil, n=N)
-        coils.grid = 32
-        assert all([coil.grid.N == 32 for coil in coils])
-        B_approx = coils.compute_magnetic_field([10, 0, 0], basis="rpz")[0]
+        B_approx = coils.compute_magnetic_field([10, 0, 0], basis="rpz", grid=32)[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit
@@ -87,9 +82,7 @@ class TestCoilSet:
         coil = FourierPlanarCoil()
         coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=N // 4)
         coils = CoilSet.from_symmetry(coils, NFP=4)
-        coils.grid = 32
-        assert all([coil.grid.N == 32 for coil in coils])
-        B_approx = coils.compute_magnetic_field([10, 0, 0], basis="rpz")[0]
+        B_approx = coils.compute_magnetic_field([10, 0, 0], basis="rpz", grid=32)[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
         # with stellarator symmetry
@@ -99,10 +92,8 @@ class TestCoilSet:
         coils = CoilSet.linspaced_angular(
             coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2
         )
-        coils.grid = 32
-        assert coils.grid.N == 32
         coils2 = CoilSet.from_symmetry(coils, NFP, True)
-        B_approx = coils2.compute_magnetic_field([10, 0, 0], basis="rpz")[0]
+        B_approx = coils2.compute_magnetic_field([10, 0, 0], basis="rpz", grid=32)[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit
@@ -110,9 +101,20 @@ class TestCoilSet:
         """Test getting/setting of CoilSet attributes."""
         coil = FourierPlanarCoil()
         coils = CoilSet.linspaced_linear(coil, n=4)
-        coils.grid = np.array([[0.0, 0.0, 0.0]])
+        data = coils.compute(
+            [
+                "x",
+                "curvature",
+                "torsion",
+                "frenet_tangent",
+                "frenet_normal",
+                "frenet_binormal",
+            ],
+            grid=0,
+            basis="xyz",
+        )
         np.testing.assert_allclose(
-            coils.compute_coordinates(),
+            [dat["x"] for dat in data],
             np.array(
                 [
                     [12, 0, 0],
@@ -122,12 +124,11 @@ class TestCoilSet:
                 ]
             ).reshape((4, 1, 3)),
         )
-        np.testing.assert_allclose(coils.compute_curvature(), 1 / 2)
-        np.testing.assert_allclose(coils.compute_torsion(), 0)
-        TNB = coils.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]), basis="xyz")
-        T = [foo[0] for foo in TNB]
-        N = [foo[1] for foo in TNB]
-        B = [foo[2] for foo in TNB]
+        np.testing.assert_allclose([dat["curvature"] for dat in data], 1 / 2)
+        np.testing.assert_allclose([dat["torsion"] for dat in data], 0)
+        T = [dat["frenet_tangent"] for dat in data]
+        N = [dat["frenet_normal"] for dat in data]
+        B = [dat["frenet_binormal"] for dat in data]
         np.testing.assert_allclose(
             T,
             np.array(
@@ -164,16 +165,20 @@ class TestCoilSet:
             ).reshape((4, 1, 3)),
             atol=1e-12,
         )
-        coils.grid = 32
-        np.testing.assert_allclose(coils.compute_length(), 2 * 2 * np.pi)
+        data = coils.compute("length", grid=32)
+        np.testing.assert_allclose([dat["length"] for dat in data], 2 * 2 * np.pi)
         coils.translate([1, 1, 1])
-        np.testing.assert_allclose(coils.compute_length(), 2 * 2 * np.pi)
+        data = coils.compute("length", grid=32)
+        np.testing.assert_allclose([dat["length"] for dat in data], 2 * 2 * np.pi)
         coils.flip([1, 0, 0])
-        coils.grid = np.array([[0.0, 0.0, 0.0]])
-        TNB = coils.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]), basis="xyz")
-        T = [foo[0] for foo in TNB]
-        N = [foo[1] for foo in TNB]
-        B = [foo[2] for foo in TNB]
+        data = coils.compute(
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"],
+            grid=0,
+            basis="xyz",
+        )
+        T = [dat["frenet_tangent"] for dat in data]
+        N = [dat["frenet_normal"] for dat in data]
+        B = [dat["frenet_binormal"] for dat in data]
         np.testing.assert_allclose(
             T,
             np.array(

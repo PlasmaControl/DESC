@@ -130,40 +130,25 @@ def test_descout_to_input(tmpdir_factory):
     ir1 = InputReader()
     ir1.descout_to_input(str(tmp_path), str(tmpout_path))
     ir1 = InputReader(cl_args=[str(tmp_path)])
-    arr1 = ir1.parse_inputs()[0]["surface"]
+    arr1 = ir1.parse_inputs()[-1]["surface"]
     arr1 = arr1[arr1[:, 1].argsort()]
-    len1 = np.shape(arr1)[0]
 
     desc_input_truth = "./tests/inputs/LandremanPaul2022_QA_reactorScale_lowRes"
     ir2 = InputReader(cl_args=[str(desc_input_truth)])
-    arr2 = ir2.parse_inputs()[0]["surface"]
+    arr2 = ir2.parse_inputs()[-1]["surface"]
     arr2 = arr2[arr2[:, 1].argsort()]
-    len2 = np.shape(arr2)[0]
 
-    found = 1
-    i = 0
-    while i <= len1 and found == 1:
-        found = 0
-        m1_idx, n1_idx, R11, Z11 = arr1[i, 1:]
-        j = 0
-        while j <= len2 and found == 0:
-            m2_idx, n2_idx, R12, Z12 = arr2[j, 1:]
-            if m1_idx == m2_idx and n1_idx == n2_idx:
-                if (
-                    np.minimum(
-                        np.linalg.norm(np.array([R11, Z11]) - np.array([R12, Z12])),
-                        np.linalg.norm(np.array([R11, Z11]) + np.array([R12, Z12])),
-                    )
-                    < 1e-6
-                ):
-                    found0 = 1
-                else:
-                    found0 = 0
-            else:
-                j += 1
-        i += 1
+    found = 0
+    if (
+        np.minimum(
+            np.linalg.norm(arr1[:, 2:] - arr2[:, 2:]),
+            np.linalg.norm(arr1[:, 2:] + arr2[:, 2:]),
+        )
+        < 1e-5
+    ):
+        found = 1
 
-    assert found0 == 1
+    assert found == 1
 
 
 @pytest.mark.unit

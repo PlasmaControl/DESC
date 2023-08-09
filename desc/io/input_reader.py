@@ -563,8 +563,11 @@ class InputReader:
         else:
             del inputs["iota"]
 
-        if inputs["objective"] == "vacuum" and (pres_flag or iota_flag or curr_flag):
-            print(pres_flag, iota_flag, curr_flag)
+        if inputs["objective"] == "vacuum" and (
+            (pres_flag and np.linalg.norm(inputs["pressure"][:, 1]) > 1e-8)
+            or (iota_flag and np.linalg.norm(inputs["iota"][:, 1]) > 1e-8)
+            or (curr_flag and np.linalg.norm(inputs["current"][:, 1]) > 1e-8)
+        ):
             warnings.warn(
                 "Vacuum objective does not use any profiles, "
                 + "ignoring presssure, iota, and current"

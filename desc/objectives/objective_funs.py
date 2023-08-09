@@ -766,6 +766,14 @@ class _Objective(IOAble, ABC):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
+    where_apply_loss " str,
+        where to apply the user defined loss function. One of "compute_unscaled"
+        or "compute_scaled"
+        If "compute_unscaled", the loss function will apply to
+        the raw objective function values, before the target is applied.
+        If "compute_scaled", the loss function will apply to
+        the scaled objective function values, after the target is applied.
+
     name : str
         Name of the objective function.
 
@@ -793,10 +801,23 @@ class _Objective(IOAble, ABC):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        where_apply_loss="compute_unscaled",
         name=None,
     ):
+        assert where_apply_loss in ["compute_unscaled", "compute_scaled"], (
+            "where_apply_loss must be 'compute_unscaled' or"
+            f"'compute_scaled', got {where_apply_loss}"
+        )
+
         if loss_function is None:
             loss_function = lambda x: x
+        loss_function_on_unscaled = (
+            loss_function if where_apply_loss == "compute_unscaled" else lambda x: x
+        )
+        loss_function_on_scaled = (
+            loss_function if where_apply_loss == "compute_scaled" else lambda x: x
+        )
+
         assert np.all(np.asarray(weight) > 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
@@ -826,7 +847,9 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        self._loss_function = loss_function
+        self._loss_function_on_unscaled = loss_function_on_unscaled
+        self._loss_function_on_scaled = loss_function_on_scaled
+        self._where_apply_loss = where_apply_loss
         # if args is already set don't overwrite it
         self._args = getattr(
             self,
@@ -910,6 +933,7 @@ class _Objective(IOAble, ABC):
         except AttributeError:
             pass
         self.compute_scaled = jit(self.compute_scaled)
+        self.compute_scaled2 = self.compute_scaled
 
         try:
             del self.compute_scaled_error
@@ -973,19 +997,19 @@ class _Objective(IOAble, ABC):
 
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
-        return jnp.atleast_1d(
-            self._loss_function(jnp.atleast_1d(self.compute(*args, **kwargs)))
+        return self._loss_function_on_unscaled(
+            jnp.atleast_1d(self.compute(*args, **kwargs))
         )
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
-        f = jnp.atleast_1d(self._loss_function(self.compute(*args, **kwargs)))
-        return self._scale(f)
+        f = self._loss_function_on_unscaled(self.compute(*args, **kwargs))
+        return self._loss_function_on_scaled(self._scale(f))
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        f = jnp.atleast_1d(self._loss_function(self.compute(*args, **kwargs)))
-        return self._scale(self._shift(f))
+        f = self._loss_function_on_unscaled(self.compute(*args, **kwargs))
+        return self._loss_function_on_scaled(self._scale(self._shift(f)))
 
     def _shift(self, f):
         """Subtract target or clamp to bounds."""

@@ -44,6 +44,13 @@ class AspectRatio(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
+    where_apply_loss " str,
+        where to apply the user defined loss function. One of "compute_unscaled"
+        or "compute_scaled"
+        If "compute_unscaled", the loss function will apply to
+        the raw objective function values, before the target is applied.
+        If "compute_scaled", the loss function will apply to
+        the scaled objective function values, after the target is applied.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -65,6 +72,7 @@ class AspectRatio(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        where_apply_loss="compute_unscaled",
         grid=None,
         name="aspect ratio",
     ):
@@ -79,6 +87,7 @@ class AspectRatio(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -185,6 +194,13 @@ class Elongation(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
+    where_apply_loss " str,
+        where to apply the user defined loss function. One of "compute_unscaled"
+        or "compute_scaled"
+        If "compute_unscaled", the loss function will apply to
+        the raw objective function values, before the target is applied.
+        If "compute_scaled", the loss function will apply to
+        the scaled objective function values, after the target is applied.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -206,6 +222,7 @@ class Elongation(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        where_apply_loss="compute_unscaled",
         grid=None,
         name="elongation",
     ):
@@ -220,6 +237,7 @@ class Elongation(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -326,6 +344,13 @@ class Volume(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
+    where_apply_loss " str,
+        where to apply the user defined loss function. One of "compute_unscaled"
+        or "compute_scaled"
+        If "compute_unscaled", the loss function will apply to
+        the raw objective function values, before the target is applied.
+        If "compute_scaled", the loss function will apply to
+        the scaled objective function values, after the target is applied.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -347,6 +372,7 @@ class Volume(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        where_apply_loss="compute_unscaled",
         grid=None,
         name="volume",
     ):
@@ -361,6 +387,7 @@ class Volume(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -489,6 +516,13 @@ class PlasmaVesselDistance(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
+    where_apply_loss " str,
+        where to apply the user defined loss function. One of "compute_unscaled"
+        or "compute_scaled"
+        If "compute_unscaled", the loss function will apply to
+        the raw objective function values, before the target is applied.
+        If "compute_scaled", the loss function will apply to
+        the scaled objective function values, after the target is applied.
     surface_grid : Grid, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
     plasma_grid : Grid, optional
@@ -519,6 +553,7 @@ class PlasmaVesselDistance(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        where_apply_loss="compute_unscaled",
         surface_grid=None,
         plasma_grid=None,
         use_softmin=False,
@@ -540,6 +575,7 @@ class PlasmaVesselDistance(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -708,6 +744,13 @@ class MeanCurvature(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
+    where_apply_loss " str,
+        where to apply the user defined loss function. One of "compute_unscaled"
+        or "compute_scaled"
+        If "compute_unscaled", the loss function will apply to
+        the raw objective function values, before the target is applied.
+        If "compute_scaled", the loss function will apply to
+        the scaled objective function values, after the target is applied.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -729,6 +772,7 @@ class MeanCurvature(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        where_apply_loss="compute_unscaled",
         grid=None,
         name="mean-curvature",
     ):
@@ -743,6 +787,7 @@ class MeanCurvature(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -861,6 +906,13 @@ class PrincipalCurvature(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
+    where_apply_loss " str,
+        where to apply the user defined loss function. One of "compute_unscaled"
+        or "compute_scaled"
+        If "compute_unscaled", the loss function will apply to
+        the raw objective function values, before the target is applied.
+        If "compute_scaled", the loss function will apply to
+        the scaled objective function values, after the target is applied.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -882,6 +934,7 @@ class PrincipalCurvature(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        where_apply_loss="compute_unscaled",
         grid=None,
         name="principal-curvature",
     ):
@@ -896,6 +949,7 @@ class PrincipalCurvature(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -1011,6 +1065,13 @@ class BScaleLength(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
+    where_apply_loss " str,
+        where to apply the user defined loss function. One of "compute_unscaled"
+        or "compute_scaled"
+        If "compute_unscaled", the loss function will apply to
+        the raw objective function values, before the target is applied.
+        If "compute_scaled", the loss function will apply to
+        the scaled objective function values, after the target is applied.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -1032,6 +1093,7 @@ class BScaleLength(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        where_apply_loss="compute_unscaled",
         grid=None,
         name="B-scale-length",
     ):
@@ -1046,6 +1108,7 @@ class BScaleLength(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            where_apply_loss=where_apply_loss,
             name=name,
         )
 

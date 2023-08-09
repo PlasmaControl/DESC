@@ -55,6 +55,13 @@ class BootstrapRedlConsistency(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
+    where_apply_loss " str,
+        where to apply the user defined loss function. One of "compute_unscaled"
+        or "compute_scaled"
+        If "compute_unscaled", the loss function will apply to
+        the raw objective function values, before the target is applied.
+        If "compute_scaled", the loss function will apply to
+        the scaled objective function values, after the target is applied.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
@@ -80,6 +87,7 @@ class BootstrapRedlConsistency(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        where_apply_loss="compute_unscaled",
         grid=None,
         helicity=(1, 0),
         name="Bootstrap current self-consistency (Redl)",
@@ -99,6 +107,7 @@ class BootstrapRedlConsistency(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            where_apply_loss=where_apply_loss,
             name=name,
         )
 

@@ -221,12 +221,10 @@ def get_matches(fun, pattern):
 
 
 def get_parameterization(fun, default="desc.equilibrium.equilibrium.Equilibrium"):
-    """Get parameterization of this function."""
-    pattern_parameterization = re.compile(
-        r'parameterization=\[\s*([^]]+?)\s*\]|parameterization="([^"]+)"'
-    )
+    """Get parameterization of thing this function computes."""
+    pattern = re.compile(r'parameterization=(?:\[([^]]+)]|"([^"]+)")')
     decorator = inspect.getsource(fun).partition("def ")[0]
-    matches = pattern_parameterization.findall(decorator)
+    matches = pattern.findall(decorator)
     # if list was found, split strings in list, else string was found so just get that
     matches = [match[0].split(",") if match[0] else [match[1]] for match in matches]
     # flatten the list
@@ -243,10 +241,10 @@ class TestAxisLimits:
         """Ensure developers do not add extra (or forget needed) dependencies."""
         queried_deps = {}
 
-        pattern_names = re.compile(r"(?<!_)data\[(.*?)\] =")
-        pattern_data = re.compile(r"(?<!_)data\[(.*?)\]")
-        pattern_profiles = re.compile(r"profiles\[(.*?)\]")
-        pattern_params = re.compile(r"params\[(.*?)\]")
+        pattern_names = re.compile(r"(?<!_)data\[(.*?)] =")
+        pattern_data = re.compile(r"(?<!_)data\[(.*?)]")
+        pattern_profiles = re.compile(r"profiles\[(.*?)]")
+        pattern_params = re.compile(r"params\[(.*?)]")
         for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
             if module_name[0] == "_":
                 for _, fun in inspect.getmembers(module, inspect.isfunction):

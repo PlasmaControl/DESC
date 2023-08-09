@@ -1,11 +1,12 @@
 """Classes for magnetic fields."""
 
 from abc import ABC, abstractmethod
+from functools import partial
 
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.backend import fori_loop, jit, jnp, odeint
+from desc.backend import fori_loop, jit, jnp, odeint, vmap
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
@@ -843,11 +844,14 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         this function then uses biot-savart to find the
         B field from this current density K on the surface
 
+        Note: potential function derivatives, if AD is used,
+         will not be vectorized over the params
+
     Parameters
     ----------
     potential : callable
         function to compute the current potential. Should have a signature of
-        the form potential(theta,zeta,*params) -> ndarray.
+        the form potential(theta,zeta,**params) -> ndarray.
         theta,zeta are poloidal and toroidal angles on the surface
     surface_grid : Grid,
         grid upon which to evaluate the surface current density K
@@ -904,18 +908,11 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         self._potential = potential
         self._surface_grid = surface_grid
         self._params = params
-        if potential_dtheta:
-            self._potential_t = potential_dtheta
-        else:
-            self._potential_t = Derivative(potential, argnum=0)
-        if potential_dzeta:
-            self._potential_z = potential_dzeta
-        else:
-            self._potential_z = Derivative(potential, argnum=1)
 
         super().__init__(
             R_lmn, Z_lmn, modes_R, modes_Z, NFP, sym, rho, name, check_orientation
         )
+        self._set_derivatives(potential_dtheta, potential_dzeta)
 
         # K can/should be precomputed I think
         self._compute_surface_current()
@@ -936,14 +933,55 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     @property
     def params(self):
         """Dict of parameters to pass to potential function and its derivatives."""
-        return self._surface_grid
+        return self._params
 
     @params.setter
     def params(self, new):
         if new != self._params:
+            if len(new) != len(self._params):
+                raise UserWarning(
+                    "Length of new params is different from length of current params! "
+                    "May cause errors unless potential function is also changed."
+                )
             self._params = new
             # recompute K if params changed
             self._compute_surface_current()
+
+    @property
+    def potential(self):
+        """Potential function, signature (theta,zeta,**params) -> potential value."""
+        return self._potential
+
+    @potential.setter
+    def potential(self, new):
+        if new != self._potential:
+            self._potential = new
+            # reset derivatives if potential has changed, using AD
+            self._set_derivatives()
+            # recompute K if potential changed
+            self._compute_surface_current()
+
+    def _set_derivatives(self, potential_dtheta=None, potential_dzeta=None):
+        if potential_dtheta:
+            self._potential_t = partial(potential_dtheta, **self.params)
+        else:
+            self._potential_t = vmap(
+                Derivative(
+                    partial(self.potential, **self.params),
+                    argnum=0,
+                    mode="grad",
+                ).compute,
+                in_axes=[0, 0],
+            )
+        if potential_dzeta:
+            self._potential_z = partial(potential_dzeta, **self.params)
+        else:
+            self._potential_z = vmap(
+                Derivative(
+                    partial(self.potential, **self.params), argnum=1, mode="grad"
+                ).compute,
+                in_axes=[0, 0],
+            )
 
     def _compute_surface_current(self, surface_grid=None, params=None):
         if surface_grid is None:
@@ -965,8 +1003,8 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         )
 
         # compute the potential derivatives on the surface
-        phi_t = self._potential_t(theta, zeta, **self._params)
-        phi_z = self._potential_z(theta, zeta, **self._params)
+        phi_t = self._potential_t(theta, zeta)
+        phi_z = self._potential_z(theta, zeta)
 
         # compute surface normal magnitude
         ns_mag = jnp.linalg.norm(np.cross(self._rs_t, self._rs_z), axis=1)

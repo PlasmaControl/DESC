@@ -15,7 +15,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.geometry.utils import rpz2xyz, rpz2xyz_vec
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import ToroidalMagneticField
+from desc.magnetic_fields import MagneticField, ToroidalMagneticField
 from desc.transform import Transform
 
 
@@ -68,6 +68,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     nscan=30,
     scan_lower=-30,
     scan_upper=-1,
+    external_field=None,
     external_TF_fraction=0,
     external_TF_scan=False,
     external_TF_scan_upper=1.0,
@@ -112,6 +113,11 @@ def run_regcoil(  # noqa: C901 fxn too complex
         lower bound of the alpha values to scan over
     scan_upper: int, default -1, power of 10 (i.e. 10^(-1)) that is the
         upper bound of the alpha values to scan over
+    external_field: MagneticField,
+        DESC MagneticField object giving the magnetic field
+        provided by any coils external to the winding surface.
+        If given, will use this external field option over the
+        external_TF_fraction option.
     external_TF_fraction: float, default 0
         how much TF is provided by coils external to the
         winding surface being considered.
@@ -163,16 +169,24 @@ def run_regcoil(  # noqa: C901 fxn too complex
         raise TypeError(f"not a valid input for eqname, got {type(eqname)}")
     if hasattr(eq, "__len__"):
         eq = eq[-1]
+
+    if external_field:  # ensure given field is an instance of MagneticField
+        assert isinstance(external_field, MagneticField), (
+            "Expected"
+            + "MagneticField for argument external_field,"
+            + f" got type {type(external_field)} "
+        )
+
     ########### calculate quantities on DESC  plasma surface #############
 
     sgrid = LinearGrid(M=source_grid_M, N=source_grid_N)  # source grid must have NFP=1
     egrid = LinearGrid(M=eval_grid_M, N=eval_grid_N, NFP=eq.NFP)
     edata = eq.compute(["e^rho", "R", "Z", "phi", "e_theta", "e_zeta"], egrid)
 
-    ne = jnp.cross(
+    ne_cyl = jnp.cross(
         edata["e_theta"], edata["e_zeta"], axis=-1
     )  # surface normal on evaluation surface (ie plasma bdry)
-    ne = rpz2xyz_vec(ne, phi=egrid.nodes[:, 2])
+    ne = rpz2xyz_vec(ne_cyl, phi=egrid.nodes[:, 2])
     ne_mag = jnp.linalg.norm(ne, axis=-1)
     ne = ne / ne_mag[:, None]
     re = jnp.array(
@@ -236,6 +250,9 @@ def run_regcoil(  # noqa: C901 fxn too complex
     # $B$ is linear in $K$ as long as the geometry is fixed
     # so just need to evaluate the jacobian
 
+    if external_field:
+        external_TF_scan = False
+
     if external_TF_scan:
         A_fun = jit(jax.jacfwd(B_from_K_SV))
     else:
@@ -258,7 +275,33 @@ def run_regcoil(  # noqa: C901 fxn too complex
             external_TF_fraction >= 0 and external_TF_fraction <= 1
         ), "external_TF_fraction must be a float between 0 and 1!"
 
-        G_ext = external_TF_fraction * G_tot
+        if external_field:  # calculate by integrating external toroidal field
+            curve_grid = LinearGrid(N=eq.NFP * 1000, endpoint=True)
+            curve_data = eq.compute(
+                ["R", "phi", "Z", "e_zeta"],
+                grid=curve_grid,
+            )
+            curve_coords = jnp.vstack(
+                (curve_data["R"], curve_data["phi"], curve_data["Z"])
+            ).T
+            ext_field_along_curve = external_field.compute_magnetic_field(
+                curve_coords, basis="rpz"
+            )
+            # calculate covariant B_zeta from external field
+            ext_field_B_zeta = jnp.sum(
+                ext_field_along_curve * curve_data["e_zeta"], axis=-1
+            )
+
+            G_ext = (
+                jnp.trapz(
+                    y=ext_field_B_zeta,
+                    x=curve_grid.nodes[:, 2],
+                )
+                / mu_0
+            )
+            print(f"G ext from ext field = {G_ext}")
+        else:
+            G_ext = external_TF_fraction * G_tot
 
         G = G_tot - G_ext
 
@@ -275,14 +318,28 @@ def run_regcoil(  # noqa: C901 fxn too complex
         print(f"Jacobian Calculation finished, took {time.time()-t_start} s")
 
         B_GI_normal = B_from_K_secular(I, G, re, rs, rs_t, rs_z, ne)
-        Bn = np.zeros_like(B_GI_normal)
-        if external_TF_fraction == 0:
-            Bn_ext = np.zeros_like(B_GI_normal)
-            TF_B = ToroidalMagneticField(B0=0, R0=1)
-        else:
-            TF_B = ToroidalMagneticField(B0=mu_0 * G_ext / 2 / jnp.pi, R0=R0_ves)
-            Bn_ext = B_from_K_secular(0, G_ext, re, rs, rs_t, rs_z, ne)
-            # TODO: check that this is the same as calculating B from TF_B...
+        Bn = np.zeros_like(B_GI_normal)  # from plasma current, currently assume is 0
+
+        # if ext field, must calc based off that field
+
+        if external_field:
+            external_field_on_surface = external_field.compute_magnetic_field(
+                re, basis="rpz"
+            )
+            Bn_ext = jnp.sum(
+                external_field_on_surface * ne_cyl,
+                axis=-1,
+            )
+            TF_B = None
+
+        if not external_field:
+            if external_TF_fraction == 0:
+                Bn_ext = np.zeros_like(B_GI_normal)
+                TF_B = ToroidalMagneticField(B0=0, R0=1)
+            else:
+                TF_B = ToroidalMagneticField(B0=mu_0 * G_ext / 2 / jnp.pi, R0=1)
+                Bn_ext = B_from_K_secular(0, G_ext, re, rs, rs_t, rs_z, ne)
+                # TODO: check that this is the same as calculating B from TF_B...
 
         rhs = -(Bn + Bn_ext + B_GI_normal).T @ A
 
@@ -316,6 +373,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
             Bn_SV = A @ phi_mn_opt
             Bn_tot = Bn_SV + Bn + B_GI_normal + Bn_ext
+
             chi_B = np.sum(Bn_tot * Bn_tot * ne_mag * egrid.weights)
             chi2Bs.append(chi_B)
             if verbose > 1:
@@ -429,7 +487,9 @@ def run_regcoil(  # noqa: C901 fxn too complex
                     "No alpha value yielded a current potential without"
                     + " saddle coil contours or badly behaved contours!!"
                 )
-            plt.savefig(f"{dirname}/Scan_ext_TF{external_TF_fraction}_M{basis_M}_N{basis_N}.png")
+            plt.savefig(
+                f"{dirname}/Scan_ext_TF{external_TF_fraction}_M{basis_M}_N{basis_N}.png"
+            )
 
         if show_plots:
 

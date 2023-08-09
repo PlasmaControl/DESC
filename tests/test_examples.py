@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 from qic import Qic
 from qsc import Qsc
+from scipy.constants import mu_0
 
 import desc.examples
 from desc.compute.utils import compress
@@ -15,6 +16,7 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.magnetic_fields import ToroidalMagneticField
 from desc.objectives import (
     AspectRatio,
     CurrentDensity,
@@ -850,3 +852,21 @@ def test_regcoil_axisymmetric():
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-16)
     np.testing.assert_allclose(chi_B, 0, atol=1e-26)
     np.testing.assert_allclose(phi_fxn(grid), correct_phi, atol=1e-16)
+
+    # test with half the current given external to winding surface
+    phi_mn_opt, _, _, G_half, phi_fxn, _, chi_B, _ = run_regcoil(
+        basis_M=2,
+        basis_N=2,
+        eqname=eq,
+        eval_grid_M=10,
+        eval_grid_N=10,
+        source_grid_M=40,
+        source_grid_N=40,
+        alpha=10,
+        external_field=ToroidalMagneticField(B0=mu_0 * (G / 2) / 2 / np.pi, R0=1),
+    )
+
+    np.testing.assert_allclose(G / 2, G_half, atol=1e-8)
+    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-10)
+    np.testing.assert_allclose(phi_fxn(grid), correct_phi / 2, atol=1e-9)
+    np.testing.assert_allclose(chi_B, 0, atol=1e-26)

@@ -13,6 +13,7 @@ from desc.compute.utils import (
     surface_integrals_transform,
     surface_max,
     surface_min,
+    surface_variance,
 )
 from desc.examples import get
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
@@ -66,7 +67,7 @@ def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
     # integration over non-contiguous elements
     integrals = []
     for _, surface_idx in sorted(surfaces.items()):
-        integrals += [weights[surface_idx].sum(axis=0)]
+        integrals.append(weights[surface_idx].sum(axis=0))
     if has_endpoint_dupe:
         integrals[0] += integrals[-1]
         integrals[-1] = integrals[0]
@@ -333,7 +334,7 @@ class TestComputeUtils:
 
     @pytest.mark.unit
     def test_surface_averages_identity_op(self):
-        """Test that surface averages of flux functions are identity operations."""
+        """Test flux surface averages of surface functions are identity operations."""
         eq = get("W7-X")
         grid = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["p", "sqrt(g)"], grid=grid)
@@ -342,7 +343,7 @@ class TestComputeUtils:
 
     @pytest.mark.unit
     def test_surface_averages_homomorphism(self):
-        """Test that surface averages of flux functions are additive homomorphisms.
+        """Test flux surface averages of surface functions are additive homomorphisms.
 
         Meaning average(a + b) = average(a) + average(b).
         """
@@ -355,13 +356,56 @@ class TestComputeUtils:
         np.testing.assert_allclose(a_plus_b, a + b)
 
     @pytest.mark.unit
-    def test_surface_averages_shortcut(self):
-        """Test that surface_averages on single rho surface matches mean() shortcut."""
+    def test_surface_integrals_against_shortcut(self):
+        """Test integration against less general methods."""
+        grid = ConcentricGrid(L=L, M=M, N=N, NFP=NFP)
+        ds = grid.spacing[:, :2].prod(axis=-1)
+        # something arbitrary that will give different sum across surfaces
+        q = np.arange(grid.num_nodes) ** 2
+        # The predefined grids sort nodes in zeta surface chunks.
+        # To compute a quantity local to a surface, we can reshape it into zeta
+        # surface chunks and compute across the chunks.
+        result = grid.expand(
+            (ds * q).reshape((grid.num_zeta, -1)).sum(axis=-1),
+            surface_label="zeta",
+        )
+        np.testing.assert_allclose(
+            surface_integrals(grid, q, surface_label="zeta"),
+            desired=result,
+        )
+
+    @pytest.mark.unit
+    def test_surface_averages_against_shortcut(self):
+        """Test averaging against less general methods."""
+        # test on zeta surfaces
+        grid = LinearGrid(L=L, M=M, N=N, NFP=NFP)
+        # something arbitrary that will give different average across surfaces
+        q = np.arange(grid.num_nodes) ** 2
+        # The predefined grids sort nodes in zeta surface chunks.
+        # To compute a quantity local to a surface, we can reshape it into zeta
+        # surface chunks and compute across the chunks.
+        mean = grid.expand(
+            q.reshape((grid.num_zeta, -1)).mean(axis=-1),
+            surface_label="zeta",
+        )
+        # number of nodes per surface
+        n = grid.num_rho * grid.num_theta
+        np.testing.assert_allclose(np.bincount(grid.inverse_zeta_idx), desired=n)
+        ds = grid.spacing[:, :2].prod(axis=-1)
+        np.testing.assert_allclose(
+            surface_integrals(grid, q / ds, surface_label="zeta") / n,
+            desired=mean,
+        )
+        np.testing.assert_allclose(
+            surface_averages(grid, q, surface_label="zeta"),
+            desired=mean,
+        )
+
+        # test on grids with a single rho surface
         eq = get("W7-X")
         rho = np.array((1 - 1e-4) * np.random.default_rng().random() + 1e-4)
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         data = eq.compute(["|B|", "sqrt(g)"], grid=grid)
-
         np.testing.assert_allclose(
             surface_averages(grid, data["|B|"], data["sqrt(g)"]),
             np.mean(data["sqrt(g)"] * data["|B|"]) / np.mean(data["sqrt(g)"]),
@@ -371,6 +415,52 @@ class TestComputeUtils:
             surface_averages(grid, data["|B|"]),
             np.mean(data["|B|"]),
             err_msg="average without sqrt(g) fail",
+        )
+
+    @pytest.mark.unit
+    def test_surface_variance(self):
+        """Test correctness of variance against less general methods."""
+        grid = LinearGrid(L=L, M=M, N=N, NFP=NFP)
+        # something arbitrary that will give different variance across surfaces
+        q = np.arange(grid.num_nodes) ** 2
+        # The predefined grids sort nodes in zeta surface chunks.
+        # To compute a quantity local to a surface, we can reshape it into zeta
+        # surface chunks and compute across the chunks.
+        chunks = q.reshape((grid.num_zeta, -1))
+
+        # Test weighted sample variance with different weights.
+        # positive weights to prevent cancellations that may hide implementation error
+        weights = np.cos(q) * np.sin(q) + 5
+        biased = surface_variance(
+            grid, q, weights, bias=True, surface_label="zeta", expand_out=False
+        )
+        unbiased = surface_variance(
+            grid, q, weights, surface_label="zeta", expand_out=False
+        )
+        # The ds weights are built into the surface variance function.
+        # So weights for np.cov should be ds * weights. Since ds is constant on
+        # LinearGrid, we need to get the same result if we don't multiply by ds.
+        weights = weights.reshape((grid.num_zeta, -1))
+        for i in range(grid.num_zeta):
+            np.testing.assert_allclose(
+                biased[i],
+                desired=np.cov(chunks[i], bias=True, aweights=weights[i]),
+            )
+            np.testing.assert_allclose(
+                unbiased[i],
+                desired=np.cov(chunks[i], aweights=weights[i]),
+            )
+
+        # Test weighted sample variance converges to unweighted sample variance
+        # when all weights are equal.
+        chunks = grid.expand(chunks, surface_label="zeta")
+        np.testing.assert_allclose(
+            surface_variance(grid, q, np.e, bias=True, surface_label="zeta"),
+            desired=chunks.var(axis=-1),
+        )
+        np.testing.assert_allclose(
+            surface_variance(grid, q, np.e, surface_label="zeta"),
+            desired=chunks.var(axis=-1, ddof=1),
         )
 
     @pytest.mark.unit

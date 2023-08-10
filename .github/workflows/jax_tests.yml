@@ -36,4 +36,4 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest -m unit --durations=0 --mpl --maxfail=1 --splits 2 --group ${{ matrix.group }} --splitting-algorithm least_duration
+          python -m pytest -m unit --durations=0 --mpl --maxfail=1 --splits 3 --group ${{ matrix.group }} --splitting-algorithm least_duration

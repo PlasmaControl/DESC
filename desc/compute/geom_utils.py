@@ -140,3 +140,17 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
     rot = rot.T
     cart = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
     return cart.reshape((-1, 3))
+
+
+def _rotation_matrix_from_normal(normal):
+    nx, ny, nz = normal
+    nxny = jnp.sqrt(nx**2 + ny**2)
+    R = jnp.array(
+        [
+            [ny / nxny, -nx / nxny, 0],
+            [nx * nx / nxny, ny * nz / nxny, -nxny],
+            [nx, ny, nz],
+        ]
+    ).T
+    R = jnp.where(nxny == 0, jnp.eye(3), R)
+    return R

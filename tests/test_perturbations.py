@@ -17,7 +17,7 @@ from desc.objectives import (
 from desc.perturbations import optimal_perturb, perturb
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
 @pytest.mark.solve
 def test_perturbation_orders(SOLOVEV):

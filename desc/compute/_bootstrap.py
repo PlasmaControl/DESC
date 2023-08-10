@@ -34,18 +34,13 @@ from .utils import surface_averages_map
     n_gauss="n_gauss",
 )
 def _trapped_fraction(params, transforms, profiles, data, **kwargs):
-    r"""
-    Evaluate the effective trapped particle fraction.
+    """Evaluate the effective trapped particle fraction.
 
     Compute the effective fraction of trapped particles, which enters
-    several formulae for neoclassical transport. The trapped fraction
-    ``f_t`` has a standard definition in neoclassical theory:
-
-    .. math::
-        f_t = 1 - \frac{3}{4} \langle \lvert B \rvert^2 \rangle \int_0^{1/Bmax}
-            \frac{\lambda\; d\lambda}{\langle \sqrt{1 - \lambda B} \rangle}
-
-    where :math:`\langle \ldots \rangle` is a flux surface average.
+    several formulae for neoclassical transport.
+    The trapped fraction fₜ has a standard definition in neoclassical theory:
+        fₜ = 1 − 3/4 〈|B|²〉 ∫₀¹/ᴮᵐᵃˣ λ / 〈√(1 − λB)〉 dλ
+    where 〈 … 〉 is a flux surface average.
     """
     # Get nodes and weights for Gauss-Legendre integration:
     n_gauss = kwargs.get("n_gauss", 20)
@@ -81,10 +76,10 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
 
 
 def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
-    r"""Compute the bootstrap current.
+    """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
 
-    (specifically :math:`\langle\vec{J}\cdot\vec{B}\rangle`) using the formulae in
-    Redl et al, Physics of Plasmas 28, 022502 (2021). This formula for
+    Compute 〈𝐉 ⋅ 𝐁〉 using the formulae in
+    Redl et al., Physics of Plasmas 28, 022502 (2021). This formula for
     the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
     and quasi-helical symmetry, but not in other stellarators.
 
@@ -97,7 +92,7 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     - iota: 1D array with the rotational transform.
     - epsilon: 1D array with the effective inverse aspect ratio to use in
       the Redl formula.
-    - psi_edge: float, the boundary toroidal flux, divided by (2 pi).
+    - psi_edge: float, the boundary toroidal flux, divided by 2π.
     - f_t: 1D array with the effective trapped particle fraction
 
     The argument ``profile_data`` is a Dictionary that should contain the
@@ -284,40 +279,33 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     J_dot_B = dnds_term + dTeds_term + dTids_term
 
     # Store all results in the J_dot_B_data dictionary:
-    # These two variables look unused, but they are used.
-    nu_e_star = nu_e  # noqa: F841
-    nu_i_star = nu_i  # noqa: F841
-    variables = [
-        "rho",
-        "ne",
-        "ni",
-        "Zeff",
-        "Te",
-        "Ti",
-        "d_ne_d_s",
-        "d_Te_d_s",
-        "d_Ti_d_s",
-        "ln_Lambda_e",
-        "ln_Lambda_ii",
-        "nu_e_star",
-        "nu_i_star",
-        "X31",
-        "X32e",
-        "X32ei",
-        "F32ee",
-        "F32ei",
-        "L31",
-        "L32",
-        "L34",
-        "alpha0",
-        "alpha",
-        "dnds_term",
-        "dTeds_term",
-        "dTids_term",
-    ]
     J_dot_B_data = geom_data.copy()
-    for v in variables:
-        J_dot_B_data[v] = eval(v)
+    J_dot_B_data["rho"] = rho
+    J_dot_B_data["ne"] = ne
+    J_dot_B_data["ni"] = ni
+    J_dot_B_data["Zeff"] = Zeff
+    J_dot_B_data["Te"] = Te
+    J_dot_B_data["Ti"] = Ti
+    J_dot_B_data["d_ne_d_s"] = d_ne_d_s
+    J_dot_B_data["d_Te_d_s"] = d_Te_d_s
+    J_dot_B_data["d_Ti_d_s"] = d_Ti_d_s
+    J_dot_B_data["ln_Lambda_e"] = ln_Lambda_e
+    J_dot_B_data["ln_Lambda_ii"] = ln_Lambda_ii
+    J_dot_B_data["nu_e_star"] = nu_e
+    J_dot_B_data["nu_i_star"] = nu_i
+    J_dot_B_data["X31"] = X31
+    J_dot_B_data["X32e"] = X32e
+    J_dot_B_data["X32ei"] = X32ei
+    J_dot_B_data["F32ee"] = F32ee
+    J_dot_B_data["F32ei"] = F32ei
+    J_dot_B_data["L31"] = L31
+    J_dot_B_data["L32"] = L32
+    J_dot_B_data["L34"] = L34
+    J_dot_B_data["alpha0"] = alpha0
+    J_dot_B_data["alpha"] = alpha
+    J_dot_B_data["dnds_term"] = dnds_term
+    J_dot_B_data["dTeds_term"] = dTeds_term
+    J_dot_B_data["dTids_term"] = dTids_term
     J_dot_B_data["<J*B>"] = J_dot_B
     return J_dot_B_data
 
@@ -352,10 +340,10 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     helicity="helicity",
 )
 def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
-    r"""Compute the bootstrap current.
+    """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
 
-    (specifically :math:`\langle\vec{J}\cdot\vec{B}\rangle`) using the formulae in
-    Redl et al, Physics of Plasmas 28, 022502 (2021). This formula for
+    Compute 〈𝐉 ⋅ 𝐁〉 using the formulae in
+    Redl et al., Physics of Plasmas 28, 022502 (2021). This formula for
     the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
     and quasi-helical symmetry, but not in other stellarators.
     """

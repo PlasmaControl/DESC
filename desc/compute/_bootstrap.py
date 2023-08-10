@@ -40,7 +40,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     several formulae for neoclassical transport.
     The trapped fraction fₜ has a standard definition in neoclassical theory:
         fₜ = 1 − 3/4 〈|B|²〉 ∫₀¹/ᴮᵐᵃˣ λ / 〈√(1 − λB)〉 dλ
-    where 〈 … 〉 is a flux surface average.
+    where 〈 ⋯ 〉 is a flux surface average.
     """
     # Get nodes and weights for Gauss-Legendre integration:
     n_gauss = kwargs.get("n_gauss", 20)

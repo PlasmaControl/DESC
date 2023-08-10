@@ -386,7 +386,7 @@
     "tests/test_compute_utils.py::TestComputeUtils::test_surface_area": 1.844673749001231,
     "tests/test_compute_utils.py::TestComputeUtils::test_surface_averages_homomorphism": 2.44728195398784,
     "tests/test_compute_utils.py::TestComputeUtils::test_surface_averages_identity_op": 1.8825205440007267,
-    "tests/test_compute_utils.py::TestComputeUtils::test_surface_averages_shortcut": 2.719893300003605,
+    "tests/test_compute_utils.py::TestComputeUtils::test_surface_averages_against_shortcut": 2.719893300003605,
     "tests/test_compute_utils.py::TestComputeUtils::test_surface_averages_vector_functions": 0.8177534150090651,
     "tests/test_compute_utils.py::TestComputeUtils::test_surface_integrals": 11.869452224993438,
     "tests/test_compute_utils.py::TestComputeUtils::test_surface_integrals_transform": 0.4860813280029106,

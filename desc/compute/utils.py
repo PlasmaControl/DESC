@@ -724,7 +724,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho", expand_out=
 
     Notes
     -----
-        It is assumed that the integration surface has area 4π^2 when the
+        It is assumed that the integration surface has area 4π² when the
         surface label is rho and area 2π when the surface label is theta or
         zeta. You may want to multiply the input by the surface area Jacobian.
 
@@ -835,7 +835,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
 
         Notes
         -----
-            It is assumed that the integration surface has area 4π^2 when the
+            It is assumed that the integration surface has area 4π² when the
             surface label is rho and area 2π when the surface label is theta or
             zeta. You may want to multiply the input by the surface area Jacobian.
 
@@ -1063,15 +1063,15 @@ def surface_integrals_transform(grid, surface_label="rho"):
     five variables, the returned method computes an integral transform,
     reducing ``q`` to a set of functions of at most three variables.
 
-    Define the domain D = u_1 × u_2 × u_3 and the codomain C = u_4 × u_5 × u_6.
-    For every surface of constant u_1 in the domain, the returned method
-    evaluates the transform T_{u_1}: (u_2 × u_3) × C → C, where T_{u_1} projects
-    away the parameters u_2 and u_3 via an integration of the given kernel
-    function K_{u_1} over the corresponding surface of constant u_1.
+    Define the domain D = u₁ × u₂ × u₃ and the codomain C = u₄ × u₅ × u₆.
+    For every surface of constant u₁ in the domain, the returned method
+    evaluates the transform Tᵤ₁ : u₂ × u₃ × C → C, where Tᵤ₁ projects
+    away the parameters u₂ and u₃ via an integration of the given kernel
+    function Kᵤ₁ over the corresponding surface of constant u₁.
 
     Notes
     -----
-        It is assumed that the integration surface has area 4π^2 when the
+        It is assumed that the integration surface has area 4π² when the
         surface label is rho and area 2π when the surface label is theta or
         zeta. You may want to multiply the input ``q`` by the surface area
         Jacobian.
@@ -1083,7 +1083,7 @@ def surface_integrals_transform(grid, surface_label="rho"):
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
         These correspond to the domain parameters discussed in this method's
-        description. In particular, ``surface_label`` names u_1.
+        description. In particular, ``surface_label`` names u₁.
 
     Returns
     -------
@@ -1122,8 +1122,8 @@ def surface_integrals_transform(grid, surface_label="rho"):
         Output
         ------
         Each element along the first dimension of the returned array, stores
-        T_{u_1} for a particular surface of constant u_1 in the given grid.
-        The order is sorted in increasing order of the values which specify u_1.
+        Tᵤ₁ for a particular surface of constant u₁ in the given grid.
+        The order is sorted in increasing order of the values which specify u₁.
 
         If ``q`` is one-dimensional, the returned array has shape
         (grid.num_surface_label, ).
@@ -1143,6 +1143,100 @@ def surface_integrals_transform(grid, surface_label="rho"):
     # discretizes f over the codomain will typically have size grid.num_nodes
     # to broadcast with quantities in data_index.
     return surface_integrals_map(grid, surface_label, expand_out=False)
+
+
+def surface_variance(
+    grid,
+    q,
+    weights=jnp.array([1.0]),
+    bias=False,
+    surface_label="rho",
+    expand_out=True,
+):
+    """Compute the weighted sample variance of ``q`` on each surface of the grid.
+
+    Computes nₑ / (nₑ − b) * (∑ᵢ₌₁ⁿ (qᵢ − q̅)² wᵢ) / (∑ᵢ₌₁ⁿ wᵢ).
+    wᵢ is the weight assigned to qᵢ given by the product of ``weights[i]`` and
+       the differential surface area element (not already weighted by the area
+       Jacobian) at the node where qᵢ is evaluated,
+    q̅ is the weighted mean of q,
+    b is 0 if the biased sample variance is to be returned and 1 otherwise,
+    n is the number of samples on a surface, and
+    nₑ ≝ (∑ᵢ₌₁ⁿ wᵢ)² / ∑ᵢ₌₁ⁿ wᵢ² is the effective number of samples.
+
+    As the weights wᵢ approach each other, nₑ approaches n, and the output
+    converges to ∑ᵢ₌₁ⁿ (qᵢ − q̅)² / (n − b).
+
+    Notes
+    -----
+        There are three different methods to unbias the variance of a weighted
+        sample so that the computed variance better estimates the true variance.
+        Whether the method is correct for a particular use case depends on what
+        the weights assigned to each sample represent.
+
+        This function implements the first case, where the weights are not random
+        and are intended to assign more weight to some samples for reasons
+        unrelated to differences in uncertainty between samples. See
+        https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights.
+
+        The second case is when the weights are intended to assign more weight
+        to samples with less uncertainty. See
+        https://en.wikipedia.org/wiki/Inverse-variance_weighting.
+        The unbiased sample variance for this case is obtained by replacing the
+        effective number of samples in the formula this function implements,
+        nₑ, with the actual number of samples n.
+
+        The third case is when the weights denote the integer frequency of each
+        sample. See
+        https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Frequency_weights.
+        This is indeed a distinct case from the above two because here the
+        weights encode additional information about the distribution.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    q : ndarray
+        Quantity to compute the sample variance.
+    weights : ndarray
+        Weight assigned to each sample of ``q``.
+        A good candidate for this parameter is the surface area Jacobian.
+    bias : bool
+        If this condition is true, then the biased estimator of the sample
+        variance is returned. This is desirable if you are only concerned with
+        computing the variance of the given set of numbers and not the
+        distribution the numbers are (potentially) sampled from.
+    surface_label : str
+        The surface label of rho, theta, or zeta to compute the variance over.
+    expand_out : bool
+        Whether to expand the output array so that the output has the same
+        shape as the input. Defaults to true so that the output may be
+        broadcast in the same way as the input. Setting to false will save
+        memory.
+
+    Returns
+    -------
+    variance : ndarray
+        Variance of the given weighted sample over each surface in the grid.
+        By default, the returned array has the same shape as the input.
+
+    """
+    _, _, spacing, _ = _get_grid_surface(grid, surface_label)
+    integrate = surface_integrals_map(grid, surface_label, expand_out=False)
+
+    v1 = integrate(weights)
+    v2 = integrate(weights**2 * jnp.prod(spacing, axis=-1))
+    # effective number of samples per surface
+    n_e = v1**2 / v2
+    # analogous to Bessel's bias correction
+    correction = n_e / (n_e - (not bias))
+
+    q = jnp.atleast_1d(q)
+    # compute variance in two passes to avoid catastrophic round off error
+    mean = (integrate((weights * q.T).T).T / v1).T
+    mean = grid.expand(mean, surface_label)
+    variance = (correction * integrate((weights * ((q - mean) ** 2).T).T).T / v1).T
+    return grid.expand(variance, surface_label) if expand_out else variance
 
 
 def surface_max(grid, x, surface_label="rho"):

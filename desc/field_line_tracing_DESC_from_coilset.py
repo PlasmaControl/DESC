@@ -1,4 +1,3 @@
-
 from desc import set_device
 
 import os
@@ -19,7 +18,8 @@ from desc.io import load
 from desc.magnetic_fields import (
     SumMagneticField,
     ToroidalMagneticField,
-    field_line_integrate,MagneticField
+    field_line_integrate,
+    MagneticField,
 )
 from desc.plotting import plot_1d, plot_2d, plot_comparison, plot_surfaces
 from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
@@ -37,7 +37,17 @@ from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
 
 
 # first arg : coil file
-def field_trace_from_coilset(coils, eqname, ntransit=100, dirname=None):
+def field_trace_from_coilset(
+    coils,
+    eqname,
+    ntransit=100,
+    dirname=None,
+    Rs=None,
+    Zs=None,
+    show_surface=True,
+    xlim=[0.66, 0.74],
+    ylim=[-0.04, 0.04],
+):
     R0 = 703.5 / 1000
     Z0 = 0
     r = 36.5 / 1000
@@ -45,7 +55,7 @@ def field_trace_from_coilset(coils, eqname, ntransit=100, dirname=None):
     if isinstance(coils, str):
         dirname = dirname if dirname else f"{coils.strip('.txt')}"
         coils = CoilSet.from_makegrid_coilfile(coils)
-        
+
     else:
         assert isinstance(coils, MagneticField)
         dirname = dirname if dirname else eqname
@@ -53,8 +63,8 @@ def field_trace_from_coilset(coils, eqname, ntransit=100, dirname=None):
     t0 = time.time()
     phis = np.arange(0, ntransit * 2 * np.pi, 2 * np.pi)
     npts = 15
-    rrr = np.linspace(
-        R0 - 0.7 * r, R0 + 0.7 * r, npts
+    rrr = (
+        np.linspace(R0 - 0.7 * r, R0 + 0.7 * r, npts) if not Rs else Rs
     )  # initial R positions of field-lines to trace
     # set initial Z positions to zero
     print("Beginning Field Line Integration")
@@ -86,34 +96,33 @@ def field_trace_from_coilset(coils, eqname, ntransit=100, dirname=None):
 
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    for i in range(npts):
+    for i in range(rrr.size):
         field_R = nnp.genfromtxt(f"{dirname}/trace_{ntransit}_transits_R_{i}.txt")
         field_Z = nnp.genfromtxt(f"{dirname}/trace_{ntransit}_transits_Z_{i}.txt")
         R_list.append(field_R[0])
 
-        if nnp.max(nnp.abs(field_R)) < 4:
+        if nnp.max(nnp.abs(field_R)) < 1e3:
             plt.scatter(field_R, field_Z, s=1)
         else:
             plt.scatter(field_R, field_Z, s=1)
 
     plt.ylabel("Z")
     plt.xlabel("R")
-    R0_ves = 0.7035
-    a_ves = 0.0365
-    theta = np.linspace(0, 2 * np.pi, 100)
-    R_ves = R0_ves + a_ves * np.cos(theta)
-    Z_ves = a_ves * np.sin(theta)
-    plt.plot(R_ves, Z_ves, "k", label="Vacuum vessel")
-    a_lim = 0.0365 - 8 / 1000
-    theta = np.linspace(0, 2 * np.pi, 100)
-    R_lim = R0_ves + a_lim * np.cos(theta)
-    Z_lim = a_lim * np.sin(theta)
-    plt.plot(R_lim, Z_lim, "r--", label="8mm from vessel")
-    plt.legend()
-    plt.ylabel("Z")
-    plt.xlabel("R")
-    plt.xlim([0.66, 0.74])
-    plt.ylim([-0.04, 0.04])
+    if show_surface:
+        R0_ves = 0.7035
+        a_ves = 0.0365
+        theta = np.linspace(0, 2 * np.pi, 100)
+        R_ves = R0_ves + a_ves * np.cos(theta)
+        Z_ves = a_ves * np.sin(theta)
+        plt.plot(R_ves, Z_ves, "k", label="Vacuum vessel")
+        a_lim = 0.0365 - 8 / 1000
+        theta = np.linspace(0, 2 * np.pi, 100)
+        R_lim = R0_ves + a_lim * np.cos(theta)
+        Z_lim = a_lim * np.sin(theta)
+        plt.plot(R_lim, Z_lim, "r--", label="8mm from vessel")
+        plt.legend()
+    plt.xlim(xlim)
+    plt.ylim(ylim)
 
     ax = compare_surfs_DESC_field_line_trace(eqname, ax, R_list)
 

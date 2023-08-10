@@ -21,7 +21,7 @@ Coils
 *****
 
 .. autosummary::
-    :toctree: _api/basis/
+    :toctree: _api/coils/
     :recursive:
     :template: class.rst
 
@@ -120,7 +120,7 @@ Magnetic Fields
 ***************
 
 .. autosummary::
-    :toctree: _api/basis/
+    :toctree: _api/magnetic_fields/
     :recursive:
 
     desc.magnetic_fields.ScaledMagneticField

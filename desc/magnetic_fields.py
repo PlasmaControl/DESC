@@ -15,8 +15,8 @@ from diffrax import (
 from netCDF4 import Dataset
 
 from desc.backend import jit, jnp
+from desc.compute import rpz2xyz_vec, xyz2rpz
 from desc.derivatives import Derivative
-from desc.geometry.utils import rpz2xyz_vec, xyz2rpz
 from desc.grid import Grid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble

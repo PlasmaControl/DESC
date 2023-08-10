@@ -64,7 +64,7 @@ def field_trace_from_coilset(
     phis = np.arange(0, ntransit * 2 * np.pi, 2 * np.pi)
     npts = 15
     rrr = (
-        np.linspace(R0 - 0.7 * r, R0 + 0.7 * r, npts) if not Rs else Rs
+        np.linspace(R0 - 0.7 * r, R0 + 0.7 * r, npts) if Rs is None else Rs
     )  # initial R positions of field-lines to trace
     # set initial Z positions to zero
     print("Beginning Field Line Integration")

@@ -165,3 +165,30 @@ class TestMagneticFields:
         # if early terinated, the values at the un-integrated phi points are inf
         assert np.isinf(r[-1])
         assert np.isinf(z[-1])
+
+    def test_field_line_integrate_early_terminate_NaN(self):
+        """Test field line integration with default early termination criterion."""
+        # q=4, field line should rotate 1/4 turn after 1 toroidal transit
+        # from outboard midplane to top center
+        # early terminate at 2pi, if fails to terminate correctly
+        # then the assert statements would not hold
+        field1 = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
+        # make a SplineMagneticField only defined in a tiny region around initial point
+        field = SplineMagneticField.from_field(
+            field=field1,
+            R=np.linspace(10.0, 10.002, 10),
+            phi=np.linspace(0, 2 * np.pi, 10),
+            Z=np.linspace(0, 1.5e-3, 10),
+            extrap=False,
+            period=2 * np.pi,
+        )
+        r0 = [10.001]
+        z0 = [0.0]
+        phis = [0, 2 * np.pi, 2 * np.pi * 2]
+
+        r, z = field_line_integrate(r0, z0, phis, field)
+        np.testing.assert_allclose(r[1], 10, rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(z[1], 0.001, rtol=1e-6, atol=1e-6)
+        # if early terinated, the values at the un-integrated phi points are inf
+        assert np.isinf(r[-1])
+        assert np.isinf(z[-1])

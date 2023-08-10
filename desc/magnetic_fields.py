@@ -789,12 +789,14 @@ def field_line_integrate(
         diffrax Solver object to use in integration,
         defaults to Tsit5(), a RK45 explicit solver
     terminating_event_fxn: fxn
-        Function which takes as input the state of the ODE solution at each timestep and
-        outputs a bool which, if True, terminates the solve at that timestep.
+        Function which takes as input the state of the ODE solution at each timestep
+        and **kwargs, and outputs a bool which, if True, terminates the solve at that
+        timestep.
+        fxn must have signature of (state, **kwargs) -> Bool
         NOTE: If the solve is terminated early, the output returned is still
         length(phis), however all values from the step point the fxn evaluated
         to True and on will be inf
-        state has attributes such a state.y (array of length 3 with current (R,phi,Z))
+        state has attributes such as state.y (array of length 3 with current (R,phi,Z))
         see diffrax documentation for more in-depth information
 
 
@@ -833,8 +835,15 @@ def field_line_integrate(
 
     # diffrax parameters
     stepsize_controller = PIDController(rtol=rtol, atol=atol)
+
+    def default_terminating_event_fxn(state, **kwargs):
+        terms = kwargs.get("terms", lambda a, x, b: x)
+        return jnp.any(jnp.isnan(terms.vf(0, state.y, 0)))
+
     terminating_event = (
-        DiscreteTerminatingEvent(terminating_event) if terminating_event else None
+        DiscreteTerminatingEvent(terminating_event)
+        if terminating_event
+        else DiscreteTerminatingEvent(default_terminating_event_fxn)
     )
     term = ODETerm(odefun)
     saveat = SaveAt(ts=phis)

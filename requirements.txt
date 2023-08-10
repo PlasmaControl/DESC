@@ -1,7 +1,7 @@
 colorama
 diffrax
 h5py >= 3.0.0
-jax[cpu] >= 0.4.1, <= 0.4.11
+jax[cpu] >= 0.4.1, <= 0.4.13
 matplotlib >= 3.3.0, <= 3.6.0, != 3.4.3
 ml_dtypes<0.2.0
 mpmath >= 1.0.0

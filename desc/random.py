@@ -9,6 +9,7 @@ from desc.basis import DoubleFourierSeries
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
 from desc.profiles import PowerSeriesProfile
+from desc.utils import setdefault
 
 
 def random_surface(
@@ -20,6 +21,7 @@ def random_surface(
     NFP=(1, 10),
     sym=None,
     alpha=(1, 4),
+    beta=(1, 4),
     rng=None,
 ):
     """Create a "random" toroidal surface.
@@ -27,9 +29,11 @@ def random_surface(
     Uses a double Fourier series representation with random coefficients.
     The coefficients are given by
 
-    X_mn =  X_scale * U(-1,1) exp(-alpha*(|m| + |n|))
+    X_mn =  X_scale * X_norm * N(1, exp(-beta))
 
-    Where U(-1,1) is a uniform random variable on [-1,1].
+    Where N(m,s) is a normal random variable on with mean m and stdev s, and
+    X_norm = exp(-alpha*(|m| + |n|)) / exp(-alpha)
+
 
     Parameters
     ----------
@@ -48,6 +52,10 @@ def random_surface(
     alpha : int or tuple
         Spectral decay factor. Larger values of alpha will tend to create simpler
         surfaces. If a tuple, treats as min/max for random int.
+    beta : int or tuple
+        Relative standard deviation for spectral coefficients. Smaller values of beta
+        will tend to create more complex surfaces. If a tuple, treats as min/max for
+        random int.
     rng : numpy.random.Generator
         Random number generator. If None, uses numpys default_rng
 
@@ -56,12 +64,12 @@ def random_surface(
     surf : FourierRZToroidalSurface
         Random toroidal surface.
     """
-    if rng is None:
-        rng = default_rng()
-    if sym is None:
-        sym = rng.choice([True, False])
+    rng = setdefault(rng, default_rng())
+    sym = setdefault(sym, rng.choice([True, False]))
     if isinstance(alpha, tuple):
         alpha = rng.integers(alpha[0], alpha[1] + 1)
+    if isinstance(beta, tuple):
+        beta = rng.integers(beta[0], beta[1] + 1)
     if isinstance(NFP, tuple):
         NFP = rng.integers(NFP[0], NFP[1] + 1)
     if isinstance(R_scale, tuple):
@@ -73,11 +81,27 @@ def random_surface(
 
     R_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
     Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
-    R_norm = np.exp(-alpha * np.sum(abs(R_basis.modes), axis=-1))
-    Z_norm = np.exp(-alpha * np.sum(abs(Z_basis.modes), axis=-1))
-    R_mn = (1 - 2 * rng.random(R_basis.num_modes)) * R_norm * R_scale
-    Z_mn = (1 - 2 * rng.random(Z_basis.num_modes)) * Z_norm * Z_scale
+    # alpha determines how quickly amplitude decays for high M, N,
+    # normalized so that X_norm=1 for m=1
+    R_norm = np.exp(-alpha * np.sum(abs(R_basis.modes), axis=-1)) / np.exp(-alpha)
+    Z_norm = np.exp(-alpha * np.sum(abs(Z_basis.modes), axis=-1)) / np.exp(-alpha)
+
+    R_mn = R_norm * (1 + np.exp(-beta) * rng.normal(R_basis.num_modes))
+    Z_mn = Z_norm * (1 + np.exp(-beta) * rng.normal(Z_basis.num_modes))
+
+    # scale to approximate aspect ratio
+    R_scale1 = np.mean(
+        abs(R_mn)[(abs(R_basis.modes[:, 1]) == 1) & (abs(R_basis.modes[:, 2]) == 0)]
+    )
+    Z_scale1 = np.mean(
+        abs(Z_mn)[(abs(Z_basis.modes[:, 1]) == 1) & (abs(Z_basis.modes[:, 2]) == 0)]
+    )
+    R_mn *= R_scale / R_scale1
+    Z_mn *= Z_scale / Z_scale1
     R_mn[R_basis.get_idx(0, 0, 0)] = R0
+    if not sym:
+        Z_mn[Z_basis.get_idx(0, 0, 0)] = 0  # center at Z=0
+
     surf = FourierRZToroidalSurface(
         R_mn,
         Z_mn,
@@ -87,6 +111,8 @@ def random_surface(
         sym=sym,
         check_orientation=False,
     )
+    # we do this manually just to avoid the warning when creating with left handed
+    # coordinates
     if surf._compute_orientation() == -1:
         surf._flip_orientation()
         assert surf._compute_orientation() == 1
@@ -116,8 +142,7 @@ def random_pressure(n=(8, 16), p0=(1e3, 1e4), rng=None):
     pressure : PowerSeriesProfile
         Random pressure profile.
     """
-    if rng is None:
-        rng = default_rng()
+    rng = setdefault(rng, default_rng())
     if isinstance(n, tuple):
         n = rng.integers(n[0] // 2, (n[1] + 1) // 2) * 2  # ensure its even
     if isinstance(p0, tuple):

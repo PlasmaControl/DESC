@@ -31,8 +31,8 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     RadialForceBalance,
     get_fixed_boundary_constraints,
+    get_NAE_constraints,
 )
-from desc.objectives.utils import get_NAE_constraints
 from desc.optimize import Optimizer
 from desc.plotting import plot_boozer_surface
 from desc.profiles import PowerSeriesProfile
@@ -63,7 +63,7 @@ def test_SOLOVEV_results(SOLOVEV):
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.solve
 def test_DSHAPE_results(DSHAPE):
     """Tests that the DSHAPE examples gives the same results as VMEC."""
@@ -73,7 +73,7 @@ def test_DSHAPE_results(DSHAPE):
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.solve
 def test_DSHAPE_current_results(DSHAPE_current):
     """Tests that the DSHAPE with fixed current gives the same results as VMEC."""
@@ -93,7 +93,7 @@ def test_HELIOTRON_results(HELIOTRON):
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.solve
 def test_HELIOTRON_vac_results(HELIOTRON_vac):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""

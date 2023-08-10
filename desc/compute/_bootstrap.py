@@ -278,39 +278,33 @@ def j_dot_B_Redl(
     J_dot_B = dnds_term + dTeds_term + dTids_term
 
     # Store all results in the J_dot_B_data dictionary:
-    nu_e_star = nu_e  # noqa: F841
-    nu_i_star = nu_i  # noqa: F841
-    variables = [
-        "rho",
-        "ne",
-        "ni",
-        "Zeff",
-        "Te",
-        "Ti",
-        "d_ne_d_s",
-        "d_Te_d_s",
-        "d_Ti_d_s",
-        "ln_Lambda_e",
-        "ln_Lambda_ii",
-        "nu_e_star",
-        "nu_i_star",
-        "X31",
-        "X32e",
-        "X32ei",
-        "F32ee",
-        "F32ei",
-        "L31",
-        "L32",
-        "L34",
-        "alpha0",
-        "alpha",
-        "dnds_term",
-        "dTeds_term",
-        "dTids_term",
-    ]
     J_dot_B_data = geom_data.copy()
-    for v in variables:
-        J_dot_B_data[v] = eval(v)
+    J_dot_B_data["rho"] = rho
+    J_dot_B_data["ne"] = ne
+    J_dot_B_data["ni"] = ni
+    J_dot_B_data["Zeff"] = Zeff
+    J_dot_B_data["Te"] = Te
+    J_dot_B_data["Ti"] = Ti
+    J_dot_B_data["d_ne_d_s"] = d_ne_d_s
+    J_dot_B_data["d_Te_d_s"] = d_Te_d_s
+    J_dot_B_data["d_Ti_d_s"] = d_Ti_d_s
+    J_dot_B_data["ln_Lambda_e"] = ln_Lambda_e
+    J_dot_B_data["ln_Lambda_ii"] = ln_Lambda_ii
+    J_dot_B_data["nu_e_star"] = nu_e
+    J_dot_B_data["nu_i_star"] = nu_i
+    J_dot_B_data["X31"] = X31
+    J_dot_B_data["X32e"] = X32e
+    J_dot_B_data["X32ei"] = X32ei
+    J_dot_B_data["F32ee"] = F32ee
+    J_dot_B_data["F32ei"] = F32ei
+    J_dot_B_data["L31"] = L31
+    J_dot_B_data["L32"] = L32
+    J_dot_B_data["L34"] = L34
+    J_dot_B_data["alpha0"] = alpha0
+    J_dot_B_data["alpha"] = alpha
+    J_dot_B_data["dnds_term"] = dnds_term
+    J_dot_B_data["dTeds_term"] = dTeds_term
+    J_dot_B_data["dTids_term"] = dTids_term
     J_dot_B_data["<J*B>"] = J_dot_B
     return J_dot_B_data
 

@@ -1,8 +1,4 @@
 # git checkout dp/coils for this script to work
-from scipy.io import netcdf_file
-
-from desc import set_device
-
 # set_device("gpu")
 import copy
 import os
@@ -17,7 +13,9 @@ import scipy
 from jax import grad, jit, vmap
 from scipy.constants import mu_0
 from scipy.interpolate import interp1d
+from scipy.io import netcdf_file
 
+from desc import set_device
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 from desc.io import load
@@ -114,6 +112,8 @@ def trace_from_curr_pot(
         modes_Z=np.array([[-1, 0]]),
         NFP=1,  # number of (toroidal) field periods
     )
+
+    curr_pot_trans.change_resolution(grid=LinearGrid(M=M, N=N))
 
     @jax.jit
     def biot_loop(re, rs, J, dV):

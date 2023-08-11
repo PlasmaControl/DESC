@@ -3237,18 +3237,14 @@ def _min_tz_modB(params, transforms, profiles, data, **kwargs):
     data=["max_tz |B|", "min_tz |B|"],
 )
 def _effective_r_over_R0(params, transforms, profiles, data, **kwargs):
-    r"""
-    Compute an effective local inverse aspect ratio.
+    """Compute an effective local inverse aspect ratio.
 
     This effective local inverse aspect ratio epsilon is defined by
-
-    .. math::
-        \frac{Bmax}{Bmin} = \frac{1 + \epsilon}{1 - \epsilon}
+    Bmax / Bmin = (1 + ε) / (1 − ε).
 
     This definition is motivated by the fact that this formula would
     be true in the case of circular cross-section surfaces in
-    axisymmetry with :math:`B \propto 1/R` and :math:`R = (1 +
-    \epsilon \cos\theta) R_0`.
+    axisymmetry with B ∝ 1/R and R = (1 + ε cos θ) R₀.
     """
     w = data["max_tz |B|"] / data["min_tz |B|"]
     data["effective r/R0"] = (w - 1) / (w + 1)

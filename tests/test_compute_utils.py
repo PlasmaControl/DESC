@@ -1,9 +1,15 @@
-"""Tests compute utilities related to surface averaging, etc."""
+"""Tests compute utilities."""
+
+import inspect
+import re
 
 import numpy as np
 import pytest
 
+import desc.compute
 from desc.basis import FourierZernikeBasis
+from desc.compute import data_index
+from desc.compute.data_index import _class_inheritance
 from desc.compute.utils import (
     _get_grid_surface,
     line_integrals,
@@ -19,59 +25,82 @@ from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 
 
-def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
-    """Compute a surface integral for each surface in the grid.
+class TestDataIndex:
+    """Tests for things related to data_index."""
 
-    Notes
-    -----
-        It is assumed that the integration surface has area 4π² when the
-        surface label is rho and area 2π when the surface label is theta or
-        zeta. You may want to multiply q by the surface area Jacobian.
+    @staticmethod
+    def get_matches(fun, pattern):
+        """Return all matches of ``pattern`` in source code of function ``fun``."""
+        src = inspect.getsource(fun)
+        # attempt to remove any decorator functions
+        # (currently works without this filter, but better to be defensive)
+        src = src.partition("def ")[2]
+        # attempt to remove comments
+        src = "\n".join(line.partition("#")[0] for line in src.splitlines())
+        matches = pattern.findall(src)
+        matches = {s.strip().strip('"') for s in matches}
+        return matches
 
-    Parameters
-    ----------
-    grid : Grid
-        Collocation grid containing the nodes to evaluate at.
-    q : ndarray
-        Quantity to integrate.
-        The first dimension of the array should have size ``grid.num_nodes``.
+    @staticmethod
+    def get_parameterization(fun, default="desc.equilibrium.equilibrium.Equilibrium"):
+        """Get parameterization of thing computed by function ``fun``."""
+        pattern = re.compile(r'parameterization=(?:\[([^]]+)]|"([^"]+)")')
+        decorator = inspect.getsource(fun).partition("def ")[0]
+        matches = pattern.findall(decorator)
+        # if list was found, split strings in list, else string was found so get that
+        matches = [match[0].split(",") if match[0] else [match[1]] for match in matches]
+        # flatten the list
+        matches = {s.strip().strip('"') for sublist in matches for s in sublist}
+        matches.discard("")
+        return matches if matches else {default}
 
-        When ``q`` is 1-dimensional, the intention is to integrate,
-        over the domain parameterized by rho, theta, and zeta,
-        a scalar function over the previously mentioned domain.
+    @pytest.mark.unit
+    def test_data_index_deps(self):
+        """Ensure developers do not add extra (or forget needed) dependencies."""
+        queried_deps = {}
 
-        When ``q`` is 2-dimensional, the intention is to integrate,
-        over the domain parameterized by rho, theta, and zeta,
-        a vector-valued function over the previously mentioned domain.
+        pattern_names = re.compile(r"(?<!_)data\[(.*?)] =")
+        pattern_data = re.compile(r"(?<!_)data\[(.*?)]")
+        pattern_profiles = re.compile(r"profiles\[(.*?)]")
+        pattern_params = re.compile(r"params\[(.*?)]")
+        for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
+            if module_name[0] == "_":
+                for _, fun in inspect.getmembers(module, inspect.isfunction):
+                    # quantities that this function computes
+                    names = self.get_matches(fun, pattern_names)
+                    # dependencies queried in source code of this function
+                    deps = {
+                        "data": self.get_matches(fun, pattern_data) - names,
+                        "profiles": self.get_matches(fun, pattern_profiles),
+                        "params": self.get_matches(fun, pattern_params),
+                    }
+                    parameterization = self.get_parameterization(fun)
+                    # some functions compute multiple things, e.g. curvature
+                    for name in names:
+                        # same logic as desc.compute.data_index.py
+                        for p in parameterization:
+                            for base_class, superclasses in _class_inheritance.items():
+                                if p in superclasses or p == base_class:
+                                    queried_deps.setdefault(base_class, {})[name] = deps
 
-        When ``q`` is 3-dimensional, the intention is to integrate,
-        over the domain parameterized by rho, theta, and zeta,
-        a matrix-valued function over the previously mentioned domain.
-    surface_label : str
-        The surface label of rho, theta, or zeta to compute the integration over.
-
-    Returns
-    -------
-    integrals : ndarray
-        Surface integral of the input over each surface in the grid.
-
-    """
-    _, _, spacing, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
-    weights = (spacing.prod(axis=1) * np.nan_to_num(q).T).T
-
-    surfaces = {}
-    nodes = grid.nodes[:, {"rho": 0, "theta": 1, "zeta": 2}[surface_label]]
-    # collect node indices for each surface_label surface
-    for grid_row_idx, surface_label_value in enumerate(nodes):
-        surfaces.setdefault(surface_label_value, []).append(grid_row_idx)
-    # integration over non-contiguous elements
-    integrals = []
-    for _, surface_idx in sorted(surfaces.items()):
-        integrals.append(weights[surface_idx].sum(axis=0))
-    if has_endpoint_dupe:
-        integrals[0] += integrals[-1]
-        integrals[-1] = integrals[0]
-    return np.asarray(integrals)
+        for p in data_index:
+            for name, val in data_index[p].items():
+                err_msg = f"Parameterization: {p}. Name: {name}."
+                deps = val["dependencies"]
+                data = set(deps["data"])
+                axis_limit_data = set(deps["axis_limit_data"])
+                profiles = set(deps["profiles"])
+                params = set(deps["params"])
+                # assert no duplicate dependencies
+                assert len(data) == len(deps["data"]), err_msg
+                assert len(axis_limit_data) == len(deps["axis_limit_data"]), err_msg
+                assert data.isdisjoint(axis_limit_data), err_msg
+                assert len(profiles) == len(deps["profiles"]), err_msg
+                assert len(params) == len(deps["params"]), err_msg
+                # assert correct dependencies are queried
+                assert queried_deps[p][name]["data"] == data | axis_limit_data, err_msg
+                assert queried_deps[p][name]["profiles"] == profiles, err_msg
+                assert queried_deps[p][name]["params"] == params, err_msg
 
 
 # arbitrary choice
@@ -83,6 +112,58 @@ NFP = 3
 
 class TestComputeUtils:
     """Tests for compute utilities related to surface averaging, etc."""
+
+    @staticmethod
+    def surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
+        """Compute a surface integral for each surface in the grid.
+
+        Notes
+        -----
+            It is assumed that the integration surface has area 4π² when the
+            surface label is rho and area 2π when the surface label is theta or
+            zeta. You may want to multiply q by the surface area Jacobian.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the nodes to evaluate at.
+        q : ndarray
+            Quantity to integrate.
+            The first dimension of the array should have size ``grid.num_nodes``.
+
+            When ``q`` is 1-dimensional, the intention is to integrate,
+            over the domain parameterized by rho, theta, and zeta,
+            a scalar function over the previously mentioned domain.
+
+            When ``q`` is 2-dimensional, the intention is to integrate,
+            over the domain parameterized by rho, theta, and zeta,
+            a vector-valued function over the previously mentioned domain.
+
+            When ``q`` is 3-dimensional, the intention is to integrate,
+            over the domain parameterized by rho, theta, and zeta,
+            a matrix-valued function over the previously mentioned domain.
+        surface_label : str
+            The surface label of rho, theta, or zeta to compute the integration over.
+
+        Returns
+        -------
+        integrals : ndarray
+            Surface integral of the input over each surface in the grid.
+
+        """
+        _, _, spacing, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
+        weights = (spacing.prod(axis=1) * np.nan_to_num(q).T).T
+
+        surfaces = {}
+        nodes = grid.nodes[:, {"rho": 0, "theta": 1, "zeta": 2}[surface_label]]
+        # collect node indices for each surface_label surface
+        for grid_row_idx, surface_label_value in enumerate(nodes):
+            surfaces.setdefault(surface_label_value, []).append(grid_row_idx)
+        # integration over non-contiguous elements
+        integrals = [weights[surfaces[key]].sum(axis=0) for key in sorted(surfaces)]
+        if has_endpoint_dupe:
+            integrals[0] = integrals[-1] = integrals[0] + integrals[-1]
+        return np.asarray(integrals)
 
     @pytest.mark.unit
     def test_surface_integrals(self):
@@ -103,7 +184,7 @@ class TestComputeUtils:
             }[surface_label]
             assert integrals.shape == (unique_size,), surface_label
 
-            desired = benchmark_surface_integrals(grid, q, surface_label)
+            desired = self.surface_integrals(grid, q, surface_label)
             np.testing.assert_allclose(
                 integrals, desired, atol=1e-16, err_msg=surface_label
             )
@@ -139,7 +220,7 @@ class TestComputeUtils:
             }[surface_label]
             assert integrals.shape == (unique_size, grid.num_nodes), surface_label
 
-            desired = benchmark_surface_integrals(grid, q, surface_label)
+            desired = self.surface_integrals(grid, q, surface_label)
             np.testing.assert_allclose(integrals, desired, err_msg=surface_label)
 
         cg = ConcentricGrid(L=L, M=M, N=N, sym=True, NFP=NFP)
@@ -167,8 +248,8 @@ class TestComputeUtils:
             assert averages.shape == q.shape == (g_size, f_size, v_size), surface_label
 
             desired = (
-                benchmark_surface_integrals(grid, (sqrt_g * q.T).T, surface_label).T
-                / benchmark_surface_integrals(grid, sqrt_g, surface_label)
+                self.surface_integrals(grid, (sqrt_g * q.T).T, surface_label).T
+                / self.surface_integrals(grid, sqrt_g, surface_label)
             ).T
             np.testing.assert_allclose(
                 grid.compress(averages, surface_label), desired, err_msg=surface_label

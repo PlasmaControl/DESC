@@ -145,6 +145,7 @@ class TestMagneticFields:
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
+    @pytest.mark.unit
     def test_field_line_integrate_early_terminate(self):
         """Test field line integration with early termination criterion."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit
@@ -166,6 +167,7 @@ class TestMagneticFields:
         assert np.isinf(r[-1])
         assert np.isinf(z[-1])
 
+    @pytest.mark.unit
     def test_field_line_integrate_early_terminate_NaN(self):
         """Test field line integration with default early termination criterion."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit

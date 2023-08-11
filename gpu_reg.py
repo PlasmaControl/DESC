@@ -22,6 +22,8 @@ alpha = 0
 coilsFilename = (
     f"{dirname}/coils_ncoils_{numCoils}_{dirname}_lam_{alpha:1.2e}_step_{step}.txt"
 )
+if not os.path.isdir(dirname):
+    os.mkdir(dirname)
 
 ##### Run Python REGCOIL #####
 printstring = (

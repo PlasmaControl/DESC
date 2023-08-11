@@ -59,21 +59,46 @@ def test_total_volume(DummyStellarator):
 @pytest.mark.unit
 def test_enclosed_volumes():
     """Test that the volume enclosed by flux surfaces matches analytic formulas."""
-    eq = Equilibrium()  # torus
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2],
+        Z_lmn=[2, -0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        modes_Z=[[-1, 0], [0, -1]],
+    )
+    eq = Equilibrium(surface=surf)  # elliptical cross-section with torsion
     rho = np.linspace(1 / 128, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-    data = eq.compute(["V_rr(r)", "R0", "V(r)", "V_r(r)"], grid=grid)
+    data = eq.compute(["R0", "V(r)", "V_r(r)", "V_rr(r)"], grid=grid)
     np.testing.assert_allclose(
-        2 * data["R0"] * (np.pi * rho) ** 2,
+        4 * data["R0"] * (np.pi * rho) ** 2,
         compress(grid, data["V(r)"]),
     )
     np.testing.assert_allclose(
-        4 * data["R0"] * np.pi**2 * rho,
+        8 * data["R0"] * np.pi**2 * rho,
         compress(grid, data["V_r(r)"]),
     )
     np.testing.assert_allclose(
-        4 * data["R0"] * np.pi**2,
+        8 * data["R0"] * np.pi**2,
         compress(grid, data["V_rr(r)"]),
+    )
+
+
+@pytest.mark.unit
+def test_enclosed_areas():
+    """Test that the area enclosed by flux surfaces matches analytic formulas."""
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2],
+        Z_lmn=[2, -0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        modes_Z=[[-1, 0], [0, -1]],
+    )
+    eq = Equilibrium(surface=surf)  # elliptical cross-section with torsion
+    rho = np.linspace(1 / 128, 1, 128)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    data = eq.compute(["A(r)"], grid=grid)
+    np.testing.assert_allclose(
+        2 * np.pi * rho**2,
+        compress(grid, data["A(r)"]),
     )
 
 
@@ -114,6 +139,34 @@ def test_surface_areas_2():
     np.testing.assert_allclose(Ar, 4 * 10 * np.pi**2)
     np.testing.assert_allclose(At, np.pi * (11**2 - 10**2))
     np.testing.assert_allclose(Az, np.pi)
+
+
+@pytest.mark.unit
+def test_elongation():
+    """Test that elongation approximation is correct."""
+    surf2 = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2],
+        Z_lmn=[2, -0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        modes_Z=[[-1, 0], [0, -1]],
+    )
+    surf3 = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2],
+        Z_lmn=[3, -0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        modes_Z=[[-1, 0], [0, -1]],
+    )
+    eq1 = Equilibrium()  # elongation = 1
+    eq2 = Equilibrium(surface=surf2)  # elongation = 2
+    eq3 = Equilibrium(surface=surf3)  # elongation = 3
+    rho = np.linspace(1 / 128, 1, 128)
+    grid = LinearGrid(M=eq3.M_grid, N=eq3.N_grid, NFP=eq3.NFP, sym=eq3.sym, rho=rho)
+    data1 = eq1.compute(["a_major/a_minor"], grid=grid)
+    data2 = eq2.compute(["a_major/a_minor"], grid=grid)
+    data3 = eq3.compute(["a_major/a_minor"], grid=grid)
+    np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
+    np.testing.assert_allclose(2.0, data2["a_major/a_minor"])
+    np.testing.assert_allclose(3.0, data3["a_major/a_minor"])
 
 
 @pytest.mark.slow

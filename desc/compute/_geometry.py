@@ -143,7 +143,22 @@ def _A(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: compute cross section area for toroidal surface using stokes?
+@register_compute_fun(
+    name="A(r)",
+    label="A(\\rho)",
+    units="m^{2}",
+    units_long="square meters",
+    description="Average cross-sectional area enclosed by flux surfaces",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["R0", "V(r)"],
+)
+def _A_of_r(params, transforms, profiles, data, **kwargs):
+    data["A(r)"] = data["V(r)"] / (2 * jnp.pi * data["R0"])
+    return data
 
 
 @register_compute_fun(
@@ -284,9 +299,11 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
         * (
             jnp.sqrt(8 * jnp.pi * A + P**2)
             + jnp.sqrt(
-                2 * jnp.sqrt(3) * P * jnp.sqrt(8 * jnp.pi * A + P**2)
-                - 40 * jnp.pi * A
-                + 4 * P**2
+                jnp.abs(
+                    2 * jnp.sqrt(3) * P * jnp.sqrt(8 * jnp.pi * A + P**2)
+                    - 40 * jnp.pi * A
+                    + 4 * P**2
+                )
             )
         )
         + 3 * P

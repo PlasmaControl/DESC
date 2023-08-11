@@ -456,18 +456,17 @@ def find_helical_coils(
 
         ####### debug #######################
         # # test that the length is what we expect
-        true_length = 2 * np.pi * a_ves
-        approx_length = 0
-        len_elem_sum = 0
-        for coords, line_elems in zip(coil_nodes_line, coil_line_elements):
-            gtt_sqrt = np.abs(surf_g_tt(coords[0], coords[1]))
-            approx_length += np.sum(gtt_sqrt * line_elems)
-            len_elem_sum += np.sum(line_elems)
-        length_diff = jnp.abs(true_length - approx_length)
-        print(f" Difference in length approx and true length: {length_diff}")
-        area_elem_diff = np.abs(2 * np.pi - len_elem_sum)
-        if area_elem_diff > 0.1:
-            print(f"line elem sum diff is large! {area_elem_diff:1.4e}")
+        # true_length = 2 * np.pi * a_ves
+        # approx_length = 0
+        # len_elem_sum = 0
+        # for coords, line_elems in zip(coil_nodes_line, coil_line_elements):
+        #     gtt_sqrt = np.abs(surf_g_tt(coords[0], coords[1]))
+        #     approx_length += np.sum(gtt_sqrt * line_elems)
+        #     len_elem_sum += np.sum(line_elems)
+        # length_diff = jnp.abs(true_length - approx_length)
+        # area_elem_diff = np.abs(2 * np.pi - len_elem_sum)
+        # if area_elem_diff > 0.1:
+        #     print(f"line elem sum diff is large! {area_elem_diff:1.4e}")
 
         if not return_full_info:
             return variance

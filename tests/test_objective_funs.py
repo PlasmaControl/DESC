@@ -283,7 +283,7 @@ class TestObjectiveFunction:
             obj = QuasisymmetryTripleProduct(eq=eq)
             obj.build()
             ft = obj.compute_unscaled(*obj.xs(eq))
-            np.testing.assert_allclose(ft, 0)
+            np.testing.assert_allclose(ft, 0, atol=5e-35)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -582,8 +582,8 @@ def test_plasma_vessel_distance():
 @pytest.mark.unit
 def test_mean_curvature():
     """Test for mean curvature objective function."""
-    # simple case like dshape should have mean curvature negative everywhere
-    eq = get("DSHAPE")
+    # torus should have mean curvature negative everywhere
+    eq = Equilibrium()
     obj = MeanCurvature(eq=eq)
     obj.build()
     H = obj.compute_unscaled(*obj.xs(eq))

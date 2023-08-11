@@ -68,7 +68,7 @@ def _psi_rr(params, transforms, profiles, data, **kwargs):
     units_long="Webers",
     description="Toroidal flux (normalized by 2pi), third radial derivative",
     dim=1,
-    params=["Psi"],
+    params=[],
     transforms={},
     profiles=[],
     coordinates="r",
@@ -509,9 +509,9 @@ def _iota(params, transforms, profiles, data, **kwargs):
             current_term = put(
                 current_term, transforms["grid"].axis, limit[transforms["grid"].axis]
             )
-        data["iota"] = (current_term + data["iota_zero_current_num"]) / data[
-            "iota_zero_current_den"
-        ]
+        data["iota"] = (current_term + data["iota_zero_current_num"]) / (
+            data["iota_zero_current_den"]
+        )
     return data
 
 
@@ -530,7 +530,6 @@ def _iota(params, transforms, profiles, data, **kwargs):
         "iota",
         "psi_r",
         "psi_rr",
-        "iota_zero_current_num",
         "iota_zero_current_num_r",
         "iota_zero_current_den",
         "iota_zero_current_den_r",
@@ -582,8 +581,6 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
         "psi_r",
         "psi_rr",
         "psi_rrr",
-        "iota_zero_current_num",
-        "iota_zero_current_num_r",
         "iota_zero_current_num_rr",
         "iota_zero_current_den",
         "iota_zero_current_den_r",

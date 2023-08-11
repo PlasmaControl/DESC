@@ -766,6 +766,7 @@ def field_line_integrate(
     maxstep=1000,
     solver=Tsit5(),
     terminating_event=None,
+    kwargs={},
 ):
     """Trace field lines by integration, using diffrax package.
 
@@ -798,6 +799,8 @@ def field_line_integrate(
         to True and on will be inf
         state has attributes such as state.y (array of length 3 with current (R,phi,Z))
         see diffrax documentation for more in-depth information
+    kwargs: dict
+        keyword arguments to be passed into the diffrax diffeqsolve function call
 
 
 
@@ -838,7 +841,7 @@ def field_line_integrate(
 
     def default_terminating_event_fxn(state, **kwargs):
         terms = kwargs.get("terms", lambda a, x, b: x)
-        return jnp.any(jnp.isnan(terms.vf(0, state.y, 0)))
+        return jnp.any(jnp.isnan(terms.vf(state.tnext, state.y, 0)))
 
     terminating_event = (
         DiscreteTerminatingEvent(terminating_event)
@@ -846,7 +849,7 @@ def field_line_integrate(
         else DiscreteTerminatingEvent(default_terminating_event_fxn)
     )
     term = ODETerm(odefun)
-    saveat = SaveAt(ts=phis)
+    saveat = kwargs.get("saveat", SaveAt(ts=phis))
 
     intfun = lambda x: diffeqsolve(
         term,
@@ -859,6 +862,7 @@ def field_line_integrate(
         dt0=None,  # have diffrax automatically choose it
         stepsize_controller=stepsize_controller,
         discrete_terminating_event=terminating_event,
+        **kwargs,
     ).ys
 
     x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)

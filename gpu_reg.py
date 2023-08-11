@@ -80,7 +80,7 @@ trace_from_curr_pot(
     alpha=alpha,
     M=50,
     N=160,
-    ntransit=5,
+    ntransit=50,
     external_TF=B0,
 )
 

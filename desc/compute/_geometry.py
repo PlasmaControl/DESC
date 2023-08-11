@@ -149,11 +149,11 @@ def _A(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Average cross-sectional area enclosed by flux surfaces",
-    dim=0,
+    dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="",
+    coordinates="r",
     data=["R0", "V(r)"],
 )
 def _A_of_r(params, transforms, profiles, data, **kwargs):

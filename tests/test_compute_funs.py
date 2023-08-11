@@ -61,7 +61,7 @@ def test_enclosed_volumes():
     """Test that the volume enclosed by flux surfaces matches analytic formulas."""
     surf = FourierRZToroidalSurface(
         R_lmn=[10, 1, 0.2],
-        Z_lmn=[2, -0.2],
+        Z_lmn=[-2, -0.2],
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0], [0, -1]],
     )
@@ -70,16 +70,13 @@ def test_enclosed_volumes():
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["R0", "V(r)", "V_r(r)", "V_rr(r)"], grid=grid)
     np.testing.assert_allclose(
-        4 * data["R0"] * (np.pi * rho) ** 2,
-        compress(grid, data["V(r)"]),
+        4 * data["R0"] * (np.pi * rho) ** 2, compress(grid, data["V(r)"])
     )
     np.testing.assert_allclose(
-        8 * data["R0"] * np.pi**2 * rho,
-        compress(grid, data["V_r(r)"]),
+        8 * data["R0"] * np.pi**2 * rho, compress(grid, data["V_r(r)"])
     )
     np.testing.assert_allclose(
-        8 * data["R0"] * np.pi**2,
-        compress(grid, data["V_rr(r)"]),
+        8 * data["R0"] * np.pi**2, compress(grid, data["V_rr(r)"])
     )
 
 
@@ -88,7 +85,7 @@ def test_enclosed_areas():
     """Test that the area enclosed by flux surfaces matches analytic formulas."""
     surf = FourierRZToroidalSurface(
         R_lmn=[10, 1, 0.2],
-        Z_lmn=[2, -0.2],
+        Z_lmn=[-2, -0.2],
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0], [0, -1]],
     )
@@ -96,10 +93,7 @@ def test_enclosed_areas():
     rho = np.linspace(1 / 128, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["A(r)"], grid=grid)
-    np.testing.assert_allclose(
-        2 * np.pi * rho**2,
-        compress(grid, data["A(r)"]),
-    )
+    np.testing.assert_allclose(2 * np.pi * rho**2, compress(grid, data["A(r)"]))
 
 
 @pytest.mark.unit
@@ -146,13 +140,13 @@ def test_elongation():
     """Test that elongation approximation is correct."""
     surf2 = FourierRZToroidalSurface(
         R_lmn=[10, 1, 0.2],
-        Z_lmn=[2, -0.2],
+        Z_lmn=[-2, -0.2],
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0], [0, -1]],
     )
     surf3 = FourierRZToroidalSurface(
         R_lmn=[10, 1, 0.2],
-        Z_lmn=[3, -0.2],
+        Z_lmn=[-3, -0.2],
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0], [0, -1]],
     )
@@ -164,9 +158,10 @@ def test_elongation():
     data1 = eq1.compute(["a_major/a_minor"], grid=grid)
     data2 = eq2.compute(["a_major/a_minor"], grid=grid)
     data3 = eq3.compute(["a_major/a_minor"], grid=grid)
+    # elongation approximation is less accurate as elongation increases
     np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
-    np.testing.assert_allclose(2.0, data2["a_major/a_minor"])
-    np.testing.assert_allclose(3.0, data3["a_major/a_minor"])
+    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-3)
+    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-2)
 
 
 @pytest.mark.slow

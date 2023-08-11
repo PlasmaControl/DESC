@@ -322,7 +322,6 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     profiles=["atomic_number"],
     coordinates="r",
     data=[
-        "rho",
         "trapped fraction",
         "G",
         "I",
@@ -336,6 +335,7 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
         "Ti",
         "Ti_r",
         "Zeff",
+        "rho",
     ],
     helicity="helicity",
 )

@@ -872,7 +872,7 @@ class InputReader:
                 eq0.iota.__class__.__name__ == "PowerSeriesProfile"
             ), "Equilibrium must have power series profiles for ascii io"
             char = "i"
-            case = 4
+            case = 2
             orderp = eq0._pressure.basis.L + 1
             orderi = eq0._iota.basis.L + 1
             if orderp >= orderi:
@@ -886,14 +886,6 @@ class InputReader:
                     pres_profile[0::2] = eq0._pressure.params
                     iota_profile[1:orderi:2] = eq0._iota.params
                     case = 1
-                elif eq0._pressure_basis.sym == "odd" and eq0._iota.basis.sym == "even":
-                    pres_profile[1::2] = eq0._pressure.params
-                    iota_profile[0:orderi:2] = eq0._iota.params
-                    case = 2
-                elif eq0._pressure_basis.sym == "odd" and eq0._iota.basis.sym == "odd":
-                    pres_profile[1::2] = eq0._pressure.params
-                    iota_profile[1:orderi:2] = eq0._iota.params
-                    case = 3
                 else:
                     pres_profile = eq0._pressure.params
                     iota_profile[:orderi] = eq0._iota.params
@@ -908,14 +900,6 @@ class InputReader:
                     pres_profile[0:orderp:2] = eq0._pressure.params
                     iota_profile[1::2] = eq0._iota.params
                     case = 1
-                elif eq0._pressure_basis.sym == "odd" and eq0._iota.basis.sym == "even":
-                    pres_profile[1:orderp:2] = eq0._pressure.params
-                    iota_profile[0::2] = eq0._iota.params
-                    case = 2
-                elif eq0._pressure_basis.sym == "odd" and eq0._iota.basis.sym == "odd":
-                    pres_profile[1:orderp:2] = eq0._pressure.params
-                    iota_profile[1::2] = eq0._iota.params
-                    case = 3
                 else:
                     pres_profile[:orderp] = eq0._pressure.params
                     iota_profile = eq0._iota.params
@@ -924,7 +908,7 @@ class InputReader:
                 eq0.current.__class__.__name__ == "PowerSeriesProfile"
             ), "Equilibrium must have power series profiles for ascii io"
             char = "c"
-            case = 4
+            case = 2
             orderp = eq0._pressure.basis.L + 1
             orderc = eq0._current.basis.L + 1
             if orderp >= orderc:
@@ -944,19 +928,6 @@ class InputReader:
                     pres_profile[0::2] = eq0._pressure.params
                     curr_profile[1:orderc:2] = eq0._current.params
                     case = 1
-                elif (
-                    eq0._pressure_basis.sym == "odd"
-                    and eq0._current.basis.sym == "even"
-                ):
-                    pres_profile[1::2] = eq0._pressure.params
-                    curr_profile[0:orderc:2] = eq0._current.params
-                    case = 2
-                elif (
-                    eq0._pressure_basis.sym == "odd" and eq0._current.basis.sym == "off"
-                ):
-                    pres_profile[1::2] = eq0._pressure.params
-                    curr_profile[1:orderc:2] = eq0._current.params
-                    case = 3
                 else:
                     pres_profile = eq0._pressure.params
                     curr_profile[:orderc] = eq0._current.params
@@ -977,20 +948,6 @@ class InputReader:
                     pres_profile[0:orderp:2] = eq0._pressure.params
                     curr_profile[1::2] = eq0._current.params
                     case = 1
-                elif (
-                    eq0._pressure_basis.sym == "odd"
-                    and eq0._current.basis.sym == "even"
-                ):
-                    pres_profile[1:orderp:2] = eq0._pressure.params
-                    curr_profile[0::2] = eq0._current.params
-                    case = 2
-                elif (
-                    eq0._pressure_basis.sym == "odd"
-                    and eq0._current.basis.sym == "even"
-                ):
-                    pres_profile[1:orderp:2] = eq0._pressure.params
-                    curr_profile[1::2] = eq0._current.params
-                    case = 3
                 else:
                     pres_profile[:orderp] = eq0._pressure.params
                     curr_profile[:] = eq0._current.params
@@ -1010,22 +967,6 @@ class InputReader:
                         )
                 elif case == 1:
                     idxs = np.linspace(0, 2 * orderp - 1, orderp, dtype=int)
-                    for l in idxs:
-                        f.write(
-                            "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                                int(l), pres_profile[l], char, iota_profile[l]
-                            )
-                        )
-                elif case == 2:
-                    idxs = np.linspace(0, 2 * orderp - 1, orderp, dtype=int)
-                    for l in idxs:
-                        f.write(
-                            "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                                int(l), pres_profile[l], char, iota_profile[l]
-                            )
-                        )
-                elif case == 3:
-                    idxs = np.linspace(1, 2 * orderp - 1, paramsp, dtype=int)
                     for l in idxs:
                         f.write(
                             "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
@@ -1055,22 +996,6 @@ class InputReader:
                         )
                 elif case == 1:
                     idxs = np.linspace(0, orderp - 1, orderp, dtype=int)
-                    for l in idxs:
-                        f.write(
-                            "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                                int(l), pres_profile[l], char, curr_profile[l]
-                            )
-                        )
-                elif case == 2:
-                    idxs = np.linspace(0, orderp - 1, orderp, dtype=int)
-                    for l in idxs:
-                        f.write(
-                            "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                                int(l), pres_profile[l], char, curr_profile[l]
-                            )
-                        )
-                elif case == 3:
-                    idxs = np.linspace(1, orderp - 1, paramsp, dtype=int)
                     for l in idxs:
                         f.write(
                             "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(

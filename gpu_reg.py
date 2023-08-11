@@ -66,6 +66,9 @@ NFP = 4
     external_TF_scan_n=5,
     verbose=2,
 )
+##### Run field line trace from current potential #####
+printstring = "Running Field Line tracing from Current Potential"
+print("#" * len(printstring) + "\n" + printstring + "\n" + "#" * len(printstring))
 
 # FIXME: this is can be slow, even on GPU
 trace_from_curr_pot(
@@ -82,6 +85,11 @@ trace_from_curr_pot(
 )
 
 phi_mn_opt = phi_mns[7]
+
+##### Run field line trace from current potential #####
+printstring = "Finding helical coils"
+print("#" * len(printstring) + "\n" + printstring + "\n" + "#" * len(printstring))
+
 
 # TODO: the equal-current optimization can be slow ( minutes for 5 coils, hour or longer for 15+ coils),
 # should JIT compile some of the functions to improve speed, and see other ways to optimize
@@ -114,4 +122,6 @@ calc_BNORM_from_coilset(coilset, eqname, alpha=alpha, step=step)
 # ### field line trace with coils ###
 from desc.field_line_tracing_DESC_from_coilset import field_trace_from_coilset
 
+printstring = "Field line tracing with magnetic field from the Helical Coilset"
+print("#" * len(printstring) + "\n" + printstring + "\n" + "#" * len(printstring))
 field_trace_from_coilset(coilsFilename, eqname, 25)

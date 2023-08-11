@@ -1148,9 +1148,9 @@ class VMECIO:
         if verbose > 1:
             timer.disp("J^theta*sqrt(g)")
 
-        timer.start("J^zeta sqrt(g)")
+        timer.start("J^zeta*sqrt(g)")
         if verbose > 0:
-            print("Saving J^zeta sqrt(g)")
+            print("Saving J^zeta*sqrt(g)")
         currvmnc = file.createVariable(
             "currvmnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -1197,9 +1197,9 @@ class VMECIO:
             currumns[0, :] = -(
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
-        timer.stop("J^zeta sqrt(g)")
+        timer.stop("J^zeta*sqrt(g)")
         if verbose > 1:
-            timer.disp("J^zeta sqrt(g)")
+            timer.disp("J^zeta*sqrt(g)")
 
         # TODO: these output quantities need to be added
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))

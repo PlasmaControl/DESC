@@ -39,7 +39,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     Compute the effective fraction of trapped particles, which enters
     several formulae for neoclassical transport.
     The trapped fraction fₜ has a standard definition in neoclassical theory:
-        fₜ = 1 − 3/4 〈|B|²〉 ∫₀¹/ᴮᵐᵃˣ λ / 〈√(1 − λB)〉 dλ
+        fₜ = 1 − 3/4 〈|B|²〉 ∫₀¹/ᴮᵐᵃˣ λ / 〈√(1 − λ B)〉 dλ
     where 〈 ⋯ 〉 is a flux surface average.
     """
     # Get nodes and weights for Gauss-Legendre integration:

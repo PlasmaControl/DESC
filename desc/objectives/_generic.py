@@ -58,19 +58,12 @@ class ObjectiveFromUser(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
-    where_apply_loss " str,
-        where to apply the user defined loss function. One of "compute_unscaled"
-        or "compute_scaled"
-        If "compute_unscaled", the loss function will apply to
+    where_apply_loss : str
+        where to apply the user defined loss function. One of "nscaled"
+        or "scaled"
+        If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
-        If "compute_scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
-    where_apply_loss " str,
-        where to apply the user defined loss function. One of "compute_unscaled"
-        or "compute_scaled"
-        If "compute_unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "compute_scaled", the loss function will apply to
+        If "scaled", the loss function will apply to
         the scaled objective function values, after the target is applied.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
@@ -111,7 +104,7 @@ class ObjectiveFromUser(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="compute_unscaled",
+        where_apply_loss="unscaled",
         grid=None,
         name="custom",
     ):
@@ -245,19 +238,12 @@ class GenericObjective(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
-    where_apply_loss " str,
-        where to apply the user defined loss function. One of "compute_unscaled"
-        or "compute_scaled"
-        If "compute_unscaled", the loss function will apply to
+    where_apply_loss : str
+        where to apply the user defined loss function. One of "nscaled"
+        or "scaled"
+        If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
-        If "compute_scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
-    where_apply_loss " str,
-        where to apply the user defined loss function. One of "compute_unscaled"
-        or "compute_scaled"
-        If "compute_unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "compute_scaled", the loss function will apply to
+        If "scaled", the loss function will apply to
         the scaled objective function values, after the target is applied.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
@@ -281,7 +267,7 @@ class GenericObjective(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="compute_unscaled",
+        where_apply_loss="unscaled",
         grid=None,
         name="generic",
     ):
@@ -404,19 +390,12 @@ class ToroidalCurrent(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
-    where_apply_loss " str,
-        where to apply the user defined loss function. One of "compute_unscaled"
-        or "compute_scaled"
-        If "compute_unscaled", the loss function will apply to
+    where_apply_loss : str
+        where to apply the user defined loss function. One of "nscaled"
+        or "scaled"
+        If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
-        If "compute_scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
-    where_apply_loss " str,
-        where to apply the user defined loss function. One of "compute_unscaled"
-        or "compute_scaled"
-        If "compute_unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "compute_scaled", the loss function will apply to
+        If "scaled", the loss function will apply to
         the scaled objective function values, after the target is applied.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
@@ -439,7 +418,7 @@ class ToroidalCurrent(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="compute_unscaled",
+        where_apply_loss="unscaled",
         grid=None,
         name="toroidal current",
     ):
@@ -622,12 +601,12 @@ class RotationalTransform(_Objective):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
-    where_apply_loss " str,
-        where to apply the user defined loss function. One of "compute_unscaled"
-        or "compute_scaled"
-        If "compute_unscaled", the loss function will apply to
+    where_apply_loss : str
+        where to apply the user defined loss function. One of "nscaled"
+        or "scaled"
+        If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
-        If "compute_scaled", the loss function will apply to
+        If "scaled", the loss function will apply to
         the scaled objective function values, after the target is applied.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
@@ -650,7 +629,7 @@ class RotationalTransform(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="compute_unscaled",
+        where_apply_loss="unscaled",
         grid=None,
         name="rotational transform",
     ):

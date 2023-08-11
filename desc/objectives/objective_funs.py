@@ -766,14 +766,13 @@ class _Objective(IOAble, ABC):
         or `lambda x: 3*x`, etc.
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
-    where_apply_loss " str,
-        where to apply the user defined loss function. One of "compute_unscaled"
-        or "compute_scaled"
-        If "compute_unscaled", the loss function will apply to
+    where_apply_loss : str
+        where to apply the user defined loss function. One of "nscaled"
+        or "scaled"
+        If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
-        If "compute_scaled", the loss function will apply to
+        If "scaled", the loss function will apply to
         the scaled objective function values, after the target is applied.
-
     name : str
         Name of the objective function.
 
@@ -801,7 +800,7 @@ class _Objective(IOAble, ABC):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="compute_unscaled",
+        where_apply_loss="unscaled",
         name=None,
     ):
         assert where_apply_loss in ["compute_unscaled", "compute_scaled"], (
@@ -933,7 +932,6 @@ class _Objective(IOAble, ABC):
         except AttributeError:
             pass
         self.compute_scaled = jit(self.compute_scaled)
-        self.compute_scaled2 = self.compute_scaled
 
         try:
             del self.compute_scaled_error

@@ -863,153 +863,64 @@ class InputReader:
         f.write("node_pattern = {}\n".format(eq0._node_pattern))
 
         f.write("\n# pressure and rotational transform/current profiles\n")
-        assert (
-            eq0.pressure.__class__.__name__ == "PowerSeriesProfile"
-        ), "Equilibrium must have power series profiles for ascii io"
 
         if eq0.iota:
             assert (
-                eq0.iota.__class__.__name__ == "PowerSeriesProfile"
+                eq0.pressure.__class__.__name__ == "PowerSeriesProfile"
+                and eq0.iota.__class__.__name__ == "PowerSeriesProfile"
             ), "Equilibrium must have power series profiles for ascii io"
             char = "i"
-            case = 2
-            orderp = eq0._pressure.basis.L + 1
-            orderi = eq0._iota.basis.L + 1
-            if orderp >= orderi:
-                pres_profile = np.zeros((orderp,))
-                iota_profile = np.zeros((orderp,))
-                if eq0._pressure.basis.sym == "even" and eq0._iota.basis.sym == "even":
-                    pres_profile[::2] = eq0._pressure.params
-                    iota_profile[:orderi:2] = eq0._pressure.params
-                    case = 0
-                elif eq0._pressure_basis.sym == "even" and eq0._iota.basis.sym == "odd":
-                    pres_profile[0::2] = eq0._pressure.params
-                    iota_profile[1:orderi:2] = eq0._iota.params
-                    case = 1
-                else:
-                    pres_profile = eq0._pressure.params
-                    iota_profile[:orderi] = eq0._iota.params
-            else:
-                pres_profile = np.zeros((orderi,))
-                iota_profile = np.zeros((orderi,))
-                if eq0._pressure.basis.sym == "even" and eq0._iota.basis.sym == "even":
-                    pres_profile[orderp::2] = eq0._pressure.params
-                    iota_profile[::2] = eq0._pressure.params
-                    case = 0
-                elif eq0._pressure_basis.sym == "even" and eq0._iota.basis.sym == "odd":
-                    pres_profile[0:orderp:2] = eq0._pressure.params
-                    iota_profile[1::2] = eq0._iota.params
-                    case = 1
-                else:
-                    pres_profile[:orderp] = eq0._pressure.params
-                    iota_profile = eq0._iota.params
+            iseven_pres = int(eq0._pressure.basis.sym == "even") + 1
+            iseven_iota = int(eq0._iota.basis.sym == "even") + 1
+            orderp = int(np.ceil((eq0._pressure.basis.L + 1) / iseven_pres))
+            orderi = int(np.ceil((eq0._iota.basis.L + 1) / iseven_iota))
+            pres_profile0 = np.zeros((orderp,))
+            iota_profile0 = np.zeros((orderi,))
+            pres_profile0[::1] = eq0._pressure.params
+            iota_profile0[::1] = eq0._iota.params
+            pres_profile = np.zeros((np.maximum(orderp, orderi),))
+            iota_profile = np.zeros((np.maximum(orderp, orderi),))
+            pres_profile[: len(pres_profile0)] = pres_profile0
+            iota_profile[: len(iota_profile0)] = iota_profile0
+
+            idxs = np.linspace(
+                0, np.maximum(orderp, orderi) - 1, np.maximum(orderp, orderi), dtype=int
+            )
+
+            for l in idxs:
+                f.write(
+                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
+                        int(l), pres_profile[l], char, iota_profile[l]
+                    )
+                )
         else:
             assert (
-                eq0.current.__class__.__name__ == "PowerSeriesProfile"
+                eq0.pressure.__class__.__name__ == "PowerSeriesProfile"
+                and eq0.current.__class__.__name__ == "PowerSeriesProfile"
             ), "Equilibrium must have power series profiles for ascii io"
             char = "c"
-            case = 2
-            orderp = eq0._pressure.basis.L + 1
-            orderc = eq0._current.basis.L + 1
-            if orderp >= orderc:
-                pres_profile = np.zeros((orderp,))
-                curr_profile = np.zeros((orderp,))
-                if (
-                    eq0._pressure.basis.sym == "even"
-                    and eq0._current.basis.sym == "even"
-                ):
-                    pres_profile[::2] = eq0._pressure.params
-                    curr_profile[:orderc:2] = eq0._current.params
-                    case = 0
-                elif (
-                    eq0._pressure_basis.sym == "even"
-                    and eq0._current.basis.sym == "odd"
-                ):
-                    pres_profile[0::2] = eq0._pressure.params
-                    curr_profile[1:orderc:2] = eq0._current.params
-                    case = 1
-                else:
-                    pres_profile = eq0._pressure.params
-                    curr_profile[:orderc] = eq0._current.params
-            else:
-                pres_profile = np.zeros((orderc,))
-                curr_profile = np.zeros((orderc,))
-                if (
-                    eq0._pressure.basis.sym == "even"
-                    and eq0._current.basis.sym == "even"
-                ):
-                    pres_profile[:orderp:2] = eq0._pressure.params
-                    curr_profile[::2] = eq0._current.params
-                    case = 0
-                elif (
-                    eq0._pressure_basis.sym == "even"
-                    and eq0._current.basis.sym == "odd"
-                ):
-                    pres_profile[0:orderp:2] = eq0._pressure.params
-                    curr_profile[1::2] = eq0._current.params
-                    case = 1
-                else:
-                    pres_profile[:orderp] = eq0._pressure.params
-                    curr_profile[:] = eq0._current.params
+            iseven_pres = int(eq0._pressure.basis.sym == "even") + 1
+            iseven_curr = int(eq0._current.basis.sym == "even") + 1
+            orderp = int(np.ceil((eq0._pressure.basis.L + 1) / iseven_pres))
+            orderc = int(np.ceil((eq0._current.basis.L + 1) / iseven_curr))
+            pres_profile0 = np.zeros((orderp,))
+            curr_profile0 = np.zeros((orderc,))
+            pres_profile0[::1] = eq0._pressure.params
+            curr_profile0[::1] = eq0._current.params
+            pres_profile = np.zeros((np.maximum(orderp, orderc),))
+            curr_profile = np.zeros((np.maximum(orderp, orderc),))
+            pres_profile[: len(pres_profile0)] = pres_profile0
+            curr_profile[: len(curr_profile0)] = curr_profile0
 
-            if char == "i":
-                orderp = np.maximum(orderp, orderi)
-                paramsp = np.maximum(
-                    len(eq0._pressure.params), len(eq0._current.params)
+            idxs = np.linspace(
+                0, np.maximum(orderp, orderc) - 1, np.maximum(orderp, orderc), dtype=int
+            )
+            for l in idxs:
+                f.write(
+                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
+                        int(l), pres_profile[l], char, curr_profile[l]
+                    )
                 )
-                if case == 0:
-                    idxs = np.linspace(0, 2 * (orderp - 1), paramsp, dtype=int)
-                    for l in idxs:
-                        f.write(
-                            "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                                int(l), pres_profile[l], char, iota_profile[l]
-                            )
-                        )
-                elif case == 1:
-                    idxs = np.linspace(0, 2 * orderp - 1, orderp, dtype=int)
-                    for l in idxs:
-                        f.write(
-                            "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                                int(l), pres_profile[l], char, iota_profile[l]
-                            )
-                        )
-                else:
-                    idxs = np.linspace(0, 2 * orderp, orderp, dtype=int)
-                    for l in idxs:
-                        f.write(
-                            "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                                int(l), pres_profile[l], char, iota_profile[l]
-                            )
-                        )
-            else:
-                orderp = np.maximum(orderp, orderc)
-                paramsp = np.maximum(
-                    len(eq0._pressure.params), len(eq0._current.params)
-                )
-                if case == 0:
-                    idxs = np.linspace(0, orderp - 1, paramsp, dtype=int)
-                    for l in idxs:
-                        f.write(
-                            "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                                int(l), pres_profile[l], char, curr_profile[l]
-                            )
-                        )
-                elif case == 1:
-                    idxs = np.linspace(0, orderp - 1, orderp, dtype=int)
-                    for l in idxs:
-                        f.write(
-                            "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                                int(l), pres_profile[l], char, curr_profile[l]
-                            )
-                        )
-                else:
-                    idxs = np.linspace(0, orderp - 1, orderp, dtype=int)
-                    for l in idxs:
-                        f.write(
-                            "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                                int(l), pres_profile[l], char, curr_profile[l]
-                            )
-                        )
 
         f.write("\n")
 

@@ -27,7 +27,7 @@ spectral_indexing = ansi
 node_pattern      = jacobi
 
 # pressure and rotational transform/current profiles
-l:   0	p =   0    i = 1E-6
+l:   0	p =   0    i = 0
 l:   2	p =   0    i = 0
 l:   4	p =   0    i = 0
 

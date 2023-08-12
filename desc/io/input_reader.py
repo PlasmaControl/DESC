@@ -558,8 +558,8 @@ class InputReader:
         # if all coefficients of pres, iota and current are zero, ignore flags
         if curr_flag:
             if inputs["objective"] == "vacuum" and (
-                (pres_flag and (np.linalg.norm(inputs["pressure"][:, 1]) > 1e-8))
-                or (curr_flag and (np.linalg.norm(inputs["current"][:, 1]) > 1e-8))
+                (pres_flag and (np.linalg.norm(inputs["pressure"][:, 1]) >= 1e-9))
+                or (curr_flag and (np.linalg.norm(inputs["current"][:, 1]) >= 1e-9))
             ):
                 warnings.warn(
                     "Vacuum objective does not use any profiles, "
@@ -567,8 +567,8 @@ class InputReader:
                 )
         else:
             if inputs["objective"] == "vacuum" and (
-                (pres_flag and (np.linalg.norm(inputs["pressure"][:, 1]) > 1e-8))
-                or (iota_flag and (np.linalg.norm(inputs["iota"][:, 1]) > 1e-8))
+                (pres_flag and (np.linalg.norm(inputs["pressure"][:, 1]) >= 1e-9))
+                or (iota_flag and (np.linalg.norm(inputs["iota"][:, 1]) >= 1e-9))
             ):
                 warnings.warn(
                     "Vacuum objective does not use any profiles, "

@@ -158,10 +158,10 @@ def test_descout_to_input(tmpdir_factory):
     ):
         found0 = 1
 
-    outfile_path = "./tests/inputs/HELIOTRON_vacuum_current.h5"
+    outfile_path = "./tests/inputs/HELIOTRON_vacuum_iota.h5"
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
-    tmp_path = tmpdir.join("input_HELIOTRON_vacuum_current")
-    tmpout_path = tmpdir.join("HELIOTRON_vacuum_current.h5")
+    tmp_path = tmpdir.join("input_HELIOTRON_vacuum_iota")
+    tmpout_path = tmpdir.join("HELIOTRON_vacuum_iota.h5")
     shutil.copyfile(outfile_path, tmpout_path)
 
     ir1 = InputReader()
@@ -172,7 +172,7 @@ def test_descout_to_input(tmpdir_factory):
     arr1mneg = arr1[arr1[:, 1] < 0]
     arr1mpos = arr1[arr1[:, 1] >= 0]
 
-    desc_input_truth = "./tests/inputs/HELIOTRON_vacuum_current"
+    desc_input_truth = "./tests/inputs/HELIOTRON_vacuum_iota"
     with pytest.warns(UserWarning):
         ir2 = InputReader(cl_args=[str(desc_input_truth)])
         arr2 = ir2.parse_inputs()[-1]["surface"]

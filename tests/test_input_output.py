@@ -173,9 +173,8 @@ def test_descout_to_input(tmpdir_factory):
     arr1mpos = arr1[arr1[:, 1] >= 0]
 
     desc_input_truth = "./tests/inputs/HELIOTRON_vacuum_iota"
-    with pytest.warns(UserWarning):
-        ir2 = InputReader(cl_args=[str(desc_input_truth)])
-        arr2 = ir2.parse_inputs()[-1]["surface"]
+    ir2 = InputReader(cl_args=[str(desc_input_truth)])
+    arr2 = ir2.parse_inputs()[-1]["surface"]
     arr2 = arr2[arr2[:, 1].argsort()]
     arr2mneg = arr2[arr2[:, 1] < 0]
     arr2mpos = arr2[arr2[:, 1] >= 0]

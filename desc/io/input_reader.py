@@ -820,10 +820,8 @@ class InputReader:
         have specified those prameters as kwargs
         """
         # open the file, unless its already open
-        if not isinstance(filename, io.IOBase):
-            f = open(filename, "w+")
-        else:
-            f = filename
+        f = open(filename, "w+")
+
         f.seek(0)
 
         eq = load(inputs)

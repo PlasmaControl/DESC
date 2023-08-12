@@ -12,5 +12,5 @@ dependencies:
   - termcolor
   - pip
   - pip:
-    - jax[cpu] >= 0.3.2, <= 0.4.11
+    - jax[cpu] >= 0.3.2, <= 0.4.14
     - nvgpu

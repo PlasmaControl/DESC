@@ -423,7 +423,9 @@ def test_save_and_load_separate_files_coils(tmpdir_factory):
     tmpdir = tmpdir_factory.mktemp("separate_coil_files")
     tmp_path_basename = tmpdir.join("separate_coil_file")
     for i in range(2):
-        shutil.copyfile(f"{input_path_basename}_{i}.txt", tmp_path_basename)
+        shutil.copyfile(
+            f"{input_path_basename}_{i}.txt", f"{tmp_path_basename}_{i}.txt"
+        )
 
     c = FourierPlanarCoil()
     c1 = FourierRZCoil()
@@ -433,9 +435,9 @@ def test_save_and_load_separate_files_coils(tmpdir_factory):
     cs.save_coilset_as_separate_coil_files(cs, str(path_basename), grid=10)
 
     for i in range(2):
-        with open(f"{tmp_path_basename}_i.txt") as f:
+        with open(f"{tmp_path_basename}_{i}.txt") as f:
             lines_orig = f.readlines()
-        with open(f"{path_basename}_i.txt") as f:
+        with open(f"{path_basename}_{i}.txt") as f:
             lines_new = f.readlines()
         for line_orig, line_new in zip(lines_orig, lines_new):
             assert line_orig == line_new

@@ -6,10 +6,8 @@ Functions in this module should not depend on any other submodules in desc.objec
 import warnings
 
 import numpy as np
-from jax import lax
-from jax.scipy.special import logsumexp
 
-from desc.backend import jnp, put
+from desc.backend import cond, jnp, logsumexp, put
 from desc.utils import Index, sort_things, svd_inv_null
 
 
@@ -156,7 +154,7 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
     return xp, A_full, b_full, Z, unfixed_idx, project, recover
 
 
-def jax_softmax(arr, alpha):
+def softmax(arr, alpha):
     """JAX softmax implementation.
 
     Inspired by https://www.johndcook.com/blog/2010/01/13/soft-maximum/
@@ -169,18 +167,21 @@ def jax_softmax(arr, alpha):
 
     Parameters
     ----------
-    arr: ndarray, the array which we would like to apply the softmax function to.
-    alpha: float, the parameter smoothly transitioning the function to a hardmax.
+    arr : ndarray
+        The array which we would like to apply the softmax function to.
+    alpha : float
+        The parameter smoothly transitioning the function to a hardmax.
         as alpha increases, the value returned will come closer and closer to
         max(arr).
 
     Returns
     -------
-    softmax: float, the soft-maximum of the array.
+    softmax : float
+        The soft-maximum of the array.
     """
     arr_times_alpha = alpha * arr
     min_val = jnp.min(jnp.abs(arr_times_alpha)) + 1e-4  # buffer value in case min is 0
-    return lax.cond(
+    return cond(
         jnp.any(min_val < 1),
         lambda arr_times_alpha: logsumexp(
             arr_times_alpha / min_val * 2
@@ -193,21 +194,24 @@ def jax_softmax(arr, alpha):
     )
 
 
-def jax_softmin(arr, alpha):
+def softmin(arr, alpha):
     """JAX softmin implementation, by taking negative of softmax(-arr).
 
     Parameters
     ----------
-    arr: ndarray, the array which we would like to apply the softmin function to.
-    alpha: float, the parameter smoothly transitioning the function to a hardmin.
+    arr : ndarray
+        The array which we would like to apply the softmin function to.
+    alpha: float
+        The parameter smoothly transitioning the function to a hardmin.
         as alpha increases, the value returned will come closer and closer to
         min(arr).
 
     Returns
     -------
-    softmin: float, the soft-minimum of the array.
+    softmin: float
+        The soft-minimum of the array.
     """
-    return -jax_softmax(-arr, alpha)
+    return -softmax(-arr, alpha)
 
 
 def combine_args(*objectives):

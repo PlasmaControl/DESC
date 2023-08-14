@@ -203,9 +203,9 @@ def _B0_r(params, transforms, profiles, data, **kwargs):
     data=["B0", "B0_r", "iota", "iota_r", "lambda_z", "lambda_rz"],
 )
 def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
-    data["B^theta_r"] = data["B0_r"] * (data["iota"] - data["lambda_z"]) + data[
-        "B0"
-    ] * (data["iota_r"] - data["lambda_rz"])
+    data["B^theta_r"] = data["B0_r"] * (data["iota"] - data["lambda_z"]) + (
+        data["B0"] * (data["iota_r"] - data["lambda_rz"])
+    )
     return data
 
 
@@ -2223,7 +2223,7 @@ def _B_mag_tz(params, transforms, profiles, data, **kwargs):
         "B^zeta_r",
         "B_theta_r",
         "B_zeta_r",
-        "B^theta_t",
+        "B^theta_z",
         "B^zeta_z",
         "B_theta_z",
         "B_zeta_z",

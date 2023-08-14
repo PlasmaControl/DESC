@@ -12,7 +12,7 @@ from desc.utils import Timer, setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-from .utils import jax_softmin
+from .utils import softmin
 
 
 class AspectRatio(_Objective):
@@ -611,7 +611,7 @@ class PlasmaVesselDistance(_Objective):
         )
 
         if self._use_softmin:  # do softmin
-            return jnp.apply_along_axis(jax_softmin, 0, d, self._alpha)
+            return jnp.apply_along_axis(softmin, 0, d, self._alpha)
         else:  # do hardmin
             return d.min(axis=0)
 

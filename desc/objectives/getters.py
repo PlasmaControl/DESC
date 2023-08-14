@@ -30,82 +30,41 @@ from .nae_utils import make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
 
 
-def get_fixed_boundary_constraints(
-    eq=None, profiles=True, iota=True, kinetic=False, normalize=True
-):
-    """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
+def get_equilibrium_objective(eq=None, mode="force", normalize=True):
+    """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium to constraint.
-    profiles : bool
-        Whether to also return constraints to fix input profiles.
-    iota : bool
-        Whether to add FixIota or FixCurrent as a constraint.
-    kinetic : bool
-        Whether to also fix kinetic profiles.
+    mode : one of {"force", "forces", "energy", "vacuum"}
+        which objective to return. "force" computes force residuals on unified grid.
+        "forces" uses two different grids for radial and helical forces. "energy" is
+        for minimizing MHD energy. "vacuum" directly minimizes current density.
     normalize : bool
-        Whether to apply constraints in normalized units.
+        Whether to normalize units of objective.
 
     Returns
     -------
-    constraints, tuple of _Objectives
-        A list of the linear constraints used in fixed-boundary problems.
-
+    objective, ObjectiveFunction
+        An objective function with default force balance objectives.
     """
-    constraints = (
-        FixBoundaryR(eq=eq, normalize=normalize, normalize_target=normalize),
-        FixBoundaryZ(eq=eq, normalize=normalize, normalize_target=normalize),
-        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
-    )
-    if profiles:
-        if kinetic:
-            constraints += (
-                FixElectronDensity(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixElectronTemperature(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixIonTemperature(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixAtomicNumber(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixPressure(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-
-        if iota:
-            constraints += (
-                FixIota(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-    return constraints
-
-
-def maybe_add_self_consistency(eq, constraints):
-    """Add self consistency constraints if needed."""
-
-    def _is_any_instance(things, cls):
-        return any([isinstance(t, cls) for t in things])
-
-    if not _is_any_instance(constraints, BoundaryRSelfConsistency):
-        constraints += (BoundaryRSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, BoundaryZSelfConsistency):
-        constraints += (BoundaryZSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, FixLambdaGauge):
-        constraints += (FixLambdaGauge(eq=eq),)
-    if not _is_any_instance(constraints, AxisRSelfConsistency):
-        constraints += (AxisRSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, AxisZSelfConsistency):
-        constraints += (AxisZSelfConsistency(eq=eq),)
-    return constraints
+    if mode == "energy":
+        objectives = Energy(eq=eq, normalize=normalize, normalize_target=normalize)
+    elif mode == "force":
+        objectives = ForceBalance(
+            eq=eq, normalize=normalize, normalize_target=normalize
+        )
+    elif mode == "forces":
+        objectives = (
+            RadialForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
+            HelicalForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
+        )
+    elif mode == "vacuum":
+        objectives = CurrentDensity(
+            eq=eq, normalize=normalize, normalize_target=normalize
+        )
+    else:
+        raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
+    return ObjectiveFunction(objectives)
 
 
 def get_fixed_axis_constraints(
@@ -165,6 +124,65 @@ def get_fixed_axis_constraints(
     return constraints
 
 
+def get_fixed_boundary_constraints(
+    eq=None, profiles=True, iota=True, kinetic=False, normalize=True
+):
+    """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to constraint.
+    profiles : bool
+        Whether to also return constraints to fix input profiles.
+    iota : bool
+        Whether to add FixIota or FixCurrent as a constraint.
+    kinetic : bool
+        Whether to also fix kinetic profiles.
+    normalize : bool
+        Whether to apply constraints in normalized units.
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed-boundary problems.
+
+    """
+    constraints = (
+        FixBoundaryR(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixBoundaryZ(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
+    )
+    if profiles:
+        if kinetic:
+            constraints += (
+                FixElectronDensity(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixElectronTemperature(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixIonTemperature(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixAtomicNumber(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
+        else:
+            constraints += (
+                FixPressure(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
+
+        if iota:
+            constraints += (
+                FixIota(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
+        else:
+            constraints += (
+                FixCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
+    return constraints
+
+
 def get_NAE_constraints(
     desc_eq,
     qsc_eq,
@@ -175,7 +193,7 @@ def get_NAE_constraints(
     normalize=True,
     N=None,
 ):
-    """Get the constraints necessary for fixing NAE behavior in an equilibrium problem. # noqa D205
+    """Get the constraints necessary for fixing NAE behavior in an equilibrium problem.
 
     Parameters
     ----------
@@ -247,38 +265,20 @@ def get_NAE_constraints(
     return constraints
 
 
-def get_equilibrium_objective(eq=None, mode="force", normalize=True):
-    """Get the objective function for a typical force balance equilibrium problem.
+def maybe_add_self_consistency(eq, constraints):
+    """Add self consistency constraints if needed."""
 
-    Parameters
-    ----------
-    mode : one of {"force", "forces", "energy", "vacuum"}
-        which objective to return. "force" computes force residuals on unified grid.
-        "forces" uses two different grids for radial and helical forces. "energy" is
-        for minimizing MHD energy. "vacuum" directly minimizes current density.
-    normalize : bool
-        Whether to normalize units of objective.
+    def _is_any_instance(things, cls):
+        return any([isinstance(t, cls) for t in things])
 
-    Returns
-    -------
-    objective, ObjectiveFunction
-        An objective function with default force balance objectives.
-    """
-    if mode == "energy":
-        objectives = Energy(eq=eq, normalize=normalize, normalize_target=normalize)
-    elif mode == "force":
-        objectives = ForceBalance(
-            eq=eq, normalize=normalize, normalize_target=normalize
-        )
-    elif mode == "forces":
-        objectives = (
-            RadialForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
-            HelicalForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
-        )
-    elif mode == "vacuum":
-        objectives = CurrentDensity(
-            eq=eq, normalize=normalize, normalize_target=normalize
-        )
-    else:
-        raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
-    return ObjectiveFunction(objectives)
+    if not _is_any_instance(constraints, BoundaryRSelfConsistency):
+        constraints += (BoundaryRSelfConsistency(eq=eq),)
+    if not _is_any_instance(constraints, BoundaryZSelfConsistency):
+        constraints += (BoundaryZSelfConsistency(eq=eq),)
+    if not _is_any_instance(constraints, FixLambdaGauge):
+        constraints += (FixLambdaGauge(eq=eq),)
+    if not _is_any_instance(constraints, AxisRSelfConsistency):
+        constraints += (AxisRSelfConsistency(eq=eq),)
+    if not _is_any_instance(constraints, AxisZSelfConsistency):
+        constraints += (AxisZSelfConsistency(eq=eq),)
+    return constraints

@@ -1191,6 +1191,112 @@ def surface_integrals_transform(grid, surface_label="rho"):
     return surface_integrals_map(grid, surface_label, expand_out=False)
 
 
+def surface_variance(
+    grid,
+    q,
+    weights=jnp.array([1.0]),
+    bias=False,
+    surface_label="rho",
+    expand_out=True,
+):
+    r"""Compute the weighted sample variance of ``q`` on each surface of the grid.
+
+    Computes the following quantity on each surface of the grid.
+
+    .. math::
+        \frac{n_e}{n_e - b}
+        \frac{ \sum_{i=1}^{n} (q_i - \bar{q})^2 w_i }{ \sum_{i=1}^{n} w_i }
+
+    where
+    :math:`w_i` is the weight assigned to :math:`q_i` given by the product
+    of ``weights[i]`` and the differential surface area element (not already
+    weighted by the area Jacobian) at the node where ``q[i]`` is evaluated,
+    :math:`\bar{q}` is the weighted mean of :math:`q`,
+    :math:`b` is 0 if the biased sample variance is to be returned and 1 otherwise,
+    :math:`n` is the number of samples on a surface, and
+    :math:`n_e` is the effective number of samples on a surface defined as
+
+    .. math::
+        (\sum_{i=1}^{n} w_i)^2 / (\sum_{i=1}^{n} w_i^2)
+
+    As the weights :math:`w_i` approach each other, :math:`n_e` approaches
+    :math:`n`, and the output converges to
+
+    .. math::
+        \frac{1}{n - b} \sum_{i=1}^{n} (q_i - \bar{q})^2
+
+    Notes
+    -----
+        There are three different methods to unbias the variance of a weighted
+        sample so that the computed variance better estimates the true variance.
+        Whether the method is correct for a particular use case depends on what
+        the weights assigned to each sample represent.
+
+        This function implements the first case, where the weights are not random
+        and are intended to assign more weight to some samples for reasons
+        unrelated to differences in uncertainty between samples. See
+        https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights.
+
+        The second case is when the weights are intended to assign more weight
+        to samples with less uncertainty. See
+        https://en.wikipedia.org/wiki/Inverse-variance_weighting.
+        The unbiased sample variance for this case is obtained by replacing the
+        effective number of samples in the formula this function implements,
+        :math:`n_e`, with the actual number of samples :math:`n`.
+
+        The third case is when the weights denote the integer frequency of each
+        sample. See
+        https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Frequency_weights.
+        This is indeed a distinct case from the above two because here the
+        weights encode additional information about the distribution.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    q : ndarray
+        Quantity to compute the sample variance.
+    weights : ndarray
+        Weight assigned to each sample of ``q``.
+        A good candidate for this parameter is the surface area Jacobian.
+    bias : bool
+        If this condition is true, then the biased estimator of the sample
+        variance is returned. This is desirable if you are only concerned with
+        computing the variance of the given set of numbers and not the
+        distribution the numbers are (potentially) sampled from.
+    surface_label : str
+        The surface label of rho, theta, or zeta to compute the variance over.
+    expand_out : bool
+        Whether to expand the output array so that the output has the same
+        shape as the input. Defaults to true so that the output may be
+        broadcast in the same way as the input. Setting to false will save
+        memory.
+
+    Returns
+    -------
+    variance : ndarray
+        Variance of the given weighted sample over each surface in the grid.
+        By default, the returned array has the same shape as the input.
+
+    """
+    _, _, spacing, _ = _get_grid_surface(grid, surface_label)
+    integrate = surface_integrals_map(grid, surface_label, expand_out=False)
+
+    v1 = integrate(weights)
+    v2 = integrate(weights**2 * jnp.prod(spacing, axis=-1))
+    # effective number of samples per surface
+    n_e = v1**2 / v2
+    # analogous to Bessel's bias correction
+    correction = n_e / (n_e - (not bias))
+
+    q = jnp.atleast_1d(q)
+    # compute variance in two passes to avoid catastrophic round off error
+    mean = (integrate((weights * q.T).T).T / v1).T
+    mean = grid.expand(mean, surface_label)
+    variance = (correction * integrate((weights * ((q - mean) ** 2).T).T).T / v1).T
+    return grid.expand(variance, surface_label) if expand_out else variance
+
+
 def surface_max(grid, x, surface_label="rho"):
     """Get the max of x for each surface in the grid.
 

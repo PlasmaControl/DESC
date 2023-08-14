@@ -1632,6 +1632,8 @@ class Equilibrium(IOAble, Optimizeable):
             objective = get_equilibrium_objective(eq=self, mode=objective)
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
+        if not isinstance(constraints, (list, tuple)):
+            constraints = tuple([constraints])
 
         if copy:
             eq = self.copy()
@@ -1750,6 +1752,8 @@ class Equilibrium(IOAble, Optimizeable):
                 kinetic=self.electron_temperature is not None,
             )
             constraints = (ForceBalance(eq=self), *constraints)
+        if not isinstance(constraints, (list, tuple)):
+            constraints = tuple([constraints])
 
         if copy:
             eq = self.copy()

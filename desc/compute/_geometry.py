@@ -257,7 +257,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["sqrt(g)", "g_tt"],
+    data=["sqrt(g)", "g_tt", "R"],
 )
 def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     max_rho = transforms["grid"].nodes[transforms["grid"].unique_rho_idx[-1], 0]

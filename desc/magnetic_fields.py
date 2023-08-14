@@ -7,9 +7,9 @@ from netCDF4 import Dataset
 
 from desc.backend import jit, jnp, odeint
 from desc.basis import DoubleFourierSeries
+from desc.compute import rpz2xyz_vec, xyz2rpz
 from desc.compute.utils import cross
 from desc.derivatives import Derivative
-from desc.geometry.utils import rpz2xyz_vec, xyz2rpz
 from desc.grid import Grid, LinearGrid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble

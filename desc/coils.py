@@ -6,8 +6,8 @@ from collections.abc import MutableSequence
 import numpy as np
 
 from desc.backend import jnp
+from desc.compute import rpz2xyz, xyz2rpz_vec
 from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve, XYZCurve
-from desc.geometry.utils import rpz2xyz, xyz2rpz_vec
 from desc.grid import Grid
 from desc.magnetic_fields import MagneticField, biot_savart
 
@@ -46,7 +46,7 @@ class Coil(MagneticField, ABC):
         assert jnp.isscalar(new) or new.size == 1
         self._current = new
 
-    def compute_magnetic_field(self, coords, params={}, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         The coil is discretized into a series of straight line segments, using
@@ -64,6 +64,9 @@ class Coil(MagneticField, ABC):
             parameters to pass to curve
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points.
 
         Returns
         -------
@@ -78,8 +81,11 @@ class Coil(MagneticField, ABC):
         coords = jnp.atleast_2d(coords)
         if basis == "rpz":
             coords = rpz2xyz(coords)
-        current = params.pop("current", self.current)
-        coil_coords = self.compute_coordinates(**params, basis="xyz")
+        if params is None:
+            current = self.current
+        else:
+            current = params.pop("current", self.current)
+        coil_coords = self.compute("x", params=params, grid=grid, basis="xyz")["x"]
         B = biot_savart(coords, coil_coords, current)
         if basis == "rpz":
             B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
@@ -112,10 +118,39 @@ class FourierRZCoil(Coil, FourierRZCurve):
         number of field periods
     sym : bool
         whether to enforce stellarator symmetry
-    grid : Grid
-        default grid for computation
     name : str
         name for this coil
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.coils import FourierRZCoil
+        from desc.grid import LinearGrid
+        import numpy as np
+
+        I = 10
+        mu0 = 4 * np.pi * 1e-7
+        R_coil = 10
+        # circular coil given by R(phi) = 10
+        coil = FourierRZCoil(
+            current=I, R_n=R_coil, Z_n=0, modes_R=[0], grid=LinearGrid(N=100)
+        )
+        z0 = 10
+        field_evaluated = coil.compute_magnetic_field(
+            np.array([[0, 0, 0], [0, 0, z0]]), basis="rpz"
+        )
+        np.testing.assert_allclose(
+            field_evaluated[0, :], np.array([0, 0, mu0 * I / 2 / R_coil]), atol=1e-8
+        )
+        np.testing.assert_allclose(
+            field_evaluated[1, :],
+            np.array(
+                [0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]
+            ),
+            atol=1e-8,
+        )
+
     """
 
     _io_attrs_ = Coil._io_attrs_ + FourierRZCurve._io_attrs_
@@ -129,10 +164,9 @@ class FourierRZCoil(Coil, FourierRZCurve):
         modes_Z=None,
         NFP=1,
         sym="auto",
-        grid=None,
         name="",
     ):
-        super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, grid, name)
+        super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
 
 
 class FourierXYZCoil(Coil, FourierXYZCurve):
@@ -146,10 +180,42 @@ class FourierXYZCoil(Coil, FourierXYZCurve):
         fourier coefficients for X, Y, Z
     modes : array-like
         mode numbers associated with X_n etc.
-    grid : Grid
-        default grid or computation
     name : str
         name for this coil
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.coils import FourierXYZCoil
+        from desc.grid import LinearGrid
+        import numpy as np
+
+        I = 10
+        mu0 = 4 * np.pi * 1e-7
+        R_coil = 10
+        # circular coil given by X(phi) = 10*cos(phi), Y(phi) = 10*sin(phi)
+        coil = FourierXYZCoil(
+            current=I,
+            X_n=[0, R_coil, 0],
+            Y_n=[0, 0, R_coil],
+            Z_n=[0, 0, 0],
+            modes=[0, 1, -1],
+            grid=LinearGrid(N=100),
+        )
+        z0 = 10
+        field_evaluated = coil.compute_magnetic_field(
+            np.array([[0, 0, 0], [0, 0, z0]]), basis="rpz"
+        )
+        np.testing.assert_allclose(
+            field_evaluated[0, :], np.array([0, 0, mu0 * I / 2 / R_coil]), atol=1e-8
+        )
+        np.testing.assert_allclose(
+            field_evaluated[1, :],
+            np.array([0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]),
+            atol=1e-8,
+        )
+
 
     """
 
@@ -162,10 +228,9 @@ class FourierXYZCoil(Coil, FourierXYZCurve):
         Y_n=[0, 0, 0],
         Z_n=[-2, 0, 0],
         modes=None,
-        grid=None,
         name="",
     ):
-        super().__init__(current, X_n, Y_n, Z_n, modes, grid, name)
+        super().__init__(current, X_n, Y_n, Z_n, modes, name)
 
 
 # TODO: add a from_XYZ?
@@ -190,10 +255,42 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
         fourier coefficients for radius from center as function of polar angle
     modes : array-like
         mode numbers associated with r_n
-    grid : Grid
-        default grid for computation
     name : str
         name for this coil
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.coils import FourierPlanarCoil
+        from desc.grid import LinearGrid
+        import numpy as np
+
+        I = 10
+        mu0 = 4 * np.pi * 1e-7
+        R_coil = 10
+        # circular coil given by center at (0,0,0)
+        # and normal vector in Z direction (0,0,1) and radius 10
+        coil = FourierPlanarCoil(
+            current=I,
+            center=[0, 0, 0],
+            normal=[0, 0, 1],
+            r_n=R_coil,
+            modes=[0],
+            grid=LinearGrid(N=100),
+        )
+        z0 = 10
+        field_evaluated = coil.compute_magnetic_field(
+            np.array([[0, 0, 0], [0, 0, z0]]), basis="rpz"
+        )
+        np.testing.assert_allclose(
+            field_evaluated[0, :], np.array([0, 0, mu0 * I / 2 / R_coil]), atol=1e-8
+        )
+        np.testing.assert_allclose(
+            field_evaluated[1, :],
+            np.array([0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]),
+            atol=1e-8,
+        )
 
     """
 
@@ -206,10 +303,9 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
         normal=[0, 1, 0],
         r_n=2,
         modes=None,
-        grid=None,
         name="",
     ):
-        super().__init__(current, center, normal, r_n, modes, grid, name)
+        super().__init__(current, center, normal, r_n, modes, name)
 
 
 class XYZCoil(Coil, XYZCurve):
@@ -306,35 +402,65 @@ class CoilSet(Coil, MutableSequence):
         for coil, cur in zip(self.coils, new):
             coil.current = cur
 
-    @property
-    def grid(self):
-        """Grid: nodes for computation."""
-        return self.coils[0].grid
+    def _make_arraylike(self, x):
+        if isinstance(x, dict):
+            x = [x] * len(self)
+        try:
+            len(x)
+        except TypeError:
+            x = [x] * len(self)
+        assert len(x) == len(self)
+        return x
 
-    @grid.setter
-    def grid(self, new):
-        for coil in self.coils:
-            coil.grid = new
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid, for each coil in the coilset.
 
-    def compute_coordinates(self, *args, **kwargs):
-        """Compute real space coordinates using underlying curve method."""
-        return [coil.compute_coordinates(*args, **kwargs) for coil in self.coils]
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int or array-like, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+            If array-like, should be 1 value per coil.
+        params : dict of ndarray or array-like
+            Parameters from the equilibrium. Defaults to attributes of self.
+            If array-like, should be 1 value per coil.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+            If array-like, should be 1 value per coil.
+        data : dict of ndarray or array-like
+            Data computed so far, generally output from other compute functions
+            If array-like, should be 1 value per coil.
 
-    def compute_frenet_frame(self, *args, **kwargs):
-        """Compute Frenet frame using underlying curve method."""
-        return [coil.compute_frenet_frame(*args, **kwargs) for coil in self.coils]
+        Returns
+        -------
+        data : list of dict of ndarray
+            Computed quantity and intermediate variables, for each coil in the set.
+            List entries map to coils in coilset, each dict contains data for an
+            individual coil.
 
-    def compute_curvature(self, *args, **kwargs):
-        """Compute curvature using underlying curve method."""
-        return [coil.compute_curvature(*args, **kwargs) for coil in self.coils]
-
-    def compute_torsion(self, *args, **kwargs):
-        """Compute torsion using underlying curve method."""
-        return [coil.compute_torsion(*args, **kwargs) for coil in self.coils]
-
-    def compute_length(self, *args, **kwargs):
-        """Compute the length of the curve using underlying curve method."""
-        return [coil.compute_length(*args, **kwargs) for coil in self.coils]
+        """
+        grid = self._make_arraylike(grid)
+        params = self._make_arraylike(params)
+        transforms = self._make_arraylike(transforms)
+        data = self._make_arraylike(data)
+        return [
+            coil.compute(
+                names, grid=grd, params=par, transforms=tran, data=dat, **kwargs
+            )
+            for (coil, grd, par, tran, dat) in zip(
+                self.coils, grid, params, transforms, data
+            )
+        ]
 
     def translate(self, *args, **kwargs):
         """Translate the coils along an axis."""
@@ -348,7 +474,7 @@ class CoilSet(Coil, MutableSequence):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
-    def compute_magnetic_field(self, coords, params={}, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -360,18 +486,22 @@ class CoilSet(Coil, MutableSequence):
             or one for each member
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
+        grid : Grid, int or None or array-like, optional
+            Grid used to discretize coil, either the same for all coils or one for each
+            member of the coilset. If an integer, uses that many equally spaced
+            points.
 
         Returns
         -------
         field : ndarray, shape(n,3)
             magnetic field at specified points, in either rpz or xyz coordinates
         """
-        if isinstance(params, dict) or params is None:
-            params = [params] * len(self)
-        assert len(params) == len(self)
+        params = self._make_arraylike(params)
+        grid = self._make_arraylike(grid)
+
         B = 0
-        for coil, par in zip(self.coils, params):
-            B += coil.compute_magnetic_field(coords, par, basis)
+        for coil, par, grd in zip(self.coils, params, grid):
+            B += coil.compute_magnetic_field(coords, par, basis, grd)
 
         return B
 

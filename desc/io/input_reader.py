@@ -554,27 +554,6 @@ class InputReader:
         if curr_flag and iota_flag:
             raise OSError(colored("Cannot specify both iota and current.", "red"))
 
-        # flags can be true will all coefficients being zero
-        # if all coefficients of pres, iota and current are zero, ignore flags
-        if curr_flag:
-            if inputs["objective"] == "vacuum" and (
-                (pres_flag and (np.linalg.norm(inputs["pressure"][:, 1]) >= 1e-9))
-                or (curr_flag and (np.linalg.norm(inputs["current"][:, 1]) >= 1e-9))
-            ):
-                warnings.warn(
-                    "Vacuum objective does not use any profiles, "
-                    + "ignoring presssure, iota, and current"
-                )
-        else:
-            if inputs["objective"] == "vacuum" and (
-                (pres_flag and (np.linalg.norm(inputs["pressure"][:, 1]) >= 1e-9))
-                or (iota_flag and (np.linalg.norm(inputs["iota"][:, 1]) >= 1e-9))
-            ):
-                warnings.warn(
-                    "Vacuum objective does not use any profiles, "
-                    + "ignoring presssure, iota, and current"
-                )
-
         # remove unused profile
         if iota_flag:
             if inputs["objective"] != "vacuum":
@@ -583,6 +562,12 @@ class InputReader:
                 del inputs["iota"]
         else:
             del inputs["iota"]
+
+        if inputs["objective"] == "vacuum" and (pres_flag or iota_flag or curr_flag):
+            warnings.warn(
+                "Vacuum objective does not use any profiles, "
+                + "ignoring presssure, iota, and current"
+            )
 
         # sort axis array
         inputs["axis"] = inputs["axis"][inputs["axis"][:, 0].argsort()]

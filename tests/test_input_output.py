@@ -136,8 +136,9 @@ def test_descout_to_input(tmpdir_factory):
     arr1mpos = arr1[arr1[:, 1] >= 0]
 
     desc_input_truth = "./tests/inputs/LandremanPaul2022_QA_reactorScale_lowRes"
-    ir2 = InputReader(cl_args=[str(desc_input_truth)])
-    arr2 = ir2.parse_inputs()[-1]["surface"]
+    with pytest.warns(UserWarning):
+        ir2 = InputReader(cl_args=[str(desc_input_truth)])
+        arr2 = ir2.parse_inputs()[-1]["surface"]
     arr2 = arr2[arr2[:, 1].argsort()]
     arr2mneg = arr2[arr2[:, 1] < 0]
     arr2mpos = arr2[arr2[:, 1] >= 0]
@@ -158,10 +159,10 @@ def test_descout_to_input(tmpdir_factory):
     ):
         found0 = 1
 
-    outfile_path = "./tests/inputs/HELIOTRON_vacuum_iota.h5"
+    outfile_path = "./tests/inputs/HELIOTRON_iota.h5"
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
-    tmp_path = tmpdir.join("input_HELIOTRON_vacuum_iota")
-    tmpout_path = tmpdir.join("HELIOTRON_vacuum_iota.h5")
+    tmp_path = tmpdir.join("input_HELIOTRON_iota")
+    tmpout_path = tmpdir.join("HELIOTRON_iota.h5")
     shutil.copyfile(outfile_path, tmpout_path)
 
     ir1 = InputReader()
@@ -172,7 +173,7 @@ def test_descout_to_input(tmpdir_factory):
     arr1mneg = arr1[arr1[:, 1] < 0]
     arr1mpos = arr1[arr1[:, 1] >= 0]
 
-    desc_input_truth = "./tests/inputs/HELIOTRON_vacuum_iota"
+    desc_input_truth = "./tests/inputs/HELIOTRON_iota"
     ir2 = InputReader(cl_args=[str(desc_input_truth)])
     arr2 = ir2.parse_inputs()[-1]["surface"]
     arr2 = arr2[arr2[:, 1].argsort()]
@@ -303,7 +304,8 @@ class TestInputReader:
         """Test that input file with vacuum objective always uses zero current."""
         input_path = ".//tests//inputs//HELIOTRON_vacuum"
         # load an input file with vacuum obj but also an iota profile specified
-        ir = InputReader(input_path)
+        with pytest.warns(UserWarning):
+            ir = InputReader(input_path)
         # ensure that a current profile instead of an iota profile is used
         assert "iota" not in ir.inputs[0].keys()
         assert "current" in ir.inputs[0].keys()

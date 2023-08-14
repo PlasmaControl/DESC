@@ -414,3 +414,28 @@ def test_repr():
 
     coils.name = "MyCoils"
     assert "MyCoils" in str(coils)
+
+
+@pytest.mark.unit
+def test_save_and_load_separate_files_coils(tmpdir_factory):
+    """Test loading in and saving CoilSet as separate coil files."""
+    input_path_basename = "./tests/inputs/separate_coil_file"
+    tmpdir = tmpdir_factory.mktemp("separate_coil_files")
+    tmp_path_basename = tmpdir.join("separate_coil_file")
+    for i in range(2):
+        shutil.copyfile(f"{input_path_basename}_{i}.txt", tmp_path_basename)
+
+    c = FourierPlanarCoil()
+    c1 = FourierRZCoil()
+
+    cs = CoilSet(c, c1)
+    path_basename = tmpdir.join("separate_coil_file_test")
+    cs.save_coilset_as_separate_coil_files(cs, str(path_basename), grid=10)
+
+    for i in range(2):
+        with open(f"{tmp_path_basename}_i.txt") as f:
+            lines_orig = f.readlines()
+        with open(f"{path_basename}_i.txt") as f:
+            lines_new = f.readlines()
+        for line_orig, line_new in zip(lines_orig, lines_new):
+            assert line_orig == line_new

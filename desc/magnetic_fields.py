@@ -764,6 +764,7 @@ def field_line_integrate(
     rtol=1e-8,
     atol=1e-8,
     maxstep=1000,
+    min_step_size=1e-8,
     solver=Tsit5(),
     terminating_event=None,
     kwargs={},
@@ -786,6 +787,8 @@ def field_line_integrate(
         relative and absolute tolerances for ode integration
     maxstep : int
         maximum number of steps between different phis
+    min_step_size: float
+        minimum step size (in phi) that the integration can take. default is 1e-8
     solver: diffrax.Solver
         diffrax Solver object to use in integration,
         defaults to Tsit5(), a RK45 explicit solver
@@ -837,7 +840,7 @@ def field_line_integrate(
         ).squeeze()
 
     # diffrax parameters
-    stepsize_controller = PIDController(rtol=rtol, atol=atol)
+    stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
 
     def default_terminating_event_fxn(state, **kwargs):
         terms = kwargs.get("terms", lambda a, x, b: x)
@@ -859,7 +862,7 @@ def field_line_integrate(
         t1=phis[-1],
         saveat=saveat,
         max_steps=maxstep,
-        dt0=None,  # have diffrax automatically choose it
+        dt0=min_step_size,
         stepsize_controller=stepsize_controller,
         discrete_terminating_event=terminating_event,
         **kwargs,
@@ -868,4 +871,5 @@ def field_line_integrate(
     x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
     r = x[:, :, 0].squeeze().T.reshape((len(phis), *rshape))
     z = x[:, :, 2].squeeze().T.reshape((len(phis), *rshape))
+
     return r, z

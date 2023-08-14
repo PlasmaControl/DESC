@@ -1,7 +1,7 @@
 """Utility function for computing scaling factors for non-dimensionalization."""
 
 import numpy as np
-from scipy.constants import mu_0
+from scipy.constants import elementary_charge, mu_0
 
 
 def compute_scaling_factors(eq):
@@ -29,6 +29,8 @@ def compute_scaling_factors(eq):
     scales["F"] = scales["p"] / scales["a"]
     scales["f"] = scales["F"] * scales["V"]
     scales["Psi"] = abs(eq.Psi)
+    scales["n"] = 1e19
+    scales["T"] = scales["p"] / (scales["n"] * elementary_charge)
     # replace 0 scales to avoid normalizing by zero
     for scale in scales.keys():
         if np.isclose(scales[scale], 0):

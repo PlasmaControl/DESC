@@ -10,10 +10,10 @@ from desc.backend import jit, jnp, put, sign
 from desc.basis import FourierZernikeBasis, PowerSeries
 from desc.derivatives import Derivative
 from desc.grid import Grid, LinearGrid
-from desc.interpolate import _approx_df, interp1d
+from desc.interpolate import interp1d
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.utils import copy_coeffs
+from desc.utils import combination_permutation, copy_coeffs, multinomial_coefficients
 
 
 class Profile(IOAble, ABC):
@@ -304,22 +304,32 @@ class ScaledProfile(Profile):
 
     @property
     def params(self):
-        """ndarray: Parameters for computation."""
-        return (self._scale, self._profile.params)
+        """ndarray: Parameters for computation [scale, profile.params]."""
+        return jnp.concatenate([jnp.atleast_1d(self._scale), self._profile.params])
 
     @params.setter
     def params(self, x):
-        if isinstance(x, (tuple, list)) and len(x) == 2:
+        self._scale, self._profile.params = self._parse_params(x)
+
+    def _parse_params(self, x):
+        if x is None:
+            scale = self._scale
+            params = self._profile.params
+        elif isinstance(x, (tuple, list)) and len(x) == 2:
             params = x[1]
             scale = x[0]
         elif np.isscalar(x):
             scale = x
             params = self._profile.params
-        else:
+        elif len(x) == len(self._profile.params):
             scale = self._scale
             params = x
-        self._scale = scale
-        self._profile.params = params
+        elif len(x) == len(self.params):
+            scale = x[0]
+            params = x[1:]
+        else:
+            raise ValueError("Got wrong number of parameters for ScaledProfile")
+        return scale, params
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
@@ -340,8 +350,9 @@ class ScaledProfile(Profile):
             values of the profile or its derivative at the points specified.
 
         """
+        scale, params = self._parse_params(params)
         f = self._profile.compute(params, grid, dr, dt, dz)
-        return self._scale * f
+        return scale * f
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -391,17 +402,30 @@ class SumProfile(Profile):
 
     @property
     def params(self):
-        """ndarray: Parameters for computation."""
-        return tuple(profile.params for profile in self._profiles)
+        """ndarray: Concatenated array of parameters for computation."""
+        return jnp.concatenate([profile.params for profile in self._profiles])
 
     @params.setter
     def params(self, x):
-        if isinstance(x, (list, tuple)) and len(x) == len(self._profiles):
-            for i, profile in enumerate(self._profiles):
-                profile.params = x[i] if x[i] is not None else profile.params
-        else:
+        x = self._parse_params(x)
+        for i, profile in enumerate(self._profiles):
+            profile.params = x[i]
+
+    def _parse_params(self, x):
+        if x is None:
+            params = [profile.params for profile in self._profiles]
+        elif isinstance(x, (list, tuple)) and len(x) == len(self._profiles):
+            params = x
+        elif len(x) == len(self.params):
+            params = []
+            i = 0
             for profile in self._profiles:
-                profile.params = x
+                k = len(profile.params)
+                params += [x[i : i + k]]
+                i += k
+        else:
+            raise ValueError("Got wrong number of parameters for SumProfile")
+        return params
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
@@ -422,13 +446,10 @@ class SumProfile(Profile):
             values of the profile or its derivative at the points specified.
 
         """
-        if params is None:
-            params = [None] * len(self._profiles)
-        if isinstance(params, dict):
-            params = [params]
+        params = self._parse_params(params)
         f = 0
         for i, profile in enumerate(self._profiles):
-            f += profile.compute(params[i % len(params)], grid, dr, dt, dz)
+            f += profile.compute(params[i], grid, dr, dt, dz)
         return f
 
     def __repr__(self):
@@ -480,17 +501,30 @@ class ProductProfile(Profile):
 
     @property
     def params(self):
-        """ndarray: Parameters for computation."""
-        return tuple(profile.params for profile in self._profiles)
+        """ndarray: Concatenated array of parameters for computation."""
+        return jnp.concatenate([profile.params for profile in self._profiles])
 
     @params.setter
     def params(self, x):
-        if isinstance(x, (list, tuple)) and len(x) == len(self._profiles):
-            for i, profile in enumerate(self._profiles):
-                profile.params = x[i] if x[i] is not None else profile.params
-        else:
+        x = self._parse_params(x)
+        for i, profile in enumerate(self._profiles):
+            profile.params = x[i]
+
+    def _parse_params(self, x):
+        if x is None:
+            params = [profile.params for profile in self._profiles]
+        elif isinstance(x, (list, tuple)) and len(x) == len(self._profiles):
+            params = x
+        elif len(x) == len(self.params):
+            params = []
+            i = 0
             for profile in self._profiles:
-                profile.params = x
+                k = len(profile.params)
+                params += [x[i : i + k]]
+                i += k
+        else:
+            raise ValueError("Got wrong number of parameters for ProductProfile")
+        return params
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
@@ -511,13 +545,20 @@ class ProductProfile(Profile):
             values of the profile or its derivative at the points specified.
 
         """
-        if params is None:
-            params = [None] * len(self._profiles)
-        if isinstance(params, dict):
-            params = [params]
-        f = 1
-        for i, profile in enumerate(self._profiles):
-            f *= profile.compute(params[i % len(params)], grid, dr, dt, dz)
+        if dt > 0 or dz > 0:
+            raise NotImplementedError(
+                "Poloidal and toroidal derivatives of ProductProfiles have not "
+                + "been implemented yet"
+            )
+        params = self._parse_params(params)
+        f = 0
+        derivs = combination_permutation(len(self._profiles), dr)
+        coeffs = multinomial_coefficients(len(self._profiles), dr)
+        for j, drj in enumerate(derivs):
+            fi = 1
+            for i, profile in enumerate(self._profiles):
+                fi *= profile.compute(params[i], grid, drj[i], 0, 0)
+            f += coeffs[j] * fi
         return f
 
     def __repr__(self):
@@ -551,7 +592,7 @@ class PowerSeriesProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params, modes=None, grid=None, sym="auto", name=""):
+    def __init__(self, params=[0], modes=None, grid=None, sym="auto", name=""):
         super().__init__(grid, name)
 
         params = np.atleast_1d(params)
@@ -688,6 +729,8 @@ class PowerSeriesProfile(Profile):
         if params is None:
             params = self.params
         transform = self._get_transform(grid)
+        if (dt != 0) or (dz != 0):
+            return jnp.zeros(transform.grid.num_nodes)
         return transform.transform(params, dr=dr, dt=dt, dz=dz)
 
     @classmethod
@@ -753,9 +796,11 @@ class SplineProfile(Profile):
 
     """
 
-    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method", "_Dx"]
+    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method"]
 
-    def __init__(self, values, knots=None, grid=None, method="cubic2", name=""):
+    def __init__(
+        self, values=[0, 0, 0], knots=None, grid=None, method="cubic2", name=""
+    ):
 
         super().__init__(grid, name)
 
@@ -767,9 +812,6 @@ class SplineProfile(Profile):
         self._knots = knots
         self._params = values
         self._method = method
-        self._Dx = _approx_df(
-            self._knots, np.eye(self._knots.size), self._method, axis=0
-        )
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -840,8 +882,8 @@ class SplineProfile(Profile):
             return jnp.zeros_like(xq)
         x = self._knots
         f = params
-        df = self._Dx @ f
-        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, df=df)
+
+        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
         return fq
 
 
@@ -872,7 +914,7 @@ class MTanhProfile(Profile):
 
     """
 
-    def __init__(self, params, grid=None, name=""):
+    def __init__(self, params=[0, 0, 1, 1, 0], grid=None, name=""):
 
         super().__init__(grid, name)
 
@@ -1124,7 +1166,7 @@ class FourierZernikeProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params, modes=None, grid=None, sym="auto", NFP=1, name=""):
+    def __init__(self, params=[0], modes=None, grid=None, sym="auto", NFP=1, name=""):
         super().__init__(grid, name)
 
         params = np.atleast_1d(params)

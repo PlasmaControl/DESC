@@ -5,12 +5,195 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jit, jnp, put, while_loop
+from desc.backend import fori_loop, jit, jnp, put, while_loop
 from desc.compute import compute as compute_fun
-from desc.compute import get_transforms
-from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.compute import data_index, get_transforms
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Index
+
+
+def map_coordinates(  # noqa: C901
+    eq,
+    coords,
+    inbasis,
+    outbasis=("rho", "theta", "zeta"),
+    guess=None,
+    period=(np.inf, np.inf, np.inf),
+    tol=1e-6,
+    maxiter=30,
+    **kwargs,
+):
+    """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
+
+    First solves for the computational coordinates that correspond to inbasis, then
+    evaluates outbasis at those locations.
+
+    NOTE: this function cannot be JIT compiled or differentiated with AD.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to use
+    coords : ndarray, shape(k,3)
+        2D array of input coordinates. Each row is a different
+        point in space.
+    inbasis, outbasis : tuple of str
+        Labels for input and output coordinates, eg ("R", "phi", "Z") or
+        ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
+        same as the compute function data key
+    guess : None or ndarray, shape(k,3)
+        Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
+        coresponding to coords in inbasis. If None, heuristics are used based on
+        in basis and a nearest neighbor search on a coarse grid.
+    period : tuple of float
+        Assumed periodicity for each quantity in inbasis.
+        Use np.inf to denote no periodicity.
+    tol : float
+        Stopping tolerance.
+    maxiter : int > 0
+        Maximum number of Newton iterations
+
+    Returns
+    -------
+    coords : ndarray, shape(k,3)
+        Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
+        for coordinates where root finding did not succeed, possibly because the
+        coordinate is not in the plasma volume.
+
+    """
+    inbasis = list(inbasis)
+    outbasis = list(outbasis)
+    assert (
+        np.isfinite(maxiter) and maxiter > 0
+    ), f"maxiter must be a positive integer, got {maxiter}"
+    assert np.isfinite(tol) and tol > 0, f"tol must be a positive float, got {tol}"
+
+    basis_derivs = [f"{X}_{d}" for X in inbasis for d in ("r", "t", "z")]
+    for key in basis_derivs:
+        assert (
+            key in data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()
+        ), f"don't have recipe to compute partial derivative {key}"
+
+    rhomin = kwargs.pop("rhomin", tol / 10)
+    alpha = kwargs.pop("backtrack_frac", 0.1)
+    maxls = kwargs.pop("max_backtrack", 10)
+    assert len(kwargs) == 0, f"map_coordinates got unexpected kwargs: {kwargs.keys()}"
+    period = np.asarray(period)
+    coords = coords % period
+
+    # can't use AD or jit compile this because of grid stuff
+    def compute(y, basis):
+        data = eq.compute(basis, grid=Grid(y, sort=False))
+        x = jnp.stack([data[k] for k in basis], axis=-1)
+        return x
+
+    def residual(y):
+        xk = compute(y, inbasis)
+        r = xk % period - coords % period
+        return jnp.where(r > period / 2, -period + r, r)
+
+    def jac(y):
+        J = compute(y, basis_derivs)
+        J = J.reshape((-1, 3, 3))
+        return J
+
+    @jit
+    def fixup(y):
+        r, t, z = y.T
+        # negative rho -> flip theta
+        t = jnp.where(r < 0, (t + np.pi), t)
+        r = jnp.abs(r)
+        r = jnp.clip(r, rhomin, 1)
+        y = jnp.array([r, t, z]).T
+        return y
+
+    # use least squares to avoid singular behavior, cheap for 3x3 systems
+    lstsq = jit(
+        jnp.vectorize(
+            lambda A, b: jnp.linalg.lstsq(A, b)[0], signature="(n,n),(n)->(n)"
+        )
+    )
+
+    yk = guess
+    if yk is None:
+        # nearest neighbor search on coarse grid for initial guess
+        rho_g = theta_g = zeta_g = None
+        if "rho" in inbasis:
+            rho_g = np.unique(coords[:, inbasis.index("rho")])
+        else:
+            rho_g = np.linspace(0, 1, eq.L_grid + 1)
+        if "theta" in inbasis:
+            theta_g = np.unique(coords[:, inbasis.index("theta")])
+        elif "theta_PEST" in inbasis:  # lambda is usually small
+            theta_g = np.unique(coords[:, inbasis.index("theta_PEST")])
+        else:
+            theta_g = np.linspace(0, 2 * np.pi, 2 * eq.M_grid + 1)
+        if "zeta" in inbasis:
+            zeta_g = np.unique(coords[:, inbasis.index("zeta")])
+        elif "phi" in inbasis:
+            zeta_g = np.unique(coords[:, inbasis.index("phi")])
+        else:
+            zeta_g = np.linspace(0, 2 * np.pi, 2 * eq.N_grid * eq.NFP + 1)
+
+        yg = LinearGrid(rho=rho_g, theta=theta_g, zeta=zeta_g).nodes
+        xg = compute(yg, inbasis)
+        idx = jnp.zeros(len(coords)).astype(int)
+        coords = jnp.asarray(coords)
+
+        def _distance_body(i, idx):
+            d = (coords[i] % period) - (xg % period)
+            d = jnp.where(d > period / 2, period - d, d)
+            distance = jnp.linalg.norm(d, axis=-1)
+            k = jnp.argmin(distance)
+            idx = put(idx, i, k)
+            return idx
+
+        idx = fori_loop(0, len(coords), _distance_body, idx)
+        yk = yg[idx]
+
+    yk = fixup(yk)
+    resk = residual(yk)
+
+    for i in range(maxiter):
+        if np.max(np.abs(resk)) < tol:
+            break
+        J = jac(yk)
+        d = lstsq(J, resk)
+        alphak = jnp.ones(yk.shape[0])
+        for j in range(maxls):
+            # backtracking line search
+            yt = fixup(yk - alphak[:, None] * d)
+            res = residual(yt)
+            if np.max(np.abs(res)) < np.max(np.abs(resk)):
+                yk = yt
+                resk = res
+                break
+            else:
+                # only reduce step size where needed
+                alphak = jnp.where(
+                    np.max(np.abs(res), axis=-1) > np.max(np.abs(resk), axis=-1),
+                    alpha * alphak,
+                    alphak,
+                )
+        else:
+            # if we haven't found a good step, try taking a bad one and
+            # hope the next one is better
+            yk = yt
+            resk = res
+
+    r, t, z = yk.T
+    res = jnp.max(jnp.abs(residual(yk)), axis=-1)
+    r = jnp.where(res > tol, jnp.nan, r)
+    t = jnp.where(res > tol, jnp.nan, t)
+    z = jnp.where(res > tol, jnp.nan, z)
+
+    yk = jnp.vstack([r, t, z]).T
+
+    data = eq.compute(outbasis, grid=Grid(yk, sort=False))
+    out = jnp.stack([data[k] for k in outbasis], axis=-1)
+
+    return out
 
 
 def compute_theta_coords(eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
@@ -22,7 +205,7 @@ def compute_theta_coords(eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         Equilibrium to use
     flux_coords : ndarray, shape(k,3)
         2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-        coordinate.
+        point in space.
     L_lmn : ndarray
         spectral coefficients for lambda. Defaults to eq.L_lmn
     tol : float
@@ -96,7 +279,7 @@ def compute_flux_coords(
         Equilibrium to use
     real_coords : ndarray, shape(k,3)
         2D array of real space coordinates [R,phi,Z]. Each row is a different
-        coordinate.
+        point in space.
     R_lmn, Z_lmn : ndarray
         spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
     tol : float
@@ -185,10 +368,10 @@ def compute_flux_coords(
     return jnp.vstack([rho, theta, phi]).T
 
 
-def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
+def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     """Check that an equilibrium has properly nested flux surfaces in a plane.
 
-    Does so by checking coordianate Jacobian (sqrt(g)) sign.
+    Does so by checking coordinate Jacobian (sqrt(g)) sign.
     If coordinate Jacobian switches sign somewhere in the volume, this
     indicates that it is zero at some point, meaning surfaces are touching and
     the equilibrium is not nested.
@@ -203,8 +386,8 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
     grid  :  Grid, optional
         Grid on which to evaluate the coordinate Jacobian and check for the sign.
         (Default to QuadratureGrid with eq's current grid resolutions)
-    R_lmn, Z_lmn : ndarray, optional
-        spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
+    R_lmn, Z_lmn, L_lmn : ndarray, optional
+        spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
     msg : {None, "auto", "manual"}
         Warning to throw if unnested.
 
@@ -218,21 +401,27 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
         R_lmn = eq.R_lmn
     if Z_lmn is None:
         Z_lmn = eq.Z_lmn
+    if L_lmn is None:
+        L_lmn = eq.L_lmn
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-    transforms = get_transforms("sqrt(g)", eq=eq, grid=grid)
+    transforms = get_transforms("sqrt(g)_PEST", obj=eq, grid=grid)
     data = compute_fun(
-        "sqrt(g)",
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "sqrt(g)_PEST",
         params={
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
         },
         transforms=transforms,
         profiles={},  # no profiles needed
     )
 
-    nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+    nested = jnp.all(
+        jnp.sign(data["sqrt(g)_PEST"][0]) == jnp.sign(data["sqrt(g)_PEST"])
+    )
     if not nested:
         if msg == "auto":
             warnings.warn(
@@ -292,7 +481,7 @@ def to_sfl(
     N_grid : int, optional
         toroidal spatial resolution to use for fit to new basis. Default = 2*N
     rcond : float, optional
-        cutoff for small singular values in least squares fit.
+        cutoff for small singular values in the least squares fit.
     copy : bool, optional
         Whether to update the existing equilibrium or make a copy (Default).
 

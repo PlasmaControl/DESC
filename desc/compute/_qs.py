@@ -5,6 +5,7 @@ import numpy as np
 from desc.backend import jnp, put, sign
 
 from .data_index import register_compute_fun
+from .utils import cross, dot
 
 
 @register_compute_fun(
@@ -47,7 +48,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer_mn",
-    label="w_{Boozer,m,n}",
+    label="w_{\\mathrm{Boozer},m,n}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to "
@@ -81,7 +82,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer",
-    label="w_{Boozer}",
+    label="w_{\\mathrm{Boozer}}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -100,7 +101,7 @@ def _w(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer_t",
-    label="\\partial_{\\theta} w_{Boozer}",
+    label="\\partial_{\\theta} w_{\\mathrm{Boozer}}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -119,7 +120,7 @@ def _w_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer_z",
-    label="\\partial_{\\zeta} w_{Boozer}",
+    label="\\partial_{\\zeta} w_{\\mathrm{Boozer}}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -251,7 +252,7 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|B|_mn",
-    label="B_{mn}^{Boozer}",
+    label="B_{mn}^{\\mathrm{Boozer}}",
     units="T",
     units_long="Tesla",
     description="Boozer harmonics of magnetic field",
@@ -277,7 +278,7 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B modes",
-    label="Boozer modes",
+    label="\\mathrm{Boozer~modes}",
     units="~",
     units_long="None",
     description="Boozer harmonics",
@@ -352,5 +353,26 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     data["f_T"] = (data["psi_r"] / data["sqrt(g)"]) * (
         data["|B|_t"] * data["(B*grad(|B|))_z"]
         - data["|B|_z"] * data["(B*grad(|B|))_t"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="isodynamicity",
+    label="1/B^2 (\\mathbf{b} \\times \\nabla B) \\cdot \\nabla \\psi",
+    units="~",
+    units_long="None",
+    description="Measure of cross field drift at each point, "
+    + "unweighted by particle energy",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["b", "grad(|B|)", "|B|", "grad(psi)"],
+)
+def _isodynamicity(params, transforms, profiles, data, **kwargs):
+    data["isodynamicity"] = (
+        dot(cross(data["b"], data["grad(|B|)"]), data["grad(psi)"]) / data["|B|"] ** 2
     )
     return data

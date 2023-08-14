@@ -70,9 +70,12 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     cond = jax.lax.cond
     switch = jax.lax.switch
     while_loop = jax.lax.while_loop
+    vmap = jax.vmap
+    bincount = jnp.bincount
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
-    from jax.scipy.special import gammaln
+    from jax.scipy.special import gammaln, logsumexp
+    from jax.tree_util import register_pytree_node
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -124,7 +127,11 @@ else:
         qr,
         solve_triangular,
     )
-    from scipy.special import gammaln  # noqa: F401
+    from scipy.special import gammaln, logsumexp  # noqa: F401
+
+    def register_pytree_node(foo, *args):
+        """Dummy decorator for non-jax pytrees."""
+        return foo
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -270,3 +277,33 @@ else:
         while cond_fun(val):
             val = body_fun(val)
         return val
+
+    def vmap(fun, out_axes=0):
+        """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
+
+        Like Python's builtin map,
+        except inputs and outputs are in the form of stacked arrays,
+        and the returned object is a vectorized version of the input function.
+
+        Parameters
+        ----------
+        fun: callable
+            Function (A -> B)
+        out_axes: int
+            An integer indicating where the mapped axis should appear in the output.
+
+        Returns
+        -------
+        fun_vmap: callable
+            Vectorized version of fun.
+
+        """
+
+        def fun_vmap(fun_inputs):
+            return np.stack([fun(fun_input) for fun_input in fun_inputs], axis=out_axes)
+
+        return fun_vmap
+
+    def bincount(x, weights=None, minlength=None, length=None):
+        """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""
+        return np.bincount(x, weights, minlength)

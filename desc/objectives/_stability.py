@@ -29,17 +29,20 @@ class MercierStability(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -55,24 +58,28 @@ class MercierStability(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="Mercier Stability",
     ):
-        self.grid = grid
+        if target is None and bounds is None:
+            bounds = (0, np.inf)
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -85,26 +92,37 @@ class MercierStability(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
+        eq = eq or self._eq
+        if self._grid is None:
+            grid = LinearGrid(
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
                 rho=np.linspace(1 / 5, 1, 5),
             )
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_rho
+        self._dim_f = grid.num_rho
         self._data_keys = ["D_Mercier"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -112,7 +130,7 @@ class MercierStability(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["Psi"] ** 2 / jnp.sqrt(self._dim_f)
+            self._normalization = 1 / scales["Psi"] ** 2
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -128,13 +146,21 @@ class MercierStability(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -142,41 +168,53 @@ class MercierStability(_Objective):
             Mercier stability criterion.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        f = compress(self.grid, data["D_Mercier"], surface_label="rho")
-        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(f) * w
+        return compress(
+            constants["transforms"]["grid"], data["D_Mercier"], surface_label="rho"
+        )
+
+    def _scale(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
+        w = compress(
+            constants["transforms"]["grid"],
+            constants["transforms"]["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
-        x = self._unshift_unscale(
-            self.compute(*args, **kwargs)
-            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        )
-        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
 
         if self._normalize:
             print(
                 "Maximum "
-                + self._print_value_fmt.format(jnp.max(x / self.normalization))
+                + self._print_value_fmt.format(jnp.max(f / self.normalization))
                 + "(normalized)"
             )
             print(
                 "Minimum "
-                + self._print_value_fmt.format(jnp.min(x / self.normalization))
+                + self._print_value_fmt.format(jnp.min(f / self.normalization))
                 + "(normalized)"
             )
             print(
                 "Average "
-                + self._print_value_fmt.format(jnp.mean(x / self.normalization))
+                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
                 + "(normalized)"
             )
 
@@ -197,19 +235,21 @@ class MagneticWell(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
+        Note: Has no effect for this objective.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Note: Has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -225,24 +265,28 @@ class MagneticWell(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="Magnetic Well",
     ):
-        self.grid = grid
+        if target is None and bounds is None:
+            bounds = (0, np.inf)
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -254,26 +298,37 @@ class MagneticWell(_Objective):
         verbose : int, optional
             Level of output.
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
+        eq = eq or self._eq
+        if self._grid is None:
+            grid = LinearGrid(
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
                 rho=np.linspace(1 / 5, 1, 5),
             )
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_rho
+        self._dim_f = grid.num_rho
         self._data_keys = ["magnetic well"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -293,13 +348,21 @@ class MagneticWell(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -307,23 +370,35 @@ class MagneticWell(_Objective):
             Magnetic well parameter.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        f = compress(self.grid, data["magnetic well"], surface_label="rho")
-        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(f) * w
+        return compress(
+            constants["transforms"]["grid"], data["magnetic well"], surface_label="rho"
+        )
+
+    def _scale(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
+        w = compress(
+            constants["transforms"]["grid"],
+            constants["transforms"]["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
-        x = self._unshift_unscale(
-            self.compute(*args, **kwargs)
-            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        )
-        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)

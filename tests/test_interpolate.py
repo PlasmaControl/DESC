@@ -35,6 +35,12 @@ class TestInterp1D:
         fq = interp1d(x, xp, fp, method="catmull-rom")
         np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
 
+        fq = interp1d(x, xp, fp, method="monotonic")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-3)
+
+        fq = interp1d(x, xp, fp, method="monotonic-0")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-2)
+
     @pytest.mark.unit
     def test_interp1d_extrap_periodic(self):
         """Test extrapolation and periodic BC of 1d interpolation."""
@@ -53,6 +59,22 @@ class TestInterp1D:
 
         fq = interp1d(x, xp, fp, method="cubic", period=2 * np.pi)
         np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-2)
+
+    @pytest.mark.unit
+    def test_interp1d_monotonic(self):
+        """Ensure monotonic interpolation is actually monotonic."""
+        # true function is just linear with a jump discontinuity at x=1.5
+        x = np.linspace(-4, 5, 10)
+        f = np.heaviside(x - 1.5, 0) + 0.1 * x
+        xq = np.linspace(-4, 5, 1000)
+        dfc = interp1d(xq, x, f, derivative=1, method="cubic")
+        dfm = interp1d(xq, x, f, derivative=1, method="monotonic")
+        dfm0 = interp1d(xq, x, f, derivative=1, method="monotonic-0")
+        assert dfc.min() < 0  # cubic interpolation undershoots, giving negative slope
+        assert dfm.min() > 0  # monotonic interpolation doesn't
+        assert dfm0.min() >= 0  # monotonic-0 doesn't overshoot either
+        # ensure monotonic-0 has 0 slope at end points
+        np.testing.assert_allclose(dfm0[np.array([0, -1])], 0, atol=1e-12)
 
 
 class TestInterp2D:
@@ -78,6 +100,19 @@ class TestInterp2D:
 
         fq = interp2d(x, y, xp, yp, fp, method="linear")
         np.testing.assert_allclose(fq, f(x, y), rtol=1e-4, atol=1e-2)
+        atol = 2e-3
+        rtol = 1e-5
+        fq = interp2d(x, y, xp, yp, fp, method="cubic")
+        np.testing.assert_allclose(fq, f(x, y), rtol=rtol, atol=atol)
+
+        fq = interp2d(x, y, xp, yp, fp, method="cubic2")
+        np.testing.assert_allclose(fq, f(x, y), rtol=rtol, atol=atol)
+
+        fq = interp2d(x, y, xp, yp, fp, method="catmull-rom")
+        np.testing.assert_allclose(fq, f(x, y), rtol=rtol, atol=atol)
+
+        fq = interp2d(x, y, xp, yp, fp, method="cardinal")
+        np.testing.assert_allclose(fq, f(x, y), rtol=rtol, atol=atol)
 
 
 class TestInterp3D:
@@ -105,3 +140,16 @@ class TestInterp3D:
 
         fq = interp3d(x, y, z, xp, yp, zp, fp, method="linear")
         np.testing.assert_allclose(fq, f(x, y, z), rtol=1e-3, atol=1e-1)
+        atol = 5.5e-3
+        rtol = 1e-5
+        fq = interp3d(x, y, z, xp, yp, zp, fp, method="cubic")
+        np.testing.assert_allclose(fq, f(x, y, z), rtol=rtol, atol=atol)
+
+        fq = interp3d(x, y, z, xp, yp, zp, fp, method="cubic2")
+        np.testing.assert_allclose(fq, f(x, y, z), rtol=rtol, atol=atol)
+
+        fq = interp3d(x, y, z, xp, yp, zp, fp, method="catmull-rom")
+        np.testing.assert_allclose(fq, f(x, y, z), rtol=rtol, atol=atol)
+
+        fq = interp3d(x, y, z, xp, yp, zp, fp, method="cardinal")
+        np.testing.assert_allclose(fq, f(x, y, z), rtol=rtol, atol=atol)

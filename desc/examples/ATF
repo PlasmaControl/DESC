@@ -1,0 +1,55 @@
+# This is the DESC input file for the Advanced Toroidal Facility with beta = 2%
+# It is similar to the VMEC example from Hirshman & Witson 1983
+
+# solver parameters
+sym =  1
+NFP = 12
+Psi =  1.00000000E+00
+
+# spectral resolution
+L_rad  =  6:6:24
+M_pol  = 12
+N_tor  =  0x4, 4
+M_grid = 12, 16
+N_grid =  0x4, 6
+
+# continuation parameters
+bdry_ratio = 0x4, 0.5, 1
+pres_ratio = 0, 0:0.5:1, 1
+pert_order = 2
+
+# solver tolerances
+ftol = 1e-2
+xtol = 1e-6
+gtol = 1e-6
+maxiter = 50
+
+# solver methods
+optimizer         = lsq-exact
+objective         = force
+spectral_indexing = fringe
+node_pattern      = jacobi
+
+# pressure and rotational transform profiles
+l:   0	p =   5.00000000E+05	i =   3.50000000E-01
+l:   2	p =  -1.00000000E+06	i =   6.50000000E-01
+l:   4	p =   5.00000000E+05	i =   0.00000000E+00
+
+# magnetic axis initial guess
+n:   0	R0 =   2.10000000E+00	Z0 =   0.00000000E+00
+n:   1	R0 =   0.10000000E+00	Z0 =   0.10000000E+00
+
+# fixed-boundary surface shape
+m:  -2	n:  -1	R1 =  -2.50000000E-02	Z1 =   0.00000000E+00
+m:  -2	n:   0	R1 =   0.00000000E+00	Z1 =  -6.75000000E-03
+m:  -2	n:   1	R1 =   0.00000000E+00	Z1 =   6.75000000E-03
+m:  -1	n:  -1	R1 =  -9.00000000E-02	Z1 =   0.00000000E+00
+m:  -1	n:   0	R1 =   0.00000000E+00	Z1 =  -2.90000000E-01
+m:  -1	n:   1	R1 =   0.00000000E+00	Z1 =  -9.00000000E-02
+m:   0	n:   0	R1 =   2.05000000E+00	Z1 =   0.00000000E+00
+m:   1	n:  -1	R1 =   0.00000000E+00	Z1 =   9.00000000E-02
+m:   1	n:   0	R1 =   2.90000000E-01	Z1 =   0.00000000E+00
+m:   1	n:   1	R1 =  -9.00000000E-02	Z1 =   0.00000000E+00
+m:   2	n:  -1	R1 =   0.00000000E+00	Z1 =  -6.75000000E-03
+m:   2	n:   0	R1 =   2.50000000E-02	Z1 =   0.00000000E+00
+m:   2	n:   1	R1 =  -2.50000000E-02	Z1 =   0.00000000E+00

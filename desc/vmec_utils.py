@@ -94,10 +94,22 @@ def ptolemy_identity_rev(m_1, n_1, x):
 def _mnsc_to_modes_x(xm, xn, s, c):
     """Convert from arrays of m, n, smn, cmn to [cos/sin, m, n] and x coeffs."""
     cmodes = np.vstack([np.ones_like(xm), xm, xn]).T
-    smodes = np.vstack([-np.ones_like(xm), xm, xn]).T[1:]  # index out m=n=0
+
+    mode_idx_00 = np.where(np.logical_and(xm == 0, xn == 0))
+    if mode_idx_00[0].size:  # there is a 00 mode, get rid of it for the sin
+        xm_no_0 = np.delete(xm, mode_idx_00[0][0])
+        xn_no_0 = np.delete(xn, mode_idx_00[0][0])
+
+        smodes = np.vstack(
+            [-np.ones_like(xm_no_0), xm_no_0, xn_no_0]
+        ).T  # index out m=n=0
+        s = np.atleast_2d(np.delete(s.T, mode_idx_00[0][0], axis=0).T)
+    else:  # no need to index out m=n=0 bc is not in the basis
+        smodes = np.vstack([-np.ones_like(xm), xm, xn]).T
+
     vmec_modes = np.vstack([cmodes, smodes])
     idx = np.lexsort(vmec_modes.T[np.array([0, 2, 1])])
-    x = np.concatenate([c.T, s.T[1:]]).T
+    x = np.concatenate([c.T, s.T]).T
     vmec_modes = vmec_modes[idx]
     x = (x.T[idx]).T
     return vmec_modes, x
@@ -108,6 +120,12 @@ def _modes_x_to_mnsc(vmec_modes, x):
     cmask = vmec_modes[:, 0] == 1
     smask = vmec_modes[:, 0] == -1
     _, xm, xn = vmec_modes[cmask].T
+    if not np.any(cmask):  #  there are no cos modes, so use smask to get modenumbers
+        _, xm, xn = vmec_modes[smask].T
+        # concatenate the 0,0 mode
+        xm = np.insert(xm, 0, 0)
+        xn = np.insert(xn, 0, 0)
+
     c = (x.T[cmask]).T
     s = (x.T[smask]).T
     if not len(s.T):
@@ -247,9 +265,7 @@ def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=Non
         if N == 0:
             idx_MN = np.nonzero(vmec_modes[:, 2] == 0)[0]
         else:
-            idx_MN = np.nonzero(
-                np.logical_and(vmec_modes[:, 1] == M, vmec_modes[:, 2] == N)
-            )[0]
+            idx_MN = np.nonzero(vmec_modes[:, 1] * N == vmec_modes[:, 2] * M)[0]
         idx[idx_MN] = False
 
         return matrix, vmec_modes, idx

@@ -178,7 +178,7 @@ class TestConstructor:
             eq = Equilibrium(M=3.4)
         with pytest.raises(AssertionError):
             eq = Equilibrium(N=3.4)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             eq = Equilibrium(NFP=3.4j)
         with pytest.raises(ValueError):
             eq = Equilibrium(surface=np.array([[1, 1, 1, 10, 2]]))
@@ -277,7 +277,7 @@ class TestInitialGuess:
         eq = Equilibrium()
         surface = FourierRZToroidalSurface()
         # turn the circular cross-section into an ellipse w AR=2
-        surface.set_coeffs(m=-1, n=0, R=None, Z=2)
+        surface.set_coeffs(m=-1, n=0, R=None, Z=-2)
         # move z axis up to 0.5 for no good reason
         axis = FourierRZCurve([0, 10, 0], [0, 0.5, 0])
         eq.set_initial_guess(surface, axis)
@@ -419,9 +419,7 @@ class TestGetSurfaces:
         rho = 0.5
         surf = eq.get_surface_at(rho=rho)
         assert surf.rho == rho
-        np.testing.assert_allclose(
-            surf.compute_surface_area(), 4 * np.pi**2 * R0 * rho
-        )
+        np.testing.assert_allclose(surf.compute("S")["S"], 4 * np.pi**2 * R0 * rho)
 
     @pytest.mark.unit
     def test_get_zeta_surface(self):
@@ -430,7 +428,7 @@ class TestGetSurfaces:
         surf = eq.get_surface_at(zeta=np.pi)
         assert surf.zeta == np.pi
         rho = 1
-        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * rho**2)
+        np.testing.assert_allclose(surf.compute("A")["A"], np.pi * rho**2)
 
     @pytest.mark.unit
     def test_get_theta_surface(self):
@@ -458,7 +456,7 @@ def test_magnetic_axis(HELIOTRON_vac):
     grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))
 
     data = eq.compute(["R", "Z"], grid=grid)
-    coords = axis.compute_coordinates(grid=grid)
+    coords = axis.compute("x", grid=grid)["x"]
 
     np.testing.assert_allclose(coords[:, 0], data["R"])
     np.testing.assert_allclose(coords[:, 2], data["Z"])
@@ -491,6 +489,20 @@ def test_is_nested():
 
 
 @pytest.mark.unit
+def test_is_nested_theta():
+    """Test that new version of is nested also catches messed up theta contours."""
+    eq = Equilibrium(L=6, M=6, N=0, iota=1)
+    # just mess with lambda, so rho contours are the same
+    eq.L_lmn += 1e-1 * np.random.default_rng(seed=3).random(eq.L_lmn.shape)
+    grid = QuadratureGrid(10, 10, 0, NFP=eq.NFP)
+    g1 = eq.compute("sqrt(g)", grid=grid)["sqrt(g)"]
+    g2 = eq.compute("sqrt(g)_PEST", grid=grid)["sqrt(g)_PEST"]
+    assert np.all(g1 > 0)  # regular jacobian will still be fine
+    assert np.any(g2 < 0)  # PEST jacobian should be negative
+    assert not eq.is_nested()
+
+
+@pytest.mark.unit
 @pytest.mark.solve
 def test_get_profile(DSHAPE_current):
     """Test getting/setting iota and current profiles."""
@@ -507,3 +519,50 @@ def test_get_profile(DSHAPE_current):
     np.testing.assert_allclose(current1.params, current2.params)
     x = np.linspace(0, 1, 20)
     np.testing.assert_allclose(current2(x), current0(x), rtol=1e-6, atol=1e-1)
+
+
+@pytest.mark.unit
+def test_kinetic_errors():
+    """Test that we can't set nonexistent profile values."""
+    eqp = Equilibrium(L=3, M=3, N=3, pressure=np.array([1, 0, -1]))
+    eqk = Equilibrium(
+        L=3,
+        M=3,
+        N=3,
+        electron_temperature=np.array([1, 0, -1]),
+        electron_density=np.array([2, 0, -2]),
+    )
+    params = np.arange(3)
+    with pytest.raises(ValueError):
+        eqk.p_l = params
+    with pytest.raises(ValueError):
+        eqp.Te_l = params
+    with pytest.raises(ValueError):
+        eqp.ne_l = params
+    with pytest.raises(ValueError):
+        eqp.Ti_l = params
+    with pytest.raises(ValueError):
+        eqp.Zeff_l = params
+
+    params = np.ones((3, 4))
+    profile = PowerSeriesProfile()
+    eqk.pressure = profile
+    eqp.electron_temperature = profile
+    eqp.electron_density = profile
+    eqp.ion_temperature = profile
+    eqp.atomic_number = profile
+    with pytest.raises(TypeError):
+        eqk.pressure = params
+    with pytest.raises(TypeError):
+        eqp.electron_temperature = params
+    with pytest.raises(TypeError):
+        eqp.electron_density = params
+    with pytest.raises(TypeError):
+        eqp.ion_temperature = params
+    with pytest.raises(TypeError):
+        eqp.atomic_number = params
+
+    with pytest.raises(ValueError):
+        _ = Equilibrium(pressure=1, electron_density=1, electron_temperature=1)
+    with pytest.raises(ValueError):
+        _ = Equilibrium(electron_temperature=1)

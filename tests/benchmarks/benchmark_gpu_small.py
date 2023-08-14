@@ -118,7 +118,7 @@ def test_objective_compile_heliotron(benchmark):
 
     def setup():
         eq = desc.examples.get("HELIOTRON")
-        objective = get_equilibrium_objective()
+        objective = get_equilibrium_objective(eq)
         objective.build(eq)
         args = (
             objective,
@@ -141,7 +141,7 @@ def test_objective_compile_dshape_current(benchmark):
 
     def setup():
         eq = desc.examples.get("DSHAPE_current")
-        objective = get_equilibrium_objective()
+        objective = get_equilibrium_objective(eq)
         objective.build(eq)
         args = (
             objective,
@@ -164,7 +164,7 @@ def test_objective_compile_atf(benchmark):
 
     def setup():
         eq = desc.examples.get("ATF")
-        objective = get_equilibrium_objective()
+        objective = get_equilibrium_objective(eq)
         objective.build(eq)
         args = (
             objective,
@@ -185,13 +185,13 @@ def test_objective_compile_atf(benchmark):
 def test_objective_compute_heliotron(benchmark):
     """Benchmark computing objective."""
     eq = desc.examples.get("HELIOTRON")
-    objective = get_equilibrium_objective()
+    objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
     def run(x):
-        objective.compute(x).block_until_ready()
+        objective.compute_scaled_error(x, objective.constants).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
     return None
@@ -202,13 +202,13 @@ def test_objective_compute_heliotron(benchmark):
 def test_objective_compute_dshape_current(benchmark):
     """Benchmark computing objective."""
     eq = desc.examples.get("DSHAPE_current")
-    objective = get_equilibrium_objective()
+    objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
     def run(x):
-        objective.compute(x).block_until_ready()
+        objective.compute_scaled_error(x, objective.constants).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
     return None
@@ -219,13 +219,13 @@ def test_objective_compute_dshape_current(benchmark):
 def test_objective_compute_atf(benchmark):
     """Benchmark computing objective."""
     eq = desc.examples.get("ATF")
-    objective = get_equilibrium_objective()
+    objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
     def run(x):
-        objective.compute(x).block_until_ready()
+        objective.compute_scaled_error(x, objective.constants).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
     return None
@@ -236,13 +236,13 @@ def test_objective_compute_atf(benchmark):
 def test_objective_jac_heliotron(benchmark):
     """Benchmark computing jacobian."""
     eq = desc.examples.get("HELIOTRON")
-    objective = get_equilibrium_objective()
+    objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
     def run(x):
-        objective.jac(x).block_until_ready()
+        objective.jac_scaled(x, objective.constants).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
     return None
@@ -253,13 +253,13 @@ def test_objective_jac_heliotron(benchmark):
 def test_objective_jac_dshape_current(benchmark):
     """Benchmark computing jacobian."""
     eq = desc.examples.get("DSHAPE_current")
-    objective = get_equilibrium_objective()
+    objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
     def run(x):
-        objective.jac(x).block_until_ready()
+        objective.jac_scaled(x, objective.constants).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
     return None
@@ -270,13 +270,13 @@ def test_objective_jac_dshape_current(benchmark):
 def test_objective_jac_atf(benchmark):
     """Benchmark computing jacobian."""
     eq = desc.examples.get("ATF")
-    objective = get_equilibrium_objective()
+    objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
     def run(x):
-        objective.jac(x).block_until_ready()
+        objective.jac_scaled(x, objective.constants).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
     return None
@@ -289,12 +289,13 @@ def test_perturb_1(benchmark):
 
     def setup():
         eq = desc.examples.get("SOLOVEV")
-        objective = get_equilibrium_objective()
-        constraints = get_fixed_boundary_constraints()
+        objective = get_equilibrium_objective(eq)
+        objective.build(eq)
+        constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
-        objective.build(eq)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
+        deltas = {"p_l": dp}
 
         args = (
             eq,
@@ -302,7 +303,7 @@ def test_perturb_1(benchmark):
             constraints,
         )
         kwargs = {
-            "dp": dp,
+            "deltas": deltas,
             "tr_ratio": tr_ratio,
             "order": 1,
             "verbose": 2,
@@ -321,12 +322,13 @@ def test_perturb_2(benchmark):
 
     def setup():
         eq = desc.examples.get("SOLOVEV")
-        objective = get_equilibrium_objective()
-        constraints = get_fixed_boundary_constraints()
+        objective = get_equilibrium_objective(eq)
+        objective.build(eq)
+        constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
-        objective.build(eq)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
+        deltas = {"p_l": dp}
 
         args = (
             eq,
@@ -334,7 +336,7 @@ def test_perturb_2(benchmark):
             constraints,
         )
         kwargs = {
-            "dp": dp,
+            "deltas": deltas,
             "tr_ratio": tr_ratio,
             "order": 2,
             "verbose": 2,

@@ -2,10 +2,23 @@
 
 import numpy as np
 import pytest
+from scipy.constants import elementary_charge
+from scipy.interpolate import interp1d
 
 from desc.equilibrium import Equilibrium
+from desc.grid import LinearGrid
 from desc.io import InputReader
-from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+from desc.objectives import (
+    ForceBalance,
+    ObjectiveFunction,
+    get_fixed_boundary_constraints,
+)
+from desc.profiles import (
+    FourierZernikeProfile,
+    MTanhProfile,
+    PowerSeriesProfile,
+    SplineProfile,
+)
 
 from .utils import area_difference, compute_coords
 
@@ -69,6 +82,63 @@ class TestProfiles:
         np.testing.assert_allclose(sp3(x), sp4(x), rtol=1e-5, atol=1e-2)
 
     @pytest.mark.unit
+    def test_SplineProfile_methods(self):
+        """Test that all methods of SplineProfile work as intended without errors."""
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
+        )  # base profile to work off of
+        knots = np.linspace(0, 1.0, 40, endpoint=True)
+        x = np.linspace(0, 0.99, 100)
+
+        method = "nearest"
+        sp = pp.to_spline(knots=knots, method=method)
+        # should be exactly same if evaluated at knots + eps
+        np.testing.assert_allclose(pp(knots), sp(knots + 0.4 * (x[1] - x[0])))
+
+        method = "linear"
+        sp = pp.to_spline(knots=knots, method=method)
+        # should match linear interpolation
+        scipy_interp = interp1d(x=knots, y=pp(knots))
+        np.testing.assert_allclose(scipy_interp(x), sp(x))
+
+        method = "cubic"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+
+        method = "cubic2"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+
+        method = "catmull-rom"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+
+        method = "cardinal"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+
+        method = "monotonic"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+
+        method = "monotonic-0"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=5e-3)
+
+        # test monotonic splines preserve monotonicity
+        f = np.heaviside(knots - 0.5, 0) + 0.1 * knots
+        spm = SplineProfile(values=f, knots=knots, method="monotonic")
+        spm0 = SplineProfile(values=f, knots=knots, method="monotonic-0")
+        spc = SplineProfile(values=f, knots=knots, method="cubic")
+
+        dfc = spc(x, dr=1)
+        dfm = spm(x, dr=1)
+        dfm0 = spm0(x, dr=1)
+        assert dfc.min() < 0  # cubic interpolation undershoots, giving negative slope
+        assert dfm.min() > 0  # monotonic interpolation doesn't
+        assert dfm0.min() >= 0  # monotonic-0 doesn't overshoot either
+
+    @pytest.mark.unit
     def test_repr(self):
         """Test string representation of profile classes."""
         pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
@@ -130,19 +200,23 @@ class TestProfiles:
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )
         sp = pp.to_spline()
-        zp = pp.to_fourierzernike()
+        zp = -pp.to_fourierzernike()
 
-        f = pp + sp - (-zp)
+        f = pp + sp - zp
         x = np.linspace(0, 1, 50)
         f.grid = 50
         np.testing.assert_allclose(f(), 3 * (pp(x)), atol=1e-3)
 
         params = f.params
+        assert params.size == len(sp.params) + len(pp.params) + len(zp.params) + 1
+        params = f._parse_params(params)
         assert all(params[0] == pp.params)
         assert all(params[1] == sp.params)
-        assert all(params[2][1][1] == zp.params)
+        # offset by 1 because of two - signs
+        assert all(params[2][1:] == zp.params)
+        assert params[2][0] == -1
 
-        f.params = (None, 2 * sp.params, None)
+        f.params = (pp.params, 2 * sp.params, zp.params)
         f.grid = x
         np.testing.assert_allclose(f(), 4 * (pp(x)), atol=1e-3)
 
@@ -161,13 +235,53 @@ class TestProfiles:
         np.testing.assert_allclose(f(), pp(x) ** 3, atol=1e-3)
 
         params = f.params
+        assert params.size == len(sp.params) + len(pp.params) + len(zp.params)
+        params = f._parse_params(params)
         assert all(params[0] == pp.params)
         assert all(params[1] == sp.params)
         assert all(params[2] == zp.params)
 
-        f.params = (None, 2 * sp.params, None)
+        f.params = (pp.params, 2 * sp.params, zp.params)
         f.grid = x
         np.testing.assert_allclose(f(), 2 * pp(x) ** 3, atol=1e-3)
+
+    @pytest.mark.unit
+    def test_product_profiles_derivative(self):
+        """Test that product profiles computes the derivative correctly."""
+        p1 = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 3, -2, 4]), sym="auto"
+        )
+        p2 = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 3]),
+            params=np.array([2.02, 4.93, 0.22, 0.46]),
+            sym="auto",
+        )
+        p3 = PowerSeriesProfile(
+            modes=np.array([0, 1, 3, 4]),
+            params=np.array([1.79, 3.19, 1.82, 2.07]),
+            sym="auto",
+        )
+
+        f = p1 * p2 * p3
+        x = np.linspace(0, 1, 50)
+        f.grid = x
+
+        # Below is a simpler method to compute first derivative of product series
+        # than the more general combinatorics algorithm in implementation.
+        # Analytic formula derived from logarithmic differentiation.
+        _sum = 0
+        _sum_r = 0
+        for profile in f._profiles:
+            result = profile.compute()
+            result_r = profile.compute(dr=1)
+            result_rr = profile.compute(dr=2)
+            _sum += result_r / result
+            _sum_r += result_rr / result - (result_r / result) ** 2
+        f_r = f.compute() * _sum
+        f_rr = f_r * _sum + f.compute() * _sum_r
+
+        np.testing.assert_allclose(f_r, f.compute(dr=1))
+        np.testing.assert_allclose(f_rr, f.compute(dr=2))
 
     @pytest.mark.unit
     def test_scaled_profiles(self):
@@ -183,7 +297,7 @@ class TestProfiles:
 
         params = f.params
         assert params[0] == 3
-        assert all(params[1] == pp.params)
+        assert all(params[1:] == pp.params)
 
         f.params = 2
         f.grid = x
@@ -193,8 +307,9 @@ class TestProfiles:
         f.grid = x
 
         params = f.params
+        assert params.size == len(pp.params) + 1
         assert params[0] == 2
-        np.testing.assert_allclose(params[1], [4, -8, 4])
+        np.testing.assert_allclose(params[1:], [4, -8, 4])
         np.testing.assert_allclose(pp.params, [1, -2, 1])
         np.testing.assert_allclose(f(), 8 * (pp(x)), atol=1e-3)
 
@@ -240,3 +355,127 @@ class TestProfiles:
         zp = pp.to_fourierzernike(L=6, M=6, N=0)
         x = np.linspace(0, 1, 100)
         np.testing.assert_allclose(pp(x), zp(x), atol=1e-10)
+
+    @pytest.mark.unit
+    def test_default_profiles(self):
+        """Test that default profiles are just zeros."""
+        pp = PowerSeriesProfile()
+        sp = SplineProfile()
+        mp = MTanhProfile()
+        zp = FourierZernikeProfile()
+
+        x = np.linspace(0, 1, 10)
+        np.testing.assert_allclose(pp(x), 0)
+        np.testing.assert_allclose(sp(x), 0)
+        np.testing.assert_allclose(mp(x), 0)
+        np.testing.assert_allclose(zp(x), 0)
+
+    @pytest.mark.unit
+    def test_solve_with_combined(self):
+        """Make sure combined profiles work correctly for solving equilibrium.
+
+        Test for gh issue #347
+        """
+        ne = PowerSeriesProfile(3.0e19 * np.array([1, -1]), modes=[0, 10])
+        Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
+        Ti = Te
+        pressure = elementary_charge * (ne * Te + ne * Ti)
+        print("pressure params:", pressure.params)
+
+        LM_resolution = 6
+        eq1 = Equilibrium(
+            pressure=pressure,
+            iota=PowerSeriesProfile([1.61]),
+            Psi=np.pi,  # so B ~ 1 T
+            NFP=1,
+            L=LM_resolution,
+            M=LM_resolution,
+            N=0,
+            L_grid=2 * LM_resolution,
+            M_grid=2 * LM_resolution,
+            N_grid=0,
+            sym=True,
+        )
+        eq1.solve(
+            constraints=get_fixed_boundary_constraints(eq=eq1, kinetic=False),
+            objective=ObjectiveFunction(objectives=ForceBalance(eq=eq1)),
+            maxiter=5,
+        )
+        eq2 = Equilibrium(
+            electron_temperature=Te,
+            electron_density=ne,
+            atomic_number=1,
+            ion_temperature=Ti,
+            iota=PowerSeriesProfile([1.61]),
+            Psi=np.pi,  # so B ~ 1 T
+            NFP=1,
+            L=LM_resolution,
+            M=LM_resolution,
+            N=0,
+            L_grid=2 * LM_resolution,
+            M_grid=2 * LM_resolution,
+            N_grid=0,
+            sym=True,
+        )
+        eq2.solve(
+            constraints=get_fixed_boundary_constraints(eq=eq2, kinetic=True),
+            objective=ObjectiveFunction(objectives=ForceBalance(eq=eq2)),
+            maxiter=5,
+        )
+        np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=1e-14)
+        np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, atol=1e-14)
+        np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, atol=1e-14)
+
+    @pytest.mark.unit
+    def test_kinetic_pressure(self):
+        """Test that both ways of computing pressure are equivalent."""
+        ne = PowerSeriesProfile(3.0e19 * np.array([1, -1]), modes=[0, 10])
+        Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
+        Ti = Te
+        pressure = elementary_charge * (ne * Te + ne * Ti)
+        print("pressure params:", pressure.params)
+
+        LM_resolution = 6
+        eq1 = Equilibrium(
+            pressure=pressure,
+            iota=PowerSeriesProfile([1.61]),
+            Psi=np.pi,  # so B ~ 1 T
+            NFP=1,
+            L=LM_resolution,
+            M=LM_resolution,
+            N=0,
+            L_grid=2 * LM_resolution,
+            M_grid=2 * LM_resolution,
+            N_grid=0,
+            sym=True,
+        )
+        eq2 = Equilibrium(
+            electron_temperature=Te,
+            electron_density=ne,
+            iota=PowerSeriesProfile([1.61]),
+            Psi=np.pi,  # so B ~ 1 T
+            NFP=1,
+            L=LM_resolution,
+            M=LM_resolution,
+            N=0,
+            L_grid=2 * LM_resolution,
+            M_grid=2 * LM_resolution,
+            N_grid=0,
+            sym=True,
+        )
+        grid = LinearGrid(L=20)
+        data1 = eq1.compute(["p", "p_r"], grid=grid)
+        data2 = eq2.compute(["p", "p_r"], grid=grid)
+
+        assert np.all(np.isnan(data1["ne"]))
+        assert np.all(np.isnan(data1["Te"]))
+        assert np.all(np.isnan(data1["Ti"]))
+        assert np.all(np.isnan(data1["Zeff"]))
+        assert np.all(np.isnan(data1["ne_r"]))
+        assert np.all(np.isnan(data1["Te_r"]))
+        assert np.all(np.isnan(data1["Ti_r"]))
+        assert np.all(np.isnan(data1["Zeff_r"]))
+        assert np.all(data2["Te"] == data2["Ti"])
+        assert np.all(data2["Te_r"] == data2["Ti_r"])
+        np.testing.assert_allclose(data1["p"], data2["p"])
+        np.testing.assert_allclose(data1["p_r"], data2["p_r"])

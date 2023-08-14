@@ -1,0 +1,48 @@
+# This is the DESC input file for a heliotron with beta = 10%
+# It is similar to the VMEC example from Hirshman & Witson 1983
+
+# global parameters
+sym = 1
+NFP = 19
+Psi = 1.0
+
+# spectral resolution
+L_rad  = 12:6:24
+M_pol  =  6:3:12
+N_tor  =  0,  0,  3
+M_grid = 12, 18
+N_grid =  0,  0,  6
+
+# continuation parameters
+bdry_ratio = 0, 0, 1
+pres_ratio = 0, 1, 1
+pert_order = 2
+
+# solver tolerances
+ftol = 1e-2
+xtol = 1e-6
+gtol = 1e-6
+maxiter = 100
+
+# solver methods
+optimizer         = lsq-exact
+objective         = force
+spectral_indexing = fringe
+node_pattern      = jacobi
+
+# pressure and rotational transform/current profiles
+l:   0  p =  1.8E+4  i =  1.0E+0
+l:   2  p = -3.6E+4  i =  1.5E+0
+l:   4  p =  1.8E+4
+
+# magnetic axis initial guess
+n:   0  R0 =  1.0E+1  Z0 =  0.0E+0
+
+# fixed-boundary surface shape
+m:   0  n:   0  R1 =  1.0E+1
+m:   1  n:   0  R1 = -1.0E+0
+m:   1  n:   1  R1 = -3.0E-1
+m:  -1  n:  -1  R1 =  3.0E-1
+m:  -1  n:   0  Z1 =  1.0E+0
+m:  -1  n:   1  Z1 = -3.0E-1
+m:   1  n:  -1  Z1 = -3.0E-1

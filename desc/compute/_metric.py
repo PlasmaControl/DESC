@@ -23,6 +23,26 @@ def _sqrtg(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="sqrt(g)_PEST",
+    label="\\sqrt{g}_{PEST}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of PEST flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_theta_PEST", "e_zeta"],
+)
+def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST"] = dot(
+        data["e_rho"], cross(data["e_theta_PEST"], data["e_zeta"])
+    )
+    return data
+
+
+@register_compute_fun(
     name="|e_theta x e_zeta|",
     label="|e_{\\theta} \\times e_{\\zeta}|",
     units="m^{2}",
@@ -34,6 +54,10 @@ def _sqrtg(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
     data["|e_theta x e_zeta|"] = jnp.linalg.norm(
@@ -54,6 +78,10 @@ def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
     data["|e_zeta x e_rho|"] = jnp.linalg.norm(
@@ -74,6 +102,10 @@ def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_theta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
     data["|e_rho x e_theta|"] = jnp.linalg.norm(
@@ -397,6 +429,10 @@ def _sqrtg_rz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_rr(params, transforms, profiles, data, **kwargs):
     data["g_rr"] = dot(data["e_rho"], data["e_rho"])
@@ -415,6 +451,10 @@ def _g_sub_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_tt(params, transforms, profiles, data, **kwargs):
     data["g_tt"] = dot(data["e_theta"], data["e_theta"])
@@ -433,6 +473,10 @@ def _g_sub_tt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_zz(params, transforms, profiles, data, **kwargs):
     data["g_zz"] = dot(data["e_zeta"], data["e_zeta"])
@@ -451,6 +495,10 @@ def _g_sub_zz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_theta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_rt(params, transforms, profiles, data, **kwargs):
     data["g_rt"] = dot(data["e_rho"], data["e_theta"])
@@ -469,6 +517,10 @@ def _g_sub_rt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_rz(params, transforms, profiles, data, **kwargs):
     data["g_rz"] = dot(data["e_rho"], data["e_zeta"])
@@ -487,6 +539,10 @@ def _g_sub_rz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_tz(params, transforms, profiles, data, **kwargs):
     data["g_tz"] = dot(data["e_theta"], data["e_zeta"])
@@ -506,6 +562,10 @@ def _g_sub_tz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_theta_r"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_tt_r(params, transforms, profiles, data, **kwargs):
     data["g_tt_r"] = 2 * dot(data["e_theta"], data["e_theta_r"])
@@ -525,6 +585,10 @@ def _g_sub_tt_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_tz_r(params, transforms, profiles, data, **kwargs):
     data["g_tz_r"] = dot(data["e_theta_r"], data["e_zeta"]) + dot(
@@ -683,6 +747,861 @@ def _g_sup_rz(params, transforms, profiles, data, **kwargs):
 )
 def _g_sup_tz(params, transforms, profiles, data, **kwargs):
     data["g^tz"] = dot(data["e^theta"], data["e^zeta"])
+    return data
+
+
+@register_compute_fun(
+    name="g^rr_r",
+    label="g^{\\rho}{\\rho}_{\\rho}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Radial element of contravariant metric tensor, "
+    + "first radial derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "sqrt(g)_r",
+        "sqrt(g)",
+        "e_theta",
+        "e_theta_r",
+        "e_zeta_r",
+        "e_zeta",
+    ],
+)
+def _g_sup_rr_r(params, transforms, profiles, data, **kwargs):
+    data["g^rr_r"] = (
+        -data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta_r"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_r"]))
+        - data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta_r"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_r"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rt_r",
+    label="g^{\\rho}{\\theta}_{\\rho}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Poloidal element of contravariant metric tensor, "
+    + "first radial derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "e^theta",
+        "sqrt(g)_r",
+        "sqrt(g)",
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+        "e_rho_r",
+        "e_theta_r",
+        "e_zeta_r",
+    ],
+)
+def _g_sup_rt_r(params, transforms, profiles, data, **kwargs):
+    data["g^rt_r"] = (
+        -data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_theta_r"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_zeta_r"]))
+        - data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_zeta_r"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho_r"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rz_r",
+    label="g^{\\rho}{\\zeta}_{\\rho}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Toroidal element of contravariant metric tensor, "
+    + "first radial derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "e^zeta",
+        "sqrt(g)_r",
+        "sqrt(g)",
+        "e_rho",
+        "e_zeta",
+        "e_theta",
+        "e_rho_r",
+        "e_zeta_r",
+        "e_theta_r",
+    ],
+)
+def _g_sup_rz_r(params, transforms, profiles, data, **kwargs):
+    data["g^rz_r"] = (
+        -data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_theta_r"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_zeta_r"]))
+        - data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_rho_r"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta_r"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^tt_r",
+    label="g^{\\theta}{\\theta}_{\\rho}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Poloidal/Poloidal element of contravariant metric tensor, "
+    + "first radial derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^theta",
+        "sqrt(g)_r",
+        "sqrt(g)",
+        "e_rho",
+        "e_rho_r",
+        "e_zeta_r",
+        "e_zeta",
+    ],
+)
+def _g_sup_tt_r(params, transforms, profiles, data, **kwargs):
+    data["g^tt_r"] = (
+        -data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta_r"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_r"]))
+        - data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta_r"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_r"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^tz_r",
+    label="g^{\\theta}{\\zeta}_{\\rho}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Poloidal/Toroidal element of contravariant metric tensor, "
+    + "first radial derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^theta",
+        "e^zeta",
+        "sqrt(g)_r",
+        "sqrt(g)",
+        "e_theta",
+        "e_zeta",
+        "e_rho",
+        "e_theta_r",
+        "e_zeta_r",
+        "e_rho_r",
+    ],
+)
+def _g_sup_tz_r(params, transforms, profiles, data, **kwargs):
+    data["g^tz_r"] = (
+        -data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_zeta_r"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho_r"]))
+        - data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_rho_r"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta_r"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^zz_r",
+    label="g^{\\zeta}{\\zeta}_{\\rho}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Toroidal/Toroidal element of contravariant metric tensor, "
+    + "first radial derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^zeta",
+        "sqrt(g)_r",
+        "sqrt(g)",
+        "e_theta",
+        "e_rho",
+        "e_theta_r",
+        "e_rho_r",
+    ],
+)
+def _g_sup_zz_r(params, transforms, profiles, data, **kwargs):
+    data["g^zz_r"] = (
+        -data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho_r"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_r"]))
+        - data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho_r"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_r"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rr_t",
+    label="g^{\\rho}{\\rho}_{\\theta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Radial element of contravariant metric tensor, "
+    + "first poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "sqrt(g)_t",
+        "sqrt(g)",
+        "e_theta",
+        "e_theta_t",
+        "e_zeta_t",
+        "e_zeta",
+    ],
+)
+def _g_sup_rr_t(params, transforms, profiles, data, **kwargs):
+    data["g^rr_t"] = (
+        -data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta_t"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_t"]))
+        - data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta_t"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_t"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rt_t",
+    label="g^{\\rho}{\\theta}_{\\theta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Poloidal element of contravariant metric tensor, "
+    + "first poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "e^theta",
+        "sqrt(g)_t",
+        "sqrt(g)",
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+        "e_rho_t",
+        "e_theta_t",
+        "e_zeta_t",
+    ],
+)
+def _g_sup_rt_t(params, transforms, profiles, data, **kwargs):
+    data["g^rt_t"] = (
+        -data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_theta_t"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_theta"], data["e_zeta_t"]))
+        - data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_zeta_t"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho_t"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rz_t",
+    label="g^{\\rho}{\\zeta}_{\\theta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Toroidal element of contravariant metric tensor, "
+    + "first poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "e^zeta",
+        "sqrt(g)_t",
+        "sqrt(g)",
+        "e_rho",
+        "e_zeta",
+        "e_theta",
+        "e_rho_t",
+        "e_zeta_t",
+        "e_theta_t",
+    ],
+)
+def _g_sup_rz_t(params, transforms, profiles, data, **kwargs):
+    data["g^rz_t"] = (
+        -data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_theta_t"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_theta"], data["e_zeta_t"]))
+        - data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_rho_t"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta_t"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^tt_t",
+    label="g^{\\theta}{\\theta}_{\\theta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Poloidal/Poloidal element of contravariant metric tensor, "
+    + "first poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^theta",
+        "sqrt(g)_t",
+        "sqrt(g)",
+        "e_zeta",
+        "e_rho",
+        "e_zeta_t",
+        "e_rho_t",
+    ],
+)
+def _g_sup_tt_t(params, transforms, profiles, data, **kwargs):
+    data["g^tt_t"] = (
+        -data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta_t"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_t"]))
+        - data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta_t"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_t"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^tz_t",
+    label="g^{\\theta}{\\zeta}_{\\theta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Poloidal/Toroidal element of contravariant metric tensor, "
+    + "first poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^theta",
+        "e^zeta",
+        "sqrt(g)_t",
+        "sqrt(g)",
+        "e_theta",
+        "e_zeta",
+        "e_rho",
+        "e_theta_t",
+        "e_zeta_t",
+        "e_rho_t",
+    ],
+)
+def _g_sup_tz_t(params, transforms, profiles, data, **kwargs):
+    data["g^tz_t"] = (
+        -data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_zeta_t"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho_t"]))
+        - data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_rho_t"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta_t"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^zz_t",
+    label="g^{\\zeta}{\\zeta}_{\\theta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Toroidal/Toroidal element of contravariant metric tensor, "
+    + "first poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^zeta",
+        "sqrt(g)_t",
+        "sqrt(g)",
+        "e_theta",
+        "e_rho",
+        "e_theta_t",
+        "e_rho_t",
+    ],
+)
+def _g_sup_zz_t(params, transforms, profiles, data, **kwargs):
+    data["g^zz_t"] = (
+        -data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho_t"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_t"]))
+        - data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho_t"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_t"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rr_z",
+    label="g^{\\rho}{\\rho}_{\\zeta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Radial element of contravariant metric tensor, "
+    + "first toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "sqrt(g)_z",
+        "sqrt(g)",
+        "e_zeta",
+        "e_theta",
+        "e_zeta_z",
+        "e_theta_z",
+    ],
+)
+def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
+    data["g^rr_z"] = (
+        -data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta_z"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_z"]))
+        - data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta_z"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_z"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rt_z",
+    label="g^{\\rho}{\\theta}_{\\zeta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Poloidal element of contravariant metric tensor, "
+    + "first toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "e^theta",
+        "sqrt(g)_z",
+        "sqrt(g)",
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+        "e_rho_z",
+        "e_theta_z",
+        "e_zeta_z",
+    ],
+)
+def _g_sup_rt_z(params, transforms, profiles, data, **kwargs):
+    data["g^rt_z"] = (
+        -data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_theta_z"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_theta"], data["e_zeta_z"]))
+        - data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_zeta_z"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho_z"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^rz_z",
+    label="g^{\\rho}{\\zeta}_{\\zeta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Toroidal element of contravariant metric tensor, "
+    + "first toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "e^zeta",
+        "sqrt(g)_z",
+        "sqrt(g)",
+        "e_rho",
+        "e_zeta",
+        "e_theta",
+        "e_rho_z",
+        "e_zeta_z",
+        "e_theta_z",
+    ],
+)
+def _g_sup_rz_z(params, transforms, profiles, data, **kwargs):
+    data["g^rz_z"] = (
+        -data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_theta"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_theta_z"], data["e_zeta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_theta"], data["e_zeta_z"]))
+        - data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_rho_z"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta_z"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^tt_z",
+    label="g^{\\theta}{\\theta}_{\\zeta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Poloidal/Poloidal element of contravariant metric tensor, "
+    + "first toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^theta",
+        "sqrt(g)_z",
+        "sqrt(g)",
+        "e_zeta",
+        "e_rho",
+        "e_zeta_z",
+        "e_rho_z",
+    ],
+)
+def _g_sup_tt_z(params, transforms, profiles, data, **kwargs):
+    data["g^tt_z"] = (
+        -data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta_z"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_z"]))
+        - data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta_z"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_z"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^tz_z",
+    label="g^{\\theta}{\\zeta}_{\\zeta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Poloidal/Toroidal element of contravariant metric tensor, "
+    + "first toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^theta",
+        "e^zeta",
+        "sqrt(g)_z",
+        "sqrt(g)",
+        "e_theta",
+        "e_zeta",
+        "e_rho",
+        "e_theta_z",
+        "e_zeta_z",
+        "e_rho_z",
+    ],
+)
+def _g_sup_tz_z(params, transforms, profiles, data, **kwargs):
+    data["g^tz_z"] = (
+        -data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_zeta_z"], data["e_rho"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho_z"]))
+        - data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_rho_z"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta_z"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g^zz_z",
+    label="g^{\\zeta}{\\zeta}_{\\zeta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Toroidal/Toroidal element of contravariant metric tensor, "
+    + "first toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^zeta",
+        "sqrt(g)_z",
+        "sqrt(g)",
+        "e_theta",
+        "e_rho",
+        "e_theta_z",
+        "e_rho_z",
+    ],
+)
+def _g_sup_zz_z(params, transforms, profiles, data, **kwargs):
+    data["g^zz_z"] = (
+        -data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho_z"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_z"]))
+        - data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho_z"], data["e_theta"]))
+        + 1
+        / data["sqrt(g)"]
+        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_z"]))
+    )
     return data
 
 

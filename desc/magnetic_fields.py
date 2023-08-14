@@ -885,7 +885,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     surface: FourierRZToroidalSurface, optional, default None
         Existing FourierRZToroidalSurface object to create a
         CurrentPotentialField with, if provided will use this
-        object's R_lmn, Z_lmn etc instead of the passed-in values
+        object's R_lmn, Z_lmn etc instead of any passed-in values
 
     """
 

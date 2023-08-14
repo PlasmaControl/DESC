@@ -73,8 +73,6 @@ class Coil(MagneticField, ABC):
         field : ndarray, shape(n,3)
             magnetic field at specified points, in either rpz or xyz coordinates
         """
-        if params is None:
-            params = {}
         assert basis.lower() in ["rpz", "xyz"]
         if isinstance(coords, Grid):
             coords = coords.nodes

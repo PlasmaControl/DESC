@@ -334,6 +334,7 @@ def j_dot_B_Redl(
         "Ti",
         "Ti_r",
         "Zeff",
+        "rho",
     ],
     helicity="helicity",
 )

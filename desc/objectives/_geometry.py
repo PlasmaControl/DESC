@@ -1244,7 +1244,7 @@ class B_dmin(_Objective):
         )
 
         if self._use_softmin:  # do softmin
-            dmin_data = jnp.apply_along_axis(jax_softmin, 0, d, self._alpha)
+            dmin_data = jnp.apply_along_axis(jax_softmin, -1, d, self._alpha)
         else:  # do hardmin
             dmin_data = d.min(axis=-1)
 

@@ -2,9 +2,10 @@
 
 import numpy as np
 import scipy.optimize
+import scipy.stats
 from numpy.random import default_rng
 
-from desc.backend import jnp
+from desc.backend import jnp, sign
 from desc.basis import DoubleFourierSeries
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
@@ -86,8 +87,12 @@ def random_surface(
     R_norm = np.exp(-alpha * np.sum(abs(R_basis.modes), axis=-1)) / np.exp(-alpha)
     Z_norm = np.exp(-alpha * np.sum(abs(Z_basis.modes), axis=-1)) / np.exp(-alpha)
 
-    R_mn = R_norm * (1 + np.exp(-beta) * rng.normal(R_basis.num_modes))
-    Z_mn = Z_norm * (1 + np.exp(-beta) * rng.normal(Z_basis.num_modes))
+    R_mn = R_norm * scipy.stats.truncnorm.rvs(
+        loc=1, scale=np.exp(-beta), size=R_basis.num_modes, a=-2, b=2, random_state=rng
+    )
+    Z_mn = Z_norm * scipy.stats.truncnorm.rvs(
+        loc=1, scale=np.exp(-beta), size=Z_basis.num_modes, a=-2, b=2, random_state=rng
+    )
 
     # scale to approximate aspect ratio
     R_scale1 = np.mean(
@@ -101,6 +106,10 @@ def random_surface(
     R_mn[R_basis.get_idx(0, 0, 0)] = R0
     if not sym:
         Z_mn[Z_basis.get_idx(0, 0, 0)] = 0  # center at Z=0
+        # flip sign and reduce magnitude of nonsymmetric modes to avoid degenerate cases
+        # with no volume. kind of ad-hoc but seems to produce reasonable results
+        R_mn[sign(R_basis.modes[:, 1]) != sign(R_basis.modes[:, 2])] *= -np.exp(-beta)
+        Z_mn[sign(Z_basis.modes[:, 1]) == sign(Z_basis.modes[:, 2])] *= -np.exp(-beta)
 
     surf = FourierRZToroidalSurface(
         R_mn,

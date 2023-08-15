@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 from desc.equilibrium import Equilibrium
+from desc.grid import LinearGrid
 from desc.random import random_pressure, random_surface
 
 
@@ -43,6 +44,37 @@ def test_random_surface():
     eq = Equilibrium(surface=surf)
     R0 = eq.compute("R0")["R0"]
     assert 5 <= R0 <= 10
+    AR = eq.compute("R0/a")["R0/a"]
+    # should be ~ R0/sqrt(R_scale*Z_scale), allowing for random variation
+    assert 2.5 <= AR <= 20
+    assert eq.is_nested()
+
+    # same stuff for non-symmetric
+    rng = np.random.default_rng(0)
+    surf = random_surface(
+        M=4,
+        N=4,
+        R0=(5, 10),
+        R_scale=(0.5, 2),
+        Z_scale=(0.5, 2),
+        NFP=(1, 3),
+        sym=False,
+        alpha=(1, 4),
+        beta=(1, 4),
+        rng=rng,
+    )
+    assert not surf.sym
+    assert 1 <= surf.NFP <= 3
+    assert surf.M == 4
+    assert surf.N == 4
+    assert surf._compute_orientation() == 1
+
+    eq = Equilibrium(surface=surf)
+    R0 = eq.compute("R0")["R0"]
+    assert 5 <= R0 <= 10
+    Z0 = eq.compute("Z", grid=LinearGrid(rho=np.array([0]), M=0, N=8, NFP=eq.NFP))["Z"]
+    # should be cenetered around Z=0
+    np.testing.assert_allclose(np.mean(Z0), 0, atol=1e-14)
     AR = eq.compute("R0/a")["R0/a"]
     # should be ~ R0/sqrt(R_scale*Z_scale), allowing for random variation
     assert 2.5 <= AR <= 20

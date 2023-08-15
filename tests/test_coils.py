@@ -256,7 +256,7 @@ class TestCoilSet:
         coil2 = FourierPlanarCoil()
         coils2 = coils1 + [coil2]
         assert coils2[-1] is coil2
-        coils2 = coils1 + CoilSet(coil2)
+        coils2 = coils1 + CoilSet([coil2, coil2])
         assert coils2[-1] is coil2
 
         with pytest.raises(TypeError):

@@ -10,6 +10,7 @@ from desc.compute import rpz2xyz, xyz2rpz_vec
 from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve, XYZCurve
 from desc.grid import Grid
 from desc.magnetic_fields import MagneticField, biot_savart
+from desc.utils import flatten_list
 
 
 class Coil(MagneticField, ABC):
@@ -366,6 +367,7 @@ class CoilSet(Coil, MutableSequence):
     def __init__(
         self, *coils, name=""
     ):  # FIXME: if a list of of Coils is passed, this fails...
+        coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (Coil)) for coil in coils])
         self._coils = list(coils)
         self._name = str(name)

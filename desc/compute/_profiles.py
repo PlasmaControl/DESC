@@ -18,6 +18,24 @@ from .utils import cumtrapz, dot, surface_averages, surface_integrals
 
 
 @register_compute_fun(
+    name="Psi",
+    label="\\Psi",
+    units="Wb",
+    units_long="Webers",
+    description="Toroidal flux",
+    dim=1,
+    params=["Psi"],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["rho"],
+)
+def _Psi(params, transforms, profiles, data, **kwargs):
+    data["Psi"] = params["Psi"] * data["rho"] ** 2
+    return data
+
+
+@register_compute_fun(
     name="psi",
     label="\\psi = \\Psi / (2 \\pi)",
     units="Wb",

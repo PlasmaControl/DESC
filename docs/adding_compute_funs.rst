@@ -23,13 +23,11 @@ The full code is below:
         transforms={},
         profiles=[],
         coordinates="rtz",
-        data=["p_r", "sqrt(g)", "B^theta", "B^zeta", "J^theta", "J^zeta"],
-        parameterization="desc.equilibrium.Equilibrium"
+        data=["p_r", "(curl(B)xB)_rho"],
+        parameterization="desc.equilibrium.Equilibrium",
     )
     def _F_rho(params, transforms, profiles, data, **kwargs):
-        data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
-            data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"]
-        )
+        data["F_rho"] = data["(curl(B)xB)_rho"] / mu_0 - data["p_r"]
         return data
 
 The decorator ``register_compute_fun`` tells DESC that the quantity exists and contains
@@ -71,12 +69,12 @@ metadata about the quanity. The necessary fields are detailed below:
   ``"rtz"`` indicating it is a funciton of :math:`\rho, \theta, \zeta`. Profiles and flux surface
   quantities would have ``coordinates="r"`` indicating it only depends on :math:`\rho`
 * ``data``: What other physics quantites are needed to compute this quanity. In our
-  example, we need the radial derivative of pressure ``p_r``, the Jacobian determinant
-  ``sqrt(g)``, and contravariant components of current and magnetic field. These dependencies
+  example, we need the radial derivative of pressure ``p_r`` and ``(curl(B)xB)_rho``, which
+  itself depends on the contravariant components of current and magnetic field. These dependencies
   will be passed to the compute function as a dictionary in the ``data`` argument. Note
   that this only includes direct dependencies (things that are used in this function).
-  For example, we need ``sqrt(g)``, which itself depends on ``e_rho``, etc. But we don'take
-  need to specify ``e_rho`` here, that dependency is determined automatically at runtime.
+  For example, we need ``(curl(B)xB)_rho`` but we do not specify the dependencies of
+  ``(curl(B)xB)_rho`` here. Those sub-dependencies are determined automatically at runtime.
 * ``parameterization``: what sorts of DESC objects is this function for. Most functions
   will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.Curve``,
   or specific types eg ``desc.geometry.FourierRZCurve``.

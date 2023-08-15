@@ -1,9 +1,20 @@
+"""Compute functions for profiles.
+
+Notes
+-----
+Some quantities require additional work to compute at the magnetic axis.
+A Python lambda function is used to lazily compute the magnetic axis limits
+of these quantities. These lambda functions are evaluated only when the
+computational grid has a node on the magnetic axis to avoid potentially
+expensive computations.
+"""
+
 from scipy.constants import elementary_charge, mu_0
 
-from desc.backend import jnp, put
+from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import compress, cumtrapz, dot, expand, surface_averages
+from .utils import cumtrapz, dot, surface_averages, surface_integrals
 
 
 @register_compute_fun(
@@ -98,60 +109,6 @@ def _psi_rrr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="grad(psi)",
-    label="\\nabla\\psi",
-    units="Wb / m",
-    units_long="Webers per meter",
-    description="Toroidal flux gradient (normalized by 2pi)",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["psi_r", "e^rho"],
-)
-def _gradpsi(params, transforms, profiles, data, **kwargs):
-    data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
-    return data
-
-
-@register_compute_fun(
-    name="|grad(psi)|^2",
-    label="|\\nabla\\psi|^{2}",
-    units="(Wb / m)^{2}",
-    units_long="Webers squared per square meter",
-    description="Toroidal flux gradient (normalized by 2pi) magnitude squared",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["grad(psi)"],
-)
-def _gradpsi_mag2(params, transforms, profiles, data, **kwargs):
-    data["|grad(psi)|^2"] = dot(data["grad(psi)"], data["grad(psi)"])
-    return data
-
-
-@register_compute_fun(
-    name="|grad(psi)|",
-    label="|\\nabla\\psi|",
-    units="Wb / m",
-    units_long="Webers per meter",
-    description="Toroidal flux gradient (normalized by 2pi) magnitude",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["|grad(psi)|^2"],
-)
-def _gradpsi_mag(params, transforms, profiles, data, **kwargs):
-    data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
-    return data
-
-
-@register_compute_fun(
     name="chi_r",
     label="\\partial_{\\rho} \\chi",
     units="Wb",
@@ -180,15 +137,12 @@ def _chi_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=[
-        "chi_r",
-    ],
+    data=["chi_r", "rho"],
 )
 def _chi(params, transforms, profiles, data, **kwargs):
-    chi_r = compress(transforms["grid"], data["chi_r"], surface_label="rho")
-    rho = transforms["grid"].nodes[transforms["grid"].unique_rho_idx, 0]
-    chi = cumtrapz(chi_r, rho, initial=0)
-    data["chi"] = expand(transforms["grid"], chi, surface_label="rho")
+    chi_r = transforms["grid"].compress(data["chi_r"])
+    chi = cumtrapz(chi_r, transforms["grid"].compress(data["rho"]), initial=0)
+    data["chi"] = transforms["grid"].expand(chi)
     return data
 
 
@@ -235,6 +189,27 @@ def _Te_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="Te_rr",
+    label="\\partial_{\\rho \\rho} T_e",
+    units="eV",
+    units_long="electron-Volts",
+    description="Electron temperature, second radial derivative",
+    dim=1,
+    params=["Te_l"],
+    transforms={},
+    profiles=["electron_temperature"],
+    coordinates="r",
+    data=["0"],
+)
+def _Te_rr(params, transforms, profiles, data, **kwargs):
+    if profiles["electron_temperature"] is not None:
+        data["Te_rr"] = profiles["electron_temperature"].compute(params["Te_l"], dr=2)
+    else:
+        data["Te_rr"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
     name="ne",
     label="n_e",
     units="m^{-3}",
@@ -277,6 +252,27 @@ def _ne_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="ne_rr",
+    label="\\partial_{\\rho \\rho} n_e",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Electron density, second radial derivative",
+    dim=1,
+    params=["ne_l"],
+    transforms={},
+    profiles=["electron_density"],
+    coordinates="r",
+    data=["0"],
+)
+def _ne_rr(params, transforms, profiles, data, **kwargs):
+    if profiles["electron_density"] is not None:
+        data["ne_rr"] = profiles["electron_density"].compute(params["ne_l"], dr=2)
+    else:
+        data["ne_rr"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
     name="Ti",
     label="T_i",
     units="eV",
@@ -315,6 +311,27 @@ def _Ti_r(params, transforms, profiles, data, **kwargs):
         data["Ti_r"] = profiles["ion_temperature"].compute(params["Ti_l"], dr=1)
     else:
         data["Ti_r"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="Ti_rr",
+    label="\\partial_{\\rho \\rho} T_i",
+    units="eV",
+    units_long="electron-Volts",
+    description="Ion temperature, second radial derivative",
+    dim=1,
+    params=["Ti_l"],
+    transforms={},
+    profiles=["ion_temperature"],
+    coordinates="r",
+    data=["0"],
+)
+def _Ti_rr(params, transforms, profiles, data, **kwargs):
+    if profiles["ion_temperature"] is not None:
+        data["Ti_rr"] = profiles["ion_temperature"].compute(params["Ti_l"], dr=2)
+    else:
+        data["Ti_rr"] = jnp.nan * data["0"]
     return data
 
 
@@ -492,43 +509,21 @@ def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Rotational transform (normalized by 2pi)",
     dim=1,
-    params=["i_l", "c_l"],
+    params=["i_l"],
     transforms={"grid": []},
     profiles=["iota", "current"],
     coordinates="r",
-    data=["psi_r", "iota_zero_current_num", "iota_zero_current_den"],
-    axis_limit_data=["psi_rr"],
+    data=["iota_den", "iota_num"],
+    axis_limit_data=["iota_den_r", "iota_num_r"],
 )
 def _iota(params, transforms, profiles, data, **kwargs):
-    # The rotational transform is computed from the toroidal current profile using
-    # equation 11 in S.P. Hishman & J.T. Hogan (1986)
-    # doi:10.1016/0021-9991(86)90197-X. Their "zero current algorithm" is supplemented
-    # with an additional term to account for finite net toroidal currents. Note that
-    # the flux surface average integrals in their formula should not be weighted by a
-    # coordinate Jacobian factor, meaning the sqrt(g) terms in the denominators of
-    # these averages will not be canceled out.
     if profiles["iota"] is not None:
         data["iota"] = profiles["iota"].compute(params["i_l"], dr=0)
     elif profiles["current"] is not None:
-        # current_term = 2*pi * I / params["Psi"]_r = mu_0 / 2*pi * current / psi_r
-        current_term = (
-            mu_0
-            / (2 * jnp.pi)
-            * profiles["current"].compute(params["c_l"], dr=0)
-            / data["psi_r"]
-        )
-        if transforms["grid"].axis.size:
-            limit = (
-                mu_0
-                / (2 * jnp.pi)
-                * profiles["current"].compute(params["c_l"], dr=2)
-                / data["psi_rr"]
-            )
-            current_term = put(
-                current_term, transforms["grid"].axis, limit[transforms["grid"].axis]
-            )
-        data["iota"] = (current_term + data["iota_zero_current_num"]) / (
-            data["iota_zero_current_den"]
+        # See the document attached to GitHub pull request #556 for the math.
+        data["iota"] = transforms["grid"].replace_at_axis(
+            data["iota_num"] / data["iota_den"],
+            lambda: data["iota_num_r"] / data["iota_den_r"],
         )
     return data
 
@@ -540,45 +535,30 @@ def _iota(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Rotational transform (normalized by 2pi), first radial derivative",
     dim=1,
-    params=["i_l", "c_l"],
+    params=["i_l"],
     transforms={"grid": []},
     profiles=["iota", "current"],
     coordinates="r",
-    data=[
-        "iota",
-        "psi_r",
-        "psi_rr",
-        "iota_zero_current_num_r",
-        "iota_zero_current_den",
-        "iota_zero_current_den_r",
-    ],
+    data=["iota_den", "iota_den_r", "iota_num", "iota_num_r"],
+    axis_limit_data=["iota_den_rr", "iota_num_rr"],
 )
 def _iota_r(params, transforms, profiles, data, **kwargs):
-    # The rotational transform is computed from the toroidal current profile using
-    # equation 11 in S.P. Hishman & J.T. Hogan (1986)
-    # doi:10.1016/0021-9991(86)90197-X. Their "zero current algorithm" is supplemented
-    # with an additional term to account for finite net toroidal currents. Note that
-    # the flux surface average integrals in their formula should not be weighted by a
-    # coordinate Jacobian factor, meaning the sqrt(g) terms in the denominators of
-    # these averages will not be canceled out.
     if profiles["iota"] is not None:
         data["iota_r"] = profiles["iota"].compute(params["i_l"], dr=1)
     elif profiles["current"] is not None:
-        current_term = (
-            mu_0
-            / (2 * jnp.pi)
-            * profiles["current"].compute(params["c_l"], dr=0)
-            / data["psi_r"]
+        # See the document attached to GitHub pull request #556 for the math.
+        data["iota_r"] = transforms["grid"].replace_at_axis(
+            (
+                data["iota_num_r"] * data["iota_den"]
+                - data["iota_num"] * data["iota_den_r"]
+            )
+            / data["iota_den"] ** 2,
+            lambda: (
+                data["iota_num_rr"] * data["iota_den_r"]
+                - data["iota_num_r"] * data["iota_den_rr"]
+            )
+            / (2 * data["iota_den_r"] ** 2),
         )
-        current_term_r = (
-            mu_0 / (2 * jnp.pi) * profiles["current"].compute(params["c_l"], dr=1)
-            - current_term * data["psi_rr"]
-        ) / data["psi_r"]
-        data["iota_r"] = (
-            current_term_r
-            + data["iota_zero_current_num_r"]
-            - data["iota"] * data["iota_zero_current_den_r"]
-        ) / data["iota_zero_current_den"]
     return data
 
 
@@ -589,118 +569,98 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Rotational transform (normalized by 2pi), second radial derivative",
     dim=1,
-    params=["i_l", "c_l"],
+    params=["i_l"],
     transforms={"grid": []},
     profiles=["iota", "current"],
     coordinates="r",
     data=[
-        "iota",
-        "iota_r",
-        "psi_r",
-        "psi_rr",
-        "psi_rrr",
-        "iota_zero_current_num_rr",
-        "iota_zero_current_den",
-        "iota_zero_current_den_r",
-        "iota_zero_current_den_rr",
+        "iota_den",
+        "iota_den_r",
+        "iota_den_rr",
+        "iota_num",
+        "iota_num_r",
+        "iota_num_rr",
     ],
+    axis_limit_data=["iota_den_rrr", "iota_num_rrr"],
 )
 def _iota_rr(params, transforms, profiles, data, **kwargs):
-    # The rotational transform is computed from the toroidal current profile using
-    # equation 11 in S.P. Hishman & J.T. Hogan (1986)
-    # doi:10.1016/0021-9991(86)90197-X. Their "zero current algorithm" is supplemented
-    # with an additional term to account for finite net toroidal currents. Note that
-    # the flux surface average integrals in their formula should not be weighted by a
-    # coordinate Jacobian factor, meaning the sqrt(g) terms in the denominators of
-    # these averages will not be canceled out.
     if profiles["iota"] is not None:
         data["iota_rr"] = profiles["iota"].compute(params["i_l"], dr=2)
     elif profiles["current"] is not None:
-        current_term = (
-            mu_0
-            / (2 * jnp.pi)
-            * profiles["current"].compute(params["c_l"], dr=0)
-            / data["psi_r"]
+        # See the document attached to GitHub pull request #556 for the math.
+        data["iota_rr"] = transforms["grid"].replace_at_axis(
+            (
+                data["iota_num_rr"] * data["iota_den"] ** 2
+                - 2 * data["iota_num_r"] * data["iota_den"] * data["iota_den_r"]
+                + 2 * data["iota_num"] * data["iota_den_r"] ** 2
+                - data["iota_num"] * data["iota_den"] * data["iota_den_rr"]
+            )
+            / data["iota_den"] ** 3,
+            lambda: (
+                2 * data["iota_num_rrr"] * data["iota_den_r"] ** 2
+                - 3 * data["iota_num_rr"] * data["iota_den_r"] * data["iota_den_rr"]
+                + 3 * data["iota_num_r"] * data["iota_den_rr"] ** 2
+                - 2 * data["iota_num_r"] * data["iota_den_r"] * data["iota_den_rrr"]
+            )
+            / (6 * data["iota_den_r"] ** 3),
         )
-        current_term_r = (
-            mu_0 / (2 * jnp.pi) * profiles["current"].compute(params["c_l"], dr=1)
-            - current_term * data["psi_rr"]
-        ) / data["psi_r"]
-        current_term_rr = (
-            mu_0 / (2 * jnp.pi) * profiles["current"].compute(params["c_l"], dr=2)
-            - 2 * current_term_r * data["psi_rr"]
-            - current_term * data["psi_rrr"]
-        ) / data["psi_r"]
-        data["iota_rr"] = (
-            current_term_rr
-            + data["iota_zero_current_num_rr"]
-            - 2 * data["iota_r"] * data["iota_zero_current_den_r"]
-            - data["iota"] * data["iota_zero_current_den_rr"]
-        ) / data["iota_zero_current_den"]
     return data
 
 
 @register_compute_fun(
-    name="iota_zero_current_num",
-    label="\\iota_{0~\\mathrm{numerator}}",
+    name="iota_num",
+    label="\\iota_{\\mathrm{numerator}}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Zero toroidal current rotational transform numerator",
+    description="Numerator of rotational transform formula",
     dim=1,
-    params=[],
+    params=["c_l"],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["current"],
     coordinates="r",
-    data=["lambda_t", "lambda_z", "g_tt", "g_tz", "sqrt(g)"],
-    axis_limit_data=[
-        "lambda_rt",
-        "g_tt_rr",
-        "g_tz_r",
-        "g_tz_rr",
-        "sqrt(g)_r",
-        "sqrt(g)_rr",
-    ],
+    data=["0", "lambda_z", "g_tt", "lambda_t", "g_tz", "sqrt(g)", "psi_r"],
 )
-def _iota_zero_current_num(params, transforms, profiles, data, **kwargs):
-    num = (
-        data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
-    ) / data["sqrt(g)"]
-    data["iota_zero_current_num"] = surface_averages(transforms["grid"], num)
+def _iota_num(params, transforms, profiles, data, **kwargs):
+    """Numerator of rotational transform formula.
 
-    if transforms["grid"].axis.size:
-        limit = (
-            (data["g_tz_r"] * data["sqrt(g)_rr"] * (1 + data["lambda_t"]))
-            / data["sqrt(g)_r"] ** 2
-        ) + (
-            data["lambda_z"] * data["g_tt_rr"]
-            - 2 * data["g_tz_r"] * data["lambda_rt"]
-            - (1 + data["lambda_t"]) * data["g_tz_rr"]
-        ) / data[
-            "sqrt(g)_r"
-        ]
-        limit = surface_averages(transforms["grid"], limit)
-        data["iota_zero_current_num"] = put(
-            data["iota_zero_current_num"],
-            transforms["grid"].axis,
-            limit[transforms["grid"].axis],
-        )
+    Computes 𝛼 + 𝛽 as defined in the document attached to the description
+    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
+    additional term to account for the enclosed net toroidal current.
+    """
+    if profiles["current"] is None:
+        data["iota_num"] = jnp.nan * data["0"]
+        return data
 
+    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+    alpha = (
+        2
+        * jnp.pi
+        * mu_0
+        * profiles["current"].compute(params["c_l"], dr=0)
+        / data["psi_r"]
+    )
+    beta = surface_integrals(
+        transforms["grid"],
+        (data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"])
+        / data["sqrt(g)"],
+    )
+    data["iota_num"] = transforms["grid"].replace_at_axis(alpha + beta, 0)
     return data
 
 
 @register_compute_fun(
-    name="iota_zero_current_num_r",
-    label="\\partial_{\\rho} \\iota_{0~\\mathrm{numerator}}",
+    name="iota_num_r",
+    label="\\partial_{\\rho} \\iota_{\\mathrm{numerator}}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Zero toroidal current rotational transform numerator,"
-    " first radial derivative",
+    description="Numerator of rotational transform formula, first radial derivative",
     dim=1,
-    params=[],
+    params=["c_l"],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["current"],
     coordinates="r",
     data=[
+        "0",
         "lambda_t",
         "lambda_rt",
         "lambda_z",
@@ -711,37 +671,84 @@ def _iota_zero_current_num(params, transforms, profiles, data, **kwargs):
         "g_tz_r",
         "sqrt(g)",
         "sqrt(g)_r",
+        "psi_r",
+        "psi_rr",
     ],
+    axis_limit_data=["g_tt_rr", "g_tz_rr", "sqrt(g)_rr", "psi_rrr"],
 )
-def _iota_zero_current_num_r(params, transforms, profiles, data, **kwargs):
-    num = (
+def _iota_num_r(params, transforms, profiles, data, **kwargs):
+    """Numerator of rotational transform formula, first radial derivative.
+
+    Computes d(𝛼+𝛽)/d𝜌 as defined in the document attached to the description
+    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
+    additional term to account for the enclosed net toroidal current.
+    """
+    if profiles["current"] is None:
+        data["iota_num_r"] = jnp.nan * data["0"]
+        return data
+
+    current_r = profiles["current"].compute(params["c_l"], dr=1)
+    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+    alpha_r = (
+        jnp.pi
+        * mu_0
+        * transforms["grid"].replace_at_axis(
+            2
+            * (
+                current_r * data["psi_r"]
+                - profiles["current"].compute(params["c_l"], dr=0) * data["psi_rr"]
+            )
+            / data["psi_r"] ** 2,
+            lambda: (
+                profiles["current"].compute(params["c_l"], dr=2) * data["psi_rr"]
+                - current_r * data["psi_rrr"]
+            )
+            / data["psi_rr"] ** 2,
+        )
+    )
+    beta = (
         data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
     ) / data["sqrt(g)"]
-    num_r = (
-        data["lambda_rz"] * data["g_tt"]
-        + data["lambda_z"] * data["g_tt_r"]
-        - data["lambda_rt"] * data["g_tz"]
-        - (1 + data["lambda_t"]) * data["g_tz_r"]
-        - num * data["sqrt(g)_r"]
-    ) / data["sqrt(g)"]
-    data["iota_zero_current_num_r"] = surface_averages(transforms["grid"], num_r)
-    # TODO: limit at axis
+    beta_r = transforms["grid"].replace_at_axis(
+        (
+            data["lambda_rz"] * data["g_tt"]
+            + data["lambda_z"] * data["g_tt_r"]
+            - data["lambda_rt"] * data["g_tz"]
+            - (1 + data["lambda_t"]) * data["g_tz_r"]
+            - beta * data["sqrt(g)_r"]
+        )
+        / data["sqrt(g)"],
+        lambda: (
+            (1 + data["lambda_t"])
+            * data["g_tz_r"]
+            * data["sqrt(g)_rr"]
+            / (2 * data["sqrt(g)_r"] ** 2)
+            + (
+                data["lambda_z"] * data["g_tt_rr"]
+                - 2 * data["lambda_rt"] * data["g_tz_r"]
+                - (1 + data["lambda_t"]) * data["g_tz_rr"]
+            )
+            / (2 * data["sqrt(g)_r"])
+        ),
+    )
+    beta_r = surface_integrals(transforms["grid"], beta_r)
+    data["iota_num_r"] = alpha_r + beta_r
     return data
 
 
 @register_compute_fun(
-    name="iota_zero_current_num_rr",
-    label="\\partial_{\\rho\\rho} \\iota_{0~\\mathrm{numerator}}",
+    name="iota_num_rr",
+    label="\\partial_{\\rho\\rho} \\iota_{\\mathrm{numerator}}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Zero toroidal current rotational transform numerator,"
-    " second radial derivative",
+    description="Numerator of rotational transform formula, second radial derivative",
     dim=1,
-    params=[],
+    params=["c_l"],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["current"],
     coordinates="r",
     data=[
+        "0",
         "lambda_t",
         "lambda_rt",
         "lambda_rrt",
@@ -757,109 +764,502 @@ def _iota_zero_current_num_r(params, transforms, profiles, data, **kwargs):
         "sqrt(g)",
         "sqrt(g)_r",
         "sqrt(g)_rr",
+        "psi_r",
+        "psi_rr",
+        "psi_rrr",
     ],
+    axis_limit_data=["sqrt(g)_rrr", "g_tt_rrr", "g_tz_rrr"],
 )
-def _iota_zero_current_num_rr(params, transforms, profiles, data, **kwargs):
-    num = (
+def _iota_num_rr(params, transforms, profiles, data, **kwargs):
+    """Numerator of rotational transform formula, second radial derivative.
+
+    Computes d2(𝛼+𝛽)/d𝜌2 as defined in the document attached to the description
+    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
+    additional term to account for the enclosed net toroidal current.
+    """
+    if profiles["current"] is None:
+        data["iota_num_rr"] = jnp.nan * data["0"]
+        return data
+
+    current_r = profiles["current"].compute(params["c_l"], dr=1)
+    current_rr = profiles["current"].compute(params["c_l"], dr=2)
+    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+    alpha_rr = (
+        jnp.pi
+        * mu_0
+        * transforms["grid"].replace_at_axis(
+            2 * current_rr / data["psi_r"]
+            - 4 * current_r * data["psi_rr"] / data["psi_r"] ** 2
+            + 2
+            * profiles["current"].compute(params["c_l"], dr=0)
+            * (2 * data["psi_rr"] ** 2 - data["psi_rrr"] * data["psi_r"])
+            / data["psi_r"] ** 3,
+            lambda: 2
+            * profiles["current"].compute(params["c_l"], dr=3)
+            / (3 * data["psi_rr"])
+            - current_rr * data["psi_rrr"] / data["psi_rr"] ** 2
+            + current_r * data["psi_rrr"] ** 2 / data["psi_rr"] ** 3,
+        )
+    )
+    beta = (
         data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
     ) / data["sqrt(g)"]
-    num_r = (
+    beta_r = (
         data["lambda_rz"] * data["g_tt"]
         + data["lambda_z"] * data["g_tt_r"]
         - data["lambda_rt"] * data["g_tz"]
         - (1 + data["lambda_t"]) * data["g_tz_r"]
-        - num * data["sqrt(g)_r"]
+        - beta * data["sqrt(g)_r"]
     ) / data["sqrt(g)"]
-    num_rr = (
+    beta_rr = transforms["grid"].replace_at_axis(
+        (
+            data["lambda_rrz"] * data["g_tt"]
+            + 2 * data["lambda_rz"] * data["g_tt_r"]
+            + data["lambda_z"] * data["g_tt_rr"]
+            - data["lambda_rrt"] * data["g_tz"]
+            - 2 * data["lambda_rt"] * data["g_tz_r"]
+            - (1 + data["lambda_t"]) * data["g_tz_rr"]
+            - 2 * beta_r * data["sqrt(g)_r"]
+            - beta * data["sqrt(g)_rr"]
+        )
+        / data["sqrt(g)"],
+        lambda: (
+            2
+            * data["sqrt(g)_r"] ** 2
+            * (
+                3 * data["g_tt_rr"] * data["lambda_rz"]
+                + data["g_tt_rrr"] * data["lambda_z"]
+                - 3 * data["g_tz_rr"] * data["lambda_rt"]
+                - 3 * data["g_tz_r"] * data["lambda_rrt"]
+                - data["g_tz_rrr"] * (1 + data["lambda_t"])
+            )
+            + data["sqrt(g)_r"]
+            * (
+                3
+                * data["sqrt(g)_rr"]
+                * (
+                    2 * data["g_tz_r"] * data["lambda_rt"]
+                    - data["g_tt_rr"] * data["lambda_t"]
+                    + data["g_tz_rr"] * (1 + data["lambda_t"])
+                )
+                + 2 * data["sqrt(g)_rrr"] * data["g_tz_r"] * (1 + data["lambda_t"])
+            )
+            - 3 * data["sqrt(g)_rr"] ** 2 * data["g_tz_r"] * (1 + data["lambda_t"])
+        )
+        / (6 * data["sqrt(g)_r"] ** 3),
+    )
+    beta_rr = surface_integrals(transforms["grid"], beta_rr)
+    data["iota_num_rr"] = alpha_rr + beta_rr
+    return data
+
+
+@register_compute_fun(
+    name="iota_num_rrr",
+    label="\\partial_{\\rho\\rho\\rho} \\iota_{\\mathrm{numerator}}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Numerator of rotational transform formula, third radial derivative",
+    dim=1,
+    params=["c_l"],
+    transforms={"grid": []},
+    profiles=["current"],
+    coordinates="r",
+    data=[
+        "0",
+        "lambda_t",
+        "lambda_rt",
+        "lambda_rrt",
+        "lambda_rrrt",
+        "lambda_z",
+        "lambda_rz",
+        "lambda_rrz",
+        "lambda_rrrz",
+        "g_tt",
+        "g_tt_r",
+        "g_tt_rr",
+        "g_tt_rrr",
+        "g_tz",
+        "g_tz_r",
+        "g_tz_rr",
+        "g_tz_rrr",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rr",
+        "sqrt(g)_rrr",
+        "psi_r",
+        "psi_rr",
+        "psi_rrr",
+    ],
+)
+def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
+    """Numerator of rotational transform formula, third radial derivative.
+
+    Computes d3(𝛼+𝛽)/d𝜌3 as defined in the document attached to the description
+    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
+    additional term to account for the enclosed net toroidal current.
+    """
+    if profiles["current"] is None:
+        data["iota_num_rrr"] = jnp.nan * data["0"]
+        return data
+
+    current_r = profiles["current"].compute(params["c_l"], dr=1)
+    current_rr = profiles["current"].compute(params["c_l"], dr=2)
+    current_rrr = profiles["current"].compute(params["c_l"], dr=3)
+    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+    alpha_rrr = (
+        jnp.pi
+        * mu_0
+        * transforms["grid"].replace_at_axis(
+            2 * current_rrr / data["psi_r"]
+            - 6 * current_rr * data["psi_rr"] / data["psi_r"] ** 2
+            + 6
+            * current_r
+            * (
+                2 * data["psi_r"] * data["psi_rr"] ** 2
+                - data["psi_rrr"] * data["psi_r"] ** 2
+            )
+            / data["psi_r"] ** 4
+            + 12
+            * profiles["current"].compute(params["c_l"], dr=0)
+            * (data["psi_rrr"] * data["psi_rr"] * data["psi_r"] - data["psi_rr"] ** 3)
+            / data["psi_r"] ** 4,
+            lambda: profiles["current"].compute(params["c_l"], dr=4)
+            / (2 * data["psi_rr"])
+            - current_rrr * data["psi_rrr"] / data["psi_rr"] ** 2
+            + 3 * current_rr * data["psi_rrr"] ** 2 / (2 * data["psi_rr"] ** 3)
+            - 3 * current_r * data["psi_rrr"] ** 3 / (2 * data["psi_rr"] ** 4),
+        )
+    )
+    beta = (
+        data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
+    ) / data["sqrt(g)"]
+    beta_r = (
+        data["lambda_rz"] * data["g_tt"]
+        + data["lambda_z"] * data["g_tt_r"]
+        - data["lambda_rt"] * data["g_tz"]
+        - (1 + data["lambda_t"]) * data["g_tz_r"]
+        - beta * data["sqrt(g)_r"]
+    ) / data["sqrt(g)"]
+    beta_rr = (
         data["lambda_rrz"] * data["g_tt"]
         + 2 * data["lambda_rz"] * data["g_tt_r"]
         + data["lambda_z"] * data["g_tt_rr"]
         - data["lambda_rrt"] * data["g_tz"]
         - 2 * data["lambda_rt"] * data["g_tz_r"]
         - (1 + data["lambda_t"]) * data["g_tz_rr"]
-        - 2 * num_r * data["sqrt(g)_r"]
-        - num * data["sqrt(g)_rr"]
+        - 2 * beta_r * data["sqrt(g)_r"]
+        - beta * data["sqrt(g)_rr"]
     ) / data["sqrt(g)"]
-    data["iota_zero_current_num_rr"] = surface_averages(transforms["grid"], num_rr)
-    # TODO: limit at axis
-    return data
-
-
-@register_compute_fun(
-    name="iota_zero_current_den",
-    label="\\iota_{0~\\mathrm{denominator}}",
-    units="m^{-1}",
-    units_long="inverse meters",
-    description="Zero toroidal current rotational transform denominator",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="r",
-    data=["g_tt", "sqrt(g)"],
-    axis_limit_data=["g_tt_rr", "sqrt(g)_r"],
-)
-def _iota_zero_current_den(params, transforms, profiles, data, **kwargs):
-    den = data["g_tt"] / data["sqrt(g)"]
-    data["iota_zero_current_den"] = surface_averages(transforms["grid"], den)
-
-    if transforms["grid"].axis.size:
-        limit = surface_averages(
-            transforms["grid"], data["g_tt_rr"] / data["sqrt(g)_r"]
+    beta_rrr = transforms["grid"].replace_at_axis(
+        (
+            data["lambda_rrrz"] * data["g_tt"]
+            + 3 * data["lambda_rrz"] * data["g_tt_r"]
+            + 3 * data["lambda_rz"] * data["g_tt_rr"]
+            + data["lambda_z"] * data["g_tt_rrr"]
+            - data["lambda_rrrt"] * data["g_tz"]
+            - 3 * data["lambda_rrt"] * data["g_tz_r"]
+            - 3 * data["lambda_rt"] * data["g_tz_rr"]
+            - (1 + data["lambda_t"]) * data["g_tz_rrr"]
+            - 3 * beta_rr * data["sqrt(g)_r"]
+            - 3 * beta_r * data["sqrt(g)_rr"]
+            - beta * data["sqrt(g)_rrr"]
         )
-        data["iota_zero_current_den"] = put(
-            data["iota_zero_current_den"],
-            transforms["grid"].axis,
-            limit[transforms["grid"].axis],
-        )
-
+        / data["sqrt(g)"],
+        # Todo: axis limit of beta_rrr
+        #   Computed with four applications of l’Hôpital’s rule.
+        #   Requires sqrt(g)_rrrr and fourth derivatives of basis vectors.
+        jnp.nan,
+    )
+    beta_rrr = surface_integrals(transforms["grid"], beta_rrr)
+    # force limit to nan until completed because integration replaces nan with 0
+    data["iota_num_rrr"] = alpha_rrr + transforms["grid"].replace_at_axis(
+        beta_rrr, jnp.nan
+    )
     return data
 
 
 @register_compute_fun(
-    name="iota_zero_current_den_r",
-    label="\\partial_{\\rho} \\iota_{0~\\mathrm{denominator}}",
+    name="iota_den",
+    label="\\iota_{\\mathrm{denominator}}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Zero toroidal current rotational transform denominator,"
-    " first radial derivative",
+    description="Denominator of rotational transform formula",
     dim=1,
     params=[],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["current"],
     coordinates="r",
-    data=["g_tt", "g_tt_r", "sqrt(g)", "sqrt(g)_r"],
+    data=["0", "g_tt", "g_tz", "sqrt(g)", "omega_t", "omega_z"],
 )
-def _iota_zero_current_den_r(params, transforms, profiles, data, **kwargs):
-    den = data["g_tt"] / data["sqrt(g)"]
-    den_r = (data["g_tt_r"] - den * data["sqrt(g)_r"]) / data["sqrt(g)"]
-    data["iota_zero_current_den_r"] = surface_averages(transforms["grid"], den_r)
-    # TODO: limit at axis
-    return data
+def _iota_den(params, transforms, profiles, data, **kwargs):
+    """Denominator of rotational transform formula.
 
+    Computes 𝛾 as defined in the document attached to the description
+    of GitHub pull request #556.
+    """
+    if profiles["current"] is None:
+        data["iota_den"] = jnp.nan * data["0"]
+        return data
 
-@register_compute_fun(
-    name="iota_zero_current_den_rr",
-    label="\\partial_{\\rho\\rho} \\iota_{0~\\mathrm{denominator}}",
-    units="m^{-1}",
-    units_long="inverse meters",
-    description="Zero toroidal current rotational transform denominator,"
-    " second radial derivative",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="r",
-    data=["g_tt", "g_tt_r", "g_tt_rr", "sqrt(g)", "sqrt(g)_r", "sqrt(g)_rr"],
-)
-def _iota_zero_current_den_rr(params, transforms, profiles, data, **kwargs):
-    den = data["g_tt"] / data["sqrt(g)"]
-    den_r = (data["g_tt_r"] - den * data["sqrt(g)_r"]) / data["sqrt(g)"]
-    den_rr = (
-        data["g_tt_rr"] - 2 * den_r * data["sqrt(g)_r"] - den * data["sqrt(g)_rr"]
+    gamma = (
+        (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
     ) / data["sqrt(g)"]
-    data["iota_zero_current_den_rr"] = surface_averages(transforms["grid"], den_rr)
-    # TODO: limit at axis
+    # Assumes toroidal stream function behaves such that the magnetic axis limit
+    # of gamma is zero (as it would if omega = 0 identically).
+    gamma = transforms["grid"].replace_at_axis(
+        surface_integrals(transforms["grid"], gamma), 0
+    )
+    data["iota_den"] = gamma
+    return data
+
+
+@register_compute_fun(
+    name="iota_den_r",
+    label="\\partial_{\\rho} \\iota_{\\mathrm{denominator}}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Denominator of rotational transform formula, first radial derivative",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=["current"],
+    coordinates="r",
+    data=[
+        "0",
+        "g_tt",
+        "g_tt_r",
+        "g_tz",
+        "g_tz_r",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "omega_t",
+        "omega_rt",
+        "omega_z",
+        "omega_rz",
+    ],
+    axis_limit_data=["sqrt(g)_rr", "g_tt_rr", "g_tz_rr"],
+)
+def _iota_den_r(params, transforms, profiles, data, **kwargs):
+    """Denominator of rotational transform formula, first radial derivative.
+
+    Computes d𝛾/d𝜌 as defined in the document attached to the description
+    of GitHub pull request #556.
+    """
+    if profiles["current"] is None:
+        data["iota_den_r"] = jnp.nan * data["0"]
+        return data
+
+    gamma = (
+        (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
+    ) / data["sqrt(g)"]
+    gamma_r = transforms["grid"].replace_at_axis(
+        (
+            data["omega_rz"] * data["g_tt"]
+            + (1 + data["omega_z"]) * data["g_tt_r"]
+            - data["omega_rt"] * data["g_tz"]
+            - data["omega_t"] * data["g_tz_r"]
+            - gamma * data["sqrt(g)_r"]
+        )
+        / data["sqrt(g)"],
+        lambda: (
+            data["omega_t"]
+            * data["g_tz_r"]
+            * data["sqrt(g)_rr"]
+            / (2 * data["sqrt(g)_r"] ** 2)
+            + (
+                (1 + data["omega_z"]) * data["g_tt_rr"]
+                - 2 * data["omega_rt"] * data["g_tz_r"]
+                - data["omega_t"] * data["g_tz_rr"]
+            )
+            / (2 * data["sqrt(g)_r"])
+        ),
+    )
+    gamma_r = surface_integrals(transforms["grid"], gamma_r)
+    data["iota_den_r"] = gamma_r
+    return data
+
+
+@register_compute_fun(
+    name="iota_den_rr",
+    label="\\partial_{\\rho\\rho} \\iota_{\\mathrm{denominator}}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Denominator of rotational transform formula, second radial derivative",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=["current"],
+    coordinates="r",
+    data=[
+        "0",
+        "g_tt",
+        "g_tt_r",
+        "g_tt_rr",
+        "g_tz",
+        "g_tz_r",
+        "g_tz_rr",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rr",
+        "omega_t",
+        "omega_rt",
+        "omega_rrt",
+        "omega_z",
+        "omega_rz",
+        "omega_rrz",
+    ],
+    axis_limit_data=["sqrt(g)_rrr", "g_tt_rrr", "g_tz_rrr"],
+)
+def _iota_den_rr(params, transforms, profiles, data, **kwargs):
+    """Denominator of rotational transform formula, second radial derivative.
+
+    Computes d2𝛾/d𝜌2 as defined in the document attached to the description
+    of GitHub pull request #556.
+    """
+    if profiles["current"] is None:
+        data["iota_den_rr"] = jnp.nan * data["0"]
+        return data
+
+    gamma = (
+        (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
+    ) / data["sqrt(g)"]
+    gamma_r = (
+        data["omega_rz"] * data["g_tt"]
+        + (1 + data["omega_z"]) * data["g_tt_r"]
+        - data["omega_rt"] * data["g_tz"]
+        - data["omega_t"] * data["g_tz_r"]
+        - gamma * data["sqrt(g)_r"]
+    ) / data["sqrt(g)"]
+    gamma_rr = transforms["grid"].replace_at_axis(
+        (
+            data["omega_rrz"] * data["g_tt"]
+            + 2 * data["omega_rz"] * data["g_tt_r"]
+            + (1 + data["omega_z"]) * data["g_tt_rr"]
+            - data["omega_rrt"] * data["g_tz"]
+            - 2 * data["omega_rt"] * data["g_tz_r"]
+            - data["omega_t"] * data["g_tz_rr"]
+            - 2 * gamma_r * data["sqrt(g)_r"]
+            - gamma * data["sqrt(g)_rr"]
+        )
+        / data["sqrt(g)"],
+        lambda: (
+            2
+            * data["sqrt(g)_r"] ** 2
+            * (
+                3 * data["g_tt_rr"] * data["omega_rz"]
+                + data["g_tt_rrr"] * (1 + data["omega_z"])
+                - 3 * data["g_tz_rr"] * data["omega_rt"]
+                - 3 * data["g_tz_r"] * data["omega_rrt"]
+                - data["g_tz_rrr"] * data["omega_t"]
+            )
+            + data["sqrt(g)_r"]
+            * (
+                3
+                * data["sqrt(g)_rr"]
+                * (
+                    2 * data["g_tz_r"] * data["omega_rt"]
+                    - data["g_tt_rr"] * (1 + data["omega_z"])
+                    + data["g_tz_rr"] * data["omega_t"]
+                )
+                + 2 * data["sqrt(g)_rrr"] * data["g_tz_r"] * data["omega_t"]
+            )
+            - 3 * data["sqrt(g)_rr"] ** 2 * data["g_tz_r"] * data["omega_t"]
+        )
+        / (6 * data["sqrt(g)_r"] ** 3),
+    )
+    gamma_rr = surface_integrals(transforms["grid"], gamma_rr)
+    data["iota_den_rr"] = gamma_rr
+    return data
+
+
+@register_compute_fun(
+    name="iota_den_rrr",
+    label="\\partial_{\\rho\\rho\\rho} \\iota_{\\mathrm{denominator}}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Denominator of rotational transform formula, third radial derivative",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=["current"],
+    coordinates="r",
+    data=[
+        "0",
+        "g_tt",
+        "g_tt_r",
+        "g_tt_rr",
+        "g_tt_rrr",
+        "g_tz",
+        "g_tz_r",
+        "g_tz_rr",
+        "g_tz_rrr",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rr",
+        "sqrt(g)_rrr",
+        "omega_t",
+        "omega_rt",
+        "omega_rrt",
+        "omega_rrrt",
+        "omega_z",
+        "omega_rz",
+        "omega_rrz",
+        "omega_rrrz",
+    ],
+)
+def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
+    """Denominator of rotational transform formula, third radial derivative.
+
+    Computes d3𝛾/d𝜌3 as defined in the document attached to the description
+    of GitHub pull request #556.
+    """
+    if profiles["current"] is None:
+        data["iota_den_rrr"] = jnp.nan * data["0"]
+        return data
+
+    gamma = (
+        (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
+    ) / data["sqrt(g)"]
+    gamma_r = (
+        data["omega_rz"] * data["g_tt"]
+        + (1 + data["omega_z"]) * data["g_tt_r"]
+        - data["omega_rt"] * data["g_tz"]
+        - data["omega_t"] * data["g_tz_r"]
+        - gamma * data["sqrt(g)_r"]
+    ) / data["sqrt(g)"]
+    gamma_rr = (
+        data["omega_rrz"] * data["g_tt"]
+        + 2 * data["omega_rz"] * data["g_tt_r"]
+        + (1 + data["omega_z"]) * data["g_tt_rr"]
+        - data["omega_rrt"] * data["g_tz"]
+        - 2 * data["omega_rt"] * data["g_tz_r"]
+        - data["omega_t"] * data["g_tz_rr"]
+        - 2 * gamma_r * data["sqrt(g)_r"]
+        - gamma * data["sqrt(g)_rr"]
+    ) / data["sqrt(g)"]
+    gamma_rrr = transforms["grid"].replace_at_axis(
+        (
+            data["omega_rrrz"] * data["g_tt"]
+            + 3 * data["omega_rrz"] * data["g_tt_r"]
+            + 3 * data["omega_rz"] * data["g_tt_rr"]
+            + (1 + data["omega_z"]) * data["g_tt_rrr"]
+            - data["omega_rrrt"] * data["g_tz"]
+            - 3 * data["omega_rrt"] * data["g_tz_r"]
+            - 3 * data["omega_rt"] * data["g_tz_rr"]
+            - data["omega_t"] * data["g_tz_rrr"]
+            - 3 * gamma_rr * data["sqrt(g)_r"]
+            - 3 * gamma_r * data["sqrt(g)_rr"]
+            - gamma * data["sqrt(g)_rrr"]
+        )
+        / data["sqrt(g)"],
+        # Todo: axis limit
+        #   Computed with four applications of l’Hôpital’s rule.
+        #   Requires sqrt(g)_rrrr and fourth derivatives of basis vectors.
+        jnp.nan,
+    )
+    gamma_rrr = surface_integrals(transforms["grid"], gamma_rrr)
+    # force limit to nan until completed because integration replaces nan with 0
+    data["iota_den_rrr"] = transforms["grid"].replace_at_axis(gamma_rrr, jnp.nan)
     return data
 
 

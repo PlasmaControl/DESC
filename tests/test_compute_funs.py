@@ -7,7 +7,6 @@ from scipy.signal import convolve2d
 
 import desc.examples
 from desc.compute import data_index, rpz2xyz_vec
-from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import (
     FourierPlanarCurve,
@@ -51,7 +50,7 @@ def test_total_volume(DummyStellarator):
     )
 
     grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
-    lcfs_volume = eq.compute("V(r)", grid=grid)["V(r)"].mean()
+    lcfs_volume = eq.compute("V(r)", grid=grid)["V(r)"]
     total_volume = eq.compute("V")["V"]  # default quadrature grid
     np.testing.assert_allclose(lcfs_volume, total_volume)
 
@@ -59,25 +58,29 @@ def test_total_volume(DummyStellarator):
 @pytest.mark.unit
 def test_enclosed_volumes():
     """Test that the volume enclosed by flux surfaces matches analytic formulas."""
+    R0 = 10
     surf = FourierRZToroidalSurface(
-        R_lmn=[10, 1, 0.2],
+        R_lmn=[R0, 1, 0.2],
         Z_lmn=[-2, -0.2],
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0], [0, -1]],
     )
+    # 𝐞(ρ, θ, ζ) = R(ρ, θ, ζ) 𝐫 + Z(ρ, θ, ζ) 𝐳
+    # V(ρ) = ∯ dθ dζ (∂_θ 𝐞 × ∂_ζ 𝐞) ⋅ (0, 0, Z)
+    #      = ∯ dθ dζ (R₀ + ρ cos θ + 0.2 cos ζ) (2 ρ² sin²θ − 0.2 ρ sin θ sin ζ)
+    np.testing.assert_allclose(4 * R0 * np.pi**2, surf.compute(["V"])["V"])
     eq = Equilibrium(surface=surf)  # elliptical cross-section with torsion
-    rho = np.linspace(1 / 128, 1, 128)
+    rho = np.linspace(0, 1, 64)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-    data = eq.compute(["R0", "V(r)", "V_r(r)", "V_rr(r)"], grid=grid)
+    data = eq.compute(["R0", "V(r)", "V_r(r)", "V_rr(r)", "V_rrr(r)"], grid=grid)
     np.testing.assert_allclose(
-        4 * data["R0"] * (np.pi * rho) ** 2, compress(grid, data["V(r)"])
+        4 * data["R0"] * (np.pi * rho) ** 2, grid.compress(data["V(r)"])
     )
     np.testing.assert_allclose(
-        8 * data["R0"] * np.pi**2 * rho, compress(grid, data["V_r(r)"])
+        8 * data["R0"] * np.pi**2 * rho, grid.compress(data["V_r(r)"])
     )
-    np.testing.assert_allclose(
-        8 * data["R0"] * np.pi**2, compress(grid, data["V_rr(r)"])
-    )
+    np.testing.assert_allclose(8 * data["R0"] * np.pi**2, data["V_rr(r)"])
+    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=2e-14)
 
 
 @pytest.mark.unit
@@ -90,21 +93,25 @@ def test_enclosed_areas():
         modes_Z=[[-1, 0], [0, -1]],
     )
     eq = Equilibrium(surface=surf)  # elliptical cross-section with torsion
-    rho = np.linspace(1 / 128, 1, 128)
+    rho = np.linspace(0, 1, 64)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["A(r)"], grid=grid)
-    np.testing.assert_allclose(2 * np.pi * rho**2, compress(grid, data["A(r)"]))
+    # area = π a b = 2 π ρ²
+    np.testing.assert_allclose(2 * np.pi * rho**2, grid.compress(data["A(r)"]))
 
 
 @pytest.mark.unit
 def test_surface_areas():
     """Test that the flux surface areas match known analytic formulas."""
     eq = Equilibrium()  # torus
-    rho = np.linspace(1 / 128, 1, 128)
+    rho = np.linspace(0, 1, 64)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-    data = eq.compute(["S(r)", "R0"], grid=grid)
-    S = 4 * data["R0"] * np.pi**2 * rho
-    np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
+    data = eq.compute(["R0", "S(r)", "S_r(r)", "S_rr(r)"], grid=grid)
+    np.testing.assert_allclose(
+        4 * data["R0"] * np.pi**2 * rho, grid.compress(data["S(r)"])
+    )
+    np.testing.assert_allclose(4 * data["R0"] * np.pi**2, data["S_r(r)"])
+    np.testing.assert_allclose(0, data["S_rr(r)"], atol=3e-12)
 
 
 @pytest.mark.unit
@@ -153,7 +160,7 @@ def test_elongation():
     eq1 = Equilibrium()  # elongation = 1
     eq2 = Equilibrium(surface=surf2)  # elongation = 2
     eq3 = Equilibrium(surface=surf3)  # elongation = 3
-    rho = np.linspace(1 / 128, 1, 128)
+    rho = np.linspace(0, 1, 128)
     grid = LinearGrid(M=eq3.M_grid, N=eq3.N_grid, NFP=eq3.NFP, sym=eq3.sym, rho=rho)
     data1 = eq1.compute(["a_major/a_minor"], grid=grid)
     data2 = eq2.compute(["a_major/a_minor"], grid=grid)
@@ -1083,31 +1090,26 @@ def test_BdotgradB(DummyStellarator):
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
 
-    # partial derivative wrt theta
-    num_theta = 120
-    grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
-    dtheta = grid.nodes[1, 1]
-    data = eq.compute(["B*grad(|B|)", "(B*grad(|B|))_t"], grid=grid)
-    Btilde_t = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dtheta
-    np.testing.assert_allclose(
-        data["(B*grad(|B|))_t"][2:-2],
-        Btilde_t[2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["(B*grad(|B|))_t"])),
-    )
+    def test_partial_derivative(name):
+        cases = {
+            "r": {"label": "rho", "column_id": 0},
+            "t": {"label": "theta", "column_id": 1},
+            "z": {"label": "zeta", "column_id": 2},
+        }[name[-1]]
+        grid = LinearGrid(NFP=eq.NFP, **{cases["label"]: 120})
+        dx = grid.nodes[1, cases["column_id"]]
+        data = eq.compute(["B*grad(|B|)", name], grid=grid)
+        Btilde_x = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dx
+        np.testing.assert_allclose(
+            actual=data[name][2:-2],
+            desired=Btilde_x[2:-2],
+            rtol=2e-2,
+            atol=2e-2 * np.mean(np.abs(data[name])),
+        )
 
-    # partial derivative wrt zeta
-    num_zeta = 120
-    grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
-    dzeta = grid.nodes[1, 2]
-    data = eq.compute(["B*grad(|B|)", "(B*grad(|B|))_z"], grid=grid)
-    Btilde_z = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dzeta
-    np.testing.assert_allclose(
-        data["(B*grad(|B|))_z"][2:-2],
-        Btilde_z[2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["(B*grad(|B|))_z"])),
-    )
+    test_partial_derivative("(B*grad(|B|))_r")
+    test_partial_derivative("(B*grad(|B|))_t")
+    test_partial_derivative("(B*grad(|B|))_z")
 
 
 # TODO: add test with stellarator example
@@ -1181,18 +1183,17 @@ def test_compare_quantities_to_vmec():
     rho = np.sqrt(s)
     grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
     data = eq.compute("<J*B>", grid=grid)
-    J_dot_B_desc = compress(grid, data["<J*B>"])
-
-    # Drop first point since desc gives NaN:
-    np.testing.assert_allclose(J_dot_B_desc[1:], J_dot_B_vmec[1:], rtol=0.005)
+    J_dot_B_desc = grid.compress(data["<J*B>"])
+    np.testing.assert_allclose(J_dot_B_desc, J_dot_B_vmec, rtol=0.005)
 
 
 @pytest.mark.unit
-def test_compute_everything():
-    """Make sure we can compute everything without errors."""
+@pytest.mark.slow
+def test_equilibrium_compute_everything():
+    """Make sure we can compute every equilibrium thing without errors."""
     eq = Equilibrium(1, 1, 1)
     grid = LinearGrid(1, 1, 1)
-    for key in data_index["desc.equilibrium.equilibrium.Equilibrium"].keys():
+    for key in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
         data = eq.compute(key, grid=grid)
         assert key in data
 
@@ -1230,11 +1231,11 @@ def test_surface_compute_everything():
 def test_compute_averages():
     """Test that computing averages uses the correct grid."""
     eq = desc.examples.get("HELIOTRON")
-    Vr = eq.get_profile("V_r(r)")
+    V_r = eq.get_profile("V_r(r)")
     rho = np.linspace(0.01, 1, 20)
     grid = LinearGrid(rho=rho, NFP=eq.NFP)
     out = eq.compute("V_r(r)", grid=grid)
-    np.testing.assert_allclose(Vr(rho), out["V_r(r)"], rtol=1e-4)
+    np.testing.assert_allclose(V_r(rho), out["V_r(r)"], rtol=1e-4)
 
     eq = Equilibrium(1, 1, 1)
     grid = LinearGrid(rho=[0.3], theta=[np.pi / 3], zeta=[0])

@@ -60,7 +60,7 @@ class ObjectiveFromUser(_Objective):
     --------
     .. code-block:: python
 
-        from desc.compute.utils import surface_averages, compress
+        from desc.compute.utils import surface_averages
         def myfun(grid, data):
             # This will compute the flux surface average of the function
             # R*B_T from the Grad-Shafranov equation
@@ -68,7 +68,7 @@ class ObjectiveFromUser(_Objective):
             f_fsa = surface_averages(grid, f, sqrt_g=data['sqrt_g'])
             # this has the FSA values on the full grid, but we just want
             # the unique values:
-            return compress(grid, f_fsa)
+            return grid.compress(f_fsa)
 
         myobj = ObjectiveFromUser(myfun)
 
@@ -124,14 +124,14 @@ class ObjectiveFromUser(_Objective):
         else:
             grid = self._grid
 
-        def getvars(fun):
+        def get_vars(fun):
             pattern = r"data\[(.*?)\]"
             src = inspect.getsource(fun)
             variables = re.findall(pattern, src)
-            variables = [s.replace("'", "").replace('"', "") for s in variables]
+            variables = list({s.replace("'", "").replace('"', "") for s in variables})
             return variables
 
-        self._data_keys = getvars(self._fun)
+        self._data_keys = get_vars(self._fun)
         dummy_data = {}
         p = "desc.equilibrium.equilibrium.Equilibrium"
         for key in self._data_keys:

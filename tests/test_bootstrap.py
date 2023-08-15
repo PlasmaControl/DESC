@@ -1633,8 +1633,8 @@ def test_bootstrap_objective_build():
     # make sure default grid has the right nodes
     assert obj._transforms["grid"].num_theta == 17
     assert obj._transforms["grid"].num_zeta == 17
-    assert obj._transforms["grid"].num_rho == 8
+    assert obj._transforms["grid"].num_rho == 4
     np.testing.assert_allclose(
         obj._transforms["grid"].nodes[obj._transforms["grid"].unique_rho_idx, 0],
-        np.array([0.0625, 0.1875, 0.3125, 0.4375, 0.5625, 0.6875, 0.8125, 0.9375]),
+        np.array([0.125, 0.375, 0.625, 0.875]),
     )

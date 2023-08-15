@@ -113,7 +113,7 @@ class BootstrapRedlConsistency(_Objective):
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=np.linspace(1 / eq.L_grid, 1, eq.L_grid) - 1 / (2 * eq.L_grid),
+                rho=np.linspace(1 / eq.L, 1, eq.L) - 1 / (2 * eq.L),
             )
         else:
             grid = self._grid

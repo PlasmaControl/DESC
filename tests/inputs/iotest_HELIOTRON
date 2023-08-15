@@ -28,10 +28,10 @@ spectral_indexing = ansi
 node_pattern      = jacobi
 
 # pressure and rotational transform/current profiles
-l:   0	p =   0    i = 0.5
-l:   1	p =   0    i = 0
-l:   2	p =   0    i = 0
-l:   4	p =   0    i = 0
+l:   0	p =   1E2    i = 0.5
+l:   1	p =   0      i = 0.1
+l:   2	p =   1E2    i = 0
+l:   4	p =   0      i = 0
 
 # magnetic axis initial guess
 n:   0  R0 =  1.0E+1  Z0 =  0.0E+0

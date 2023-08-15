@@ -796,9 +796,9 @@ class InputReader:
 
         Parameters
         ----------
-        filename : str or path-like
+        outfile : str or path-like
             name of the DESC input file to create
-        inputs : str or path-like
+        infile : str or path-like
             path of the DESC output equilibrium file
         objective : str
             objective type used in the input file
@@ -807,11 +807,11 @@ class InputReader:
         header : str
             text to print at the top of the file
         ftol : float
-            tolerance on the objective function f
+            relative tolerance on the objective function f
         xtol : float
-            tolerance on the state vector x
+            relative tolerance on the state vector x
         gtol : float
-            relative tolerance on the prjected gradient g
+            absolute tolerance on the projected gradient g
         maxiter : int
             maximum number of optimizer iterations per continuation step
         """
@@ -865,21 +865,12 @@ class InputReader:
             char = "i"
             iseven_pres = int(eq0._pressure.basis.sym == "even") + 1
             iseven_iota = int(eq0._iota.basis.sym == "even") + 1
-            orderp = int(np.ceil((eq0._pressure.basis.L + 1) / iseven_pres))
-            orderi = int(np.ceil((eq0._iota.basis.L + 1) / iseven_iota))
-            pres_profile0 = np.zeros((orderp,))
-            iota_profile0 = np.zeros((orderi,))
-            pres_profile0[::1] = eq0._pressure.params
-            iota_profile0[::1] = eq0._iota.params
-            pres_profile = np.zeros((np.maximum(orderp, orderi),))
-            iota_profile = np.zeros((np.maximum(orderp, orderi),))
-            pres_profile[: len(pres_profile0)] = pres_profile0
-            iota_profile[: len(iota_profile0)] = iota_profile0
+            pres_profile = np.zeros((eq0.L + 1,))
+            iota_profile = np.zeros((eq0.L + 1,))
+            pres_profile[: eq0.L + 1 : iseven_pres] = eq0._pressure.params
+            iota_profile[: eq0.L + 1 : iseven_iota] = eq0._iota.params
 
-            idxs = np.linspace(
-                0, np.maximum(orderp, orderi) - 1, np.maximum(orderp, orderi), dtype=int
-            )
-
+            idxs = np.linspace(0, eq0.L - 1, eq0.L, dtype=int)
             for l in idxs:
                 f.write(
                     "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
@@ -894,20 +885,12 @@ class InputReader:
             char = "c"
             iseven_pres = int(eq0._pressure.basis.sym == "even") + 1
             iseven_curr = int(eq0._current.basis.sym == "even") + 1
-            orderp = int(np.ceil((eq0._pressure.basis.L + 1) / iseven_pres))
-            orderc = int(np.ceil((eq0._current.basis.L + 1) / iseven_curr))
-            pres_profile0 = np.zeros((orderp,))
-            curr_profile0 = np.zeros((orderc,))
-            pres_profile0[::1] = eq0._pressure.params
-            curr_profile0[::1] = eq0._current.params
-            pres_profile = np.zeros((np.maximum(orderp, orderc),))
-            curr_profile = np.zeros((np.maximum(orderp, orderc),))
-            pres_profile[: len(pres_profile0)] = pres_profile0
-            curr_profile[: len(curr_profile0)] = curr_profile0
+            pres_profile = np.zeros((eq0.L + 1,))
+            curr_profile = np.zeros((eq0.L + 1,))
+            pres_profile[: eq0.L + 1 : iseven_pres] = eq0._pressure.params
+            curr_profile[: eq0.L + 1 : iseven_curr] = eq0._current.params
 
-            idxs = np.linspace(
-                0, np.maximum(orderp, orderc) - 1, np.maximum(orderp, orderc), dtype=int
-            )
+            idxs = np.linspace(0, eq0.L - 1, eq0.L, dtype=int)
             for l in idxs:
                 f.write(
                     "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(

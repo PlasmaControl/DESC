@@ -767,6 +767,9 @@ class XYZCurve(Curve):
 
     @X.setter
     def X(self, new):
+        assert np.allclose(
+            self._X[-1], self._X[0], atol=1e-14
+        ), "Must pass in a closed curve!"
         if len(new) == len(self._knots):
             self._X = jnp.asarray(new)
         else:
@@ -774,9 +777,6 @@ class XYZCurve(Curve):
                 "X should have the same size as the knots, "
                 + f"got {len(new)} X values for {len(self._knots)} knots"
             )
-        assert np.allclose(
-            self._X[-1], self._X[0], atol=1e-14
-        ), "Must pass in a closed curve!"
 
     @property
     def Y(self):
@@ -785,6 +785,9 @@ class XYZCurve(Curve):
 
     @Y.setter
     def Y(self, new):
+        assert np.allclose(
+            self._Y[-1], self._Y[0], atol=1e-14
+        ), "Must pass in a closed curve!"
         if len(new) == len(self._knots):
             self._Y = jnp.asarray(new)
         else:
@@ -792,9 +795,6 @@ class XYZCurve(Curve):
                 "Y should have the same size as the knots, "
                 + f"got {len(new)} Y values for {len(self._knots)} knots"
             )
-        assert np.allclose(
-            self._Y[-1], self._Y[0], atol=1e-14
-        ), "Must pass in a closed curve!"
 
     @property
     def Z(self):
@@ -803,6 +803,9 @@ class XYZCurve(Curve):
 
     @Z.setter
     def Z(self, new):
+        assert np.allclose(
+            self._Z[-1], self._Z[0], atol=1e-14
+        ), "Must pass in a closed curve!"
         if len(new) == len(self._knots):
             self._Z = jnp.asarray(new)
         else:
@@ -810,14 +813,6 @@ class XYZCurve(Curve):
                 "Z should have the same size as the knots, "
                 + f"got {len(new)} Z values for {len(self._knots)} knots"
             )
-        assert np.allclose(
-            self._Z[-1], self._Z[0], atol=1e-14
-        ), "Must pass in a closed curve!"
-
-    @property
-    def grid(self):
-        """Default grid for computation."""
-        return self._grid
 
     @classmethod
     def from_values(cls, coords, knots=None, method="cubic2", name="", basis="xyz"):

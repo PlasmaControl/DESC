@@ -1620,9 +1620,9 @@ def test_bootstrap_objective_build():
         BootstrapRedlConsistency(eq=eq).build()
 
     eq = Equilibrium(
-        L=3,
-        M=3,
-        N=3,
+        L=4,
+        M=4,
+        N=4,
         NFP=2,
         electron_temperature=1e3,
         electron_density=1e21,
@@ -1631,10 +1631,10 @@ def test_bootstrap_objective_build():
     obj = BootstrapRedlConsistency(eq=eq)
     obj.build()
     # make sure default grid has the right nodes
-    assert obj._transforms["grid"].num_theta == 13
-    assert obj._transforms["grid"].num_zeta == 13
-    assert obj._transforms["grid"].num_rho == 5
+    assert obj._transforms["grid"].num_theta == 17
+    assert obj._transforms["grid"].num_zeta == 17
+    assert obj._transforms["grid"].num_rho == 8
     np.testing.assert_allclose(
         obj._transforms["grid"].nodes[obj._transforms["grid"].unique_rho_idx, 0],
-        np.array([0.2, 0.4, 0.6, 0.8, 1.0]),
+        np.array([0.0625, 0.1875, 0.3125, 0.4375, 0.5625, 0.6875, 0.8125, 0.9375]),
     )

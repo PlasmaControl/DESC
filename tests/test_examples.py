@@ -422,14 +422,14 @@ def test_simsopt_QH_comparison():
     nfp = 4
     aspect_target = 8.0
     # Initial (m=0, n=nfp) mode of the axis:
-    Delta = 0.4
+    torsion = 0.4
     LMN_resolution = 6
     # Set shape of the initial condition.
     # R_lmn and Z_lmn are the amplitudes. modes_R and modes_Z are the (m,n) pairs.
     surface = FourierRZToroidalSurface(
-        R_lmn=[1.0, 1.0 / aspect_target, Delta],
+        R_lmn=[1.0, 1.0 / aspect_target, torsion],
         modes_R=[[0, 0], [1, 0], [0, 1]],
-        Z_lmn=[0, -1.0 / aspect_target, Delta],
+        Z_lmn=[0, -1.0 / aspect_target, torsion],
         modes_Z=[[0, 0], [-1, 0], [0, -1]],
         NFP=nfp,
     )

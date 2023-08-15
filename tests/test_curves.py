@@ -154,8 +154,8 @@ class TestRZCurve:
             xyz.compute("length", grid=grid)["length"],
         )
         np.testing.assert_allclose(
-            rz.compute("x", grid=grid, basis="rpz")["x"],
-            xyz.compute("x", basis="rpz", grid=grid)["x"],
+            rz.compute("x", grid=grid, basis="xyz")["x"],
+            xyz.compute("x", basis="xyz", grid=grid)["x"],
             atol=1e-12,
         )
 

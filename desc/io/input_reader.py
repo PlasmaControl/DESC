@@ -780,36 +780,46 @@ class InputReader:
 
     @staticmethod
     def descout_to_input(  # noqa: C901 - fxn too complex
-        filename,
-        inputs,
+        outfile,
+        infile,
+        objective="force",
+        optimizer="lsq-exact",
         header="#DESC-generated input file",
         ftol=1e-2,
         xtol=1e-6,
         gtol=1e-6,
         maxiter=100,
-        optimizer="lsq-exact",
-        objective="force",
     ):
         """Generate a DESC input file from a DESC output file.
+
+        DESC will automatically choose continuation parameters
 
         Parameters
         ----------
         filename : str or path-like
-            name of the file to create
+            name of the DESC input file to create
         inputs : str or path-like
             path of the DESC output equilibrium file
+        objective : str
+            objective type used in the input file
+        optimizer : str
+            type of optimizer
         header : str
             text to print at the top of the file
-
-        DESC will automatically choose continuation parameters unless you
-        have specified those prameters as kwargs
+        ftol : float
+            tolerance on the objective function f
+        xtol : float
+            tolerance on the state vector x
+        gtol : float
+            relative tolerance on the prjected gradient g
+        maxiter : int
+            maximum number of optimizer iterations per continuation step
         """
-        # open the file, unless its already open
-        f = open(filename, "w+")
+        f = open(outfile, "w+")
 
         f.seek(0)
 
-        eq = load(inputs)
+        eq = load(infile)
         try:
             eq0 = eq[-1]
         except TypeError:

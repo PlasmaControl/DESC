@@ -134,35 +134,41 @@ def test_descout_to_input(tmpdir_factory):
     arr1 = arr1[arr1[:, 1].argsort()]
     arr1mneg = arr1[arr1[:, 1] < 0]
     arr1mpos = arr1[arr1[:, 1] >= 0]
+    pres1 = ir1.parse_inputs()[-1]["pressure"]
 
     desc_input_truth = "./tests/inputs/LandremanPaul2022_QA_reactorScale_lowRes"
     with pytest.warns(UserWarning):
         ir2 = InputReader(cl_args=[str(desc_input_truth)])
         arr2 = ir2.parse_inputs()[-1]["surface"]
+        pres2 = ir2.parse_inputs()[-1]["pressure"]
     arr2 = arr2[arr2[:, 1].argsort()]
     arr2mneg = arr2[arr2[:, 1] < 0]
     arr2mpos = arr2[arr2[:, 1] >= 0]
 
-    found0 = 0
-    if (
+    np.testing.assert_allclose(
         np.minimum(
             np.linalg.norm(arr1mneg[:, 3:] - arr2mneg[:, 3:]),
             np.linalg.norm(arr1mneg[:, 3:] + arr2mneg[:, 3:]),
-        )
-        <= 1e-8
-    ) and (
+        ),
+        0,
+        atol=1e-8,
+    )
+    np.testing.assert_allclose(
         np.minimum(
             np.linalg.norm(arr1mpos[:, 3:] - arr2mpos[:, 3:]),
             np.linalg.norm(arr1mpos[:, 3:] + arr2mpos[:, 3:]),
-        )
-        <= 1e-8
-    ):
-        found0 = 1
+        ),
+        0,
+        atol=1e-8,
+    )
 
-    outfile_path = "./tests/inputs/HELIOTRON_iota.h5"
+    if np.linalg.norm(pres1[:, 1]) > 0:
+        np.testing.assert_allclose(pres1(pres1[:, 1] > 0), pres2(pres2[:, 1] > 0))
+
+    outfile_path = "./tests/inputs/iotest_HELIOTRON.h5"
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
-    tmp_path = tmpdir.join("input_HELIOTRON_iota")
-    tmpout_path = tmpdir.join("HELIOTRON_iota.h5")
+    tmp_path = tmpdir.join("input_iotest_HELIOTRON")
+    tmpout_path = tmpdir.join("iotest_HELIOTRON.h5")
     shutil.copyfile(outfile_path, tmpout_path)
 
     ir1 = InputReader()
@@ -173,30 +179,33 @@ def test_descout_to_input(tmpdir_factory):
     arr1mneg = arr1[arr1[:, 1] < 0]
     arr1mpos = arr1[arr1[:, 1] >= 0]
 
-    desc_input_truth = "./tests/inputs/HELIOTRON_iota"
+    desc_input_truth = "./tests/inputs/iotest_HELIOTRON"
     ir2 = InputReader(cl_args=[str(desc_input_truth)])
     arr2 = ir2.parse_inputs()[-1]["surface"]
     arr2 = arr2[arr2[:, 1].argsort()]
     arr2mneg = arr2[arr2[:, 1] < 0]
     arr2mpos = arr2[arr2[:, 1] >= 0]
 
-    found1 = 0
-    if (
+    np.testing.assert_allclose(
         np.minimum(
             np.linalg.norm(arr1mneg[:, 3:] - arr2mneg[:, 3:]),
             np.linalg.norm(arr1mneg[:, 3:] + arr2mneg[:, 3:]),
-        )
-        <= 1e-8
-    ) and (
+        ),
+        0,
+        atol=1e-8,
+    )
+
+    np.testing.assert_allclose(
         np.minimum(
             np.linalg.norm(arr1mpos[:, 3:] - arr2mpos[:, 3:]),
             np.linalg.norm(arr1mpos[:, 3:] + arr2mpos[:, 3:]),
-        )
-        <= 1e-8
-    ):
-        found1 = 1
+        ),
+        0,
+        atol=1e-8,
+    )
 
-    assert found0 == 1 and found1 == 1
+    if np.linalg.norm(pres1[:, 1]) > 0:
+        np.testing.assert_allclose(pres1(pres1[:, 1] > 0), pres2(pres2[:, 1] > 0))
 
 
 @pytest.mark.unit

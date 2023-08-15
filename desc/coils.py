@@ -610,7 +610,7 @@ class CoilSet(Coil, MutableSequence):
         return cls(*coilset)
 
     @classmethod
-    def from_makegrid_coilfile(cls, coil_file, method="cubic", grid=None):
+    def from_makegrid_coilfile(cls, coil_file, method="cubic"):
         """Create a CoilSet of XYZCoils from a MAKEGRID-formatted coil txtfile.
 
         Parameters
@@ -624,8 +624,6 @@ class CoilSet(Coil, MutableSequence):
             - `'cubic'`: C1 cubic splines (aka local splines)
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
-        grid : Grid
-            default grid for computation
         """
         coils = []  # list of XYZCoils
         coilinds = [2]  # always start at the 3rd line
@@ -770,7 +768,7 @@ class CoilSet(Coil, MutableSequence):
             delimiter=" ",
             header=header,
             footer=footer,
-            fmt="%14.22e",
+            fmt="%14.8e",
             comments="",  # to avoid the # appended to the start of the header/footer
         )
         # now need to re-load the file and place coilgroup markers at end of each coil

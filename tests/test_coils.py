@@ -299,7 +299,7 @@ def test_save_and_load_MAKEGRID_coils(tmpdir_factory):
     assert len(coilset) == Ncoils  # correct number of coils
     # TODO: add better tests for this?
     path = tmpdir.join("coils.MAKEGRID_format_desc")
-    coilset.save_in_MAKEGRID_format(str(path))
+    coilset.save_in_MAKEGRID_format(str(path), grid=LinearGrid(zeta=coilset[0]._knots))
 
     coilset2 = CoilSet.from_makegrid_coilfile(str(path))
 
@@ -317,9 +317,9 @@ def test_save_and_load_MAKEGRID_coils(tmpdir_factory):
     Z2 = coords2[:, 2]
 
     np.testing.assert_allclose(coilset2[0].current, coilset[0].current)
-    np.testing.assert_allclose(X1, X2)
-    np.testing.assert_allclose(Y1, Y2)
-    np.testing.assert_allclose(Z1, Z2, atol=9e-15)
+    np.testing.assert_allclose(X1, X2, atol=1e-8)
+    np.testing.assert_allclose(Y1, Y2, atol=1e-8)
+    np.testing.assert_allclose(Z1, Z2, atol=1e-8)
 
 
 @pytest.mark.unit

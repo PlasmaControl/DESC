@@ -635,9 +635,11 @@ class CoilSet(Coil, MutableSequence):
         with open(coil_file) as f:
             lines = f.readlines()
             for i, line in enumerate(lines):
+                if line.find("periods") != -1:
+                    NFP = int(line.split()[-1].strip())
+                    continue
                 if (
-                    line.find("periods") != -1
-                    or line.find("begin filament") != -1
+                    line.find("begin filament") != -1
                     or line.find("end") != -1
                     or line.find("mirror") != -1
                 ):
@@ -689,7 +691,11 @@ class CoilSet(Coil, MutableSequence):
                 )
             )
 
-        return CoilSet(*coils)
+        return (
+            CoilSet.from_symmetry(CoilSet(*coils), NFP=NFP)
+            if NFP > 1
+            else CoilSet(*coils)
+        )
 
     def save_in_MAKEGRID_format(self, coilsFilename, NFP=1, grid=None):
         """Save CoilSet of as a MAKEGRID-formatted coil txtfile.
@@ -697,6 +703,9 @@ class CoilSet(Coil, MutableSequence):
         By default, each coil is assigned to the same Coilgroup in MAKEGRID
         with the name "Modular". For more details see the MAKEGRID documentation
         https://princetonuniversity.github.io/STELLOPT/MAKEGRID.html
+
+        Note: if a nested CoilSet, will flatten it first before saving
+        #TODO: name each group based off of CoilSet name?
 
         Parameters
         ----------

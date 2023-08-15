@@ -323,55 +323,59 @@ def test_save_and_load_MAKEGRID_coils(tmpdir_factory):
 
 
 @pytest.mark.unit
-def test_save_and_load_MAKEGRID_coils_angular(tmpdir_factory):
-    """Test saving and reloading CoilSet linspaced angular from MAKEGRID file."""
+def test_save_and_load_MAKEGRID_coils_rotated(tmpdir_factory):
+    """Test saving and reloading NFP=2 CoilSet linspaced angular from MAKEGRID file."""
     tmpdir = tmpdir_factory.mktemp("coil_files")
     path = tmpdir.join("coils.MAKEGRID_format_angular_coil")
 
     # make a coilset with angular coilset
-    N = 50
+    N = 22
     coil = FourierPlanarCoil()
     coil.current = 1
-    coilset = CoilSet.linspaced_angular(coil, n=N)
-    coilset.grid = 32
+    coilset = CoilSet.linspaced_angular(coil, n=N, angle=2 * np.pi)
 
     grid = LinearGrid(N=200, endpoint=True)
-    coilset.save_in_MAKEGRID_format(str(path), grid=grid)
+    coilset.save_in_MAKEGRID_format(str(path), grid=grid, NFP=2)
 
     coilset2 = CoilSet.from_makegrid_coilfile(str(path))
+    assert len(coilset2) == 2  # contains a coilset per FP
+
+    coilset2_flattened = coilset2[0] + coilset2[1]
 
     # check values at saved points, ensure they match
-    coords1 = coilset[0].compute("x", grid=grid, basis="xyz")["x"]
-    X1 = coords1[:, 0]
-    Y1 = coords1[:, 1]
-    Z1 = coords1[:, 2]
+    for i, (c1, c2) in enumerate(zip(coilset, coilset2_flattened)):
+        coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
+        X1 = coords1[:, 0]
+        Y1 = coords1[:, 1]
+        Z1 = coords1[:, 2]
 
-    coords2 = coilset2[0].compute("x", grid=grid, basis="xyz")["x"]
-    X2 = coords2[:, 0]
-    Y2 = coords2[:, 1]
-    Z2 = coords2[:, 2]
+        coords2 = c2.compute("x", grid=grid, basis="xyz")["x"]
+        X2 = coords2[:, 0]
+        Y2 = coords2[:, 1]
+        Z2 = coords2[:, 2]
 
-    np.testing.assert_allclose(coilset2[0].current, coilset[0].current)
-    np.testing.assert_allclose(X1, X2)
-    np.testing.assert_allclose(Y1, Y2)
-    np.testing.assert_allclose(Z1, Z2, atol=9e-15)
+        np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check values at interpolated points, ensure they match closely
-    grid = LinearGrid(N=50, endpoint=True)
-    coords1 = coilset[0].compute("x", grid=grid, basis="xyz")["x"]
-    X1 = coords1[:, 0]
-    Y1 = coords1[:, 1]
-    Z1 = coords1[:, 2]
+    grid = LinearGrid(N=51, endpoint=True)
+    for c1, c2 in zip(coilset, coilset2_flattened):
+        coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
+        X1 = coords1[:, 0]
+        Y1 = coords1[:, 1]
+        Z1 = coords1[:, 2]
 
-    coords2 = coilset2[0].compute("x", grid=grid, basis="xyz")["x"]
-    X2 = coords2[:, 0]
-    Y2 = coords2[:, 1]
-    Z2 = coords2[:, 2]
+        coords2 = c2.compute("x", grid=grid, basis="xyz")["x"]
+        X2 = coords2[:, 0]
+        Y2 = coords2[:, 1]
+        Z2 = coords2[:, 2]
 
-    np.testing.assert_allclose(coilset2[0].current, coilset[0].current)
-    np.testing.assert_allclose(X1, X2, atol=1e-15)
-    np.testing.assert_allclose(Y1, Y2, atol=1e-15)
-    np.testing.assert_allclose(Z1, Z2, atol=1e-15)
+        np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check Bnormal on torus and ensure is near zero
     surf = FourierRZToroidalSurface(

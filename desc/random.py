@@ -53,8 +53,8 @@ def random_surface(
         Spectral decay factor. Larger values of alpha will tend to create simpler
         surfaces. If a tuple, treats as min/max for random int.
     beta : int or tuple
-        Relative standard deviation for spectral coefficients. Smaller values of beta
-        will tend to create more complex surfaces. If a tuple, treats as min/max for
+        Relative standard deviation for spectral coefficients. Larger values of beta
+        will tend to create simpler surfaces. If a tuple, treats as min/max for
         random int.
     rng : numpy.random.Generator
         Random number generator. If None, uses numpys default_rng
@@ -119,7 +119,7 @@ def random_surface(
     return surf
 
 
-def random_pressure(n=(8, 16), p0=(1e3, 1e4), rng=None):
+def random_pressure(n=8, p0=(1e3, 1e4), rng=None):
     """Create a random monotonic pressure profile.
 
     Profile will be a PowerSeriesProfile with even symmetry,
@@ -130,8 +130,8 @@ def random_pressure(n=(8, 16), p0=(1e3, 1e4), rng=None):
 
     Parameters
     ----------
-    n : int or tuple
-        Order of polynomial. If a tuple, treats as min/max for random int.
+    n : int
+        Order of polynomial.
     p0 : float or tuple
         Pressure on axis. If a tuple, treats as min/max for random value.
     rng : numpy.random.Generator
@@ -142,14 +142,13 @@ def random_pressure(n=(8, 16), p0=(1e3, 1e4), rng=None):
     pressure : PowerSeriesProfile
         Random pressure profile.
     """
+    assert (n // 2) == (n / 2), "n should be even"
     rng = setdefault(rng, default_rng())
-    if isinstance(n, tuple):
-        n = rng.integers(n[0] // 2, (n[1] + 1) // 2) * 2  # ensure its even
     if isinstance(p0, tuple):
         p0 = rng.uniform(p0[0], p0[1])
 
     # first create random even coeffs
-    p = 1 - 2 * np.random.random(n // 2 + 1)
+    p = 1 - 2 * rng.random(n // 2 + 1)
     # make it sum to 0 -> p=0 at r=1
     p[0] -= p.sum()
     # make p(0) = 1
@@ -186,5 +185,5 @@ def random_pressure(n=(8, 16), p0=(1e3, 1e4), rng=None):
         method="trust-constr",
     )
 
-    p = np.vstack([out.x, np.zeros_like(out.x)]).flatten(order="F")[::-1]
-    return PowerSeriesProfile(p[::-1] * p0)
+    p = np.vstack([out.x, np.zeros_like(out.x)]).flatten(order="F")
+    return PowerSeriesProfile(p[::2] * p0, modes=np.arange(n + 1)[::2], sym=True)

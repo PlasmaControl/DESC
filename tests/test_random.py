@@ -10,10 +10,10 @@ from desc.random import random_pressure, random_surface
 def test_random_pressure():
     """Test that randomly generated profile is monotonic, has correct scaling etc."""
     rng = np.random.default_rng(0)
-    p = random_pressure(n=(8, 16), p0=(1e3, 1e4), rng=rng)
+    p = random_pressure(n=8, p0=(1e3, 1e4), rng=rng)
     assert p.basis.sym == "even"
     assert 1e3 <= p(np.array([0.0])) <= 1e4
-    assert 8 <= 2 * len(p.params) <= 16
+    assert p.basis.L == 8  # symmetric, so should be 4 params up to order 8
     dp = p(np.linspace(0, 1, 10), dr=1)
     assert np.all(dp <= 0)  # can't use array_less because that doesn't do <=
 

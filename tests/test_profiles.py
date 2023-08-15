@@ -49,7 +49,6 @@ class TestProfiles:
         np.testing.assert_allclose(theta_err, 0, atol=2e-11)
 
     @pytest.mark.unit
-    @pytest.mark.slow
     def test_close_values(self):
         """Test that different forms of the same profile give similar values."""
         pp = PowerSeriesProfile(

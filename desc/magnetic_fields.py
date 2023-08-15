@@ -273,6 +273,7 @@ class MagneticField(IOAble, ABC):
             surface = surface.surface
         else:
             eq = None
+        # TODO: test this error
         if scale_by_curpol and eq is None:
             raise RuntimeError(
                 "an Equilibrium must be supplied when scale_by_curpol is True!"

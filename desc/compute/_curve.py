@@ -563,7 +563,7 @@ def _x_XYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["X", "Y", "Z"],
+    params=["X", "Y", "Z", "_knots", "_period", "_method"],
     transforms={
         "X": [[0, 0, 0], [0, 0, 1]],
         "Y": [[0, 0, 0], [0, 0, 1]],
@@ -623,7 +623,7 @@ def _x_s_XYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["X", "Y", "Z"],
+    params=["X", "Y", "Z", "_knots", "_period", "_method"],
     transforms={
         "X": [[0, 0, 0], [0, 0, 2]],
         "Y": [[0, 0, 0], [0, 0, 2]],
@@ -683,7 +683,7 @@ def _x_ss_XYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["X", "Y", "Z"],
+    params=["X", "Y", "Z", "_knots", "_period", "_method"],
     transforms={
         "X": [[0, 0, 0], [0, 0, 3]],
         "Y": [[0, 0, 0], [0, 0, 3]],

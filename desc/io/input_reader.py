@@ -807,11 +807,11 @@ class InputReader:
         header : str
             text to print at the top of the file
         ftol : float
-            relative tolerance on the objective function f
+            relative tolerance of the objective function f
         xtol : float
-            relative tolerance on the state vector x
+            relative tolerance of the state vector x
         gtol : float
-            absolute tolerance on the projected gradient g
+            absolute tolerance of the projected gradient g
         maxiter : int
             maximum number of optimizer iterations per continuation step
         """

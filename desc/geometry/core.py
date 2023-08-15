@@ -15,7 +15,7 @@ from desc.compute.utils import (
     get_params,
     get_transforms,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.io import IOAble
 
 
@@ -69,14 +69,21 @@ class Curve(IOAble, ABC):
             Computed quantity and intermediate variables.
 
         """
+        # FIXME: if ndarray is passed in, throws an uncaught error, should either
+        # accept it or check and raise more instructive error saying to wrap it in
+        # a Grid object
+        # set a default numpts for the spline XYZCurve
+        N = self.N if hasattr(self, "N") else self.X.size
         if isinstance(names, str):
             names = [names]
         if grid is None:
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=True)
-        if isinstance(grid, numbers.Integral):
+            grid = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=True)
+        elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1
             grid = LinearGrid(N=grid, NFP=NFP, endpoint=True)
+        elif isinstance(grid, Grid):
+            NFP = grid.NFP
 
         if params is None:
             params = get_params(names, obj=self)
@@ -95,11 +102,11 @@ class Curve(IOAble, ABC):
         ]
         calc0d = bool(len(dep0d))
         # see if the grid we're already using will work for desired qtys
-        if calc0d and (grid.N >= 2 * self.N + 5) and isinstance(grid, LinearGrid):
+        if calc0d and (grid.N >= 2 * N + 5) and isinstance(grid, LinearGrid):
             calc0d = False
 
         if calc0d:
-            grid0d = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=True)
+            grid0d = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=True)
             data0d = compute_fun(
                 self,
                 dep0d,

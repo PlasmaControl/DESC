@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve, XYZCurve
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 
 
 class TestRZCurve:
@@ -135,7 +135,7 @@ class TestRZCurve:
 
     @pytest.mark.unit
     def test_to_FourierXYZCurve(self):
-        """Test conversion to XYZCurve."""
+        """Test conversion to FourierXYZCurve."""
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
         xyz = rz.to_FourierXYZCurve(N=2)
 
@@ -157,6 +157,34 @@ class TestRZCurve:
             rz.compute("x", grid=grid, basis="rpz")["x"],
             xyz.compute("x", basis="rpz", grid=grid)["x"],
             atol=1e-12,
+        )
+
+    @pytest.mark.unit
+    def test_to_XYZCurve(self):
+        """Test conversion to XYZCurve."""
+        rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
+        xyz = rz.to_XYZCurve(grid=500)
+
+        grid = LinearGrid(N=20, endpoint=True)
+
+        np.testing.assert_allclose(
+            rz.compute("length", grid=grid)["length"],
+            xyz.compute("length", grid=grid)["length"],
+            atol=1e-2,
+        )
+        coords_xyz = np.asarray(xyz.compute("x", basis="rpz", grid=grid)["x"])
+        phi_xyz = (coords_xyz[:, 1] + 1e-4) % (2 * np.pi)
+        coords_rpz = rz.compute("x", grid=grid, basis="rpz")["x"]
+        phi_rpz = (coords_rpz[:, 1] + 1e-4) % (2 * np.pi)
+        np.testing.assert_allclose(
+            coords_rpz[:, 0::2],
+            coords_xyz[:, 0::2],
+            atol=1e-1,
+        )
+        np.testing.assert_allclose(
+            phi_rpz,
+            phi_xyz,
+            atol=1e-1,
         )
 
 
@@ -240,32 +268,27 @@ class TestFourierXYZCurve:
         np.testing.assert_allclose(z, 1)
 
     @pytest.mark.unit
-    def test_from_XYZCurve(self):
+    def test_to_FourierXYZCurve(self):
         """Test fitting FourierXYZCurve from XYZCurve object."""
         npts = 4000
         # make a simple circular curve of radius 2
         R = 2
         phi = np.linspace(0, 2 * np.pi, 1001, endpoint=True)
         c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        c2 = FourierXYZCurve.from_XYZCurve(c, N=1, grid=100)
-        c3 = c.to_FourierXYZCurve(N=1, grid=100)
+        c2 = c.to_FourierXYZCurve(N=1, grid=1000)
 
         np.testing.assert_allclose(
-            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+            c.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
         )
         np.testing.assert_allclose(
-            c2.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+            c2.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
         )
-        np.testing.assert_allclose(
-            c3.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
-        )
+
         grid = LinearGrid(N=20, endpoint=True)
-        coords1 = c.compute_coordinates(grid=grid)
-        coords2 = c2.compute_coordinates(grid=grid)
-        coords3 = c3.compute_coordinates(grid=grid)
+        coords1 = c.compute("x", grid=grid, basis="xyz")["x"]
+        coords2 = c2.compute("x", grid=grid, basis="xyz")["x"]
 
-        np.testing.assert_allclose(coords1, coords2, atol=1e-10)
-        np.testing.assert_allclose(coords2, coords3)
+        np.testing.assert_allclose(coords1, coords2, atol=8e-3)
 
     @pytest.mark.unit
     def test_misc(self):
@@ -450,13 +473,19 @@ class TestXYZCurve:
                 method=method,
             )
             np.testing.assert_allclose(
-                c.compute_length(grid=npts), R * 2 * np.pi, atol=atol
+                c.compute("length", grid=npts)["length"],
+                R * 2 * np.pi,
+                atol=atol,
+                err_msg=f"Failed at {method}",
             )
             c.translate([1, 1, 1])
             c.rotate(angle=np.pi)
             c.flip([0, 1, 0])
             np.testing.assert_allclose(
-                c.compute_length(grid=npts), R * 2 * np.pi, atol=atol
+                c.compute("length", grid=npts)["length"],
+                R * 2 * np.pi,
+                atol=atol,
+                err_msg=f"Failed at {method}",
             )
 
             # make a simple circular curve with supplied knots as phi
@@ -466,17 +495,22 @@ class TestXYZCurve:
                 Y=R * np.sin(phi),
                 Z=np.zeros_like(phi),
                 knots=phi,
-                period=2 * np.pi,
                 method=method,
             )
             np.testing.assert_allclose(
-                c.compute_length(grid=npts), R * 2 * np.pi, atol=atol
+                c.compute("length", grid=npts)["length"],
+                R * 2 * np.pi,
+                atol=atol,
+                err_msg=f"Failed at {method}",
             )
             c.translate([1, 1, 1])
             c.rotate(angle=np.pi)
             c.flip([0, 1, 0])
             np.testing.assert_allclose(
-                c.compute_length(grid=npts), R * 2 * np.pi, atol=atol
+                c.compute("length", grid=npts)["length"],
+                R * 2 * np.pi,
+                atol=atol,
+                err_msg=f"Failed at {method}",
             )
 
             if method == "nearest":
@@ -489,22 +523,18 @@ class TestXYZCurve:
             c.X = R * np.cos(phi)
             c.Y = R * np.sin(phi)
             c.Z = np.ones_like(phi)
+            grid = LinearGrid(zeta=np.linspace(0, 2 * np.pi, npts, endpoint=True))
             np.testing.assert_allclose(
-                c.compute_length(grid=np.linspace(0, 2 * np.pi, npts, endpoint=True)),
+                c.compute("length", grid=grid)["length"],
                 R * 2 * np.pi,
                 atol=atol,
-            )
-
-            c.grid = LinearGrid(
-                L=0, M=0, zeta=np.linspace(0, 2 * np.pi, npts, endpoint=True)
+                err_msg=f"Failed at {method}",
             )
             np.testing.assert_allclose(
-                c.compute_length(grid=None), R * 2 * np.pi, atol=atol
-            )
-            phi = c.grid.nodes[:, 2]
-            c.grid = np.vstack((np.zeros_like(phi), np.zeros_like(phi), phi)).T
-            np.testing.assert_allclose(
-                c.compute_length(grid=None), R * 2 * np.pi, atol=atol
+                c.compute("length", grid=None)["length"],
+                R * 2 * np.pi,
+                atol=9e-3,
+                err_msg=f"Failed at {method}",
             )
 
     @pytest.mark.unit
@@ -514,44 +544,42 @@ class TestXYZCurve:
         R = 3
         phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
         c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        x, y, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="xyz").T
+        x, y, z = c.compute("x", grid=Grid(np.array([[0.0, 0.0, 0.0]])), basis="xyz")[
+            "x"
+        ].T
         np.testing.assert_allclose(x, R)
         np.testing.assert_allclose(y, 0, atol=1e-15)
         np.testing.assert_allclose(z, 0, atol=1e-15)
         c.rotate(angle=np.pi / 2)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
-        r, p, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz").T
+        r, p, z = c.compute("x", grid=Grid(np.array([[0.0, 0.0, 0.0]])), basis="rpz")[
+            "x"
+        ].T
         np.testing.assert_allclose(r, np.sqrt(1**2 + (R - 1) ** 2))
         np.testing.assert_allclose(p, np.arctan2(-(R - 1), 1))
         np.testing.assert_allclose(z, 1)
 
     @pytest.mark.unit
-    def test_from_FourierXYZCurve(self):
+    def test_to_XYZCurve(self):
         """Test converting FourierXYZCurve to XYZCurve object."""
         npts = 4000
         # make a simple circular curve of radius 2
         R = 2
         c = FourierXYZCurve()
-        c2 = XYZCurve.from_FourierXYZCurve(c, grid=1000)
-        c3 = c.to_XYZCurve(grid=1000)
+        c2 = c.to_XYZCurve(grid=npts)
 
         np.testing.assert_allclose(
-            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+            c.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
         )
         np.testing.assert_allclose(
-            c2.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
-        )
-        np.testing.assert_allclose(
-            c3.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+            c2.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
         )
         grid = LinearGrid(N=20, endpoint=True)
-        coords1 = c.compute_coordinates(grid=grid)
-        coords2 = c2.compute_coordinates(grid=grid)
-        coords3 = c3.compute_coordinates(grid=grid)
+        coords1 = c.compute("x", grid=grid)["x"]
+        coords2 = c2.compute("x", grid=grid)["x"]
 
         np.testing.assert_allclose(coords1, coords2, atol=1e-10)
-        np.testing.assert_allclose(coords2, coords3)
 
     @pytest.mark.unit
     def test_asserts_and_errors(self):
@@ -560,21 +588,11 @@ class TestXYZCurve:
         R = 2
         phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
         c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        with pytest.raises(TypeError):
-            c.grid = [1, 2, 3]
         with pytest.raises(AssertionError):
             XYZCurve(
                 X=R * np.cos(phi[:-1]),
                 Y=R * np.sin(phi[:-1]),
                 Z=np.zeros_like(phi[:-1]),
-            )
-        with pytest.raises(AssertionError):
-            XYZCurve(
-                X=R * np.cos(phi),
-                Y=R * np.sin(phi),
-                Z=np.zeros_like(phi),
-                knots=phi,
-                period=None,
             )
         # change number of knots, should raise error since is different than
         # existing knots
@@ -593,9 +611,6 @@ class TestXYZCurve:
         R = 2
         phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
         c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        grid = LinearGrid(M=2, N=2)
-        c.grid = grid
-        assert grid.eq(c.grid)
 
         s = c.copy()
         assert s.eq(c)

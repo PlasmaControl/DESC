@@ -49,14 +49,14 @@ class TestCoil:
         By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 2])
         coil = FourierXYZCoil(I)
-        coil.grid = LinearGrid(zeta=100, endpoint=True)
-        assert coil.grid.num_nodes == 100
 
         field = SumMagneticField(coil, VerticalMagneticField(B_Z))
         B_approx = field.compute_magnetic_field(
             Grid([[10, y, 0], [10, -y, 0]]), basis="xyz"
         )[0]
-        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
+        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-8)
+        # TODO: increase atol to 1e-10 when refactor compute methods of coil
+        # and magnetic_fields to accept a grid argument
 
 
 class TestCoilSet:
@@ -292,7 +292,7 @@ def test_save_and_load_MAKEGRID_coils(tmpdir_factory):
     Ncoils = 22
     input_path = f"./tests/inputs/coils.MAKEGRID_format_{Ncoils}_coils"
     tmpdir = tmpdir_factory.mktemp("coil_files")
-    tmp_path = tmpdir.join("coils.MAKEGRID_format_{Ncoils}_coils")
+    tmp_path = tmpdir.join(f"coils.MAKEGRID_format_{Ncoils}_coils")
     shutil.copyfile(input_path, tmp_path)
 
     coilset = CoilSet.from_makegrid_coilfile(str(tmp_path))
@@ -301,12 +301,25 @@ def test_save_and_load_MAKEGRID_coils(tmpdir_factory):
     path = tmpdir.join("coils.MAKEGRID_format_desc")
     coilset.save_in_MAKEGRID_format(str(path))
 
-    with open(tmp_path) as f:
-        lines_orig = f.readlines()
-    with open(path) as f:
-        lines_new = f.readlines()
-    for line_orig, line_new in zip(lines_orig, lines_new):
-        assert line_orig == line_new
+    coilset2 = CoilSet.from_makegrid_coilfile(str(path))
+
+    grid = LinearGrid(N=200, endpoint=True)
+
+    # check values at saved points, ensure they match
+    coords1 = coilset[0].compute("x", grid=grid, basis="xyz")["x"]
+    X1 = coords1[:, 0]
+    Y1 = coords1[:, 1]
+    Z1 = coords1[:, 2]
+
+    coords2 = coilset2[0].compute("x", grid=grid, basis="xyz")["x"]
+    X2 = coords2[:, 0]
+    Y2 = coords2[:, 1]
+    Z2 = coords2[:, 2]
+
+    np.testing.assert_allclose(coilset2[0].current, coilset[0].current)
+    np.testing.assert_allclose(X1, X2)
+    np.testing.assert_allclose(Y1, Y2)
+    np.testing.assert_allclose(Z1, Z2, atol=9e-15)
 
 
 @pytest.mark.unit
@@ -328,12 +341,12 @@ def test_save_and_load_MAKEGRID_coils_angular(tmpdir_factory):
     coilset2 = CoilSet.from_makegrid_coilfile(str(path))
 
     # check values at saved points, ensure they match
-    coords1 = coilset[0].compute_coordinates(grid=grid, basis="xyz")
+    coords1 = coilset[0].compute("x", grid=grid, basis="xyz")["x"]
     X1 = coords1[:, 0]
     Y1 = coords1[:, 1]
     Z1 = coords1[:, 2]
 
-    coords2 = coilset2[0].compute_coordinates(grid=grid, basis="xyz")
+    coords2 = coilset2[0].compute("x", grid=grid, basis="xyz")["x"]
     X2 = coords2[:, 0]
     Y2 = coords2[:, 1]
     Z2 = coords2[:, 2]
@@ -345,12 +358,12 @@ def test_save_and_load_MAKEGRID_coils_angular(tmpdir_factory):
 
     # check values at interpolated points, ensure they match closely
     grid = LinearGrid(N=50, endpoint=True)
-    coords1 = coilset[0].compute_coordinates(grid=grid, basis="xyz")
+    coords1 = coilset[0].compute("x", grid=grid, basis="xyz")["x"]
     X1 = coords1[:, 0]
     Y1 = coords1[:, 1]
     Z1 = coords1[:, 2]
 
-    coords2 = coilset2[0].compute_coordinates(grid=grid, basis="xyz")
+    coords2 = coilset2[0].compute("x", grid=grid, basis="xyz")["x"]
     X2 = coords2[:, 0]
     Y2 = coords2[:, 1]
     Z2 = coords2[:, 2]

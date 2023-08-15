@@ -318,13 +318,11 @@ class XYZCoil(Coil, XYZCurve):
     knots : ndarray
         arbitrary theta values to use for spline knots,
         should be an 1D ndarray of same length as the input.
-        If None, defaults to using an equal-arclength angle as the knot
-    period: float
-        period of the theta variable used for the spline knots.
-        if knots is None, this defaults to 2pi. If knots is not None, this must be
-        supplied by the user
-    grid : Grid
-        default grid for computation
+        (input length in this case is determined by grid argument, since
+        the input coordinates come from
+        fourier_xyzcurve.compute("x",grid=grid))
+        If None, defaults to using an equal-arclength angle as the knots
+        If supplied, will be rescaled to lie in [0,2pi]
     method : str
         method of interpolation
         - `'nearest'`: nearest neighbor interpolation
@@ -346,12 +344,10 @@ class XYZCoil(Coil, XYZCurve):
         Y,
         Z,
         knots=None,
-        period=None,
-        grid=None,
         method="cubic2",
         name="",
     ):
-        super().__init__(current, X, Y, Z, knots, period, grid, method, name)
+        super().__init__(current, X, Y, Z, knots, method, name)
 
 
 class CoilSet(Coil, MutableSequence):
@@ -688,7 +684,6 @@ class CoilSet(Coil, MutableSequence):
                     tempx,
                     tempy,
                     tempz,
-                    grid=grid,
                     method=method,
                     name=names[i],
                 )
@@ -742,7 +737,7 @@ class CoilSet(Coil, MutableSequence):
         # at the end of each individual coil
         for i in range(int(len(self.coils) / NFP)):
             coil = self.coils[i]
-            coords = coil.compute_coordinates(basis="xyz", grid=grid)
+            coords = coil.compute("x", basis="xyz", grid=grid)["x"]
 
             contour_X = np.asarray(coords[0:-1, 0])
             contour_Y = np.asarray(coords[0:-1, 1])

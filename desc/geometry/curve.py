@@ -6,9 +6,8 @@ import numpy as np
 
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from desc.compute import xyz2rpz
-from desc.grid import Grid, LinearGrid
-from desc.interpolate import interp1d
+from desc.compute import rpz2xyz, xyz2rpz
+from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.utils import copy_coeffs
 
@@ -204,14 +203,18 @@ class FourierRZCurve(Curve):
                 + f"basis with {self.Z_basis.num_modes} modes"
             )
 
-    def to_FourierXYZCurve(self, N=None):
-        """Convert to FourierXYZCurve representation.
+    def to_FourierXYZCurve(self, N=None, grid=None, name=""):
+        """Convert Curve to FourierXYZCurve representation.
 
         Parameters
         ----------
         N : int
             Fourier resolution of the new X,Y,Z representation.
-            Default is the resolution of the old R,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
+            If an integer, uses that many equally spaced points.
+        name : str
+            name for this curve
 
         Returns
         -------
@@ -219,16 +222,45 @@ class FourierRZCurve(Curve):
             New representation of the curve parameterized by Fourier series for X,Y,Z.
 
         """
-        if N is None:
-            N = max(self.R_basis.N, self.Z_basis.N)
-        grid = LinearGrid(N=4 * N, NFP=1, sym=False)
-        basis = FourierSeries(N=N, NFP=1, sym=False)
-        xyz = self.compute("x", grid=grid, basis="xyz")["x"]
-        transform = Transform(grid, basis, build_pinv=True)
-        X_n = transform.fit(xyz[:, 0])
-        Y_n = transform.fit(xyz[:, 1])
-        Z_n = transform.fit(xyz[:, 2])
-        return FourierXYZCurve(X_n=X_n, Y_n=Y_n, Z_n=Z_n)
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierXYZCurve.from_values(coords, N=N, basis="xyz", name=name)
+
+    def to_XYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
+        """Convert Curve to XYZCurve.
+
+        Parameters
+        ----------
+        knots : ndarray
+            arbitrary theta values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Curve.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with XYZCurve.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        XYZCurve: XYZCurve
+            New representation of the curve parameterized by a spline for X,Y,Z.
+
+        """
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return XYZCurve.from_values(
+            coords, knots=knots, method=method, name=name, basis="xyz"
+        )
 
 
 class FourierXYZCurve(Curve):
@@ -399,6 +431,73 @@ class FourierXYZCurve(Curve):
                 + f"basis with {self.Z_basis.num_modes} modes."
             )
 
+    @classmethod
+    def from_values(cls, coords, N=10, grid=None, basis="xyz", name=""):
+        """Fit coordinates to FourierXYZCurve representation.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+            default is 10
+
+        Returns
+        -------
+        curve : FourierXYZCurve
+            New representation of the curve parameterized by Fourier series for X,Y,Z.
+
+        """
+        if basis == "xyz":
+            coords_rpz = xyz2rpz(coords)
+            coords_xyz = coords
+        else:
+            coords_rpz = coords
+            coords_xyz = rpz2xyz(coords, phi=coords[:, 1])
+        grid = LinearGrid(zeta=coords_rpz[:, 1], NFP=1, sym=False)
+        basis = FourierSeries(N=N, NFP=1, sym=False)
+        transform = Transform(grid, basis, build_pinv=True)
+        X_n = transform.fit(coords_xyz[:, 0])
+        Y_n = transform.fit(coords_xyz[:, 1])
+        Z_n = transform.fit(coords_xyz[:, 2])
+        return cls(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
+
+    def to_XYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
+        """Convert Curve to XYZCurve.
+
+        Parameters
+        ----------
+        knots : ndarray
+            arbitrary theta values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Curve.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with XYZCurve.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        XYZCurve: XYZCurve
+            New representation of the curve parameterized by a spline for X,Y,Z.
+
+        """
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return XYZCurve.from_values(
+            coords, knots=knots, method=method, name=name, basis="xyz"
+        )
+
     # TODO: to_rz method for converting to FourierRZCurve representation
     # (might be impossible to parameterize with toroidal angle phi)
 
@@ -536,6 +635,65 @@ class FourierPlanarCurve(Curve):
             if rr is not None:
                 self.r_n = put(self.r_n, idx, rr)
 
+    def to_FourierXYZCurve(self, N=None, grid=None, name=""):
+        """Convert Curve to FourierXYZCurve representation.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
+            If an integer, uses that many equally spaced points.
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        curve : FourierXYZCurve
+            New representation of the curve parameterized by Fourier series for X,Y,Z.
+
+        """
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierXYZCurve.from_values(coords, N=N, basis="xyz", name=name)
+
+    def to_XYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
+        """Convert Curve to XYZCurve.
+
+        Parameters
+        ----------
+        knots : ndarray
+            arbitrary theta values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Curve.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with XYZCurve.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        XYZCurve: XYZCurve
+            New representation of the curve parameterized by a spline for X,Y,Z.
+
+        """
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return XYZCurve.from_values(
+            coords, knots=knots, method=method, name=name, basis="xyz"
+        )
+
 
 class XYZCurve(Curve):
     """Curve parameterized by spline knots in X,Y,Z.
@@ -548,11 +706,8 @@ class XYZCurve(Curve):
         arbitrary theta values to use for spline knots,
         should be an 1D ndarray of same length as the input.
         If None, defaults to using an equal-arclength angle as the knot
-    period: float
-        period of the theta variable used for the spline knots.
-        if knots is None, this defaults to 2pi. If knots is not None, this must be
-        supplied by the user
-     method : str
+        If supplied, will be rescaled to lie in [0,2pi]
+    method : str
         method of interpolation
         - `'nearest'`: nearest neighbor interpolation
         - `'linear'`: linear interpolation
@@ -572,8 +727,6 @@ class XYZCurve(Curve):
         Y,
         Z,
         knots=None,
-        period=None,
-        grid=None,
         method="cubic",
         name="",
     ):
@@ -586,6 +739,7 @@ class XYZCurve(Curve):
         self._X = X
         self._Y = Y
         self._Z = Z
+        self._period = 2 * np.pi
 
         if knots is None:
             # find equal arclength angle-like variable, and use that as theta
@@ -596,29 +750,15 @@ class XYZCurve(Curve):
             thetas = 2 * jnp.pi * np.cumsum(lengths) / jnp.sum(lengths)
             thetas = np.insert(thetas, 0, 0)
             knots = thetas
-            self._period = 2 * np.pi
+
         else:
             knots = np.atleast_1d(knots)
-            assert (
-                period is not None
-            ), "Must specify period if using user-supplied knots!"
-            self._period = period
+            # rescale knots to lie in [0,2pi]
+            knots = knots - knots[0]
+            knots = (knots / knots[-1]) * 2 * np.pi
+
         self._knots = knots
-
         self._method = method
-
-        if grid is None:
-            self._grid = Grid(
-                jnp.vstack(
-                    (
-                        jnp.zeros_like(self._knots),
-                        jnp.zeros_like(self._knots),
-                        self._knots,
-                    )
-                ).T
-            )
-        else:
-            self._grid = grid
 
     @property
     def X(self):
@@ -679,276 +819,22 @@ class XYZCurve(Curve):
         """Default grid for computation."""
         return self._grid
 
-    @grid.setter
-    def grid(self, new):
-        if isinstance(new, Grid):
-            self._grid = new
-        elif isinstance(new, (np.ndarray, jnp.ndarray)):
-            self._grid = Grid(new, sort=False)
-        else:
-            raise TypeError(
-                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
-            )
-
-    def _get_xq(self, grid):
-        if grid is None:
-            return self.grid.nodes[:, 2]
-        if isinstance(grid, Grid):
-            return grid.nodes[:, 2]
-        if np.isscalar(grid):
-            return np.linspace(0, self._period, grid, endpoint=True)
-        grid = np.atleast_1d(grid)
-        if grid.ndim == 1:
-            return grid
-        return grid[:, 2]
-
-    def compute_coordinates(self, X=None, Y=None, Z=None, grid=None, dt=0, basis="xyz"):
-        """Compute values using specified coefficients.
-
-        Parameters
-        ----------
-        X, Y, Z: array-like
-            coordinate values at the knots for X, Y, Z.
-            If not given, defaults to values given
-            by X, Y, Z attributes
-        grid : Grid, int or array-like
-            locations to compute values at. Defaults to self.grid
-            if int, uses a linearly spaced grid with specified number of points
-            between 0 and self.period
-        dt: int
-            derivative order to compute
-        basis : {"rpz", "xyz"}
-            coordinate system for returned points
-
-        Returns
-        -------
-        values : ndarray, shape(k,3)
-            X, Y, Z or R, phi, Z coordinates of the curve
-
-        """
-        if X is None:
-            X = self.X
-        if Y is None:
-            Y = self.Y
-        if Z is None:
-            Z = self.Z
-        xq = self._get_xq(grid)
-
-        Xq = interp1d(
-            xq,
-            self._knots,
-            X,
-            method=self._method,
-            derivative=dt,
-            period=self._period,
-        )
-        Yq = interp1d(
-            xq,
-            self._knots,
-            Y,
-            method=self._method,
-            derivative=dt,
-            period=self._period,
-        )
-        Zq = interp1d(
-            xq,
-            self._knots,
-            Z,
-            method=self._method,
-            derivative=dt,
-            period=self._period,
-        )
-
-        coords = jnp.stack([Xq, Yq, Zq], axis=1)
-        coords = coords @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
-        if basis.lower() == "rpz":
-            coords = xyz2rpz(coords)
-        return coords
-
-    def compute_frenet_frame(self, X=None, Y=None, Z=None, grid=None, basis="xyz"):
-        """Compute Frenet frame vectors using specified values.
-
-        Parameters
-        ----------
-        X, Y, Z: array-like
-            coordinate values at the knots for X, Y, Z.
-            If not given, defaults to values given
-            by X, Y, Z attributes
-        grid : Grid, int or array-like
-            locations to compute values at. Defaults to self.grid
-            if int, uses a linearly spaced grid with specified number of points
-            between 0 and self.period
-        dt: int
-            derivative order to compute
-        basis : {"rpz", "xyz"}
-            coordinate system for returned points
-
-        Returns
-        -------
-        T, N, B : ndarrays, shape(k,3)
-            tangent, normal, and binormal vectors of the curve at specified grid
-            locations
-
-        """
-        T = self.compute_coordinates(X, Y, Z, grid, dt=1, basis=basis)
-        N = self.compute_coordinates(X, Y, Z, grid, dt=2, basis=basis)
-
-        T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
-        N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
-        B = jnp.cross(T, N, axis=1) * jnp.linalg.det(self.rotmat)
-
-        return T, N, B
-
-    def compute_curvature(self, X=None, Y=None, Z=None, grid=None):
-        """Compute curvature using specified values at knots.
-
-        Parameters
-        ----------
-        X, Y, Z: array-like
-            coordinate values at the knots for X, Y, Z.
-            If not given, defaults to values given
-            by X, Y, Z attributes
-        grid : Grid, int or array-like
-            locations to compute values at. Defaults to self.grid
-            if int, uses a linearly spaced grid with specified number of points
-            between 0 and self.period
-        dt: int
-            derivative order to compute
-        basis : {"rpz", "xyz"}
-            coordinate system for returned points
-
-        Returns
-        -------
-        kappa : ndarray, shape(k,)
-            curvature of the curve at specified grid locations in phi
-
-        """
-        dx = self.compute_coordinates(X, Y, Z, grid, dt=1)
-        d2x = self.compute_coordinates(X, Y, Z, grid, dt=2)
-        dxn = jnp.linalg.norm(dx, axis=1)[:, jnp.newaxis]
-        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn**3, axis=1)
-        return kappa
-
-    def compute_torsion(self, X=None, Y=None, Z=None, grid=None):
-        """Compute torsion using specified coefficientsnp.empty((0, 3)).
-
-        Parameters
-        ----------
-        X, Y, Z: array-like
-            coordinate values at the knots for X, Y, Z.
-            If not given, defaults to values given
-            by X, Y, Z attributes
-        grid : Grid, int or array-like
-            locations to compute values at. Defaults to self.grid
-            if int, uses a linearly spaced grid with specified number of points
-            between 0 and self.period
-        dt: int
-            derivative order to compute
-        basis : {"rpz", "xyz"}
-            coordinate system for returned points
-
-        Returns
-        -------
-        tau : ndarray, shape(k,)
-            torsion of the curve at specified grid locations in phi
-
-        """
-        dx = self.compute_coordinates(X, Y, Z, grid, dt=1)
-        d2x = self.compute_coordinates(X, Y, Z, grid, dt=2)
-        d3x = self.compute_coordinates(X, Y, Z, grid, dt=3)
-        dxd2x = jnp.cross(dx, d2x, axis=1)
-        tau = (
-            jnp.sum(dxd2x * d3x, axis=1)
-            / jnp.linalg.norm(dxd2x, axis=1)[:, jnp.newaxis] ** 2
-        )
-        return tau
-
-    def compute_length(self, X=None, Y=None, Z=None, grid=None):
-        """Compute the length of the curve specified by given cartesian spline points.
-
-        Parameters
-        ----------
-        X, Y, Z: array-like
-            coordinate values at the knots for X, Y, Z.
-            If not given, defaults to values given
-            by X, Y, Z attributes
-        grid : Grid, int or array-like
-            locations to compute values at. Defaults to self.grid
-            if int, uses a linearly spaced grid with specified number of points
-            between 0 and self.period
-
-        Returns
-        -------
-        length : float
-            length of the curve.
-
-        """
-        if self._method == "nearest":  # cannot use derivative method as deriv=0
-            coords = self.compute_coordinates(
-                X=X, Y=Y, Z=Z, grid=grid, basis="xyz", dt=0
-            )
-            X = coords[:, 0]
-            Y = coords[:, 1]
-            Z = coords[:, 2]
-            lengths = jnp.sqrt(
-                (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2
-            )
-            return jnp.sum(lengths)
-        else:
-            coords = self.compute_coordinates(
-                X=X, Y=Y, Z=Z, grid=grid, basis="xyz", dt=1
-            )
-            # L = integral( sqrt(x'(t)**2+y'(t)**2+z'(t)**2 )dt )
-            integrand = jnp.linalg.norm(coords, axis=1)
-            ts = self._get_xq(grid)
-
-            return jnp.trapz(integrand, ts)
-
-    def to_FourierXYZCurve(self, N=10, grid=None):
-        """Convert to a FourierXYZCurve object.
-
-        N : int
-            number of Fourier Modes to use in fitting the XYZCurve object.
-            Default is 10.
-        grid: Grid, int or array-like
-            dependent coordinates to fit at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-
-        Returns
-        -------
-        fourier_xyz_curve : FourierXYZCurve
-            FourierXYZCurve fit of the XYZCurve input object.
-
-        """
-        return FourierXYZCurve.from_XYZCurve(self, N, grid)
-
     @classmethod
-    def from_FourierXYZCurve(
-        cls,
-        fourier_xyzcurve,
-        knots=None,
-        period=None,
-        grid=None,
-        method="cubic2",
-        name="",
-    ):
-        """Create XYZCurve from FourierXYZCurve object.
+    def from_values(cls, coords, knots=None, method="cubic2", name="", basis="xyz"):
+        """Create XYZCurve from coordinate values.
 
         Parameters
         ----------
-        fourier_xyzcurve: FourierXYZCurve
-            FourierXYZCurve object to convert to XYZCurve
+        coords: ndarray
+            coordinates to fit a XYZCurve object with.
         knots : ndarray
             arbitrary theta values to use for spline knots,
             should be an 1D ndarray of same length as the input.
             (input length in this case is determined by grid argument, since
             the input coordinates come from
-            fourier_xyzcurve.compute_coordinates(grid=grid))
+            Curve.compute("x",grid=grid))
             If None, defaults to using an equal-arclength angle as the knots
-        period: float
-            period of the theta variable used for the spline knots.
-            if knots is None, this defaults to 2pi. If knots is not None, this must be
-            supplied by the user
+            If supplied, will be rescaled to lie in [0,2pi]
         method : str
             method of interpolation
             - `'nearest'`: nearest neighbor interpolation
@@ -958,6 +844,9 @@ class XYZCurve(Curve):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             name for this curve
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "xyz"
+
 
         Returns
         -------
@@ -965,10 +854,30 @@ class XYZCurve(Curve):
             XYZCurve object which is the spline representation of the FourierXYZCurve.
 
         """
-        coords = fourier_xyzcurve.compute_coordinates(grid=grid, basis="xyz")
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+        return cls(coords[:, 0], coords[:, 1], coords[:, 2], knots, method, name)
 
-        return cls(
-            coords[:, 0], coords[:, 1], coords[:, 2], knots, period, grid, method, name
-        )
+    def to_FourierXYZCurve(self, N=None, grid=None, name=""):
+        """Convert Curve to FourierXYZCurve representation.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
+            If an integer, uses that many equally spaced points.
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        curve : FourierXYZCurve
+            New representation of the curve parameterized by Fourier series for X,Y,Z.
+
+        """
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierXYZCurve.from_values(coords, N=N, basis="xyz", name=name)
 
     # TODO: methods for converting between representations

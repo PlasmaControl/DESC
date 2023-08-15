@@ -64,7 +64,7 @@ def biot_savart(eval_pts, coil_pts, current):
 
 
 def read_BNORM_file(fname, eq, eval_grid=None, scale_by_curpol=True):
-    """Create BNORM-style .txt file containing Bnormal Fourier coefficients.
+    """Read BNORM-style .txt file containing Bnormal Fourier coefficients.
 
     Parameters
     ----------
@@ -110,12 +110,10 @@ def read_BNORM_file(fname, eq, eval_grid=None, scale_by_curpol=True):
         Bnorm_mn_desc_basis[idx] = Bnorm_mn[0, i]
 
     if eval_grid is None:
-        eval_grid = LinearGrid(
-            rho=jnp.array(1.0), M=2 * basis.M, N=2 * basis.N, NFP=eq.NFP
-        )
+        eval_grid = LinearGrid(rho=jnp.array(1.0), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)
 
-    # fit Bnorm with Fourier Series
+    # Evaluate Fourier Series
     Bnorm = trans.transform(Bnorm_mn_desc_basis)
 
     return Bnorm
@@ -175,25 +173,17 @@ class MagneticField(IOAble, ABC):
         """Compute magnetic field at a set of points."""
         return self.compute_magnetic_field(coords, params, basis)
 
-    def compute_Bnormal(self, surface, grid_M=40, grid_N=40, NFP=None, grid=None):
+    def compute_Bnormal(self, surface, grid=None, NFP=None):
         """Create BNORM-style .txt file containing Bnormal Fourier coefficients.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium to calculate the magnetic field's Bnormal on the surface of.
-        fname : str
-            name of file to save the BNORM Bnormal Fourier coefficients to.
+        surface : Surface
+            Surface to calculate the magnetic field's Bnormal on.
         grid : Grid, optional
-            Grid of points on the plasma surface to calculate the Bnormal at and then
-            fit with a DoubleFourierSeries, if None defaults to a LinearGrid with
-            grid_M and grid_N
-        grid_M : int, optional
-            Poloidal resolution of the grid on the surface
-            on which to calculate Bnormal, by default 40
-        grid_N : int, optional
-            Toroidal resolution of the grid on the surface
-            on which to calculate Bnormal, by default 40
+            Grid of points on the  surface to calculate the Bnormal at and then
+            fit with a DoubleFourierSeries, if None defaults to a LinearGrid with twice
+            the surface poloidal and toroidal resolutions
         NFP : int, optional
             Number of field periods for compute grid, if None
             defaults to surface.NFP.
@@ -205,11 +195,13 @@ class MagneticField(IOAble, ABC):
         if NFP is None:
             NFP = surface.NFP
         if grid is None:
-            grid = LinearGrid(rho=jnp.array(1.0), M=grid_M, N=grid_N, NFP=NFP)
+            grid = LinearGrid(
+                rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=NFP
+            )
 
-        coords = surface.compute_coordinates(grid=grid, basis="xyz")
-        rs_t = surface.compute_coordinates(grid=grid, dt=1, basis="xyz")
-        rs_z = surface.compute_coordinates(grid=grid, dz=1, basis="xyz")
+        coords = surface.compute("x", grid=grid, basis="xyz")["x"]
+        rs_t = surface.compute("e_theta", grid=grid, basis="xyz")["e_theta"]
+        rs_z = surface.compute("e_zeta", grid=grid, basis="xyz")["e_zeta"]
         surf_normal = cross(rs_t, rs_z)
         B = self.compute_magnetic_field(coords, basis="xyz")
 
@@ -376,7 +368,7 @@ class SumMagneticField(MagneticField):
         )
         self._fields = fields
 
-    def compute_magnetic_field(self, coords, params={}, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -424,8 +416,8 @@ class ToroidalMagneticField(MagneticField):
     def __init__(self, B0, R0):
         assert float(B0) == B0, "B0 must be a scalar"
         assert float(R0) == R0, "R0 must be a scalar"
-        self._B0 = B0
-        self._R0 = R0
+        self._B0 = float(B0)
+        self._R0 = float(R0)
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points.

@@ -1,4 +1,5 @@
 from desc.backend import jnp
+from desc.interpolate import interp1d
 
 from .data_index import register_compute_fun
 from .geom_utils import (
@@ -502,6 +503,241 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="x",
+    label="\\mathbf{r}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve",
+    dim=3,
+    params=["X", "Y", "Z", "_knots", "_period", "_method"],
+    transforms={
+        "rotmat": [],
+        "shift": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.XYZCurve",
+    basis="basis",
+)
+def _x_XYZCurve(params, transforms, profiles, data, **kwargs):
+    xq = data["s"]
+
+    Xq = interp1d(
+        xq,
+        params["_knots"],
+        params["X"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+    Yq = interp1d(
+        xq,
+        params["_knots"],
+        params["Y"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+    Zq = interp1d(
+        xq,
+        params["_knots"],
+        params["Z"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+
+    coords = jnp.stack([Xq, Yq, Zq], axis=1)
+    coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        coords = xyz2rpz(coords)
+    data["x"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="x_s",
+    label="\\partial_{s} \\mathbf{r}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, first derivative",
+    dim=3,
+    params=["X", "Y", "Z"],
+    transforms={
+        "X": [[0, 0, 0], [0, 0, 1]],
+        "Y": [[0, 0, 0], [0, 0, 1]],
+        "Z": [[0, 0, 1]],
+        "rotmat": [],
+        "shift": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=["x", "s"],
+    parameterization="desc.geometry.curve.XYZCurve",
+    basis="basis",
+)
+def _x_s_XYZCurve(params, transforms, profiles, data, **kwargs):
+    xq = data["s"]
+
+    dXq = interp1d(
+        xq,
+        params["_knots"],
+        params["X"],
+        method=params["_method"],
+        derivative=1,
+        period=params["_period"],
+    )
+    dYq = interp1d(
+        xq,
+        params["_knots"],
+        params["Y"],
+        method=params["_method"],
+        derivative=1,
+        period=params["_period"],
+    )
+    dZq = interp1d(
+        xq,
+        params["_knots"],
+        params["Z"],
+        method=params["_method"],
+        derivative=1,
+        period=params["_period"],
+    )
+
+    coords = jnp.stack([dXq, dYq, dZq], axis=1)
+    coords = coords @ transforms["rotmat"].T
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        coords = xyz2rpz_vec(
+            coords,
+            phi=data["x"][:, 1],
+        )  # TODO: possible issue if data is passed in with "x" but in cartesian?
+    data["x_s"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="x_ss",
+    label="\\partial_{ss} \\mathbf{r}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, second derivative",
+    dim=3,
+    params=["X", "Y", "Z"],
+    transforms={
+        "X": [[0, 0, 0], [0, 0, 2]],
+        "Y": [[0, 0, 0], [0, 0, 2]],
+        "Z": [[0, 0, 2]],
+        "rotmat": [],
+        "shift": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=["x", "s"],
+    parameterization="desc.geometry.curve.XYZCurve",
+    basis="basis",
+)
+def _x_ss_XYZCurve(params, transforms, profiles, data, **kwargs):
+    xq = data["s"]
+
+    d2Xq = interp1d(
+        xq,
+        params["_knots"],
+        params["X"],
+        method=params["_method"],
+        derivative=2,
+        period=params["_period"],
+    )
+    d2Yq = interp1d(
+        xq,
+        params["_knots"],
+        params["Y"],
+        method=params["_method"],
+        derivative=2,
+        period=params["_period"],
+    )
+    d2Zq = interp1d(
+        xq,
+        params["_knots"],
+        params["Z"],
+        method=params["_method"],
+        derivative=2,
+        period=params["_period"],
+    )
+
+    coords = jnp.stack([d2Xq, d2Yq, d2Zq], axis=1)
+    coords = coords @ transforms["rotmat"].T
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        coords = xyz2rpz_vec(
+            coords,
+            phi=data["x"][:, 1],
+        )  # TODO: possible issue if data is passed in with "x" but in cartesian?
+    data["x_ss"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="x_sss",
+    label="\\partial_{sss} \\mathbf{r}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, third derivative",
+    dim=3,
+    params=["X", "Y", "Z"],
+    transforms={
+        "X": [[0, 0, 0], [0, 0, 3]],
+        "Y": [[0, 0, 0], [0, 0, 3]],
+        "Z": [[0, 0, 3]],
+        "rotmat": [],
+        "shift": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=["x", "s"],
+    parameterization="desc.geometry.curve.XYZCurve",
+    basis="basis",
+)
+def _x_sss_XYZCurve(params, transforms, profiles, data, **kwargs):
+    xq = data["s"]
+
+    d3Xq = interp1d(
+        xq,
+        params["_knots"],
+        params["X"],
+        method=params["_method"],
+        derivative=3,
+        period=params["_period"],
+    )
+    d3Yq = interp1d(
+        xq,
+        params["_knots"],
+        params["Y"],
+        method=params["_method"],
+        derivative=3,
+        period=params["_period"],
+    )
+    d3Zq = interp1d(
+        xq,
+        params["_knots"],
+        params["Z"],
+        method=params["_method"],
+        derivative=3,
+        period=params["_period"],
+    )
+
+    coords = jnp.stack([d3Xq, d3Yq, d3Zq], axis=1)
+    coords = coords @ transforms["rotmat"].T
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        coords = xyz2rpz_vec(
+            coords,
+            phi=data["x"][:, 1],
+        )  # TODO: possible issue if data is passed in with "x" but in cartesian?
+    data["x_sss"] = coords
+
+    return data
+
+
+@register_compute_fun(
     name="frenet_tangent",
     label="\\mathbf{T}_{\\mathrm{Frenet-Serret}}",
     units="~",
@@ -623,4 +859,36 @@ def _torsion(params, transforms, profiles, data, **kwargs):
 def _length(params, transforms, profiles, data, **kwargs):
     T = jnp.linalg.norm(data["x_s"], axis=-1)
     data["length"] = jnp.trapz(T, data["s"])
+    return data
+
+
+@register_compute_fun(
+    name="length",
+    label="L",
+    units="m",
+    units_long="meters",
+    description="Length of the curve",
+    dim=0,
+    params=["_method"],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["s", "x", "x_s"],
+    parameterization="desc.geometry.curve.XYZCurve",
+)
+def _length_XYZCurve(params, transforms, profiles, data, **kwargs):
+    if params["_method"] == "nearest":  # cannot use derivative method as deriv=0
+        coords = data["x"]
+        if kwargs.get("basis", "rpz").lower() == "rpz":
+            coords = rpz2xyz(coords)
+        X = coords[:, 0]
+        Y = coords[:, 1]
+        Z = coords[:, 2]
+        lengths = jnp.sqrt(
+            (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2
+        )
+        data["length"] = jnp.sum(lengths)
+    else:
+        T = jnp.linalg.norm(data["x_s"], axis=-1)
+        data["length"] = jnp.trapz(T, data["s"])
     return data

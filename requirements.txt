@@ -1,5 +1,5 @@
 colorama
-diffrax
+diffrax>=0.4.1
 h5py >= 3.0.0
 jax[cpu] >= 0.3.2, <= 0.4.14
 matplotlib >= 3.3.0, <= 3.6.0, != 3.4.3

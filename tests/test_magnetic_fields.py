@@ -168,7 +168,7 @@ class TestMagneticFields:
         assert np.isinf(z[-1])
 
     @pytest.mark.unit
-    def test_field_line_integrate_early_terminate_NaN(self):
+    def test_field_line_integrate_early_terminate_default(self):
         """Test field line integration with default early termination criterion."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit
         # from outboard midplane to top center
@@ -178,11 +178,11 @@ class TestMagneticFields:
         # make a SplineMagneticField only defined in a tiny region around initial point
         field = SplineMagneticField.from_field(
             field=field1,
-            R=np.linspace(10.0, 10.002, 10),
-            phi=np.linspace(0, 2 * np.pi, 10),
-            Z=np.linspace(0, 1.5e-3, 10),
+            R=np.linspace(-9.995, 10.005, 40),
+            phi=np.linspace(0, 3 * np.pi, 60),
+            Z=np.linspace(-1.5e-3, 1.5e-3, 40),
             extrap=False,
-            period=2 * np.pi,
+            period=np.inf,
         )
         r0 = [10.001]
         z0 = [0.0]

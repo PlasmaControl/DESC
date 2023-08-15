@@ -13,6 +13,7 @@ from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.io import InputReader, hdf5Reader, hdf5Writer, load
 from desc.io.ascii_io import read_ascii, write_ascii
+from desc.magnetic_fields import SplineMagneticField, ToroidalMagneticField
 from desc.transform import Transform
 from desc.utils import equals
 
@@ -130,8 +131,9 @@ def test_near_axis_input_files():
 def test_vmec_input_surface_threshold():
     """Test ."""
     path = ".//tests//inputs//input.QSC_r2_5.5_vmec"
-    surf_full = InputReader.parse_vmec_inputs(path)[-1]["surface"]
-    surf_trim = InputReader.parse_vmec_inputs(path, threshold=1e-6)[-1]["surface"]
+    with pytest.warns(UserWarning, match="Detected multiple inputs"):
+        surf_full = InputReader.parse_vmec_inputs(path)[-1]["surface"]
+        surf_trim = InputReader.parse_vmec_inputs(path, threshold=1e-6)[-1]["surface"]
     assert surf_full.shape[0] > surf_trim.shape[0]
     assert surf_full.shape[1] == surf_trim.shape[1] == 5
 
@@ -440,3 +442,37 @@ def test_load_eq_without_current():
     with pytest.warns(RuntimeWarning):
         eq = load(desc_no_current_path)[-1]
     assert eq.current is None
+
+
+@pytest.mark.unit
+def test_io_SplineMagneticField(tmpdir_factory):
+    """Test saving/loading a SplineMagneticField works (tests dict saving)."""
+    tmpdir = tmpdir_factory.mktemp("save_spline_field_test")
+    tmp_path = tmpdir.join("spline_test.h5")
+
+    R = np.linspace(1, 2, 2)
+    Z = np.linspace(1, 2, 2)
+    phi = np.linspace(1, 2, 2)
+
+    field = SplineMagneticField.from_field(
+        ToroidalMagneticField(R0=1, B0=1), R, phi, Z, period=2 * np.pi
+    )
+
+    field.save(tmp_path)
+    field2 = load(tmp_path)
+
+    for attr in field._io_attrs_:
+        attr1 = getattr(field, attr)
+        attr2 = getattr(field2, attr)
+
+        if isinstance(attr1, str) or isinstance(attr1, bool):
+            assert attr1 == attr2
+        elif isinstance(attr1, dict):
+            continue
+        else:
+            np.testing.assert_allclose(attr1, attr2, err_msg=attr)
+    derivs1 = field._derivs
+    derivs2 = field2._derivs
+    for key in derivs1.keys():
+        for key2 in derivs1[key].keys():
+            np.testing.assert_allclose(derivs1[key][key2], derivs2[key][key2])

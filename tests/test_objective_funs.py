@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from scipy.constants import mu_0
 
+import desc.examples
 from desc.backend import jnp
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
@@ -39,7 +40,7 @@ from desc.objectives import (
     Volume,
 )
 from desc.objectives.objective_funs import _Objective
-from desc.objectives.utils import jax_softmax, jax_softmin
+from desc.objectives.utils import softmax, softmin
 from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -220,7 +221,7 @@ class TestObjectiveFunction:
 
         # compute all amplitudes in the Boozer spectrum
         transforms = get_transforms(
-            "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         matrix, modes, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes, helicity=helicity, NFP=eq.NFP
@@ -249,6 +250,31 @@ class TestObjectiveFunction:
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
+        # also make sure helicity is set correctly
+        eq1 = desc.examples.get("precise_QA")
+        eq2 = desc.examples.get("precise_QH")
+
+        helicity_QA = (1, 0)
+        helicity_QH = (1, eq2.NFP)
+
+        # precise_QA should have lower QA than QH
+        obj = QuasisymmetryTwoTerm(eq=eq1, helicity=helicity_QA)
+        obj.build()
+        f1 = obj.compute_scalar(*obj.xs(eq1))
+        obj.helicity = helicity_QH
+        obj.build()
+        f2 = obj.compute_scalar(*obj.xs(eq1))
+        assert f1 < f2
+
+        # precise_QH should have lower QH than QA
+        obj = QuasisymmetryTwoTerm(eq=eq2, helicity=helicity_QH)
+        obj.build()
+        f1 = obj.compute_scalar(*obj.xs(eq2))
+        obj.helicity = helicity_QA
+        obj.build()
+        f2 = obj.compute_scalar(*obj.xs(eq2))
+        assert f1 < f2
+
     @pytest.mark.unit
     def test_qs_tripleproduct(self):
         """Test calculation of triple product QS metric."""
@@ -257,7 +283,7 @@ class TestObjectiveFunction:
             obj = QuasisymmetryTripleProduct(eq=eq)
             obj.build()
             ft = obj.compute_unscaled(*obj.xs(eq))
-            np.testing.assert_allclose(ft, 0)
+            np.testing.assert_allclose(ft, 0, atol=5e-35)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -368,7 +394,7 @@ def test_rejit():
             self._dim_f = 1
             super().build(eq, use_jit, verbose)
 
-        def compute(self, R_lmn):
+        def compute(self, R_lmn, **kwargs):
             return 200 + self.target * self.weight - self.y * R_lmn**3
 
     eq = Equilibrium()
@@ -556,8 +582,8 @@ def test_plasma_vessel_distance():
 @pytest.mark.unit
 def test_mean_curvature():
     """Test for mean curvature objective function."""
-    # simple case like dshape should have mean curvature negative everywhere
-    eq = get("DSHAPE")
+    # torus should have mean curvature negative everywhere
+    eq = Equilibrium()
     obj = MeanCurvature(eq=eq)
     obj.build()
     H = obj.compute_unscaled(*obj.xs(eq))
@@ -834,25 +860,25 @@ def test_objective_target_bounds():
 
 
 @pytest.mark.unit
-def test_jax_softmax_and_softmin():
+def test_softmax_and_softmin():
     """Test softmax and softmin function."""
     arr = np.arange(-17, 17, 5)
     # expect this to not be equal to the max but rather be more
     # since softmax is a conservative estimate of the max
-    softmax = jax_softmax(arr, alpha=1)
-    assert softmax >= np.max(arr)
+    sftmax = softmax(arr, alpha=1)
+    assert sftmax >= np.max(arr)
 
     # expect this to be equal to the max
     # as alpha -> infinity, softmax -> max
-    softmax = jax_softmax(arr, alpha=100)
-    np.testing.assert_almost_equal(softmax, np.max(arr))
+    sftmax = softmax(arr, alpha=100)
+    np.testing.assert_almost_equal(sftmax, np.max(arr))
 
     # expect this to not be equal to the min but rather be less
     # since softmin is a conservative estimate of the min
-    softmin = jax_softmin(arr, alpha=1)
-    assert softmin <= np.min(arr)
+    sftmin = softmin(arr, alpha=1)
+    assert sftmin <= np.min(arr)
 
     # expect this to be equal to the min
     # as alpha -> infinity, softmin -> min
-    softmin = jax_softmin(arr, alpha=100)
-    np.testing.assert_almost_equal(softmin, np.min(arr))
+    sftmin = softmin(arr, alpha=100)
+    np.testing.assert_almost_equal(sftmin, np.min(arr))

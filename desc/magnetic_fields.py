@@ -174,7 +174,7 @@ class MagneticField(IOAble, ABC):
         return self.compute_magnetic_field(coords, params, basis)
 
     def compute_Bnormal(self, surface, grid=None, NFP=None):
-        """Create BNORM-style .txt file containing Bnormal Fourier coefficients.
+        """Compute Bnormal from self on the given surface.
 
         Parameters
         ----------
@@ -190,7 +190,9 @@ class MagneticField(IOAble, ABC):
 
         Returns
         -------
-        None
+        Bnorm : ndarray
+            The normal magnetic field to the surface given, of size grid.num_nodes.
+
         """
         if NFP is None:
             NFP = surface.NFP

@@ -10,6 +10,7 @@ from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz_vec, xyz2rpz
 from desc.compute.utils import cross
 from desc.derivatives import Derivative
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
@@ -178,8 +179,9 @@ class MagneticField(IOAble, ABC):
 
         Parameters
         ----------
-        surface : Surface
+        surface : Surface or Equilibrium
             Surface to calculate the magnetic field's Bnormal on.
+            If an Equilibrium is supplied, will use its boundary surface.
         grid : Grid, optional
             Grid of points on the  surface to calculate the Bnormal at and then
             fit with a DoubleFourierSeries, if None defaults to a LinearGrid with twice
@@ -194,13 +196,16 @@ class MagneticField(IOAble, ABC):
             The normal magnetic field to the surface given, of size grid.num_nodes.
 
         """
+        if isinstance(surface, EquilibriaFamily):
+            surface = surface[-1]
+        if isinstance(surface, Equilibrium):
+            surface = surface.surface
         if NFP is None:
             NFP = surface.NFP
         if grid is None:
             grid = LinearGrid(
                 rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=NFP
             )
-
         coords = surface.compute("x", grid=grid, basis="xyz")["x"]
         rs_t = surface.compute("e_theta", grid=grid, basis="xyz")["e_theta"]
         rs_z = surface.compute("e_zeta", grid=grid, basis="xyz")["e_zeta"]
@@ -212,7 +217,7 @@ class MagneticField(IOAble, ABC):
 
     def save_BNORM_file(
         self,
-        eq,
+        surface,
         fname,
         basis_M=24,
         basis_N=24,
@@ -224,8 +229,9 @@ class MagneticField(IOAble, ABC):
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium to calculate the magnetic field's Bnormal on the surface of.
+        surface : Surface or Equilibrium
+            Surface to calculate the magnetic field's Bnormal on.
+            If an Equilibrium is supplied, will use its boundary surface.
         fname : str
             name of file to save the BNORM Bnormal Fourier coefficients to.
         basis_M : int, optional
@@ -260,15 +266,27 @@ class MagneticField(IOAble, ABC):
                 + " Resulting BNORM file will not contain the cos modes"
             )
 
-        basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=eq.NFP, sym=sym)
+        if isinstance(surface, EquilibriaFamily):
+            surface = surface[-1]
+        if isinstance(surface, Equilibrium):
+            eq = surface
+            surface = surface.surface
+        else:
+            eq = None
+        if scale_by_curpol and eq is None:
+            raise RuntimeError(
+                "an Equilibrium must be supplied when scale_by_curpol is True!"
+            )
         if grid is None:
             grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * basis_M, N=2 * basis_N, NFP=eq.NFP
+                rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
             )
+
+        basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=surface.NFP, sym=sym)
         trans = Transform(basis=basis, grid=grid, build_pinv=True)
 
         # compute Bnormal on the grid
-        Bnorm = self.compute_Bnormal(eq.surface, grid=grid, NFP=eq.NFP)
+        Bnorm = self.compute_Bnormal(surface.surface, grid=grid, NFP=surface.NFP)
 
         # fit Bnorm with Fourier Series
         Bnorm_mn = trans.fit(Bnorm)
@@ -291,7 +309,7 @@ class MagneticField(IOAble, ABC):
             (
                 2
                 * jnp.pi
-                / eq.NFP
+                / surface.NFP
                 * eq.compute("G", grid=LinearGrid(rho=jnp.array(1)))["G"]
             )
             if scale_by_curpol

@@ -1,6 +1,34 @@
 Changelog
 =========
 
+v0.9.2
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.9.1...v0.9.2)
+
+Improvements
+- Improves robustness and speed of ``map_coordinates``.
+- Adds axis parameters ``Ra_n`` and ``Za_n`` as optimizable DoF when using standard
+constrained optimization methods (ie, not ``ProximalProjection``).
+- Adds method to convert ``FourierRZCurve`` to ``FourierXYZCurve``.
+- Makes DESC classes compatible with JAX pytrees.
+- Adds Chebyshev polynomials as basis function (for future use).
+
+Breaking changes
+- Renames ``theta_sfl`` to ``theta_PEST`` in compute functions to avoid confusion with
+other straight field line coordinate systems.
+- Makes plotting kwargs a bit more uniform. ``zeta``, ``nzeta``, ``nphi`` have all been
+superceded by ``phi`` which can be an integer for equally spaced angles or a float or
+array of float to specify angles manually.
+
+Bug fixes
+- Avoids accidentally overwriting equilibria during automatic continuation method.
+
+New Contributors
+
+- \@rahulgaur104 made their first contribution in https://github.com/PlasmaControl/DESC/pull/576
+
+
 v0.9.1
 ------
 

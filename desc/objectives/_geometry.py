@@ -6,14 +6,13 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms
-from desc.geometry.utils import rpz2xyz
+from desc.compute import get_params, get_profiles, get_transforms, rpz2xyz
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-from .utils import jax_softmin
+from .utils import softmin
 
 
 class AspectRatio(_Objective):
@@ -96,15 +95,19 @@ class AspectRatio(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["R0/a"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -136,6 +139,7 @@ class AspectRatio(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -224,15 +228,19 @@ class Elongation(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["a_major/a_minor"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -264,6 +272,7 @@ class Elongation(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -352,15 +361,19 @@ class Volume(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["V"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -396,6 +409,7 @@ class Volume(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -527,7 +541,9 @@ class PlasmaVesselDistance(_Objective):
         self._dim_f = surface_grid.num_nodes
         self._data_keys = ["R", "phi", "Z"]
         self._args = get_params(
-            self._data_keys, has_axis=plasma_grid.axis.size or surface_grid.axis.size
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
         )
 
         timer = Timer()
@@ -535,18 +551,18 @@ class PlasmaVesselDistance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._surface_coords = self._surface.compute_coordinates(
-            grid=surface_grid, basis="xyz"
-        )
+        self._surface_coords = self._surface.compute(
+            "x", grid=surface_grid, basis="xyz"
+        )["x"]
         self._profiles = get_profiles(
             self._data_keys,
-            eq=eq,
+            obj=eq,
             grid=plasma_grid,
             has_axis=plasma_grid.axis.size or surface_grid.axis.size,
         )
         self._transforms = get_transforms(
             self._data_keys,
-            eq=eq,
+            obj=eq,
             grid=plasma_grid,
             has_axis=plasma_grid.axis.size or surface_grid.axis.size,
         )
@@ -586,6 +602,7 @@ class PlasmaVesselDistance(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -596,7 +613,7 @@ class PlasmaVesselDistance(_Objective):
             plasma_coords[:, None, :] - constants["surface_coords"][None, :, :], axis=-1
         )
         if self._use_softmin:  # do softmin
-            return jnp.apply_along_axis(jax_softmin, 0, d, self._alpha)
+            return jnp.apply_along_axis(softmin, 0, d, self._alpha)
         else:  # do hardmin
             return d.min(axis=0)
 
@@ -709,16 +726,20 @@ class MeanCurvature(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["curvature_H"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._data_keys = ["curvature_H_rho"]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -754,12 +775,13 @@ class MeanCurvature(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["curvature_H"]
+        return data["curvature_H_rho"]
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
@@ -853,16 +875,20 @@ class PrincipalCurvature(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["curvature_k1", "curvature_k2"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._data_keys = ["curvature_k1_rho", "curvature_k2_rho"]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -898,12 +924,15 @@ class PrincipalCurvature(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return jnp.maximum(jnp.abs(data["curvature_k1"]), jnp.abs(data["curvature_k2"]))
+        return jnp.maximum(
+            jnp.abs(data["curvature_k1_rho"]), jnp.abs(data["curvature_k2_rho"])
+        )
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
@@ -993,15 +1022,19 @@ class BScaleLength(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["L_grad(B)"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -1045,6 +1078,7 @@ class BScaleLength(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

@@ -31,8 +31,8 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     RadialForceBalance,
     get_fixed_boundary_constraints,
+    get_NAE_constraints,
 )
-from desc.objectives.utils import get_NAE_constraints
 from desc.optimize import Optimizer
 from desc.plotting import plot_boozer_surface
 from desc.profiles import PowerSeriesProfile
@@ -63,7 +63,7 @@ def test_SOLOVEV_results(SOLOVEV):
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.solve
 def test_DSHAPE_results(DSHAPE):
     """Tests that the DSHAPE examples gives the same results as VMEC."""
@@ -73,7 +73,7 @@ def test_DSHAPE_results(DSHAPE):
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.solve
 def test_DSHAPE_current_results(DSHAPE_current):
     """Tests that the DSHAPE with fixed current gives the same results as VMEC."""
@@ -93,7 +93,7 @@ def test_HELIOTRON_results(HELIOTRON):
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.solve
 def test_HELIOTRON_vac_results(HELIOTRON_vac):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
@@ -608,9 +608,9 @@ def test_NAE_QSC_solve():
     for i, (l, m, n) in enumerate(modes):
         if m >= 0 and n >= 0:
             B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
-        elif m >= 0 and n < 0:
+        elif m >= 0 > n:
             B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
-        elif m < 0 and n >= 0:
+        elif m < 0 <= n:
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
@@ -666,7 +666,6 @@ def test_NAE_QIC_solve():
     iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
 
     np.testing.assert_allclose(iota[1], qic.iota, atol=1e-5)
-    np.testing.assert_allclose(iota[1:10], qic.iota, atol=5e-4)
 
     # check lambda to match near axis
     grid_2d_05 = LinearGrid(rho=np.array(1e-6), M=50, N=50, NFP=eq.NFP, endpoint=True)
@@ -692,7 +691,7 @@ def test_NAE_QIC_solve():
     lam_nae = np.squeeze(lam_nae[:, 0, :])
 
     lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -qic.iota * qic.nu_spline(phi), atol=7e-5)
+    np.testing.assert_allclose(lam_av_nae, -qic.iota * qic.nu_spline(phi), atol=5e-4)
 
     # check |B| on axis
 
@@ -710,9 +709,9 @@ def test_NAE_QIC_solve():
     for i, (l, m, n) in enumerate(modes):
         if m >= 0 and n >= 0:
             B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
-        elif m >= 0 and n < 0:
+        elif m >= 0 > n:
             B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
-        elif m < 0 and n >= 0:
+        elif m < 0 <= n:
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)

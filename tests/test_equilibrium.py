@@ -108,9 +108,9 @@ def test_map_coordinates():
     inbasis = ["alpha", "phi", "rho"]
     outbasis = ["rho", "theta_PEST", "zeta"]
 
-    rho = np.linspace(0.01, 0.99, 100)
-    theta = np.linspace(0, np.pi, 100, endpoint=False)
-    zeta = np.linspace(0, np.pi, 100, endpoint=False)
+    rho = np.linspace(0.01, 0.99, 20)
+    theta = np.linspace(0, np.pi, 20, endpoint=False)
+    zeta = np.linspace(0, np.pi, 20, endpoint=False)
 
     grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
@@ -118,7 +118,9 @@ def test_map_coordinates():
     out_data = eq.compute(outbasis, grid=grid)
     out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
 
-    out = eq.map_coordinates(in_coords, inbasis, outbasis)
+    out = eq.map_coordinates(
+        in_coords, inbasis, outbasis, period=(2 * np.pi, 2 * np.pi, np.inf)
+    )
     np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
 
 

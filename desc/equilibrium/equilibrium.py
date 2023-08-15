@@ -764,27 +764,28 @@ class Equilibrium(IOAble):
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
 
         if params is None:
-            params = get_params(names, eq=self, has_axis=grid.axis.size)
+            params = get_params(names, obj=self, has_axis=grid.axis.size)
         if profiles is None:
-            profiles = get_profiles(names, eq=self, grid=grid)
+            profiles = get_profiles(names, obj=self, grid=grid)
         if transforms is None:
-            transforms = get_transforms(names, eq=self, grid=grid, **kwargs)
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
         if data is None:
             data = {}
 
         # To avoid the issue of using the wrong grid for surface and volume averages,
         # we first figure out what needed qtys are flux functions or volume integrals
         # and compute those first on a full grid
-        deps = list(set(get_data_deps(names, has_axis=grid.axis.size) + names))
+        p = "desc.equilibrium.equilibrium.Equilibrium"
+        deps = list(set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names))
         dep0d = [
             dep
             for dep in deps
-            if (data_index[dep]["coordinates"] == "") and (dep not in data)
+            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
         ]
         dep1d = [
             dep
             for dep in deps
-            if (data_index[dep]["coordinates"] == "r") and (dep not in data)
+            if (data_index[p][dep]["coordinates"] == "r") and (dep not in data)
         ]
 
         # whether we need to calculate 0d or 1d quantities on a special grid
@@ -803,10 +804,11 @@ class Equilibrium(IOAble):
         if calc0d:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d = compute_fun(
+                self,
                 dep0d,
                 params=params,
-                transforms=get_transforms(dep0d, eq=self, grid=grid0d, **kwargs),
-                profiles=get_profiles(dep0d, eq=self, grid=grid0d),
+                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
+                profiles=get_profiles(dep0d, obj=self, grid=grid0d),
                 data=None,
                 **kwargs,
             )
@@ -825,10 +827,11 @@ class Equilibrium(IOAble):
             # Todo: Pass in data0d as a seed once there are 1d quantities that
             #  depend on 0d quantities in data_index.
             data1d = compute_fun(
+                self,
                 dep1d,
                 params=params,
-                transforms=get_transforms(dep1d, eq=self, grid=grid1d, **kwargs),
-                profiles=get_profiles(dep1d, eq=self, grid=grid1d),
+                transforms=get_transforms(dep1d, obj=self, grid=grid1d, **kwargs),
+                profiles=get_profiles(dep1d, obj=self, grid=grid1d),
                 data=None,
                 **kwargs,
             )
@@ -844,6 +847,7 @@ class Equilibrium(IOAble):
         #   needed as inputs for 0d and 1d qtys, unless the user asks for them
         #   specifically?
         data = compute_fun(
+            self,
             names,
             params=params,
             transforms=transforms,

@@ -94,6 +94,7 @@ class RotationalTransform(_Objective):
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
+                axis=False,
             )
         else:
             grid = self._grid
@@ -262,6 +263,7 @@ class Shear(_Objective):
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
+                axis=False,
             )
         else:
             grid = self._grid

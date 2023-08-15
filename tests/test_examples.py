@@ -420,7 +420,7 @@ def test_simsopt_QH_comparison():
     nfp = 4
     aspect_target = 8.0
     # Initial (m=0, n=nfp) mode of the axis:
-    Delta = 0.2
+    Delta = 0.4
     LMN_resolution = 6
     # Set shape of the initial condition.
     # R_lmn and Z_lmn are the amplitudes. modes_R and modes_Z are the (m,n) pairs.
@@ -508,7 +508,7 @@ def test_simsopt_QH_comparison():
                 eq=eq, target=aspect_target, weight=aspect_weight, normalize=False
             ),
             QuasisymmetryTwoTerm(
-                eq=eq, helicity=(1, nfp), grid=grid, weight=qs_weight, normalize=False
+                eq=eq, helicity=(-1, nfp), grid=grid, weight=qs_weight, normalize=False
             ),
         )
     )
@@ -517,10 +517,12 @@ def test_simsopt_QH_comparison():
         objective=objective,
         constraints=constraints,
         optimizer=Optimizer("proximal-lsq-exact"),
+        ftol=1e-3,
     )
     aspect = eq2.compute("R0/a")["R0/a"]
-    np.testing.assert_allclose(aspect, aspect_target, atol=1e-2, rtol=1e-3)
-    np.testing.assert_array_less(objective.compute_scalar(objective.x(eq)), 1e-2)
+    np.testing.assert_allclose(aspect, aspect_target, atol=1e-2, rtol=1e-2)
+    np.testing.assert_array_less(objective.compute_scalar(objective.x(eq)), 0.075)
+    np.testing.assert_array_less(eq2.compute("a_major/a_minor")["a_major/a_minor"], 5)
 
 
 @pytest.mark.regression

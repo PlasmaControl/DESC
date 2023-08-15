@@ -766,7 +766,7 @@ class PowerSeriesProfile(Profile):
             profile in power series basis fit to given data.
 
         """
-        if sym:
+        if sym and sym != "auto":
             x = x**2
             order = order // 2
         params = np.polyfit(x, y, order, rcond=rcond, w=w, full=False)[::-1]

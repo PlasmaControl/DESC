@@ -198,6 +198,20 @@ class TestObjectiveFunction:
         test(Equilibrium(L=2, M=2, N=1, current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_jax_compile_boozer(self):
+        """Test compilation of Boozer QA metric in ObjectiveFunction."""
+        # making sure that compiles without any errors from JAX
+        # Related to issue #625
+        def test(eq):
+            obj = ObjectiveFunction(QuasisymmetryBoozer(eq=eq))
+            obj.build()
+            obj.compile()
+            fb = obj.compute_unscaled(obj.x(eq))
+            np.testing.assert_allclose(fb, 0, atol=1e-12)
+
+        test(Equilibrium(L=2, M=2, N=1, current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
     def test_qh_boozer(self):
         """Test calculation of Boozer QH metric."""
         eq = get("WISTELL-A")  # WISTELL-A is optimized for QH symmetry

@@ -322,7 +322,7 @@ def test_save_and_load_MAKEGRID_coils(tmpdir_factory):
 
 @pytest.mark.unit
 def test_save_and_load_MAKEGRID_coils_rotated(tmpdir_factory):
-    """Test saving and reloading NFP=2 CoilSet linspaced angular from MAKEGRID file."""
+    """Test saving and reloading CoilSet linspaced angular from MAKEGRID file."""
     tmpdir = tmpdir_factory.mktemp("coil_files")
     path = tmpdir.join("coils.MAKEGRID_format_angular_coil")
 
@@ -336,12 +336,9 @@ def test_save_and_load_MAKEGRID_coils_rotated(tmpdir_factory):
     coilset.save_in_MAKEGRID_format(str(path), grid=grid, NFP=2)
 
     coilset2 = CoilSet.from_makegrid_coilfile(str(path))
-    assert len(coilset2) == 2  # contains a coilset per FP
-
-    coilset2_flattened = coilset2[0] + coilset2[1]
 
     # check values at saved points, ensure they match
-    for i, (c1, c2) in enumerate(zip(coilset, coilset2_flattened)):
+    for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
         Y1 = coords1[:, 1]
@@ -359,7 +356,7 @@ def test_save_and_load_MAKEGRID_coils_rotated(tmpdir_factory):
 
     # check values at interpolated points, ensure they match closely
     grid = LinearGrid(N=51, endpoint=True)
-    for c1, c2 in zip(coilset, coilset2_flattened):
+    for c1, c2 in zip(coilset, coilset2):
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
         Y1 = coords1[:, 1]
@@ -401,6 +398,7 @@ def test_save_MAKEGRID_coils_assert_NFP(tmpdir_factory):
     coilset = CoilSet.from_makegrid_coilfile(str(tmp_path))
     assert len(coilset) == Ncoils  # correct number of coils
     path = tmpdir.join("coils.MAKEGRID_format_desc")
+    assert len(coilset) % 3 != 0
     with pytest.raises(AssertionError):
         coilset.save_in_MAKEGRID_format(str(path), NFP=3)
 

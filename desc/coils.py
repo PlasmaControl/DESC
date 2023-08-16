@@ -371,7 +371,7 @@ class CoilSet(Coil, MutableSequence):
         to ensure correct computations
     """
 
-    _io_attrs_ = Coil._io_attrs_ + ["_coils"]
+    _io_attrs_ = Coil._io_attrs_ + ["_coils"] + ["_NFP"]
 
     def __init__(self, *coils, name="", NFP=1):
         coils = flatten_list(coils, flatten_tuple=True)

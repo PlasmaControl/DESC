@@ -64,24 +64,26 @@ def biot_savart(eval_pts, coil_pts, current):
     return B
 
 
-def read_BNORM_file(fname, eq, eval_grid=None, scale_by_curpol=True):
+def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     """Read BNORM-style .txt file containing Bnormal Fourier coefficients.
 
     Parameters
     ----------
     fname : str
         name of BNORM file to read and calculate Bnormal from.
-    eq : Equilibrium
-        Equilibrium to calculate the magnetic field's Bnormal on the surface of.
+    surface : Surface or Equilibrium
+        Surface to calculate the magnetic field's Bnormal on.
+        If an Equilibrium is supplied, will use its boundary surface.
     eval_grid : Grid, optional
-        Grid of points on the plasma surface to calculate the Bnormal at and then
-        fit with a DoubleFourierSeries, if None defaults to a LinearGrid with twice
-        the basis poloidal and toroidal resolutions
+        Grid of points on the plasma surface to calculate the Bnormal at,
+        if None defaults to a LinearGrid with twice
+        the surface grid's poloidal and toroidal resolutions
     scale_by_curpol : bool, optional
         Whether or not to un-scale the Bnormal coefficients by curpol
         before calculating Bnormal, by default True
         (set to False if it is known that the BNORM file was saved without scaling
         by curpol)
+        requires an Equilibrium to be passed in
 
 
     Returns
@@ -90,6 +92,19 @@ def read_BNORM_file(fname, eq, eval_grid=None, scale_by_curpol=True):
         Bnormal distribution from the BNORM Fourier coefficients,
         evaluated on the given eval_grid
     """
+    if isinstance(surface, EquilibriaFamily):
+        surface = surface[-1]
+    if isinstance(surface, Equilibrium):
+        eq = surface
+        surface = eq.surface
+    else:
+        eq = None
+
+    if scale_by_curpol and eq is None:
+        raise RuntimeError(
+            "an Equilibrium must be supplied when scale_by_curpol is True!"
+        )
+
     curpol = (
         (2 * jnp.pi / eq.NFP * eq.compute("G", grid=LinearGrid(rho=jnp.array(1)))["G"])
         if scale_by_curpol
@@ -104,14 +119,18 @@ def read_BNORM_file(fname, eq, eval_grid=None, scale_by_curpol=True):
 
     # convert to DESC Fourier representation i.e. like cos(mt)*cos(nz)
     m, n, Bnorm_mn = ptolemy_identity_fwd(xm, xn, Bnorm_mn, np.zeros_like(Bnorm_mn))
-    basis = DoubleFourierSeries(int(np.max(m)), int(np.max(n)), sym=False, NFP=eq.NFP)
+    basis = DoubleFourierSeries(
+        int(np.max(m)), int(np.max(n)), sym=False, NFP=surface.NFP
+    )
     Bnorm_mn_desc_basis = np.zeros((basis.num_modes,))
     for i, (mm, nn) in enumerate(zip(m, n)):
         idx = basis.get_idx(L=0, M=mm, N=nn)
         Bnorm_mn_desc_basis[idx] = Bnorm_mn[0, i]
 
     if eval_grid is None:
-        eval_grid = LinearGrid(rho=jnp.array(1.0), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        eval_grid = LinearGrid(
+            rho=jnp.array(1.0), M=surface.M_grid, N=surface.N_grid, NFP=surface.NFP
+        )
     trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)
 
     # Evaluate Fourier Series

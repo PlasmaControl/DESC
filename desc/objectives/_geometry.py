@@ -1047,11 +1047,11 @@ class BScaleLength(_Objective):
 
 
 class B_dmin(_Objective):
-    """Targets |B| times the minimum distance from a surrounding surface.
+    """Targets variance of |B| times min distance from a surrounding surface.
 
     Computes the minimum distance (d_min) from each point on the surface
     grid to a point on the plasma grid and the magnitude of the magnetic
-    field (|B|) at that point. Then minimizes the function |B|*d_min
+    field (|B|) at that point. Then minimizes the surface-variance of |B|*d_min.
 
     NOTE: When use_softmin=True, ensures that alpha*values passed in is
     at least >1, otherwise the softmin will return inaccurate approximations
@@ -1100,7 +1100,7 @@ class B_dmin(_Objective):
     _scalar = False
     _linear = False
     _units = "(T^2 * m^2)"
-    _print_value_fmt = "|B|*d_min: {:10.3e} "
+    _print_value_fmt = "surface-variance(|B|*d_min): {:10.3e} "
 
     def __init__(
         self,
@@ -1203,7 +1203,7 @@ class B_dmin(_Objective):
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        """Computes |B|*d_min.
+        """Computes the flux-surface variance of |B|*d_min.
 
         Parameters
         ----------

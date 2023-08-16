@@ -3286,6 +3286,9 @@ def _kappa(params, transforms, profiles, data, **kwargs):
     data=["kappa", "n_rho"],
 )
 def _kappa_n(params, transforms, profiles, data, **kwargs):
+    # n_rho is (finite) multivalued at magnetic axis and kappa is nonzero
+    # single-valued at magnetic axis, implying kappa_n is also multivalued.
+    # The nan from n_rho propagates to automatically set kappa_n to nan.
     data["kappa_n"] = dot(data["kappa"], data["n_rho"])
     return data
 
@@ -3304,6 +3307,9 @@ def _kappa_n(params, transforms, profiles, data, **kwargs):
     data=["kappa", "n_rho", "b"],
 )
 def _kappa_g(params, transforms, profiles, data, **kwargs):
+    # n_rho is (finite) multivalued at magnetic axis. kappa and b are nonzero
+    # single-valued at magnetic axis, implying kappa_g is also multivalued.
+    # The nan from n_rho propagates to automatically set kappa_g to nan.
     data["kappa_g"] = dot(data["kappa"], cross(data["n_rho"], data["b"]))
     return data
 

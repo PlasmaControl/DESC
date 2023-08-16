@@ -980,12 +980,11 @@ def plot_fsa(
 
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
 
-    if "<" + name + ">" in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
+    p = "desc.equilibrium.equilibrium.Equilibrium"
+    if "<" + name + ">" in data_index[p]:
         # If we identify the quantity to plot as something in data_index, then
         # we may be able to compute more involved magnetic axis limits.
-        deps = data_index["desc.equilibrium.equilibrium.Equilibrium"]["<" + name + ">"][
-            "dependencies"
-        ]["data"]
+        deps = data_index[p]["<" + name + ">"]["dependencies"]["data"]
         if with_sqrt_g == ("sqrt(g)" in deps or "V_r(r)" in deps):
             # When we denote a quantity as ``<name>`` in data_index, we have
             # marked it a surface average of ``name``. This does not specify
@@ -999,20 +998,15 @@ def plot_fsa(
     )
     label = label.split("~")
     if (
-        data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
-        == "r"
-        or data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
-        == ""
+        data_index[p][name]["coordinates"] == "r"
+        or data_index[p][name]["coordinates"] == ""
     ):
         # If the quantity is a surface function, averaging it again has no
         # effect, regardless of whether sqrt(g) is used.
         # So we avoid surface averaging it and forgo the <> around the label.
         label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
         plot_data_ylabel_key = f"{name}"
-        if (
-            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
-            == "r"
-        ):
+        if data_index[p][name]["coordinates"] == "r":
             values = grid.compress(values)
     else:
         compute_surface_averages = surface_averages_map(grid, expand_out=False)
@@ -1022,7 +1016,7 @@ def plot_fsa(
             # Compute derivative depending on various naming schemes.
             # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
             schemes = (
-                name + "_r",  # you
+                name + "_r",
                 name[:-3] + "_r" + name[-3:],
                 name[:-3] + "r" + name[-3:],
             )
@@ -1030,7 +1024,7 @@ def plot_fsa(
                 (
                     _compute(eq, x, grid, reshape=False)[0]
                     for x in schemes
-                    if x in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+                    if x in data_index[p]
                 ),
                 np.nan,
             )
@@ -1082,14 +1076,8 @@ def plot_fsa(
         ax.set_ylabel(
             "%s / %s"
             % (
-                "$"
-                + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
-                + "$",
-                "$"
-                + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
-                    "label"
-                ]
-                + "$",
+                "$" + data_index[p][name]["label"] + "$",
+                "$" + data_index[p][norm_name]["label"] + "$",
             ),
             fontsize=ylabel_fontsize,
         )

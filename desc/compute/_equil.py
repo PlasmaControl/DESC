@@ -170,7 +170,8 @@ def _J_sqrt_g(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} (\\mathbf{J} \\sqrt{g})",
     units="A m",
     units_long="Ampere meters",
-    description="Plasma current density weighted by 3-D volume Jacobian",
+    description="Plasma current density weighted by 3-D volume Jacobian,"
+    " radial derivative",
     dim=3,
     params=[],
     transforms={},

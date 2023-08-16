@@ -3432,7 +3432,6 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta", "|e_theta x e_zeta|"],
-    axis_limit_data=["e_theta_r", "|e_theta x e_zeta|_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
@@ -3443,9 +3442,7 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     # contravariant basis defined
     data["n_rho"] = transforms["grid"].replace_at_axis(
         (cross(data["e_theta"], data["e_zeta"]).T / data["|e_theta x e_zeta|"]).T,
-        lambda: (
-            cross(data["e_theta_r"], data["e_zeta"]).T / data["|e_theta x e_zeta|_r"]
-        ).T,
+        jnp.nan,  # n_rho is (finite) multivalued at magnetic axis
     )
     return data
 

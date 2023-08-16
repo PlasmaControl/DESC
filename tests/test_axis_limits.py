@@ -52,6 +52,11 @@ not_finite_limits = {
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
+    # finite, but multivalued
+    "N_sff_rho",
+    "kappa_g",
+    "kappa_n",
+    "n_rho",
 }
 
 # reliant limits will be added to this set automatically

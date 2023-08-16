@@ -614,3 +614,13 @@ class TestXYZCurve:
 
         s = c.copy()
         assert s.eq(c)
+
+    @pytest.mark.unit
+    def test_compute_ndarray_error(self):
+        """Test raising TypeError if ndarray is passed in."""
+        # make a simple circular curve of radius 2
+        R = 2
+        phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
+        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        with pytest.raises(TypeError):
+            c.compute("length", grid=np.linspace(0, 1, 10))

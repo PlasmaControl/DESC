@@ -69,9 +69,6 @@ class Curve(IOAble, ABC):
             Computed quantity and intermediate variables.
 
         """
-        # FIXME: if ndarray is passed in, throws an uncaught error, should either
-        # accept it or check and raise more instructive error saying to wrap it in
-        # a Grid object
         # set a default numpts for the spline XYZCurve
         N = self.N if hasattr(self, "N") else self.X.size
         if isinstance(names, str):
@@ -84,6 +81,11 @@ class Curve(IOAble, ABC):
             grid = LinearGrid(N=grid, NFP=NFP, endpoint=True)
         elif isinstance(grid, Grid):
             NFP = grid.NFP
+        elif not isinstance(grid, Grid):
+            raise TypeError(
+                "must pass in a Grid object or an integer for argument grid!"
+                f" instead got type {type(grid)}"
+            )
 
         if params is None:
             params = get_params(names, obj=self)
@@ -272,6 +274,11 @@ class Surface(IOAble, ABC):
             elif hasattr(self, "zeta"):  # constant zeta surface
                 grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
                 grid._nodes[:, 2] = self.zeta
+        elif not isinstance(grid, Grid):
+            raise TypeError(
+                "must pass in a Grid object or an integer for argument grid!"
+                f" instead got type {type(grid)}"
+            )
         if params is None:
             params = get_params(names, obj=self)
         if transforms is None:

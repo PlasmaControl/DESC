@@ -21,6 +21,15 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(s.compute("S", grid=grid)["S"], area)
 
     @pytest.mark.unit
+    def test_compute_ndarray_error(self):
+        """Test raising TypeError if ndarray is passed in."""
+        s = FourierRZToroidalSurface()
+        with pytest.raises(TypeError):
+            s.compute("S", grid=1)
+        with pytest.raises(TypeError):
+            s.compute("S", grid=np.linspace(0, 1, 10))
+
+    @pytest.mark.unit
     def test_normal(self):
         """Test calculation of surface normal vector."""
         s = FourierRZToroidalSurface()

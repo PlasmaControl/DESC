@@ -156,9 +156,16 @@ class TestMagneticFields:
         # should have 0 Bnormal because surface is axisymmetric
         np.testing.assert_allclose(Bnorm, 0, atol=1e-14)
 
-        tfield.save_BNORM_file(eq, path)
-        Bnorm_from_file = read_BNORM_file(path, eq, grid)
+        tfield.save_BNORM_file(eq, path, scale_by_curpol=False)
+        Bnorm_from_file = read_BNORM_file(path, eq, grid, scale_by_curpol=False)
         np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-14)
+
+        # check that loading/saving with scale_by_curpol true
+        # but no eq passed raises error
+        with pytest.raises(RuntimeError):
+            Bnorm_from_file = read_BNORM_file(path, eq.surface, grid)
+        with pytest.raises(RuntimeError):
+            tfield.save_BNORM_file(eq.surface, path)
 
     @pytest.mark.unit
     def test_Bnormal_save_and_load_HELIOTRON(self, tmpdir_factory):

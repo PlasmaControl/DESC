@@ -170,7 +170,7 @@ class MagneticField(IOAble, ABC):
         return self.__add__(-x)
 
     @abstractmethod
-    def compute_magnetic_field(self, coords, params={}, basis="rpz"):
+    def compute_magnetic_field(self, coords, params={}, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -181,6 +181,10 @@ class MagneticField(IOAble, ABC):
             parameters to pass to scalar potential function
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
 
         Returns
         -------
@@ -292,7 +296,6 @@ class MagneticField(IOAble, ABC):
             surface = eq.surface
         else:
             eq = None
-        # TODO: test this error
         if scale_by_curpol and eq is None:
             raise RuntimeError(
                 "an Equilibrium must be supplied when scale_by_curpol is True!"
@@ -408,7 +411,7 @@ class SumMagneticField(MagneticField):
         )
         self._fields = fields
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -427,13 +430,23 @@ class SumMagneticField(MagneticField):
         field : ndarray, shape(N,3)
             scaled magnetic field at specified points
         """
+        from desc.coils import Coil
+
         if params is None:
             params = [None] * len(self._fields)
         if isinstance(params, dict):
             params = [params]
         B = 0
         for i, field in enumerate(self._fields):
-            B += field.compute_magnetic_field(coords, params[i % len(params)], basis)
+            B += (
+                field.compute_magnetic_field(
+                    coords, params[i % len(params)], basis, grid=grid
+                )
+                if isinstance(field, Coil)
+                else field.compute_magnetic_field(
+                    coords, params[i % len(params)], basis
+                )
+            )
         return B
 
 

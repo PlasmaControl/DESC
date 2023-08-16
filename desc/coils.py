@@ -133,7 +133,7 @@ class FourierRZCoil(Coil, FourierRZCurve):
         R_coil = 10
         # circular coil given by R(phi) = 10
         coil = FourierRZCoil(
-            current=I, R_n=R_coil, Z_n=0, modes_R=[0], grid=LinearGrid(N=100)
+            current=I, R_n=R_coil, Z_n=0, modes_R=[0]
         )
         z0 = 10
         field_evaluated = coil.compute_magnetic_field(
@@ -200,7 +200,6 @@ class FourierXYZCoil(Coil, FourierXYZCurve):
             Y_n=[0, 0, R_coil],
             Z_n=[0, 0, 0],
             modes=[0, 1, -1],
-            grid=LinearGrid(N=100),
         )
         z0 = 10
         field_evaluated = coil.compute_magnetic_field(
@@ -273,7 +272,6 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
             normal=[0, 0, 1],
             r_n=R_coil,
             modes=[0],
-            grid=LinearGrid(N=100),
         )
         z0 = 10
         field_evaluated = coil.compute_magnetic_field(

@@ -52,11 +52,9 @@ class TestCoil:
 
         field = SumMagneticField(coil, VerticalMagneticField(B_Z))
         B_approx = field.compute_magnetic_field(
-            Grid([[10, y, 0], [10, -y, 0]]), basis="xyz"
+            Grid([[10, y, 0], [10, -y, 0]]), basis="xyz", grid=100
         )[0]
-        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-8)
-        # TODO: increase atol to 1e-10 when refactor compute methods of coil
-        # and magnetic_fields to accept a grid argument
+        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
 
 class TestCoilSet:

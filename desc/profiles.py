@@ -32,7 +32,6 @@ class Profile(IOAble, ABC):
     _io_attrs_ = ["_name", "_grid", "_params"]
 
     def __init__(self, grid=None, name=""):
-
         self.name = name
         self.grid = grid if grid is not None else LinearGrid(L=20)
 
@@ -475,7 +474,6 @@ class ProductProfile(Profile):
     _io_attrs_ = Profile._io_attrs_ + ["_profiles"]
 
     def __init__(self, *profiles, **kwargs):
-
         self._profiles = []
         for profile in profiles:
             assert isinstance(profile, Profile), (
@@ -768,6 +766,9 @@ class PowerSeriesProfile(Profile):
             profile in power series basis fit to given data.
 
         """
+        if sym and sym != "auto":
+            x = x**2
+            order = order // 2
         params = np.polyfit(x, y, order, rcond=rcond, w=w, full=False)[::-1]
         return cls(params, grid=grid, sym=sym, name=name)
 
@@ -801,7 +802,6 @@ class SplineProfile(Profile):
     def __init__(
         self, values=[0, 0, 0], knots=None, grid=None, method="cubic2", name=""
     ):
-
         super().__init__(grid, name)
 
         values = np.atleast_1d(values)
@@ -915,7 +915,6 @@ class MTanhProfile(Profile):
     """
 
     def __init__(self, params=[0, 0, 1, 1, 0], grid=None, name=""):
-
         super().__init__(grid, name)
 
         self._params = params

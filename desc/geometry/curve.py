@@ -874,5 +874,3 @@ class XYZCurve(Curve):
         """
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, basis="xyz", name=name)
-
-    # TODO: methods for converting between representations

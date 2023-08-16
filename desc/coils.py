@@ -232,9 +232,6 @@ class FourierXYZCoil(Coil, FourierXYZCurve):
         super().__init__(current, X_n, Y_n, Z_n, modes, name)
 
 
-# TODO: add a from_XYZ?
-
-
 class FourierPlanarCoil(Coil, FourierPlanarCurve):
     """Coil that lines in a plane.
 
@@ -364,9 +361,7 @@ class CoilSet(Coil, MutableSequence):
 
     _io_attrs_ = Coil._io_attrs_ + ["_coils"]
 
-    def __init__(
-        self, *coils, name=""
-    ):  # FIXME: if a list of of Coils is passed, this fails...
+    def __init__(self, *coils, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (Coil)) for coil in coils])
         self._coils = list(coils)

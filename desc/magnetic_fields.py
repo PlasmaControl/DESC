@@ -299,7 +299,7 @@ class MagneticField(IOAble, ABC):
             )
         if grid is None:
             grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
+                rho=jnp.array(1.0), M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP
             )
 
         basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=surface.NFP, sym=sym)

@@ -8,13 +8,10 @@ from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     ObjectiveFunction,
-)
-from desc.objectives.utils import (
-    align_jacobian,
-    factorize_linear_constraints,
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
+from desc.objectives.utils import align_jacobian, factorize_linear_constraints
 from desc.utils import Timer, get_instance
 
 from .utils import compute_jac_scale, f_where_x
@@ -670,14 +667,16 @@ class ProximalProjection(ObjectiveFunction):
                 if val.size:
                     setattr(self._eq, arg, val)
             for con in self._linear_constraints:
-                con.update_target(self._eq)
+                if hasattr(con, "update_target"):
+                    con.update_target(self._eq)
         else:
             for arg in arg_order:
                 val = self.history[arg][-1].copy()
                 if val.size:
                     setattr(self._eq, arg, val)
             for con in self._linear_constraints:
-                con.update_target(self._eq)
+                if hasattr(con, "update_target"):
+                    con.update_target(self._eq)
         return xopt, xeq
 
     def compute_scaled(self, x, constants=None):

@@ -179,16 +179,25 @@ class TestMagneticFields:
         field = SplineMagneticField.from_field(
             field=field1,
             R=np.linspace(-9.995, 10.005, 40),
-            phi=np.linspace(0, 3 * np.pi, 60),
+            phi=np.linspace(0, 2 * np.pi, 40),
             Z=np.linspace(-1.5e-3, 1.5e-3, 40),
             extrap=False,
-            period=np.inf,
+            period=2 * np.pi,
         )
         r0 = [10.001]
         z0 = [0.0]
         phis = [0, 2 * np.pi, 2 * np.pi * 2]
 
-        r, z = field_line_integrate(r0, z0, phis, field)
+        r, z = field_line_integrate(
+            r0,
+            z0,
+            phis,
+            field,
+            bounds_R=(np.min(field._R), np.max(field._R)),
+            bounds_Z=(np.min(field._Z), np.max(field._Z)),
+            bounds_phi=(np.min(field._phi), 3 * np.pi),
+            min_step_size=1e-2,
+        )
         np.testing.assert_allclose(r[1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[1], 0.001, rtol=1e-6, atol=1e-6)
         # if early terinated, the values at the un-integrated phi points are inf

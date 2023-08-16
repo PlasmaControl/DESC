@@ -767,6 +767,9 @@ def field_line_integrate(
     min_step_size=1e-8,
     solver=Tsit5(),
     terminating_event=None,
+    bounds_R=None,
+    bounds_Z=None,
+    bounds_phi=None,
     kwargs={},
 ):
     """Trace field lines by integration, using diffrax package.
@@ -792,16 +795,35 @@ def field_line_integrate(
     solver: diffrax.Solver
         diffrax Solver object to use in integration,
         defaults to Tsit5(), a RK45 explicit solver
-    terminating_event_fxn: fxn
+    terminating_event: fxn
         Function which takes as input the state of the ODE solution at each timestep
         and **kwargs, and outputs a bool which, if True, terminates the solve at that
         timestep.
+
         fxn must have signature of (state, **kwargs) -> Bool
+
+        If not given and one of bounds_R,Z,phi are given, will
+        default to a terminating event which ends integration
+        once R,Z,or phi exit the domain defined by the given bounds
+
         NOTE: If the solve is terminated early, the output returned is still
         length(phis), however all values from the step point the fxn evaluated
         to True and on will be inf
         state has attributes such as state.y (array of length 3 with current (R,phi,Z))
         see diffrax documentation for more in-depth information
+    bounds_R: tuple
+        tuple of (R_min,R_max) of the R bounds for the domain of interest.
+        Integration will terminate when the field line exits this domain
+        (when using the default terminating event)
+    bounds_Z: tuple
+        tuple of (Z_min,Z_max) of the Z bounds for the domain of interest.
+        Integration will terminate when the field line exits this domain
+        (when using the default terminating event)
+    bounds_phi: tuple
+        tuple of (phi_min,phi_max) of the phi bounds for the domain of interest.
+        Integration will terminate when the field line exits this domain
+        (when using the default terminating event)
+
     kwargs: dict
         keyword arguments to be passed into the diffrax diffeqsolve function call
 
@@ -842,15 +864,57 @@ def field_line_integrate(
     # diffrax parameters
     stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
 
-    def default_terminating_event_fxn(state, **kwargs):
-        terms = kwargs.get("terms", lambda a, x, b: x)
-        return jnp.any(jnp.isnan(terms.vf(state.tnext, state.y, 0)))
+    if np.all(
+        [
+            bounds_R is None,
+            bounds_Z is None,
+            bounds_phi is None,
+            terminating_event is None,
+        ]
+    ):
+        # no bounds or terminating event given, so dont use a terminating event
+        terminating_event = None
+    else:
+        bounds_R = (-np.inf, np.inf) if bounds_R is None else bounds_R
+        bounds_Z = (-np.inf, np.inf) if bounds_Z is None else bounds_Z
+        bounds_phi = (-np.inf, np.inf) if bounds_phi is None else bounds_phi
 
-    terminating_event = (
-        DiscreteTerminatingEvent(terminating_event)
-        if terminating_event
-        else DiscreteTerminatingEvent(default_terminating_event_fxn)
-    )
+        def default_terminating_event_fxn(state, **kwargs):
+            R_out_of_bounds = jnp.any(
+                jnp.array(
+                    [
+                        jnp.less(state.y[0], bounds_R[0]),
+                        jnp.greater(state.y[0], bounds_R[1]),
+                    ]
+                )
+            )
+            Z_out_of_bounds = jnp.any(
+                jnp.array(
+                    [
+                        jnp.less(state.y[2], bounds_Z[0]),
+                        jnp.greater(state.y[2], bounds_Z[1]),
+                    ]
+                )
+            )
+            phi_out_of_bounds = jnp.any(
+                jnp.array(
+                    [
+                        jnp.less(state.y[1], bounds_phi[0]),
+                        jnp.greater(state.y[1], bounds_phi[1]),
+                    ]
+                )
+            )
+
+            return jnp.any(
+                jnp.array([R_out_of_bounds, Z_out_of_bounds, phi_out_of_bounds])
+            )
+
+        terminating_event = (
+            DiscreteTerminatingEvent(terminating_event)
+            if terminating_event
+            else DiscreteTerminatingEvent(default_terminating_event_fxn)
+        )
+
     term = ODETerm(odefun)
     saveat = kwargs.get("saveat", SaveAt(ts=phis))
 

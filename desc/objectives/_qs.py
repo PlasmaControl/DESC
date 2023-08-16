@@ -143,7 +143,7 @@ class QuasisymmetryBoozer(_Objective):
             helicity=self.helicity,
             NFP=self._transforms["B"].basis.NFP,
         )
-        self._idx = np.where(self._idx)[0]
+
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,

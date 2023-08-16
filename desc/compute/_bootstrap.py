@@ -5,7 +5,7 @@ from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
 from .data_index import register_compute_fun
-from .utils import compress, expand, surface_averages
+from .utils import compress, expand, surface_averages_map
 
 
 @register_compute_fun(
@@ -49,17 +49,18 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     modB_over_Bmax = data["|B|"] / Bmax
     sqrt_g = data["sqrt(g)"]
     Bmax_squared = compress(grid, Bmax * Bmax)
+    V_r = compress(grid, data["V_r(r)"])
+    compute_surface_averages = surface_averages_map(grid, expand_out=False)
 
     # Sum over the lambda grid points, using fori_loop for efficiency.
     def body_fun(jlambda, lambda_integral):
-        flux_surf_avg_term = surface_averages(
-            grid,
+        flux_surf_avg_term = compute_surface_averages(
             jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax),
             sqrt_g,
-            denominator=data["V_r(r)"],
+            denominator=V_r,
         )
         return lambda_integral + lambda_weights[jlambda] * lambd[jlambda] / (
-            Bmax_squared * compress(grid, flux_surf_avg_term)
+            Bmax_squared * flux_surf_avg_term
         )
 
     lambda_integral = fori_loop(0, n_gauss, body_fun, jnp.zeros(grid.num_rho))
@@ -188,17 +189,15 @@ def j_dot_B_Redl(
 
     # Redl eq (14):
     X32e = f_t / (
-        (
-            1
-            + 0.23 * (1 - 0.96 * f_t) * jnp.sqrt(nu_e) / jnp.sqrt(Zeff)
-            + 0.13
-            * (1 - 0.38 * f_t)
-            * nu_e
-            / (Zeff * Zeff)
-            * (
-                jnp.sqrt(1 + 2 * jnp.sqrt(Zeff - 1))
-                + f_t * f_t * jnp.sqrt((0.075 + 0.25 * (Zeff - 1) ** 2) * nu_e)
-            )
+        1
+        + 0.23 * (1 - 0.96 * f_t) * jnp.sqrt(nu_e) / jnp.sqrt(Zeff)
+        + 0.13
+        * (1 - 0.38 * f_t)
+        * nu_e
+        / (Zeff * Zeff)
+        * (
+            jnp.sqrt(1 + 2 * jnp.sqrt(Zeff - 1))
+            + f_t * f_t * jnp.sqrt((0.075 + 0.25 * (Zeff - 1) ** 2) * nu_e)
         )
     )
 
@@ -279,39 +278,33 @@ def j_dot_B_Redl(
     J_dot_B = dnds_term + dTeds_term + dTids_term
 
     # Store all results in the J_dot_B_data dictionary:
-    nu_e_star = nu_e
-    nu_i_star = nu_i
-    variables = [
-        "rho",
-        "ne",
-        "ni",
-        "Zeff",
-        "Te",
-        "Ti",
-        "d_ne_d_s",
-        "d_Te_d_s",
-        "d_Ti_d_s",
-        "ln_Lambda_e",
-        "ln_Lambda_ii",
-        "nu_e_star",
-        "nu_i_star",
-        "X31",
-        "X32e",
-        "X32ei",
-        "F32ee",
-        "F32ei",
-        "L31",
-        "L32",
-        "L34",
-        "alpha0",
-        "alpha",
-        "dnds_term",
-        "dTeds_term",
-        "dTids_term",
-    ]
     J_dot_B_data = geom_data.copy()
-    for v in variables:
-        J_dot_B_data[v] = eval(v)
+    J_dot_B_data["rho"] = rho
+    J_dot_B_data["ne"] = ne
+    J_dot_B_data["ni"] = ni
+    J_dot_B_data["Zeff"] = Zeff
+    J_dot_B_data["Te"] = Te
+    J_dot_B_data["Ti"] = Ti
+    J_dot_B_data["d_ne_d_s"] = d_ne_d_s
+    J_dot_B_data["d_Te_d_s"] = d_Te_d_s
+    J_dot_B_data["d_Ti_d_s"] = d_Ti_d_s
+    J_dot_B_data["ln_Lambda_e"] = ln_Lambda_e
+    J_dot_B_data["ln_Lambda_ii"] = ln_Lambda_ii
+    J_dot_B_data["nu_e_star"] = nu_e
+    J_dot_B_data["nu_i_star"] = nu_i
+    J_dot_B_data["X31"] = X31
+    J_dot_B_data["X32e"] = X32e
+    J_dot_B_data["X32ei"] = X32ei
+    J_dot_B_data["F32ee"] = F32ee
+    J_dot_B_data["F32ei"] = F32ei
+    J_dot_B_data["L31"] = L31
+    J_dot_B_data["L32"] = L32
+    J_dot_B_data["L34"] = L34
+    J_dot_B_data["alpha0"] = alpha0
+    J_dot_B_data["alpha"] = alpha
+    J_dot_B_data["dnds_term"] = dnds_term
+    J_dot_B_data["dTeds_term"] = dTeds_term
+    J_dot_B_data["dTids_term"] = dTids_term
     J_dot_B_data["<J*B>"] = J_dot_B
     return J_dot_B_data
 
@@ -341,6 +334,7 @@ def j_dot_B_Redl(
         "Ti",
         "Ti_r",
         "Zeff",
+        "rho",
     ],
     helicity="helicity",
 )

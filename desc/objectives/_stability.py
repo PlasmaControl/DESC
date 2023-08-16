@@ -59,13 +59,15 @@ class MercierStability(_Objective):
         self,
         eq=None,
         target=None,
-        bounds=(0, np.inf),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="Mercier Stability",
     ):
+        if target is None and bounds is None:
+            bounds = (0, np.inf)
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -77,7 +79,7 @@ class MercierStability(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -90,6 +92,7 @@ class MercierStability(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,
@@ -103,15 +106,23 @@ class MercierStability(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["D_Mercier"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -157,25 +168,31 @@ class MercierStability(_Objective):
             Mercier stability criterion.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         return compress(
-            self._transforms["grid"], data["D_Mercier"], surface_label="rho"
+            constants["transforms"]["grid"], data["D_Mercier"], surface_label="rho"
         )
 
-    def compute_scaled(self, *args, **kwargs):
+    def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
         w = compress(
-            self._transforms["grid"],
-            self._transforms["grid"].spacing[:, 0],
+            constants["transforms"]["grid"],
+            constants["transforms"]["grid"].spacing[:, 0],
             surface_label="rho",
         )
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -249,13 +266,15 @@ class MagneticWell(_Objective):
         self,
         eq=None,
         target=None,
-        bounds=(0, np.inf),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="Magnetic Well",
     ):
+        if target is None and bounds is None:
+            bounds = (0, np.inf)
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -267,7 +286,7 @@ class MagneticWell(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -279,6 +298,7 @@ class MagneticWell(_Objective):
         verbose : int, optional
             Level of output.
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,
@@ -292,15 +312,23 @@ class MagneticWell(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["magnetic well"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -342,25 +370,31 @@ class MagneticWell(_Objective):
             Magnetic well parameter.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         return compress(
-            self._transforms["grid"], data["magnetic well"], surface_label="rho"
+            constants["transforms"]["grid"], data["magnetic well"], surface_label="rho"
         )
 
-    def compute_scaled(self, *args, **kwargs):
+    def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
         w = compress(
-            self._transforms["grid"],
-            self._transforms["grid"].spacing[:, 0],
+            constants["transforms"]["grid"],
+            constants["transforms"]["grid"].spacing[:, 0],
             surface_label="rho",
         )
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

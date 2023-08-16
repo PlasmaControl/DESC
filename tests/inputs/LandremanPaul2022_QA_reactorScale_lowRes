@@ -5,9 +5,9 @@
 # 2) The resolution has been decreased.
 
 # global parameters
-sym = 1 
-NFP =   2 
-Psi = 50.48228827 
+sym = 1
+NFP =   2
+Psi = 50.48228827
 
 # spectral resolution
 L_rad = 8
@@ -18,7 +18,7 @@ M_grid = 16
 N_grid = 0, 16
 
 # continuation parameters
-bdry_ratio = 0, 0.25, 0.5, 0.75, 1.0 
+bdry_ratio = 0, 0.25, 0.5, 0.75, 1.0
 pres_ratio = 1
 curr_ratio = 1
 pert_order = 1, 2
@@ -27,7 +27,7 @@ pert_order = 1, 2
 ftol = 0.01
 xtol = 1e-06
 gtol = 1e-06
-nfev = 200
+maxiter = 200
 
 # solver methods
 optimizer = lsq-exact

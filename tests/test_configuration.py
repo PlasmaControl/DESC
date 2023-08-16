@@ -178,7 +178,7 @@ class TestConstructor:
             eq = Equilibrium(M=3.4)
         with pytest.raises(AssertionError):
             eq = Equilibrium(N=3.4)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             eq = Equilibrium(NFP=3.4j)
         with pytest.raises(ValueError):
             eq = Equilibrium(surface=np.array([[1, 1, 1, 10, 2]]))
@@ -419,9 +419,7 @@ class TestGetSurfaces:
         rho = 0.5
         surf = eq.get_surface_at(rho=rho)
         assert surf.rho == rho
-        np.testing.assert_allclose(
-            surf.compute_surface_area(), 4 * np.pi**2 * R0 * rho
-        )
+        np.testing.assert_allclose(surf.compute("S")["S"], 4 * np.pi**2 * R0 * rho)
 
     @pytest.mark.unit
     def test_get_zeta_surface(self):
@@ -430,7 +428,7 @@ class TestGetSurfaces:
         surf = eq.get_surface_at(zeta=np.pi)
         assert surf.zeta == np.pi
         rho = 1
-        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * rho**2)
+        np.testing.assert_allclose(surf.compute("A")["A"], np.pi * rho**2)
 
     @pytest.mark.unit
     def test_get_theta_surface(self):
@@ -458,7 +456,7 @@ def test_magnetic_axis(HELIOTRON_vac):
     grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))
 
     data = eq.compute(["R", "Z"], grid=grid)
-    coords = axis.compute_coordinates(grid=grid)
+    coords = axis.compute("x", grid=grid)["x"]
 
     np.testing.assert_allclose(coords[:, 0], data["R"])
     np.testing.assert_allclose(coords[:, 2], data["Z"])
@@ -488,6 +486,20 @@ def test_is_nested():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         assert not eq.is_nested(grid=grid, msg=None)
+
+
+@pytest.mark.unit
+def test_is_nested_theta():
+    """Test that new version of is nested also catches messed up theta contours."""
+    eq = Equilibrium(L=6, M=6, N=0, iota=1)
+    # just mess with lambda, so rho contours are the same
+    eq.L_lmn += 1e-1 * np.random.default_rng(seed=3).random(eq.L_lmn.shape)
+    grid = QuadratureGrid(10, 10, 0, NFP=eq.NFP)
+    g1 = eq.compute("sqrt(g)", grid=grid)["sqrt(g)"]
+    g2 = eq.compute("sqrt(g)_PEST", grid=grid)["sqrt(g)_PEST"]
+    assert np.all(g1 > 0)  # regular jacobian will still be fine
+    assert np.any(g2 < 0)  # PEST jacobian should be negative
+    assert not eq.is_nested()
 
 
 @pytest.mark.unit

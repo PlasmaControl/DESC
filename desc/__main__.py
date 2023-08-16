@@ -46,7 +46,7 @@ def main(cl_args=sys.argv[1:]):
             ftol=inputs[-1]["ftol"],
             xtol=inputs[-1]["xtol"],
             gtol=inputs[-1]["gtol"],
-            nfev=inputs[-1]["nfev"],
+            maxiter=inputs[-1]["maxiter"],
             verbose=ir.args.verbose,
             checkpoint_path=ir.output_path,
         )
@@ -66,7 +66,7 @@ def main(cl_args=sys.argv[1:]):
             ftol=[inp["ftol"] for inp in inputs],
             xtol=[inp["xtol"] for inp in inputs],
             gtol=[inp["gtol"] for inp in inputs],
-            nfev=[inp["nfev"] for inp in inputs],
+            maxiter=[inp["maxiter"] for inp in inputs],
             verbose=ir.args.verbose,
             checkpoint_path=ir.output_path,
         )

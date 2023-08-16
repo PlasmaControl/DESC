@@ -1,209 +1,13 @@
-"""Functions for getting common objectives and constraints."""
+"""Misc utilities needed by objectives.
+
+Functions in this module should not depend on any other submodules in desc.objectives.
+"""
 
 import numpy as np
 
-from desc.backend import jnp, put
+from desc.backend import cond, jnp, logsumexp, put
 from desc.compute import arg_order
-from desc.utils import Index, svd_inv_null
-
-from ._equilibrium import (
-    CurrentDensity,
-    Energy,
-    ForceBalance,
-    HelicalForceBalance,
-    RadialForceBalance,
-)
-from .linear_objectives import (
-    BoundaryRSelfConsistency,
-    BoundaryZSelfConsistency,
-    FixAtomicNumber,
-    FixAxisR,
-    FixAxisZ,
-    FixBoundaryR,
-    FixBoundaryZ,
-    FixCurrent,
-    FixElectronDensity,
-    FixElectronTemperature,
-    FixIonTemperature,
-    FixIota,
-    FixLambdaGauge,
-    FixPressure,
-    FixPsi,
-)
-from .nae_utils import make_RZ_cons_1st_order
-from .objective_funs import ObjectiveFunction
-
-
-def get_fixed_boundary_constraints(
-    profiles=True, iota=True, kinetic=False, normalize=True
-):
-    """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
-
-    Parameters
-    ----------
-    profiles : bool
-        Whether to also return constraints to fix input profiles.
-    iota : bool
-        Whether to add FixIota or FixCurrent as a constraint.
-    kinetic : bool
-        Whether to add constraints to fix kinetic profiles or pressure
-    normalize : bool
-        Whether to apply constraints in normalized units.
-
-    Returns
-    -------
-    constraints, tuple of _Objectives
-        A list of the linear constraints used in fixed-boundary problems.
-
-    """
-    constraints = (
-        FixBoundaryR(normalize=normalize, normalize_target=normalize),
-        FixBoundaryZ(normalize=normalize, normalize_target=normalize),
-        FixPsi(normalize=normalize, normalize_target=normalize),
-    )
-    if profiles:
-        if kinetic:
-            constraints += (
-                FixElectronDensity(normalize=normalize, normalize_target=normalize),
-                FixElectronTemperature(normalize=normalize, normalize_target=normalize),
-                FixIonTemperature(normalize=normalize, normalize_target=normalize),
-                FixAtomicNumber(normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixPressure(normalize=normalize, normalize_target=normalize),
-            )
-
-        if iota:
-            constraints += (FixIota(normalize=normalize, normalize_target=normalize),)
-        else:
-            constraints += (
-                FixCurrent(normalize=normalize, normalize_target=normalize),
-            )
-    return constraints
-
-
-def maybe_add_self_consistency(constraints):
-    """Add self consistency constraints if needed."""
-
-    def _is_any_instance(things, cls):
-        return any([isinstance(t, cls) for t in things])
-
-    if not _is_any_instance(constraints, BoundaryRSelfConsistency):
-        constraints += (BoundaryRSelfConsistency(),)
-    if not _is_any_instance(constraints, BoundaryZSelfConsistency):
-        constraints += (BoundaryZSelfConsistency(),)
-    if not _is_any_instance(constraints, FixLambdaGauge):
-        constraints += (FixLambdaGauge(),)
-    return constraints
-
-
-def get_fixed_axis_constraints(profiles=True, iota=True):
-    """Get the constraints necessary for a fixed-axis equilibrium problem.
-
-    Parameters
-    ----------
-    profiles : bool
-        Whether to also return constraints to fix input profiles.
-    iota : bool
-        Whether to add FixIota or FixCurrent as a constraint.
-
-    Returns
-    -------
-    constraints, tuple of _Objectives
-        A list of the linear constraints used in fixed-axis problems.
-
-    """
-    constraints = (
-        FixAxisR(),
-        FixAxisZ(),
-        FixLambdaGauge(),
-        FixPsi(),
-    )
-    if profiles:
-        constraints += (FixPressure(),)
-
-        if iota:
-            constraints += (FixIota(),)
-        else:
-            constraints += (FixCurrent(),)
-    return constraints
-
-
-def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
-    """Get the constraints necessary for fixing NAE behavior in an equilibrium problem. # noqa D205
-
-    Parameters
-    ----------
-    desc_eq : Equilibrium
-        Equilibrium to constrain behavior of
-        (assumed to be a fit from the NAE equil using .from_near_axis()).
-    qsc_eq : Qsc
-        Qsc object defining the near-axis equilibrium to constrain behavior to.
-    profiles : bool
-        Whether to also return constraints to fix input profiles.
-    iota : bool
-        Whether to add FixIota or FixCurrent as a constraint.
-    order : int
-        order (in rho) of near-axis behavior to constrain
-
-    Returns
-    -------
-    constraints, tuple of _Objectives
-        A list of the linear constraints used in fixed-axis problems.
-    """
-
-    constraints = (
-        FixAxisR(),
-        FixAxisZ(),
-        FixPsi(),
-    )
-    if profiles:
-        constraints += (FixPressure(),)
-
-        if iota:
-            constraints += (FixIota(),)
-        else:
-            constraints += (FixCurrent(),)
-    if order >= 1:  # first order constraints
-        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq)
-    if order >= 2:  # 2nd order constraints
-        raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
-
-    return constraints
-
-
-def get_equilibrium_objective(mode="force", normalize=True):
-    """Get the objective function for a typical force balance equilibrium problem.
-
-    Parameters
-    ----------
-    mode : one of {"force", "forces", "energy", "vacuum"}
-        which objective to return. "force" computes force residuals on unified grid.
-        "forces" uses two different grids for radial and helical forces. "energy" is
-        for minimizing MHD energy. "vacuum" directly minimizes current density.
-    normalize : bool
-        Whether to normalize units of objective.
-
-    Returns
-    -------
-    objective, ObjectiveFunction
-        An objective function with default force balance objectives.
-    """
-    if mode == "energy":
-        objectives = Energy(normalize=normalize, normalize_target=normalize)
-    elif mode == "force":
-        objectives = ForceBalance(normalize=normalize, normalize_target=normalize)
-    elif mode == "forces":
-        objectives = (
-            RadialForceBalance(normalize=normalize, normalize_target=normalize),
-            HelicalForceBalance(normalize=normalize, normalize_target=normalize),
-        )
-    elif mode == "vacuum":
-        objectives = CurrentDensity(normalize=normalize, normalize_target=normalize)
-    else:
-        raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
-    return ObjectiveFunction(objectives)
+from desc.utils import Index, flatten_list, svd_inv_null
 
 
 def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
@@ -259,13 +63,15 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
         if obj.bounds is not None:
             raise ValueError("Linear constraints must use target instead of bounds.")
         A_ = {
-            arg: obj.derivatives["jac"][arg](
+            arg: obj.derivatives["jac_scaled"][arg](
                 *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
             )
             for arg in args
         }
         # using obj.compute instead of obj.target to allow for correct scale/weight
-        b_ = -obj.compute_scaled(*[jnp.zeros(obj.dimensions[arg]) for arg in obj.args])
+        b_ = -obj.compute_scaled_error(
+            *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
+        )
         A.append(A_)
         b.append(b_)
 
@@ -311,7 +117,7 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
 
     def project(x):
         """Project a full state vector into the reduced optimization vector."""
-        x_reduced = jnp.dot(Z.T, (x - xp)[unfixed_idx])
+        x_reduced = Z.T @ ((x - xp)[unfixed_idx])
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
     def recover(x_reduced):
@@ -322,10 +128,13 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     # check that all constraints are actually satisfiable
     xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
     for con in constraints:
-        res = con.compute_scaled(**xp_dict)
+        res = con.compute_scaled_error(**xp_dict)
         x = np.concatenate([xp_dict[arg] for arg in con.args])
         # stuff like density is O(1e19) so need some adjustable tolerance here.
-        atol = max(1e-8, np.finfo(x.dtype).eps * np.linalg.norm(x) / x.size)
+        if x.size:
+            atol = max(1e-8, np.finfo(x.dtype).eps * np.linalg.norm(x) / x.size)
+        else:
+            atol = 0
         np.testing.assert_allclose(
             res,
             0,
@@ -367,3 +176,87 @@ def align_jacobian(Fx, objective_f, objective_g):
             A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
     A = jnp.concatenate([A[arg] for arg in allargs])
     return A.T
+
+
+def softmax(arr, alpha):
+    """JAX softmax implementation.
+
+    Inspired by https://www.johndcook.com/blog/2010/01/13/soft-maximum/
+    and https://www.johndcook.com/blog/2010/01/20/how-to-compute-the-soft-maximum/
+
+    Will automatically multiply array values by 2 / min_val if the min_val of
+    the array is <1. This is to avoid inaccuracies that arise when values <1
+    are present in the softmax, which can cause inaccurate maxes or even incorrect
+    signs of the softmax versus the actual max.
+
+    Parameters
+    ----------
+    arr : ndarray
+        The array which we would like to apply the softmax function to.
+    alpha : float
+        The parameter smoothly transitioning the function to a hardmax.
+        as alpha increases, the value returned will come closer and closer to
+        max(arr).
+
+    Returns
+    -------
+    softmax : float
+        The soft-maximum of the array.
+    """
+    arr_times_alpha = alpha * arr
+    min_val = jnp.min(jnp.abs(arr_times_alpha)) + 1e-4  # buffer value in case min is 0
+    return cond(
+        jnp.any(min_val < 1),
+        lambda arr_times_alpha: logsumexp(
+            arr_times_alpha / min_val * 2
+        )  # adjust to make vals>1
+        / alpha
+        * min_val
+        / 2,
+        lambda arr_times_alpha: logsumexp(arr_times_alpha) / alpha,
+        arr_times_alpha,
+    )
+
+
+def softmin(arr, alpha):
+    """JAX softmin implementation, by taking negative of softmax(-arr).
+
+    Parameters
+    ----------
+    arr : ndarray
+        The array which we would like to apply the softmin function to.
+    alpha: float
+        The parameter smoothly transitioning the function to a hardmin.
+        as alpha increases, the value returned will come closer and closer to
+        min(arr).
+
+    Returns
+    -------
+    softmin: float
+        The soft-minimum of the array.
+    """
+    return -softmax(-arr, alpha)
+
+
+def combine_args(*objectives):
+    """Given ObjectiveFunctions, modify all to take the same state vector.
+
+    The new state vector will be a combination of all arguments taken by any objective.
+
+    Parameters
+    ----------
+    objectives : ObjectiveFunction
+        ObjectiveFunctions to modify.
+
+    Returns
+    -------
+    objectives : ObjectiveFunction
+        Original ObjectiveFunctions modified to take the same state vector.
+    """
+    args = flatten_list([obj.args for obj in objectives])
+    args = [arg for arg in arg_order if arg in args]
+
+    for obj in objectives:
+        obj.set_args(*args)
+
+    return objectives

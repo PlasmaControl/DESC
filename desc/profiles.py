@@ -10,7 +10,7 @@ from desc.backend import jit, jnp, put, sign
 from desc.basis import FourierZernikeBasis, PowerSeries
 from desc.derivatives import Derivative
 from desc.grid import Grid, LinearGrid
-from desc.interpolate import _approx_df, interp1d
+from desc.interpolate import interp1d
 from desc.io import IOAble
 from desc.transform import Transform
 from desc.utils import combination_permutation, copy_coeffs, multinomial_coefficients
@@ -729,6 +729,8 @@ class PowerSeriesProfile(Profile):
         if params is None:
             params = self.params
         transform = self._get_transform(grid)
+        if (dt != 0) or (dz != 0):
+            return jnp.zeros(transform.grid.num_nodes)
         return transform.transform(params, dr=dr, dt=dt, dz=dz)
 
     @classmethod
@@ -794,7 +796,7 @@ class SplineProfile(Profile):
 
     """
 
-    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method", "_Dx"]
+    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method"]
 
     def __init__(
         self, values=[0, 0, 0], knots=None, grid=None, method="cubic2", name=""
@@ -810,9 +812,6 @@ class SplineProfile(Profile):
         self._knots = knots
         self._params = values
         self._method = method
-        self._Dx = _approx_df(
-            self._knots, np.eye(self._knots.size), self._method, axis=0
-        )
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -883,8 +882,8 @@ class SplineProfile(Profile):
             return jnp.zeros_like(xq)
         x = self._knots
         f = params
-        df = self._Dx @ f
-        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, df=df)
+
+        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
         return fq
 
 

@@ -24,7 +24,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.9']
-        group: [1, 2, 3, 4]
+        group: [1, 2, 3, 4, 5]
 
     steps:
       - uses: actions/checkout@v3
@@ -41,7 +41,7 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest -m regression --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl --mpl-results-path=mpl_results.html --mpl-generate-summary=html --splits 4 --group ${{ matrix.group }} --splitting-algorithm least_duration --db ./prof.db
+          python -m pytest -v -m regression --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl --mpl-results-path=mpl_results.html --mpl-generate-summary=html --splits 5 --group ${{ matrix.group }} --splitting-algorithm least_duration --db ./prof.db
       - name: save coverage file and plot comparison results
         if: always()
         uses: actions/upload-artifact@v3
@@ -53,10 +53,14 @@ jobs:
             ./prof.db
       - name: Upload coverage
         id : codecov
-        uses: codecov/codecov-action@v3
+        uses: Wandalen/wretry.action@v1.0.36
         with:
-          token: ${{ secrets.CODECOV_TOKEN }} # maybe needed to avoid upload failure?
-          name: codecov-umbrella # optional
-          files: ./cov.xml
-          fail_ci_if_error: true # optional (default = false)
-          verbose: true # optional (default = false)
+          action: codecov/codecov-action@v3
+          with: |
+            token: ${{ secrets.CODECOV_TOKEN }}
+            name: codecov-umbrella
+            files: ./cov.xml
+            fail_ci_if_error: true
+            verbose: true
+          attempt_limit: 10
+          attempt_delay: 60000 # ms, 1 min

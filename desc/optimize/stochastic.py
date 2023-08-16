@@ -1,7 +1,8 @@
 """Function for minimizing a scalar function of multiple variables."""
 
-import numpy as np
 from scipy.optimize import OptimizeResult
+
+from desc.backend import jnp
 
 from .utils import (
     STATUS_MESSAGES,
@@ -23,7 +24,7 @@ def sgd(
     verbose=1,
     maxiter=None,
     callback=None,
-    options={},
+    options=None,
 ):
     """Minimize a scalar function using stochastic gradient descent with momentum.
 
@@ -46,19 +47,15 @@ def sgd(
         Step size update rule. Currently only the default "sgd" is available. Future
         updates may include RMSProp, Adam, etc.
     ftol : float or None, optional
-        Tolerance for termination by the change of the cost function. Default
-        is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
-        and there was an adequate agreement between a local quadratic model and
-        the true model in the last step. If None, the termination by this
-        condition is disabled.
+        Tolerance for termination by the change of the cost function.
+        The optimization process is stopped when ``dF < ftol * F``.
     xtol : float or None, optional
         Tolerance for termination by the change of the independent variables.
-        Default is 1e-8. Optimization is stopped when
-        ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
-        this condition is disabled.
+        Optimization is stopped when ``norm(dx) < xtol * (xtol + norm(x))``.
+        If None, the termination by this condition is disabled.
     gtol : float or None, optional
-        Absolute tolerance for termination by the norm of the gradient. Default is 1e-6.
-        Optimizer teriminates when ``norm(g) < gtol``, where
+        Absolute tolerance for termination by the norm of the gradient.
+        Optimizer teriminates when ``max(abs(g)) < gtol``.
         If None, the termination by this condition is disabled.
     verbose : {0, 1, 2}, optional
         * 0 (default) : work silently.
@@ -88,13 +85,14 @@ def sgd(
         Boolean flag indicating if the optimizer exited successfully.
 
     """
+    options = {} if options is None else options
     nfev = 0
     ngev = 0
     iteration = 0
 
     N = x0.size
     x = x0.copy()
-    v = np.zeros_like(x)
+    v = jnp.zeros_like(x)
     f = fun(x, *args)
     nfev += 1
     g = grad(x, *args)
@@ -102,10 +100,10 @@ def sgd(
 
     if maxiter is None:
         maxiter = N * 1000
-    gnorm_ord = options.pop("gnorm_ord", np.inf)
+    gnorm_ord = options.pop("gnorm_ord", jnp.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
-    g_norm = np.linalg.norm(g, ord=gnorm_ord)
-    x_norm = np.linalg.norm(x, ord=xnorm_ord)
+    g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
+    x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
     return_all = options.pop("return_all", True)
     alpha = options.pop("alpha", 1e-2 * x_norm / g_norm)
     beta = options.pop("beta", 0.9)
@@ -113,8 +111,8 @@ def sgd(
 
     success = None
     message = None
-    step_norm = np.inf
-    df_norm = np.inf
+    step_norm = jnp.inf
+    df_norm = jnp.inf
 
     if verbose > 1:
         print_header_nonlinear()
@@ -136,11 +134,11 @@ def sgd(
             iteration,
             maxiter,
             nfev,
-            np.inf,
+            jnp.inf,
             0,
-            np.inf,
+            jnp.inf,
             0,
-            np.inf,
+            jnp.inf,
         )
         if success is not None:
             break
@@ -149,8 +147,8 @@ def sgd(
         x = x - alpha * v
         g = grad(x, *args)
         ngev += 1
-        step_norm = np.linalg.norm(alpha * v, ord=xnorm_ord)
-        g_norm = np.linalg.norm(g, ord=gnorm_ord)
+        step_norm = jnp.linalg.norm(alpha * v, ord=xnorm_ord)
+        g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
         fnew = fun(x, *args)
         nfev += 1
         df = f - fnew
@@ -162,7 +160,7 @@ def sgd(
             print_iteration_nonlinear(iteration, nfev, f, df, step_norm, g_norm)
 
         if callback is not None:
-            stop = callback(np.copy(x), *args)
+            stop = callback(jnp.copy(x), *args)
             if stop:
                 success = False
                 message = STATUS_MESSAGES["callback"]

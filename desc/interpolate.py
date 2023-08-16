@@ -32,6 +32,8 @@ def interp1d(
             parameter `c` in float[0,1] to specify tension
         - `'monotonic'`: C1 cubic splines that attempt to preserve monotonicity in the
             data, and will not introduce new extrama in the interpolated points
+        - `'monotonic-0'`: same as `'monotonic'` but with 0 first derivatives at both
+            endpoints
     derivative : int
         derivative order to calculate
     extrap : bool, float, array-like
@@ -91,7 +93,14 @@ def interp1d(
         else:
             fq = jnp.zeros((xq.size, *f.shape[1:]))
 
-    elif method in ["cubic", "cubic2", "cardinal", "catmull-rom", "monotonic"]:
+    elif method in [
+        "cubic",
+        "cubic2",
+        "cardinal",
+        "catmull-rom",
+        "monotonic",
+        "monotonic-0",
+    ]:
         i = jnp.clip(jnp.searchsorted(x, xq, side="right"), 1, len(x) - 1)
         if fx is None:
             fx = _approx_df(x, f, method, axis, **kwargs)
@@ -652,7 +661,7 @@ def _approx_df(x, f, method, axis, **kwargs):
             axis=axis,
         )
         return fx
-    if method == "cubic2":
+    elif method == "cubic2":
         dx = jnp.diff(x)
         df = jnp.diff(f, axis=axis)
         if df.ndim > dx.ndim:
@@ -695,7 +704,7 @@ def _approx_df(x, f, method, axis, **kwargs):
         fx = jnp.linalg.solve(A, b)
         fx = jnp.moveaxis(fx.reshape(f.shape), 0, axis)
         return fx
-    if method in ["cardinal", "catmull-rom"]:
+    elif method in ["cardinal", "catmull-rom"]:
         dx = x[2:] - x[:-2]
         df = jnp.take(f, jnp.arange(2, f.shape[axis]), axis, mode="wrap") - jnp.take(
             f, jnp.arange(0, f.shape[axis] - 2), axis, mode="wrap"
@@ -729,7 +738,7 @@ def _approx_df(x, f, method, axis, **kwargs):
             c = 0
         fx = (1 - c) * jnp.concatenate([fx0, df, fx1], axis=axis)
         return fx
-    if method == "monotonic":
+    elif method in ["monotonic", "monotonic-0"]:
         f = jnp.moveaxis(f, axis, 0)
         fshp = f.shape
         if f.ndim == 1:
@@ -737,38 +746,61 @@ def _approx_df(x, f, method, axis, **kwargs):
             x = x[:, None]
             f = f[:, None]
         hk = x[1:] - x[:-1]
-        mk = (f[1:] - f[:-1]) / hk
+        df = jnp.diff(f, axis=axis)
+        hki = jnp.where(hk == 0, 0, 1 / hk)
+        if df.ndim > hki.ndim:
+            hki = jnp.expand_dims(hki, tuple(range(1, df.ndim)))
+            hki = jnp.moveaxis(hki, 0, axis)
+
+        mk = hki * df
 
         smk = jnp.sign(mk)
-        condition = (smk[1:] != smk[:-1]) | (mk[1:] == 0) | (mk[:-1] == 0)
+        condition = (smk[1:, :] != smk[:-1, :]) | (mk[1:, :] == 0) | (mk[:-1, :] == 0)
 
         w1 = 2 * hk[1:] + hk[:-1]
         w2 = hk[1:] + 2 * hk[:-1]
 
-        whmean = (w1 / mk[:-1] + w2 / mk[1:]) / (w1 + w2)
+        if df.ndim > w1.ndim:
+            w1 = jnp.expand_dims(w1, tuple(range(1, df.ndim)))
+            w1 = jnp.moveaxis(w1, 0, axis)
+            w2 = jnp.expand_dims(w2, tuple(range(1, df.ndim)))
+            w2 = jnp.moveaxis(w2, 0, axis)
+
+        whmean = (w1 / mk[:-1, :] + w2 / mk[1:, :]) / (w1 + w2)
 
         dk = jnp.where(condition, 0, 1.0 / whmean)
 
-        # special case endpoints, as suggested in
-        # Cleve Moler, Numerical Computing with MATLAB, Chap 3.6 (pchiptx.m)
-        def _edge_case(h0, h1, m0, m1):
-            # one-sided three-point estimate for the derivative
-            d = ((2 * h0 + h1) * m0 - h0 * m1) / (h0 + h1)
+        if method == "monotonic-0":
+            d0 = jnp.zeros((1, dk.shape[1]))
+            d1 = jnp.zeros((1, dk.shape[1]))
 
-            # try to preserve shape
-            mask = jnp.sign(d) != jnp.sign(m0)
-            mask2 = (jnp.sign(m0) != jnp.sign(m1)) & (jnp.abs(d) > 3.0 * jnp.abs(m0))
-            mmm = (~mask) & mask2
+        else:
+            # special case endpoints, as suggested in
+            # Cleve Moler, Numerical Computing with MATLAB, Chap 3.6 (pchiptx.m)
+            def _edge_case(h0, h1, m0, m1):
+                # one-sided three-point estimate for the derivative
+                d = ((2 * h0 + h1) * m0 - h0 * m1) / (h0 + h1)
 
-            d = jnp.where(mask, 0.0, d)
-            d = jnp.where(mmm, 3.0 * m0, d)
+                # try to preserve shape
+                mask = jnp.sign(d) != jnp.sign(m0)
+                mask2 = (jnp.sign(m0) != jnp.sign(m1)) & (
+                    jnp.abs(d) > 3.0 * jnp.abs(m0)
+                )
+                mmm = (~mask) & mask2
 
-            return d
+                d = jnp.where(mask, 0.0, d)
+                d = jnp.where(mmm, 3.0 * m0, d)
+                return d
 
-        d0 = _edge_case(hk[0], hk[1], mk[0], mk[1])[None]
-        d1 = _edge_case(hk[-1], hk[-2], mk[-1], mk[-2])[None]
-        dk = jnp.concatenate([d0, dk, d1])
+            hk = 1 / hki
+            d0 = _edge_case(hk[0, :], hk[1, :], mk[0, :], mk[1, :])[None]
+            d1 = _edge_case(hk[-1, :], hk[-2, :], mk[-1, :], mk[-2, :])[None]
+
+        dk = np.concatenate([d0, dk, d1])
+        dk = dk.reshape(fshp)
         return dk.reshape(fshp)
+    else:  # method passed in does not use df from this function, just return 0
+        return jnp.zeros_like(f)
 
 
 # fmt: off

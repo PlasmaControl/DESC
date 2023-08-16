@@ -13,13 +13,13 @@ from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
 from desc.compute.utils import compress, surface_averages
 from desc.equilibrium import Equilibrium
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.objectives import (
-    BoundaryRSelfConsistency,
-    BoundaryZSelfConsistency,
-    FixBoundaryR,
-    FixBoundaryZ,
     ObjectiveFunction,
+    get_fixed_axis_constraints,
+    get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile, SplineProfile
@@ -110,27 +110,58 @@ class VMECIO:
             inputs["sym"] = True
 
         # profiles
-        r = np.sqrt(np.linspace(0, 1, file.variables["ns"][:]))
-        pres = file.variables["presf"][:]
-        inputs["pressure"] = SplineProfile(r, pres, name="pressure")
+        r = np.sqrt(np.linspace(0, 1, file.variables["ns"][:].filled()))
+        pres = file.variables["presf"][:].filled()
+        inputs["pressure"] = SplineProfile(pres, r, name="pressure")
         if profile == "iota":
-            iota = file.variables["iotaf"][:]
-            inputs["iota"] = SplineProfile(r, iota, name="iota")
+            iota = file.variables["iotaf"][:].filled()
+            inputs["iota"] = SplineProfile(iota, r, name="iota")
             inputs["current"] = None
         if profile == "current":
-            curr = 2 * np.pi / mu_0 * file.variables["buco"][:]
-            inputs["current"] = SplineProfile(r, curr, name="current")
+            curr = 2 * np.pi / mu_0 * file.variables["buco"][:].filled()
+            inputs["current"] = SplineProfile(curr, r, name="current")
             inputs["iota"] = None
-
-        file.close()
 
         # boundary
         m, n, Rb_lmn = ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
         m, n, Zb_lmn = ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
-        inputs["surface"] = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
+        surface = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
+        # need to create surface object here so we can tell it not to flip the
+        # orientation yet. If we did it here, it would mess up the self-consistency
+        # stuff later
+        inputs["surface"] = FourierRZToroidalSurface(
+            surface[:, 3],
+            surface[:, 4],
+            surface[:, 1:3].astype(int),
+            surface[:, 1:3].astype(int),
+            inputs["NFP"],
+            inputs["sym"],
+            check_orientation=False,
+        )
+
+        # axis
+        rax_cc = file.variables["raxis_cc"][:].filled()
+        zax_cs = file.variables["zaxis_cs"][:].filled()
+        try:
+            rax_cs = file.variables["raxis_cs"][:].filled()
+            rax_cc = file.variables["zaxis_cc"][:].filled()
+        except KeyError:
+            rax_cs = np.zeros_like(rax_cc)
+            zax_cc = np.zeros_like(zax_cs)
+        rax = np.concatenate([-rax_cs[1:][::-1], rax_cc])
+        zax = np.concatenate([-zax_cs[1:][::-1], zax_cc])
+        nax = len(rax_cc) - 1
+        nax = np.arange(-nax, nax + 1)
+        inputs["axis"] = np.vstack([nax, rax, zax]).T
+
+        file.close()
 
         # initialize Equilibrium
-        eq = Equilibrium(**inputs)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="Left handed coordinates detected"
+            )
+            eq = Equilibrium(**inputs)
 
         # R
         m, n, R_mn = ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)
@@ -144,22 +175,23 @@ class VMECIO:
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
-        eq = ensure_positive_jacobian(eq)
-
         # apply boundary conditions
-        constraints = (
-            FixBoundaryR(),
-            FixBoundaryZ(),
-            BoundaryRSelfConsistency(),
-            BoundaryZSelfConsistency(),
-        )
-        objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
+
+        constraints = get_fixed_axis_constraints(
+            profiles=False, eq=eq
+        ) + get_fixed_boundary_constraints(iota=eq.iota, eq=eq)
+        constraints = maybe_add_self_consistency(eq, constraints)
+        objective = ObjectiveFunction(constraints, verbose=0)
+        objective.build()
         _, _, _, _, _, project, recover = factorize_linear_constraints(
             constraints, objective.args
         )
         args = objective.unpack_state(recover(project(objective.x(eq))))
         for key, value in args.items():
             setattr(eq, key, value)
+
+        # now we flip the orientation at the very end
+        eq = ensure_positive_jacobian(eq)
 
         return eq
 
@@ -251,8 +283,11 @@ class VMECIO:
         )
 
         ier_flag = file.createVariable("ier_flag", np.int32)
-        ier_flag.long_name = "error flag (0 = solved equilibrium, 1 = unsolved)"
-        ier_flag[:] = int(not eq.solved)
+        ier_flag.long_name = (
+            "error flag (DESC always outputs 0; "
+            + "manually check for a good equilibrium solution)"
+        )
+        ier_flag[:] = 0
 
         lfreeb = file.createVariable("lfreeb__logical__", np.int32)
         lfreeb.long_name = "free boundary logical (0 = fixed boundary)"
@@ -542,26 +577,22 @@ class VMECIO:
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^theta"
         jcuru.units = "A/m^3"
-        jcuru[:] = compress(
+        jcuru[:] = surface_averages(
             grid,
-            surface_averages(
-                grid,
-                data["sqrt(g)"] * data["J^theta"] / (2 * data["rho"]),
-                sqrt_g=data["sqrt(g)"],
-            ),
+            data["sqrt(g)"] * data["J^theta"] / (2 * data["rho"]),
+            sqrt_g=data["sqrt(g)"],
+            expand_out=False,
         )
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^zeta"
         jcurv.units = "A/m^3"
-        jcurv[:] = compress(
+        jcurv[:] = surface_averages(
             grid,
-            surface_averages(
-                grid,
-                data["sqrt(g)"] * data["J^zeta"] / (2 * data["rho"]),
-                sqrt_g=data["sqrt(g)"],
-            ),
+            data["sqrt(g)"] * data["J^zeta"] / (2 * data["rho"]),
+            sqrt_g=data["sqrt(g)"],
+            expand_out=False,
         )
         jcurv[0] = 0
 
@@ -718,10 +749,23 @@ class VMECIO:
             cos_transform = Transform(
                 grid=grid, basis=cos_basis, build=False, build_pinv=True
             )
+
+            def cosfit(x):
+                y = cos_transform.fit(x)
+                return np.where(cos_transform.basis.modes[:, 1] < 0, -y, y)
+
+            def sinfit(x):
+                y = sin_transform.fit(x)
+                return np.where(sin_transform.basis.modes[:, 1] < 0, -y, y)
+
         else:
             full_transform = Transform(
                 grid=grid, basis=full_basis, build=False, build_pinv=True
             )
+
+            def fullfit(x):
+                y = full_transform.fit(x)
+                return np.where(full_transform.basis.modes[:, 1] < 0, -y, y)
 
         rmin_surf = file.createVariable("rmin_surf", np.float64)
         rmin_surf.long_name = "minimum R coordinate range"
@@ -775,9 +819,9 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         gmnc[0, :] = 0
         gmnc[1:, :] = -c  # negative sign for negative Jacobian
@@ -814,7 +858,7 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
@@ -857,7 +901,7 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
@@ -900,7 +944,7 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
@@ -941,18 +985,18 @@ class VMECIO:
         x_mn = np.zeros((surfs, m.size))
         for i in range(surfs):
             if eq.sym:
-                x_mn[i, :] = sin_transform.fit(data[i, :])
+                x_mn[i, :] = sinfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
-        bsubsmns[:, :] = -s  # negative sign for negative Jacobian
-        bsubsmns[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
+        bsubsmns[:, :] = s
+        bsubsmns[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
         # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
-            bsubsmnc[:, :] = -c
-            bsubsmnc[0, :] = -(
+            bsubsmnc[:, :] = c
+            bsubsmnc[0, :] = (
                 c[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("B_psi")
@@ -989,9 +1033,9 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubumnc[0, :] = 0
         bsubumnc[1:, :] = -c  # negative sign for negative Jacobian
@@ -1032,9 +1076,9 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubvmnc[0, :] = 0
         bsubvmnc[1:, :] = c
@@ -1081,9 +1125,9 @@ class VMECIO:
         x_mn = np.zeros((surfs, m.size))
         for i in range(surfs):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         currumnc[:, :] = c
         currumnc[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
@@ -1135,9 +1179,9 @@ class VMECIO:
         x_mn = np.zeros((surfs, m.size))
         for i in range(surfs):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         currvmnc[:, :] = -c  # negative sign for negative Jacobian
         currvmnc[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
@@ -1156,12 +1200,18 @@ class VMECIO:
         # TODO: these output quantities need to be added
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
         bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
+        bdotgradv.long_name = "Not Implemented: This output is hard-coded to 0!"
+        bdotgradv.units = "None"
         # beta_vol = something like p/(B^2-p) ? It's not <beta>_vol(r)
         beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
         beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
+        beta_vol.long_name = "Not Implemented: This output is hard-coded to 0!"
+        beta_vol.units = "None"
         # betaxis = beta_vol at the axis?
         betaxis = file.createVariable("betaxis", np.float64)
         betaxis[:] = 0
+        betaxis.long_name = "Not Implemented: This output is hard-coded to 0!"
+        betaxis.units = "None"
         """
         IonLarmor = file.createVariable("IonLarmor", np.float64)
         IonLarmor[:] = 0.0

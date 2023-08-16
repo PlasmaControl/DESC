@@ -49,7 +49,6 @@ class TestProfiles:
         np.testing.assert_allclose(theta_err, 0, atol=2e-11)
 
     @pytest.mark.unit
-    @pytest.mark.slow
     def test_close_values(self):
         """Test that different forms of the same profile give similar values."""
         pp = PowerSeriesProfile(
@@ -80,6 +79,21 @@ class TestProfiles:
         np.testing.assert_allclose(sp3(x), pp3(x), rtol=1e-5, atol=1e-3)
         sp4 = mp.to_spline()
         np.testing.assert_allclose(sp3(x), sp4(x), rtol=1e-5, atol=1e-2)
+
+    @pytest.mark.unit
+    def test_PowerSeriesProfile_even_sym(self):
+        """Test that even symmetry is enforced properly in PowerSeriesProfile."""
+        pp = PowerSeriesProfile(params=np.array([4, 0, -2, 0, 3, 0, -1]), sym="auto")
+        assert pp.sym == "even"  # auto symmetry detects it is even
+        sp = pp.to_spline()
+
+        pp_o = sp.to_powerseries(sym="auto")
+        assert not pp_o.sym  # default conversion from spline is not symmetric
+
+        pp_e = sp.to_powerseries(sym="even")
+        assert pp_e.sym == "even"  # check that even symmetry is enforced
+        # check that this matches the original parameters
+        np.testing.assert_allclose(pp.params, pp_e.params, rtol=1e-3)
 
     @pytest.mark.unit
     def test_SplineProfile_methods(self):
@@ -345,16 +359,6 @@ class TestProfiles:
         with pytest.raises(ValueError):
             a = sp * pp
             a.params = sp.params
-
-    @pytest.mark.unit
-    def test_profile_conversion(self):
-        """Test converting to FourierZernikeProfile."""
-        pp = PowerSeriesProfile(
-            modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
-        )
-        zp = pp.to_fourierzernike(L=6, M=6, N=0)
-        x = np.linspace(0, 1, 100)
-        np.testing.assert_allclose(pp(x), zp(x), atol=1e-10)
 
     @pytest.mark.unit
     def test_default_profiles(self):

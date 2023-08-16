@@ -270,7 +270,7 @@ class MagneticField(IOAble, ABC):
             surface = surface[-1]
         if isinstance(surface, Equilibrium):
             eq = surface
-            surface = surface.surface
+            surface = eq.surface
         else:
             eq = None
         # TODO: test this error
@@ -287,7 +287,7 @@ class MagneticField(IOAble, ABC):
         trans = Transform(basis=basis, grid=grid, build_pinv=True)
 
         # compute Bnormal on the grid
-        Bnorm = self.compute_Bnormal(surface.surface, grid=grid, NFP=surface.NFP)
+        Bnorm = self.compute_Bnormal(surface, grid=grid, NFP=surface.NFP)
 
         # fit Bnorm with Fourier Series
         Bnorm_mn = trans.fit(Bnorm)

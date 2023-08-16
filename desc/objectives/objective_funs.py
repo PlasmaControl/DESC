@@ -8,6 +8,7 @@ import numpy as np
 
 from desc.backend import block_diag, jit, jnp, use_jax
 from desc.compute import arg_order
+from desc.compute.utils import compress
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.utils import Timer, is_broadcastable
@@ -949,11 +950,27 @@ class _Objective(IOAble, ABC):
             params = kwargs
         return params, constants
 
-    # TODO: update
-    def _scale(self, f):
+    def _scale(self, f, *args, **kwargs):
         """Apply weighting, normalization etc."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
+        # collocation grid weights
+        if self._coordinates == "":
+            w = jnp.ones((self.dim_f,))
+        elif self._coordinates == "rtz":
+            w = jnp.sqrt(self._transforms["grid"].weights)
+        elif self._coordinates == "r":
+            w = jnp.sqrt(
+                compress(
+                    constants["transforms"]["grid"],
+                    constants["transforms"]["grid"].spacing[:, 0],
+                    surface_label="rho",
+                )
+            )
+        w = jnp.tile(w, self.dim_f // w.size)
         f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
-        return f_norm * self.weight  # weighting
+        return f_norm * w * self.weight
 
     def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""

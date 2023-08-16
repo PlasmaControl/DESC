@@ -345,36 +345,79 @@ class TestObjectiveFunction:
 
 
 @pytest.mark.unit
+@pytest.mark.slow
 def test_compute_scalar_resolution():
     """Test that compute_scalar values are independent of grid resolution."""
     eq = get("HELIOTRON")
     res_array = np.arange(8, 17)
+
+    # BootstrapRedlConsistency
+
+    # CurrentDensity
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        obj = ObjectiveFunction(CurrentDensity(eq=eq, grid=grid), verbose=0)
+        obj.build()
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[0], rtol=2e-2)
+
+    # Energy
+
+    # ForceBalance
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        obj = ObjectiveFunction(ForceBalance(eq=eq, grid=grid), verbose=0)
+        obj.build()
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[0], atol=1e-8)
+
+    # HelicalForceBalance
+
+    # RadialForceBalance
 
     # GenericObjective
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
         obj = ObjectiveFunction(
-            GenericObjective("sqrt(g)", grid=grid), eq=eq, verbose=0
+            GenericObjective("sqrt(g)", eq=eq, grid=grid), verbose=0
         )
+        obj.build()
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[0], rtol=2e-2)
 
-    # ForceBalance
-    f = np.zeros_like(res_array, dtype=float)
-    for i, res in enumerate(res_array):
-        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(ForceBalance(grid=grid), eq=eq, verbose=0)
-        f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[0], atol=1e-8)
+    # AspectRatio
 
-    # CurrentDensity
+    # BScaleLength
+
+    # Elongation
+
+    # MeanCurvature
+
+    # PlasmaVesselDistance
+
+    # PrincipalCurvature
+
+    # Volume
+
+    # RotationalTransform
+
+    # ToroidalCurrent
+
+    # Isodynamicity
+
+    # QuasisymmetryBoozer
+
+    # QuasisymmetryTripleProduct
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(CurrentDensity(grid=grid), eq=eq, verbose=0)
+        obj = ObjectiveFunction(QuasisymmetryTripleProduct(eq=eq, grid=grid), verbose=0)
+        obj.build()
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[0], rtol=2e-2)
+    np.testing.assert_allclose(f, f[0], rtol=5e-2)
 
     # QuasisymmetryTwoTerm
     f = np.zeros_like(res_array, dtype=float)
@@ -387,13 +430,9 @@ def test_compute_scalar_resolution():
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[0], rtol=5e-2)
 
-    # QuasisymmetryTripleProduct
-    f = np.zeros_like(res_array, dtype=float)
-    for i, res in enumerate(res_array):
-        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(QuasisymmetryTripleProduct(grid=grid), eq=eq, verbose=0)
-        f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[0], rtol=5e-2)
+    # MagneticWell
+
+    # MercierStability
 
 
 @pytest.mark.unit

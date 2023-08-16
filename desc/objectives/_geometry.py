@@ -255,7 +255,7 @@ class BScaleLength(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["R0"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["R0"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

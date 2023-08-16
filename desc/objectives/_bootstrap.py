@@ -60,8 +60,7 @@ class BootstrapRedlConsistency(_Objective):
         Name of the objective function.
     """
 
-    _scalar = False
-    _linear = False
+    _coordinates = "r"
     _units = "(T A m^-2)"
     _print_value_fmt = "Bootstrap current self-consistency: {:10.3e} "
 
@@ -225,18 +224,6 @@ class BootstrapRedlConsistency(_Objective):
             data["<J*B>"] - data["<J*B> Redl"],
             surface_label="rho",
         )
-
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = compress(
-            constants["transforms"]["grid"],
-            constants["transforms"]["grid"].spacing[:, 0],
-            surface_label="rho",
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

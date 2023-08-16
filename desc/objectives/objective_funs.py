@@ -767,6 +767,7 @@ class _Objective(IOAble, ABC):
 
     _scalar = False
     _linear = False
+    _coordinates = "rtz"
     _equilibrium = False
     _io_attrs_ = [
         "_target",
@@ -788,6 +789,8 @@ class _Objective(IOAble, ABC):
         normalize_target=True,
         name=None,
     ):
+        if self._scalar:
+            assert self._coordinates == ""
         assert np.all(np.asarray(weight) > 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
@@ -983,6 +986,7 @@ class _Objective(IOAble, ABC):
             f_target = f - target
         return f_target
 
+    # TODO: update
     def _scale(self, f):
         """Apply weighting, normalization etc."""
         f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
@@ -996,6 +1000,7 @@ class _Objective(IOAble, ABC):
             f = jnp.sum(self.compute_scaled_error(*args, **kwargs) ** 2) / 2
         return f.squeeze()
 
+    # TODO: update
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         f = self.compute_unscaled(*args, **kwargs)

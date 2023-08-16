@@ -8,7 +8,12 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import rpz2xyz, xyz2rpz_vec
-from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve, XYZCurve
+from desc.geometry import (
+    FourierPlanarCurve,
+    FourierRZCurve,
+    FourierXYZCurve,
+    SplineXYZCurve,
+)
 from desc.grid import Grid
 from desc.magnetic_fields import MagneticField, biot_savart
 from desc.utils import errorif, flatten_list, isposint
@@ -303,7 +308,7 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
         super().__init__(current, center, normal, r_n, modes, name)
 
 
-class XYZCoil(Coil, XYZCurve):
+class SplineXYZCoil(Coil, SplineXYZCurve):
     """Coil parameterized by spline points in X,Y,Z.
 
     Parameters
@@ -314,10 +319,7 @@ class XYZCoil(Coil, XYZCurve):
         points for X, Y, Z describing a closed curve
     knots : ndarray
         arbitrary theta values to use for spline knots,
-        should be an 1D ndarray of same length as the input.
-        (input length in this case is determined by grid argument, since
-        the input coordinates come from
-        fourier_xyzcurve.compute("x",grid=grid))
+        should be an 1D ndarray of same length as the input X,Y,Z.
         If None, defaults to using an equal-arclength angle as the knots
         If supplied, will be rescaled to lie in [0,2pi]
     method : str
@@ -332,7 +334,7 @@ class XYZCoil(Coil, XYZCurve):
 
     """
 
-    _io_attrs_ = Coil._io_attrs_
+    _io_attrs_ = Coil._io_attrs_ + SplineXYZCurve._io_attrs_
 
     def __init__(
         self,
@@ -636,7 +638,7 @@ class CoilSet(Coil, MutableSequence):
 
     @classmethod
     def from_makegrid_coilfile(cls, coil_file, method="cubic"):
-        """Create a CoilSet of XYZCoils from a MAKEGRID-formatted coil txtfile.
+        """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
 
         Parameters
         ----------
@@ -650,7 +652,7 @@ class CoilSet(Coil, MutableSequence):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         """
-        coils = []  # list of XYZCoils
+        coils = []  # list of SplineXYZCoils
         coilinds = [2]  # always start at the 3rd line
         names = []
 
@@ -704,7 +706,7 @@ class CoilSet(Coil, MutableSequence):
             tempz = np.append(coords[:, 2], np.array([coords[0, 2]]))
 
             coils.append(
-                XYZCoil(
+                SplineXYZCoil(
                     coords[:, -1][0],
                     tempx,
                     tempy,

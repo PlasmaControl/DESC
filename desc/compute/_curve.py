@@ -517,10 +517,10 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["s"],
-    parameterization="desc.geometry.curve.XYZCurve",
+    parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="basis",
 )
-def _x_XYZCurve(params, transforms, profiles, data, **kwargs):
+def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
 
     Xq = interp1d(
@@ -574,10 +574,10 @@ def _x_XYZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x", "s"],
-    parameterization="desc.geometry.curve.XYZCurve",
+    parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="basis",
 )
-def _x_s_XYZCurve(params, transforms, profiles, data, **kwargs):
+def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
 
     dXq = interp1d(
@@ -634,10 +634,10 @@ def _x_s_XYZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x", "s"],
-    parameterization="desc.geometry.curve.XYZCurve",
+    parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="basis",
 )
-def _x_ss_XYZCurve(params, transforms, profiles, data, **kwargs):
+def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
 
     d2Xq = interp1d(
@@ -694,10 +694,10 @@ def _x_ss_XYZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x", "s"],
-    parameterization="desc.geometry.curve.XYZCurve",
+    parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="basis",
 )
-def _x_sss_XYZCurve(params, transforms, profiles, data, **kwargs):
+def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     xq = data["s"]
 
     d3Xq = interp1d(
@@ -874,9 +874,9 @@ def _length(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["s", "x", "x_s"],
-    parameterization="desc.geometry.curve.XYZCurve",
+    parameterization="desc.geometry.curve.SplineXYZCurve",
 )
-def _length_XYZCurve(params, transforms, profiles, data, **kwargs):
+def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     if params["_method"] == "nearest":  # cannot use derivative method as deriv=0
         coords = data["x"]
         if kwargs.get("basis", "rpz").lower() == "rpz":

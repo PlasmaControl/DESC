@@ -13,11 +13,7 @@ from desc.utils import copy_coeffs
 
 from .core import Curve
 
-__all__ = [
-    "FourierRZCurve",
-    "FourierXYZCurve",
-    "FourierPlanarCurve",
-]
+__all__ = ["FourierRZCurve", "FourierXYZCurve", "FourierPlanarCurve", "SplineXYZCurve"]
 
 
 class FourierRZCurve(Curve):
@@ -225,8 +221,8 @@ class FourierRZCurve(Curve):
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, basis="xyz", name=name)
 
-    def to_XYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
-        """Convert Curve to XYZCurve.
+    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
+        """Convert Curve to SplineXYZCurve.
 
         Parameters
         ----------
@@ -239,7 +235,7 @@ class FourierRZCurve(Curve):
             If None, defaults to using an equal-arclength angle as the knots
             If supplied, will be rescaled to lie in [0,2pi]
         grid : Grid, int or None
-            Grid used to evaluate curve coordinates on to fit with XYZCurve.
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCurve.
             If an integer, uses that many equally spaced points.
         method : str
             method of interpolation
@@ -253,12 +249,12 @@ class FourierRZCurve(Curve):
 
         Returns
         -------
-        XYZCurve: XYZCurve
+        SplineXYZCurve: SplineXYZCurve
             New representation of the curve parameterized by a spline for X,Y,Z.
 
         """
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
-        return XYZCurve.from_values(
+        return SplineXYZCurve.from_values(
             coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
@@ -461,8 +457,8 @@ class FourierXYZCurve(Curve):
         Z_n = transform.fit(coords_xyz[:, 2])
         return cls(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
 
-    def to_XYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
-        """Convert Curve to XYZCurve.
+    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
+        """Convert Curve to SplineXYZCurve.
 
         Parameters
         ----------
@@ -475,7 +471,7 @@ class FourierXYZCurve(Curve):
             If None, defaults to using an equal-arclength angle as the knots
             If supplied, will be rescaled to lie in [0,2pi]
         grid : Grid, int or None
-            Grid used to evaluate curve coordinates on to fit with XYZCurve.
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCurve.
             If an integer, uses that many equally spaced points.
         method : str
             method of interpolation
@@ -489,12 +485,12 @@ class FourierXYZCurve(Curve):
 
         Returns
         -------
-        XYZCurve: XYZCurve
+        SplineXYZCurve: SplineXYZCurve
             New representation of the curve parameterized by a spline for X,Y,Z.
 
         """
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
-        return XYZCurve.from_values(
+        return SplineXYZCurve.from_values(
             coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
@@ -657,8 +653,8 @@ class FourierPlanarCurve(Curve):
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, basis="xyz", name=name)
 
-    def to_XYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
-        """Convert Curve to XYZCurve.
+    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
+        """Convert Curve to SplineXYZCurve.
 
         Parameters
         ----------
@@ -671,7 +667,7 @@ class FourierPlanarCurve(Curve):
             If None, defaults to using an equal-arclength angle as the knots
             If supplied, will be rescaled to lie in [0,2pi]
         grid : Grid, int or None
-            Grid used to evaluate curve coordinates on to fit with XYZCurve.
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCurve.
             If an integer, uses that many equally spaced points.
         method : str
             method of interpolation
@@ -685,17 +681,17 @@ class FourierPlanarCurve(Curve):
 
         Returns
         -------
-        XYZCurve: XYZCurve
+        SplineXYZCurve: SplineXYZCurve
             New representation of the curve parameterized by a spline for X,Y,Z.
 
         """
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
-        return XYZCurve.from_values(
+        return SplineXYZCurve.from_values(
             coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
 
-class XYZCurve(Curve):
+class SplineXYZCurve(Curve):
     """Curve parameterized by spline knots in X,Y,Z.
 
     Parameters
@@ -704,7 +700,7 @@ class XYZCurve(Curve):
         points for X, Y, Z describing a closed curve
     knots : ndarray
         arbitrary theta values to use for spline knots,
-        should be an 1D ndarray of same length as the input.
+        should be an 1D ndarray of same length as the input X,Y,Z.
         If None, defaults to using an equal-arclength angle as the knot
         If supplied, will be rescaled to lie in [0,2pi]
     method : str
@@ -816,12 +812,12 @@ class XYZCurve(Curve):
 
     @classmethod
     def from_values(cls, coords, knots=None, method="cubic2", name="", basis="xyz"):
-        """Create XYZCurve from coordinate values.
+        """Create SplineXYZCurve from coordinate values.
 
         Parameters
         ----------
         coords: ndarray
-            coordinates to fit a XYZCurve object with.
+            coordinates to fit a SplineXYZCurve object with.
         knots : ndarray
             arbitrary theta values to use for spline knots,
             should be an 1D ndarray of same length as the input.
@@ -845,8 +841,8 @@ class XYZCurve(Curve):
 
         Returns
         -------
-        XYZCurve: XYZCurve,
-            XYZCurve object which is the spline representation of the FourierXYZCurve.
+        SplineXYZCurve: SplineXYZCurve,
+            SplineXYZCurve object, the spline representation of the FourierXYZCurve.
 
         """
         if basis == "rpz":

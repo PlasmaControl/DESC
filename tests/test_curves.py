@@ -3,7 +3,12 @@
 import numpy as np
 import pytest
 
-from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve, XYZCurve
+from desc.geometry import (
+    FourierPlanarCurve,
+    FourierRZCurve,
+    FourierXYZCurve,
+    SplineXYZCurve,
+)
 from desc.grid import Grid, LinearGrid
 
 
@@ -160,10 +165,10 @@ class TestRZCurve:
         )
 
     @pytest.mark.unit
-    def test_to_XYZCurve(self):
-        """Test conversion to XYZCurve."""
+    def test_to_SplineXYZCurve(self):
+        """Test conversion to SplineXYZCurve."""
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
-        xyz = rz.to_XYZCurve(grid=500)
+        xyz = rz.to_SplineXYZCurve(grid=500)
 
         grid = LinearGrid(N=20, endpoint=True)
 
@@ -269,12 +274,12 @@ class TestFourierXYZCurve:
 
     @pytest.mark.unit
     def test_to_FourierXYZCurve(self):
-        """Test fitting FourierXYZCurve from XYZCurve object."""
+        """Test fitting FourierXYZCurve from SplineXYZCurve object."""
         npts = 4000
         # make a simple circular curve of radius 2
         R = 2
         phi = np.linspace(0, 2 * np.pi, 1001, endpoint=True)
-        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
         c2 = c.to_FourierXYZCurve(N=1, grid=1000)
 
         np.testing.assert_allclose(
@@ -437,8 +442,8 @@ class TestPlanarCurve:
             c.normal = [4]
 
 
-class TestXYZCurve:
-    """Tests for XYZCurve class."""
+class testSplineXYZCurve:
+    """Tests for SplineXYZCurve class."""
 
     @pytest.mark.unit
     def test_length(self):
@@ -466,7 +471,7 @@ class TestXYZCurve:
             # if were simply missing one segment of a linear interpolation,
             #  to try to ensure we are not making that mistake
             atol = R * 2 * np.pi / npts if method not in ["nearest", "linear"] else 3e-3
-            c = XYZCurve(
+            c = SplineXYZCurve(
                 X=R * np.cos(phi),
                 Y=R * np.sin(phi),
                 Z=np.zeros_like(phi),
@@ -490,7 +495,7 @@ class TestXYZCurve:
 
             # make a simple circular curve with supplied knots as phi
             phi = np.linspace(0, 2 * np.pi, 201, endpoint=True)
-            c = XYZCurve(
+            c = SplineXYZCurve(
                 X=R * np.cos(phi),
                 Y=R * np.sin(phi),
                 Z=np.zeros_like(phi),
@@ -543,7 +548,7 @@ class TestXYZCurve:
         # make a simple circular curve of radius 2
         R = 3
         phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
-        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
         x, y, z = c.compute("x", grid=Grid(np.array([[0.0, 0.0, 0.0]])), basis="xyz")[
             "x"
         ].T
@@ -561,13 +566,13 @@ class TestXYZCurve:
         np.testing.assert_allclose(z, 1)
 
     @pytest.mark.unit
-    def test_to_XYZCurve(self):
-        """Test converting FourierXYZCurve to XYZCurve object."""
+    def test_to_SplineXYZCurve(self):
+        """Test converting FourierXYZCurve to SplineXYZCurve object."""
         npts = 4000
         # make a simple circular curve of radius 2
         R = 2
         c = FourierXYZCurve()
-        c2 = c.to_XYZCurve(grid=npts)
+        c2 = c.to_SplineXYZCurve(grid=npts)
 
         np.testing.assert_allclose(
             c.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
@@ -583,13 +588,13 @@ class TestXYZCurve:
 
     @pytest.mark.unit
     def test_asserts_and_errors(self):
-        """Test error checking when creating or setting properties of XYZCurve."""
+        """Test error checking when creating or setting properties of SplineXYZCurve."""
         # make a simple circular curve of radius 2
         R = 2
         phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
-        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
         with pytest.raises(AssertionError):
-            XYZCurve(
+            SplineXYZCurve(
                 X=R * np.cos(phi[:-1]),
                 Y=R * np.sin(phi[:-1]),
                 Z=np.zeros_like(phi[:-1]),
@@ -606,11 +611,11 @@ class TestXYZCurve:
 
     @pytest.mark.unit
     def test_misc(self):
-        """Test getting/setting misc attributes of XYZCurve."""
+        """Test getting/setting misc attributes of SplineXYZCurve."""
         # make a simple circular curve of radius 2
         R = 2
         phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
-        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
 
         s = c.copy()
         assert s.eq(c)
@@ -621,6 +626,6 @@ class TestXYZCurve:
         # make a simple circular curve of radius 2
         R = 2
         phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
-        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
         with pytest.raises(TypeError):
             c.compute("length", grid=np.linspace(0, 1, 10))

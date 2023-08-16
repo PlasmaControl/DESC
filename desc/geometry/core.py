@@ -69,7 +69,7 @@ class Curve(IOAble, ABC):
             Computed quantity and intermediate variables.
 
         """
-        # set a default numpts for the spline XYZCurve
+        # set a default numpts for the SplineXYZCurve
         N = self.N if hasattr(self, "N") else self.X.size
         if isinstance(names, str):
             names = [names]

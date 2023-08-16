@@ -111,7 +111,7 @@ _class_inheritance = {
     "desc.geometry.curve.FourierPlanarCurve": [
         "desc.geometry.core.Curve",
     ],
-    "desc.geometry.curve.XYZCurve": [
+    "desc.geometry.curve.SplineXYZCurve": [
         "desc.geometry.core.Curve",
     ],
     "desc.geometry.surface.FourierRZToroidalSurface": [
@@ -132,8 +132,8 @@ _class_inheritance = {
         "desc.geometry.curve.FourierPlanarCurve",
         "desc.geometry.core.Curve",
     ],
-    "desc.coils.XYZCoil": [
-        "desc.geometry.curve.XYZCurve",
+    "desc.coils.SplineXYZCoil": [
+        "desc.geometry.curve.SplineXYZCurve",
         "desc.geometry.core.Curve",
     ],
 }

@@ -28,7 +28,7 @@ Coils
     desc.coils.FourierRZCoil
     desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
-    desc.coils.XYZCoil
+    desc.coils.SplineXYZCoil
     desc.coils.CoilSet
 
 Continuation
@@ -89,7 +89,7 @@ Geometry
     desc.geometry.FourierXYZCurve
     desc.geometry.FourierPlanarCurve
     desc.geometry.FourierRZToroidalSurface
-    desc.geometry.XYZCurve
+    desc.geometry.SplineXYZCurve
     desc.geometry.ZernikeRZToroidalSection
 
 Grid

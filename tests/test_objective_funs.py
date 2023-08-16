@@ -245,7 +245,7 @@ class TestObjectiveFunction:
         idx_B = np.argsort(np.abs(B_mn))
 
         # check that largest amplitudes are the QH modes
-        np.testing.assert_allclose(B_mn[idx_B[-3:]], np.flip(B_mn[~idx][:3]))
+        np.testing.assert_allclose(B_mn[idx_B[-3:]], np.flip(np.delete(B_mn, idx)[:3]))
         # check that these QH modes are not returned by the objective
         assert [b not in f for b in B_mn[idx_B[-3:]]]
         # check that the objective returns the lowest amplitudes

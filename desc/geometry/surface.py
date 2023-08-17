@@ -7,7 +7,9 @@ import numpy as np
 
 from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
+from desc.grid import Grid
 from desc.io import InputReader
+from desc.transform import Transform
 from desc.utils import copy_coeffs
 
 from .core import Surface
@@ -346,6 +348,60 @@ class FourierRZToroidalSurface(Surface):
         modes_Z = np.array([[-1, 0], [0, -2], [-1, 1], [1, -2], [-1, 2]])
 
         surf = cls(R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z, NFP=NFP)
+        return surf
+
+    @classmethod
+    def from_values(cls, coords, nodes, M, N, NFP, sym=True):
+        """Create a surface from given R,Z coordinates in real space.
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical coordinates to fit as a FourierRZToroidalSurface
+        nodes : Grid or ndarray, shape(k,3)
+            Locations in (theta,zeta) where real space coordinates are given.
+            Expects same number of nodes as coords (N),
+            containing the theta and zeta angles corresponding to the
+            given coordinates (the rho coordinate is ignored).
+            This determines the poloidal and toroidal angle for the
+            resulting surface
+        M : int
+            poloidal resolution of basis used to fit surface with
+        N : int
+            toroidal resolution of basis used to fit surface with
+        NFP : int
+            number of toroidal field periods for surface
+        sym : bool
+            True if surface is stellarator-symmetric
+
+        Returns
+        -------
+        surface : FourierRZToroidalSurface
+            Surface with Fourier coefficients fitted from input coords.
+
+        """
+        if not isinstance(nodes, Grid):
+            nodes = Grid(nodes, sort=False)
+
+        R = coords[:, 0]
+        Z = coords[:, 2]
+        R_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
+        Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+
+        transform = Transform(nodes, R_basis, build=False, build_pinv=True)
+        Rb_lmn = transform.fit(R)
+
+        transform = Transform(nodes, Z_basis, build=False, build_pinv=True)
+        Zb_lmn = transform.fit(Z)
+
+        surf = cls(
+            Rb_lmn,
+            Zb_lmn,
+            R_basis.modes[:, 1:],
+            Z_basis.modes[:, 1:],
+            NFP,
+            sym,
+        )
         return surf
 
 

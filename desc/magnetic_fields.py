@@ -198,7 +198,7 @@ class MagneticField(IOAble, ABC):
         return self.compute_magnetic_field(coords, params, basis)
 
     def compute_Bnormal(
-        self, surface, eval_grid=None, source_grid=None, NFP=None, basis="rpz"
+        self, surface, eval_grid=None, source_grid=None, params=None, basis="rpz"
     ):
         """Compute Bnormal from self on the given surface.
 
@@ -212,18 +212,14 @@ class MagneticField(IOAble, ABC):
             if None defaults to a LinearGrid with twice
             the surface poloidal and toroidal resolutions
             points are in surface angular coordinates i.e theta and zeta
-        eval_grid : Grid, optional
-            Grid of points on the surface to calculate the Bnormal at,
-            if None defaults to a LinearGrid with twice
-            the surface poloidal and toroidal resolutions
-            points are in surface angular coordinates i.e theta and zeta
         source_grid : Grid, int or None
             Grid used to discretize MagneticField object if calculating
             B from biot savart. If an integer, uses that many equally spaced
             points.
-        NFP : int, optional
-            Number of field periods for compute grid, if None
-            defaults to surface.NFP.
+        params : list or tuple of dict, optional
+            parameters to pass to underlying field's compute_magnetic_field function.
+            If None, uses the default parameters for each field.
+            If a list or tuple, should have one entry for each component field.
         basis : {"rpz", "xyz"}
             basis for returned coordinates on the surface
             cylindrical "rpz" by default
@@ -240,18 +236,18 @@ class MagneticField(IOAble, ABC):
             surface = surface[-1]
         if isinstance(surface, Equilibrium):
             surface = surface.surface
-        if NFP is None:
-            NFP = surface.NFP
         if eval_grid is None:
             eval_grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=NFP
+                rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
             )
         data = surface.compute(["x", "e_theta", "e_zeta"], grid=eval_grid, basis="xyz")
         coords = data["x"]
         rs_t = data["e_theta"]
         rs_z = data["e_zeta"]
         surf_normal = cross(rs_t, rs_z)
-        B = self.compute_magnetic_field(coords, basis="xyz", grid=source_grid)
+        B = self.compute_magnetic_field(
+            coords, basis="xyz", grid=source_grid, params=params
+        )
 
         Bnorm = jnp.sum(B * surf_normal, axis=-1)
 
@@ -268,6 +264,7 @@ class MagneticField(IOAble, ABC):
         basis_N=24,
         eval_grid=None,
         source_grid=None,
+        params=None,
         sym="sin",
         scale_by_curpol=True,
     ):
@@ -295,6 +292,10 @@ class MagneticField(IOAble, ABC):
             Grid used to discretize MagneticField object if calculating
             B from biot savart. If an integer, uses that many equally spaced
             points.
+        params : list or tuple of dict, optional
+            parameters to pass to underlying field's compute_magnetic_field function.
+            If None, uses the default parameters for each field.
+            If a list or tuple, should have one entry for each component field.
         sym : str, optional
             if Bnormal is symmetric, by default "sin"
             NOTE: BNORM code only ever deals with sin-symmetric modes, so results
@@ -338,7 +339,7 @@ class MagneticField(IOAble, ABC):
 
         # compute Bnormal on the grid
         Bnorm, _ = self.compute_Bnormal(
-            surface, eval_grid=eval_grid, source_grid=source_grid, NFP=surface.NFP
+            surface, eval_grid=eval_grid, source_grid=source_grid, params=params
         )
 
         # fit Bnorm with Fourier Series

@@ -56,11 +56,7 @@ class Coil(MagneticField, ABC):
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
-        The coil is discretized into a series of straight line segments, using
-        the coil ``grid`` attribute. To override this, include 'grid' as a key
-        in the `params` dictionary with the desired grid resolution.
-
-        Similarly, the coil current may be overridden by including `current`
+        The coil current may be overridden by including `current`
         in the `params` dictionary.
 
         Parameters

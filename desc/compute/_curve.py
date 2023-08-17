@@ -570,7 +570,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     },
     profiles=[],
     coordinates="s",
-    data=["x", "s"],
+    data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="basis",
 )
@@ -653,7 +653,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     },
     profiles=[],
     coordinates="s",
-    data=["x", "s"],
+    data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="basis",
 )
@@ -736,7 +736,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     },
     profiles=[],
     coordinates="s",
-    data=["x", "s"],
+    data=["s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
     basis="basis",
 )

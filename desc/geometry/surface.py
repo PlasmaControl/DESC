@@ -4,9 +4,11 @@ import numbers
 import warnings
 
 import numpy as np
+import scipy
 
 from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
+from desc.compute import xyz2rpz
 from desc.grid import Grid
 from desc.io import InputReader
 from desc.transform import Transform
@@ -403,6 +405,79 @@ class FourierRZToroidalSurface(Surface):
             sym,
         )
         return surf
+
+    @classmethod
+    def constant_offset_surface(cls, base_surface, offset, grid, M=None, N=None):
+        """Create a FourierRZSurface with constant offset from the given surface.
+
+        Implementation of algorithm described in Appendix B of
+        "An improved current potential method for fast computation of
+        stellarator coil shapes", Landreman (2017)
+        https://iopscience.iop.org/article/10.1088/1741-4326/aa57d4
+
+        Parameters
+        ----------
+        base_surface : FourierRZToroidalSurface
+            Surface from which the constant offset surface will be found.
+        offset : float
+            constant offset (in m) of the desired surface from the input surface
+            offset will be in the normal direction to the surface.
+        grid : Grid
+            Grid object of the points on the given surface to evaluate the corresponding
+            offset points at, from which the offset surface will be created by fitting
+            offset points with the basis defined by the given M and N
+        M : int, optional
+            Poloidal resolution of the basis used to fit the offset points
+            to create the resulting constant offset surface, by default equal
+            to base_surface.M
+        N : int, optional
+            Toroidal resolution of the basis used to fit the offset points
+            to create the resulting constant offset surface, by default equal
+            to base_surface.N
+        Returns
+        -------
+        offset_surface : FourierRZToroidalSurface
+            FourierRZToroidalSurface, created from fitting points offset from the input
+            surface by the given constant offset.
+        """
+        M = base_surface.M if M is None else M
+        N = base_surface.N if N is None else N
+
+        def n_and_r(grid):
+            data = base_surface.compute(
+                ["x", "e_theta", "e_zeta"], grid=grid, basis="xyz"
+            )
+            re = data["x"]
+
+            re_t = data["e_theta"]
+            re_z = data["e_zeta"]
+            n = np.cross(re_t, re_z)
+            r_offset = re + offset * (n.T / np.linalg.norm(n, axis=1)).T
+            return n, re, r_offset
+
+        def fun(zeta_hat, theta, zeta):
+            nodes = np.vstack((np.ones_like(theta), theta, zeta_hat)).T
+            grid = Grid(nodes)
+            n, r, r_offset = n_and_r(grid)
+            return np.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
+
+        zetas = []
+        for node in grid.nodes:
+            root = scipy.optimize.fsolve(fun, node[2], args=(node[1], node[2]))
+            zetas.append(root[0])
+        zetas = np.asarray(zetas)
+        nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
+        grid_offset = Grid(nodes)
+        n, re, r_offsets = n_and_r(grid_offset)
+        offset_surface = cls.from_values(
+            xyz2rpz(r_offsets),
+            grid_offset,
+            M=M,
+            N=N,
+            NFP=base_surface.NFP,
+            sym=base_surface.sym,
+        )
+        return offset_surface, n, re, r_offsets
 
 
 class ZernikeRZToroidalSection(Surface):

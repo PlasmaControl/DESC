@@ -137,6 +137,159 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(data["curvature_k1_rho"], 0)
         np.testing.assert_allclose(data["curvature_k2_rho"], -1)
 
+    @pytest.mark.unit
+    def test_constant_offset_surface_circle(self):
+        """Test constant offset algorithm for a circular torus."""
+        s = FourierRZToroidalSurface()
+        grid = LinearGrid(M=3, N=2)
+        offset = 1
+        (
+            s_offset,
+            _,
+            r_surf,
+            r_offset_surf,
+        ) = FourierRZToroidalSurface.constant_offset_surface(s, offset, grid, M=1, N=1)
+        dists = np.linalg.norm(r_surf - r_offset_surf, axis=1)
+        np.testing.assert_allclose(dists, 1, atol=1e-16)
+        R00_offset_ind = s_offset.R_basis.get_idx(M=0, N=0)
+        R00_offset = s_offset.R_lmn[R00_offset_ind]
+        R10_offset_ind = s_offset.R_basis.get_idx(M=1, N=0)
+        R10_offset = s_offset.R_lmn[R10_offset_ind]
+        Zneg10_offset_ind = s_offset.Z_basis.get_idx(M=-1, N=0)
+        Zneg10_offset = s_offset.Z_lmn[Zneg10_offset_ind]
+
+        np.testing.assert_allclose(R00_offset, 10)
+        np.testing.assert_allclose(R10_offset, 2)
+        np.testing.assert_allclose(Zneg10_offset, -2)
+        np.testing.assert_allclose(
+            np.delete(
+                s_offset.R_lmn,
+                np.array([R00_offset_ind, R10_offset_ind]),
+            ),
+            0,
+            atol=9e-15,
+        )
+        np.testing.assert_allclose(
+            np.delete(
+                s_offset.Z_lmn,
+                Zneg10_offset_ind,
+            ),
+            0,
+            atol=9e-15,
+        )
+        grid_compute = LinearGrid(M=10, N=10)
+        data = s.compute(["x", "e_theta", "e_zeta"], basis="rpz", grid=grid_compute)
+        data_offset = s_offset.compute(
+            ["x", "e_theta", "e_zeta"], basis="rpz", grid=grid_compute
+        )
+        dists = np.linalg.norm(data["x"] - data_offset["x"], axis=1)
+        np.testing.assert_allclose(dists, 1, atol=1e-16)
+        correct_data_offset = {
+            "e_theta": np.vstack(
+                (
+                    -2 * np.sin(grid_compute.nodes[:, 1]),
+                    np.zeros_like(grid_compute.nodes[:, 1]),
+                    -2 * np.cos(grid_compute.nodes[:, 1]),
+                )
+            ).T,
+            "e_zeta": np.vstack(
+                (
+                    np.zeros_like(grid_compute.nodes[:, 1]),
+                    data_offset["x"][:, 0],
+                    np.zeros_like(grid_compute.nodes[:, 1]),
+                )
+            ).T,
+        }
+        for key in ["e_theta", "e_zeta"]:
+            np.testing.assert_allclose(
+                correct_data_offset[key],
+                data_offset[key],
+                atol=1e-4,
+                err_msg=f"Failed test at comparison of {key}",
+            )
+
+    @pytest.mark.slow
+    @pytest.mark.unit
+    def test_constant_offset_surface_rot_ellipse(self):
+        """Test constant offset algorithm for a rotating ellipse."""
+        # make rotating ellipse
+        R0 = 10
+        a = 2  # plasma semi-major radius (m) = a + b
+        b = 1  # plasma semi-minor radius (m) = a - b
+
+        s = FourierRZToroidalSurface(
+            R_lmn=np.array([R0, -a, -b, b]),  # boundary coefficients
+            Z_lmn=np.array([a, -b, -b]),
+            modes_R=np.array(
+                [[0, 0], [1, 0], [1, 1], [-1, -1]]
+            ),  # [M, N] boundary Fourier modes
+            modes_Z=np.array([[-1, 0], [-1, 1], [1, -1]]),
+            NFP=2,  # number of (toroidal) field periods
+        )
+        grid = LinearGrid(M=4, N=4)
+        offset = 1
+        (
+            s_offset,
+            _,
+            r_surf,
+            r_offset_surf,
+        ) = FourierRZToroidalSurface.constant_offset_surface(s, offset, grid, M=2, N=2)
+        dists = np.linalg.norm(r_surf - r_offset_surf, axis=1)
+
+        np.testing.assert_allclose(dists, 1, atol=1e-16)
+        R00_offset_ind = s_offset.R_basis.get_idx(M=0, N=0)
+        R00_offset = s_offset.R_lmn[R00_offset_ind]
+        R10_offset_ind = s_offset.R_basis.get_idx(M=1, N=0)
+        R10_offset = s_offset.R_lmn[R10_offset_ind]
+        R11_offset_ind = s_offset.R_basis.get_idx(M=1, N=1)
+        R11_offset = s_offset.R_lmn[R11_offset_ind]
+        Rneg1neg1_offset_ind = s_offset.R_basis.get_idx(M=-1, N=-1)
+        Rneg1neg1_offset = s_offset.R_lmn[Rneg1neg1_offset_ind]
+
+        Zneg10_offset_ind = s_offset.Z_basis.get_idx(M=-1, N=0)
+        Zneg10_offset = s_offset.Z_lmn[Zneg10_offset_ind]
+        Zneg11_offset_ind = s_offset.Z_basis.get_idx(M=-1, N=1)
+        Zneg11_offset = s_offset.Z_lmn[Zneg11_offset_ind]
+        Z1neg1_offset_ind = s_offset.Z_basis.get_idx(M=1, N=-1)
+        Z1neg1_offset = s_offset.Z_lmn[Z1neg1_offset_ind]
+
+        np.testing.assert_allclose(R00_offset, R0)
+        np.testing.assert_allclose(R10_offset, -a - offset)
+        np.testing.assert_allclose(R11_offset, -b)
+        np.testing.assert_allclose(Rneg1neg1_offset, b)
+
+        np.testing.assert_allclose(Zneg10_offset, -a - offset)
+        np.testing.assert_allclose(Zneg11_offset, -b)
+        np.testing.assert_allclose(Z1neg1_offset, -b)
+
+        np.testing.assert_allclose(
+            np.delete(
+                s_offset.R_lmn,
+                np.array(
+                    [
+                        R00_offset_ind,
+                        R10_offset_ind,
+                        R11_offset_ind,
+                        Rneg1neg1_offset_ind,
+                    ]
+                ),
+            ),
+            0,
+            atol=9e-15,
+        )
+        np.testing.assert_allclose(
+            np.delete(
+                s_offset.Z_lmn, Zneg10_offset_ind, Zneg11_offset_ind, Z1neg1_offset_ind
+            ),
+            0,
+            atol=9e-15,
+        )
+        grid_compute = LinearGrid(M=10, N=10)
+        data = s.compute(["x"], basis="rpz", grid=grid_compute)
+        data_offset = s_offset.compute(["x"], basis="rpz", grid=grid_compute)
+        dists = np.linalg.norm(data["x"] - data_offset["x"], axis=1)
+        np.testing.assert_allclose(dists, 1, atol=1e-16)
+
 
 class TestZernikeRZToroidalSection:
     """Tests for ZerinkeRZTorioidalSection class."""

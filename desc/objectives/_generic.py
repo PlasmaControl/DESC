@@ -220,9 +220,6 @@ class GenericObjective(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
-    _units = "(Unknown)"
     _print_value_fmt = "Residual: {:10.3e} "
 
     def __init__(
@@ -250,6 +247,12 @@ class GenericObjective(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
+        self._scalar = not bool(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["dim"]
+        )
+        self._coordinates = data_index["desc.equilibrium.equilibrium.Equilibrium"][
+            self.f
+        ]["coordinates"]
         self._units = (
             "("
             + data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["units"]

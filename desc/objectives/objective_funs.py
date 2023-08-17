@@ -8,7 +8,6 @@ import numpy as np
 
 from desc.backend import block_diag, jit, jnp, use_jax
 from desc.compute import arg_order
-from desc.compute.utils import compress
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.utils import Timer, is_broadcastable
@@ -769,6 +768,7 @@ class _Objective(IOAble, ABC):
     _scalar = False
     _linear = False
     _coordinates = "rtz"
+    _units = "(Unknown)"
     _equilibrium = False
     _io_attrs_ = [
         "_target",
@@ -962,10 +962,8 @@ class _Objective(IOAble, ABC):
             w = jnp.sqrt(self._transforms["grid"].weights)
         elif self._coordinates == "r":
             w = jnp.sqrt(
-                compress(
-                    constants["transforms"]["grid"],
-                    constants["transforms"]["grid"].spacing[:, 0],
-                    surface_label="rho",
+                constants["transforms"]["grid"].compress(
+                    constants["transforms"]["grid"].spacing[:, 0], surface_label="rho"
                 )
             )
         w = jnp.tile(w, self.dim_f // w.size)

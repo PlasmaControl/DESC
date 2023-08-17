@@ -81,7 +81,7 @@ class Curve(IOAble, ABC):
             grid = LinearGrid(N=grid, NFP=NFP, endpoint=True)
         elif isinstance(grid, Grid):
             NFP = grid.NFP
-        elif not isinstance(grid, Grid):
+        else:
             raise TypeError(
                 "must pass in a Grid object or an integer for argument grid!"
                 f" instead got type {type(grid)}"

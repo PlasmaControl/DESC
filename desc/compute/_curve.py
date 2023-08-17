@@ -33,7 +33,7 @@ def _s(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x",
-    label="\\mathbf{r}",
+    label="\\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve",
@@ -69,7 +69,7 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_s",
-    label="\\partial_{s} \\mathbf{r}",
+    label="\\partial_{s} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, first derivative",
@@ -111,7 +111,7 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_ss",
-    label="\\partial_{ss} \\mathbf{r}",
+    label="\\partial_{ss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, second derivative",
@@ -158,7 +158,7 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_sss",
-    label="\\partial_{sss} \\mathbf{r}",
+    label="\\partial_{sss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, third derivative",
@@ -212,7 +212,7 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x",
-    label="\\mathbf{r}",
+    label="\\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve",
@@ -247,7 +247,7 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_s",
-    label="\\partial_{s} \\mathbf{r}",
+    label="\\partial_{s} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, first derivative",
@@ -282,7 +282,7 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_ss",
-    label="\\partial_{ss} \\mathbf{r}",
+    label="\\partial_{ss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, second derivative",
@@ -321,7 +321,7 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_sss",
-    label="\\partial_{sss} \\mathbf{r}",
+    label="\\partial_{sss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, third derivative",
@@ -360,7 +360,7 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x",
-    label="\\mathbf{r}",
+    label="\\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve",
@@ -393,7 +393,7 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_s",
-    label="\\partial_{s} \\mathbf{r}",
+    label="\\partial_{s} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, first derivative",
@@ -430,7 +430,7 @@ def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_ss",
-    label="\\partial_{ss} \\mathbf{r}",
+    label="\\partial_{ss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, second derivative",
@@ -467,7 +467,7 @@ def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_sss",
-    label="\\partial_{sss} \\mathbf{r}",
+    label="\\partial_{sss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, third derivative",
@@ -504,7 +504,7 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x",
-    label="\\mathbf{r}",
+    label="\\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve",
@@ -558,7 +558,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_s",
-    label="\\partial_{s} \\mathbf{r}",
+    label="\\partial_{s} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, first derivative",
@@ -618,7 +618,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_ss",
-    label="\\partial_{ss} \\mathbf{r}",
+    label="\\partial_{ss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, second derivative",
@@ -678,7 +678,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_sss",
-    label="\\partial_{sss} \\mathbf{r}",
+    label="\\partial_{sss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, third derivative",

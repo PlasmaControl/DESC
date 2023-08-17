@@ -445,30 +445,48 @@ class FourierRZToroidalSurface(Surface):
 
         def n_and_r(grid):
             data = base_surface.compute(
-                ["x", "e_theta", "e_zeta"], grid=grid, basis="xyz"
+                ["x", "e_theta", "e_zeta", "n_rho"], grid=grid, basis="xyz"
             )
             re = data["x"]
 
-            re_t = data["e_theta"]
-            re_z = data["e_zeta"]
-            n = np.cross(re_t, re_z)
-            r_offset = re + offset * (n.T / np.linalg.norm(n, axis=1)).T
-            return n, re, r_offset
+            n = data["n_rho"]
+            r_offset = re + offset * n
+            return n, re, r_offset, data
 
         def fun(zeta_hat, theta, zeta):
             nodes = np.vstack((np.ones_like(theta), theta, zeta_hat)).T
             grid = Grid(nodes)
-            n, r, r_offset = n_and_r(grid)
+            n, r, r_offset, data = n_and_r(grid)
             return np.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
+
+        def fprime(zeta_hat, theta, zeta):
+            nodes = np.vstack((np.ones_like(theta), theta, zeta_hat)).T
+            grid = Grid(nodes)
+            _, _, r_offset, data = n_and_r(grid)
+            data = base_surface.compute(["e_zeta", "n_rho_z"], grid=grid, data=data)
+            dr_offset_dz = data["e_zeta"] + offset * data["n_rho_z"]
+            dx_offset_dz = dr_offset_dz[:, 0]
+            dy_offset_dz = dr_offset_dz[:, 1]
+            x_offset = r_offset[:, 0]
+            y_offset = r_offset[:, 1]
+
+            deriv = (
+                1
+                / (1 + (y_offset / x_offset) ** 2)
+                * (dy_offset_dz / x_offset - y_offset / x_offset**2 * dx_offset_dz)
+            )
+            return deriv
 
         zetas = []
         for node in grid.nodes:
-            root = scipy.optimize.fsolve(fun, node[2], args=(node[1], node[2]))
+            root = scipy.optimize.fsolve(
+                fun, node[2], args=(node[1], node[2]), fprime=fprime
+            )
             zetas.append(root[0])
         zetas = np.asarray(zetas)
         nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
         grid_offset = Grid(nodes)
-        n, re, r_offsets = n_and_r(grid_offset)
+        n, re, r_offsets, _ = n_and_r(grid_offset)
         offset_surface = cls.from_values(
             xyz2rpz(r_offsets),
             grid_offset,

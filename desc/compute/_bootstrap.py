@@ -312,7 +312,7 @@ def j_dot_B_Redl(
 @register_compute_fun(
     name="<J*B> Redl",
     label="\\langle\\mathbf{J}\\cdot\\mathbf{B}\\rangle_{Redl}",
-    units="T A m^{-2}",
+    units="N / m^{3}",
     units_long="Tesla Ampere / meter^2",
     description="Bootstrap current profile, Redl model for quasisymmetry",
     dim=1,

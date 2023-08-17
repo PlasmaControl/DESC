@@ -605,14 +605,40 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         period=params["_period"],
     )
 
-    coords = jnp.stack([dXq, dYq, dZq], axis=1)
-    coords = coords @ transforms["rotmat"].T
+    Xq = interp1d(
+        xq,
+        params["_knots"],
+        params["X"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+    Yq = interp1d(
+        xq,
+        params["_knots"],
+        params["Y"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+    Zq = interp1d(
+        xq,
+        params["_knots"],
+        params["Z"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+
+    coords_s = jnp.stack([dXq, dYq, dZq], axis=1)
+    coords_s = coords_s @ transforms["rotmat"].T
+
+    coords = jnp.stack([Xq, Yq, Zq], axis=1)
+    coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+
     if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz_vec(
-            coords,
-            phi=data["x"][:, 1],
-        )  # TODO: possible issue if data is passed in with "x" but in cartesian?
-    data["x_s"] = coords
+        coords_s = xyz2rpz_vec(coords_s, x=coords[:, 0], y=coords[:, 1])
+    data["x_s"] = coords_s
     return data
 
 
@@ -665,14 +691,40 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         period=params["_period"],
     )
 
-    coords = jnp.stack([d2Xq, d2Yq, d2Zq], axis=1)
-    coords = coords @ transforms["rotmat"].T
+    Xq = interp1d(
+        xq,
+        params["_knots"],
+        params["X"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+    Yq = interp1d(
+        xq,
+        params["_knots"],
+        params["Y"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+    Zq = interp1d(
+        xq,
+        params["_knots"],
+        params["Z"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+
+    coords_ss = jnp.stack([d2Xq, d2Yq, d2Zq], axis=1)
+    coords_ss = coords_ss @ transforms["rotmat"].T
+
+    coords = jnp.stack([Xq, Yq, Zq], axis=1)
+    coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+
     if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz_vec(
-            coords,
-            phi=data["x"][:, 1],
-        )  # TODO: possible issue if data is passed in with "x" but in cartesian?
-    data["x_ss"] = coords
+        coords_ss = xyz2rpz_vec(coords_ss, x=coords[:, 0], y=coords[:, 1])
+    data["x_ss"] = coords_ss
     return data
 
 
@@ -725,14 +777,40 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         period=params["_period"],
     )
 
-    coords = jnp.stack([d3Xq, d3Yq, d3Zq], axis=1)
-    coords = coords @ transforms["rotmat"].T
+    Xq = interp1d(
+        xq,
+        params["_knots"],
+        params["X"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+    Yq = interp1d(
+        xq,
+        params["_knots"],
+        params["Y"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+    Zq = interp1d(
+        xq,
+        params["_knots"],
+        params["Z"],
+        method=params["_method"],
+        derivative=0,
+        period=params["_period"],
+    )
+
+    coords_sss = jnp.stack([d3Xq, d3Yq, d3Zq], axis=1)
+    coords_sss = coords_sss @ transforms["rotmat"].T
+
+    coords = jnp.stack([Xq, Yq, Zq], axis=1)
+    coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+
     if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz_vec(
-            coords,
-            phi=data["x"][:, 1],
-        )  # TODO: possible issue if data is passed in with "x" but in cartesian?
-    data["x_sss"] = coords
+        coords_sss = xyz2rpz_vec(coords_sss, x=coords[:, 0], y=coords[:, 1])
+    data["x_sss"] = coords_sss
 
     return data
 

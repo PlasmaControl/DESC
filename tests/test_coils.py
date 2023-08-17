@@ -98,7 +98,7 @@ class TestCoilSet:
             modes_Z=np.array([[-1, 0]]),
         )
 
-        B_normal = coils.compute_Bnormal(surf)
+        B_normal, _ = coils.compute_Bnormal(surf)
         np.testing.assert_allclose(B_normal, 0, atol=1e-9)
 
     @pytest.mark.unit
@@ -380,9 +380,9 @@ def test_save_and_load_MAKEGRID_coils_rotated(tmpdir_factory):
         modes_Z=np.array([[-1, 0]]),
     )
 
-    B_normal = coilset.compute_Bnormal(surf)
+    B_normal, _ = coilset.compute_Bnormal(surf, source_grid=grid)
     np.testing.assert_allclose(B_normal, 0, atol=1e-9)
-    B_normal = coilset2.compute_Bnormal(surf)
+    B_normal, _ = coilset2.compute_Bnormal(surf)
     np.testing.assert_allclose(B_normal, 0, atol=1e-9)
 
 

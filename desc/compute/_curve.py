@@ -565,9 +565,6 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X", "Y", "Z", "_knots", "_period", "_method"],
     transforms={
-        "X": [[0, 0, 0], [0, 0, 1]],
-        "Y": [[0, 0, 0], [0, 0, 1]],
-        "Z": [[0, 0, 1]],
         "rotmat": [],
         "shift": [],
     },
@@ -651,9 +648,6 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X", "Y", "Z", "_knots", "_period", "_method"],
     transforms={
-        "X": [[0, 0, 0], [0, 0, 2]],
-        "Y": [[0, 0, 0], [0, 0, 2]],
-        "Z": [[0, 0, 2]],
         "rotmat": [],
         "shift": [],
     },
@@ -737,9 +731,6 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X", "Y", "Z", "_knots", "_period", "_method"],
     transforms={
-        "X": [[0, 0, 0], [0, 0, 3]],
-        "Y": [[0, 0, 0], [0, 0, 3]],
-        "Z": [[0, 0, 3]],
         "rotmat": [],
         "shift": [],
     },

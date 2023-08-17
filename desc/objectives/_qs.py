@@ -2,8 +2,6 @@
 
 import warnings
 
-import numpy as np
-
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid
@@ -297,7 +295,7 @@ class QuasisymmetryBoozer(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._dim_f = np.sum(self._idx)
+        self._dim_f = self._idx.size
 
         if self._normalize:
             scales = compute_scaling_factors(eq)

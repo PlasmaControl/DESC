@@ -5,7 +5,7 @@ import re
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.utils import compress, get_params, get_profiles, get_transforms
+from desc.compute.utils import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.profiles import Profile
 from desc.utils import Timer
@@ -282,6 +282,8 @@ class GenericObjective(_Objective):
         if data_index[p][self.f]["dim"] == 0:
             self._dim_f = 1
             self._scalar = True
+        elif data_index[p][self.f]["coordinates"] == "r":
+            self._dim_f = grid.num_rho
         else:
             self._dim_f = grid.num_nodes * data_index[p][self.f]["dim"]
             self._scalar = False
@@ -323,7 +325,12 @@ class GenericObjective(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data[self.f]
+        if self._coordinates == "r":
+            return constants["transforms"]["grid"].compress(
+                data[self.f], surface_label="rho"
+            )
+        else:
+            return data[self.f]
 
 
 class RotationalTransform(_Objective):
@@ -474,8 +481,8 @@ class RotationalTransform(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return compress(
-            constants["transforms"]["grid"], data["iota"], surface_label="rho"
+        return constants["transforms"]["grid"].compress(
+            data["iota"], surface_label="rho"
         )
 
     def print_value(self, *args, **kwargs):
@@ -636,8 +643,8 @@ class ToroidalCurrent(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return compress(
-            constants["transforms"]["grid"], data["current"], surface_label="rho"
+        return constants["transforms"]["grid"].compress(
+            data["current"], surface_label="rho"
         )
 
     def print_value(self, *args, **kwargs):

@@ -181,8 +181,6 @@ class BScaleLength(_Objective):
 
     """
 
-    _scalar = True
-    _coordinates = ""
     _units = "(m)"
     _print_value_fmt = "Magnetic field scale length: {:10.3e} "
 
@@ -506,7 +504,7 @@ class MeanCurvature(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
 
@@ -675,11 +673,11 @@ class PlasmaVesselDistance(_Objective):
         """
         eq = eq or self._eq
         if self._surface_grid is None:
-            surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             surface_grid = self._surface_grid
         if self._plasma_grid is None:
-            plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             plasma_grid = self._plasma_grid
         if not np.allclose(surface_grid.nodes[:, 0], 1):
@@ -871,7 +869,7 @@ class PrincipalCurvature(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
 

@@ -51,8 +51,7 @@ class MagneticWell(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
+    _coordinates = "r"
     _units = "(dimensionless)"
     _print_value_fmt = "Magnetic Well: {:10.3e} "
 
@@ -223,8 +222,7 @@ class MercierStability(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
+    _coordinates = "r"
     _units = "(Wb^-2)"
     _print_value_fmt = "Mercier Stability: {:10.3e} "
 

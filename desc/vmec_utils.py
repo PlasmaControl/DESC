@@ -267,7 +267,7 @@ def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=Non
         else:
             idx_MN = np.nonzero(vmec_modes[:, 1] * N == vmec_modes[:, 2] * M)[0]
         idx[idx_MN] = False
-
+        idx = np.nonzero(idx)[0]
         return matrix, vmec_modes, idx
 
     return matrix, vmec_modes
@@ -482,6 +482,7 @@ def print_vmec_boundary(eq):
 
     for m, n, rbc, zbs in np.vstack((np.atleast_2d(M), np.atleast_2d(N), RBC, ZBS)).T:
         print(
-            f"  RBC({n:2.0f},{m:2.0f}) = {rbc:+14.8e}  ZBS({n:2.0f},{m:2.0f}) = {zbs:+14.8e}"
+            f"  RBC({n:2.0f},{m:2.0f}) = {rbc:+14.8e}"
+            + f"  ZBS({n:2.0f},{m:2.0f}) = {zbs:+14.8e}"
         )
     return None

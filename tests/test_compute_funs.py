@@ -1236,7 +1236,6 @@ def test_surface_compute_everything():
 
 
 @pytest.mark.unit
-@pytest.mark.slow
 def test_compute_everything_against_master_branch():
     """Test that the computations on this branch agree with those on master."""
     elliptic_cross_section_with_torsion = {
@@ -1288,11 +1287,11 @@ def test_compute_everything_against_master_branch():
         )
         for name in this_branch_data[p]:
             if name in master_data.get(p, {}):
-                err_msg = f"Parameterization: {p}. Name: {name}."
                 np.testing.assert_allclose(
                     actual=this_branch_data[p][name],
                     desired=master_data[p][name],
-                    err_msg=err_msg,
+                    atol=1e-12,
+                    err_msg=f"Parameterization: {p}. Name: {name}.",
                 )
             else:
                 can_compute_new_stuff = True

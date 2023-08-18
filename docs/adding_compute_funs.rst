@@ -25,6 +25,7 @@ The full code is below:
         coordinates="rtz",
         data=["sqrt(g)", "B_zeta_t", "B_theta_z"],
         axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
+        parameterization="desc.equilibrium.equilibrium.Equilibrium",
     )
     def _J_sup_rho(params, transforms, profiles, data, **kwargs):
         data["J^rho"] = (

@@ -47,6 +47,8 @@ def _b(params, transforms, profiles, data, **kwargs):
     data=["e_theta/sqrt(g)", "e_zeta"],
 )
 def _e_sup_rho(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis, this function returns the multivalued map whose
+    # image is the set { 𝐞^ρ | ρ=0 }.
     data["e^rho"] = cross(data["e_theta/sqrt(g)"], data["e_zeta"])
     return data
 
@@ -303,6 +305,8 @@ def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
     data=["e_rho", "e_theta/sqrt(g)"],
 )
 def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis, this function returns the multivalued map whose
+    # image is the set { 𝐞^ζ | ρ=0 }.
     data["e^zeta"] = cross(data["e_rho"], data["e_theta/sqrt(g)"])
     return data
 
@@ -1390,6 +1394,8 @@ def _e_sub_theta(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["e_theta_r", "sqrt(g)_r"],
 )
 def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis, this function returns the multivalued map whose
+    # image is the set { 𝐞_θ / √g | ρ=0 }.
     data["e_theta/sqrt(g)"] = transforms["grid"].replace_at_axis(
         (data["e_theta"].T / data["sqrt(g)"]).T,
         lambda: (data["e_theta_r"].T / data["sqrt(g)_r"]).T,
@@ -1430,6 +1436,8 @@ def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
     data=["R", "R_r", "R_rt", "R_t", "Z_rt", "omega_r", "omega_rt", "omega_t"],
 )
 def _e_sub_theta_r(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis, this function returns the multivalued map whose
+    # image is the set { ∂ᵨ 𝐞_θ | ρ=0 }
     data["e_theta_r"] = jnp.array(
         [
             -data["R"] * data["omega_t"] * data["omega_r"] + data["R_rt"],
@@ -3432,17 +3440,22 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta", "|e_theta x e_zeta|"],
+    axis_limit_data=["e_theta_r", "|e_theta x e_zeta|_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
 )
 def _n_rho(params, transforms, profiles, data, **kwargs):
-    # equal to e^rho / |e^rho| but works correctly for surfaces as well that don't have
-    # contravariant basis defined
+    # Equal to 𝐞^ρ / ‖𝐞^ρ‖ but works correctly for surfaces as well that don't
+    # have contravariant basis defined.
     data["n_rho"] = transforms["grid"].replace_at_axis(
         (cross(data["e_theta"], data["e_zeta"]).T / data["|e_theta x e_zeta|"]).T,
-        jnp.nan,  # n_rho is (finite) multivalued at magnetic axis
+        # At the magnetic axis, this function returns the multivalued map whose
+        # image is the set { 𝐞^ρ / ‖𝐞^ρ‖ | ρ=0 }.
+        lambda: (
+            cross(data["e_theta_r"], data["e_zeta"]).T / data["|e_theta x e_zeta|_r"]
+        ).T,
     )
     return data
 
@@ -3465,6 +3478,8 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _n_theta(params, transforms, profiles, data, **kwargs):
+    # Equal to 𝐞^θ / ‖𝐞^θ‖ but works correctly for surfaces as well that don't
+    # have contravariant basis defined.
     data["n_theta"] = (
         cross(data["e_zeta"], data["e_rho"]).T / data["|e_zeta x e_rho|"]
     ).T
@@ -3490,8 +3505,12 @@ def _n_theta(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _n_zeta(params, transforms, profiles, data, **kwargs):
+    # Equal to 𝐞^ζ / ‖𝐞^ζ‖ but works correctly for surfaces as well that don't
+    # have contravariant basis defined.
     data["n_zeta"] = transforms["grid"].replace_at_axis(
         (cross(data["e_rho"], data["e_theta"]).T / data["|e_rho x e_theta|"]).T,
+        # At the magnetic axis, this function returns the multivalued map whose
+        # image is the set { 𝐞^ζ / ‖𝐞^ζ‖ | ρ=0 }.
         lambda: (
             cross(data["e_rho"], data["e_theta_r"]).T / data["|e_rho x e_theta|_r"]
         ).T,

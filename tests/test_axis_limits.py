@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index
-from desc.compute.utils import surface_integrals_map
+from desc.compute.utils import dot, surface_integrals_map
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
@@ -12,10 +12,9 @@ from desc.grid import LinearGrid
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
 # functions tend toward zero as the magnetic axis is approached and that
-# d^2𝜓/(d𝜌)^2 and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
-# Also, d^n𝜓/(d𝜌)^n for n > 3 is assumed zero everywhere.
+# d²ψ/(dρ)² and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
+# Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
 zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
-
 not_finite_limits = {
     "D_Mercier",
     "D_current",
@@ -52,21 +51,17 @@ not_finite_limits = {
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
-    # finite, but multivalued
-    "N_sff_rho",
-    "kappa_g",
-    "kappa_n",
-    "n_rho",
 }
-
-# reliant limits will be added to this set automatically
 not_implemented_limits = {
+    # reliant limits will be added to this set automatically
     "iota_num_rrr",
     "iota_den_rrr",
 }
 
 
-def grow_seeds(seeds, search_space):
+def grow_seeds(
+    seeds, search_space, parameterization="desc.equilibrium.equilibrium.Equilibrium"
+):
     """Traverse the dependency DAG for keys in search space dependent on seeds.
 
     Parameters
@@ -75,6 +70,9 @@ def grow_seeds(seeds, search_space):
         Keys to find paths toward.
     search_space : iterable
         Additional keys to consider returning.
+    parameterization: str or list of str
+        Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
+        or `desc.equilibrium.Equilibrium`.
 
     Returns
     -------
@@ -84,9 +82,7 @@ def grow_seeds(seeds, search_space):
     """
     out = seeds.copy()
     for key in search_space:
-        deps = data_index["desc.equilibrium.equilibrium.Equilibrium"][key][
-            "full_with_axis_dependencies"
-        ]["data"]
+        deps = data_index[parameterization][key]["full_with_axis_dependencies"]["data"]
         if not seeds.isdisjoint(deps):
             out.add(key)
     return out
@@ -168,15 +164,15 @@ def assert_is_continuous(
     num_points = 12
     rho = np.linspace(start=0, stop=delta, num=num_points)
     grid = LinearGrid(rho=rho, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
-    at_axis = grid.nodes[:, 0] == 0
-    assert at_axis.any() and not at_axis.all()
+    axis = grid.nodes[:, 0] == 0
+    assert axis.any() and not axis.all()
     integrate = surface_integrals_map(grid, expand_out=False)
     data = eq.compute(names=names, grid=grid)
 
     p = "desc.equilibrium.equilibrium.Equilibrium"
     for name in names:
         if name in not_finite_limits:
-            assert (np.isfinite(data[name]).T != at_axis).all(), name
+            assert (np.isfinite(data[name]).T != axis).all(), name
             continue
         else:
             assert np.isfinite(data[name]).all(), name
@@ -254,3 +250,32 @@ class TestAxisLimits:
         assert_is_continuous(get("W7-X"), kwargs=kwargs)
         # fixed current
         assert_is_continuous(get("QAS"), kwargs=kwargs)
+
+    @pytest.mark.unit
+    def test_magnetic_field_is_physical(self):
+        """Test direction of magnetic field at axis limit."""
+
+        def test(eq):
+            grid = LinearGrid(
+                rho=np.linspace(0, 5e-4, 5), M=5, N=5, NFP=eq.NFP, sym=eq.sym
+            )
+            data = eq.compute(["b", "n_theta", "n_rho", "e_zeta", "g_zz"], grid=grid)
+            # For the rotational transform to be finite at the magnetic axis,
+            # the magnetic field must satisfy 𝐁 ⋅ 𝐞_ζ × 𝐞ᵨ = 0. This is also
+            # required for 𝐁^θ component of the field to be physical.
+            np.testing.assert_allclose(
+                dot(data["b"], data["n_theta"])[grid.axis], 0, atol=1e-15
+            )
+            # and be orthogonal with 𝐞^ρ because 𝐞^ρ is multivalued at the magnetic
+            # axis and 𝐁^ρ = 𝐁 ⋅ 𝐞^ρ must be single-valued there for the magnetic
+            # field to be physical.
+            np.testing.assert_allclose(dot(data["b"], data["n_rho"]), 0, atol=1e-15)
+            # and collinear with 𝐞_ζ near ρ=0
+            np.testing.assert_allclose(
+                # |𝐁_ζ| == ‖𝐁‖ ‖𝐞_ζ‖
+                np.abs(dot(data["b"], (data["e_zeta"].T / np.sqrt(data["g_zz"])).T)),
+                1,
+            )
+
+        test(get("W7-X"))
+        test(get("QAS"))

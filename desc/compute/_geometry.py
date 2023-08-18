@@ -402,10 +402,7 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
 def _L_sff_rho(params, transforms, profiles, data, **kwargs):
     # following notation from
     # https://en.wikipedia.org/wiki/Parametric_surface
-    data["L_sff_rho"] = transforms["grid"].replace_at_axis(
-        dot(data["e_theta_t"], data["n_rho"]),
-        0,  # n_rho is (finite) multivalued at magnetic axis
-    )
+    data["L_sff_rho"] = dot(data["e_theta_t"], data["n_rho"])
     return data
 
 
@@ -429,10 +426,7 @@ def _L_sff_rho(params, transforms, profiles, data, **kwargs):
 def _M_sff_rho(params, transforms, profiles, data, **kwargs):
     # following notation from
     # https://en.wikipedia.org/wiki/Parametric_surface
-    data["M_sff_rho"] = transforms["grid"].replace_at_axis(
-        dot(data["e_theta_z"], data["n_rho"]),
-        0,  # n_rho is (finite) multivalued at magnetic axis
-    )
+    data["M_sff_rho"] = dot(data["e_theta_z"], data["n_rho"])
     return data
 
 
@@ -457,9 +451,6 @@ def _N_sff_rho(params, transforms, profiles, data, **kwargs):
     # following notation from
     # https://en.wikipedia.org/wiki/Parametric_surface
     data["N_sff_rho"] = dot(data["e_zeta_z"], data["n_rho"])
-    # n_rho is (finite) multivalued at magnetic axis and N_sff_rho is nonzero
-    # single-valued at magnetic axis, implying N_sff_rho is also multivalued.
-    # The nan from n_rho propagates to automatically set N_sff_rho to nan.
     return data
 
 
@@ -489,11 +480,6 @@ def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
     L = data["L_sff_rho"]
     M = data["M_sff_rho"]
     N = data["N_sff_rho"]
-    # N is (finite) multivalued at the magnetic axis, so it evaluates as nan.
-    # Still E * N and L * N are 0 at the magnetic axis.
-    # We can enforce this explicitly to prevent the nan value from propagating.
-    # Though it is not necessary since the principal curvatures are also
-    # undefined at the magnetic axis.
     a = E * G - F**2
     b = 2 * F * M - L * G - E * N
     c = L * N - M**2
@@ -533,11 +519,6 @@ def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
     L = data["L_sff_rho"]
     M = data["M_sff_rho"]
     N = data["N_sff_rho"]
-    # N is (finite) multivalued at the magnetic axis, so it evaluates as nan.
-    # Still E * N and L * N are 0 at the magnetic axis.
-    # We can enforce this explicitly to prevent the nan value from propagating.
-    # Though it is not necessary since the principal curvatures are also
-    # undefined at the magnetic axis.
     a = E * G - F**2
     b = 2 * F * M - L * G - E * N
     c = L * N - M**2

@@ -256,16 +256,15 @@ class TestAxisLimits:
         """Test direction of magnetic field at axis limit."""
 
         def test(eq):
-            grid = LinearGrid(
-                rho=np.linspace(0, 5e-4, 5), M=5, N=5, NFP=eq.NFP, sym=eq.sym
+            grid = LinearGrid(rho=0, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
+            assert grid.axis.size
+            data = eq.compute(
+                ["b", "n_theta", "n_rho", "e_zeta", "g_zz", "B"], grid=grid
             )
-            data = eq.compute(["b", "n_theta", "n_rho", "e_zeta", "g_zz"], grid=grid)
             # For the rotational transform to be finite at the magnetic axis,
             # the magnetic field must satisfy 𝐁 ⋅ 𝐞_ζ × 𝐞ᵨ = 0. This is also
             # required for 𝐁^θ component of the field to be physical.
-            np.testing.assert_allclose(
-                dot(data["b"], data["n_theta"])[grid.axis], 0, atol=1e-15
-            )
+            np.testing.assert_allclose(dot(data["b"], data["n_theta"]), 0, atol=1e-15)
             # and be orthogonal with 𝐞^ρ because 𝐞^ρ is multivalued at the
             # magnetic axis. 𝐁^ρ = 𝐁 ⋅ 𝐞^ρ must be single-valued for the
             # magnetic field to be physical. (The direction of the vector needs
@@ -277,6 +276,11 @@ class TestAxisLimits:
                 np.abs(dot(data["b"], (data["e_zeta"].T / np.sqrt(data["g_zz"])).T)),
                 1,
             )
+            # Explicitly check B is single-valued at the magnetic axis.
+            for B in data["B"].reshape((grid.num_zeta, -1, 3)):
+                np.testing.assert_allclose(B[:, 0], B[0, 0])
+                np.testing.assert_allclose(B[:, 1], B[0, 1])
+                np.testing.assert_allclose(B[:, 2], B[0, 2])
 
         test(get("W7-X"))
         test(get("QAS"))

@@ -1,13 +1,15 @@
 """Tests for compute functions."""
 
+import pickle
+
 import numpy as np
 import pytest
 from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
-import desc.examples
 from desc.compute import data_index, rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -1193,9 +1195,13 @@ def test_equilibrium_compute_everything():
     """Make sure we can compute every equilibrium thing without errors."""
     eq = Equilibrium(1, 1, 1)
     grid = LinearGrid(1, 1, 1)
-    for key in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
-        data = eq.compute(key, grid=grid)
-        assert key in data
+    p = "desc.equilibrium.equilibrium.Equilibrium"
+    for name in data_index[p]:
+        # Compute one at a time to make sure we can do it from scratch
+        # rather than relying on already computed dependency.
+        err_msg = f"Parameterization: {p}. Name: {name}."
+        data = eq.compute(name, grid=grid)
+        assert name in data, err_msg
 
 
 @pytest.mark.unit
@@ -1208,9 +1214,10 @@ def test_curve_compute_everything():
     }
 
     for p, thing in curves.items():
-        for key in data_index[p].keys():
-            data = thing.compute(key)
-            assert key in data
+        for name in data_index[p]:
+            data = thing.compute(name)
+            err_msg = f"Parameterization: {p}. Name: {name}."
+            assert name in data, err_msg
 
 
 @pytest.mark.unit
@@ -1222,15 +1229,83 @@ def test_surface_compute_everything():
     }
 
     for p, thing in surfaces.items():
-        for key in data_index[p].keys():
-            data = thing.compute(key)
-            assert key in data
+        for name in data_index[p]:
+            data = thing.compute(name)
+            err_msg = f"Parameterization: {p}. Name: {name}."
+            assert name in data, err_msg
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_compute_everything_against_master_branch():
+    """Test that the computations on this branch agree with those on master."""
+    elliptic_cross_section_with_torsion = {
+        "R_lmn": [10, 1, 0.2],
+        "Z_lmn": [-2, -0.2],
+        "modes_R": [[0, 0], [1, 0], [0, 1]],
+        "modes_Z": [[-1, 0], [0, -1]],
+    }
+    things = {
+        # equilibria
+        "desc.equilibrium.equilibrium.Equilibrium": get("W7-X"),
+        # curves
+        "desc.geometry.curve.FourierXYZCurve": FourierXYZCurve(
+            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
+        ),
+        "desc.geometry.curve.FourierRZCurve": FourierRZCurve(
+            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
+        ),
+        "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(
+            center=[10, 1, 3], normal=[1, 2, 3], r_n=[1, 2, 3], modes=[0, 1, 2]
+        ),
+        # surfaces
+        "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
+            **elliptic_cross_section_with_torsion
+        ),
+        "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
+            **elliptic_cross_section_with_torsion
+        ),
+    }
+    # use this low resolution grid for equilibria to reduce file size
+    grid = LinearGrid(
+        # include magnetic axis
+        rho=np.linspace(0, 1, 10),
+        M=5,
+        N=5,
+        NFP=things["desc.equilibrium.equilibrium.Equilibrium"].NFP,
+        sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
+    )
+    grid = {"desc.equilibrium.equilibrium.Equilibrium": {"grid": grid}}
+
+    with open("tests/inputs/master_compute_data.pkl", "rb") as file:
+        master_data = pickle.load(file)
+    this_branch_data = {}
+    can_compute_new_stuff = False
+
+    for p in things:
+        this_branch_data[p] = things[p].compute(
+            list(data_index[p].keys()), **grid.get(p, {})
+        )
+        for name in this_branch_data[p]:
+            if name in master_data.get(p, {}):
+                err_msg = f"Parameterization: {p}. Name: {name}."
+                np.testing.assert_allclose(
+                    actual=this_branch_data[p][name],
+                    desired=master_data[p][name],
+                    err_msg=err_msg,
+                )
+            else:
+                can_compute_new_stuff = True
+
+    if can_compute_new_stuff:
+        with open("tests/inputs/master_compute_data.pkl", "wb") as file:
+            pickle.dump(this_branch_data, file)
 
 
 @pytest.mark.unit
 def test_compute_averages():
     """Test that computing averages uses the correct grid."""
-    eq = desc.examples.get("HELIOTRON")
+    eq = get("HELIOTRON")
     V_r = eq.get_profile("V_r(r)")
     rho = np.linspace(0.01, 1, 20)
     grid = LinearGrid(rho=rho, NFP=eq.NFP)

@@ -266,9 +266,10 @@ class TestAxisLimits:
             np.testing.assert_allclose(
                 dot(data["b"], data["n_theta"])[grid.axis], 0, atol=1e-15
             )
-            # and be orthogonal with 𝐞^ρ because 𝐞^ρ is multivalued at the magnetic
-            # axis and 𝐁^ρ = 𝐁 ⋅ 𝐞^ρ must be single-valued there for the magnetic
-            # field to be physical.
+            # and be orthogonal with 𝐞^ρ because 𝐞^ρ is multivalued at the
+            # magnetic axis. 𝐁^ρ = 𝐁 ⋅ 𝐞^ρ must be single-valued for the
+            # magnetic field to be physical. (The direction of the vector needs
+            # to be unique).
             np.testing.assert_allclose(dot(data["b"], data["n_rho"]), 0, atol=1e-15)
             # and collinear with 𝐞_ζ near ρ=0
             np.testing.assert_allclose(

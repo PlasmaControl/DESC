@@ -102,8 +102,8 @@ def _e_theta_x_e_zeta_r(params, transforms, profiles, data, **kwargs):
     )
     # The limit of a sequence and the norm function can be interchanged
     # because norms are continuous functions. Likewise with dot product.
-    # Then lim |e^rho| = |lim e^rho| != 0.
-    # lim (dot(e^rho, a_r) / |e^rho|) = dot(lim e^rho, lim a_r) / lim |e^rho|
+    # Then lim ‖𝐞^ρ‖ = ‖ lim 𝐞^ρ ‖ ≠ 0
+    # lim (𝐞^ρ ⋅ a_r / ‖𝐞^ρ‖) = lim 𝐞^ρ ⋅ lim a_r / lim ‖𝐞^ρ‖
     # The vectors converge to be parallel.
     data["|e_theta x e_zeta|_r"] = transforms["grid"].replace_at_axis(
         dot(a, a_r) / jnp.linalg.norm(a, axis=-1), lambda: jnp.linalg.norm(a_r, axis=-1)
@@ -221,8 +221,8 @@ def _e_rho_x_e_theta_r(params, transforms, profiles, data, **kwargs):
     )
     # The limit of a sequence and the norm function can be interchanged
     # because norms are continuous functions. Likewise with dot product.
-    # Then lim |e^zeta| = |lim e^zeta| != 0.
-    # lim (dot(e^zeta, a_r) / |e^zeta|) = dot(lim e^zeta, lim a_r) / lim |e^zeta|
+    # Then lim ‖𝐞^ζ‖ = ‖ lim 𝐞^ζ ‖ ≠ 0
+    # lim (𝐞^ζ ⋅ a_r / ‖𝐞^ζ‖) = lim 𝐞^ζ ⋅ lim a_r / lim ‖𝐞^ζ‖
     # The vectors converge to be parallel.
     data["|e_rho x e_theta|_r"] = transforms["grid"].replace_at_axis(
         dot(a, a_r) / jnp.linalg.norm(a, axis=-1), lambda: jnp.linalg.norm(a_r, axis=-1)

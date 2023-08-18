@@ -76,7 +76,6 @@ class BootstrapRedlConsistency(_Objective):
         helicity=(1, 0),
         name="Bootstrap current self-consistency (Redl)",
     ):
-
         if target is None and bounds is None:
             target = 0
         assert (len(helicity) == 2) and (int(helicity[1]) == helicity[1])
@@ -113,7 +112,7 @@ class BootstrapRedlConsistency(_Objective):
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=np.linspace(1 / 5, 1, 5),
+                rho=np.linspace(1 / eq.L, 1, eq.L) - 1 / (2 * eq.L),
             )
         else:
             grid = self._grid

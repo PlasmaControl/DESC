@@ -181,7 +181,7 @@ class TestVMECIO:
                 [1, 3, 3],
             ]
         )
-        np.testing.assert_allclose(modes[~idx], sym_modes)
+        np.testing.assert_allclose(np.delete(modes, idx, axis=0), sym_modes)
 
     @pytest.mark.unit
     def test_fourier_to_zernike(self):

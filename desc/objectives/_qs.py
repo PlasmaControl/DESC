@@ -47,6 +47,7 @@ class Isodynamicity(_Objective):
 
     """
 
+    _coordinates = "rtz"
     _units = "(dimensionless)"
     _print_value_fmt = "Isodynamicity error: {:10.3e} "
 
@@ -192,7 +193,6 @@ class QuasisymmetryBoozer(_Objective):
 
     """
 
-    _coordinates = ""
     _units = "(T)"
     _print_value_fmt = "Quasi-symmetry Boozer error: {:10.3e} "
 
@@ -396,6 +396,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
     """
 
+    _coordinates = "rtz"
     _units = "(T^4/m^2)"
     _print_value_fmt = "Quasi-symmetry error: {:10.3e} "
 
@@ -540,6 +541,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
     """
 
+    _coordinates = "rtz"
     _units = "(T^3)"
     _print_value_fmt = "Quasi-symmetry two-term error: {:10.3e} "
 

@@ -46,7 +46,6 @@ class AspectRatio(_Objective):
     """
 
     _scalar = True
-    _coordinates = ""
     _units = "(dimensionless)"
     _print_value_fmt = "Aspect ratio: {:10.3e} "
 
@@ -181,6 +180,7 @@ class BScaleLength(_Objective):
 
     """
 
+    _coordinates = "rtz"
     _units = "(m)"
     _print_value_fmt = "Magnetic field scale length: {:10.3e} "
 
@@ -325,7 +325,6 @@ class Elongation(_Objective):
     """
 
     _scalar = True
-    _coordinates = ""
     _units = "(dimensionless)"
     _print_value_fmt = "Elongation: {:10.3e} "
 
@@ -462,6 +461,7 @@ class MeanCurvature(_Objective):
 
     """
 
+    _coordinates = "rtz"
     _units = "(m^-1)"
     _print_value_fmt = "Mean curvature: {:10.3e} "
 
@@ -623,6 +623,7 @@ class PlasmaVesselDistance(_Objective):
         Name of the objective function.
     """
 
+    _coordinates = "rtz"
     _units = "(m)"
     _print_value_fmt = "Plasma-vessel distance: {:10.3e} "
 
@@ -827,6 +828,7 @@ class PrincipalCurvature(_Objective):
 
     """
 
+    _coordinates = "rtz"
     _units = "(m^-1)"
     _print_value_fmt = "Principal curvature: {:10.3e} "
 
@@ -965,7 +967,6 @@ class Volume(_Objective):
     """
 
     _scalar = True
-    _coordinates = ""
     _units = "(m^3)"
     _print_value_fmt = "Plasma volume: {:10.3e} "
 

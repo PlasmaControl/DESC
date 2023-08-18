@@ -46,6 +46,7 @@ class CurrentDensity(_Objective):
     """
 
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(A*m)"
     _print_value_fmt = "Total current density: {:10.3e} "
 
@@ -438,6 +439,7 @@ class ForceBalance(_Objective):
     """
 
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
     _print_value_fmt = "Total force: {:10.3e} "
 
@@ -629,6 +631,7 @@ class HelicalForceBalance(_Objective):
     """
 
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
     _print_value_fmt = "Helical force: {:10.3e}, "
 
@@ -809,6 +812,7 @@ class RadialForceBalance(_Objective):
     """
 
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
     _print_value_fmt = "Radial force: {:10.3e} "
 

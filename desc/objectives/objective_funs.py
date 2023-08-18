@@ -767,7 +767,7 @@ class _Objective(IOAble, ABC):
 
     _scalar = False
     _linear = False
-    _coordinates = "rtz"
+    _coordinates = ""
     _units = "(Unknown)"
     _equilibrium = False
     _io_attrs_ = [

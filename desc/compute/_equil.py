@@ -459,8 +459,8 @@ def _F_zeta(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="F_helical",
     label="F_{helical}",
-    units="N / (T m)",
-    units_long="Newtons / (Tesla meters)",
+    units="A",
+    units_long="Amperes",
     description="Covariant helical component of force balance error",
     dim=1,
     params=[],
@@ -548,7 +548,7 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["B^theta", "B^zeta", "e^theta", "e^zeta"],
 )
-def _e_helical(params, transforms, profiles, data, **kwargs):
+def _e_sup_helical(params, transforms, profiles, data, **kwargs):
     data["e^helical"] = (
         data["B^zeta"] * data["e^theta"].T - data["B^theta"] * data["e^zeta"].T
     ).T
@@ -568,7 +568,7 @@ def _e_helical(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e^helical"],
 )
-def _helical_mag(params, transforms, profiles, data, **kwargs):
+def _e_sup_helical_mag(params, transforms, profiles, data, **kwargs):
     data["|e^helical|"] = jnp.linalg.norm(data["e^helical"], axis=-1)
     return data
 

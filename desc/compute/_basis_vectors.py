@@ -26,10 +26,10 @@ from .utils import cross
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B"],
+    data=["B", "|B|"],
 )
 def _b(params, transforms, profiles, data, **kwargs):
-    data["b"] = (data["B"].T / jnp.linalg.norm(data["B"], axis=-1)).T
+    data["b"] = (data["B"].T / data["|B|"]).T
     return data
 
 

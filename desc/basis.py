@@ -813,7 +813,7 @@ class ZernikePolynomial(Basis):
 
 
 class ChebyshevDoubleFourierBasis(Basis):
-    """3D basis: tensor product of Chebyshev poynomials and two Fourier series.
+    """3D basis: tensor product of Chebyshev polynomials and two Fourier series.
 
     Fourier series in both the poloidal and toroidal coordinates.
 
@@ -852,7 +852,7 @@ class ChebyshevDoubleFourierBasis(Basis):
         Parameters
         ----------
         L : int
-            Maximum radial resoltuion.
+            Maximum radial resolution.
         M : int
             Maximum poloidal resolution.
         N : int
@@ -1249,31 +1249,23 @@ def polyval_vec(p, x, prec=None):
         Each row corresponds to a polynomial, each column to a value of x
 
     """
-    p = np.atleast_2d(p)
-    x = np.atleast_1d(x).flatten()
-    # for modest to large arrays, faster to find unique values and
-    # only evaluate those. Have to cast to float because np.unique
-    # can't handle object types like python native int
-    unq_x, xidx = np.unique(x, return_inverse=True)
-    _, pidx, outidx = np.unique(
-        p.astype(float), return_index=True, return_inverse=True, axis=0
-    )
-    unq_p = p[pidx]
+    p = jnp.atleast_2d(p)
+    x = jnp.atleast_1d(x).flatten()
 
     if prec is not None and prec > 18:
         # TODO: possibly multithread this bit
         mpmath.mp.dps = prec
-        y = np.array([np.asarray(mpmath.polyval(list(pi), unq_x)) for pi in unq_p])
+        y = np.array([np.asarray(mpmath.polyval(list(pi), x)) for pi in p])
     else:
-        npoly = unq_p.shape[0]  # number of polynomials
-        order = unq_p.shape[1]  # order of polynomials
-        nx = len(unq_x)  # number of coordinates
-        y = np.zeros((npoly, nx))
+        npoly = p.shape[0]  # number of polynomials
+        order = p.shape[1]  # order of polynomials
+        nx = len(x)  # number of coordinates
+        y = jnp.zeros((npoly, nx))
 
         for k in range(order):
-            y = y * unq_x + np.atleast_2d(unq_p[:, k]).T
+            y = y * x + jnp.atleast_2d(p[:, k]).T
 
-    return y[outidx][:, xidx].astype(float)
+    return y.astype(float)
 
 
 def zernike_radial_coeffs(l, m, exact=True):
@@ -1359,7 +1351,7 @@ def zernike_radial_poly(r, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    coeffs = zernike_radial_coeffs(l, m)
+    coeffs = zernike_radial_coeffs(l, m, exact=(np.max(l) > 54))
     lmax = np.max(l)
     coeffs = polyder_vec(coeffs, dr)
     # this should give accuracy of ~1e-10 in the eval'd polynomials

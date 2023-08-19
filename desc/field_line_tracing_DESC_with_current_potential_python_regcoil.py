@@ -5,17 +5,11 @@ import os
 import sys
 
 import jax.numpy as np
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as nnp
 import numpy as np
-import scipy
-from jax import grad, jit, vmap
-from scipy.constants import mu_0
 from scipy.interpolate import interp1d
-from scipy.io import netcdf_file
 
-from desc import set_device
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 from desc.io import load
@@ -24,8 +18,6 @@ from desc.magnetic_fields import (
     ToroidalMagneticField,
     field_line_integrate,
 )
-from desc.plotting import plot_1d, plot_2d, plot_comparison, plot_surfaces
-from desc.vmec_utils import ptolemy_identity_fwd
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.insert(0, os.path.abspath("../"))
@@ -79,39 +71,71 @@ def trace_from_curr_pot(
     ntransit=100,
     external_TF=None,
     savename=None,
+    Rs=None,
+    phi0=0,
+    surface=None,
 ):
-    """Traces Field Lines from a current potential found by python REGCOIL.
+    """Field line trace from current potential.
 
-    Args:
-        phi_mn_desc_basis (_type_): _description_
-        curr_pot_trans (_type_): _description_
-        eqname (_type_): _description_
-        net_toroidal_current_Amperes (_type_): _description_
-        net_poloidal_current_Amperes (_type_): _description_
-        M (int, optional): _description_. Defaults to 30.
-        N (int, optional): _description_. Defaults to 30.
-        alpha (int, optional): _description_. Defaults to 0.
-        ntransit (int, optional): _description_. Defaults to 100.
-        external_TF (_type_, optional): _description_. Defaults to None.
-        savename" str, name of file to save figure to
+    Parameters
+    ----------
+    phi_mn_desc_basis : _type_
+        _description_
+    curr_pot_trans : _type_
+        _description_
+    eqname : _type_
+        _description_
+    net_toroidal_current_Amperes : _type_
+        _description_
+    net_poloidal_current_Amperes : _type_
+        _description_
+    M : int, optional
+        _description_, by default 30
+    N : int, optional
+        _description_, by default 30
+    alpha : int, optional
+        _description_, by default 0
+    ntransit : int, optional
+        _description_, by default 100
+    external_TF : _type_, optional
+        _description_, by default None
+    savename : _type_, optional
+        _description_, by default None
+    Rs : _type_, optional
+        _description_, by default None
+    phi0 : int, optional
+        _description_, by default 0
+    surface
 
-    Returns:
-        _type_: _description_
+    Returns
+    -------
+    field_R
+        _description_
+    field_Z
+        _description_
+    field_phis
+        _description_
     """
-    eq = desc.io.load(eqname)
+    if isinstance(eqname, str):
+        eq = desc.io.load(eqname)
+    elif isinstance(eqname, EquilibriaFamily) or isinstance(eqname, Equilibrium):
+        eq = eqname
     if hasattr(eq, "__len__"):
         eq = eq[-1]
 
     R0_ves = 0.7035  # m
     a_ves = 0.0365  # m
 
-    winding_surf = FourierRZToroidalSurface(
-        R_lmn=np.array([R0_ves, -a_ves]),  # boundary coefficients in m
-        Z_lmn=np.array([-a_ves]),
-        modes_R=np.array([[0, 0], [1, 0]]),  # [M, N] boundary Fourier modes
-        modes_Z=np.array([[-1, 0]]),
-        NFP=1,  # number of (toroidal) field periods
-    )
+    if surface is None:
+        winding_surf = FourierRZToroidalSurface(
+            R_lmn=np.array([R0_ves, -a_ves]),  # boundary coefficients in m
+            Z_lmn=np.array([-a_ves]),
+            modes_R=np.array([[0, 0], [1, 0]]),  # [M, N] boundary Fourier modes
+            modes_Z=np.array([[-1, 0]]),
+            NFP=1,  # number of (toroidal) field periods
+        )
+    else:
+        winding_surf = surface
 
     curr_pot_trans.change_resolution(grid=LinearGrid(M=M, N=N))
 
@@ -176,7 +200,6 @@ def trace_from_curr_pot(
         K = -(phi_t * (1 / ns_mag) * rs_z.T).T + (phi_z * (1 / ns_mag) * rs_t.T).T
 
         def B_from_K_trace(re, params=None, basis="rpz"):
-
             dV = sgrid.weights * jnp.linalg.norm(
                 jnp.cross(rs_t, rs_z, axis=-1), axis=-1
             )
@@ -218,12 +241,13 @@ def trace_from_curr_pot(
         Bfield = Bfield_currpot
 
     t0 = time.time()
-    phis = np.arange(0, ntransit * 2 * np.pi, 2 * np.pi)
+    phis = np.arange(0, ntransit * 2 * np.pi, 2 * np.pi) + phi0
     n_R_points = 45
-    rrr = np.linspace(
-        R0 - 0.9 * r, R0 + 0.9 * r, n_R_points
+    rrr = (
+        np.linspace(R0 - 0.9 * r, R0 + 0.9 * r, n_R_points) if Rs is None else Rs
     )  # initial R positions of field-lines to trace
     # set initial Z positions to zero
+    n_R_points = rrr.size
 
     # integrate field lines
     field_R, field_Z = field_line_integrate(rrr, np.zeros_like(rrr), phis, Bfield)
@@ -235,9 +259,10 @@ def trace_from_curr_pot(
 
     R_list = []
     # save data
-    dirname = (
-        f"trace_M_{M}_N_{N}_alpha_{alpha}_{str(os.path.basename(eqname)).strip('.h5')}"
-    )
+    if isinstance(eqname, str):
+        dirname = f"trace_M_{M}_N_{N}_alpha_{alpha}_{str(os.path.basename(eqname)).strip('.h5')}"
+    else:
+        dirname = "field_trace_from_potential"
     print(f"Saving to {dirname}")
 
     if not os.path.isdir(dirname):
@@ -255,50 +280,44 @@ def trace_from_curr_pot(
     fig, ax = plt.subplots(figsize=(8, 8))
 
     for i in range(n_R_points):
-        field_R = nnp.genfromtxt(f"{dirname}/trace_{ntransit}_transits_R_{i}.txt")
-        field_Z = nnp.genfromtxt(f"{dirname}/trace_{ntransit}_transits_Z_{i}.txt")
-        R_list.append(field_R[0])
-        if nnp.max(nnp.abs(field_R)) < 4:
-            plt.scatter(field_R, field_Z, s=1)
+        R = nnp.genfromtxt(f"{dirname}/trace_{ntransit}_transits_R_{i}.txt")
+        Z = nnp.genfromtxt(f"{dirname}/trace_{ntransit}_transits_Z_{i}.txt")
+        R_list.append(R[0])
+        if (
+            nnp.max(nnp.abs(R)) < np.max(Rs) * 1.5
+            and nnp.min(nnp.abs(R)) > np.min(Rs) * 0.5
+        ):
+            plt.scatter(R, Z, s=1)
         else:
-            plt.scatter(field_R[0], field_Z[0], marker="x", s=5)
+            plt.scatter(R[0], Z[0], marker="x", s=5)
 
     plt.ylabel("Z")
     plt.xlabel("R")
-    R0_ves = 0.7035
-    a_ves = 0.0365
+
+    data = winding_surf.compute_coordinates(basis="rpz", grid=LinearGrid(rho=1, M=20))
+
     theta = np.linspace(0, 2 * np.pi, 100)
-    R_ves = R0_ves + a_ves * np.cos(theta)
-    Z_ves = a_ves * np.sin(theta)
+    R_ves = data[:, 0]
+    Z_ves = data[:, 2]
     plt.plot(R_ves, Z_ves, "k", label="Vacuum vessel")
-    a_lim = 0.0365 - 8 / 1000
-    theta = np.linspace(0, 2 * np.pi, 100)
-    R_lim = R0_ves + a_lim * np.cos(theta)
-    Z_lim = a_lim * np.sin(theta)
-    plt.plot(R_lim, Z_lim, "r--", label="8mm from vessel")
     plt.legend()
     plt.ylabel("Z")
     plt.xlabel("R")
-    plt.xlim([0.66, 0.74])
-    plt.ylim([-0.04, 0.04])
 
-    ax = compare_surfs_DESC_field_line_trace(eqname, ax, R_list)
+    # ax = compare_surfs_DESC_field_line_trace(eq, ax, R_list)
     if not savename:
         plt.savefig(f"{dirname}/trace{ntransit}_transits_{dirname}.png")
     else:
         plt.savefig(f"{dirname}/{savename}.png")
-    return None
+    return field_R, field_Z
 
 
-def compare_surfs_DESC_field_line_trace(desc_eq_fname, ax, R_list, savename_poin=None):
+def compare_surfs_DESC_field_line_trace(eq, ax, R_list, savename_poin=None, phi0=0):
     # given initial ax object which already has stuff plotted, and a list of R values of different surfaces
     # plot the flux surfaces of a DESC equiilibrium at the rhos corr. to those surfaces
     # those are values should be at theta=zeta=0... which should corr. to the outboard plane
 
-    eq = load(desc_eq_fname)
-    if hasattr(eq, "__len__"):
-        eq = eq[-1]
-    Rgrid = LinearGrid(theta=np.array([np.pi]), zeta=np.array([0]), L=100)
+    Rgrid = LinearGrid(theta=np.array([np.pi]), zeta=np.array([phi0]), L=100)
     Rcoords_no_isl = eq.compute("R", grid=Rgrid)
     rho_of_R_no_isl = interp1d(
         x=Rcoords_no_isl["R"], y=Rgrid.nodes[:, 0], fill_value="extrapolate"

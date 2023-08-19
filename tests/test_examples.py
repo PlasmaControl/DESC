@@ -13,6 +13,9 @@ from scipy.constants import mu_0
 import desc.examples
 from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
+    trace_from_curr_pot,
+)
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
@@ -830,7 +833,6 @@ def test_regcoil_axisymmetric():
         alpha=0,
         winding_surf=surf_winding,
     )
-    print(np.max(phi_mn_opt))
     np.testing.assert_allclose(phi_mn_opt, 0, atol=2e-9)
     np.testing.assert_allclose(chi_B, 0, atol=1e-14)
 
@@ -870,3 +872,57 @@ def test_regcoil_axisymmetric():
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-10)
     np.testing.assert_allclose(phi_fxn(grid), correct_phi / 2, atol=1e-9)
     np.testing.assert_allclose(chi_B, 0, atol=1e-26)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_ellipse():
+    """Test elliptical eq and circular winding surf regcoil solution."""
+    # make a simple axisymmetric vacuum equilibrium
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+
+    (phi_mn_opt_0, trans, I, G, _, _, chi_B, _,) = run_regcoil(
+        basis_M=8,
+        basis_N=8,
+        eqname=eq,
+        eval_grid_M=40,
+        eval_grid_N=40,
+        source_grid_M=100,
+        source_grid_N=100,
+        alpha=1e-15,
+    )
+    assert np.all(chi_B < 1e-5)
+
+    fieldR, fieldZ = trace_from_curr_pot(
+        phi_mn_opt_0,
+        trans,
+        eq,
+        I,
+        G,
+        alpha=1e-15,
+        M=50,
+        N=160,
+        ntransit=20,
+        Rs=np.linspace(0.68, 0.72, 10),
+    )
+
+    assert np.max(fieldR) < 0.73
+    assert np.min(fieldR) > 0.67
+
+    assert np.max(fieldZ) < 0.02
+    assert np.min(fieldZ) > -0.02
+
+    # test with alpha large, should have very small phi_mn
+    phi_mn_opt_0, trans, I, G, phi_fxn, _, _, _ = run_regcoil(
+        basis_M=2,
+        basis_N=2,
+        eqname=eq,
+        eval_grid_M=10,
+        eval_grid_N=10,
+        source_grid_M=40,
+        source_grid_N=40,
+        alpha=1e8,
+    )
+    # should be small
+    np.testing.assert_allclose(phi_mn_opt_0, 0, atol=1e-11)

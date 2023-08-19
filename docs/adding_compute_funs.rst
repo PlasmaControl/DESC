@@ -28,6 +28,10 @@ The full code is below:
         parameterization="desc.equilibrium.equilibrium.Equilibrium",
     )
     def _J_sup_rho(params, transforms, profiles, data, **kwargs):
+        # At the magnetic axis,
+        # ∂_θ (𝐁 ⋅ 𝐞_ζ) - ∂_ζ (𝐁 ⋅ 𝐞_θ) = 𝐁 ⋅ (∂_θ 𝐞_ζ - ∂_ζ 𝐞_θ) = 0
+        # because the partial derivatives commute. So 𝐉^ρ is of the indeterminate
+        # form 0/0 and we may compute the limit as follows.
         data["J^rho"] = (
             transforms["grid"].replace_at_axis(
                 (data["B_zeta_t"] - data["B_theta_z"]) / data["sqrt(g)"],

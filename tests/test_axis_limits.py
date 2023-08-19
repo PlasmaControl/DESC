@@ -276,7 +276,7 @@ class TestAxisLimits:
                 np.abs(dot(data["b"], (data["e_zeta"].T / np.sqrt(data["g_zz"])).T)),
                 1,
             )
-            # Explicitly check B is single-valued at the magnetic axis.
+            # Explicitly check 𝐁 is single-valued at the magnetic axis.
             for B in data["B"].reshape((grid.num_zeta, -1, 3)):
                 np.testing.assert_allclose(B[:, 0], B[0, 0])
                 np.testing.assert_allclose(B[:, 1], B[0, 1])

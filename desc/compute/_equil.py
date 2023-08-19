@@ -30,8 +30,13 @@ from .utils import dot, surface_averages
     coordinates="rtz",
     data=["sqrt(g)", "B_zeta_t", "B_theta_z"],
     axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
 )
 def _J_sup_rho(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis,
+    # ∂_θ (𝐁 ⋅ 𝐞_ζ) - ∂_ζ (𝐁 ⋅ 𝐞_θ) = 𝐁 ⋅ (∂_θ 𝐞_ζ - ∂_ζ 𝐞_θ) = 0
+    # because the partial derivatives commute. So 𝐉^ρ is of the indeterminate
+    # form 0/0 and we may compute the limit as follows.
     data["J^rho"] = (
         transforms["grid"].replace_at_axis(
             (data["B_zeta_t"] - data["B_theta_z"]) / data["sqrt(g)"],
@@ -93,8 +98,10 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["sqrt(g)_r", "B_theta_rr", "B_rho_rt"],
 )
 def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
-    # In the axis limit, J^zeta is of indeterminate form 0/0. The cancellation in
-    # the numerator occurs when decomposed into the polar basis vectors.
+    # At the magnetic axis,
+    # ∂ᵨ (𝐁 ⋅ 𝐞_θ) - ∂_θ (𝐁 ⋅ 𝐞ᵨ) = 𝐁 ⋅ (∂ᵨ 𝐞_θ - ∂_θ 𝐞ᵨ) = 0
+    # because the partial derivatives commute. So 𝐉^ζ is of the indeterminate
+    # form 0/0 and we may compute the limit as follows.
     data["J^zeta"] = (
         transforms["grid"].replace_at_axis(
             (data["B_theta_r"] - data["B_rho_t"]) / data["sqrt(g)"],

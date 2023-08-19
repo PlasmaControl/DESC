@@ -47,7 +47,7 @@
     "tests/test_compute_funs.py::test_compute_grad_p_volume_avg": 0.792815654000151,
     "tests/test_compute_funs.py::test_currents": 4.251725698006339,
     "tests/test_compute_funs.py::test_enclosed_volumes": 2.006099311998696,
-    "tests/test_compute_funs.py::test_equilibrium_compute_everything": 154.27346869101166,
+    "tests/test_compute_funs.py::test_compute_everything": 18.26,
     "tests/test_compute_funs.py::test_magnetic_field_derivatives": 9.015901343002042,
     "tests/test_compute_funs.py::test_magnetic_pressure_gradient": 3.835518025000056,
     "tests/test_compute_funs.py::test_metric_derivatives": 1.6676708760060137,

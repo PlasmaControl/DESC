@@ -1190,54 +1190,11 @@ def test_compare_quantities_to_vmec():
 
 
 @pytest.mark.unit
-@pytest.mark.slow
-def test_equilibrium_compute_everything():
-    """Make sure we can compute every equilibrium thing without errors."""
-    eq = Equilibrium(1, 1, 1)
-    grid = LinearGrid(1, 1, 1)
-    p = "desc.equilibrium.equilibrium.Equilibrium"
-    for name in data_index[p]:
-        # Compute one at a time to make sure we can do it from scratch
-        # rather than relying on already computed dependency.
-        err_msg = f"Parameterization: {p}. Name: {name}."
-        data = eq.compute(name, grid=grid)
-        assert name in data, err_msg
+def test_compute_everything():
+    """Test that the computations on this branch agree with those on master.
 
-
-@pytest.mark.unit
-def test_curve_compute_everything():
-    """Make sure we can compute every curve thing without errors."""
-    curves = {
-        "desc.geometry.curve.FourierXYZCurve": FourierXYZCurve(),
-        "desc.geometry.curve.FourierRZCurve": FourierRZCurve(),
-        "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(),
-    }
-
-    for p, thing in curves.items():
-        for name in data_index[p]:
-            data = thing.compute(name)
-            err_msg = f"Parameterization: {p}. Name: {name}."
-            assert name in data, err_msg
-
-
-@pytest.mark.unit
-def test_surface_compute_everything():
-    """Make sure we can compute every surface thing without errors."""
-    surfaces = {
-        "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(),
-        "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(),
-    }
-
-    for p, thing in surfaces.items():
-        for name in data_index[p]:
-            data = thing.compute(name)
-            err_msg = f"Parameterization: {p}. Name: {name}."
-            assert name in data, err_msg
-
-
-@pytest.mark.unit
-def test_compute_everything_against_master_branch():
-    """Test that the computations on this branch agree with those on master."""
+    Also make sure we can compute everything without errors.
+    """
     elliptic_cross_section_with_torsion = {
         "R_lmn": [10, 1, 0.2],
         "Z_lmn": [-2, -0.2],
@@ -1279,26 +1236,35 @@ def test_compute_everything_against_master_branch():
     with open("tests/inputs/master_compute_data.pkl", "rb") as file:
         master_data = pickle.load(file)
     this_branch_data = {}
-    can_compute_new_stuff = False
+    update_master_data = False
+    error = False
 
     for p in things:
         this_branch_data[p] = things[p].compute(
             list(data_index[p].keys()), **grid.get(p, {})
         )
+        # make sure we can compute everything
+        assert this_branch_data[p].keys() == data_index[p].keys()
+        # compare against master branch
         for name in this_branch_data[p]:
-            if name in master_data.get(p, {}):
-                np.testing.assert_allclose(
-                    actual=this_branch_data[p][name],
-                    desired=master_data[p][name],
-                    atol=1e-12,
-                    err_msg=f"Parameterization: {p}. Name: {name}.",
-                )
+            if p in master_data and name in master_data[p]:
+                try:
+                    np.testing.assert_allclose(
+                        actual=this_branch_data[p][name],
+                        desired=master_data[p][name],
+                        atol=1e-12,
+                        err_msg=f"Parameterization: {p}. Name: {name}.",
+                    )
+                except AssertionError as e:
+                    error = True
+                    print(e)
             else:
-                can_compute_new_stuff = True
+                update_master_data = True
 
-    if can_compute_new_stuff:
+    if not error and update_master_data:
         with open("tests/inputs/master_compute_data.pkl", "wb") as file:
             pickle.dump(this_branch_data, file)
+    assert not error
 
 
 @pytest.mark.unit

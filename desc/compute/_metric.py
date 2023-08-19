@@ -475,19 +475,15 @@ def _sqrtg_rrt(params, transforms, profiles, data, **kwargs):
         + dot(
             data["e_rho_t"],
             cross(data["e_theta_rr"], data["e_zeta"])
-            + cross(data["e_theta_r"], data["e_zeta_r"])
-            + cross(data["e_theta_r"], data["e_zeta_r"])
             + cross(data["e_theta"], data["e_zeta_rr"]),
         )
         + dot(
             data["e_rho"],
             cross(data["e_theta_rrt"], data["e_zeta"])
-            + cross(data["e_theta_rt"], data["e_zeta_r"])
+            + 2 * cross(data["e_theta_rt"], data["e_zeta_r"])
             + cross(data["e_theta_rr"], data["e_zeta_t"])
-            + cross(data["e_theta_r"], data["e_zeta_rt"])
-            + cross(data["e_theta_rt"], data["e_zeta_r"])
+            + 2 * cross(data["e_theta_r"], data["e_zeta_rt"])
             + cross(data["e_theta_t"], data["e_zeta_rr"])
-            + cross(data["e_theta_r"], data["e_zeta_rt"])
             + cross(data["e_theta"], data["e_zeta_rrt"]),
         )
     )
@@ -575,7 +571,6 @@ def _sqrtg_rtt(params, transforms, profiles, data, **kwargs):
         + dot(data["e_rho"], cross(data["e_theta_rtt"], data["e_zeta"]))
         + dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta_tt"]))
         + 2 * dot(data["e_rho_t"], cross(data["e_theta_rt"], data["e_zeta"]))
-        + 2 * dot(data["e_rho_t"], cross(data["e_theta_r"], data["e_zeta_t"]))
         + 2 * dot(data["e_rho"], cross(data["e_theta_rt"], data["e_zeta_t"]))
         + dot(data["e_rho_tt"], cross(data["e_theta"], data["e_zeta_r"]))
         + dot(data["e_rho"], cross(data["e_theta_tt"], data["e_zeta_r"]))
@@ -673,7 +668,6 @@ def _sqrtg_rzz(params, transforms, profiles, data, **kwargs):
         + dot(data["e_rho_zz"], cross(data["e_theta"], data["e_zeta_r"]))
         + dot(data["e_rho"], cross(data["e_theta_zz"], data["e_zeta_r"]))
         + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_rzz"]))
-        + 2 * dot(data["e_rho_z"], cross(data["e_theta_z"], data["e_zeta_r"]))
         + 2 * dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_rz"]))
         + 2 * dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_rz"]))
     )
@@ -712,7 +706,6 @@ def _sqrtg_rt(params, transforms, profiles, data, **kwargs):
         dot(data["e_rho_rt"], cross(data["e_theta"], data["e_zeta"]))
         + dot(data["e_rho_r"], cross(data["e_theta_t"], data["e_zeta"]))
         + dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta_t"]))
-        + dot(data["e_rho_t"], cross(data["e_theta_r"], data["e_zeta"]))
         + dot(data["e_rho"], cross(data["e_theta_rt"], data["e_zeta"]))
         + dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta_t"]))
         + dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta_r"]))
@@ -756,7 +749,6 @@ def _sqrtg_tz(params, transforms, profiles, data, **kwargs):
         + dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_t"]))
         + dot(data["e_rho_t"], cross(data["e_theta_z"], data["e_zeta"]))
         + dot(data["e_rho"], cross(data["e_theta_tz"], data["e_zeta"]))
-        + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_t"]))
         + dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta_z"]))
         + dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta_z"]))
         + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_tz"]))
@@ -819,7 +811,6 @@ def _sqrtg_rtz(params, transforms, profiles, data, **kwargs):
         + dot(
             data["e_rho_r"],
             cross(data["e_theta_tz"], data["e_zeta"])
-            + cross(data["e_theta_z"], data["e_zeta_t"])
             + cross(data["e_theta_t"], data["e_zeta_z"])
             + cross(data["e_theta"], data["e_zeta_tz"]),
         )
@@ -831,7 +822,6 @@ def _sqrtg_rtz(params, transforms, profiles, data, **kwargs):
         + dot(
             data["e_rho_z"],
             cross(data["e_theta_rt"], data["e_zeta"])
-            + cross(data["e_theta_t"], data["e_zeta_r"])
             + cross(data["e_theta_r"], data["e_zeta_t"])
             + cross(data["e_theta"], data["e_zeta_rt"]),
         )
@@ -839,7 +829,6 @@ def _sqrtg_rtz(params, transforms, profiles, data, **kwargs):
             data["e_rho_t"],
             cross(data["e_theta_rz"], data["e_zeta"])
             + cross(data["e_theta_z"], data["e_zeta_r"])
-            + cross(data["e_theta_r"], data["e_zeta_z"])
             + cross(data["e_theta"], data["e_zeta_rz"]),
         )
         + dot(
@@ -892,7 +881,6 @@ def _sqrtg_rz(params, transforms, profiles, data, **kwargs):
         + dot(data["e_rho_z"], cross(data["e_theta_r"], data["e_zeta"]))
         + dot(data["e_rho"], cross(data["e_theta_rz"], data["e_zeta"]))
         + dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta_z"]))
-        + dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_r"]))
         + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_r"]))
         + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_rz"]))
     )
@@ -957,18 +945,14 @@ def _sqrtg_rrz(params, transforms, profiles, data, **kwargs):
         + dot(
             data["e_rho_z"],
             cross(data["e_theta_rr"], data["e_zeta"])
-            + cross(data["e_theta_r"], data["e_zeta_r"])
-            + cross(data["e_theta_r"], data["e_zeta_r"])
             + cross(data["e_theta"], data["e_zeta_rr"]),
         )
         + dot(
             data["e_rho"],
             cross(data["e_theta_rrz"], data["e_zeta"])
             + cross(data["e_theta_rr"], data["e_zeta_z"])
-            + cross(data["e_theta_rz"], data["e_zeta_r"])
-            + cross(data["e_theta_r"], data["e_zeta_rz"])
-            + cross(data["e_theta_rz"], data["e_zeta_r"])
-            + cross(data["e_theta_r"], data["e_zeta_rz"])
+            + 2 * cross(data["e_theta_r"], data["e_zeta_rz"])
+            + 2 * cross(data["e_theta_rz"], data["e_zeta_r"])
             + cross(data["e_theta_z"], data["e_zeta_rr"])
             + cross(data["e_theta"], data["e_zeta_rrz"]),
         )

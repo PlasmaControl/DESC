@@ -170,7 +170,7 @@ class MagneticField(IOAble, ABC):
         return self.__add__(-x)
 
     @abstractmethod
-    def compute_magnetic_field(self, coords, params={}, basis="rpz", grid=None):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -193,7 +193,7 @@ class MagneticField(IOAble, ABC):
 
         """
 
-    def __call__(self, coords, params={}, basis="rpz"):
+    def __call__(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points."""
         return self.compute_magnetic_field(coords, params, basis)
 
@@ -941,7 +941,7 @@ class SplineMagneticField(MagneticField):
 
     @classmethod
     def from_field(
-        cls, field, R, phi, Z, params={}, method="cubic", extrap=False, period=None
+        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, period=None
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -994,7 +994,7 @@ class ScalarPotentialField(MagneticField):
 
     """
 
-    def __init__(self, potential, params={}):
+    def __init__(self, potential, params=None):
         self._potential = potential
         self._params = params
 
@@ -1029,7 +1029,7 @@ class ScalarPotentialField(MagneticField):
             coords = xyz2rpz(coords)
         Rq, phiq, Zq = coords.T
 
-        if (params is None) or (len(params) == 0):
+        if params is None:
             params = self._params
         r, p, z = coords.T
         funR = lambda x: self._potential(x, p, z, **params)

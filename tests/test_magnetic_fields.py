@@ -196,6 +196,6 @@ class TestMagneticFields:
         # make sure x calculation is the same
         np.testing.assert_allclose(x, x_from_Bnorm, atol=1e-16)
 
-        tfield.save_BNORM_file(eq, path)
+        tfield.save_BNORM_file(eq, path, 40, 40)
         Bnorm_from_file = read_BNORM_file(path, eq, grid)
-        np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-12)
+        np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-8)

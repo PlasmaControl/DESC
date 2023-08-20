@@ -8,7 +8,6 @@ from netCDF4 import Dataset
 from desc.backend import jit, jnp, odeint
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz_vec, xyz2rpz
-from desc.compute.utils import cross
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
@@ -240,11 +239,9 @@ class MagneticField(IOAble, ABC):
             eval_grid = LinearGrid(
                 rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
             )
-        data = surface.compute(["x", "e_theta", "e_zeta"], grid=eval_grid, basis="xyz")
+        data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="xyz")
         coords = data["x"]
-        rs_t = data["e_theta"]
-        rs_z = data["e_zeta"]
-        surf_normal = cross(rs_t, rs_z)
+        surf_normal = data["n_rho"]
         B = self.compute_magnetic_field(
             coords, basis="xyz", grid=source_grid, params=params
         )

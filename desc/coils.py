@@ -814,8 +814,6 @@ class CoilSet(Coil, MutableSequence):
         with open(coilsFilename, "w") as f:
             f.writelines(lines)
 
-        print(f"Saved coils file at : {coilsFilename}")
-
     def __add__(self, other):
         if isinstance(other, (CoilSet)):
             return CoilSet(*self.coils, *other.coils)

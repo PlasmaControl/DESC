@@ -5,7 +5,13 @@ import shutil
 import numpy as np
 import pytest
 
-from desc.coils import CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil
+from desc.coils import (
+    CoilSet,
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYZCoil,
+    SplineXYZCoil,
+)
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
@@ -15,19 +21,54 @@ class TestCoil:
     """Tests for singular coil objects."""
 
     @pytest.mark.unit
-    def test_biot_savart(self):
+    def test_biot_savart_all_coils(self):
         """Test biot-savart implementation against analytic formula."""
         R = 2
         y = 1
         I = 1
         By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 0])
+
+        # FourierXYZCoil
         coil = FourierXYZCoil(I)
         grid = LinearGrid(zeta=100, endpoint=True)
         B_approx = coil.compute_magnetic_field(
             Grid([[10, y, 0], [10, -y, 0]]), basis="xyz", grid=grid
         )[0]
-        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
+        np.testing.assert_allclose(
+            B_true, B_approx, rtol=1e-3, atol=1e-10, err_msg="Using FourierXYZCoil"
+        )
+
+        # SplineXYZCoil
+        coords = coil.compute("x", grid=grid, basis="xyz")["x"]
+        coil = SplineXYZCoil(I, X=coords[:, 0], Y=coords[:, 1], Z=coords[:, 2])
+        B_approx = coil.compute_magnetic_field(
+            Grid([[10, y, 0], [10, -y, 0]]), basis="xyz", grid=grid
+        )[0]
+        np.testing.assert_allclose(
+            B_true, B_approx, rtol=1e-3, atol=1e-10, err_msg="Using SplineXYZCoil"
+        )
+
+        # FourierPlanarCoil
+        coil = FourierPlanarCoil(I)
+        grid = LinearGrid(zeta=100, endpoint=True)
+        B_approx = coil.compute_magnetic_field(
+            Grid([[10, y, 0], [10, -y, 0]]), basis="xyz", grid=grid
+        )[0]
+        np.testing.assert_allclose(
+            B_true, B_approx, rtol=1e-3, atol=1e-10, err_msg="Using FourierPlanarCoil"
+        )
+
+        # FourierRZCoil
+        Bz_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        B_true = np.array([0, 0, Bz_true])
+        coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]))
+        B_approx = coil.compute_magnetic_field(
+            Grid([[0, 0, y], [0, 0, -y]]), basis="xyz", grid=grid
+        )[0]
+        np.testing.assert_allclose(
+            B_true, B_approx, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+        )
 
     @pytest.mark.unit
     def test_properties(self):

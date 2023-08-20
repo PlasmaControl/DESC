@@ -60,7 +60,7 @@ class FourierRZCurve(Curve):
         if modes_R is None:
             modes_R = np.arange(-(R_n.size // 2), R_n.size // 2 + 1)
         if modes_Z is None:
-            modes_Z = modes_R
+            modes_Z = np.arange(-(Z_n.size // 2), Z_n.size // 2 + 1)
 
         if R_n.size == 0:
             raise ValueError("At least 1 coefficient for R must be supplied")

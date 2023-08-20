@@ -304,7 +304,7 @@ def trace_from_curr_pot(
     plt.ylabel("Z")
     plt.xlabel("R")
 
-    # ax = compare_surfs_DESC_field_line_trace(eq, ax, R_list)
+    ax = compare_surfs_DESC_field_line_trace(eq, ax, R_list)
     if not savename:
         plt.savefig(f"{dirname}/trace{ntransit}_transits_{dirname}.png")
     else:

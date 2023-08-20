@@ -48,6 +48,8 @@ def find_helical_coils(
     dirname=".",
     method="Nelder-Mead",
     equal_current=True,
+    initial_guess=None,
+    save_files=True,
 ):
     eq = desc.io.load(eqname)
     nfp = eq.NFP
@@ -67,7 +69,6 @@ def find_helical_coils(
     # rs: source pts R,phi,Z (just from the winding surface)
 
     if winding_surf is None:
-
         R0_ves = 0.7035  # m
         a_ves = 0.0365  # m
 
@@ -118,7 +119,6 @@ def find_helical_coils(
         )
 
     def phi_tot_fun_theta_deriv_vec_jit(sgrid, trans_temp):
-
         return (
             trans_temp.transform(phi_mn_desc_basis, dt=1)
             + net_toroidal_current / 2 / jnp.pi
@@ -141,7 +141,6 @@ def find_helical_coils(
         )
 
     def surf_current_vec_contravariant_zeta_times_R_times_g_tt(sgrid):
-
         Rs = winding_surf.compute_coordinates(grid=sgrid, basis="rpz")[:, 0]
         rs_t = winding_surf.compute_coordinates(grid=sgrid, dt=1)
         rs_z = winding_surf.compute_coordinates(grid=sgrid, dz=1)
@@ -278,7 +277,9 @@ def find_helical_coils(
     ################################################################
     # find contours of constant phi
     ################################################################
-
+    # Phi is linear in theta at zeta=0 (bc is a sin series for phi SV), so can
+    # have theta be the optimization varibale
+    # and theta halfway is literally the theta halfway btwn, so no need to call matploltib
     def find_contours_and_current_variance(
         contours, return_full_info=False, show_plots=False, nthetas=200
     ):
@@ -542,11 +543,14 @@ def find_helical_coils(
         contours.append(float(phi_tot_fun(t, 0.0)[0]))  # contour values
     import time
 
+    if initial_guess:
+        assert len(initial_guess) == len(contours)
+        contours = initial_guess
+
     xs = [contours]
     fun_vals = [find_contours_and_current_variance(contours)]
 
     if equal_current:
-
         t_start = time.time()
 
         def callback(x):
@@ -613,7 +617,8 @@ def find_helical_coils(
     print(f"Minimum coil-coil separation: {np.sqrt(minSeparation2)*1000:3.2f} mm")
 
     figfilename = f"coil_3d_ncoil_{desirednumcoils}_alpha_{alpha:1.4e}_{dirname}.png"
-    plt.savefig(f"{dirname}/{figfilename}")
+    if save_files:
+        plt.savefig(f"{dirname}/{figfilename}")
 
     ################
 

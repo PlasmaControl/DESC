@@ -1,7 +1,4 @@
-from desc import set_device
-
 import os
-
 import sys
 import time
 
@@ -11,20 +8,15 @@ import numpy as nnp
 from jax import grad, jit, vmap
 from scipy.interpolate import interp1d
 
+from desc import set_device
 from desc.coils import Coil, CoilSet, FourierPlanarCoil, XYZCoil
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import LinearGrid
-from desc.io import load
-from desc.magnetic_fields import (
-    SumMagneticField,
-    ToroidalMagneticField,
-    field_line_integrate,
-    MagneticField,
-)
-from desc.plotting import plot_1d, plot_2d, plot_comparison, plot_surfaces
 from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
     compare_surfs_DESC_field_line_trace,
 )
+from desc.grid import LinearGrid
+from desc.io import load
+from desc.magnetic_fields import MagneticField, field_line_integrate
 
 ################## Inputs ################
 # coil .txt file in MAKEGRID format
@@ -47,6 +39,8 @@ def field_trace_from_coilset(
     show_surface=True,
     xlim=[0.66, 0.74],
     ylim=[-0.04, 0.04],
+    save_files=True,
+    only_return_data=False,
 ):
     R0 = 703.5 / 1000
     Z0 = 0
@@ -72,6 +66,9 @@ def field_trace_from_coilset(
     field_R, field_Z = field_line_integrate(rrr, np.zeros_like(rrr), phis, coils)
 
     t_elapse = time.time() - t0
+
+    if only_return_data:
+        return field_R, field_Z
 
     print(
         f"{dirname} field line tracing done, took {t_elapse} seconds which is {t_elapse/60} mins or  {t_elapse/3600} hours"

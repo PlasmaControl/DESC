@@ -13,8 +13,12 @@ from scipy.constants import mu_0
 import desc.examples
 from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.field_line_tracing_DESC_from_coilset import field_trace_from_coilset
 from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
     trace_from_curr_pot,
+)
+from desc.find_helical_contours_from_python_regcoil_equal_curr_line_integral import (
+    find_helical_coils,
 )
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -879,7 +883,6 @@ def test_regcoil_axisymmetric():
 @pytest.mark.slow
 def test_regcoil_ellipse():
     """Test elliptical eq and circular winding surf regcoil solution."""
-    # make a simple axisymmetric vacuum equilibrium
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
     (phi_mn_opt_0, trans, I, G, _, _, chi_B, _,) = run_regcoil(
@@ -926,3 +929,78 @@ def test_regcoil_ellipse():
     )
     # should be small
     np.testing.assert_allclose(phi_mn_opt_0, 0, atol=1e-11)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_ellipse_helical():
+    """Test elliptical eq and circular winding surf helical regcoil solution."""
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+
+    (phi_mn_opt_0, trans, I, G, _, _, chi_B, _,) = run_regcoil(
+        basis_M=8,
+        basis_N=8,
+        eqname=eq,
+        eval_grid_M=40,
+        eval_grid_N=40,
+        source_grid_M=100,
+        source_grid_N=100,
+        alpha=1e-11,
+        helicity_ratio=-1,
+    )
+    assert np.all(chi_B < 1e-4)
+
+    fieldR, fieldZ = trace_from_curr_pot(
+        phi_mn_opt_0,
+        trans,
+        eq,
+        I,
+        G,
+        alpha=1e-15,
+        M=50,
+        N=160,
+        ntransit=20,
+        Rs=np.linspace(0.685, 0.72, 10),
+    )
+
+    assert np.max(fieldR) < 0.73
+    assert np.min(fieldR) > 0.67
+
+    assert np.max(fieldZ) < 0.02
+    assert np.min(fieldZ) > -0.02
+
+    # test finding coils
+
+    numCoils = 15
+    coilsFilename = "./coilsfile_15.txt"
+    eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
+
+    # TODO: the equal-current optimization can be slow ( minutes for 5 coils, hour or longer for 15+ coils),
+    # should JIT compile some of the functions to improve speed, and see other ways to optimize
+    coilset2 = find_helical_coils(
+        phi_mn_opt_0,
+        trans.basis,
+        eqname,
+        I,
+        G,
+        1e-15,
+        desirednumcoils=numCoils,
+        coilsFilename=coilsFilename,
+        maxiter=100,
+        method="Nelder-Mead",
+        equal_current=False,
+        initial_guess=None,
+        step=6,
+        save_files=False,
+    )
+
+    fieldR, fieldZ = field_trace_from_coilset(
+        coilset2, eq, 15, only_return_data=True, Rs=np.linspace(0.685, 0.72, 10)
+    )
+
+    assert np.max(fieldR) < 0.73
+    assert np.min(fieldR) > 0.67
+
+    assert np.max(fieldZ) < 0.02
+    assert np.min(fieldZ) > -0.02

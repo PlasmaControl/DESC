@@ -120,7 +120,7 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     # convert to DESC Fourier representation i.e. like cos(mt)*cos(nz)
     m, n, Bnorm_mn = ptolemy_identity_fwd(xm, xn, Bnorm_mn, np.zeros_like(Bnorm_mn))
     basis = DoubleFourierSeries(
-        int(np.max(m)), int(np.max(n)), sym=False, NFP=surface.NFP
+        int(np.max(m)), int(np.max(n)), sym="sin", NFP=surface.NFP
     )
 
     Bnorm_mn_desc_basis = copy_coeffs(

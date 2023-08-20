@@ -716,7 +716,6 @@ class SplineMagneticField(MagneticField):
     ]
 
     def __init__(self, R, phi, Z, BR, Bphi, BZ, method="cubic", extrap=False, period=0):
-
         R, phi, Z = np.atleast_1d(R), np.atleast_1d(phi), np.atleast_1d(Z)
         assert R.ndim == 1
         assert phi.ndim == 1
@@ -916,7 +915,6 @@ class SplineMagneticField(MagneticField):
         bz = np.zeros([kp, jz, ir])
         extcur = np.broadcast_to(extcur, nextcur)
         for i in range(nextcur):
-
             # apply scaling by currents given in VMEC input file
             scale = extcur[i]
 
@@ -1047,7 +1045,7 @@ class ScalarPotentialField(MagneticField):
 
 
 def field_line_integrate(
-    r0, z0, phis, field, params={}, rtol=1e-8, atol=1e-8, maxstep=1000
+    r0, z0, phis, field, params=None, rtol=1e-8, atol=1e-8, maxstep=1000
 ):
     """Trace field lines by integration.
 

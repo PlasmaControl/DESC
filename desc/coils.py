@@ -694,8 +694,6 @@ class CoilSet(Coil, MutableSequence):
 
         for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
             coords = np.genfromtxt(lines[start + 1 : end])
-            if i % 20 == 0:
-                print("reading coil " + f"{i}")
 
             tempx = np.append(coords[:, 0], np.array([coords[0, 0]]))
             tempy = np.append(coords[:, 1], np.array([coords[0, 1]]))

@@ -752,8 +752,8 @@ class SplineXYZCurve(Curve):
             knots = knots - knots[0]
             knots = (knots / knots[-1]) * 2 * np.pi
 
-        self._knots = knots
-        self._method = method
+        self.knots = knots
+        self.method = method
 
     @property
     def X(self):
@@ -765,12 +765,12 @@ class SplineXYZCurve(Curve):
         assert np.allclose(
             self._X[-1], self._X[0], atol=1e-14
         ), "Must pass in a closed curve!"
-        if len(new) == len(self._knots):
+        if len(new) == len(self.knots):
             self._X = jnp.asarray(new)
         else:
             raise ValueError(
                 "X should have the same size as the knots, "
-                + f"got {len(new)} X values for {len(self._knots)} knots"
+                + f"got {len(new)} X values for {len(self.knots)} knots"
             )
 
     @property
@@ -783,12 +783,12 @@ class SplineXYZCurve(Curve):
         assert np.allclose(
             self._Y[-1], self._Y[0], atol=1e-14
         ), "Must pass in a closed curve!"
-        if len(new) == len(self._knots):
+        if len(new) == len(self.knots):
             self._Y = jnp.asarray(new)
         else:
             raise ValueError(
                 "Y should have the same size as the knots, "
-                + f"got {len(new)} Y values for {len(self._knots)} knots"
+                + f"got {len(new)} Y values for {len(self.knots)} knots"
             )
 
     @property
@@ -801,12 +801,12 @@ class SplineXYZCurve(Curve):
         assert np.allclose(
             self._Z[-1], self._Z[0], atol=1e-14
         ), "Must pass in a closed curve!"
-        if len(new) == len(self._knots):
+        if len(new) == len(self.knots):
             self._Z = jnp.asarray(new)
         else:
             raise ValueError(
                 "Z should have the same size as the knots, "
-                + f"got {len(new)} Z values for {len(self._knots)} knots"
+                + f"got {len(new)} Z values for {len(self.knots)} knots"
             )
 
     @classmethod

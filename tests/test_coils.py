@@ -297,7 +297,7 @@ def test_save_and_load_MAKEGRID_coils(tmpdir_factory):
     assert len(coilset) == Ncoils  # correct number of coils
     # TODO: add better tests for this?
     path = tmpdir.join("coils.MAKEGRID_format_desc")
-    coilset.save_in_MAKEGRID_format(str(path), grid=LinearGrid(zeta=coilset[0]._knots))
+    coilset.save_in_MAKEGRID_format(str(path), grid=LinearGrid(zeta=coilset[0].knots))
 
     coilset2 = CoilSet.from_makegrid_coilfile(str(path))
 

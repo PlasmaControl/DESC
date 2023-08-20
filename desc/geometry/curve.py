@@ -221,7 +221,7 @@ class FourierRZCurve(Curve):
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, basis="xyz", name=name)
 
-    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
+    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic", name=""):
         """Convert Curve to SplineXYZCurve.
 
         Parameters
@@ -457,7 +457,7 @@ class FourierXYZCurve(Curve):
         Z_n = transform.fit(coords_xyz[:, 2])
         return cls(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
 
-    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
+    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic", name=""):
         """Convert Curve to SplineXYZCurve.
 
         Parameters
@@ -653,7 +653,7 @@ class FourierPlanarCurve(Curve):
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, basis="xyz", name=name)
 
-    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic2", name=""):
+    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic", name=""):
         """Convert Curve to SplineXYZCurve.
 
         Parameters
@@ -810,7 +810,7 @@ class SplineXYZCurve(Curve):
             )
 
     @classmethod
-    def from_values(cls, coords, knots=None, method="cubic2", name="", basis="xyz"):
+    def from_values(cls, coords, knots=None, method="cubic", name="", basis="xyz"):
         """Create SplineXYZCurve from coordinate values.
 
         Parameters

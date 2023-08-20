@@ -339,7 +339,7 @@ class SplineXYZCoil(Coil, SplineXYZCurve):
         Y,
         Z,
         knots=None,
-        method="cubic2",
+        method="cubic",
         name="",
     ):
         super().__init__(current, X, Y, Z, knots, method, name)

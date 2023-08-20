@@ -141,9 +141,10 @@ def find_helical_coils(
         )
 
     def surf_current_vec_contravariant_zeta_times_R_times_g_tt(sgrid):
-        Rs = winding_surf.compute_coordinates(grid=sgrid, basis="rpz")[:, 0]
-        rs_t = winding_surf.compute_coordinates(grid=sgrid, dt=1)
-        rs_z = winding_surf.compute_coordinates(grid=sgrid, dz=1)
+        data = winding_surf.compute(["x", "e_theta", "e_zeta"], grid=sgrid, basis="rpz")
+        Rs = data["x"][:, 0]
+        rs_t = data["e_theta"]
+        rs_z = data["e_zeta"]
         ns_mag = np.linalg.norm(cross(rs_t, rs_z), axis=1)
 
         phi_t = phi_tot_fun_theta_deriv_vec(sgrid.nodes[:, 1], sgrid.nodes[:, 2])
@@ -153,23 +154,6 @@ def find_helical_coils(
         K_sup_zeta = -phi_t * (1 / ns_mag)
 
         return K_sup_zeta * Rs * jnp.sqrt(g_tt)
-
-    def surf_g_tt(theta, zeta):
-        # the theta, zeta here are in REGCOIL
-        # the theta used for DESC to evaluate from the surface must be -theta
-        theta_DESC_surf = theta
-        nodes_surf = np.vstack(
-            (
-                np.zeros_like(theta_DESC_surf.flatten(order="F")),
-                theta_DESC_surf.flatten(order="F"),
-                zeta.flatten(order="F"),
-            )
-        ).T
-        sgrid = Grid(nodes_surf, sort=False)
-        rs_t = winding_surf.compute_coordinates(grid=sgrid, dt=1)
-        g_tt = dot(rs_t, rs_t)
-
-        return np.sqrt(g_tt)
 
     def phi_tot_fun(theta, zeta):
         if np.shape(theta):
@@ -587,12 +571,13 @@ def find_helical_coils(
     contour_Z = []
 
     for thetas, zetas in zip(contour_theta, contour_zeta):
-        coords = winding_surf.compute_coordinates(
+        coords = winding_surf.compute(
+            "x",
             grid=Grid(
                 jnp.vstack((jnp.zeros_like(thetas), thetas, zetas)).T, sort=False
             ),
             basis="xyz",
-        )
+        )["x"]
         contour_X.append(coords[:, 0])
         contour_Y.append(coords[:, 1])
         contour_Z.append(coords[:, 2])

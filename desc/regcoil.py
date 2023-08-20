@@ -10,9 +10,9 @@ from scipy.constants import mu_0
 
 from desc.backend import jit
 from desc.basis import DoubleFourierSeries
+from desc.compute import rpz2xyz, rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.geometry.utils import rpz2xyz, rpz2xyz_vec
 from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import MagneticField, ToroidalMagneticField
@@ -82,6 +82,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     show_plots=False,
     verbose=1,
     dirname=".",
+    override_G=None,
 ):
     """Python regcoil to find single-valued current potential.
 
@@ -139,6 +140,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
     verbose: int, level of verbosity
     dirname: where to save figures, defaults to current directory
             should not include the trailing '/'
+    override_G : float
+        if given, use this G instead of that calculated from the equilibrium
 
     Returns
     -------
@@ -215,14 +218,19 @@ def run_regcoil(  # noqa: C901 fxn too complex
     curr_pot_trans = Transform(sgrid, curr_pot_basis, derivs=1, build=True)
 
     # calc quantities on winding surface (source)
-    rs = winding_surf.compute_coordinates(
-        grid=sgrid
-    )  # surface normal on winding surface
-    rs_t = winding_surf.compute_coordinates(grid=sgrid, dt=1)
-    rs_z = winding_surf.compute_coordinates(grid=sgrid, dz=1)
+    data = winding_surf.compute(
+        ["x", "e_theta", "e_zeta"], grid=sgrid
+    )  # data on winding surface
+    rs = data["x"]
+    rs_t = data["e_theta"]
+    rs_z = data["e_zeta"]
 
     # calculate net enclosed poloidal and toroidal currents
-    G_tot = eq.compute("G", grid=sgrid)["G"][0] / mu_0 * 2 * np.pi  # poloidal
+    G_tot = (
+        eq.compute("G", grid=sgrid)["G"][0] / mu_0 * 2 * np.pi
+        if override_G is None
+        else override_G
+    )  # poloidal
     # 2pi factor is present in regcoil code
     #  https://github.com/landreman/regcoil/blob
     # /99f9abf8b0b0c6ec7bb6e7975dbee5e438808162/regcoil_init_plasma_mod.f90#L500

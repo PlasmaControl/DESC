@@ -1,6 +1,3 @@
-# git checkout dp/coils for this script to work
-# set_device("gpu")
-import copy
 import os
 import sys
 
@@ -12,7 +9,6 @@ from scipy.interpolate import interp1d
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
-from desc.io import load
 from desc.magnetic_fields import (
     SumMagneticField,
     ToroidalMagneticField,
@@ -21,44 +17,24 @@ from desc.magnetic_fields import (
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.insert(0, os.path.abspath("../"))
-import functools
 import os
-import pickle
 import time
 
 import jax
 import jax.numpy as jnp
-from jax import jacfwd, jit
 
 import desc.examples
 import desc.io
-from desc.backend import put
-from desc.basis import DoubleFourierSeries, FourierSeries, FourierZernikeBasis
-from desc.coils import *
-from desc.derivatives import Derivative
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.geometry.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
-from desc.io import InputReader, load
+from desc.grid import LinearGrid
 from desc.magnetic_fields import SplineMagneticField
-from desc.objectives import *
-from desc.objectives.objective_funs import _Objective
-from desc.plotting import (
-    plot_1d,
-    plot_2d,
-    plot_3d,
-    plot_comparison,
-    plot_section,
-    plot_surfaces,
-)
-from desc.profiles import PowerSeriesProfile, SplineProfile
-from desc.transform import Transform
-from desc.vmec import VMECIO
 
 ##################################
 
 
+# TODO: add option to first make a spline field then use that for integration
 def trace_from_curr_pot(
     phi_mn_desc_basis,
     curr_pot_trans,
@@ -181,9 +157,13 @@ def trace_from_curr_pot(
         sgrid = (
             curr_pot_trans.grid
         )  # LinearGrid(M=M + 1, N=N * eq.NFP + 1, NFP=1)  # source (wind surf)
-        rs = winding_surf.compute_coordinates(grid=sgrid)
-        rs_t = winding_surf.compute_coordinates(grid=sgrid, dt=1)
-        rs_z = winding_surf.compute_coordinates(grid=sgrid, dz=1)
+        # calc quantities on winding surface (source)
+        data = winding_surf.compute(
+            ["x", "e_theta", "e_zeta"], grid=sgrid
+        )  # data on winding surface
+        rs = data["x"]
+        rs_t = data["e_theta"]
+        rs_z = data["e_zeta"]
 
         # define functions that calc B
 
@@ -208,23 +188,9 @@ def trace_from_curr_pot(
             )
             return xyz2rpz_vec(B, phi=re[:, 1])
 
-        #         K = -(phi_t * (1 / ns_mag) * rs_z.T).T + (phi_z * (1 / ns_mag) * rs_t.T).T
-
-        #         def B_from_K_reg(re, params=None, basis="rpz"):
-        #             # re points given in R,phi,Z shape (N_pts,3)
-        #             dV = sgrid.weights * jnp.linalg.norm(
-        #                 jnp.cross(rs_t, rs_z, axis=-1), axis=-1
-        #             )
-        #             B = biot_loop(
-        #                 rpz2xyz(re), rpz2xyz(rs), rpz2xyz_vec(K, phi=sgrid.nodes[:, 2]), dV
-        #             )
-        #             return xyz2rpz_vec(B, phi=re[:, 1])
-
         return B_from_K_trace
 
     # Field line tracing
-
-    # how many times to trace the field line going across phi=0 plane
 
     R0 = 703.5 / 1000
     Z0 = 0
@@ -246,7 +212,7 @@ def trace_from_curr_pot(
     rrr = (
         np.linspace(R0 - 0.9 * r, R0 + 0.9 * r, n_R_points) if Rs is None else Rs
     )  # initial R positions of field-lines to trace
-    # set initial Z positions to zero
+    # set initial Z positions are zero
     n_R_points = rrr.size
 
     # integrate field lines
@@ -294,7 +260,7 @@ def trace_from_curr_pot(
     plt.ylabel("Z")
     plt.xlabel("R")
 
-    data = winding_surf.compute_coordinates(basis="rpz", grid=LinearGrid(rho=1, M=20))
+    data = winding_surf.compute("x", basis="rpz", grid=LinearGrid(rho=1, M=20))["x"]
 
     theta = np.linspace(0, 2 * np.pi, 100)
     R_ves = data[:, 0]
@@ -330,7 +296,7 @@ def compare_surfs_DESC_field_line_trace(eq, ax, R_list, savename_poin=None, phi0
     rhos_to_plot = np.append(rhos_to_plot, 1.0)
     print("plotting surfaces at these rhos: ", rhos_to_plot)
     labelled = False
-    for r in np.sort(rhos_to_plot):  # np.append(rhos_to_plot,1.0):
+    for r in np.sort(rhos_to_plot):
         dat = eq.compute(
             ["R", "Z"],
             grid=LinearGrid(
@@ -346,7 +312,5 @@ def compare_surfs_DESC_field_line_trace(eq, ax, R_list, savename_poin=None, phi0
             plt.plot(
                 dat["R"], dat["Z"], "m--", lw=4, label="DESC Vacuum Equilibrium Bdry"
             )
-    # fig,ax = plot_surfaces(eq,zeta=1,rho=np.abs(rhos_to_plot),theta=0,rho_lw=1,rho_color='c',rho_ls='--',lcfs_ls='--',lcfs_lw=1,lcfs_color='r',figsize=(10,10),ax=ax)
-    # plt.savefig(savename_poin)
 
     return ax

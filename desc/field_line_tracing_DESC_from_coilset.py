@@ -1,20 +1,16 @@
 import os
-import sys
 import time
 
 import jax.numpy as np
 import matplotlib.pyplot as plt
 import numpy as nnp
-from jax import grad, jit, vmap
-from scipy.interpolate import interp1d
 
 from desc import set_device
-from desc.coils import Coil, CoilSet, FourierPlanarCoil, XYZCoil
-from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.coils import CoilSet
+from desc.equilibrium import Equilibrium
 from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
     compare_surfs_DESC_field_line_trace,
 )
-from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import MagneticField, field_line_integrate
 
@@ -76,8 +72,6 @@ def field_trace_from_coilset(
 
     R_list = []
     # save data
-
-    import os
 
     if not os.path.isdir(dirname):
         os.mkdir(dirname)

@@ -1,19 +1,28 @@
 """Base classes for curves and surfaces."""
 
+import numbers
 from abc import ABC, abstractmethod
 
 import numpy as np
 
 from desc.backend import jnp
+from desc.compute import compute as compute_fun
+from desc.compute import data_index
+from desc.compute.geom_utils import reflection_matrix, rotation_matrix
+from desc.compute.utils import (
+    _parse_parameterization,
+    get_data_deps,
+    get_params,
+    get_transforms,
+)
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.io import IOAble
-
-from .utils import reflection_matrix, rotation_matrix
 
 
 class Curve(IOAble, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
-    _io_attrs_ = ["_name", "_grid", "shift", "rotmat"]
+    _io_attrs_ = ["_name", "shift", "rotmat"]
 
     def __init__(self, name=""):
         self.shift = jnp.array([0, 0, 0])
@@ -29,30 +38,100 @@ class Curve(IOAble, ABC):
     def name(self, new):
         self._name = new
 
-    @property
-    @abstractmethod
-    def grid(self):
-        """Grid: Nodes for computation."""
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
 
-    @abstractmethod
-    def compute_coordinates(self, params=None, grid=None, dt=0):
-        """Compute real space coordinates on predefined grid."""
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
 
-    @abstractmethod
-    def compute_frenet_frame(self, params=None, grid=None):
-        """Compute Frenet frame on predefined grid."""
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
 
-    @abstractmethod
-    def compute_curvature(self, params=None, grid=None):
-        """Compute curvature on predefined grid."""
+        """
+        # set a default numpts for the SplineXYZCurve
+        N = self.N if hasattr(self, "N") else self.X.size
+        if isinstance(names, str):
+            names = [names]
+        if grid is None:
+            NFP = self.NFP if hasattr(self, "NFP") else 1
+            grid = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=True)
+        elif isinstance(grid, numbers.Integral):
+            NFP = self.NFP if hasattr(self, "NFP") else 1
+            grid = LinearGrid(N=grid, NFP=NFP, endpoint=True)
+        elif isinstance(grid, Grid):
+            NFP = grid.NFP
+        else:
+            raise TypeError(
+                "must pass in a Grid object or an integer for argument grid!"
+                f" instead got type {type(grid)}"
+            )
 
-    @abstractmethod
-    def compute_torsion(self, params=None, grid=None):
-        """Compute torsion on predefined grid."""
+        if params is None:
+            params = get_params(names, obj=self)
+        if transforms is None:
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+        if data is None:
+            data = {}
+        profiles = {}
 
-    @abstractmethod
-    def compute_length(self, params=None, grid=None):
-        """Compute the length of the curve using specified nodes for quadrature."""
+        p = _parse_parameterization(self)
+        deps = list(set(get_data_deps(names, obj=p) + names))
+        dep0d = [
+            dep
+            for dep in deps
+            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
+        ]
+        calc0d = bool(len(dep0d))
+        # see if the grid we're already using will work for desired qtys
+        if calc0d and (grid.N >= 2 * N + 5) and isinstance(grid, LinearGrid):
+            calc0d = False
+
+        if calc0d:
+            grid0d = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=True)
+            data0d = compute_fun(
+                self,
+                dep0d,
+                params=params,
+                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
+                profiles={},
+                data=None,
+                **kwargs,
+            )
+            # these should all be 0d quantities so don't need to compress/expand
+            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            data.update(data0d)
+
+        data = compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            **kwargs,
+        )
+        return data
 
     def translate(self, displacement=[0, 0, 0]):
         """Translate the curve by a rigid displacement in x, y, z."""
@@ -76,14 +155,14 @@ class Curve(IOAble, ABC):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (name={}, grid={})".format(self.name, self.grid)
+            + " (name={})".format(self.name)
         )
 
 
 class Surface(IOAble, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
-    _io_attrs_ = ["_name", "_grid", "_sym", "_L", "_M", "_N"]
+    _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]
 
     @property
     def name(self):
@@ -147,59 +226,125 @@ class Surface(IOAble, ABC):
         one[self.Z_basis.modes[:, 1] < 0] *= -1
         self.Z_lmn *= one
 
-    @property
-    @abstractmethod
-    def grid(self):
-        """Grid: Nodes for computation."""
-
     @abstractmethod
     def change_resolution(self, *args, **kwargs):
         """Change the maximum resolution."""
 
-    @abstractmethod
-    def compute_coordinates(self, params=None, grid=None, dt=0, dz=0):
-        """Compute coordinate values at specified nodes."""
-
-    @abstractmethod
-    def compute_normal(self, params=None, grid=None):
-        """Compute normal vectors to the surface on predefined grid."""
-
-    @abstractmethod
-    def compute_surface_area(self, params=None, grids=None):
-        """Compute surface area via quadrature."""
-
-    def compute_curvature(self, R_lmn=None, Z_lmn=None, grid=None):
-        """Compute gaussian and mean curvature.
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
 
         Parameters
         ----------
-        R_lmn, Z_lmn: array-like
-            fourier coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
-        grid : Grid or array-like
-            toroidal coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid for constant
+            rho surfaces or a Quadrature grid for constant zeta surfaces.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
 
         Returns
         -------
-        K, H, k1, k2 : ndarray, shape(k,)
-            Gaussian, mean and 2 principle curvatures at points specified in grid.
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
 
         """
-        # following notation from
-        # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
-        E, F, G = self._compute_first_fundamental_form(R_lmn, Z_lmn, grid)
-        L, M, N = self._compute_second_fundamental_form(R_lmn, Z_lmn, grid)
-        # coeffs of quadratic eqn for determinant
-        a = E * G - F**2
-        b = F * M - L * G - E * N
-        c = L * N - M**2
-        r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-        r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-        k1 = jnp.maximum(r1, r2)
-        k2 = jnp.minimum(r1, r2)
-        K = k1 * k2
-        H = (k1 + k2) / 2
-        return K, H, k1, k2
+        if isinstance(names, str):
+            names = [names]
+        if grid is None:
+            if hasattr(self, "rho"):  # constant rho surface
+                grid = LinearGrid(
+                    rho=np.array(self.rho),
+                    M=2 * self.M + 5,
+                    N=2 * self.N + 5,
+                    NFP=self.NFP,
+                )
+            elif hasattr(self, "zeta"):  # constant zeta surface
+                grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
+                grid._nodes[:, 2] = self.zeta
+        elif not isinstance(grid, Grid):
+            raise TypeError(
+                "must pass in a Grid object or an integer for argument grid!"
+                f" instead got type {type(grid)}"
+            )
+        if params is None:
+            params = get_params(names, obj=self)
+        if transforms is None:
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+        if data is None:
+            data = {}
+        profiles = {}
+
+        p = _parse_parameterization(self)
+        deps = list(set(get_data_deps(names, obj=p) + names))
+        dep0d = [
+            dep
+            for dep in deps
+            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
+        ]
+        calc0d = bool(len(dep0d))
+        # see if the grid we're already using will work for desired qtys
+        if calc0d and hasattr(self, "rho"):  # constant rho surface
+            if (
+                (grid.N >= 2 * self.N + 5)
+                and (grid.M > 2 * self.M + 5)
+                and isinstance(grid, LinearGrid)
+            ):
+                calc0d = False
+            else:
+                grid0d = LinearGrid(
+                    rho=np.array(self.rho),
+                    M=2 * self.M + 5,
+                    N=2 * self.N + 5,
+                    NFP=self.NFP,
+                )
+        elif calc0d and hasattr(self, "zeta"):  # constant zeta surface
+            if (
+                (grid.L >= self.L + 1)
+                and (grid.M > 2 * self.M + 5)
+                and isinstance(grid, QuadratureGrid)
+            ):
+                calc0d = False
+            else:
+                grid0d = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
+                grid0d._nodes[:, 2] = self.zeta
+
+        if calc0d:
+            data0d = compute_fun(
+                self,
+                dep0d,
+                params=params,
+                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
+                profiles={},
+                data=None,
+                **kwargs,
+            )
+            # these should all be 0d quantities so don't need to compress/expand
+            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            data.update(data0d)
+
+        data = compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            **kwargs,
+        )
+        return data
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -207,5 +352,5 @@ class Surface(IOAble, ABC):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (name={}, grid={})".format(self.name, self.grid)
+            + " (name={})".format(self.name)
         )

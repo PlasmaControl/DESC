@@ -139,7 +139,7 @@ class TestMagneticFields:
         """Tests Bnormal calculation for simple toroidal field."""
         tfield = ToroidalMagneticField(2, 1)
         surface = get("DSHAPE").surface
-        Bnorm = tfield.compute_Bnormal(surface)
+        Bnorm, _ = tfield.compute_Bnormal(surface)
         # should have 0 Bnormal because surface is axisymmetric
         np.testing.assert_allclose(Bnorm, 0, atol=3e-15)
 
@@ -152,13 +152,32 @@ class TestMagneticFields:
         tfield = ToroidalMagneticField(2, 1)
         eq = get("DSHAPE")
         grid = LinearGrid(rho=np.array(1.0), M=20, N=20, NFP=eq.NFP)
-        Bnorm = tfield.compute_Bnormal(eq.surface, grid=grid)
+        x = eq.surface.compute("x", grid=grid, basis="rpz")["x"]
+        Bnorm, x_from_Bnorm = tfield.compute_Bnormal(
+            eq.surface, eval_grid=grid, source_grid=grid, basis="rpz"
+        )
+
+        # make sure x calculation is the same
+        np.testing.assert_allclose(x[:, 0], x_from_Bnorm[:, 0], atol=1e-16)
+        np.testing.assert_allclose(x[:, 2], x_from_Bnorm[:, 2], atol=1e-16)
+
+        np.testing.assert_allclose(
+            x[:, 1] % (2 * np.pi), x_from_Bnorm[:, 1] % (2 * np.pi), atol=1e-16
+        )
+
         # should have 0 Bnormal because surface is axisymmetric
         np.testing.assert_allclose(Bnorm, 0, atol=1e-14)
 
-        tfield.save_BNORM_file(eq, path)
-        Bnorm_from_file = read_BNORM_file(path, eq, grid)
+        tfield.save_BNORM_file(eq, path, scale_by_curpol=False)
+        Bnorm_from_file = read_BNORM_file(path, eq, grid, scale_by_curpol=False)
         np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-14)
+
+        # check that loading/saving with scale_by_curpol true
+        # but no eq passed raises error
+        with pytest.raises(RuntimeError):
+            Bnorm_from_file = read_BNORM_file(path, eq.surface, grid)
+        with pytest.raises(RuntimeError):
+            tfield.save_BNORM_file(eq.surface, path)
 
     @pytest.mark.unit
     def test_Bnormal_save_and_load_HELIOTRON(self, tmpdir_factory):
@@ -169,7 +188,13 @@ class TestMagneticFields:
         tfield = ToroidalMagneticField(2, 1)
         eq = get("HELIOTRON")
         grid = LinearGrid(rho=np.array(1.0), M=20, N=20, NFP=eq.NFP)
-        Bnorm = tfield.compute_Bnormal(eq.surface, grid=grid)
+        x = eq.surface.compute("x", grid=grid, basis="xyz")["x"]
+        Bnorm, x_from_Bnorm = tfield.compute_Bnormal(
+            eq.surface, eval_grid=grid, basis="xyz"
+        )
+
+        # make sure x calculation is the same
+        np.testing.assert_allclose(x, x_from_Bnorm, atol=1e-16)
 
         tfield.save_BNORM_file(eq, path)
         Bnorm_from_file = read_BNORM_file(path, eq, grid)

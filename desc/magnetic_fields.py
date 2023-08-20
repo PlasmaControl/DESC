@@ -7,9 +7,10 @@ from netCDF4 import Dataset
 
 from desc.backend import jit, jnp, odeint
 from desc.basis import DoubleFourierSeries
+from desc.compute import rpz2xyz_vec, xyz2rpz
 from desc.compute.utils import cross
 from desc.derivatives import Derivative
-from desc.geometry.utils import rpz2xyz_vec, xyz2rpz
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
@@ -63,24 +64,26 @@ def biot_savart(eval_pts, coil_pts, current):
     return B
 
 
-def read_BNORM_file(fname, eq, eval_grid=None, scale_by_curpol=True):
-    """Create BNORM-style .txt file containing Bnormal Fourier coefficients.
+def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
+    """Read BNORM-style .txt file containing Bnormal Fourier coefficients.
 
     Parameters
     ----------
     fname : str
-        name of BNORM file to read and calculate Bnormal from.
-    eq : Equilibrium
-        Equilibrium to calculate the magnetic field's Bnormal on the surface of.
+        name of BNORM file to read and use to calculate Bnormal from.
+    surface : Surface or Equilibrium
+        Surface to calculate the magnetic field's Bnormal on.
+        If an Equilibrium is supplied, will use its boundary surface.
     eval_grid : Grid, optional
-        Grid of points on the plasma surface to calculate the Bnormal at and then
-        fit with a DoubleFourierSeries, if None defaults to a LinearGrid with twice
-        the basis poloidal and toroidal resolutions
+        Grid of points on the plasma surface to evaluate the Bnormal at,
+        if None defaults to a LinearGrid with twice
+        the surface grid's poloidal and toroidal resolutions
     scale_by_curpol : bool, optional
         Whether or not to un-scale the Bnormal coefficients by curpol
         before calculating Bnormal, by default True
         (set to False if it is known that the BNORM file was saved without scaling
         by curpol)
+        requires an Equilibrium to be passed in
 
 
     Returns
@@ -89,6 +92,19 @@ def read_BNORM_file(fname, eq, eval_grid=None, scale_by_curpol=True):
         Bnormal distribution from the BNORM Fourier coefficients,
         evaluated on the given eval_grid
     """
+    if isinstance(surface, EquilibriaFamily):
+        surface = surface[-1]
+    if isinstance(surface, Equilibrium):
+        eq = surface
+        surface = eq.surface
+    else:
+        eq = None
+
+    if scale_by_curpol and eq is None:
+        raise RuntimeError(
+            "an Equilibrium must be supplied when scale_by_curpol is True!"
+        )
+
     curpol = (
         (2 * jnp.pi / eq.NFP * eq.compute("G", grid=LinearGrid(rho=jnp.array(1)))["G"])
         if scale_by_curpol
@@ -103,7 +119,9 @@ def read_BNORM_file(fname, eq, eval_grid=None, scale_by_curpol=True):
 
     # convert to DESC Fourier representation i.e. like cos(mt)*cos(nz)
     m, n, Bnorm_mn = ptolemy_identity_fwd(xm, xn, Bnorm_mn, np.zeros_like(Bnorm_mn))
-    basis = DoubleFourierSeries(int(np.max(m)), int(np.max(n)), sym=False, NFP=eq.NFP)
+    basis = DoubleFourierSeries(
+        int(np.max(m)), int(np.max(n)), sym=False, NFP=surface.NFP
+    )
     Bnorm_mn_desc_basis = np.zeros((basis.num_modes,))
     for i, (mm, nn) in enumerate(zip(m, n)):
         idx = basis.get_idx(L=0, M=mm, N=nn)
@@ -111,11 +129,11 @@ def read_BNORM_file(fname, eq, eval_grid=None, scale_by_curpol=True):
 
     if eval_grid is None:
         eval_grid = LinearGrid(
-            rho=jnp.array(1.0), M=2 * basis.M, N=2 * basis.N, NFP=eq.NFP
+            rho=jnp.array(1.0), M=surface.M_grid, N=surface.N_grid, NFP=surface.NFP
         )
     trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)
 
-    # fit Bnorm with Fourier Series
+    # Evaluate Fourier Series
     Bnorm = trans.transform(Bnorm_mn_desc_basis)
 
     return Bnorm
@@ -152,7 +170,7 @@ class MagneticField(IOAble, ABC):
         return self.__add__(-x)
 
     @abstractmethod
-    def compute_magnetic_field(self, coords, params={}, basis="rpz"):
+    def compute_magnetic_field(self, coords, params={}, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -163,6 +181,10 @@ class MagneticField(IOAble, ABC):
             parameters to pass to scalar potential function
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
 
         Returns
         -------
@@ -175,54 +197,74 @@ class MagneticField(IOAble, ABC):
         """Compute magnetic field at a set of points."""
         return self.compute_magnetic_field(coords, params, basis)
 
-    def compute_Bnormal(self, surface, grid_M=40, grid_N=40, NFP=None, grid=None):
-        """Create BNORM-style .txt file containing Bnormal Fourier coefficients.
+    def compute_Bnormal(
+        self, surface, eval_grid=None, source_grid=None, params=None, basis="rpz"
+    ):
+        """Compute Bnormal from self on the given surface.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium to calculate the magnetic field's Bnormal on the surface of.
-        fname : str
-            name of file to save the BNORM Bnormal Fourier coefficients to.
-        grid : Grid, optional
-            Grid of points on the plasma surface to calculate the Bnormal at and then
-            fit with a DoubleFourierSeries, if None defaults to a LinearGrid with
-            grid_M and grid_N
-        grid_M : int, optional
-            Poloidal resolution of the grid on the surface
-            on which to calculate Bnormal, by default 40
-        grid_N : int, optional
-            Toroidal resolution of the grid on the surface
-            on which to calculate Bnormal, by default 40
-        NFP : int, optional
-            Number of field periods for compute grid, if None
-            defaults to surface.NFP.
+        surface : Surface or Equilibrium
+            Surface to calculate the magnetic field's Bnormal on.
+            If an Equilibrium is supplied, will use its boundary surface.
+        eval_grid : Grid, optional
+            Grid of points on the surface to calculate the Bnormal at,
+            if None defaults to a LinearGrid with twice
+            the surface poloidal and toroidal resolutions
+            points are in surface angular coordinates i.e theta and zeta
+        source_grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
+        params : list or tuple of dict, optional
+            parameters to pass to underlying field's compute_magnetic_field function.
+            If None, uses the default parameters for each field.
+            If a list or tuple, should have one entry for each component field.
+        basis : {"rpz", "xyz"}
+            basis for returned coordinates on the surface
+            cylindrical "rpz" by default
 
         Returns
         -------
-        None
-        """
-        if NFP is None:
-            NFP = surface.NFP
-        if grid is None:
-            grid = LinearGrid(rho=jnp.array(1.0), M=grid_M, N=grid_N, NFP=NFP)
+        Bnorm : ndarray
+            The normal magnetic field to the surface given, of size grid.num_nodes.
+        coords: ndarray
+            the locations (in specified basis) at which the Bnormal was calculated
 
-        coords = surface.compute_coordinates(grid=grid, basis="xyz")
-        rs_t = surface.compute_coordinates(grid=grid, dt=1, basis="xyz")
-        rs_z = surface.compute_coordinates(grid=grid, dz=1, basis="xyz")
+        """
+        if isinstance(surface, EquilibriaFamily):
+            surface = surface[-1]
+        if isinstance(surface, Equilibrium):
+            surface = surface.surface
+        if eval_grid is None:
+            eval_grid = LinearGrid(
+                rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
+            )
+        data = surface.compute(["x", "e_theta", "e_zeta"], grid=eval_grid, basis="xyz")
+        coords = data["x"]
+        rs_t = data["e_theta"]
+        rs_z = data["e_zeta"]
         surf_normal = cross(rs_t, rs_z)
-        B = self.compute_magnetic_field(coords, basis="xyz")
+        B = self.compute_magnetic_field(
+            coords, basis="xyz", grid=source_grid, params=params
+        )
 
         Bnorm = jnp.sum(B * surf_normal, axis=-1)
-        return Bnorm
+
+        if basis.lower() == "rpz":
+            coords = xyz2rpz(coords)
+
+        return Bnorm, coords
 
     def save_BNORM_file(
         self,
-        eq,
+        surface,
         fname,
         basis_M=24,
         basis_N=24,
-        grid=None,
+        eval_grid=None,
+        source_grid=None,
+        params=None,
         sym="sin",
         scale_by_curpol=True,
     ):
@@ -230,8 +272,9 @@ class MagneticField(IOAble, ABC):
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium to calculate the magnetic field's Bnormal on the surface of.
+        surface : Surface or Equilibrium
+            Surface to calculate the magnetic field's Bnormal on.
+            If an Equilibrium is supplied, will use its boundary surface.
         fname : str
             name of file to save the BNORM Bnormal Fourier coefficients to.
         basis_M : int, optional
@@ -240,10 +283,19 @@ class MagneticField(IOAble, ABC):
         basis_N : int, optional
             Toroidal resolution of the DoubleFourierSeries used to fit the Bnormal
             on the plasma surface, by default 24
-        grid : Grid, optional
-            Grid of points on the plasma surface to calculate the Bnormal at and then
-            fit with a DoubleFourierSeries, if None defaults to a LinearGrid with twice
-            the basis poloidal and toroidal resolutions
+        eval_grid : Grid, optional
+            Grid of points on the surface to calculate the Bnormal at,
+            if None defaults to a LinearGrid with twice
+            the surface poloidal and toroidal resolutions
+            points are in surface angular coordinates i.e theta and zeta
+        source_grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
+        params : list or tuple of dict, optional
+            parameters to pass to underlying field's compute_magnetic_field function.
+            If None, uses the default parameters for each field.
+            If a list or tuple, should have one entry for each component field.
         sym : str, optional
             if Bnormal is symmetric, by default "sin"
             NOTE: BNORM code only ever deals with sin-symmetric modes, so results
@@ -266,15 +318,29 @@ class MagneticField(IOAble, ABC):
                 + " Resulting BNORM file will not contain the cos modes"
             )
 
-        basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=eq.NFP, sym=sym)
-        if grid is None:
-            grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * basis_M, N=2 * basis_N, NFP=eq.NFP
+        if isinstance(surface, EquilibriaFamily):
+            surface = surface[-1]
+        if isinstance(surface, Equilibrium):
+            eq = surface
+            surface = eq.surface
+        else:
+            eq = None
+        if scale_by_curpol and eq is None:
+            raise RuntimeError(
+                "an Equilibrium must be supplied when scale_by_curpol is True!"
             )
-        trans = Transform(basis=basis, grid=grid, build_pinv=True)
+        if eval_grid is None:
+            eval_grid = LinearGrid(
+                rho=jnp.array(1.0), M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP
+            )
+
+        basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=surface.NFP, sym=sym)
+        trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)
 
         # compute Bnormal on the grid
-        Bnorm = self.compute_Bnormal(eq.surface, grid=grid, NFP=eq.NFP)
+        Bnorm, _ = self.compute_Bnormal(
+            surface, eval_grid=eval_grid, source_grid=source_grid, params=params
+        )
 
         # fit Bnorm with Fourier Series
         Bnorm_mn = trans.fit(Bnorm)
@@ -297,7 +363,7 @@ class MagneticField(IOAble, ABC):
             (
                 2
                 * jnp.pi
-                / eq.NFP
+                / surface.NFP
                 * eq.compute("G", grid=LinearGrid(rho=jnp.array(1)))["G"]
             )
             if scale_by_curpol
@@ -337,7 +403,7 @@ class ScaledMagneticField(MagneticField):
         self._scalar = scalar
         self._field = field
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -348,13 +414,19 @@ class ScaledMagneticField(MagneticField):
             parameters to pass to underlying field
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
 
         Returns
         -------
         field : ndarray, shape(N,3)
             scaled magnetic field at specified points
         """
-        return self._scalar * self._field.compute_magnetic_field(coords, params, basis)
+        return self._scalar * self._field.compute_magnetic_field(
+            coords, params, basis, grid
+        )
 
 
 class SumMagneticField(MagneticField):
@@ -376,7 +448,7 @@ class SumMagneticField(MagneticField):
         )
         self._fields = fields
 
-    def compute_magnetic_field(self, coords, params={}, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -389,6 +461,10 @@ class SumMagneticField(MagneticField):
             one entry for each component field.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
 
         Returns
         -------
@@ -401,7 +477,10 @@ class SumMagneticField(MagneticField):
             params = [params]
         B = 0
         for i, field in enumerate(self._fields):
-            B += field.compute_magnetic_field(coords, params[i % len(params)], basis)
+            B += field.compute_magnetic_field(
+                coords, params[i % len(params)], basis, grid=grid
+            )
+
         return B
 
 
@@ -424,10 +503,10 @@ class ToroidalMagneticField(MagneticField):
     def __init__(self, B0, R0):
         assert float(B0) == B0, "B0 must be a scalar"
         assert float(R0) == R0, "R0 must be a scalar"
-        self._B0 = B0
-        self._R0 = R0
+        self._B0 = float(B0)
+        self._R0 = float(R0)
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -438,7 +517,11 @@ class ToroidalMagneticField(MagneticField):
             unused by this method
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
-
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
+            Unused by this MagneticField class
         Returns
         -------
         field : ndarray, shape(N,3)
@@ -476,7 +559,7 @@ class VerticalMagneticField(MagneticField):
         assert np.isscalar(B0), "B0 must be a scalar"
         self._B0 = B0
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -487,6 +570,11 @@ class VerticalMagneticField(MagneticField):
             unused by this method
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
+            Unused by this MagneticField class
 
         Returns
         -------
@@ -543,7 +631,7 @@ class PoloidalMagneticField(MagneticField):
         self._R0 = R0
         self._iota = iota
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -554,6 +642,11 @@ class PoloidalMagneticField(MagneticField):
             unused by this method
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
+            Unused by this MagneticField class
 
         Returns
         -------
@@ -671,7 +764,7 @@ class SplineMagneticField(MagneticField):
                 tempdict[key] = val[:, 0, :]
         return tempdict
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -682,6 +775,11 @@ class SplineMagneticField(MagneticField):
             unused by this method
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
+            Unused by this MagneticField class
 
         Returns
         -------
@@ -902,7 +1000,7 @@ class ScalarPotentialField(MagneticField):
         self._potential = potential
         self._params = params
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -913,6 +1011,11 @@ class ScalarPotentialField(MagneticField):
             parameters to pass to scalar potential function
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
+            Unused by this MagneticField class
 
         Returns
         -------

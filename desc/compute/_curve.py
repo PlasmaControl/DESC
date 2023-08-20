@@ -509,7 +509,7 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve",
     dim=3,
-    params=["X", "Y", "Z", "_knots", "_period", "_method"],
+    params=["X", "Y", "Z", "knots", "method"],
     transforms={
         "rotmat": [],
         "shift": [],
@@ -525,27 +525,27 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     Xq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["X"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     Yq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Y"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     Zq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Z"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
 
     coords = jnp.stack([Xq, Yq, Zq], axis=1)
@@ -563,7 +563,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["X", "Y", "Z", "_knots", "_period", "_method"],
+    params=["X", "Y", "Z", "knots", "method"],
     transforms={
         "rotmat": [],
         "shift": [],
@@ -579,52 +579,52 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     dXq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["X"],
-        method=params["_method"],
+        method=params["method"],
         derivative=1,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     dYq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Y"],
-        method=params["_method"],
+        method=params["method"],
         derivative=1,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     dZq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Z"],
-        method=params["_method"],
+        method=params["method"],
         derivative=1,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
 
     Xq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["X"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     Yq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Y"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     Zq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Z"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
 
     coords_s = jnp.stack([dXq, dYq, dZq], axis=1)
@@ -646,7 +646,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["X", "Y", "Z", "_knots", "_period", "_method"],
+    params=["X", "Y", "Z", "knots", "method"],
     transforms={
         "rotmat": [],
         "shift": [],
@@ -662,52 +662,52 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     d2Xq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["X"],
-        method=params["_method"],
+        method=params["method"],
         derivative=2,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     d2Yq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Y"],
-        method=params["_method"],
+        method=params["method"],
         derivative=2,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     d2Zq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Z"],
-        method=params["_method"],
+        method=params["method"],
         derivative=2,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
 
     Xq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["X"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     Yq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Y"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     Zq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Z"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
 
     coords_ss = jnp.stack([d2Xq, d2Yq, d2Zq], axis=1)
@@ -729,7 +729,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["X", "Y", "Z", "_knots", "_period", "_method"],
+    params=["X", "Y", "Z", "knots", "method"],
     transforms={
         "rotmat": [],
         "shift": [],
@@ -745,52 +745,52 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
     d3Xq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["X"],
-        method=params["_method"],
+        method=params["method"],
         derivative=3,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     d3Yq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Y"],
-        method=params["_method"],
+        method=params["method"],
         derivative=3,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     d3Zq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Z"],
-        method=params["_method"],
+        method=params["method"],
         derivative=3,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
 
     Xq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["X"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     Yq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Y"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
     Zq = interp1d(
         xq,
-        params["_knots"],
+        params["knots"],
         params["Z"],
-        method=params["_method"],
+        method=params["method"],
         derivative=0,
-        period=params["_period"],
+        period=2 * jnp.pi,
     )
 
     coords_sss = jnp.stack([d3Xq, d3Yq, d3Zq], axis=1)
@@ -938,7 +938,7 @@ def _length(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Length of the curve",
     dim=0,
-    params=["_method"],
+    params=["method"],
     transforms={},
     profiles=[],
     coordinates="",
@@ -946,7 +946,7 @@ def _length(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.curve.SplineXYZCurve",
 )
 def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
-    if params["_method"] == "nearest":  # cannot use derivative method as deriv=0
+    if params["method"] == "nearest":  # cannot use derivative method as deriv=0
         coords = data["x"]
         if kwargs.get("basis", "rpz").lower() == "rpz":
             coords = rpz2xyz(coords)

@@ -735,7 +735,6 @@ class SplineXYZCurve(Curve):
         self._X = X
         self._Y = Y
         self._Z = Z
-        self._period = 2 * np.pi
 
         if knots is None:
             # find equal arclength angle-like variable, and use that as theta

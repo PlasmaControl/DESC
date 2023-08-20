@@ -100,6 +100,10 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     else:
         eq = None
 
+    assert surface.sym, (
+        "BNORM assumes stellarator symmetry, but" "a non-symmetric surface was given!"
+    )
+
     if scale_by_curpol and eq is None:
         raise RuntimeError(
             "an Equilibrium must be supplied when scale_by_curpol is True!"

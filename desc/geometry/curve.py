@@ -238,7 +238,7 @@ class FourierXYZCurve(Curve):
         else:
             modes = np.asarray(modes)
 
-        assert np.all(modes.astype(int) == modes)
+        assert issubclass(modes.dtype.type, np.integer)
 
         N = np.max(abs(modes))
         self._X_basis = FourierSeries(N, NFP=1, sym=False)

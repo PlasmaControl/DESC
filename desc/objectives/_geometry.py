@@ -1212,6 +1212,7 @@ class B_dmin(_Objective):
             eq=eq,
             grid=plasma_grid,
             has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+            obj=eq,
         )
         self._transforms = get_transforms(
             self._data_keys,

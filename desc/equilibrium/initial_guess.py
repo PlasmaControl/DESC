@@ -13,6 +13,101 @@ from desc.transform import Transform
 from desc.utils import copy_coeffs
 
 
+def _initial_guess_points(nodes, x, x_basis):
+    """Create an initial guess based on locations of flux surfaces in real space.
+
+    Parameters
+    ----------
+    nodes : Grid or ndarray, shape(k,3)
+        Locations in flux coordinates where real space coordinates are given.
+    x : ndarray, shape(k,)
+        R, Z or lambda values at specified nodes.
+    x_basis : Basis
+        Spectral basis for x (R, Z or lambda)
+
+    Returns
+    -------
+    x_lmn : ndarray
+        Vector of flux surface coefficients associated with x_basis.
+
+    """
+    if not isinstance(nodes, Grid):
+        nodes = Grid(nodes, sort=False)
+    transform = Transform(nodes, x_basis, build=False, build_pinv=True)
+    x_lmn = transform.fit(x)
+    return x_lmn
+
+
+def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=None):
+    """Create an initial guess from boundary coefficients and a magnetic axis guess.
+
+    Parameters
+    ----------
+    x_basis : FourierZernikeBais
+        basis of the flux surfaces (for R, Z, or Lambda).
+    b_lmn : ndarray, shape(b_basis.num_modes,)
+        vector of boundary coefficients associated with b_basis.
+    b_basis : Basis
+        basis of the boundary surface (for Rb or Zb)
+    axis : ndarray, shape(num_modes,2)
+        coefficients of the magnetic axis. axis[i, :] = [n, x0].
+        Only used for 'lcfs' boundary mode. Defaults to m=0 modes of boundary
+    mode : str
+        One of 'lcfs', 'poincare'.
+        Whether the boundary condition is specified by the last closed flux surface
+        (rho=1) or the Poincare section (zeta=0).
+    coord : float or None
+        Surface label (ie, rho, zeta, etc.) for supplied surface.
+
+    Returns
+    -------
+    x_lmn : ndarray
+        vector of flux surface coefficients associated with x_basis.
+
+    """
+    x_lmn = np.zeros((x_basis.num_modes,))
+    if mode is None:
+        # auto-detect based on mode numbers
+        if np.all(b_basis.modes[:, 0] == 0):
+            mode = "lcfs"
+        elif np.all(b_basis.modes[:, 2] == 0):
+            mode = "poincare"
+        else:
+            raise ValueError("Surface should have either l=0 or n=0")
+    if mode == "lcfs":
+        if coord is None:
+            coord = 1.0
+        if axis is None:
+            axidx = np.where(b_basis.modes[:, 1] == 0)[0]
+            axis = np.array([b_basis.modes[axidx, 2], b_lmn[axidx]]).T
+        for k, (l, m, n) in enumerate(b_basis.modes):
+            scale = zernike_radial(coord, abs(m), m)
+            # index of basis mode with lowest radial power (l = |m|)
+            idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
+            if m == 0:  # magnetic axis only affects m=0 modes
+                # index of basis mode with second lowest radial power (l = |m| + 2)
+                idx2 = np.where((x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1))[0]
+                ax = np.where(axis[:, 0] == n)[0]
+                if ax.size:
+                    a_n = axis[ax[0], 1]  # use provided axis guess
+                else:
+                    a_n = b_lmn[k]  # use boundary centroid as axis
+                x_lmn[idx0] = (b_lmn[k] + a_n) / 2 / scale
+                x_lmn[idx2] = (b_lmn[k] - a_n) / 2 / scale
+            else:
+                x_lmn[idx0] = b_lmn[k] / scale
+
+    elif mode == "poincare":
+        for k, (l, m, n) in enumerate(b_basis.modes):
+            idx = np.where((x_basis.modes == [l, m, n]).all(axis=1))[0]
+            x_lmn[idx] = b_lmn[k]
+
+    else:
+        raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
+
+    return x_lmn
+
+
 def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
@@ -213,98 +308,3 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
         else:
             raise ValueError("Can't initialize equilibrium from args {}.".format(args))
     return eq
-
-
-def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=None):
-    """Create an initial guess from boundary coefficients and a magnetic axis guess.
-
-    Parameters
-    ----------
-    x_basis : FourierZernikeBais
-        basis of the flux surfaces (for R, Z, or Lambda).
-    b_lmn : ndarray, shape(b_basis.num_modes,)
-        vector of boundary coefficients associated with b_basis.
-    b_basis : Basis
-        basis of the boundary surface (for Rb or Zb)
-    axis : ndarray, shape(num_modes,2)
-        coefficients of the magnetic axis. axis[i, :] = [n, x0].
-        Only used for 'lcfs' boundary mode. Defaults to m=0 modes of boundary
-    mode : str
-        One of 'lcfs', 'poincare'.
-        Whether the boundary condition is specified by the last closed flux surface
-        (rho=1) or the Poincare section (zeta=0).
-    coord : float or None
-        Surface label (ie, rho, zeta, etc.) for supplied surface.
-
-    Returns
-    -------
-    x_lmn : ndarray
-        vector of flux surface coefficients associated with x_basis.
-
-    """
-    x_lmn = np.zeros((x_basis.num_modes,))
-    if mode is None:
-        # auto-detect based on mode numbers
-        if np.all(b_basis.modes[:, 0] == 0):
-            mode = "lcfs"
-        elif np.all(b_basis.modes[:, 2] == 0):
-            mode = "poincare"
-        else:
-            raise ValueError("Surface should have either l=0 or n=0")
-    if mode == "lcfs":
-        if coord is None:
-            coord = 1.0
-        if axis is None:
-            axidx = np.where(b_basis.modes[:, 1] == 0)[0]
-            axis = np.array([b_basis.modes[axidx, 2], b_lmn[axidx]]).T
-        for k, (l, m, n) in enumerate(b_basis.modes):
-            scale = zernike_radial(coord, abs(m), m)
-            # index of basis mode with lowest radial power (l = |m|)
-            idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
-            if m == 0:  # magnetic axis only affects m=0 modes
-                # index of basis mode with second lowest radial power (l = |m| + 2)
-                idx2 = np.where((x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1))[0]
-                ax = np.where(axis[:, 0] == n)[0]
-                if ax.size:
-                    a_n = axis[ax[0], 1]  # use provided axis guess
-                else:
-                    a_n = b_lmn[k]  # use boundary centroid as axis
-                x_lmn[idx0] = (b_lmn[k] + a_n) / 2 / scale
-                x_lmn[idx2] = (b_lmn[k] - a_n) / 2 / scale
-            else:
-                x_lmn[idx0] = b_lmn[k] / scale
-
-    elif mode == "poincare":
-        for k, (l, m, n) in enumerate(b_basis.modes):
-            idx = np.where((x_basis.modes == [l, m, n]).all(axis=1))[0]
-            x_lmn[idx] = b_lmn[k]
-
-    else:
-        raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
-
-    return x_lmn
-
-
-def _initial_guess_points(nodes, x, x_basis):
-    """Create an initial guess based on locations of flux surfaces in real space.
-
-    Parameters
-    ----------
-    nodes : Grid or ndarray, shape(k,3)
-        Locations in flux coordinates where real space coordinates are given.
-    x : ndarray, shape(k,)
-        R, Z or lambda values at specified nodes.
-    x_basis : Basis
-        Spectral basis for x (R, Z or lambda)
-
-    Returns
-    -------
-    x_lmn : ndarray
-        Vector of flux surface coefficients associated with x_basis.
-
-    """
-    if not isinstance(nodes, Grid):
-        nodes = Grid(nodes, sort=False)
-    transform = Transform(nodes, x_basis, build=False, build_pinv=True)
-    x_lmn = transform.fit(x)
-    return x_lmn

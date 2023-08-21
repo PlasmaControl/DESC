@@ -15,6 +15,78 @@ from desc.profiles import PowerSeriesProfile, Profile
 from desc.utils import isnonnegint
 
 
+def _assert_nonnegint(x, name=""):
+    assert (x is None) or isnonnegint(
+        x
+    ), f"{name} should be a non-negative integer or None, got {x}"
+
+
+def parse_axis(axis, NFP=1, sym=True, surface=None):
+    """Parse axis input into Curve object.
+
+    Parameters
+    ----------
+    axis : Curve, ndarray, None
+        Axis to parse.
+    NFP : int
+        Number of field periods of the Equilibrium.
+    sym : bool
+        Stellarator symmetry of the Equilibrium.
+
+    Returns
+    -------
+    axis : Curve
+        Parsed axis object.
+    """
+    if isinstance(axis, FourierRZCurve):
+        axis = axis
+    elif isinstance(axis, (np.ndarray, jnp.ndarray)):
+        axis = FourierRZCurve(
+            axis[:, 1],
+            axis[:, 2],
+            axis[:, 0].astype(int),
+            NFP=NFP,
+            sym=sym,
+            name="axis",
+        )
+    elif axis is None:  # use the center of surface
+        # TODO: make this method of surface, surface.get_axis()?
+        if isinstance(surface, FourierRZToroidalSurface):
+            axis = FourierRZCurve(
+                R_n=surface.R_lmn[np.where(surface.R_basis.modes[:, 1] == 0)],
+                Z_n=surface.Z_lmn[np.where(surface.Z_basis.modes[:, 1] == 0)],
+                modes_R=surface.R_basis.modes[
+                    np.where(surface.R_basis.modes[:, 1] == 0)[0], -1
+                ],
+                modes_Z=surface.Z_basis.modes[
+                    np.where(surface.Z_basis.modes[:, 1] == 0)[0], -1
+                ],
+                NFP=NFP,
+            )
+        elif isinstance(surface, ZernikeRZToroidalSection):
+            # FIXME: include m=0 l!=0 modes
+            axis = FourierRZCurve(
+                R_n=surface.R_lmn[
+                    np.where(
+                        (surface.R_basis.modes[:, 0] == 0)
+                        & (surface.R_basis.modes[:, 1] == 0)
+                    )
+                ].sum(),
+                Z_n=surface.Z_lmn[
+                    np.where(
+                        (surface.Z_basis.modes[:, 0] == 0)
+                        & (surface.Z_basis.modes[:, 1] == 0)
+                    )
+                ].sum(),
+                modes_R=[0],
+                modes_Z=[0],
+                NFP=NFP,
+            )
+    else:
+        raise TypeError("Got unknown axis type {}".format(axis))
+    return axis
+
+
 def parse_profile(prof, name="", **kwargs):
     """Parse an object into a Profile.
 
@@ -115,75 +187,3 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
     if isinstance(surface, ZernikeRZToroidalSection):
         bdry_mode = "poincare"
     return surface, bdry_mode
-
-
-def parse_axis(axis, NFP=1, sym=True, surface=None):
-    """Parse axis input into Curve object.
-
-    Parameters
-    ----------
-    axis : Curve, ndarray, None
-        Axis to parse.
-    NFP : int
-        Number of field periods of the Equilibrium.
-    sym : bool
-        Stellarator symmetry of the Equilibrium.
-
-    Returns
-    -------
-    axis : Curve
-        Parsed axis object.
-    """
-    if isinstance(axis, FourierRZCurve):
-        axis = axis
-    elif isinstance(axis, (np.ndarray, jnp.ndarray)):
-        axis = FourierRZCurve(
-            axis[:, 1],
-            axis[:, 2],
-            axis[:, 0].astype(int),
-            NFP=NFP,
-            sym=sym,
-            name="axis",
-        )
-    elif axis is None:  # use the center of surface
-        # TODO: make this method of surface, surface.get_axis()?
-        if isinstance(surface, FourierRZToroidalSurface):
-            axis = FourierRZCurve(
-                R_n=surface.R_lmn[np.where(surface.R_basis.modes[:, 1] == 0)],
-                Z_n=surface.Z_lmn[np.where(surface.Z_basis.modes[:, 1] == 0)],
-                modes_R=surface.R_basis.modes[
-                    np.where(surface.R_basis.modes[:, 1] == 0)[0], -1
-                ],
-                modes_Z=surface.Z_basis.modes[
-                    np.where(surface.Z_basis.modes[:, 1] == 0)[0], -1
-                ],
-                NFP=NFP,
-            )
-        elif isinstance(surface, ZernikeRZToroidalSection):
-            # FIXME: include m=0 l!=0 modes
-            axis = FourierRZCurve(
-                R_n=surface.R_lmn[
-                    np.where(
-                        (surface.R_basis.modes[:, 0] == 0)
-                        & (surface.R_basis.modes[:, 1] == 0)
-                    )
-                ].sum(),
-                Z_n=surface.Z_lmn[
-                    np.where(
-                        (surface.Z_basis.modes[:, 0] == 0)
-                        & (surface.Z_basis.modes[:, 1] == 0)
-                    )
-                ].sum(),
-                modes_R=[0],
-                modes_Z=[0],
-                NFP=NFP,
-            )
-    else:
-        raise TypeError("Got unknown axis type {}".format(axis))
-    return axis
-
-
-def _assert_nonnegint(x, name=""):
-    assert (x is None) or isnonnegint(
-        x
-    ), f"{name} should be a non-negative integer or None, got {x}"

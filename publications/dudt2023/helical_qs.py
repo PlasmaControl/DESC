@@ -11,8 +11,9 @@ from desc.objectives import (
     ObjectiveFunction,
     Omnigenity,
     StraightBmaxContour,
+    get_fixed_boundary_constraints,
+    get_NAE_constraints,
 )
-from desc.objectives import get_fixed_boundary_constraints, get_NAE_constraints
 from desc.vmec import VMECIO
 
 fname = "helical_qs"
@@ -111,6 +112,7 @@ for i in range(len(LM)):
     for rho in surfaces:
         grids[rho] = LinearGrid(M=M_grid, N=N_grid, NFP=eq.NFP, sym=False, rho=rho)
         objs[rho] = Omnigenity(
+            eq=eq,
             grid=grids[rho],
             helicity=helicity,
             M_booz=M_booz,
@@ -119,11 +121,11 @@ for i in range(len(LM)):
         )
 
     objective = ObjectiveFunction(
-        (CurrentDensity(weight=eq_weights[i]),) + tuple(objs.values())
+        (CurrentDensity(eq=eq, weight=eq_weights[i]),) + tuple(objs.values())
     )
     constraints = get_NAE_constraints(eq, qsc, order=1) + (
-        FixOmni(),
-        StraightBmaxContour(),
+        FixOmni(eq=eq),
+        StraightBmaxContour(eq=eq),
     )
     eq, result = eq.solve(
         objective=objective,

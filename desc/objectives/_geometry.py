@@ -1196,7 +1196,9 @@ class B_dmin(_Objective):
         self._dim_f = plasma_grid.num_rho
         self._data_keys = ["X", "Y", "Z", "|B|", "|e_theta x e_zeta|"]
         self._args = get_params(
-            self._data_keys, has_axis=plasma_grid.axis.size or surface_grid.axis.size
+            self._data_keys,
+            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
         )
 
         timer = Timer()

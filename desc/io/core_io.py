@@ -14,11 +14,22 @@ class IO(ABC):
         """Close file upon garbage colleciton or explicit deletion with del function."""
         self.close()
 
+    def check_type(self, obj):
+        """See if this thing can handle that type of file."""
+        if isinstance(obj, self._file_types_):
+            return True
+        else:
+            return False
+
     def close(self):
         """Close file if initialized with class instance."""
         if hasattr(self, "base") and hasattr(self.base, "close"):
             self.base.close()
             self._close_base_ = False
+
+    @abstractmethod
+    def open_file(self, file_name, file_mode):
+        """Open the file."""
 
     def resolve_base(self):
         """Set base attribute.
@@ -65,37 +76,26 @@ class IO(ABC):
             raise SyntaxError("where '{}' is not a readable type.".format(where))
         return loc
 
-    @abstractmethod
-    def open_file(self, file_name, file_mode):
-        """Open the file."""
-
-    def check_type(self, obj):
-        """See if this thing can handle that type of file."""
-        if isinstance(obj, self._file_types_):
-            return True
-        else:
-            return False
-
 
 class Reader(ABC):
     """ABC for all readers."""
 
     @abstractmethod
-    def read_obj(self, obj, where=None):
-        """Read a DESC object."""
-
-    @abstractmethod
     def read_dict(self, thedict, where=None):
         """Read a dictionary."""
+
+    @abstractmethod
+    def read_obj(self, obj, where=None):
+        """Read a DESC object."""
 
 
 class Writer(ABC):
     """ABC for all writers."""
 
     @abstractmethod
-    def write_obj(self, obj, where=None):
-        """Write a DESC object."""
-
-    @abstractmethod
     def write_dict(self, thedict, where=None):
         """Write a dictionary."""
+
+    @abstractmethod
+    def write_obj(self, obj, where=None):
+        """Write a DESC object."""

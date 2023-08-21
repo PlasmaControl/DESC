@@ -42,25 +42,169 @@ class InputReader:
             if not self.args.version:
                 self._inputs = self.parse_inputs()
 
-    @property
-    def args(self):
-        """Namespace : parsed namespace of all command line arguments."""
-        return self._args
+    def _get_parser_(self):
+        """Get parser for command line arguments.
 
-    @property
-    def inputs(self):
-        """List of dictionaries with values from input file."""
-        return self._inputs
+        Returns
+        -------
+        parser : argparse object
+            argument parser
 
-    @property
-    def input_path(self):
-        """Path to input file."""
-        return self._input_path
+        """
+        return get_parser()
 
-    @property
-    def output_path(self):
-        """Path to output file."""
-        return self._output_path
+    @staticmethod
+    def descout_to_input(  # noqa: C901 - fxn too complex
+        outfile,
+        infile,
+        objective="force",
+        optimizer="lsq-exact",
+        header="#DESC-generated input file",
+        ftol=1e-2,
+        xtol=1e-6,
+        gtol=1e-6,
+        maxiter=100,
+    ):
+        """Generate a DESC input file from a DESC output file.
+
+        DESC will automatically choose continuation parameters
+
+        Parameters
+        ----------
+        outfile : str or path-like
+            name of the DESC input file to create
+        infile : str or path-like
+            path of the DESC output equilibrium file
+        objective : str
+            objective type used in the input file
+        optimizer : str
+            type of optimizer
+        header : str
+            text to print at the top of the file
+        ftol : float
+            relative tolerance of the objective function f
+        xtol : float
+            relative tolerance of the state vector x
+        gtol : float
+            absolute tolerance of the projected gradient g
+        maxiter : int
+            maximum number of optimizer iterations per continuation step
+        """
+        f = open(outfile, "w+")
+
+        f.seek(0)
+
+        eq = load(infile)
+        try:
+            eq0 = eq[-1]
+        except TypeError:
+            eq0 = eq
+
+        f.write(header + "\n")
+
+        f.write("# global parameters\n")
+        f.write("sym = {:1d} \n".format(eq0.sym))
+        f.write("NFP = {:3d} \n".format(int(eq0.NFP)))
+        f.write("Psi = {:.8f} \n".format(eq0.Psi))
+
+        f.write("\n# spectral resolution\n")
+        for key, val in {
+            "L_rad": "L",
+            "M_pol": "M",
+            "N_tor": "N",
+            "L_grid": "L_grid",
+            "M_grid": "M_grid",
+            "N_grid": "N_grid",
+        }.items():
+            f.write(f"{key} = {getattr(eq0, val)}\n")
+
+        f.write("\n\n# solver tolerances\n")
+        f.write(f"ftol = {ftol}\n")
+        f.write(f"xtol = {xtol}\n")
+        f.write(f"gtol = {gtol}\n")
+        f.write(f"maxiter = {maxiter}\n")
+
+        f.write("\n\n# solver methods\n")
+        f.write(f"optimizer = {optimizer}\n")
+        f.write(f"objective = {objective}\n")
+        f.write("spectral_indexing = {}\n".format(eq0._spectral_indexing))
+        f.write("node_pattern = {}\n".format(eq0._node_pattern))
+
+        f.write("\n# pressure and rotational transform/current profiles\n")
+
+        if eq0.iota:
+            assert (
+                eq0.pressure.__class__.__name__ == "PowerSeriesProfile"
+                and eq0.iota.__class__.__name__ == "PowerSeriesProfile"
+            ), "Equilibrium must have power series profiles for ascii io"
+            char = "i"
+            iseven_pres = int(eq0._pressure.basis.sym == "even") + 1
+            iseven_iota = int(eq0._iota.basis.sym == "even") + 1
+            pres_profile = np.zeros((eq0.L + 1,))
+            iota_profile = np.zeros((eq0.L + 1,))
+            pres_profile[: eq0.L + 1 : iseven_pres] = eq0._pressure.params
+            iota_profile[: eq0.L + 1 : iseven_iota] = eq0._iota.params
+
+            idxs = np.linspace(0, eq0.L - 1, eq0.L, dtype=int)
+            for l in idxs:
+                f.write(
+                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
+                        int(l), pres_profile[l], char, iota_profile[l]
+                    )
+                )
+        else:
+            assert (
+                eq0.pressure.__class__.__name__ == "PowerSeriesProfile"
+                and eq0.current.__class__.__name__ == "PowerSeriesProfile"
+            ), "Equilibrium must have power series profiles for ascii io"
+            char = "c"
+            iseven_pres = int(eq0._pressure.basis.sym == "even") + 1
+            iseven_curr = int(eq0._current.basis.sym == "even") + 1
+            pres_profile = np.zeros((eq0.L + 1,))
+            curr_profile = np.zeros((eq0.L + 1,))
+            pres_profile[: eq0.L + 1 : iseven_pres] = eq0._pressure.params
+            curr_profile[: eq0.L + 1 : iseven_curr] = eq0._current.params
+
+            idxs = np.linspace(0, eq0.L - 1, eq0.L, dtype=int)
+            for l in idxs:
+                f.write(
+                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
+                        int(l), pres_profile[l], char, curr_profile[l]
+                    )
+                )
+
+        f.write("\n")
+
+        f.write("\n# fixed-boundary surface shape\n")
+        # boundary paramters
+        if eq0.sym:
+            for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
+                if abs(eq0.Rb_lmn[k]) > 1e-8:
+                    f.write(
+                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
+                            Z1 = {:16.8E}\n".format(
+                            int(0), m, n, eq0.Rb_lmn[k], 0
+                        )
+                    )
+            for k, (l, m, n) in enumerate(eq0.surface.Z_basis.modes):
+                if abs(eq0.Zb_lmn[k]) > 1e-8:
+                    f.write(
+                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
+                            Z1 = {:16.8E}\n".format(
+                            int(0), m, n, 0, eq0.Zb_lmn[k]
+                        )
+                    )
+        else:
+            for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
+                if abs(eq0.Rb_lmn[k]) > 1e-8 or abs(eq0.Zb_lmn[k]) > 1e-8:
+                    f.write(
+                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
+                            Z1 = {:16.8E}\n".format(
+                            int(0), m, n, eq0.Rb_lmn[k], eq0.Zb_lmn[k]
+                        )
+                    )
+
+        f.close()
 
     def parse_args(self, cl_args=None):
         """Parse command line arguments.
@@ -123,17 +267,6 @@ class InputReader:
             set_device("cpu")
 
         return args
-
-    def _get_parser_(self):
-        """Get parser for command line arguments.
-
-        Returns
-        -------
-        parser : argparse object
-            argument parser
-
-        """
-        return get_parser()
 
     def parse_inputs(self, fname=None):  # noqa: C901 - FIXME: simplify this
         """Read input from DESC input file; converts from VMEC input if necessary.
@@ -209,7 +342,6 @@ class InputReader:
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
 
         for line in lines:
-
             # check if VMEC input file format
             isVMEC = re.search(r"&INDATA", line)
             if isVMEC:
@@ -657,303 +789,6 @@ class InputReader:
             inputs_list.append(inputs_ii)
 
         return inputs_list
-
-    @staticmethod
-    def write_desc_input(filename, inputs, header=""):  # noqa: C901 - fxn too complex
-        """Generate a DESC input file from a dictionary of parameters.
-
-        Parameters
-        ----------
-        filename : str or path-like
-            name of the file to create
-        inputs : dict or list of dict
-            dictionary of input parameters
-        header : str
-            text to print at the top of the file
-
-        """
-        # open the file, unless its already open
-        if not isinstance(filename, io.IOBase):
-            f = open(filename, "w+")
-        else:
-            f = filename
-        f.seek(0)
-
-        if not isinstance(inputs, (list, tuple)):
-            inputs = [inputs]
-
-        f.write(header + "\n")
-
-        f.write("# global parameters\n")
-        f.write("sym = {:1d} \n".format(inputs[0]["sym"]))
-        f.write("NFP = {:3d} \n".format(int(inputs[0]["NFP"])))
-        f.write("Psi = {:.8f} \n".format(inputs[0]["Psi"]))
-
-        f.write("\n# spectral resolution\n")
-        for key, val in {
-            "L_rad": "L",
-            "M_pol": "M",
-            "N_tor": "N",
-            "L_grid": "L_grid",
-            "M_grid": "M_grid",
-            "N_grid": "N_grid",
-        }.items():
-            f.write(
-                key + " = {}\n".format(", ".join([str(inp[val]) for inp in inputs]))
-            )
-
-        f.write("\n# continuation parameters\n")
-        for key in ["bdry_ratio", "pres_ratio", "curr_ratio", "pert_order"]:
-            inputs_not_None = []
-            for inp in inputs:
-                if inp.get(key) is not None:
-                    inputs_not_None.append(inp)
-            if not inputs_not_None:  # an  empty list evals to False
-                continue  # don't write line if all input tolerance are None
-
-            f.write(
-                key
-                + " = {} \n".format(
-                    ", ".join([str(float(inp[key])) for inp in inputs_not_None])
-                )
-            )
-
-        f.write("\n# solver tolerances\n")
-        for key in ["ftol", "xtol", "gtol", "maxiter"]:
-            inputs_not_None = []
-            for inp in inputs:
-                if inp[key] is not None:
-                    inputs_not_None.append(inp)
-            if not inputs_not_None:  # an  empty list evals to False
-                continue  # don't write line if all input tolerance are None
-
-            f.write(
-                key
-                + " = {}\n".format(
-                    ", ".join([str(inp[key]) for inp in inputs_not_None])
-                )
-            )
-
-        f.write("\n# solver methods\n")
-        f.write("optimizer = {}\n".format(inputs[0]["optimizer"]))
-        f.write("objective = {}\n".format(inputs[0]["objective"]))
-        f.write("bdry_mode = {}\n".format(inputs[0]["bdry_mode"]))
-        f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
-        f.write("node_pattern = {}\n".format(inputs[0]["node_pattern"]))
-
-        f.write("\n# pressure and rotational transform/current profiles\n")
-        if "iota" in inputs[-1].keys():
-            char = "i"
-            profile = inputs[-1]["iota"]
-        elif "current" in inputs[-1].keys():
-            char = "c"
-            profile = inputs[-1]["current"]
-        ls = np.unique(np.concatenate([inputs[-1]["pressure"][:, 0], profile[:, 0]]))
-        for l in ls:
-            idx = np.where(l == inputs[-1]["pressure"][:, 0])[0]
-            if len(idx):
-                p = inputs[-1]["pressure"][idx[0], 1]
-            else:
-                p = 0.0
-            idx = np.where(l == profile[:, 0])[0]
-            if len(idx):
-                i = profile[idx[0], 1]
-            else:
-                i = 0.0
-            f.write(
-                "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), p, char, i)
-            )
-
-        f.write("\n# fixed-boundary surface shape\n")
-        for (l, m, n, R1, Z1) in inputs[-1]["surface"]:
-            f.write(
-                "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
-                    int(l), int(m), int(n), R1, Z1
-                )
-            )
-
-        f.write("\n# magnetic axis initial guess\n")
-        for (n, R0, Z0) in inputs[0]["axis"]:
-            f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
-
-        f.close()
-
-    @staticmethod
-    def descout_to_input(  # noqa: C901 - fxn too complex
-        outfile,
-        infile,
-        objective="force",
-        optimizer="lsq-exact",
-        header="#DESC-generated input file",
-        ftol=1e-2,
-        xtol=1e-6,
-        gtol=1e-6,
-        maxiter=100,
-    ):
-        """Generate a DESC input file from a DESC output file.
-
-        DESC will automatically choose continuation parameters
-
-        Parameters
-        ----------
-        outfile : str or path-like
-            name of the DESC input file to create
-        infile : str or path-like
-            path of the DESC output equilibrium file
-        objective : str
-            objective type used in the input file
-        optimizer : str
-            type of optimizer
-        header : str
-            text to print at the top of the file
-        ftol : float
-            relative tolerance of the objective function f
-        xtol : float
-            relative tolerance of the state vector x
-        gtol : float
-            absolute tolerance of the projected gradient g
-        maxiter : int
-            maximum number of optimizer iterations per continuation step
-        """
-        f = open(outfile, "w+")
-
-        f.seek(0)
-
-        eq = load(infile)
-        try:
-            eq0 = eq[-1]
-        except TypeError:
-            eq0 = eq
-
-        f.write(header + "\n")
-
-        f.write("# global parameters\n")
-        f.write("sym = {:1d} \n".format(eq0.sym))
-        f.write("NFP = {:3d} \n".format(int(eq0.NFP)))
-        f.write("Psi = {:.8f} \n".format(eq0.Psi))
-
-        f.write("\n# spectral resolution\n")
-        for key, val in {
-            "L_rad": "L",
-            "M_pol": "M",
-            "N_tor": "N",
-            "L_grid": "L_grid",
-            "M_grid": "M_grid",
-            "N_grid": "N_grid",
-        }.items():
-            f.write(f"{key} = {getattr(eq0, val)}\n")
-
-        f.write("\n\n# solver tolerances\n")
-        f.write(f"ftol = {ftol}\n")
-        f.write(f"xtol = {xtol}\n")
-        f.write(f"gtol = {gtol}\n")
-        f.write(f"maxiter = {maxiter}\n")
-
-        f.write("\n\n# solver methods\n")
-        f.write(f"optimizer = {optimizer}\n")
-        f.write(f"objective = {objective}\n")
-        f.write("spectral_indexing = {}\n".format(eq0._spectral_indexing))
-        f.write("node_pattern = {}\n".format(eq0._node_pattern))
-
-        f.write("\n# pressure and rotational transform/current profiles\n")
-
-        if eq0.iota:
-            assert (
-                eq0.pressure.__class__.__name__ == "PowerSeriesProfile"
-                and eq0.iota.__class__.__name__ == "PowerSeriesProfile"
-            ), "Equilibrium must have power series profiles for ascii io"
-            char = "i"
-            iseven_pres = int(eq0._pressure.basis.sym == "even") + 1
-            iseven_iota = int(eq0._iota.basis.sym == "even") + 1
-            pres_profile = np.zeros((eq0.L + 1,))
-            iota_profile = np.zeros((eq0.L + 1,))
-            pres_profile[: eq0.L + 1 : iseven_pres] = eq0._pressure.params
-            iota_profile[: eq0.L + 1 : iseven_iota] = eq0._iota.params
-
-            idxs = np.linspace(0, eq0.L - 1, eq0.L, dtype=int)
-            for l in idxs:
-                f.write(
-                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                        int(l), pres_profile[l], char, iota_profile[l]
-                    )
-                )
-        else:
-            assert (
-                eq0.pressure.__class__.__name__ == "PowerSeriesProfile"
-                and eq0.current.__class__.__name__ == "PowerSeriesProfile"
-            ), "Equilibrium must have power series profiles for ascii io"
-            char = "c"
-            iseven_pres = int(eq0._pressure.basis.sym == "even") + 1
-            iseven_curr = int(eq0._current.basis.sym == "even") + 1
-            pres_profile = np.zeros((eq0.L + 1,))
-            curr_profile = np.zeros((eq0.L + 1,))
-            pres_profile[: eq0.L + 1 : iseven_pres] = eq0._pressure.params
-            curr_profile[: eq0.L + 1 : iseven_curr] = eq0._current.params
-
-            idxs = np.linspace(0, eq0.L - 1, eq0.L, dtype=int)
-            for l in idxs:
-                f.write(
-                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                        int(l), pres_profile[l], char, curr_profile[l]
-                    )
-                )
-
-        f.write("\n")
-
-        f.write("\n# fixed-boundary surface shape\n")
-        # boundary paramters
-        if eq0.sym:
-            for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
-                if abs(eq0.Rb_lmn[k]) > 1e-8:
-                    f.write(
-                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
-                            Z1 = {:16.8E}\n".format(
-                            int(0), m, n, eq0.Rb_lmn[k], 0
-                        )
-                    )
-            for k, (l, m, n) in enumerate(eq0.surface.Z_basis.modes):
-                if abs(eq0.Zb_lmn[k]) > 1e-8:
-                    f.write(
-                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
-                            Z1 = {:16.8E}\n".format(
-                            int(0), m, n, 0, eq0.Zb_lmn[k]
-                        )
-                    )
-        else:
-            for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
-                if abs(eq0.Rb_lmn[k]) > 1e-8 or abs(eq0.Zb_lmn[k]) > 1e-8:
-                    f.write(
-                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
-                            Z1 = {:16.8E}\n".format(
-                            int(0), m, n, eq0.Rb_lmn[k], eq0.Zb_lmn[k]
-                        )
-                    )
-
-        f.close()
-
-    @staticmethod
-    def vmec_to_desc_input(vmec_fname, desc_fname):
-        """Convert a VMEC input file to an equivalent DESC input file.
-
-        Parameters
-        ----------
-        vmec_fname : str or path-like
-            filename of VMEC input file
-        desc_fname : str or path-like
-            filename of DESC input file. If it already exists it is overwritten.
-
-        """
-        now = datetime.now()
-        date = now.strftime("%m/%d/%Y")
-        time = now.strftime("%H:%M:%S")
-        header = (
-            "# This DESC input file was auto generated from the VMEC input file\n"
-            + "# {}\n# on {} at {}.\n".format(vmec_fname, date, time)
-            + "# For details on the various options see "
-            + "https://desc-docs.readthedocs.io/en/stable/input.html\n"
-        )
-        inputs = InputReader.parse_vmec_inputs(vmec_fname)
-        InputReader.write_desc_input(desc_fname, inputs, header)
 
     @staticmethod
     def parse_vmec_inputs(vmec_fname, threshold=0):  # noqa: C901 - FIXME: simplify this
@@ -1613,6 +1448,170 @@ class InputReader:
         inputs_arr = [inputs]
 
         return inputs_arr
+
+    @staticmethod
+    def vmec_to_desc_input(vmec_fname, desc_fname):
+        """Convert a VMEC input file to an equivalent DESC input file.
+
+        Parameters
+        ----------
+        vmec_fname : str or path-like
+            filename of VMEC input file
+        desc_fname : str or path-like
+            filename of DESC input file. If it already exists it is overwritten.
+
+        """
+        now = datetime.now()
+        date = now.strftime("%m/%d/%Y")
+        time = now.strftime("%H:%M:%S")
+        header = (
+            "# This DESC input file was auto generated from the VMEC input file\n"
+            + "# {}\n# on {} at {}.\n".format(vmec_fname, date, time)
+            + "# For details on the various options see "
+            + "https://desc-docs.readthedocs.io/en/stable/input.html\n"
+        )
+        inputs = InputReader.parse_vmec_inputs(vmec_fname)
+        InputReader.write_desc_input(desc_fname, inputs, header)
+
+    @staticmethod
+    def write_desc_input(filename, inputs, header=""):  # noqa: C901 - fxn too complex
+        """Generate a DESC input file from a dictionary of parameters.
+
+        Parameters
+        ----------
+        filename : str or path-like
+            name of the file to create
+        inputs : dict or list of dict
+            dictionary of input parameters
+        header : str
+            text to print at the top of the file
+
+        """
+        # open the file, unless its already open
+        if not isinstance(filename, io.IOBase):
+            f = open(filename, "w+")
+        else:
+            f = filename
+        f.seek(0)
+
+        if not isinstance(inputs, (list, tuple)):
+            inputs = [inputs]
+
+        f.write(header + "\n")
+
+        f.write("# global parameters\n")
+        f.write("sym = {:1d} \n".format(inputs[0]["sym"]))
+        f.write("NFP = {:3d} \n".format(int(inputs[0]["NFP"])))
+        f.write("Psi = {:.8f} \n".format(inputs[0]["Psi"]))
+
+        f.write("\n# spectral resolution\n")
+        for key, val in {
+            "L_rad": "L",
+            "M_pol": "M",
+            "N_tor": "N",
+            "L_grid": "L_grid",
+            "M_grid": "M_grid",
+            "N_grid": "N_grid",
+        }.items():
+            f.write(
+                key + " = {}\n".format(", ".join([str(inp[val]) for inp in inputs]))
+            )
+
+        f.write("\n# continuation parameters\n")
+        for key in ["bdry_ratio", "pres_ratio", "curr_ratio", "pert_order"]:
+            inputs_not_None = []
+            for inp in inputs:
+                if inp.get(key) is not None:
+                    inputs_not_None.append(inp)
+            if not inputs_not_None:  # an  empty list evals to False
+                continue  # don't write line if all input tolerance are None
+
+            f.write(
+                key
+                + " = {} \n".format(
+                    ", ".join([str(float(inp[key])) for inp in inputs_not_None])
+                )
+            )
+
+        f.write("\n# solver tolerances\n")
+        for key in ["ftol", "xtol", "gtol", "maxiter"]:
+            inputs_not_None = []
+            for inp in inputs:
+                if inp[key] is not None:
+                    inputs_not_None.append(inp)
+            if not inputs_not_None:  # an  empty list evals to False
+                continue  # don't write line if all input tolerance are None
+
+            f.write(
+                key
+                + " = {}\n".format(
+                    ", ".join([str(inp[key]) for inp in inputs_not_None])
+                )
+            )
+
+        f.write("\n# solver methods\n")
+        f.write("optimizer = {}\n".format(inputs[0]["optimizer"]))
+        f.write("objective = {}\n".format(inputs[0]["objective"]))
+        f.write("bdry_mode = {}\n".format(inputs[0]["bdry_mode"]))
+        f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
+        f.write("node_pattern = {}\n".format(inputs[0]["node_pattern"]))
+
+        f.write("\n# pressure and rotational transform/current profiles\n")
+        if "iota" in inputs[-1].keys():
+            char = "i"
+            profile = inputs[-1]["iota"]
+        elif "current" in inputs[-1].keys():
+            char = "c"
+            profile = inputs[-1]["current"]
+        ls = np.unique(np.concatenate([inputs[-1]["pressure"][:, 0], profile[:, 0]]))
+        for l in ls:
+            idx = np.where(l == inputs[-1]["pressure"][:, 0])[0]
+            if len(idx):
+                p = inputs[-1]["pressure"][idx[0], 1]
+            else:
+                p = 0.0
+            idx = np.where(l == profile[:, 0])[0]
+            if len(idx):
+                i = profile[idx[0], 1]
+            else:
+                i = 0.0
+            f.write(
+                "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), p, char, i)
+            )
+
+        f.write("\n# fixed-boundary surface shape\n")
+        for l, m, n, R1, Z1 in inputs[-1]["surface"]:
+            f.write(
+                "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
+                    int(l), int(m), int(n), R1, Z1
+                )
+            )
+
+        f.write("\n# magnetic axis initial guess\n")
+        for n, R0, Z0 in inputs[0]["axis"]:
+            f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
+
+        f.close()
+
+    @property
+    def args(self):
+        """Namespace : parsed namespace of all command line arguments."""
+        return self._args
+
+    @property
+    def input_path(self):
+        """Path to input file."""
+        return self._input_path
+
+    @property
+    def inputs(self):
+        """List of dictionaries with values from input file."""
+        return self._inputs
+
+    @property
+    def output_path(self):
+        """Path to output file."""
+        return self._output_path
 
 
 # NOTE: this has to be outside the class to work with autodoc

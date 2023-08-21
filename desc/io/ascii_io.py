@@ -3,6 +3,96 @@
 import numpy as np
 
 
+def read_ascii(filename):
+    """Read a previously generated DESC ascii output file.
+
+    Parameters
+    ----------
+    filename : str or path-like
+        path to file to read
+
+    Returns
+    -------
+    eq : dict
+        dictionary of equilibrium parameters.
+
+    """
+    from desc.backend import sign
+    from desc.equilibrium import Equilibrium
+    from desc.utils import copy_coeffs
+
+    eq = {}
+    f = open(filename)
+    lines = list(f)
+    eq["NFP"] = int(lines[0].strip("\n").split()[-1])
+    eq["Psi"] = float(lines[1].strip("\n").split()[-1])
+    lines = lines[2:]
+
+    Nbdry = int(lines[0].strip("\n").split()[-1])
+    bdry_idx = np.zeros((Nbdry, 2), dtype=int)
+    bdryR = np.zeros(Nbdry)
+    bdryZ = np.zeros(Nbdry)
+    for i in range(Nbdry):
+        bdry_idx[i, 0] = int(lines[i + 1].strip("\n").split()[1])
+        bdry_idx[i, 1] = int(lines[i + 1].strip("\n").split()[3])
+        bdryR[i] = float(lines[i + 1].strip("\n").split()[6])
+        bdryZ[i] = float(lines[i + 1].strip("\n").split()[9])
+    eq["surface"] = np.hstack(
+        [
+            np.zeros((Nbdry, 1)),
+            bdry_idx,
+            bdryR.reshape((-1, 1)),
+            bdryZ.reshape((-1, 1)),
+        ]
+    )
+    lines = lines[Nbdry + 1 :]
+
+    Nprof = int(lines[0].strip("\n").split()[-1])
+    pl = np.zeros(Nprof).astype(int)
+    cP = np.zeros(Nprof)
+    cI = np.zeros(Nprof)
+    for i in range(Nprof):
+        pl[i] = int(lines[i + 1].strip("\n").split()[1])
+        cP[i] = float(lines[i + 1].strip("\n").split()[4])
+        cI[i] = float(lines[i + 1].strip("\n").split()[7])
+    eq["pressure"] = np.hstack([pl.reshape((-1, 1)), cP.reshape((-1, 1))])
+    eq["iota"] = np.hstack([pl.reshape((-1, 1)), cI.reshape((-1, 1))])
+    lines = lines[Nprof + 1 :]
+
+    NRZ = int(lines[0].strip("\n").split()[-1])
+    zern_idx = np.zeros((NRZ, 3), dtype=int)
+    cR = np.zeros(NRZ)
+    cZ = np.zeros(NRZ)
+    cL = np.zeros(NRZ)
+    for i in range(NRZ):
+        zern_idx[i, 0] = int(lines[i + 1].strip("\n").split()[1])
+        zern_idx[i, 1] = int(lines[i + 1].strip("\n").split()[3])
+        zern_idx[i, 2] = int(lines[i + 1].strip("\n").split()[5])
+        cR[i] = float(lines[i + 1].strip("\n").split()[8])
+        cZ[i] = float(lines[i + 1].strip("\n").split()[11])
+        cL[i] = float(lines[i + 1].strip("\n").split()[14])
+    lines = lines[NRZ + 1 :]
+
+    eq["L"] = np.max(abs(zern_idx[:, 0]))
+    eq["M"] = np.max(abs(zern_idx[:, 1]))
+    eq["N"] = np.max(abs(zern_idx[:, 2]))
+
+    if np.all(
+        cR[np.where(sign(zern_idx[:, 1]) != sign(zern_idx[:, 2]))] == 0
+    ) and np.all(cZ[np.where(sign(zern_idx[:, 1]) == sign(zern_idx[:, 2]))] == 0):
+        eq["sym"] = True
+    else:
+        eq["sym"] = False
+
+    eq["spectral_indexing"] = "ansi" if eq["L"] == eq["M"] else "fringe"
+    equil = Equilibrium(**eq)
+    equil.R_lmn = copy_coeffs(cR, zern_idx, equil.R_basis.modes)
+    equil.Z_lmn = copy_coeffs(cZ, zern_idx, equil.Z_basis.modes)
+    equil.L_lmn = copy_coeffs(cL, zern_idx, equil.L_basis.modes)
+
+    return equil
+
+
 def write_ascii(fname, eq):
     """Print the equilibrium solution to a text file.
 
@@ -105,93 +195,3 @@ def write_ascii(fname, eq):
     # close file
     file.truncate()
     file.close()
-
-
-def read_ascii(filename):
-    """Read a previously generated DESC ascii output file.
-
-    Parameters
-    ----------
-    filename : str or path-like
-        path to file to read
-
-    Returns
-    -------
-    eq : dict
-        dictionary of equilibrium parameters.
-
-    """
-    from desc.backend import sign
-    from desc.equilibrium import Equilibrium
-    from desc.utils import copy_coeffs
-
-    eq = {}
-    f = open(filename)
-    lines = list(f)
-    eq["NFP"] = int(lines[0].strip("\n").split()[-1])
-    eq["Psi"] = float(lines[1].strip("\n").split()[-1])
-    lines = lines[2:]
-
-    Nbdry = int(lines[0].strip("\n").split()[-1])
-    bdry_idx = np.zeros((Nbdry, 2), dtype=int)
-    bdryR = np.zeros(Nbdry)
-    bdryZ = np.zeros(Nbdry)
-    for i in range(Nbdry):
-        bdry_idx[i, 0] = int(lines[i + 1].strip("\n").split()[1])
-        bdry_idx[i, 1] = int(lines[i + 1].strip("\n").split()[3])
-        bdryR[i] = float(lines[i + 1].strip("\n").split()[6])
-        bdryZ[i] = float(lines[i + 1].strip("\n").split()[9])
-    eq["surface"] = np.hstack(
-        [
-            np.zeros((Nbdry, 1)),
-            bdry_idx,
-            bdryR.reshape((-1, 1)),
-            bdryZ.reshape((-1, 1)),
-        ]
-    )
-    lines = lines[Nbdry + 1 :]
-
-    Nprof = int(lines[0].strip("\n").split()[-1])
-    pl = np.zeros(Nprof).astype(int)
-    cP = np.zeros(Nprof)
-    cI = np.zeros(Nprof)
-    for i in range(Nprof):
-        pl[i] = int(lines[i + 1].strip("\n").split()[1])
-        cP[i] = float(lines[i + 1].strip("\n").split()[4])
-        cI[i] = float(lines[i + 1].strip("\n").split()[7])
-    eq["pressure"] = np.hstack([pl.reshape((-1, 1)), cP.reshape((-1, 1))])
-    eq["iota"] = np.hstack([pl.reshape((-1, 1)), cI.reshape((-1, 1))])
-    lines = lines[Nprof + 1 :]
-
-    NRZ = int(lines[0].strip("\n").split()[-1])
-    zern_idx = np.zeros((NRZ, 3), dtype=int)
-    cR = np.zeros(NRZ)
-    cZ = np.zeros(NRZ)
-    cL = np.zeros(NRZ)
-    for i in range(NRZ):
-        zern_idx[i, 0] = int(lines[i + 1].strip("\n").split()[1])
-        zern_idx[i, 1] = int(lines[i + 1].strip("\n").split()[3])
-        zern_idx[i, 2] = int(lines[i + 1].strip("\n").split()[5])
-        cR[i] = float(lines[i + 1].strip("\n").split()[8])
-        cZ[i] = float(lines[i + 1].strip("\n").split()[11])
-        cL[i] = float(lines[i + 1].strip("\n").split()[14])
-    lines = lines[NRZ + 1 :]
-
-    eq["L"] = np.max(abs(zern_idx[:, 0]))
-    eq["M"] = np.max(abs(zern_idx[:, 1]))
-    eq["N"] = np.max(abs(zern_idx[:, 2]))
-
-    if np.all(
-        cR[np.where(sign(zern_idx[:, 1]) != sign(zern_idx[:, 2]))] == 0
-    ) and np.all(cZ[np.where(sign(zern_idx[:, 1]) == sign(zern_idx[:, 2]))] == 0):
-        eq["sym"] = True
-    else:
-        eq["sym"] = False
-
-    eq["spectral_indexing"] = "ansi" if eq["L"] == eq["M"] else "fringe"
-    equil = Equilibrium(**eq)
-    equil.R_lmn = copy_coeffs(cR, zern_idx, equil.R_basis.modes)
-    equil.Z_lmn = copy_coeffs(cZ, zern_idx, equil.Z_basis.modes)
-    equil.L_lmn = copy_coeffs(cL, zern_idx, equil.L_basis.modes)
-
-    return equil

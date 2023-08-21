@@ -50,6 +50,20 @@ class PickleReader(PickleIO, Reader):
         self.file_mode = "r"
         super().__init__()
 
+    def read_dict(self, thedict, where=None):
+        """Read dictionary from file in group specified by where argument.
+
+        Parameters
+        ----------
+        thedict : dictionary
+            dictionary to update from the file
+        where : None of file instance
+            specifies where to read dict from
+
+        """
+        loc = self.resolve_where(where)
+        thedict.update(pickle.load(loc))
+
     def read_obj(self, obj=None, where=None):
         """Read object from file in group specified by where argument.
 
@@ -66,20 +80,6 @@ class PickleReader(PickleIO, Reader):
             return pickle.load(loc)
         else:
             obj = pickle.load(loc)
-
-    def read_dict(self, thedict, where=None):
-        """Read dictionary from file in group specified by where argument.
-
-        Parameters
-        ----------
-        thedict : dictionary
-            dictionary to update from the file
-        where : None of file instance
-            specifies where to read dict from
-
-        """
-        loc = self.resolve_where(where)
-        thedict.update(pickle.load(loc))
 
 
 class PickleWriter(PickleIO, Writer):
@@ -100,20 +100,6 @@ class PickleWriter(PickleIO, Writer):
         self.file_mode = file_mode
         super().__init__()
 
-    def write_obj(self, obj, where=None):
-        """Write object to file in group specified by where argument.
-
-        Parameters
-        ----------
-        obj : python object instance
-            object must have _io_attrs_ attribute to have attributes read and loaded
-        where : None or file insance
-            specifies where to write obj to
-
-        """
-        loc = self.resolve_where(where)
-        pickle.dump(obj, loc)
-
     def write_dict(self, thedict, where=None):
         """Write dictionary to file in group specified by where argument.
 
@@ -128,3 +114,17 @@ class PickleWriter(PickleIO, Writer):
         if not isinstance(thedict, dict):
             raise TypeError("Object provided is not a dictionary.")
         self.write_object(thedict, where=where)
+
+    def write_obj(self, obj, where=None):
+        """Write object to file in group specified by where argument.
+
+        Parameters
+        ----------
+        obj : python object instance
+            object must have _io_attrs_ attribute to have attributes read and loaded
+        where : None or file insance
+            specifies where to write obj to
+
+        """
+        loc = self.resolve_where(where)
+        pickle.dump(obj, loc)

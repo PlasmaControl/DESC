@@ -711,7 +711,14 @@ class CoilSet(Coil, MutableSequence):
             default grid
         """
         NFP = 1 if NFP is None else NFP
-        coils = flatten_list(self.coils)  # flatten any nested coilsets
+
+        def flatten_coils(coilset):
+            if hasattr(coilset, "__len__"):
+                return [a for i in coilset for a in flatten_coils(i)]
+            else:
+                return [coilset]
+
+        coils = flatten_coils(self.coils)
         assert (
             int(len(coils) / NFP) == len(coils) / NFP
         ), "Number of coils in coilset must be evenly divisible by NFP!"

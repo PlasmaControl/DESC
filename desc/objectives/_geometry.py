@@ -1267,6 +1267,7 @@ class B_dmin(_Objective):
             constants = self.constants
 
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=self._transforms,

@@ -374,6 +374,8 @@ class FourierXYZCurve(Curve):
 
         Parameters
         ----------
+        coords: ndarray
+            coordinates to fit a FourierXYZCurve object with.
         N : int
             Fourier resolution of the new X,Y,Z representation.
             default is 10

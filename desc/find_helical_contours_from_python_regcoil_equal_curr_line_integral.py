@@ -3,6 +3,7 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.interpolate import interp1d
 from scipy.optimize import minimize
 
 import desc.io
@@ -12,6 +13,7 @@ from desc.compute.utils import cross, dot
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid
+from desc.plotting import plot_3d
 from desc.transform import Transform
 
 # make this a fxn that takes in the phi_MN and does the usual thing
@@ -210,31 +212,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     helicity = -net_poloidal_current / net_toroidal_current / eq.NFP
     phi_slope = np.sign(helicity)
     ###############################################
-    # TODO: don't need this for the whole thing,
-    #  should be able to only use like 2 or 3 repetitions
-    # to find the contour then repeat given the discrete
-    #  periodicity in zeta, by just rotating it by
-    # an angle phi/NFP, just need
-    # wide enough in zeta and tall enough inzeta
-    # to capture the contour entering at zeta=0
-    # and exiting at zeta = XX
-    # then rotate it by repeating it 2pi/(2pi-XX)
-    # times over the angle 2pi-XX/something
-
-    theta_full = theta_coil * np.sign(phi_slope)
-    for inn in range(1, int(2 * nfp)):
-        theta_full = np.concatenate(
-            (theta_full, (theta_coil + 2 * np.pi * inn) * np.sign(phi_slope))
-        )
-    theta_full = np.append(
-        theta_full, theta_full[-1] + theta_full[1]
-    )  # add the last point
-    zeta_full = np.append(zetal_coil, 2 * np.pi)
-    theta_full_2D, zeta_full_2D = np.meshgrid(theta_full, zeta_full, indexing="ij")
-
-    my_tot_full = phi_tot_fun_vec(theta_full_2D, zeta_full_2D).reshape(
-        theta_full.size, zeta_full.size, order="F"
-    )
 
     def get_integration_points_and_line_elems(
         contour_theta_halfway,
@@ -252,8 +229,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             )  # assumes we have contours which are intially at phi=0
             if i != 0:  # do as normal
                 thetas = np.linspace(
-                    contour_theta_halfway[i - 1][0],
-                    contour_theta_halfway[i][0],
+                    contour_theta_halfway[i - 1],
+                    contour_theta_halfway[i],
                     nthetas,
                     endpoint=False,
                 )
@@ -262,8 +239,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             ):  # if i==0, then must use the last and the first halfway
                 # contour periodicity to find the integration domain
                 thetas = jnp.linspace(
-                    contour_theta_halfway[i][0],
-                    contour_theta_halfway[-1][0] + 2 * np.pi * np.sign(phi_slope),
+                    contour_theta_halfway[i],
+                    contour_theta_halfway[-1] + 2 * np.pi * np.sign(phi_slope),
                     nthetas,
                     endpoint=False,
                 )
@@ -291,6 +268,19 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     # have theta be the optimization varibale
     # and theta halfway is literally the theta halfway btwn,
     #  so no need to call matploltib
+
+    # grids of values to use to approximately find the thetas
+    # corresponding to the contour Phi value halfway between two contours
+    theta_lookup_grid = np.linspace(
+        -2 * np.pi / eq.NFP, 2 * np.pi + 2 * np.pi / eq.NFP, 10000
+    )
+    contour_vals_on_theta_lookup_grid = phi_tot_fun_vec(
+        theta_lookup_grid, np.zeros_like(theta_lookup_grid)
+    )
+    theta_of_contour_val = interp1d(
+        x=contour_vals_on_theta_lookup_grid, y=theta_lookup_grid
+    )
+
     def find_contours_and_current_variance(
         contours, return_full_info=False, show_plots=False, nthetas=200
     ):
@@ -300,83 +290,22 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
         """
         N_trial_contours = len(contours) - 1
-        # contours is the decision variable
-        contour_zeta = []
-        contour_theta = []
+        # thetas is the decision variable
+
         if not contours[1] - contours[0] > 1:
             contours = np.sort(contours)
             contours_were_sorted = True
         else:
             contours_were_sorted = False
-        contours_halfway = []
-        for i in range(N_trial_contours):
-            halfway_below = (contours[i] + contours[i + 1]) / 2
-            contours_halfway.append(halfway_below)
 
-        plt.figure(figsize=(18, 10))
-        cdata = plt.contour(
-            zeta_full_2D.T, theta_full_2D.T, np.transpose(my_tot_full), contours
-        )
-        cdata_half = plt.contour(
-            zeta_full_2D.T,
-            theta_full_2D.T,
-            np.transpose(my_tot_full),
-            contours_halfway,
-            colors="w",
-        )
-
-        contour_zeta = []
+        theta_halfways = []
         contour_theta = []
-        contour_zeta_halfway = []
-        contour_theta_halfway = []
-        numCoils = 0
-        for j in range(N_trial_contours):
-            try:
-                p = cdata.collections[j].get_paths()[0]
-            except Exception:
-                print("no path found for given contour")
-                continue
-            v = p.vertices
-            temp_zeta = v[:, 0]
-            temp_theta = v[:, 1]
-            contour_zeta.append(temp_zeta)
-            contour_theta.append(temp_theta)
 
-            numCoils += 1
-            if show_plots:
-                plt.plot(contour_zeta[-1], contour_theta[-1], "-r", linewidth=1)
-                plt.plot(contour_zeta[-1][-1], contour_theta[-1][-1], "sk")
-            if numCoils == N_trial_contours:
-                plt.plot(
-                    contour_zeta[0][50:],
-                    np.asarray(contour_theta[0][50:]) - 2 * np.pi,
-                    "--k",
-                )
-                break
-        for k in range(len(cdata_half.collections)):
-            try:
-                p = cdata_half.collections[k].get_paths()[0]
-            except Exception:
-                print("no path found for given contour")
-                continue
-            v = p.vertices
-            contour_zeta_halfway.append(v[:, 0])
-            contour_theta_halfway.append(v[:, 1])
+        for i in range(N_trial_contours):
+            halfway_contour_val = (contours[i] + contours[i + 1]) / 2
+            theta_halfways.append(theta_of_contour_val(halfway_contour_val))
+            contour_theta.append(theta_of_contour_val(contours[i]))
 
-            numCoils += 1
-            if show_plots:
-                plt.plot(
-                    contour_zeta_halfway[-1],
-                    contour_theta_halfway[-1],
-                    "--g",
-                    linewidth=1,
-                )
-                plt.plot(
-                    contour_zeta_halfway[-1][-1], contour_theta_halfway[-1][-1], "--k"
-                )
-        plt.close()
-        del cdata
-        del cdata_half
         ################################################################
         # Find contours that are halfway between each coil contour,
         # to set the bounds of integration of surface current for
@@ -386,7 +315,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         # number of theta points at each phi point for integration
 
         coil_nodes_line, coil_line_elements = get_integration_points_and_line_elems(
-            contour_theta_halfway,
+            theta_halfways,
             contours_were_sorted,
             nthetas=nthetas,
         )
@@ -395,50 +324,46 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             plt.figure(figsize=(10, 10))
 
             for i in range(N_trial_contours):  # np.flip(np.arange(desirednumcoils)):
-                plt.scatter(
+                plt.plot(
                     coil_nodes_line[i][1],
                     coil_nodes_line[i][0],
-                    label="line integration nodes",
-                    s=50,
-                    marker="x",
+                    label="line integration bound",
                 )
                 plt.plot(
-                    contour_zeta[i],
+                    0,
                     contour_theta[i],
-                    "c",
-                    label="Coil to integrate current for",
+                    "c.",
+                    label="Theta0 of Coil to integrate current for",
                 )
                 if i != 0:
                     plt.plot(
-                        contour_zeta_halfway[i], contour_theta_halfway[i], "k"
+                        0, theta_halfways[i], "k"
                     )  # , label="bounding contours for integration")
-                    plt.plot(
-                        contour_zeta_halfway[i - 1], contour_theta_halfway[i - 1], "k"
-                    )
+                    plt.plot(0, theta_halfways[i - 1], "k")
 
                 elif not contours_were_sorted and i == 0:
                     plt.plot(
-                        contour_zeta_halfway[-1],
-                        contour_theta_halfway[-1] + 2 * np.pi * np.sign(phi_slope),
-                        "k-",
-                        label="bounding contours for integration",
+                        0,
+                        theta_halfways[-1] + 2 * np.pi * np.sign(phi_slope),
+                        "k+",
+                        label="bounds for integration",
                     )
-                    plt.plot(contour_zeta_halfway[i], contour_theta_halfway[i], "k-")
+                    plt.plot(0, theta_halfways[i], "k-")
                     plt.legend()
                 elif contours_were_sorted and i == 0:
                     plt.plot(
-                        contour_zeta_halfway[0],
-                        contour_theta_halfway[0] + 2 * np.pi * np.sign(phi_slope),
-                        "m--",
+                        0,
+                        theta_halfways[0] + 2 * np.pi * np.sign(phi_slope),
+                        "m.",
                         label="bounding contours for integration",
                     )
-                    plt.plot(contour_zeta_halfway[i], contour_theta_halfway[i], "k--")
+                    plt.plot(0, theta_halfways[i], "k.")
                     plt.legend()
             plt.xlabel("zeta")
             plt.ylabel("theta")
 
         ################################################################
-        # integrate surface current over the areas for each coil
+        # integrate surface current through the integration bounds for each coil
         # to find the current for each coil
         ################################################################
 
@@ -461,8 +386,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             current = jnp.sum(K_sup_z_time_R * line_elems)
             coil_currents_line.append(current)
 
-        numCoils = len(contour_theta)
-
         variance = np.var(coil_currents_line)
         if not show_plots:
             plt.close("all")
@@ -474,10 +397,20 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
         if not return_full_info:
             return variance
-        else:  # return all info: contour_theta and contour_zeta, coil_currents, etc
-            return contour_theta, contour_zeta, coil_currents_line
+        else:  # return all info: contour_theta and coil_currents
+            return contour_theta, coil_currents_line
 
-    def find_full_coil_contours(contours, show_plots=True):
+    # TODO: don't need this for the whole zeta/theta domain,
+    #  should be able to only use like 2 or 3 repetitions
+    # to find the contour then repeat given the discrete
+    #  periodicity in zeta, by just rotating it by
+    # an angle phi/NFP, just need
+    # wide enough in zeta and tall enough inzeta
+    # to capture the contour entering at zeta=0
+    # and exiting at zeta = XX
+    # then rotate it by repeating it 2pi/(2pi-XX)
+    # times over the angle 2pi-XX/something
+    def find_full_coil_contours(contours, show_plots=True, ax=None, label=None, ls="-"):
         """Accepts a list of current potential contour values of length Ncoils+1.
 
         returns the theta,zeta points of each contour
@@ -527,6 +460,9 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             if show_plots:
                 plt.plot(contour_zeta[-1], contour_theta[-1], "-r", linewidth=1)
                 plt.plot(contour_zeta[-1][-1], contour_theta[-1][-1], "sk")
+        plt.xlim([0, 2 * np.pi / nfp])
+        plt.ylim([0, 2 * np.pi + 2 * np.pi / nfp / 4])
+
         return contour_theta, contour_zeta
 
     N_trial_contours = desirednumcoils
@@ -556,6 +492,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     xs = [contours]
     fun_vals = [find_contours_and_current_variance(contours)]
 
+    contour_theta_initial, contour_zeta_initial = find_full_coil_contours(contours)
+
     if equal_current:
         t_start = time.time()
 
@@ -580,48 +518,89 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         print(f"Optimization for coils took {t_end-t_start} s")
         contours = result.x
 
-    contour_theta, contour_zeta, coil_currents = find_contours_and_current_variance(
+    final_coil_theta0s, coil_currents = find_contours_and_current_variance(
         contours, return_full_info=True, show_plots=True
     )
+    print("initial coil thetas:", theta0s)
+    print("final coil thetas:", final_coil_theta0s)
+
     contour_theta, contour_zeta = find_full_coil_contours(contours)
 
     ################################################################
     # Find the XYZ points in real space of the coil contours
     ################################################################
-    contour_X = []
-    contour_Y = []
-    contour_Z = []
+    if save_figs:
+        fig, ax = plot_3d(eq, "|B|", figsize=(12, 12))
+    else:
+        ax = None
 
-    for thetas, zetas in zip(contour_theta, contour_zeta):
-        coords = winding_surf.compute(
-            "x",
-            grid=Grid(
-                jnp.vstack((jnp.zeros_like(thetas), thetas, zetas)).T, sort=False
-            ),
-            basis="xyz",
-        )["x"]
-        contour_X.append(coords[:, 0])
-        contour_Y.append(coords[:, 1])
-        contour_Z.append(coords[:, 2])
-    fig = plt.figure(figsize=(12, 12))
-    ax = fig.add_subplot(projection="3d")
-    for j in range(len(contour_X)):
-        ax.plot(contour_X[j], contour_Y[j], contour_Z[j], "-")
+    def find_XYZ_points(
+        theta_pts, zeta_pts, surface, find_min_dist=None, ax=None, ls="-", label=None
+    ):
+        contour_X = []
+        contour_Y = []
+        contour_Z = []
 
-    # Find the point of minimum separation
-    minSeparation2 = 1.0e20
-    for whichCoil1 in range(desirednumcoils):
-        for whichCoil2 in range(whichCoil1):
-            for whichPoint in range(len(contour_X[whichCoil1])):
-                dx = contour_X[whichCoil1][whichPoint] - contour_X[whichCoil2]
-                dy = contour_Y[whichCoil1][whichPoint] - contour_Y[whichCoil2]
-                dz = contour_Z[whichCoil1][whichPoint] - contour_Z[whichCoil2]
-                separation2 = dx * dx + dy * dy + dz * dz
-                this_minSeparation2 = np.min(separation2)
-                if this_minSeparation2 < minSeparation2:
-                    minSeparation2 = this_minSeparation2
+        for thetas, zetas in zip(theta_pts, zeta_pts):
+            coords = surface.compute(
+                "x",
+                grid=Grid(
+                    jnp.vstack((jnp.zeros_like(thetas), thetas, zetas)).T, sort=False
+                ),
+                basis="xyz",
+            )["x"]
+            contour_X.append(coords[:, 0])
+            contour_Y.append(coords[:, 1])
+            contour_Z.append(coords[:, 2])
+        if save_figs:
+            if ax is None:
+                fig = plt.figure(figsize=(12, 12))
+                ax = fig.add_subplot(projection="3d")
+            for j in range(len(contour_X)):
+                if j == 0:
+                    ax.plot(contour_X[j], contour_Y[j], contour_Z[j], ls, label=label)
+                else:
+                    ax.plot(contour_X[j], contour_Y[j], contour_Z[j], ls)
 
-    print(f"Minimum coil-coil separation: {np.sqrt(minSeparation2)*1000:3.2f} mm")
+        # Find the point of minimum separation
+        if find_min_dist:
+            minSeparation2 = 1.0e20
+            for whichCoil1 in range(desirednumcoils):
+                for whichCoil2 in range(whichCoil1):
+                    for whichPoint in range(len(contour_X[whichCoil1])):
+                        dx = contour_X[whichCoil1][whichPoint] - contour_X[whichCoil2]
+                        dy = contour_Y[whichCoil1][whichPoint] - contour_Y[whichCoil2]
+                        dz = contour_Z[whichCoil1][whichPoint] - contour_Z[whichCoil2]
+                        separation2 = dx * dx + dy * dy + dz * dz
+                        this_minSeparation2 = np.min(separation2)
+                        if this_minSeparation2 < minSeparation2:
+                            minSeparation2 = this_minSeparation2
+
+            print(
+                f"Minimum coil-coil separation: {np.sqrt(minSeparation2)*1000:3.2f} mm"
+            )
+        return contour_X, contour_Y, contour_Z, ax
+
+    contour_X, contour_Y, contour_Z, ax = find_XYZ_points(
+        contour_theta,
+        contour_zeta,
+        winding_surf,
+        find_min_dist=True,
+        label="Final",
+        ax=ax,
+    )
+    _, _, _, ax = find_XYZ_points(
+        contour_theta_initial,
+        contour_zeta_initial,
+        winding_surf,
+        find_min_dist=False,
+        label="Initial",
+        ls="--",
+        ax=ax,
+    )
+
+    if save_figs:
+        ax.legend()
 
     figfilename = f"coil_3d_ncoil_{desirednumcoils}_alpha_{alpha:1.4e}_{dirname}.png"
     if save_figs:

@@ -979,8 +979,6 @@ def test_regcoil_ellipse_helical():
     coilsFilename = "./coilsfile_15.txt"
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
-    # TODO: the equal-current optimization can be slow ( minutes for 5 coils, hour or longer for 15+ coils),
-    # should JIT compile some of the functions to improve speed, and see other ways to optimize
     coilset2 = find_helical_coils(
         phi_mn_opt_0,
         trans.basis,
@@ -995,7 +993,7 @@ def test_regcoil_ellipse_helical():
         equal_current=False,
         initial_guess=None,
         step=6,
-        save_files=False,
+        save_figs=False,
     )
 
     fieldR, fieldZ = field_trace_from_coilset(

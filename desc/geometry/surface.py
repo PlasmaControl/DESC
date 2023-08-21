@@ -12,8 +12,6 @@ from desc.utils import copy_coeffs
 
 from .core import Surface
 
-__all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
-
 
 class FourierRZToroidalSurface(Surface):
     """Toroidal surface represented by Fourier series in poloidal and toroidal angles.
@@ -120,28 +118,6 @@ class FourierRZToroidalSurface(Surface):
 
         self.name = name
 
-    @property
-    def NFP(self):
-        """int: Number of (toroidal) field periods."""
-        return self._NFP
-
-    @NFP.setter
-    def NFP(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(new)}"
-        self.change_resolution(NFP=new)
-
-    @property
-    def R_basis(self):
-        """DoubleFourierSeries: Spectral basis for R."""
-        return self._R_basis
-
-    @property
-    def Z_basis(self):
-        """DoubleFourierSeries: Spectral basis for Z."""
-        return self._Z_basis
-
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
         assert (
@@ -188,74 +164,6 @@ class FourierRZToroidalSurface(Surface):
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
             self._M = M
             self._N = N
-
-    @property
-    def R_lmn(self):
-        """ndarray: Spectral coefficients for R."""
-        return self._R_lmn
-
-    @R_lmn.setter
-    def R_lmn(self, new):
-        if len(new) == self.R_basis.num_modes:
-            self._R_lmn = jnp.asarray(new)
-        else:
-            raise ValueError(
-                f"R_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
-            )
-
-    @property
-    def Z_lmn(self):
-        """ndarray: Spectral coefficients for Z."""
-        return self._Z_lmn
-
-    @Z_lmn.setter
-    def Z_lmn(self, new):
-        if len(new) == self.Z_basis.num_modes:
-            self._Z_lmn = jnp.asarray(new)
-        else:
-            raise ValueError(
-                f"Z_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
-            )
-
-    def get_coeffs(self, m, n=0):
-        """Get Fourier coefficients for given mode number(s)."""
-        n = np.atleast_1d(n).astype(int)
-        m = np.atleast_1d(m).astype(int)
-
-        m, n = np.broadcast_arrays(m, n)
-        R = np.zeros_like(m).astype(float)
-        Z = np.zeros_like(m).astype(float)
-
-        mn = np.array([m, n]).T
-        idxR = np.where(
-            (mn[:, np.newaxis, :] == self.R_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
-        )
-        idxZ = np.where(
-            (mn[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
-        )
-
-        R[idxR[0]] = self.R_lmn[idxR[1]]
-        Z[idxZ[0]] = self.Z_lmn[idxZ[1]]
-        return R, Z
-
-    def set_coeffs(self, m, n=0, R=None, Z=None):
-        """Set specific Fourier coefficients."""
-        m, n, R, Z = (
-            np.atleast_1d(m),
-            np.atleast_1d(n),
-            np.atleast_1d(R),
-            np.atleast_1d(Z),
-        )
-        m, n, R, Z = np.broadcast_arrays(m, n, R, Z)
-        for mm, nn, RR, ZZ in zip(m, n, R, Z):
-            if RR is not None:
-                idxR = self.R_basis.get_idx(0, mm, nn)
-                self.R_lmn = put(self.R_lmn, idxR, RR)
-            if ZZ is not None:
-                idxZ = self.Z_basis.get_idx(0, mm, nn)
-                self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
     @classmethod
     def from_input_file(cls, path):
@@ -347,6 +255,96 @@ class FourierRZToroidalSurface(Surface):
 
         surf = cls(R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z, NFP=NFP)
         return surf
+
+    def get_coeffs(self, m, n=0):
+        """Get Fourier coefficients for given mode number(s)."""
+        n = np.atleast_1d(n).astype(int)
+        m = np.atleast_1d(m).astype(int)
+
+        m, n = np.broadcast_arrays(m, n)
+        R = np.zeros_like(m).astype(float)
+        Z = np.zeros_like(m).astype(float)
+
+        mn = np.array([m, n]).T
+        idxR = np.where(
+            (mn[:, np.newaxis, :] == self.R_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
+        )
+        idxZ = np.where(
+            (mn[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
+        )
+
+        R[idxR[0]] = self.R_lmn[idxR[1]]
+        Z[idxZ[0]] = self.Z_lmn[idxZ[1]]
+        return R, Z
+
+    def set_coeffs(self, m, n=0, R=None, Z=None):
+        """Set specific Fourier coefficients."""
+        m, n, R, Z = (
+            np.atleast_1d(m),
+            np.atleast_1d(n),
+            np.atleast_1d(R),
+            np.atleast_1d(Z),
+        )
+        m, n, R, Z = np.broadcast_arrays(m, n, R, Z)
+        for mm, nn, RR, ZZ in zip(m, n, R, Z):
+            if RR is not None:
+                idxR = self.R_basis.get_idx(0, mm, nn)
+                self.R_lmn = put(self.R_lmn, idxR, RR)
+            if ZZ is not None:
+                idxZ = self.Z_basis.get_idx(0, mm, nn)
+                self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @NFP.setter
+    def NFP(self, new):
+        assert (
+            isinstance(new, numbers.Real) and int(new) == new and new > 0
+        ), f"NFP should be a positive integer, got {type(new)}"
+        self.change_resolution(NFP=new)
+
+    @property
+    def R_basis(self):
+        """DoubleFourierSeries: Spectral basis for R."""
+        return self._R_basis
+
+    @property
+    def R_lmn(self):
+        """ndarray: Spectral coefficients for R."""
+        return self._R_lmn
+
+    @R_lmn.setter
+    def R_lmn(self, new):
+        if len(new) == self.R_basis.num_modes:
+            self._R_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"R_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
+            )
+
+    @property
+    def Z_basis(self):
+        """DoubleFourierSeries: Spectral basis for Z."""
+        return self._Z_basis
+
+    @property
+    def Z_lmn(self):
+        """ndarray: Spectral coefficients for Z."""
+        return self._Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, new):
+        if len(new) == self.Z_basis.num_modes:
+            self._Z_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
+            )
 
 
 class ZernikeRZToroidalSection(Surface):
@@ -477,21 +475,6 @@ class ZernikeRZToroidalSection(Surface):
 
         self.name = name
 
-    @property
-    def spectral_indexing(self):
-        """str: Type of spectral indexing for Zernike basis."""
-        return self._spectral_indexing
-
-    @property
-    def R_basis(self):
-        """ZernikePolynomial: Spectral basis for R."""
-        return self._R_basis
-
-    @property
-    def Z_basis(self):
-        """ZernikePolynomial: Spectral basis for Z."""
-        return self._Z_basis
-
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""
         assert (
@@ -533,36 +516,6 @@ class ZernikeRZToroidalSection(Surface):
             self._L = L
             self._M = M
 
-    @property
-    def R_lmn(self):
-        """ndarray: Spectral coefficients for R."""
-        return self._R_lmn
-
-    @R_lmn.setter
-    def R_lmn(self, new):
-        if len(new) == self.R_basis.num_modes:
-            self._R_lmn = jnp.asarray(new)
-        else:
-            raise ValueError(
-                f"R_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
-            )
-
-    @property
-    def Z_lmn(self):
-        """ndarray: Spectral coefficients for Z."""
-        return self._Z_lmn
-
-    @Z_lmn.setter
-    def Z_lmn(self, new):
-        if len(new) == self.Z_basis.num_modes:
-            self._Z_lmn = jnp.asarray(new)
-        else:
-            raise ValueError(
-                f"Z_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
-            )
-
     def get_coeffs(self, l, m=0):
         """Get Zernike coefficients for given mode number(s)."""
         l = np.atleast_1d(l).astype(int)
@@ -600,3 +553,48 @@ class ZernikeRZToroidalSection(Surface):
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+
+    @property
+    def R_basis(self):
+        """ZernikePolynomial: Spectral basis for R."""
+        return self._R_basis
+
+    @property
+    def R_lmn(self):
+        """ndarray: Spectral coefficients for R."""
+        return self._R_lmn
+
+    @R_lmn.setter
+    def R_lmn(self, new):
+        if len(new) == self.R_basis.num_modes:
+            self._R_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"R_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
+            )
+
+    @property
+    def spectral_indexing(self):
+        """str: Type of spectral indexing for Zernike basis."""
+        return self._spectral_indexing
+
+    @property
+    def Z_basis(self):
+        """ZernikePolynomial: Spectral basis for Z."""
+        return self._Z_basis
+
+    @property
+    def Z_lmn(self):
+        """ndarray: Spectral coefficients for Z."""
+        return self._Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, new):
+        if len(new) == self.Z_basis.num_modes:
+            self._Z_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
+            )

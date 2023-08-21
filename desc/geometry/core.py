@@ -29,14 +29,14 @@ class Curve(IOAble, ABC):
         self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         self.name = name
 
-    @property
-    def name(self):
-        """Name of the curve."""
-        return self._name
-
-    @name.setter
-    def name(self, new):
-        self._name = new
+    def __repr__(self):
+        """Get the string form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (name={})".format(self.name)
+        )
 
     def compute(
         self,
@@ -124,9 +124,11 @@ class Curve(IOAble, ABC):
         )
         return data
 
-    def translate(self, displacement=[0, 0, 0]):
-        """Translate the curve by a rigid displacement in x, y, z."""
-        self.shift += jnp.asarray(displacement)
+    def flip(self, normal):
+        """Flip the curve about the plane with specified normal."""
+        F = reflection_matrix(normal)
+        self.rotmat = F @ self.rotmat
+        self.shift = self.shift @ F.T
 
     def rotate(self, axis=[0, 0, 1], angle=0):
         """Rotate the curve by a fixed angle about axis in xyz coordinates."""
@@ -134,11 +136,24 @@ class Curve(IOAble, ABC):
         self.rotmat = R @ self.rotmat
         self.shift = self.shift @ R.T
 
-    def flip(self, normal):
-        """Flip the curve about the plane with specified normal."""
-        F = reflection_matrix(normal)
-        self.rotmat = F @ self.rotmat
-        self.shift = self.shift @ F.T
+    def translate(self, displacement=[0, 0, 0]):
+        """Translate the curve by a rigid displacement in x, y, z."""
+        self.shift += jnp.asarray(displacement)
+
+    @property
+    def name(self):
+        """Name of the curve."""
+        return self._name
+
+    @name.setter
+    def name(self, new):
+        self._name = new
+
+
+class Surface(IOAble, ABC):
+    """Abstract base class for 2d surfaces in 3d space."""
+
+    _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -148,41 +163,6 @@ class Curve(IOAble, ABC):
             + str(hex(id(self)))
             + " (name={})".format(self.name)
         )
-
-
-class Surface(IOAble, ABC):
-    """Abstract base class for 2d surfaces in 3d space."""
-
-    _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]
-
-    @property
-    def name(self):
-        """str: Name of the surface."""
-        return self._name
-
-    @name.setter
-    def name(self, new):
-        self._name = new
-
-    @property
-    def L(self):
-        """int: Maximum radial mode number."""
-        return self._L
-
-    @property
-    def M(self):
-        """int: Maximum poloidal mode number."""
-        return self._M
-
-    @property
-    def N(self):
-        """int: Maximum toroidal mode number."""
-        return self._N
-
-    @property
-    def sym(self):
-        """bool: Whether or not the surface is stellarator symmetric."""
-        return self._sym
 
     def _compute_orientation(self):
         """Handedness of coordinate system.
@@ -332,11 +312,31 @@ class Surface(IOAble, ABC):
         )
         return data
 
-    def __repr__(self):
-        """Get the string form of the object."""
-        return (
-            type(self).__name__
-            + " at "
-            + str(hex(id(self)))
-            + " (name={})".format(self.name)
-        )
+    @property
+    def L(self):
+        """int: Maximum radial mode number."""
+        return self._L
+
+    @property
+    def M(self):
+        """int: Maximum poloidal mode number."""
+        return self._M
+
+    @property
+    def N(self):
+        """int: Maximum toroidal mode number."""
+        return self._N
+
+    @property
+    def name(self):
+        """str: Name of the surface."""
+        return self._name
+
+    @name.setter
+    def name(self, new):
+        self._name = new
+
+    @property
+    def sym(self):
+        """bool: Whether or not the surface is stellarator symmetric."""
+        return self._sym

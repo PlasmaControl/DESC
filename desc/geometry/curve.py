@@ -12,11 +12,139 @@ from desc.utils import copy_coeffs
 
 from .core import Curve
 
-__all__ = [
-    "FourierRZCurve",
-    "FourierXYZCurve",
-    "FourierPlanarCurve",
-]
+
+class FourierPlanarCurve(Curve):
+    """Curve that lies in a plane.
+
+    Parameterized by a point (the center of the curve), a vector (normal to the plane),
+    and a Fourier series defining the radius from the center as a function of
+    a polar angle theta.
+
+    Parameters
+    ----------
+    center : array-like, shape(3,)
+        x,y,z coordinates of center of curve
+    normal : array-like, shape(3,)
+        x,y,z components of normal vector to planar surface
+    r_n : array-like
+        Fourier coefficients for radius from center as function of polar angle
+    modes : array-like
+        mode numbers associated with r_n
+    name : str
+        name for this curve
+
+    """
+
+    _io_attrs_ = Curve._io_attrs_ + [
+        "_r_n",
+        "_center",
+        "_normal",
+        "_r_basis",
+    ]
+
+    # Reference frame is centered at the origin with normal in the +Z direction.
+    # The curve is computed in this frame and then shifted/rotated to the correct frame.
+    def __init__(
+        self,
+        center=[10, 0, 0],
+        normal=[0, 1, 0],
+        r_n=2,
+        modes=None,
+        name="",
+    ):
+        super().__init__(name)
+        r_n = np.atleast_1d(r_n)
+        if modes is None:
+            modes = np.arange(-(r_n.size // 2), r_n.size // 2 + 1)
+        else:
+            modes = np.asarray(modes)
+        assert issubclass(modes.dtype.type, np.integer)
+
+        N = np.max(abs(modes))
+        self._r_basis = FourierSeries(N, NFP=1, sym=False)
+        self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
+
+        self.normal = normal
+        self.center = center
+
+    def change_resolution(self, N=None):
+        """Change the maximum angular resolution."""
+        if (N is not None) and (N != self.N):
+            modes_old = self.r_basis.modes
+            self.r_basis.change_resolution(N=N)
+            self.r_n = copy_coeffs(self.r_n, modes_old, self.r_basis.modes)
+
+    def get_coeffs(self, n):
+        """Get Fourier coefficients for given mode number(s)."""
+        n = np.atleast_1d(n).astype(int)
+        r = np.zeros_like(n).astype(float)
+
+        idx = np.where(n[:, np.newaxis] == self.r_basis.modes[:, 2])
+
+        r[idx[0]] = self.r_n[idx[1]]
+        return r
+
+    def set_coeffs(self, n, r=None):
+        """Set specific Fourier coefficients."""
+        n, r = np.atleast_1d(n), np.atleast_1d(r)
+        r = np.broadcast_to(r, n.shape)
+        for nn, rr in zip(n, r):
+            idx = self.r_basis.get_idx(0, 0, nn)
+            if rr is not None:
+                self.r_n = put(self.r_n, idx, rr)
+
+    @property
+    def center(self):
+        """Center of planar curve polar coordinates."""
+        return self._center
+
+    @center.setter
+    def center(self, new):
+        if len(new) == 3:
+            self._center = np.asarray(new)
+        else:
+            raise ValueError(
+                "center should be a 3 element vector [cx, cy, cz], got {}".format(new)
+            )
+
+    @property
+    def N(self):
+        """Maximum mode number."""
+        return self.r_basis.N
+
+    @property
+    def normal(self):
+        """Normal vector to plane."""
+        return self._normal
+
+    @normal.setter
+    def normal(self, new):
+        if len(np.asarray(new)) == 3:
+            self._normal = np.asarray(new) / np.linalg.norm(new)
+        else:
+            raise ValueError(
+                "normal should be a 3 element vector [nx, ny, nz], got {}".format(new)
+            )
+
+    @property
+    def r_basis(self):
+        """Spectral basis for Fourier series."""
+        return self._r_basis
+
+    @property
+    def r_n(self):
+        """Spectral coefficients for r."""
+        return self._r_n
+
+    @r_n.setter
+    def r_n(self, new):
+        if len(np.asarray(new)) == self.r_basis.num_modes:
+            self._r_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"r_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.r_basis.num_modes} modes."
+            )
 
 
 class FourierRZCurve(Curve):
@@ -92,38 +220,6 @@ class FourierRZCurve(Curve):
         self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
 
-    @property
-    def sym(self):
-        """Whether this curve has stellarator symmetry."""
-        return self._sym
-
-    @property
-    def R_basis(self):
-        """Spectral basis for R_Fourier series."""
-        return self._R_basis
-
-    @property
-    def Z_basis(self):
-        """Spectral basis for Z_Fourier series."""
-        return self._Z_basis
-
-    @property
-    def NFP(self):
-        """Number of field periods."""
-        return self._NFP
-
-    @NFP.setter
-    def NFP(self, new):
-        assert (
-            isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(new)}"
-        self.change_resolution(NFP=new)
-
-    @property
-    def N(self):
-        """Maximum mode number."""
-        return max(self.R_basis.N, self.Z_basis.N)
-
     def change_resolution(self, N=None, NFP=None, sym=None):
         """Change the maximum toroidal resolution."""
         if (
@@ -172,36 +268,6 @@ class FourierRZCurve(Curve):
                 idxZ = self.Z_basis.get_idx(0, 0, nn)
                 self.Z_n = put(self.Z_n, idxZ, ZZ)
 
-    @property
-    def R_n(self):
-        """Spectral coefficients for R."""
-        return self._R_n
-
-    @R_n.setter
-    def R_n(self, new):
-        if len(new) == self.R_basis.num_modes:
-            self._R_n = jnp.asarray(new)
-        else:
-            raise ValueError(
-                f"R_n should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
-            )
-
-    @property
-    def Z_n(self):
-        """Spectral coefficients for Z."""
-        return self._Z_n
-
-    @Z_n.setter
-    def Z_n(self, new):
-        if len(new) == self.Z_basis.num_modes:
-            self._Z_n = jnp.asarray(new)
-        else:
-            raise ValueError(
-                f"Z_n should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.Z_basis.num_modes} modes"
-            )
-
     def to_FourierXYZCurve(self, N=None):
         """Convert to FourierXYZCurve representation.
 
@@ -227,6 +293,68 @@ class FourierRZCurve(Curve):
         Y_n = transform.fit(xyz[:, 1])
         Z_n = transform.fit(xyz[:, 2])
         return FourierXYZCurve(X_n=X_n, Y_n=Y_n, Z_n=Z_n)
+
+    @property
+    def N(self):
+        """Maximum mode number."""
+        return max(self.R_basis.N, self.Z_basis.N)
+
+    @property
+    def NFP(self):
+        """Number of field periods."""
+        return self._NFP
+
+    @NFP.setter
+    def NFP(self, new):
+        assert (
+            isinstance(new, numbers.Real) and int(new) == new and new > 0
+        ), f"NFP should be a positive integer, got {type(new)}"
+        self.change_resolution(NFP=new)
+
+    @property
+    def R_basis(self):
+        """Spectral basis for R_Fourier series."""
+        return self._R_basis
+
+    @property
+    def R_n(self):
+        """Spectral coefficients for R."""
+        return self._R_n
+
+    @R_n.setter
+    def R_n(self, new):
+        if len(new) == self.R_basis.num_modes:
+            self._R_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"R_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
+            )
+
+    @property
+    def sym(self):
+        """Whether this curve has stellarator symmetry."""
+        return self._sym
+
+    @property
+    def Z_basis(self):
+        """Spectral basis for Z_Fourier series."""
+        return self._Z_basis
+
+    @property
+    def Z_n(self):
+        """Spectral coefficients for Z."""
+        return self._Z_n
+
+    @Z_n.setter
+    def Z_n(self, new):
+        if len(new) == self.Z_basis.num_modes:
+            self._Z_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Z_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.Z_basis.num_modes} modes"
+            )
 
 
 class FourierXYZCurve(Curve):
@@ -276,26 +404,6 @@ class FourierXYZCurve(Curve):
         self._X_n = copy_coeffs(X_n, modes, self.X_basis.modes[:, 2])
         self._Y_n = copy_coeffs(Y_n, modes, self.Y_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes, self.Z_basis.modes[:, 2])
-
-    @property
-    def X_basis(self):
-        """Spectral basis for X Fourier series."""
-        return self._X_basis
-
-    @property
-    def Y_basis(self):
-        """Spectral basis for Y Fourier series."""
-        return self._Y_basis
-
-    @property
-    def Z_basis(self):
-        """Spectral basis for Z Fourier series."""
-        return self._Z_basis
-
-    @property
-    def N(self):
-        """Maximum mode number."""
-        return max(self.X_basis.N, self.Y_basis.N, self.Z_basis.N)
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
@@ -353,6 +461,16 @@ class FourierXYZCurve(Curve):
                 self.Z_n = put(self.Z_n, idx, ZZ)
 
     @property
+    def N(self):
+        """Maximum mode number."""
+        return max(self.X_basis.N, self.Y_basis.N, self.Z_basis.N)
+
+    @property
+    def X_basis(self):
+        """Spectral basis for X Fourier series."""
+        return self._X_basis
+
+    @property
     def X_n(self):
         """Spectral coefficients for X."""
         return self._X_n
@@ -368,6 +486,11 @@ class FourierXYZCurve(Curve):
             )
 
     @property
+    def Y_basis(self):
+        """Spectral basis for Y Fourier series."""
+        return self._Y_basis
+
+    @property
     def Y_n(self):
         """Spectral coefficients for Y."""
         return self._Y_n
@@ -381,6 +504,11 @@ class FourierXYZCurve(Curve):
                 f"Y_n should have the same size as the basis, got {len(new)} for "
                 + f"basis with {self.Y_basis.num_modes} modes."
             )
+
+    @property
+    def Z_basis(self):
+        """Spectral basis for Z Fourier series."""
+        return self._Z_basis
 
     @property
     def Z_n(self):
@@ -399,137 +527,3 @@ class FourierXYZCurve(Curve):
 
     # TODO: to_rz method for converting to FourierRZCurve representation
     # (might be impossible to parameterize with toroidal angle phi)
-
-
-class FourierPlanarCurve(Curve):
-    """Curve that lies in a plane.
-
-    Parameterized by a point (the center of the curve), a vector (normal to the plane),
-    and a Fourier series defining the radius from the center as a function of
-    a polar angle theta.
-
-    Parameters
-    ----------
-    center : array-like, shape(3,)
-        x,y,z coordinates of center of curve
-    normal : array-like, shape(3,)
-        x,y,z components of normal vector to planar surface
-    r_n : array-like
-        Fourier coefficients for radius from center as function of polar angle
-    modes : array-like
-        mode numbers associated with r_n
-    name : str
-        name for this curve
-
-    """
-
-    _io_attrs_ = Curve._io_attrs_ + [
-        "_r_n",
-        "_center",
-        "_normal",
-        "_r_basis",
-    ]
-
-    # Reference frame is centered at the origin with normal in the +Z direction.
-    # The curve is computed in this frame and then shifted/rotated to the correct frame.
-    def __init__(
-        self,
-        center=[10, 0, 0],
-        normal=[0, 1, 0],
-        r_n=2,
-        modes=None,
-        name="",
-    ):
-        super().__init__(name)
-        r_n = np.atleast_1d(r_n)
-        if modes is None:
-            modes = np.arange(-(r_n.size // 2), r_n.size // 2 + 1)
-        else:
-            modes = np.asarray(modes)
-        assert issubclass(modes.dtype.type, np.integer)
-
-        N = np.max(abs(modes))
-        self._r_basis = FourierSeries(N, NFP=1, sym=False)
-        self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
-
-        self.normal = normal
-        self.center = center
-
-    @property
-    def r_basis(self):
-        """Spectral basis for Fourier series."""
-        return self._r_basis
-
-    @property
-    def N(self):
-        """Maximum mode number."""
-        return self.r_basis.N
-
-    def change_resolution(self, N=None):
-        """Change the maximum angular resolution."""
-        if (N is not None) and (N != self.N):
-            modes_old = self.r_basis.modes
-            self.r_basis.change_resolution(N=N)
-            self.r_n = copy_coeffs(self.r_n, modes_old, self.r_basis.modes)
-
-    @property
-    def center(self):
-        """Center of planar curve polar coordinates."""
-        return self._center
-
-    @center.setter
-    def center(self, new):
-        if len(new) == 3:
-            self._center = np.asarray(new)
-        else:
-            raise ValueError(
-                "center should be a 3 element vector [cx, cy, cz], got {}".format(new)
-            )
-
-    @property
-    def normal(self):
-        """Normal vector to plane."""
-        return self._normal
-
-    @normal.setter
-    def normal(self, new):
-        if len(np.asarray(new)) == 3:
-            self._normal = np.asarray(new) / np.linalg.norm(new)
-        else:
-            raise ValueError(
-                "normal should be a 3 element vector [nx, ny, nz], got {}".format(new)
-            )
-
-    @property
-    def r_n(self):
-        """Spectral coefficients for r."""
-        return self._r_n
-
-    @r_n.setter
-    def r_n(self, new):
-        if len(np.asarray(new)) == self.r_basis.num_modes:
-            self._r_n = jnp.asarray(new)
-        else:
-            raise ValueError(
-                f"r_n should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.r_basis.num_modes} modes."
-            )
-
-    def get_coeffs(self, n):
-        """Get Fourier coefficients for given mode number(s)."""
-        n = np.atleast_1d(n).astype(int)
-        r = np.zeros_like(n).astype(float)
-
-        idx = np.where(n[:, np.newaxis] == self.r_basis.modes[:, 2])
-
-        r[idx[0]] = self.r_n[idx[1]]
-        return r
-
-    def set_coeffs(self, n, r=None):
-        """Set specific Fourier coefficients."""
-        n, r = np.atleast_1d(n), np.atleast_1d(r)
-        r = np.broadcast_to(r, n.shape)
-        for nn, rr in zip(n, r):
-            idx = self.r_basis.get_idx(0, 0, nn)
-            if rr is not None:
-                self.r_n = put(self.r_n, idx, rr)

@@ -896,7 +896,7 @@ def test_bd_min_objective():
         R_lmn=[10, 4], Z_lmn=[-4], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
     )
 
-    grid = LinearGrid(rho=np.array(1.0), M=4, N=4, NFP=eq.NFP)
+    grid = LinearGrid(rho=np.array(1.0), M=4, N=4, NFP=1)
 
     obj1 = B_dmin(winding_surf1, eq=eq, normalize=False, plasma_grid=grid)
     obj2 = B_dmin(winding_surf2, eq=eq, normalize=False, plasma_grid=grid)

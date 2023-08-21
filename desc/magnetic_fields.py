@@ -128,7 +128,7 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     )
 
     Bnorm_mn_desc_basis = copy_coeffs(
-        Bnorm_mn, np.vstack((np.zeros_like(m), m, n)).T, basis.modes
+        Bnorm_mn.squeeze(), np.vstack((np.zeros_like(m), m, n)).T, basis.modes
     )
 
     if eval_grid is None:

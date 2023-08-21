@@ -368,7 +368,6 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
 
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
     """Copy coefficients from one resolution to another."""
-    c_old = c_old.squeeze()
     modes_old, modes_new = np.atleast_1d(modes_old), np.atleast_1d(modes_new)
     if modes_old.ndim == 1:
         modes_old = modes_old.reshape((-1, 1))

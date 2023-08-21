@@ -768,16 +768,19 @@ class CoilSet(Coil, MutableSequence):
             coil = coils[i]
             coords = coil.compute("x", basis="xyz", grid=grid)["x"]
 
-            contour_X = np.asarray(coords[0:-1, 0])
-            contour_Y = np.asarray(coords[0:-1, 1])
-            contour_Z = np.asarray(coords[0:-1, 2])
+            contour_X = np.asarray(coords[0:, 0])
+            contour_Y = np.asarray(coords[0:, 1])
+            contour_Z = np.asarray(coords[0:, 2])
 
             currents = np.ones_like(contour_X) * float(coil.current)
-            # close the curves
-            contour_X = np.append(contour_X, contour_X[0])
-            contour_Y = np.append(contour_Y, contour_Y[0])
-            contour_Z = np.append(contour_Z, contour_Z[0])
-            currents = np.append(currents, 0)  # this last point must have 0 current
+
+            if grid.endpoint:
+                currents[-1] = 0  # this last point must have 0 current
+            else:  # close the curves if needed
+                contour_X = np.append(contour_X, contour_X[0])
+                contour_Y = np.append(contour_Y, contour_Y[0])
+                contour_Z = np.append(contour_Z, contour_Z[0])
+                currents = np.append(currents, 0)  # this last point must have 0 current
 
             coil_end_inds.append(contour_X.size)
 

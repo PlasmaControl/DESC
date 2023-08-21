@@ -1,6 +1,5 @@
 """Classes for magnetic field coils."""
 
-import numbers
 from abc import ABC
 from collections.abc import MutableSequence
 
@@ -16,7 +15,7 @@ from desc.geometry import (
 )
 from desc.grid import Grid
 from desc.magnetic_fields import MagneticField, biot_savart
-from desc.utils import errorif, flatten_list, isposint
+from desc.utils import flatten_list
 
 
 class Coil(MagneticField, ABC):
@@ -356,30 +355,16 @@ class CoilSet(Coil, MutableSequence):
         currents in each coil, or a single current shared by all coils in the set
     name : str
         name of this CoilSet
-    NFP : int
-        nominal NFP for the CoilSet. Does not affect any computations, but is used when
-        saving the CoilSet to a MAKEGRID formatted coils file.
-        Should correspond to the field periodicity expected of the magnetic field
-        from the coilset.
-        defaults to 1.
-        NOTE: since NFP does not affect any computation, ensure that the CoilSet
-        contains coils across the entire range 0->2pi, not just from 0->2pi/NFP,
-        to ensure correct computations
+
     """
 
     _io_attrs_ = Coil._io_attrs_ + ["_coils"] + ["_NFP"]
 
-    def __init__(self, *coils, name="", NFP=1):
+    def __init__(self, *coils, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (Coil)) for coil in coils])
         self._coils = list(coils)
         self._name = str(name)
-        errorif(
-            (NFP is not None) and not isposint(NFP),
-            ValueError,
-            f"NFP should be a positive integer, got {NFP}",
-        )
-        self._NFP = NFP
 
     @property
     def name(self):
@@ -406,18 +391,6 @@ class CoilSet(Coil, MutableSequence):
             new = [new] * len(self)
         for coil, cur in zip(self.coils, new):
             coil.current = cur
-
-    @property
-    def NFP(self):
-        """int: Nominal number of (toroidal) field periods."""
-        return self._NFP
-
-    @NFP.setter
-    def NFP(self, NFP):
-        assert (
-            isinstance(NFP, numbers.Real) and (NFP == int(NFP)) and (NFP > 0)
-        ), f"NFP should be a positive integer, got {type(NFP)}"
-        self._NFP = NFP
 
     def _make_arraylike(self, x):
         if isinstance(x, dict):
@@ -657,7 +630,6 @@ class CoilSet(Coil, MutableSequence):
             lines = f.readlines()
             for i, line in enumerate(lines):
                 if line.find("periods") != -1:
-                    NFP = int(line.split()[-1].strip())
                     continue
                 if (
                     line.find("begin filament") != -1
@@ -710,7 +682,7 @@ class CoilSet(Coil, MutableSequence):
                 )
             )
 
-        return CoilSet(*coils, NFP=NFP)
+        return CoilSet(*coils)
 
     def save_in_MAKEGRID_format(self, coilsFilename, NFP=None, grid=None):
         """Save CoilSet of as a MAKEGRID-formatted coil txtfile.
@@ -732,12 +704,13 @@ class CoilSet(Coil, MutableSequence):
             If > 1, assumes that the CoilSet is the coils for a coilset
             with a nominal discrete toroidal symmetry of NFP, and will
             put that NFP in the periods line of the coils file generated.
-            defaults to self.NFP
+            defaults to 1
         grid: Grid, ndarray, int,
             Grid of sample points along each coil to save.
-            if None, will default to each coils self._grid
+            if None, will default to the coil compute functions's
+            default grid
         """
-        NFP = self.NFP if NFP is None else NFP
+        NFP = 1 if NFP is None else NFP
         coils = flatten_list(self.coils)  # flatten any nested coilsets
         assert (
             int(len(coils) / NFP) == len(coils) / NFP

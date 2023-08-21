@@ -8,13 +8,13 @@ from netCDF4 import Dataset
 from desc.backend import jit, jnp, odeint
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz_vec, xyz2rpz
-from desc.compute.utils import cross
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
 from desc.transform import Transform
+from desc.utils import copy_coeffs
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -100,6 +100,10 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     else:
         eq = None
 
+    assert surface.sym, (
+        "BNORM assumes stellarator symmetry, but" "a non-symmetric surface was given!"
+    )
+
     if scale_by_curpol and eq is None:
         raise RuntimeError(
             "an Equilibrium must be supplied when scale_by_curpol is True!"
@@ -120,12 +124,12 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     # convert to DESC Fourier representation i.e. like cos(mt)*cos(nz)
     m, n, Bnorm_mn = ptolemy_identity_fwd(xm, xn, Bnorm_mn, np.zeros_like(Bnorm_mn))
     basis = DoubleFourierSeries(
-        int(np.max(m)), int(np.max(n)), sym=False, NFP=surface.NFP
+        int(np.max(m)), int(np.max(n)), sym="sin", NFP=surface.NFP
     )
-    Bnorm_mn_desc_basis = np.zeros((basis.num_modes,))
-    for i, (mm, nn) in enumerate(zip(m, n)):
-        idx = basis.get_idx(L=0, M=mm, N=nn)
-        Bnorm_mn_desc_basis[idx] = Bnorm_mn[0, i]
+
+    Bnorm_mn_desc_basis = copy_coeffs(
+        Bnorm_mn.squeeze(), np.vstack((np.zeros_like(m), m, n)).T, basis.modes
+    )
 
     if eval_grid is None:
         eval_grid = LinearGrid(
@@ -240,11 +244,9 @@ class MagneticField(IOAble, ABC):
             eval_grid = LinearGrid(
                 rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
             )
-        data = surface.compute(["x", "e_theta", "e_zeta"], grid=eval_grid, basis="xyz")
+        data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="xyz")
         coords = data["x"]
-        rs_t = data["e_theta"]
-        rs_z = data["e_zeta"]
-        surf_normal = cross(rs_t, rs_z)
+        surf_normal = data["n_rho"]
         B = self.compute_magnetic_field(
             coords, basis="xyz", grid=source_grid, params=params
         )

@@ -158,6 +158,77 @@ class Curve(IOAble, ABC):
             + " (name={})".format(self.name)
         )
 
+    def to_FourierXYZCurve(self, N=None, grid=None, phis=None, name=""):
+        """Convert Curve to FourierXYZCurve representation.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
+            If an integer, uses that many equally spaced points.
+        phis : ndarray
+            angle to use for the fitting. if None, defaults to
+            normalized arclength
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        curve : FourierXYZCurve
+            New representation of the curve parameterized by Fourier series for X,Y,Z.
+
+        """
+        from .curve import FourierXYZCurve
+
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierXYZCurve.from_values(
+            coords, N=N, phis=phis, basis="xyz", name=name
+        )
+
+    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic", name=""):
+        """Convert Curve to SplineXYZCurve.
+
+        Parameters
+        ----------
+        knots : ndarray
+            arbitrary theta values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Curve.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCurve.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        SplineXYZCurve: SplineXYZCurve
+            New representation of the curve parameterized by a spline for X,Y,Z.
+
+        """
+        from .curve import SplineXYZCurve
+
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return SplineXYZCurve.from_values(
+            coords, knots=knots, method=method, name=name, basis="xyz"
+        )
+
+    # TODO: to_rz method for converting to FourierRZCurve representation
+    # (might be impossible to parameterize some curves with toroidal angle phi)
+
 
 class Surface(IOAble, ABC):
     """Abstract base class for 2d surfaces in 3d space."""

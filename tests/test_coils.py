@@ -373,13 +373,14 @@ def test_save_and_load_MAKEGRID_coils_rotated(tmpdir_factory):
     coil.current = 1
     coilset = CoilSet.linspaced_angular(coil, n=N, angle=2 * np.pi)
 
-    grid = LinearGrid(N=200, endpoint=True)
+    grid = LinearGrid(N=200, endpoint=False)
     coilset.save_in_MAKEGRID_format(str(path), grid=grid, NFP=2)
 
     coilset2 = CoilSet.from_makegrid_coilfile(str(path))
 
     # check values at saved points, ensure they match
     for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
+        grid = LinearGrid(zeta=coilset2[0].knots, endpoint=False)
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
         Y1 = coords1[:, 1]

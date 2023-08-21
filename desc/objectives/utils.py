@@ -10,6 +10,62 @@ from desc.compute import arg_order
 from desc.utils import Index, flatten_list, svd_inv_null
 
 
+def align_jacobian(Fx, objective_f, objective_g):
+    """Pad Jacobian with zeros in the right places so that the arguments line up.
+
+    Parameters
+    ----------
+    Fx : ndarray
+        Jacobian wrt args the objective_f takes
+    objective_f : ObjectiveFunction
+        Objective corresponding to Fx
+    objective_g : ObjectiveFunction
+        Other objective we want to align Jacobian against
+
+    Returns
+    -------
+    A : ndarray
+        Jacobian matrix, reordered and padded so that it broadcasts
+        correctly against the other Jacobian
+    """
+    x_idx = objective_f.x_idx
+    args = objective_f.args
+
+    dim_f = Fx.shape[:1]
+    A = {arg: Fx.T[x_idx[arg]] for arg in args}
+    allargs = np.concatenate([objective_f.args, objective_g.args])
+    allargs = [arg for arg in arg_order if arg in allargs]
+    for arg in allargs:
+        if arg not in A.keys():
+            A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
+    A = jnp.concatenate([A[arg] for arg in allargs])
+    return A.T
+
+
+def combine_args(*objectives):
+    """Given ObjectiveFunctions, modify all to take the same state vector.
+
+    The new state vector will be a combination of all arguments taken by any objective.
+
+    Parameters
+    ----------
+    objectives : ObjectiveFunction
+        ObjectiveFunctions to modify.
+
+    Returns
+    -------
+    objectives : ObjectiveFunction
+        Original ObjectiveFunctions modified to take the same state vector.
+    """
+    args = flatten_list([obj.args for obj in objectives])
+    args = [arg for arg in arg_order if arg in args]
+
+    for obj in objectives:
+        obj.set_args(*args)
+
+    return objectives
+
+
 def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     """Compute and factorize A to get pseudoinverse and nullspace.
 
@@ -146,38 +202,6 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     return xp, A_full, b_full, Z, unfixed_idx, project, recover
 
 
-def align_jacobian(Fx, objective_f, objective_g):
-    """Pad Jacobian with zeros in the right places so that the arguments line up.
-
-    Parameters
-    ----------
-    Fx : ndarray
-        Jacobian wrt args the objective_f takes
-    objective_f : ObjectiveFunction
-        Objective corresponding to Fx
-    objective_g : ObjectiveFunction
-        Other objective we want to align Jacobian against
-
-    Returns
-    -------
-    A : ndarray
-        Jacobian matrix, reordered and padded so that it broadcasts
-        correctly against the other Jacobian
-    """
-    x_idx = objective_f.x_idx
-    args = objective_f.args
-
-    dim_f = Fx.shape[:1]
-    A = {arg: Fx.T[x_idx[arg]] for arg in args}
-    allargs = np.concatenate([objective_f.args, objective_g.args])
-    allargs = [arg for arg in arg_order if arg in allargs]
-    for arg in allargs:
-        if arg not in A.keys():
-            A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
-    A = jnp.concatenate([A[arg] for arg in allargs])
-    return A.T
-
-
 def softmax(arr, alpha):
     """JAX softmax implementation.
 
@@ -236,27 +260,3 @@ def softmin(arr, alpha):
         The soft-minimum of the array.
     """
     return -softmax(-arr, alpha)
-
-
-def combine_args(*objectives):
-    """Given ObjectiveFunctions, modify all to take the same state vector.
-
-    The new state vector will be a combination of all arguments taken by any objective.
-
-    Parameters
-    ----------
-    objectives : ObjectiveFunction
-        ObjectiveFunctions to modify.
-
-    Returns
-    -------
-    objectives : ObjectiveFunction
-        Original ObjectiveFunctions modified to take the same state vector.
-    """
-    args = flatten_list([obj.args for obj in objectives])
-    args = [arg for arg in arg_order if arg in args]
-
-    for obj in objectives:
-        obj.set_args(*args)
-
-    return objectives

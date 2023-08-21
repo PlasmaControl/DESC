@@ -14,6 +14,144 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
+class GenericObjective(_Objective):
+    """A generic objective that can compute any quantity from the `data_index`.
+
+    Parameters
+    ----------
+    f : str
+        Name of the quantity to compute.
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+    _units = "(Unknown)"
+    _print_value_fmt = "Residual: {:10.3e} "
+
+    def __init__(
+        self,
+        f,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="generic",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self.f = f
+        self._grid = grid
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+        self._units = (
+            "("
+            + data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["units"]
+            + ")"
+        )
+
+    def build(self, eq=None, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        if self._grid is None:
+            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+        else:
+            grid = self._grid
+
+        p = "desc.equilibrium.equilibrium.Equilibrium"
+        if data_index[p][self.f]["dim"] == 0:
+            self._dim_f = 1
+            self._scalar = True
+        else:
+            self._dim_f = grid.num_nodes * data_index[p][self.f]["dim"]
+            self._scalar = False
+        self._args = get_params(
+            self.f,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
+        self._profiles = get_profiles(self.f, obj=eq, grid=grid)
+        self._transforms = get_transforms(self.f, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute the quantity.
+
+        Parameters
+        ----------
+        args : ndarray
+            Parameters given by self.args.
+
+        Returns
+        -------
+        f : ndarray
+            Computed quantity.
+
+        """
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self.f,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        f = data[self.f]
+        if not self.scalar:
+            f = (f.T * constants["transforms"]["grid"].weights).flatten()
+        return f
+
+
 class ObjectiveFromUser(_Objective):
     """Wrap a user defined objective function.
 
@@ -190,13 +328,11 @@ class ObjectiveFromUser(_Objective):
         return f
 
 
-class GenericObjective(_Objective):
-    """A generic objective that can compute any quantity from the `data_index`.
+class RotationalTransform(_Objective):
+    """Targets a rotational transform profile.
 
     Parameters
     ----------
-    f : str
-        Name of the quantity to compute.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
@@ -215,7 +351,8 @@ class GenericObjective(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    grid : Grid, ndarray, optional
+        Note: has no effect for this objective.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
@@ -224,12 +361,11 @@ class GenericObjective(_Objective):
 
     _scalar = False
     _linear = False
-    _units = "(Unknown)"
-    _print_value_fmt = "Residual: {:10.3e} "
+    _units = "(dimensionless)"
+    _print_value_fmt = "Rotational transform: {:10.3e} "
 
     def __init__(
         self,
-        f,
         eq=None,
         target=None,
         bounds=None,
@@ -237,11 +373,10 @@ class GenericObjective(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
-        name="generic",
+        name="rotational transform",
     ):
         if target is None and bounds is None:
             target = 0
-        self.f = f
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -251,11 +386,6 @@ class GenericObjective(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
-        )
-        self._units = (
-            "("
-            + data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["units"]
-            + ")"
         )
 
     def build(self, eq=None, use_jit=True, verbose=1):
@@ -273,43 +403,68 @@ class GenericObjective(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+            grid = LinearGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
         else:
             grid = self._grid
 
-        p = "desc.equilibrium.equilibrium.Equilibrium"
-        if data_index[p][self.f]["dim"] == 0:
-            self._dim_f = 1
-            self._scalar = True
-        else:
-            self._dim_f = grid.num_nodes * data_index[p][self.f]["dim"]
-            self._scalar = False
+        if isinstance(self._target, Profile):
+            self._target = self._target(grid.nodes[grid.unique_rho_idx])
+
+        self._dim_f = grid.num_rho
+        self._data_keys = ["iota"]
         self._args = get_params(
-            self.f,
+            self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
             has_axis=grid.axis.size,
         )
-        self._profiles = get_profiles(self.f, obj=eq, grid=grid)
-        self._transforms = get_transforms(self.f, obj=eq, grid=grid)
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
         }
 
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        """Compute the quantity.
+        """Compute rotational transform profile errors.
 
         Parameters
         ----------
-        args : ndarray
-            Parameters given by self.args.
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
-        f : ndarray
-            Computed quantity.
+        iota : ndarray
+            rotational transform on specified flux surfaces.
 
         """
         params, constants = self._parse_args(*args, **kwargs)
@@ -317,15 +472,33 @@ class GenericObjective(_Objective):
             constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
-            self.f,
+            self._data_keys,
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        f = data[self.f]
-        if not self.scalar:
-            f = (f.T * constants["transforms"]["grid"].weights).flatten()
-        return f
+        return compress(
+            constants["transforms"]["grid"], data["iota"], surface_label="rho"
+        )
+
+    def _scale(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
+        w = compress(
+            constants["transforms"]["grid"],
+            constants["transforms"]["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
 
 
 class ToroidalCurrent(_Objective):
@@ -518,176 +691,3 @@ class ToroidalCurrent(_Objective):
                 + self._print_value_fmt.format(jnp.mean(f / self.normalization))
                 + "(normalized)"
             )
-
-
-class RotationalTransform(_Objective):
-    """Targets a rotational transform profile.
-
-    Parameters
-    ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
-    normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-        Note: has no effect for this objective.
-    grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
-
-    """
-
-    _scalar = False
-    _linear = False
-    _units = "(dimensionless)"
-    _print_value_fmt = "Rotational transform: {:10.3e} "
-
-    def __init__(
-        self,
-        eq=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        grid=None,
-        name="rotational transform",
-    ):
-        if target is None and bounds is None:
-            target = 0
-        self._grid = grid
-        super().__init__(
-            eq=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-        )
-
-    def build(self, eq=None, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = eq or self._eq
-        if self._grid is None:
-            grid = LinearGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-            )
-        else:
-            grid = self._grid
-
-        if isinstance(self._target, Profile):
-            self._target = self._target(grid.nodes[grid.unique_rho_idx])
-
-        self._dim_f = grid.num_rho
-        self._data_keys = ["iota"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
-        self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
-        }
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, *args, **kwargs):
-        """Compute rotational transform profile errors.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        Returns
-        -------
-        iota : ndarray
-            rotational transform on specified flux surfaces.
-
-        """
-        params, constants = self._parse_args(*args, **kwargs)
-        if constants is None:
-            constants = self.constants
-        data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
-        )
-        return compress(
-            constants["transforms"]["grid"], data["iota"], surface_label="rho"
-        )
-
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = compress(
-            constants["transforms"]["grid"],
-            constants["transforms"]["grid"].spacing[:, 0],
-            surface_label="rho",
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
-
-    def print_value(self, *args, **kwargs):
-        """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)

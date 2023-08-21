@@ -1206,9 +1206,7 @@ class B_dmin(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._surface_coords = self._surface.compute_coordinates(
-            grid=surface_grid, basis="xyz"
-        )
+        self._surface_coords = self._surface.compute("x", basis="xyz")
         self._profiles = get_profiles(
             self._data_keys,
             eq=eq,

@@ -1,38 +1,24 @@
+"""Find helical coils from surface current potential."""
 import os
-import sys
 
-import jax
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.interpolate import interp1d
 from scipy.optimize import minimize
 
 import desc.io
 from desc.backend import jnp
 from desc.coils import CoilSet
 from desc.compute.utils import cross, dot
-from desc.equilibrium import Equilibrium
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid
 from desc.transform import Transform
 
 # make this a fxn that takes in the phi_MN and does the usual thing
 # does theta convention matter for this?
 
-# TODO: if the original file had TF coils external, this still works right? yes I think so, bc we subtract the
-# external current from the net poloidal current before it is saved in regcoil, so this script will work even
-# for cases where I ran regcoil with external coils
 
-##################### INPUTS #####################
-# regcoil_out .nc file
-# number of helical coils
-# which lambda to us from the regcoil file
-# how many pts to output for the coil geometry (integer i, to use only every i'th point from the contour)
-##################### OUTPUTS #####################
-# coilfile .txt file, contains the helical coil geometry and the currents in them
-
-
-def find_helical_coils(
+def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     phi_mn_desc_basis,
     basis,
     eqname,
@@ -49,9 +35,79 @@ def find_helical_coils(
     method="Nelder-Mead",
     equal_current=True,
     initial_guess=None,
-    save_files=True,
+    save_figs=True,
 ):
-    eq = desc.io.load(eqname)
+    """Find helical coils from a surface current potential.
+
+    Parameters
+    ----------
+    phi_mn_desc_basis : ndarray
+        The DoubleFourierSeries coefficients for the surface current potential.
+    basis : DoubleFourierSeries
+        Basis corresponding to the phi_mn_desc_basis
+    eqname : str or Equilibrium
+        The DESC equilibrum the surface current potential was found for
+        If str, assumes it is the name of the equilibrium .h5 output and will
+        load it
+    net_toroidal_current : float
+        Net current linking the plasma and the coils toroidally
+        Denoted I in the algorithm
+        An output of the run_regcoil function
+        If nonzero, helical coils are sought
+        If 0, then modular coils are sought, and this function is not
+        appropriate for that, and will raise an error
+    net_poloidal_current : float
+        Net current linking the plasma and the coils poloidally
+        Denoted G in the algorithm
+        an output of the run_regcoil function
+    alpha : float
+        regularization parameter used in run_regcoil
+        #TODO: can remove this and replace with something like
+        basename to be used for every saved figure
+    desirednumcoils : int, optional
+        number of coils to discretize the surface current with, by default 10
+    step : int, optional
+        Amount of points to step when saving the coil geometry
+        by default 2, meaning that every other point will be saved
+        if higher, less points will be saved
+    ntheta : int, optional
+        number of theta points to use in the integration to find the current
+        pertaining to each coil, by default 128
+    winding_surf : _type_, optional
+        Winding surface on which the surface current lies, if None will default
+        to a circular torus of R0=0.7035 and a = 0.0365
+
+    coilsFilename : str, optional
+        name of txt file to save coils to, by default "coils.txt"
+    maxiter : int, optional
+        max iterations to use in equal current optimization, by default 25
+    dirname : str, optional
+        directory to save files to, by default "."
+    method : str, optional
+        scipy minimization method to use for equal current algorithm,
+        by default "Nelder-Mead"
+    equal_current : bool, optional
+        Whether to optimize the contour positions to find
+        coils which have equal currents, by default True
+    initial_guess : array-like, optional
+        initial guess to use for the contour values in the minimization
+        by default None
+    save_figs : bool, optional
+        whether to save figures, by default True
+
+    Returns
+    -------
+    coils : CoilSet
+        DESC CoilSet object that is a discretization of the input
+        surface current on the given winding surface
+    """
+    if isinstance(eqname, str):
+        eq = desc.io.load(eqname)
+    elif isinstance(eqname, EquilibriaFamily) or isinstance(eqname, Equilibrium):
+        eq = eqname
+    if hasattr(eq, "__len__"):
+        eq = eq[-1]
+
     nfp = eq.NFP
     theta_coil = np.linspace(0, 2 * np.pi, ntheta)
     zeta_coil = np.linspace(0, 2 * np.pi / nfp, ntheta)
@@ -118,28 +174,6 @@ def find_helical_coils(
             + net_toroidal_current / 2 / np.pi
         )
 
-    def phi_tot_fun_theta_deriv_vec_jit(sgrid, trans_temp):
-        return (
-            trans_temp.transform(phi_mn_desc_basis, dt=1)
-            + net_toroidal_current / 2 / jnp.pi
-        )
-
-    def phi_tot_fun_zeta_deriv_vec(theta, zeta):
-        nodes = np.vstack(
-            (
-                np.zeros_like(theta.flatten(order="F")),
-                theta.flatten(order="F"),
-                zeta.flatten(order="F"),
-            )
-        ).T
-        trans_temp = Transform(
-            Grid(nodes, sort=False), basis, derivs=np.array([[0, 0, 1]])
-        )
-        return (
-            np.asarray(trans_temp.transform(phi_mn_desc_basis, dz=1))
-            + net_poloidal_current / 2 / np.pi
-        )
-
     def surf_current_vec_contravariant_zeta_times_R_times_g_tt(sgrid):
         data = winding_surf.compute(["x", "e_theta", "e_zeta"], grid=sgrid, basis="rpz")
         Rs = data["x"][:, 0]
@@ -165,38 +199,27 @@ def find_helical_coils(
             + net_toroidal_current * theta / 2 / np.pi
         )
 
-    # this tiling only works if we have our contours increasing to the up and right
-    # otherwise, we do not capture full contouts
-    # do trial run with this and see slope, if slope positive keep, if slope negative then make theta decrease
-
     ##### find helicity naively ######################################################
-    t_2D, z_2D = np.meshgrid(theta_coil, zeta_coil, indexing="ij")
 
-    total_phi_trial = phi_tot_fun_vec(t_2D, z_2D).reshape(
-        theta_coil.size, zeta_coil.size, order="F"
-    )
-    plt.figure(figsize=(18, 10))
-    cdata = plt.contour(t_2D.T, z_2D.T, np.transpose(total_phi_trial))
-    numCoilsFound = len(cdata.collections)
-    contour_zeta = []
-    contour_theta = []
+    if np.isclose(net_toroidal_current, 0):
+        raise ValueError(
+            "this function only works for helical coils, not modular or window pane!"
+        )
+    # we know that I = -(G - G_ext) / (helicity * NFP)
 
-    for j in range(numCoilsFound):
-        try:
-            p = cdata.collections[j].get_paths()[0]
-        except:
-            print("no path found for given contour")
-            continue
-        v = p.vertices
-        temp_zeta = v[:, 0]
-        if len(temp_zeta) < 5:
-            continue
-        temp_theta = v[:, 1]
-        phi_slope = (temp_theta[-1] - temp_theta[0]) / (temp_zeta[-1] - temp_zeta[0])
-        # print("sign of slope", np.sign(phi_slope))
-        # if slope positive, we can tile as theta=(0 -> NFP*2pi),if negative we tile from (-2*NFP*2pi -> 0)
-        break
-    ##################################################################
+    helicity = -net_poloidal_current / net_toroidal_current / eq.NFP
+    phi_slope = np.sign(helicity)
+    ###############################################
+    # TODO: don't need this for the whole thing,
+    #  should be able to only use like 2 or 3 repetitions
+    # to find the contour then repeat given the discrete
+    #  periodicity in zeta, by just rotating it by
+    # an angle phi/NFP, just need
+    # wide enough in zeta and tall enough inzeta
+    # to capture the contour entering at zeta=0
+    # and exiting at zeta = XX
+    # then rotate it by repeating it 2pi/(2pi-XX)
+    # times over the angle 2pi-XX/something
 
     theta_full = theta_coil * np.sign(phi_slope)
     for inn in range(1, int(2 * nfp)):
@@ -222,7 +245,7 @@ def find_helical_coils(
         # and the dtheta for each given the ntheta
         N_trial_contours = len(contour_theta_halfway)
         coil_nodes = []  # will be a list of lists
-        coil_dthetas = []  # will be a list of lists of dphi*dtheta for each point
+        coil_dthetas = []  # will be a list of lists of dtheta for each point
         for i in range(0, N_trial_contours):
             phis = np.zeros(
                 (nthetas,)
@@ -236,17 +259,20 @@ def find_helical_coils(
                 )
             elif (
                 not contours_were_sorted
-            ):  # if i==0, then must use the last and the first halfway contour periodicity to find the area
+            ):  # if i==0, then must use the last and the first halfway
+                # contour periodicity to find the integration domain
                 thetas = jnp.linspace(
                     contour_theta_halfway[i][0],
-                    contour_theta_halfway[-1][j] + 2 * np.pi * np.sign(phi_slope),
+                    contour_theta_halfway[-1][0] + 2 * np.pi * np.sign(phi_slope),
                     nthetas,
                     endpoint=False,
                 )
             elif (
                 contours_were_sorted
-            ):  # if i==0, then must use the last and the first halfway contour periodicity to find the area
-                # here I assume this contour is on the bottom... when it could be on top too
+            ):  # if i==0, then must use the last and the first halfway contour
+                # periodicity to find the integration domain
+                # here I assume this contour is on the bottom...
+                # when it could be on top too
                 thetas = np.linspace(
                     contour_theta_halfway[i - 1][0],
                     contour_theta_halfway[i][0],
@@ -263,11 +289,13 @@ def find_helical_coils(
     ################################################################
     # Phi is linear in theta at zeta=0 (bc is a sin series for phi SV), so can
     # have theta be the optimization varibale
-    # and theta halfway is literally the theta halfway btwn, so no need to call matploltib
+    # and theta halfway is literally the theta halfway btwn,
+    #  so no need to call matploltib
     def find_contours_and_current_variance(
         contours, return_full_info=False, show_plots=False, nthetas=200
     ):
-        """Accepts a list of current potential contour values of length Ncoils+1,
+        """Accepts a list of current potential contour values of length Ncoils+1.
+
         returns variance of current in the coils
 
         """
@@ -305,7 +333,7 @@ def find_helical_coils(
         for j in range(N_trial_contours):
             try:
                 p = cdata.collections[j].get_paths()[0]
-            except:
+            except Exception:
                 print("no path found for given contour")
                 continue
             v = p.vertices
@@ -328,7 +356,7 @@ def find_helical_coils(
         for k in range(len(cdata_half.collections)):
             try:
                 p = cdata_half.collections[k].get_paths()[0]
-            except:
+            except Exception:
                 print("no path found for given contour")
                 continue
             v = p.vertices
@@ -440,18 +468,9 @@ def find_helical_coils(
             plt.close("all")
 
         ####### debug #######################
-        # # test that the length is what we expect
-        # true_length = 2 * np.pi * a_ves
-        # approx_length = 0
-        # len_elem_sum = 0
-        # for coords, line_elems in zip(coil_nodes_line, coil_line_elements):
-        #     gtt_sqrt = np.abs(surf_g_tt(coords[0], coords[1]))
-        #     approx_length += np.sum(gtt_sqrt * line_elems)
-        #     len_elem_sum += np.sum(line_elems)
-        # length_diff = jnp.abs(true_length - approx_length)
-        # area_elem_diff = np.abs(2 * np.pi - len_elem_sum)
-        # if area_elem_diff > 0.1:
-        #     print(f"line elem sum diff is large! {area_elem_diff:1.4e}")
+        # should just check that the net toroidal current is the same
+        # as what we get after integration...?
+        # no it wont be quite that though
 
         if not return_full_info:
             return variance
@@ -459,8 +478,9 @@ def find_helical_coils(
             return contour_theta, contour_zeta, coil_currents_line
 
     def find_full_coil_contours(contours, show_plots=True):
-        """Accepts a list of current potential contour values of length Ncoils+1,
-        returns variance of current in the coils
+        """Accepts a list of current potential contour values of length Ncoils+1.
+
+        returns the theta,zeta points of each contour
 
         """
         theta_full = theta_coil * np.sign(phi_slope)
@@ -494,7 +514,7 @@ def find_helical_coils(
         for j in range(N_trial_contours):
             try:
                 p = cdata.collections[j].get_paths()[0]
-            except:
+            except Exception:
                 print("no path found for given contour")
                 continue
             v = p.vertices
@@ -510,8 +530,10 @@ def find_helical_coils(
         return contour_theta, contour_zeta
 
     N_trial_contours = desirednumcoils
-    # flip is so the contour levels are increasing (this may not be necessary dep. on contour direction)
-    # adding extra contour above and below the ones we care about, so we can then find halfway point...
+    # flip is so the contour levels are increasing
+    #  (this may not be necessary dep. on contour direction)
+    # adding extra contour above and below the ones we care about,
+    #  so we can then find halfway point btwn them
 
     theta0s = np.flip(
         np.linspace(
@@ -602,7 +624,7 @@ def find_helical_coils(
     print(f"Minimum coil-coil separation: {np.sqrt(minSeparation2)*1000:3.2f} mm")
 
     figfilename = f"coil_3d_ncoil_{desirednumcoils}_alpha_{alpha:1.4e}_{dirname}.png"
-    if save_files:
+    if save_figs:
         plt.savefig(f"{dirname}/{figfilename}")
 
     ################

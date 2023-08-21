@@ -388,6 +388,18 @@ class RotationalTransform(_Objective):
             name=name,
         )
 
+    def _scale(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
+        w = compress(
+            constants["transforms"]["grid"],
+            constants["transforms"]["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
+
     def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
@@ -481,18 +493,6 @@ class RotationalTransform(_Objective):
             constants["transforms"]["grid"], data["iota"], surface_label="rho"
         )
 
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = compress(
-            constants["transforms"]["grid"],
-            constants["transforms"]["grid"].spacing[:, 0],
-            surface_label="rho",
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
-
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         f = self.compute(*args, **kwargs)
@@ -558,6 +558,18 @@ class ToroidalCurrent(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def _scale(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
+        w = compress(
+            constants["transforms"]["grid"],
+            constants["transforms"]["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -655,18 +667,6 @@ class ToroidalCurrent(_Objective):
         return compress(
             constants["transforms"]["grid"], data["current"], surface_label="rho"
         )
-
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = compress(
-            constants["transforms"]["grid"],
-            constants["transforms"]["grid"].spacing[:, 0],
-            surface_label="rho",
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

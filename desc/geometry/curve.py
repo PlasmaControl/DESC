@@ -35,12 +35,7 @@ class FourierPlanarCurve(Curve):
 
     """
 
-    _io_attrs_ = Curve._io_attrs_ + [
-        "_r_n",
-        "_center",
-        "_normal",
-        "_r_basis",
-    ]
+    _io_attrs_ = Curve._io_attrs_ + ["_center", "_normal", "_r_basis", "_r_n"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
     # The curve is computed in this frame and then shifted/rotated to the correct frame.
@@ -168,12 +163,12 @@ class FourierRZCurve(Curve):
     """
 
     _io_attrs_ = Curve._io_attrs_ + [
-        "_R_n",
-        "_Z_n",
-        "_R_basis",
-        "_Z_basis",
-        "_sym",
         "_NFP",
+        "_R_basis",
+        "_R_n",
+        "_sym",
+        "_Z_basis",
+        "_Z_n",
     ]
 
     def __init__(
@@ -372,12 +367,12 @@ class FourierXYZCurve(Curve):
     """
 
     _io_attrs_ = Curve._io_attrs_ + [
-        "_X_n",
-        "_Y_n",
-        "_Z_n",
         "_X_basis",
+        "_X_n",
         "_Y_basis",
+        "_Y_n",
         "_Z_basis",
+        "_Z_n",
     ]
 
     def __init__(

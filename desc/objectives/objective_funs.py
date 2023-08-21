@@ -46,13 +46,13 @@ class _Objective(IOAble, ABC):
     _linear = False
     _equilibrium = False
     _io_attrs_ = [
-        "_target",
-        "_weight",
-        "_name",
         "_args",
+        "_name",
+        "_normalization",
         "_normalize",
         "_normalize_target",
-        "_normalization",
+        "_target",
+        "_weight",
     ]
 
     def __init__(

@@ -41,12 +41,12 @@ class FourierRZToroidalSurface(Surface):
     """
 
     _io_attrs_ = Surface._io_attrs_ + [
-        "_R_lmn",
-        "_Z_lmn",
-        "_R_basis",
-        "_Z_basis",
-        "rho",
         "_NFP",
+        "_R_basis",
+        "_R_lmn",
+        "_Z_basis",
+        "_Z_lmn",
+        "rho",
     ]
 
     def __init__(
@@ -390,12 +390,12 @@ class ZernikeRZToroidalSection(Surface):
     """
 
     _io_attrs_ = Surface._io_attrs_ + [
-        "_R_lmn",
-        "_Z_lmn",
         "_R_basis",
-        "_Z_basis",
-        "zeta",
+        "_R_lmn",
         "_spectral_indexing",
+        "_Z_basis",
+        "_Z_lmn",
+        "zeta",
     ]
 
     def __init__(

@@ -22,7 +22,7 @@ from desc.io import IOAble
 class Curve(IOAble, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
-    _io_attrs_ = ["_name", "shift", "rotmat"]
+    _io_attrs_ = ["_name", "rotmat", "shift"]
 
     def __init__(self, name=""):
         self.shift = jnp.array([0, 0, 0])
@@ -153,7 +153,7 @@ class Curve(IOAble, ABC):
 class Surface(IOAble, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
-    _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]
+    _io_attrs_ = ["_L", "_M", "_N", "_name", "_sym"]
 
     def __repr__(self):
         """Get the string form of the object."""

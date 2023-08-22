@@ -58,7 +58,6 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
         "|grad(psi)|",
         "|e_theta x e_zeta|",
     ],
-    axis_limit_data=["I_rr", "psi_rr"],
 )
 def _D_current(params, transforms, profiles, data, **kwargs):
     # Implements equation 4.17 in M. Landreman & R. Jorge (2020)
@@ -189,7 +188,6 @@ def _D_geodesic(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["D_shear", "D_current", "D_well", "D_geodesic"],
-    axis_limit_data=["p_r"],
 )
 def _D_Mercier(params, transforms, profiles, data, **kwargs):
     # Implements equation 4.20 in M. Landreman & R. Jorge (2020)

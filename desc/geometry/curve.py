@@ -401,6 +401,7 @@ class FourierXYZCurve(Curve):
         assert np.allclose(X[-1], X[0], atol=1e-14), "Must pass in a closed curve!"
         assert np.allclose(Y[-1], Y[0], atol=1e-14), "Must pass in a closed curve!"
         assert np.allclose(Z[-1], Z[0], atol=1e-14), "Must pass in a closed curve!"
+
         if s is None:
             lengths = jnp.sqrt(
                 (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2

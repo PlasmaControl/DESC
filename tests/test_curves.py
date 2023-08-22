@@ -173,6 +173,11 @@ class TestRZCurve:
             atol=3e-3,
         )
 
+        # pass in unclosed curve
+        grid = LinearGrid(N=20, endpoint=False)
+        with pytest.raises(AssertionError):
+            xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=grid.nodes[:, 2])
+
     @pytest.mark.unit
     def test_to_SplineXYZCurve(self):
         """Test conversion to SplineXYZCurve."""

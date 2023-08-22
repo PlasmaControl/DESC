@@ -158,7 +158,7 @@ class Curve(IOAble, ABC):
             + " (name={})".format(self.name)
         )
 
-    def to_FourierXYZCurve(self, N=None, grid=None, phis=None, name=""):
+    def to_FourierXYZCurve(self, N=None, grid=None, s=None, name=""):
         """Convert Curve to FourierXYZCurve representation.
 
         Parameters
@@ -168,8 +168,8 @@ class Curve(IOAble, ABC):
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
             If an integer, uses that many equally spaced points.
-        phis : ndarray
-            angle to use for the fitting. if None, defaults to
+        s : ndarray
+            arbitrary curve parameter to use for the fitting. if None, defaults to
             normalized arclength
         name : str
             name for this curve
@@ -183,9 +183,7 @@ class Curve(IOAble, ABC):
         from .curve import FourierXYZCurve
 
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
-        return FourierXYZCurve.from_values(
-            coords, N=N, phis=phis, basis="xyz", name=name
-        )
+        return FourierXYZCurve.from_values(coords, N=N, s=s, basis="xyz", name=name)
 
     def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic", name=""):
         """Convert Curve to SplineXYZCurve.
@@ -193,7 +191,7 @@ class Curve(IOAble, ABC):
         Parameters
         ----------
         knots : ndarray
-            arbitrary theta values to use for spline knots,
+            arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.
             (input length in this case is determined by grid argument, since
             the input coordinates come from

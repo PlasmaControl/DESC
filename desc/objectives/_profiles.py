@@ -272,7 +272,7 @@ class Shear(_Objective):
             self._target = self._target(grid.nodes[grid.unique_rho_idx])
 
         self._dim_f = grid.num_rho
-        self._data_keys = ["iota_r"]
+        self._data_keys = ["rho", "iota", "iota_r"]
         self._args = get_params(
             self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
@@ -317,8 +317,8 @@ class Shear(_Objective):
 
         Returns
         -------
-        iota_r : ndarray
-            First radial derivative of rotational transform on specified flux surfaces.
+        shear : ndarray
+            Normalized radial derivative of the rotational transform.
 
         """
         params, constants = self._parse_args(*args, **kwargs)
@@ -331,7 +331,12 @@ class Shear(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return constants["transforms"]["grid"].compress(data["iota_r"])
+        shear = jnp.where(
+            data["iota"] == 0,
+            data["iota_r"],
+            data["rho"] * data["iota_r"] / data["iota"],
+        )
+        return constants["transforms"]["grid"].compress(shear)
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""

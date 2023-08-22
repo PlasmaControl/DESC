@@ -61,10 +61,9 @@ class Transform(IOAble):
 
         if (
             method != "jitable"
-            and np.any(self.grid.nodes[:, 2] != 0)
+            and grid.node_pattern != "custom"
             and self.basis.N != 0
             and self.grid.NFP != self.basis.NFP
-            and self.basis.N != 0
             and np.any(self.grid.nodes[:, 2] != 0)
         ):
             warnings.warn(

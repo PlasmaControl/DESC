@@ -37,6 +37,197 @@ class VMECIO:
     """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""
 
     @classmethod
+    def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, Nz=None, **kwargs):
+        """Compute points on surfaces of constant rho, vartheta for both DESC and VMEC.
+
+        Parameters
+        ----------
+        equil : Equilibrium
+            desc equilibrium to compare
+        vmec_data : str or path-like or dict
+            path to VMEC output file, or dictionary of vmec outputs
+        Nr : int, optional
+            number of rho contours
+        Nt : int, optional
+            number of vartheta contours
+        Nz : int, optional
+            Number of zeta planes to compare. If None, use 1 plane for axisymmetric
+            cases or 6 for non-axisymmetric.
+
+        Returns
+        -------
+        coords : dict of ndarray
+            dictionary of coordinate arrays with keys Xy_code where X is R or Z, y is r
+            for rho contours, or v for vartheta contours, and code is vmec or desc
+
+        """
+        if isinstance(vmec_data, (str, os.PathLike)):
+            vmec_data = cls.read_vmec_output(vmec_data)
+
+        if Nz is None and equil.N == 0:
+            Nz = 1
+        elif Nz is None:
+            Nz = 6
+
+        num_theta = kwargs.get("num_theta", 180)
+        Nr_vmec = vmec_data["rmnc"].shape[0] - 1
+        s_idx = Nr_vmec % np.floor(Nr_vmec / (Nr - 1))
+        idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
+        if s_idx != 0:
+            idxes = np.pad(idxes, (1, 0), mode="constant")
+
+        # flux surfaces to plot
+        rr = np.sqrt(idxes / Nr_vmec)
+        rt = np.linspace(0, 2 * np.pi, num_theta)
+        rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
+        r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
+
+        # straight field-line angles to plot
+        tr = np.linspace(0, 1, 50)
+        tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
+        tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
+        t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
+
+        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # angle in PEST-like flux coordinates
+
+        # find theta angles corresponding to desired theta* angles
+        v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
+        r_coords_desc = equil.compute(["R", "Z"], grid=r_grid)
+        v_coords_desc = equil.compute(["R", "Z"], grid=v_grid)
+
+        # rho contours
+        Rr_desc = r_coords_desc["R"].reshape(
+            (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+        )
+        Zr_desc = r_coords_desc["Z"].reshape(
+            (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+        )
+
+        # vartheta contours
+        Rv_desc = v_coords_desc["R"].reshape(
+            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+        )
+        Zv_desc = v_coords_desc["Z"].reshape(
+            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+        )
+
+        # Note: the VMEC radial coordinate s is the normalized toroidal magnetic flux;
+        # the DESC radial coordinate rho = sqrt(s)
+
+        # convert from rho -> s
+        r_nodes = r_grid.nodes
+        r_nodes[:, 0] = r_nodes[:, 0] ** 2
+        t_nodes = t_grid.nodes
+        t_nodes[:, 0] = t_nodes[:, 0] ** 2
+
+        v_nodes = cls.compute_theta_coords(
+            vmec_data["lmns"],
+            vmec_data["xm"],
+            vmec_data["xn"],
+            t_nodes[:, 0],
+            t_nodes[:, 1],
+            t_nodes[:, 2],
+        )
+
+        t_nodes[:, 1] = v_nodes
+
+        Rr_vmec, Zr_vmec = cls.vmec_interpolate(
+            vmec_data["rmnc"],
+            vmec_data["zmns"],
+            vmec_data["xm"],
+            vmec_data["xn"],
+            theta=r_nodes[:, 1],
+            phi=r_nodes[:, 2],
+            s=r_nodes[:, 0],
+        )
+
+        Rv_vmec, Zv_vmec = cls.vmec_interpolate(
+            vmec_data["rmnc"],
+            vmec_data["zmns"],
+            vmec_data["xm"],
+            vmec_data["xn"],
+            theta=t_nodes[:, 1],
+            phi=t_nodes[:, 2],
+            s=t_nodes[:, 0],
+        )
+
+        coords = {
+            "Rr_desc": Rr_desc,
+            "Zr_desc": Zr_desc,
+            "Rv_desc": Rv_desc,
+            "Zv_desc": Zv_desc,
+            "Rr_vmec": Rr_vmec.reshape(
+                (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+            ),
+            "Zr_vmec": Zr_vmec.reshape(
+                (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+            ),
+            "Rv_vmec": Rv_vmec.reshape(
+                (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+            ),
+            "Zv_vmec": Zv_vmec.reshape(
+                (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+            ),
+        }
+        coords = {key: np.swapaxes(val, 0, 1) for key, val in coords.items()}
+        return coords
+
+    @classmethod
+    def compute_theta_coords(cls, lmns, xm, xn, s, theta_star, zeta, si=None):
+        """Find theta such that theta + lambda(theta) == theta_star.
+
+        Parameters
+        ----------
+        lmns : array-like
+            fourier coefficients for lambda
+        xm : array-like
+            poloidal mode numbers
+        xn : array-like
+            toroidal mode numbers
+        s : array-like
+            desired radial coordinates (normalized toroidal magnetic flux)
+        theta_star : array-like
+            desired straigh field-line poloidal angles (PEST/VMEC-like flux coordinates)
+        zeta : array-like
+            desired toroidal angles (toroidal coordinate phi)
+        si : ndarray
+            values of radial coordinates where lmns are defined. Defaults to linearly
+            spaced on half grid between (0,1)
+
+        Returns
+        -------
+        theta : ndarray
+            theta such that theta + lambda(theta) == theta_star
+
+        """
+        if si is None:
+            si = np.linspace(0, 1, lmns.shape[0])
+            si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
+        lmbda_mn = interpolate.CubicSpline(si, lmns)
+
+        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # angle in PEST-like flux coordinates
+
+        def root_fun(theta):
+            lmbda = np.sum(
+                lmbda_mn(s)
+                * np.sin(
+                    xm[np.newaxis] * theta[:, np.newaxis]
+                    - xn[np.newaxis] * zeta[:, np.newaxis]
+                ),
+                axis=-1,
+            )
+            theta_star_k = theta + lmbda  # theta* = theta + lambda
+            err = theta_star - theta_star_k
+            return err
+
+        out = optimize.root(
+            root_fun, x0=theta_star, method="diagbroyden", options={"ftol": 1e-6}
+        )
+        return out.x
+
+    @classmethod
     def load(
         cls, path, L=None, M=None, N=None, spectral_indexing="ansi", profile="iota"
     ):
@@ -194,6 +385,99 @@ class VMECIO:
         eq = ensure_positive_jacobian(eq)
 
         return eq
+
+    @classmethod
+    def plot_vmec_comparison(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
+        """Plot a comparison to VMEC flux surfaces.
+
+        Parameters
+        ----------
+        equil : Equilibrium
+            desc equilibrium to compare
+        vmec_data : str or path-like or dict
+            path to VMEC output file, or dictionary of vmec outputs
+        Nr : int, optional
+            number of rho contours to plot
+        Nt : int, optional
+            number of vartheta contours to plot
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            figure being plotted to
+        ax : matplotlib.axes.Axes or ndarray of Axes
+            axes being plotted to
+
+        """
+        if isinstance(vmec_data, (str, os.PathLike)):
+            vmec_data = cls.read_vmec_output(vmec_data)
+        coords = cls.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
+
+        if equil.N == 0:
+            fig, ax = plt.subplots(1, 1, figsize=(6, 6), squeeze=False)
+        else:
+            fig, ax = plt.subplots(2, 3, figsize=(16, 12), squeeze=False)
+        ax = ax.flatten()
+
+        for k in range(len(ax)):
+            ax[k].plot(coords["Rr_vmec"][0, 0, k], coords["Zr_vmec"][0, 0, k], "bo")
+            s_vmec = ax[k].plot(
+                coords["Rr_vmec"][:, :, k].T, coords["Zr_vmec"][:, :, k].T, "b-"
+            )
+            ax[k].plot(coords["Rv_vmec"][:, :, k], coords["Zv_vmec"][:, :, k], "b-")
+
+            ax[k].plot(coords["Rr_desc"][0, 0, k].T, coords["Zr_desc"][0, 0, k].T, "ro")
+            ax[k].plot(coords["Rv_desc"][:, :, k], coords["Zv_desc"][:, :, k], "r--")
+            s_desc = ax[k].plot(
+                coords["Rr_desc"][:, :, k].T, coords["Zr_desc"][:, :, k].T, "r--"
+            )
+
+            ax[k].axis("equal")
+            ax[k].set_xlabel(r"$R ~(\mathrm{m})$")
+            ax[k].set_ylabel(r"$Z ~(\mathrm{m})$")
+            if k == 0:
+                s_vmec[0].set_label(r"$\mathrm{VMEC}$")
+                s_desc[0].set_label(r"$\mathrm{DESC}$")
+                ax[k].legend(fontsize="x-small")
+
+        return fig, ax
+
+    @classmethod
+    def read_vmec_output(cls, fname):
+        """Read VMEC data from wout NetCDF file.
+
+        Parameters
+        ----------
+        fname : str or path-like
+            filename of VMEC output file
+
+        Returns
+        -------
+        vmec_data : dict
+            the VMEC data fields
+
+        """
+        file = Dataset(fname, mode="r")
+
+        vmec_data = {
+            "NFP": file.variables["nfp"][:],
+            "psi": file.variables["phi"][:],  # toroidal flux is saved as 'phi'
+            "xm": file.variables["xm"][:],
+            "xn": file.variables["xn"][:],
+            "rmnc": file.variables["rmnc"][:],
+            "zmns": file.variables["zmns"][:],
+            "lmns": file.variables["lmns"][:],
+            "signgs": file.variables["signgs"][:],
+        }
+        try:
+            vmec_data["rmns"] = file.variables["rmns"][:]
+            vmec_data["zmnc"] = file.variables["zmnc"][:]
+            vmec_data["lmnc"] = file.variables["lmnc"][:]
+            vmec_data["sym"] = False
+        except KeyError:
+            vmec_data["sym"] = True
+
+        return vmec_data
 
     @classmethod
     def save(cls, eq, path, surfs=128, verbose=1):  # noqa: C901 - FIXME - simplify
@@ -1288,43 +1572,6 @@ class VMECIO:
         if verbose > 1:
             timer.disp("Total time")
 
-    @classmethod
-    def read_vmec_output(cls, fname):
-        """Read VMEC data from wout NetCDF file.
-
-        Parameters
-        ----------
-        fname : str or path-like
-            filename of VMEC output file
-
-        Returns
-        -------
-        vmec_data : dict
-            the VMEC data fields
-
-        """
-        file = Dataset(fname, mode="r")
-
-        vmec_data = {
-            "NFP": file.variables["nfp"][:],
-            "psi": file.variables["phi"][:],  # toroidal flux is saved as 'phi'
-            "xm": file.variables["xm"][:],
-            "xn": file.variables["xn"][:],
-            "rmnc": file.variables["rmnc"][:],
-            "zmns": file.variables["zmns"][:],
-            "lmns": file.variables["lmns"][:],
-            "signgs": file.variables["signgs"][:],
-        }
-        try:
-            vmec_data["rmns"] = file.variables["rmns"][:]
-            vmec_data["zmnc"] = file.variables["zmnc"][:]
-            vmec_data["lmnc"] = file.variables["lmnc"][:]
-            vmec_data["sym"] = False
-        except KeyError:
-            vmec_data["sym"] = True
-
-        return vmec_data
-
     @staticmethod
     def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi, s=None, si=None, sym=True):
         """Interpolate VMEC data on a flux surface.
@@ -1388,250 +1635,3 @@ class VMECIO:
             return C, S
         else:
             return C + S
-
-    @classmethod
-    def compute_theta_coords(cls, lmns, xm, xn, s, theta_star, zeta, si=None):
-        """Find theta such that theta + lambda(theta) == theta_star.
-
-        Parameters
-        ----------
-        lmns : array-like
-            fourier coefficients for lambda
-        xm : array-like
-            poloidal mode numbers
-        xn : array-like
-            toroidal mode numbers
-        s : array-like
-            desired radial coordinates (normalized toroidal magnetic flux)
-        theta_star : array-like
-            desired straigh field-line poloidal angles (PEST/VMEC-like flux coordinates)
-        zeta : array-like
-            desired toroidal angles (toroidal coordinate phi)
-        si : ndarray
-            values of radial coordinates where lmns are defined. Defaults to linearly
-            spaced on half grid between (0,1)
-
-        Returns
-        -------
-        theta : ndarray
-            theta such that theta + lambda(theta) == theta_star
-
-        """
-        if si is None:
-            si = np.linspace(0, 1, lmns.shape[0])
-            si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
-        lmbda_mn = interpolate.CubicSpline(si, lmns)
-
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line
-        # angle in PEST-like flux coordinates
-
-        def root_fun(theta):
-            lmbda = np.sum(
-                lmbda_mn(s)
-                * np.sin(
-                    xm[np.newaxis] * theta[:, np.newaxis]
-                    - xn[np.newaxis] * zeta[:, np.newaxis]
-                ),
-                axis=-1,
-            )
-            theta_star_k = theta + lmbda  # theta* = theta + lambda
-            err = theta_star - theta_star_k
-            return err
-
-        out = optimize.root(
-            root_fun, x0=theta_star, method="diagbroyden", options={"ftol": 1e-6}
-        )
-        return out.x
-
-    @classmethod
-    def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, Nz=None, **kwargs):
-        """Compute points on surfaces of constant rho, vartheta for both DESC and VMEC.
-
-        Parameters
-        ----------
-        equil : Equilibrium
-            desc equilibrium to compare
-        vmec_data : str or path-like or dict
-            path to VMEC output file, or dictionary of vmec outputs
-        Nr : int, optional
-            number of rho contours
-        Nt : int, optional
-            number of vartheta contours
-        Nz : int, optional
-            Number of zeta planes to compare. If None, use 1 plane for axisymmetric
-            cases or 6 for non-axisymmetric.
-
-        Returns
-        -------
-        coords : dict of ndarray
-            dictionary of coordinate arrays with keys Xy_code where X is R or Z, y is r
-            for rho contours, or v for vartheta contours, and code is vmec or desc
-
-        """
-        if isinstance(vmec_data, (str, os.PathLike)):
-            vmec_data = cls.read_vmec_output(vmec_data)
-
-        if Nz is None and equil.N == 0:
-            Nz = 1
-        elif Nz is None:
-            Nz = 6
-
-        num_theta = kwargs.get("num_theta", 180)
-        Nr_vmec = vmec_data["rmnc"].shape[0] - 1
-        s_idx = Nr_vmec % np.floor(Nr_vmec / (Nr - 1))
-        idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
-        if s_idx != 0:
-            idxes = np.pad(idxes, (1, 0), mode="constant")
-
-        # flux surfaces to plot
-        rr = np.sqrt(idxes / Nr_vmec)
-        rt = np.linspace(0, 2 * np.pi, num_theta)
-        rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-        r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
-
-        # straight field-line angles to plot
-        tr = np.linspace(0, 1, 50)
-        tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
-        tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-        t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
-
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line
-        # angle in PEST-like flux coordinates
-
-        # find theta angles corresponding to desired theta* angles
-        v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
-        r_coords_desc = equil.compute(["R", "Z"], grid=r_grid)
-        v_coords_desc = equil.compute(["R", "Z"], grid=v_grid)
-
-        # rho contours
-        Rr_desc = r_coords_desc["R"].reshape(
-            (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
-        )
-        Zr_desc = r_coords_desc["Z"].reshape(
-            (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
-        )
-
-        # vartheta contours
-        Rv_desc = v_coords_desc["R"].reshape(
-            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
-        )
-        Zv_desc = v_coords_desc["Z"].reshape(
-            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
-        )
-
-        # Note: the VMEC radial coordinate s is the normalized toroidal magnetic flux;
-        # the DESC radial coordinate rho = sqrt(s)
-
-        # convert from rho -> s
-        r_nodes = r_grid.nodes
-        r_nodes[:, 0] = r_nodes[:, 0] ** 2
-        t_nodes = t_grid.nodes
-        t_nodes[:, 0] = t_nodes[:, 0] ** 2
-
-        v_nodes = cls.compute_theta_coords(
-            vmec_data["lmns"],
-            vmec_data["xm"],
-            vmec_data["xn"],
-            t_nodes[:, 0],
-            t_nodes[:, 1],
-            t_nodes[:, 2],
-        )
-
-        t_nodes[:, 1] = v_nodes
-
-        Rr_vmec, Zr_vmec = cls.vmec_interpolate(
-            vmec_data["rmnc"],
-            vmec_data["zmns"],
-            vmec_data["xm"],
-            vmec_data["xn"],
-            theta=r_nodes[:, 1],
-            phi=r_nodes[:, 2],
-            s=r_nodes[:, 0],
-        )
-
-        Rv_vmec, Zv_vmec = cls.vmec_interpolate(
-            vmec_data["rmnc"],
-            vmec_data["zmns"],
-            vmec_data["xm"],
-            vmec_data["xn"],
-            theta=t_nodes[:, 1],
-            phi=t_nodes[:, 2],
-            s=t_nodes[:, 0],
-        )
-
-        coords = {
-            "Rr_desc": Rr_desc,
-            "Zr_desc": Zr_desc,
-            "Rv_desc": Rv_desc,
-            "Zv_desc": Zv_desc,
-            "Rr_vmec": Rr_vmec.reshape(
-                (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
-            ),
-            "Zr_vmec": Zr_vmec.reshape(
-                (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
-            ),
-            "Rv_vmec": Rv_vmec.reshape(
-                (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
-            ),
-            "Zv_vmec": Zv_vmec.reshape(
-                (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
-            ),
-        }
-        coords = {key: np.swapaxes(val, 0, 1) for key, val in coords.items()}
-        return coords
-
-    @classmethod
-    def plot_vmec_comparison(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
-        """Plot a comparison to VMEC flux surfaces.
-
-        Parameters
-        ----------
-        equil : Equilibrium
-            desc equilibrium to compare
-        vmec_data : str or path-like or dict
-            path to VMEC output file, or dictionary of vmec outputs
-        Nr : int, optional
-            number of rho contours to plot
-        Nt : int, optional
-            number of vartheta contours to plot
-
-        Returns
-        -------
-        fig : matplotlib.figure.Figure
-            figure being plotted to
-        ax : matplotlib.axes.Axes or ndarray of Axes
-            axes being plotted to
-
-        """
-        if isinstance(vmec_data, (str, os.PathLike)):
-            vmec_data = cls.read_vmec_output(vmec_data)
-        coords = cls.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
-
-        if equil.N == 0:
-            fig, ax = plt.subplots(1, 1, figsize=(6, 6), squeeze=False)
-        else:
-            fig, ax = plt.subplots(2, 3, figsize=(16, 12), squeeze=False)
-        ax = ax.flatten()
-
-        for k in range(len(ax)):
-            ax[k].plot(coords["Rr_vmec"][0, 0, k], coords["Zr_vmec"][0, 0, k], "bo")
-            s_vmec = ax[k].plot(
-                coords["Rr_vmec"][:, :, k].T, coords["Zr_vmec"][:, :, k].T, "b-"
-            )
-            ax[k].plot(coords["Rv_vmec"][:, :, k], coords["Zv_vmec"][:, :, k], "b-")
-
-            ax[k].plot(coords["Rr_desc"][0, 0, k].T, coords["Zr_desc"][0, 0, k].T, "ro")
-            ax[k].plot(coords["Rv_desc"][:, :, k], coords["Zv_desc"][:, :, k], "r--")
-            s_desc = ax[k].plot(
-                coords["Rr_desc"][:, :, k].T, coords["Zr_desc"][:, :, k].T, "r--"
-            )
-
-            ax[k].axis("equal")
-            ax[k].set_xlabel(r"$R ~(\mathrm{m})$")
-            ax[k].set_ylabel(r"$Z ~(\mathrm{m})$")
-            if k == 0:
-                s_vmec[0].set_label(r"$\mathrm{VMEC}$")
-                s_desc[0].set_label(r"$\mathrm{DESC}$")
-                ax[k].legend(fontsize="x-small")
-
-        return fig, ax

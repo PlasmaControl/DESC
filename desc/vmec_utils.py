@@ -7,6 +7,127 @@ from desc.backend import sign
 from desc.basis import zernike_radial
 
 
+def _desc_modes_from_vmec_modes(vmec_modes):
+    """Finds the DESC modes corresponding to a given set of VMEC modes.
+
+    input order: [+1 for cos/-1 for sin, m, n]
+    output order : [l,m,n]
+    """
+    desc_modes = np.vstack(
+        [
+            np.zeros(len(vmec_modes)),
+            sign(vmec_modes[:, 2]) * vmec_modes[:, 0] * vmec_modes[:, 1],
+            vmec_modes[:, 2],
+        ]
+    ).T
+    desc_modes[desc_modes[:, 1] == 0, 2] *= vmec_modes[desc_modes[:, 1] == 0, 0]
+    desc_modes = desc_modes[np.lexsort(desc_modes.T[np.array([1, 0, 2])])]
+    return desc_modes
+
+
+def _mnsc_to_modes_x(xm, xn, s, c):
+    """Convert from arrays of m, n, smn, cmn to [cos/sin, m, n] and x coeffs."""
+    cmodes = np.vstack([np.ones_like(xm), xm, xn]).T
+
+    mode_idx_00 = np.where(np.logical_and(xm == 0, xn == 0))
+    if mode_idx_00[0].size:  # there is a 00 mode, get rid of it for the sin
+        xm_no_0 = np.delete(xm, mode_idx_00[0][0])
+        xn_no_0 = np.delete(xn, mode_idx_00[0][0])
+
+        smodes = np.vstack(
+            [-np.ones_like(xm_no_0), xm_no_0, xn_no_0]
+        ).T  # index out m=n=0
+        s = np.atleast_2d(np.delete(s.T, mode_idx_00[0][0], axis=0).T)
+    else:  # no need to index out m=n=0 bc is not in the basis
+        smodes = np.vstack([-np.ones_like(xm), xm, xn]).T
+
+    vmec_modes = np.vstack([cmodes, smodes])
+    idx = np.lexsort(vmec_modes.T[np.array([0, 2, 1])])
+    x = np.concatenate([c.T, s.T]).T
+    vmec_modes = vmec_modes[idx]
+    x = (x.T[idx]).T
+    return vmec_modes, x
+
+
+def _modes_x_to_mnsc(vmec_modes, x):
+    """Convert from [cos/sin, m, n] and x coeffs to arrays of m, n, smn, cmn."""
+    cmask = vmec_modes[:, 0] == 1
+    smask = vmec_modes[:, 0] == -1
+    _, xm, xn = vmec_modes[cmask].T
+    if not np.any(cmask):  #  there are no cos modes, so use smask to get modenumbers
+        _, xm, xn = vmec_modes[smask].T
+        # concatenate the 0,0 mode
+        xm = np.insert(xm, 0, 0)
+        xn = np.insert(xn, 0, 0)
+
+    c = (x.T[cmask]).T
+    s = (x.T[smask]).T
+    if not len(s.T):
+        s = np.zeros_like(c)
+    elif len(s.T):  # if there are sin terms, add a zero for the m=n=0 mode
+        s = np.concatenate([np.zeros_like(s.T[:1]), s.T]).T
+    if not len(c.T):
+        c = np.zeros_like(s)
+    assert len(s.T) == len(c.T)
+    return xm, xn, s, c
+
+
+def _vmec_modes_from_desc_modes(desc_modes):
+    """Finds the VMEC modes corresponding to a given set of DESC modes.
+
+    input order: [l,m,n]
+    output order : [+1 for cos/-1 for sin, m, n]
+    """
+    vmec_modes = np.vstack(
+        [
+            sign(desc_modes[:, 2]) * sign(desc_modes[:, 1]),
+            abs(desc_modes[:, 1]),
+            desc_modes[:, 2],
+        ]
+    ).T
+    vmec_modes[vmec_modes[:, 1] == 0, 2] = abs(vmec_modes[vmec_modes[:, 1] == 0, 2])
+    vmec_modes = vmec_modes[np.lexsort(vmec_modes.T[np.array([0, 2, 1])])]
+    return vmec_modes
+
+
+def fourier_to_zernike(m, n, x_mn, basis):
+    """Convert from a double Fourier series to a Fourier-Zernike basis.
+
+    Parameters
+    ----------
+    m : ndarray, shape(num_modes,)
+        Poloidal mode numbers.
+    n : ndarray, shape(num_modes,)
+        Toroidal mode numbers.
+    x_mn : ndarray, shape(surfs,num_modes)
+        Spectral coefficients in the double Fourier basis.
+        Each row is a separate flux surface, increasing from the magnetic
+        axis to the boundary.
+    basis : FourierZernikeBasis
+        Basis set for x_lmn
+
+    Returns
+    -------
+    x_lmn : ndarray, shape(num_modes,)
+        Fourier-Zernike spectral coefficients.
+
+    """
+    x_lmn = np.zeros((basis.num_modes,))
+    surfs = x_mn.shape[0]
+    rho = np.sqrt(np.linspace(0, 1, surfs))
+
+    for k in range(len(m)):
+        idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
+        if len(idx):
+            A = zernike_radial(
+                rho[:, np.newaxis], basis.modes[idx, 0], basis.modes[idx, 1]
+            )
+            c = np.linalg.lstsq(A, x_mn[:, k], rcond=None)[0]
+            x_lmn[idx] = c
+
+    return x_lmn
+
+
 def ptolemy_identity_fwd(m_0, n_0, s, c):
     """Convert from double-angle to double-Fourier form using Ptolemy's identity.
 
@@ -89,89 +210,6 @@ def ptolemy_identity_rev(m_1, n_1, x):
     y = (A @ x.T).T
     xm, xn, s, c = _modes_x_to_mnsc(vmec_modes, y)
     return xm, xn, s, c
-
-
-def _mnsc_to_modes_x(xm, xn, s, c):
-    """Convert from arrays of m, n, smn, cmn to [cos/sin, m, n] and x coeffs."""
-    cmodes = np.vstack([np.ones_like(xm), xm, xn]).T
-
-    mode_idx_00 = np.where(np.logical_and(xm == 0, xn == 0))
-    if mode_idx_00[0].size:  # there is a 00 mode, get rid of it for the sin
-        xm_no_0 = np.delete(xm, mode_idx_00[0][0])
-        xn_no_0 = np.delete(xn, mode_idx_00[0][0])
-
-        smodes = np.vstack(
-            [-np.ones_like(xm_no_0), xm_no_0, xn_no_0]
-        ).T  # index out m=n=0
-        s = np.atleast_2d(np.delete(s.T, mode_idx_00[0][0], axis=0).T)
-    else:  # no need to index out m=n=0 bc is not in the basis
-        smodes = np.vstack([-np.ones_like(xm), xm, xn]).T
-
-    vmec_modes = np.vstack([cmodes, smodes])
-    idx = np.lexsort(vmec_modes.T[np.array([0, 2, 1])])
-    x = np.concatenate([c.T, s.T]).T
-    vmec_modes = vmec_modes[idx]
-    x = (x.T[idx]).T
-    return vmec_modes, x
-
-
-def _modes_x_to_mnsc(vmec_modes, x):
-    """Convert from [cos/sin, m, n] and x coeffs to arrays of m, n, smn, cmn."""
-    cmask = vmec_modes[:, 0] == 1
-    smask = vmec_modes[:, 0] == -1
-    _, xm, xn = vmec_modes[cmask].T
-    if not np.any(cmask):  #  there are no cos modes, so use smask to get modenumbers
-        _, xm, xn = vmec_modes[smask].T
-        # concatenate the 0,0 mode
-        xm = np.insert(xm, 0, 0)
-        xn = np.insert(xn, 0, 0)
-
-    c = (x.T[cmask]).T
-    s = (x.T[smask]).T
-    if not len(s.T):
-        s = np.zeros_like(c)
-    elif len(s.T):  # if there are sin terms, add a zero for the m=n=0 mode
-        s = np.concatenate([np.zeros_like(s.T[:1]), s.T]).T
-    if not len(c.T):
-        c = np.zeros_like(s)
-    assert len(s.T) == len(c.T)
-    return xm, xn, s, c
-
-
-def _vmec_modes_from_desc_modes(desc_modes):
-    """Finds the VMEC modes corresponding to a given set of DESC modes.
-
-    input order: [l,m,n]
-    output order : [+1 for cos/-1 for sin, m, n]
-    """
-    vmec_modes = np.vstack(
-        [
-            sign(desc_modes[:, 2]) * sign(desc_modes[:, 1]),
-            abs(desc_modes[:, 1]),
-            desc_modes[:, 2],
-        ]
-    ).T
-    vmec_modes[vmec_modes[:, 1] == 0, 2] = abs(vmec_modes[vmec_modes[:, 1] == 0, 2])
-    vmec_modes = vmec_modes[np.lexsort(vmec_modes.T[np.array([0, 2, 1])])]
-    return vmec_modes
-
-
-def _desc_modes_from_vmec_modes(vmec_modes):
-    """Finds the DESC modes corresponding to a given set of VMEC modes.
-
-    input order: [+1 for cos/-1 for sin, m, n]
-    output order : [l,m,n]
-    """
-    desc_modes = np.vstack(
-        [
-            np.zeros(len(vmec_modes)),
-            sign(vmec_modes[:, 2]) * vmec_modes[:, 0] * vmec_modes[:, 1],
-            vmec_modes[:, 2],
-        ]
-    ).T
-    desc_modes[desc_modes[:, 1] == 0, 2] *= vmec_modes[desc_modes[:, 1] == 0, 0]
-    desc_modes = desc_modes[np.lexsort(desc_modes.T[np.array([1, 0, 2])])]
-    return desc_modes
 
 
 def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=None):
@@ -271,88 +309,6 @@ def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=Non
         return matrix, vmec_modes, idx
 
     return matrix, vmec_modes
-
-
-def fourier_to_zernike(m, n, x_mn, basis):
-    """Convert from a double Fourier series to a Fourier-Zernike basis.
-
-    Parameters
-    ----------
-    m : ndarray, shape(num_modes,)
-        Poloidal mode numbers.
-    n : ndarray, shape(num_modes,)
-        Toroidal mode numbers.
-    x_mn : ndarray, shape(surfs,num_modes)
-        Spectral coefficients in the double Fourier basis.
-        Each row is a separate flux surface, increasing from the magnetic
-        axis to the boundary.
-    basis : FourierZernikeBasis
-        Basis set for x_lmn
-
-    Returns
-    -------
-    x_lmn : ndarray, shape(num_modes,)
-        Fourier-Zernike spectral coefficients.
-
-    """
-    x_lmn = np.zeros((basis.num_modes,))
-    surfs = x_mn.shape[0]
-    rho = np.sqrt(np.linspace(0, 1, surfs))
-
-    for k in range(len(m)):
-        idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
-        if len(idx):
-            A = zernike_radial(
-                rho[:, np.newaxis], basis.modes[idx, 0], basis.modes[idx, 1]
-            )
-            c = np.linalg.lstsq(A, x_mn[:, k], rcond=None)[0]
-            x_lmn[idx] = c
-
-    return x_lmn
-
-
-# FIXME: this always returns the full double Fourier basis regardless of symmetry
-def zernike_to_fourier(x_lmn, basis, rho):
-    """Convert from a Fourier-Zernike basis to a double Fourier series.
-
-    Parameters
-    ----------
-    x_lmn : ndarray, shape(num_modes,)
-        Fourier-Zernike spectral coefficients.
-    basis : FourierZernikeBasis
-        Basis set for x_lmn.
-    rho : ndarray
-        Radial coordinates of flux surfaces, rho = sqrt(psi).
-
-    Returns
-    -------
-    m : ndarray, shape(num_modes,)
-        Poloidal mode numbers.
-    n : ndarray, shape(num_modes,)
-        Toroidal mode numbers.
-    x_mn : ndarray, shape(surfs,num_modes)
-        Spectral coefficients in the double Fourier basis.
-        Each row is a separate flux surface, increasing from the magnetic
-        axis to the boundary.
-
-    """
-    M = basis.M
-    N = basis.N
-
-    mn = np.array([[m - M, n - N] for m in range(2 * M + 1) for n in range(2 * N + 1)])
-    m = mn[:, 0]
-    n = mn[:, 1]
-
-    x_mn = np.zeros((rho.size, m.size))
-    for k in range(len(m)):
-        idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
-        if len(idx):
-            A = zernike_radial(
-                rho[:, np.newaxis], basis.modes[idx, 0], basis.modes[idx, 1]
-            )
-            x_mn[:, k] = np.matmul(A, x_lmn[idx])
-
-    return m, n, x_mn
 
 
 def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa: C901
@@ -469,3 +425,47 @@ def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa:
     boundary_subspace = block_diag(Rb_subspace, Zb_subspace)
     opt_subspace = null_space(boundary_subspace)
     return opt_subspace
+
+
+# FIXME: this always returns the full double Fourier basis regardless of symmetry
+def zernike_to_fourier(x_lmn, basis, rho):
+    """Convert from a Fourier-Zernike basis to a double Fourier series.
+
+    Parameters
+    ----------
+    x_lmn : ndarray, shape(num_modes,)
+        Fourier-Zernike spectral coefficients.
+    basis : FourierZernikeBasis
+        Basis set for x_lmn.
+    rho : ndarray
+        Radial coordinates of flux surfaces, rho = sqrt(psi).
+
+    Returns
+    -------
+    m : ndarray, shape(num_modes,)
+        Poloidal mode numbers.
+    n : ndarray, shape(num_modes,)
+        Toroidal mode numbers.
+    x_mn : ndarray, shape(surfs,num_modes)
+        Spectral coefficients in the double Fourier basis.
+        Each row is a separate flux surface, increasing from the magnetic
+        axis to the boundary.
+
+    """
+    M = basis.M
+    N = basis.N
+
+    mn = np.array([[m - M, n - N] for m in range(2 * M + 1) for n in range(2 * N + 1)])
+    m = mn[:, 0]
+    n = mn[:, 1]
+
+    x_mn = np.zeros((rho.size, m.size))
+    for k in range(len(m)):
+        idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
+        if len(idx):
+            A = zernike_radial(
+                rho[:, np.newaxis], basis.modes[idx, 0], basis.modes[idx, 1]
+            )
+            x_mn[:, k] = np.matmul(A, x_lmn[idx])
+
+    return m, n, x_mn

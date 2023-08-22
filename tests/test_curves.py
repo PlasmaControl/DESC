@@ -143,7 +143,7 @@ class TestRZCurve:
         """Test conversion to FourierXYZCurve."""
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
         grid = LinearGrid(N=20, endpoint=True)
-        xyz = rz.to_FourierXYZCurve(N=2, grid=grid, phis=grid.nodes[:, 2])
+        xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=grid.nodes[:, 2])
 
         np.testing.assert_allclose(
             rz.compute("curvature", grid=grid)["curvature"],
@@ -165,7 +165,7 @@ class TestRZCurve:
 
         # same thing but with arclength angle
 
-        xyz = rz.to_FourierXYZCurve(N=2, grid=grid, phis=None)
+        xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=None)
 
         np.testing.assert_allclose(
             rz.compute("length", grid=grid)["length"],

@@ -313,7 +313,7 @@ class SplineXYZCoil(Coil, SplineXYZCurve):
     X, Y, Z: array-like
         points for X, Y, Z describing a closed curve
     knots : ndarray
-        arbitrary theta values to use for spline knots,
+        arbitrary curve parameter values to use for spline knots,
         should be an 1D ndarray of same length as the input X,Y,Z.
         If None, defaults to using an equal-arclength angle as the knots
         If supplied, will be rescaled to lie in [0,2pi]

@@ -369,7 +369,7 @@ class FourierXYZCurve(Curve):
             )
 
     @classmethod
-    def from_values(cls, coords, N=10, phis=None, basis="xyz", name=""):
+    def from_values(cls, coords, N=10, s=None, basis="xyz", name=""):
         """Fit coordinates to FourierXYZCurve representation.
 
         Parameters
@@ -379,9 +379,9 @@ class FourierXYZCurve(Curve):
         N : int
             Fourier resolution of the new X,Y,Z representation.
             default is 10
-        phis : ndarray
-            angle to use for the fitting. if None, defaults to
-            normalized arclength
+        s : ndarray
+            arbitrary curve parameter to use for the fitting.
+            if None, defaults to normalized arclength
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
         Returns
@@ -401,19 +401,19 @@ class FourierXYZCurve(Curve):
         assert np.allclose(X[-1], X[0], atol=1e-14), "Must pass in a closed curve!"
         assert np.allclose(Y[-1], Y[0], atol=1e-14), "Must pass in a closed curve!"
         assert np.allclose(Z[-1], Z[0], atol=1e-14), "Must pass in a closed curve!"
-        if phis is None:
+        if s is None:
             lengths = jnp.sqrt(
                 (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2
             )
-            phis = 2 * jnp.pi * np.cumsum(lengths) / jnp.sum(lengths)
-            phis = np.insert(phis, 0, 0)
+            s = 2 * jnp.pi * np.cumsum(lengths) / jnp.sum(lengths)
+            s = np.insert(s, 0, 0)
         else:
-            phis = np.atleast_1d(phis)
+            s = np.atleast_1d(s)
             # rescale angle to lie in [0,2pi]
-            phis = phis - phis[0]
-            phis = (phis / phis[-1]) * 2 * np.pi
+            s = s - s[0]
+            s = (s / s[-1]) * 2 * np.pi
 
-        grid = LinearGrid(zeta=phis, NFP=1, sym=False)
+        grid = LinearGrid(zeta=s, NFP=1, sym=False)
         basis = FourierSeries(N=N, NFP=1, sym=False)
         transform = Transform(grid, basis, build_pinv=True)
         X_n = transform.fit(coords_xyz[:, 0])
@@ -564,9 +564,9 @@ class SplineXYZCurve(Curve):
     X, Y, Z: array-like
         points for X, Y, Z describing a closed curve
     knots : ndarray
-        arbitrary theta values to use for spline knots,
+        arbitrary curve parameter values to use for spline knots,
         should be an 1D ndarray of same length as the input X,Y,Z.
-        If None, defaults to using an equal-arclength angle as the knot
+        If None, defaults to using an equal-arclength angle as the knots
         If supplied, will be rescaled to lie in [0,2pi]
     method : str
         method of interpolation
@@ -683,7 +683,7 @@ class SplineXYZCurve(Curve):
         coords: ndarray
             coordinates to fit a SplineXYZCurve object with.
         knots : ndarray
-            arbitrary theta values to use for spline knots,
+            arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.
             (input length in this case is determined by grid argument, since
             the input coordinates come from
@@ -705,7 +705,7 @@ class SplineXYZCurve(Curve):
 
         Returns
         -------
-        SplineXYZCurve: SplineXYZCurve,
+        SplineXYZCurve: SplineXYZCurve
             SplineXYZCurve object, the spline representation of the FourierXYZCurve.
 
         """

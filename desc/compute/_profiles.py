@@ -1266,8 +1266,8 @@ def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="iota_psi",
     label="\\partial_{\\psi} \\iota",
-    units="~",
-    units_long="None",
+    units="Wb^{-1}",
+    units_long="Inverse Webers",
     description="Rotational transform, radial derivative wrt toroidal flux",
     dim=1,
     params=[],

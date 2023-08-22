@@ -178,6 +178,13 @@ class TestRZCurve:
         with pytest.raises(AssertionError):
             xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=grid.nodes[:, 2])
 
+        # pass in non-monotonic s
+        grid = LinearGrid(N=20, endpoint=False)
+        s = grid.nodes[:, 2]
+        s[-2] = s[-1]
+        with pytest.raises(AssertionError):
+            xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=s)
+
     @pytest.mark.unit
     def test_to_SplineXYZCurve(self):
         """Test conversion to SplineXYZCurve."""
@@ -660,6 +667,11 @@ class TestSplineXYZCurve:
         # setter for knots
         with pytest.raises(ValueError):
             c.knots = np.linspace(0, 10, 10)
+        knots = c.knots
+        knots[-2] = knots[-1]  # make it non-monotonic
+        with pytest.raises(ValueError):
+            c.knots = knots
+
         # setter for method
         with pytest.raises(ValueError):
             c.method = "not a valid method"

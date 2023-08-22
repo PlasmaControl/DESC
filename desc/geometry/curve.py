@@ -381,6 +381,8 @@ class FourierXYZCurve(Curve):
             default is 10
         s : ndarray
             arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords
             if None, defaults to normalized arclength
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
@@ -410,6 +412,8 @@ class FourierXYZCurve(Curve):
             s = np.insert(s, 0, 0)
         else:
             s = np.atleast_1d(s)
+            if not jnp.all(jnp.diff(s) > 0):
+                raise ValueError("supplied s values must be monotonically increasing!")
             # rescale angle to lie in [0,2pi]
             s = s - s[0]
             s = (s / s[-1]) * 2 * np.pi
@@ -566,7 +570,7 @@ class SplineXYZCurve(Curve):
         points for X, Y, Z describing a closed curve
     knots : ndarray
         arbitrary curve parameter values to use for spline knots,
-        should be an 1D ndarray of same length as the input X,Y,Z.
+        should be a mononotic, 1D ndarray of same length as the input X,Y,Z.
         If None, defaults to using an equal-arclength angle as the knots
         If supplied, will be rescaled to lie in [0,2pi]
     method : str
@@ -620,6 +624,8 @@ class SplineXYZCurve(Curve):
 
         else:
             knots = np.atleast_1d(knots)
+            if not np.all(np.diff(knots) > 0):
+                raise ValueError("supplied knots must be monotonically increasing!")
             # rescale knots to lie in [0,2pi]
             knots = knots - knots[0]
             knots = (knots / knots[-1]) * 2 * np.pi
@@ -690,6 +696,8 @@ class SplineXYZCurve(Curve):
     def knots(self, new):
         if len(new) == len(self.knots):
             knots = jnp.atleast_1d(new)
+            if not jnp.all(jnp.diff(knots) > 0):
+                raise ValueError("supplied knots must be monotonically increasing!")
             # rescale knots to lie in [0,2pi]
             knots = knots - knots[0]
             knots = (knots / knots[-1]) * 2 * np.pi

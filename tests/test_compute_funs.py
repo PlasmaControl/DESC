@@ -1244,7 +1244,7 @@ def test_compute_everything():
             list(data_index[p].keys()), **grid.get(p, {})
         )
         # make sure we can compute everything
-        assert this_branch_data[p].keys() == data_index[p].keys()
+        assert this_branch_data[p].keys() == data_index[p].keys(), p
         # compare against master branch
         for name in this_branch_data[p]:
             if p in master_data and name in master_data[p]:

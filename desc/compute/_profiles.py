@@ -1264,6 +1264,30 @@ def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="iota_psi",
+    label="\\partial_{\\psi} \\iota",
+    units="~",
+    units_long="None",
+    description="Rotational transform, radial derivative wrt toroidal flux",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["iota_r", "psi_r"],
+    axis_limit_data=["iota_rr", "psi_rr"],
+)
+def _iota_psi(params, transforms, profiles, data, **kwargs):
+    # Existence of limit at magnetic axis requires ∂ᵨ iota = 0 at axis.
+    # Assume iota may be expanded as an even power series of ρ so that this
+    # condition is satisfied.
+    data["iota_psi"] = transforms["grid"].replace_at_axis(
+        data["iota_r"] / data["psi_r"], data["iota_rr"] / data["psi_rr"]
+    )
+    return data
+
+
+@register_compute_fun(
     name="q",
     label="q = 1/\\iota",
     units="~",

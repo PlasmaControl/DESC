@@ -17,9 +17,7 @@ from desc.grid import LinearGrid
 zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
 not_finite_limits = {
     "D_Mercier",
-    "D_current",
     "D_geodesic",
-    "D_shear",  # may not exist for all configurations
     "D_well",
     "J^theta",
     "curvature_H_rho",
@@ -56,6 +54,7 @@ not_implemented_limits = {
     # reliant limits will be added to this set automatically
     "iota_num_rrr",
     "iota_den_rrr",
+    "D_current",
 }
 
 
@@ -92,6 +91,7 @@ not_implemented_limits = grow_seeds(
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
 )
+not_implemented_limits.discard("D_Mercier")
 
 
 def _skip_this(eq, name):

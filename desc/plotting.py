@@ -1161,6 +1161,7 @@ def plot_section(
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
             period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=grid.nodes,
         )
         grid = Grid(coords, sort=False)
 
@@ -1173,6 +1174,7 @@ def plot_section(
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
             period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=grid.nodes,
         )
         grid = Grid(coords, sort=False)
     rows = np.floor(np.sqrt(nphi)).astype(int)
@@ -1416,6 +1418,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
             period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=r_grid.nodes,
         ),
         sort=False,
     )
@@ -1436,6 +1439,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
                 ["rho", "theta_PEST", "phi"],
                 ["rho", "theta", "zeta"],
                 period=(np.inf, 2 * np.pi, 2 * np.pi),
+                guess=t_grid.nodes,
             ),
             sort=False,
         )
@@ -1614,6 +1618,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
             period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=grid.nodes,
         ),
         sort=False,
     )
@@ -1779,6 +1784,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
                 ["rho", "theta", "phi"],
                 ["rho", "theta", "zeta"],
                 period=(np.inf, 2 * np.pi, 2 * np.pi),
+                guess=grid.nodes,
             ),
             sort=False,
         )

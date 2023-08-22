@@ -26,7 +26,7 @@ class FourierRZCurve(Curve):
     modes_R : array-like, optional
         Mode numbers associated with R_n. If not given defaults to [-n:n].
     modes_Z : array-like, optional
-        Mode numbers associated with Z_n, If not given defaults to modes_R.
+        Mode numbers associated with Z_n, If not given defaults to [-n:n]].
     NFP : int
         Number of field periods.
     sym : bool

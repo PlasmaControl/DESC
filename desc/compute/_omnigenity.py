@@ -447,10 +447,11 @@ def _B_well(params, transforms, profiles, data, **kwargs):
 def _B_omni_coords(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (0, 1))
     iota = data["iota"][0]  # FIXME: assumes a single flux surface
-    if M == 0:
-        matrix = jnp.array([[N - M * iota, iota / N], [0, 1 / N]])
-    else:
-        matrix = jnp.array([[N, M * iota / (N - M * iota)], [M, M / (N - M * iota)]])
+    matrix = jnp.where(
+        M == 0,
+        jnp.array([N - M * iota, iota / N, 0, 1 / N]),
+        jnp.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),
+    ).reshape((2, 2))
     alpha = data["zeta"]  # zeta is used as a placeholder for alpha (field line label)
 
     # solve for (theta_B,zeta_B) cooresponding to (eta,alpha)

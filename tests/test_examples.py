@@ -25,6 +25,7 @@ from desc.objectives import (
     FixPressure,
     FixPsi,
     ForceBalance,
+    ForceBalanceAnisotropic,
     HelicalForceBalance,
     ObjectiveFunction,
     QuasisymmetryBoozer,
@@ -35,7 +36,7 @@ from desc.objectives import (
 )
 from desc.optimize import Optimizer
 from desc.plotting import plot_boozer_surface
-from desc.profiles import PowerSeriesProfile
+from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
@@ -57,6 +58,27 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
 def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
+
+    np.testing.assert_allclose(rho_err, 0, atol=1e-3)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_SOLOVEV_anisotropic_results(SOLOVEV):
+    """Tests that SOLOVEV with zero anisotropic pressure gives the same result."""
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    # reset to start
+    eq.set_initial_guess()
+    # give it a zero anisotropy profile
+    anisotropy = FourierZernikeProfile()
+    anisotropy.change_resolution(eq.L, eq.M, eq.N)
+    eq.anisotropy = anisotropy
+
+    obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq))
+    constraints = get_fixed_boundary_constraints(eq=eq, anisotropy=True)
+    eq.solve(obj, constraints, verbose=3)
     rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
     np.testing.assert_allclose(rho_err, 0, atol=1e-3)
@@ -616,7 +638,7 @@ def test_NAE_QSC_solve():
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
-    # Eliminate the poloidal angle to focus on the toroidal behaviour
+    # Eliminate the poloidal angle to focus on the toroidal behavior
     B_av_nae = np.mean(B_nae, axis=1)
     np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=1e-4)
 
@@ -628,7 +650,7 @@ def test_NAE_QIC_solve():
     """Test O(rho) NAE QIC constraints solve."""
     # get Qic example
     qsc = Qic.from_paper("QI NFP2 r2", nphi=301, order="r1")
-    qsc.lasym = False  # don't need to consider stell asym for order 1 constraints
+    qsc.lasym = False  # don't need to consider stellarator asym for order 1 constraints
     ntheta = 75
     r = 0.01
     N = 11
@@ -718,7 +740,7 @@ def test_NAE_QIC_solve():
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
-    # Eliminate the poloidal angle to focus on the toroidal behaviour
+    # Eliminate the poloidal angle to focus on the toroidal behavior
     B_av_nae = np.mean(B_nae, axis=1)
     np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=2e-2)
 

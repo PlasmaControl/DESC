@@ -9,6 +9,22 @@ from scipy.special import factorial
 from termcolor import colored
 
 
+class _Indexable:
+    """Helper object for building indexes for indexed update functions.
+
+    This is a singleton object that overrides the ``__getitem__`` method
+    to return the index it is passed.
+    >>> Index[1:2, 3, None, ..., ::2]
+    (slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
+    copied from jax.ops.index to work with either backend
+    """
+
+    __slots__ = ()
+
+    def __getitem__(self, index):
+        return index
+
+
 class Timer:
     """Simple object for organizing timing info.
 
@@ -54,24 +70,23 @@ class Timer:
         else:
             self.op = time.perf_counter
 
-    def start(self, name):
-        """Start a timer.
+    def __getitem__(self, key):
+        return self._times[key]
+
+    def __setitem__(self, key, val):
+        self._times[key] = val
+
+    def disp(self, name):
+        """Pretty print elapsed time.
+
+        If the timer has been stopped, it reports the time delta between
+        start and stop. If it has not been stopped, it reports the current
+        elapsed time and keeps the timing running.
 
         Parameters
         ----------
         name : str
-            name to associate with timer
-
-        """
-        self._timers[name] = [self.op()]
-
-    def stop(self, name):
-        """Stop a running timer.
-
-        Parameters
-        ----------
-        name : str
-            name of timer to stop
+            name of the timer to display
 
         Raises
         ------
@@ -79,16 +94,19 @@ class Timer:
             if timer ``'name'`` has not been started
 
         """
-        try:
-            self._timers[name].append(self.op())
-        except KeyError:
-            raise ValueError(
-                colored("timer '{}' has not been started".format(name), "red")
-            ) from None
-        self._times[name] = np.diff(self._timers[name])[0]
-        if self._ns:
-            self._times[name] = self._times[name] / 1e9
-        del self._timers[name]
+        try:  # has the timer been stopped?
+            time = self._times[name]
+        except KeyError:  # might still be running, let's check
+            try:
+                start = self._timers[name][0]
+                now = self.op()  # don't stop it, just report current elapsed time
+                time = float(now - start) / 1e9 if self._ns else (now - start)
+            except KeyError:
+                raise ValueError(
+                    colored("timer '{}' has not been started".format(name), "red")
+                ) from None
+
+        self.pretty_print(name, time)
 
     @staticmethod
     def pretty_print(name, time):
@@ -128,17 +146,24 @@ class Timer:
 
         print(colored("Timer: {} = {}".format(name, out), "green"))
 
-    def disp(self, name):
-        """Pretty print elapsed time.
-
-        If the timer has been stopped, it reports the time delta between
-        start and stop. If it has not been stopped, it reports the current
-        elapsed time and keeps the timing running.
+    def start(self, name):
+        """Start a timer.
 
         Parameters
         ----------
         name : str
-            name of the timer to display
+            name to associate with timer
+
+        """
+        self._timers[name] = [self.op()]
+
+    def stop(self, name):
+        """Stop a running timer.
+
+        Parameters
+        ----------
+        name : str
+            name of timer to stop
 
         Raises
         ------
@@ -146,41 +171,16 @@ class Timer:
             if timer ``'name'`` has not been started
 
         """
-        try:  # has the timer been stopped?
-            time = self._times[name]
-        except KeyError:  # might still be running, let's check
-            try:
-                start = self._timers[name][0]
-                now = self.op()  # don't stop it, just report current elapsed time
-                time = float(now - start) / 1e9 if self._ns else (now - start)
-            except KeyError:
-                raise ValueError(
-                    colored("timer '{}' has not been started".format(name), "red")
-                ) from None
-
-        self.pretty_print(name, time)
-
-    def __getitem__(self, key):
-        return self._times[key]
-
-    def __setitem__(self, key, val):
-        self._times[key] = val
-
-
-class _Indexable:
-    """Helper object for building indexes for indexed update functions.
-
-    This is a singleton object that overrides the ``__getitem__`` method
-    to return the index it is passed.
-    >>> Index[1:2, 3, None, ..., ::2]
-    (slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
-    copied from jax.ops.index to work with either backend
-    """
-
-    __slots__ = ()
-
-    def __getitem__(self, index):
-        return index
+        try:
+            self._timers[name].append(self.op())
+        except KeyError:
+            raise ValueError(
+                colored("timer '{}' has not been started".format(name), "red")
+            ) from None
+        self._times[name] = np.diff(self._timers[name])[0]
+        if self._ns:
+            self._times[name] = self._times[name] / 1e9
+        del self._timers[name]
 
 
 """
@@ -192,6 +192,56 @@ to return the index it is passed.
 copied from jax.ops.index to work with either backend
 """
 Index = _Indexable()
+
+
+def combination_permutation(m, n, equals=True):
+    """Compute all m-tuples of non-negative ints that sum to less than or equal to n.
+
+    Parameters
+    ----------
+    m : int
+        Size of tuples. IE, number of items being combined.
+    n : int
+        Maximum sum
+    equals : bool
+        If True, return only where sum == n, else retun where sum <= n
+
+    Returns
+    -------
+    out : ndarray
+        m tuples that sum to n, or less than n if equals=False
+    """
+    out = []
+    combos = combinations_with_replacement(range(n + 1), m)
+    for combo in list(combos):
+        perms = set(permutations(combo))
+        for perm in list(perms):
+            out += [perm]
+    out = np.array(out)
+    if equals:
+        out = out[out.sum(axis=-1) == n]
+    else:
+        out = out[out.sum(axis=-1) <= n]
+    return out
+
+
+def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
+    """Copy coefficients from one resolution to another."""
+    modes_old, modes_new = np.atleast_1d(modes_old), np.atleast_1d(modes_new)
+    if modes_old.ndim == 1:
+        modes_old = modes_old.reshape((-1, 1))
+    if modes_new.ndim == 1:
+        modes_new = modes_new.reshape((-1, 1))
+
+    num_modes = modes_new.shape[0]
+    if c_new is None:
+        c_new = np.zeros((num_modes,))
+
+    for i in range(num_modes):
+        idx = np.where((modes_old == modes_new[i, :]).all(axis=1))[0]
+        if len(idx):
+            c_new[i] = c_old[idx]
+    return c_new
 
 
 def equals(a, b):
@@ -225,6 +275,16 @@ def equals(a, b):
     return a == b
 
 
+def errorif(cond, err=ValueError, msg=""):
+    """Raise an error if condition is met.
+
+    Similar to assert but allows wider range of Error types, rather than
+    just AssertionError.
+    """
+    if cond:
+        raise err(msg)
+
+
 def flatten_list(x):
     """Flatten a nested list.
 
@@ -245,33 +305,30 @@ def flatten_list(x):
         return [x]
 
 
-def issorted(x, axis=None, tol=1e-12):
-    """Check if an array is sorted, within a given tolerance.
+def get_instance(things, cls):
+    """Get thing from a collection of things that is the instance of a given class."""
+    return [t for t in things if isinstance(t, cls)][0]
 
-    Checks whether x[i+1] - x[i] > tol
+
+def is_broadcastable(shp1, shp2):
+    """Determine if 2 shapes will broadcast without error.
 
     Parameters
     ----------
-    x : array-like
-        input values
-    axis : int
-        axis along which to check if the array is sorted.
-        If None, the flattened array is used
-    tol : float
-        tolerance for determining order. Array is still considered sorted
-        if the difference between adjacent values is greater than -tol
+    shp1, shp2 : tuple of int
+        Shapes of the arrays to check.
 
     Returns
     -------
-    issorted : bool
-        whether the array is sorted along specified axis
-
+    is_broadcastable : bool
+        Whether the arrays can be broadcast.
     """
-    x = np.asarray(x)
-    if axis is None:
-        x = x.flatten()
-        axis = 0
-    return np.all(np.diff(x, axis=axis) >= -tol)
+    for a, b in zip(shp1[::-1], shp2[::-1]):
+        if a == 1 or b == 1 or a == b:
+            pass
+        else:
+            return False
+    return True
 
 
 def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
@@ -361,23 +418,84 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
     return isalmostequal(np.diff(x, axis=axis), rtol=rtol, atol=atol, axis=axis)
 
 
-def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
-    """Copy coefficients from one resolution to another."""
-    modes_old, modes_new = np.atleast_1d(modes_old), np.atleast_1d(modes_new)
-    if modes_old.ndim == 1:
-        modes_old = modes_old.reshape((-1, 1))
-    if modes_new.ndim == 1:
-        modes_new = modes_new.reshape((-1, 1))
+def isnonnegint(x):
+    """Determine if x is a non-negative integer."""
+    return isinstance(x, numbers.Real) and (x == int(x)) and (x >= 0)
 
-    num_modes = modes_new.shape[0]
-    if c_new is None:
-        c_new = np.zeros((num_modes,))
 
-    for i in range(num_modes):
-        idx = np.where((modes_old == modes_new[i, :]).all(axis=1))[0]
-        if len(idx):
-            c_new[i] = c_old[idx]
-    return c_new
+def isposint(x):
+    """Determine if x is a strictly positive integer."""
+    return isinstance(x, numbers.Real) and (x == int(x)) and (x > 0)
+
+
+def issorted(x, axis=None, tol=1e-12):
+    """Check if an array is sorted, within a given tolerance.
+
+    Checks whether x[i+1] - x[i] > tol
+
+    Parameters
+    ----------
+    x : array-like
+        input values
+    axis : int
+        axis along which to check if the array is sorted.
+        If None, the flattened array is used
+    tol : float
+        tolerance for determining order. Array is still considered sorted
+        if the difference between adjacent values is greater than -tol
+
+    Returns
+    -------
+    issorted : bool
+        whether the array is sorted along specified axis
+
+    """
+    x = np.asarray(x)
+    if axis is None:
+        x = x.flatten()
+        axis = 0
+    return np.all(np.diff(x, axis=axis) >= -tol)
+
+
+def multinomial_coefficients(m, n):
+    """Number of ways to place n objects into m bins."""
+    k = combination_permutation(m, n)
+    num = factorial(n)
+    den = factorial(k).prod(axis=-1)
+    return num / den
+
+
+def only1(*args):
+    """Return True if 1 and only 1 of args evaluates to True."""
+    # copied from https://stackoverflow.com/questions/16801322/
+    i = iter(args)
+    return any(i) and not any(i)
+
+
+def parse_argname_change(arg, kwargs, oldname, newname):
+    """Warn and parse arguemnts whose names have changed."""
+    if oldname in kwargs:
+        warnings.warn(
+            FutureWarning(
+                f"argument {oldname} has been renamed to {newname}, "
+                + f"{oldname} will be removed in a future release"
+            )
+        )
+        arg = kwargs.pop(oldname)
+    return arg
+
+
+def setdefault(val, default, cond=None):
+    """Return val if condition is met, otherwise default.
+
+    If cond is None, then it checks if val is not None, returning val
+    or default accordingly.
+    """
+    if cond is None:
+        cond = val is not None
+    if cond:
+        return val
+    return default
 
 
 def svd_inv_null(A):
@@ -410,121 +528,3 @@ def svd_inv_null(A):
     Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
     Z = vh[num:, :].T.conj()
     return Ainv, Z
-
-
-def combination_permutation(m, n, equals=True):
-    """Compute all m-tuples of non-negative ints that sum to less than or equal to n.
-
-    Parameters
-    ----------
-    m : int
-        Size of tuples. IE, number of items being combined.
-    n : int
-        Maximum sum
-    equals : bool
-        If True, return only where sum == n, else retun where sum <= n
-
-    Returns
-    -------
-    out : ndarray
-        m tuples that sum to n, or less than n if equals=False
-    """
-    out = []
-    combos = combinations_with_replacement(range(n + 1), m)
-    for combo in list(combos):
-        perms = set(permutations(combo))
-        for perm in list(perms):
-            out += [perm]
-    out = np.array(out)
-    if equals:
-        out = out[out.sum(axis=-1) == n]
-    else:
-        out = out[out.sum(axis=-1) <= n]
-    return out
-
-
-def multinomial_coefficients(m, n):
-    """Number of ways to place n objects into m bins."""
-    k = combination_permutation(m, n)
-    num = factorial(n)
-    den = factorial(k).prod(axis=-1)
-    return num / den
-
-
-def is_broadcastable(shp1, shp2):
-    """Determine if 2 shapes will broadcast without error.
-
-    Parameters
-    ----------
-    shp1, shp2 : tuple of int
-        Shapes of the arrays to check.
-
-    Returns
-    -------
-    is_broadcastable : bool
-        Whether the arrays can be broadcast.
-    """
-    for a, b in zip(shp1[::-1], shp2[::-1]):
-        if a == 1 or b == 1 or a == b:
-            pass
-        else:
-            return False
-    return True
-
-
-def get_instance(things, cls):
-    """Get thing from a collection of things that is the instance of a given class."""
-    return [t for t in things if isinstance(t, cls)][0]
-
-
-def parse_argname_change(arg, kwargs, oldname, newname):
-    """Warn and parse arguemnts whose names have changed."""
-    if oldname in kwargs:
-        warnings.warn(
-            FutureWarning(
-                f"argument {oldname} has been renamed to {newname}, "
-                + f"{oldname} will be removed in a future release"
-            )
-        )
-        arg = kwargs.pop(oldname)
-    return arg
-
-
-def setdefault(val, default, cond=None):
-    """Return val if condition is met, otherwise default.
-
-    If cond is None, then it checks if val is not None, returning val
-    or default accordingly.
-    """
-    if cond is None:
-        cond = val is not None
-    if cond:
-        return val
-    return default
-
-
-def isnonnegint(x):
-    """Determine if x is a non-negative integer."""
-    return isinstance(x, numbers.Real) and (x == int(x)) and (x >= 0)
-
-
-def isposint(x):
-    """Determine if x is a strictly positive integer."""
-    return isinstance(x, numbers.Real) and (x == int(x)) and (x > 0)
-
-
-def errorif(cond, err=ValueError, msg=""):
-    """Raise an error if condition is met.
-
-    Similar to assert but allows wider range of Error types, rather than
-    just AssertionError.
-    """
-    if cond:
-        raise err(msg)
-
-
-def only1(*args):
-    """Return True if 1 and only 1 of args evaluates to True."""
-    # copied from https://stackoverflow.com/questions/16801322/
-    i = iter(args)
-    return any(i) and not any(i)

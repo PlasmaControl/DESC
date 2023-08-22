@@ -8,6 +8,244 @@ import numpy as np
 from desc.backend import jnp
 
 
+def _approx_df(x, f, method, axis, **kwargs):
+    """Approximates derivatives for cubic spline interpolation."""
+    if method == "cubic":
+        dx = jnp.diff(x)
+        df = jnp.diff(f, axis=axis)
+        dxi = jnp.where(dx == 0, 0, 1 / dx)
+        if df.ndim > dxi.ndim:
+            dxi = jnp.expand_dims(dxi, tuple(range(1, df.ndim)))
+            dxi = jnp.moveaxis(dxi, 0, axis)
+        df = dxi * df
+        fx = jnp.concatenate(
+            [
+                jnp.take(df, jnp.array([0]), axis, mode="wrap"),
+                1
+                / 2
+                * (
+                    jnp.take(df, jnp.arange(0, df.shape[axis] - 1), axis, mode="wrap")
+                    + jnp.take(df, jnp.arange(1, df.shape[axis]), axis, mode="wrap")
+                ),
+                jnp.take(df, jnp.array([-1]), axis, mode="wrap"),
+            ],
+            axis=axis,
+        )
+        return fx
+    elif method == "cubic2":
+        dx = jnp.diff(x)
+        df = jnp.diff(f, axis=axis)
+        if df.ndim > dx.ndim:
+            dx = jnp.expand_dims(dx, tuple(range(1, df.ndim)))
+            dx = jnp.moveaxis(dx, 0, axis)
+        dxi = jnp.where(dx == 0, 0, 1 / dx)
+        df = dxi * df
+
+        A = jnp.diag(
+            jnp.concatenate(
+                (
+                    np.array([1.0]),
+                    2 * (dx.flatten()[:-1] + dx.flatten()[1:]),
+                    np.array([1.0]),
+                )
+            )
+        )
+        upper_diag1 = jnp.diag(
+            jnp.concatenate((np.array([1.0]), dx.flatten()[:-1])), k=1
+        )
+        lower_diag1 = jnp.diag(
+            jnp.concatenate((dx.flatten()[1:], np.array([1.0]))), k=-1
+        )
+        A += upper_diag1 + lower_diag1
+        b = jnp.concatenate(
+            [
+                2 * jnp.take(df, jnp.array([0]), axis, mode="wrap"),
+                3
+                * (
+                    jnp.take(dx, jnp.arange(0, df.shape[axis] - 1), axis, mode="wrap")
+                    * jnp.take(df, jnp.arange(1, df.shape[axis]), axis, mode="wrap")
+                    + jnp.take(dx, jnp.arange(1, df.shape[axis]), axis, mode="wrap")
+                    * jnp.take(df, jnp.arange(0, df.shape[axis] - 1), axis, mode="wrap")
+                ),
+                2 * jnp.take(df, jnp.array([-1]), axis, mode="wrap"),
+            ],
+            axis=axis,
+        )
+        b = jnp.moveaxis(b, axis, 0).reshape((b.shape[axis], -1))
+        fx = jnp.linalg.solve(A, b)
+        fx = jnp.moveaxis(fx.reshape(f.shape), 0, axis)
+        return fx
+    elif method in ["cardinal", "catmull-rom"]:
+        dx = x[2:] - x[:-2]
+        df = jnp.take(f, jnp.arange(2, f.shape[axis]), axis, mode="wrap") - jnp.take(
+            f, jnp.arange(0, f.shape[axis] - 2), axis, mode="wrap"
+        )
+        dxi = jnp.where(dx == 0, 0, 1 / dx)
+        if df.ndim > dxi.ndim:
+            dxi = jnp.expand_dims(dxi, tuple(range(1, df.ndim)))
+            dxi = jnp.moveaxis(dxi, 0, axis)
+        df = dxi * df
+        fx0 = (
+            (
+                jnp.take(f, jnp.array([1]), axis, mode="wrap")
+                - jnp.take(f, jnp.array([0]), axis, mode="wrap")
+            )
+            / (x[(1,)] - x[(0,)])
+            if x[0] != x[1]
+            else jnp.zeros_like(jnp.take(f, jnp.array([0]), axis, mode="wrap"))
+        )
+        fx1 = (
+            (
+                jnp.take(f, jnp.array([-1]), axis, mode="wrap")
+                - jnp.take(f, jnp.array([-2]), axis, mode="wrap")
+            )
+            / (x[(-1,)] - x[(-2,)])
+            if x[-1] != x[-2]
+            else jnp.zeros_like(jnp.take(f, jnp.array([0]), axis, mode="wrap"))
+        )
+        if method == "cardinal":
+            c = kwargs.get("c", 0)
+        else:
+            c = 0
+        fx = (1 - c) * jnp.concatenate([fx0, df, fx1], axis=axis)
+        return fx
+    elif method in ["monotonic", "monotonic-0"]:
+        f = jnp.moveaxis(f, axis, 0)
+        fshp = f.shape
+        if f.ndim == 1:
+            # So that _edge_case doesn't end up assigning to scalars
+            x = x[:, None]
+            f = f[:, None]
+        hk = x[1:] - x[:-1]
+        df = jnp.diff(f, axis=axis)
+        hki = jnp.where(hk == 0, 0, 1 / hk)
+        if df.ndim > hki.ndim:
+            hki = jnp.expand_dims(hki, tuple(range(1, df.ndim)))
+            hki = jnp.moveaxis(hki, 0, axis)
+
+        mk = hki * df
+
+        smk = jnp.sign(mk)
+        condition = (smk[1:, :] != smk[:-1, :]) | (mk[1:, :] == 0) | (mk[:-1, :] == 0)
+
+        w1 = 2 * hk[1:] + hk[:-1]
+        w2 = hk[1:] + 2 * hk[:-1]
+
+        if df.ndim > w1.ndim:
+            w1 = jnp.expand_dims(w1, tuple(range(1, df.ndim)))
+            w1 = jnp.moveaxis(w1, 0, axis)
+            w2 = jnp.expand_dims(w2, tuple(range(1, df.ndim)))
+            w2 = jnp.moveaxis(w2, 0, axis)
+
+        whmean = (w1 / mk[:-1, :] + w2 / mk[1:, :]) / (w1 + w2)
+
+        dk = jnp.where(condition, 0, 1.0 / whmean)
+
+        if method == "monotonic-0":
+            d0 = jnp.zeros((1, dk.shape[1]))
+            d1 = jnp.zeros((1, dk.shape[1]))
+
+        else:
+            # special case endpoints, as suggested in
+            # Cleve Moler, Numerical Computing with MATLAB, Chap 3.6 (pchiptx.m)
+            def _edge_case(h0, h1, m0, m1):
+                # one-sided three-point estimate for the derivative
+                d = ((2 * h0 + h1) * m0 - h0 * m1) / (h0 + h1)
+
+                # try to preserve shape
+                mask = jnp.sign(d) != jnp.sign(m0)
+                mask2 = (jnp.sign(m0) != jnp.sign(m1)) & (
+                    jnp.abs(d) > 3.0 * jnp.abs(m0)
+                )
+                mmm = (~mask) & mask2
+
+                d = jnp.where(mask, 0.0, d)
+                d = jnp.where(mmm, 3.0 * m0, d)
+                return d
+
+            hk = 1 / hki
+            d0 = _edge_case(hk[0, :], hk[1, :], mk[0, :], mk[1, :])[None]
+            d1 = _edge_case(hk[-1, :], hk[-2, :], mk[-1, :], mk[-2, :])[None]
+
+        dk = np.concatenate([d0, dk, d1])
+        dk = dk.reshape(fshp)
+        return dk.reshape(fshp)
+    else:  # method passed in does not use df from this function, just return 0
+        return jnp.zeros_like(f)
+
+
+def _extrap(xq, fq, x, f, low, high, axis=0):
+    """Clamp or extrapolate values outside bounds."""
+    if isinstance(low, numbers.Number) or (not low):
+        low = low if isinstance(low, numbers.Number) else np.nan
+        fq = jnp.where(xq < x[0], low, fq)
+    if isinstance(high, numbers.Number) or (not high):
+        high = high if isinstance(high, numbers.Number) else np.nan
+        fq = jnp.where(xq > x[-1], high, fq)
+    return fq
+
+
+def _get_t_der(t, derivative, dxi):
+    """Get arrays of [1,t,t^2,t^3] for cubic interpolation."""
+    assert int(derivative) == derivative, "derivative must be an integer"
+    if derivative == 0 or derivative is None:
+        tt = jnp.array([jnp.ones_like(t), t, t**2, t**3]).T
+    elif derivative == 1:
+        tt = (
+            jnp.array([jnp.zeros_like(t), jnp.ones_like(t), 2 * t, 3 * t**2]).T
+            * dxi[:, np.newaxis]
+        )
+    elif derivative == 2:
+        tt = (
+            jnp.array(
+                [jnp.zeros_like(t), jnp.zeros_like(t), 2 * jnp.ones_like(t), 6 * t]
+            ).T
+            * dxi[:, np.newaxis] ** 2
+        )
+    elif derivative == 3:
+        tt = (
+            jnp.array(
+                [
+                    jnp.zeros_like(t),
+                    jnp.zeros_like(t),
+                    jnp.zeros_like(t),
+                    6 * jnp.ones_like(t),
+                ]
+            ).T
+            * dxi[:, np.newaxis] ** 3
+        )
+    else:
+        tt = jnp.array(
+            [jnp.zeros_like(t), jnp.zeros_like(t), jnp.zeros_like(t), jnp.zeros_like(t)]
+        ).T
+    return tt
+
+
+def _make_periodic(xq, x, period, axis, *arrs):
+    """Make arrays periodic along a specified axis."""
+    if period == 0:
+        raise ValueError(f"period must be a non-zero value; got {period}")
+    period = abs(period)
+    xq = xq % period
+    x = x % period
+    i = jnp.argsort(x)
+    x = x[i]
+    x = jnp.concatenate([x[-1:] - period, x, x[:1] + period])
+    arrs = list(arrs)
+    for k in range(len(arrs)):
+        if arrs[k] is not None:
+            arrs[k] = jnp.take(arrs[k], i, axis, mode="wrap")
+            arrs[k] = jnp.concatenate(
+                [
+                    jnp.take(arrs[k], jnp.array([-1]), axis),
+                    arrs[k],
+                    jnp.take(arrs[k], jnp.array([0]), axis),
+                ],
+                axis=axis,
+            )
+    return (xq, x, *arrs)
+
+
 def interp1d(
     xq, x, f, method="cubic", derivative=0, extrap=False, period=None, fx=None, **kwargs
 ):
@@ -565,245 +803,33 @@ def interp3d(  # noqa: C901 - FIXME: break this up into simpler pieces
     return fq
 
 
-def _make_periodic(xq, x, period, axis, *arrs):
-    """Make arrays periodic along a specified axis."""
-    if period == 0:
-        raise ValueError(f"period must be a non-zero value; got {period}")
-    period = abs(period)
-    xq = xq % period
-    x = x % period
-    i = jnp.argsort(x)
-    x = x[i]
-    x = jnp.concatenate([x[-1:] - period, x, x[:1] + period])
-    arrs = list(arrs)
-    for k in range(len(arrs)):
-        if arrs[k] is not None:
-            arrs[k] = jnp.take(arrs[k], i, axis, mode="wrap")
-            arrs[k] = jnp.concatenate(
-                [
-                    jnp.take(arrs[k], jnp.array([-1]), axis),
-                    arrs[k],
-                    jnp.take(arrs[k], jnp.array([0]), axis),
-                ],
-                axis=axis,
-            )
-    return (xq, x, *arrs)
-
-
-def _get_t_der(t, derivative, dxi):
-    """Get arrays of [1,t,t^2,t^3] for cubic interpolation."""
-    assert int(derivative) == derivative, "derivative must be an integer"
-    if derivative == 0 or derivative is None:
-        tt = jnp.array([jnp.ones_like(t), t, t**2, t**3]).T
-    elif derivative == 1:
-        tt = (
-            jnp.array([jnp.zeros_like(t), jnp.ones_like(t), 2 * t, 3 * t**2]).T
-            * dxi[:, np.newaxis]
-        )
-    elif derivative == 2:
-        tt = (
-            jnp.array(
-                [jnp.zeros_like(t), jnp.zeros_like(t), 2 * jnp.ones_like(t), 6 * t]
-            ).T
-            * dxi[:, np.newaxis] ** 2
-        )
-    elif derivative == 3:
-        tt = (
-            jnp.array(
-                [
-                    jnp.zeros_like(t),
-                    jnp.zeros_like(t),
-                    jnp.zeros_like(t),
-                    6 * jnp.ones_like(t),
-                ]
-            ).T
-            * dxi[:, np.newaxis] ** 3
-        )
-    else:
-        tt = jnp.array(
-            [jnp.zeros_like(t), jnp.zeros_like(t), jnp.zeros_like(t), jnp.zeros_like(t)]
-        ).T
-    return tt
-
-
-def _extrap(xq, fq, x, f, low, high, axis=0):
-    """Clamp or extrapolate values outside bounds."""
-    if isinstance(low, numbers.Number) or (not low):
-        low = low if isinstance(low, numbers.Number) else np.nan
-        fq = jnp.where(xq < x[0], low, fq)
-    if isinstance(high, numbers.Number) or (not high):
-        high = high if isinstance(high, numbers.Number) else np.nan
-        fq = jnp.where(xq > x[-1], high, fq)
-    return fq
-
-
-def _approx_df(x, f, method, axis, **kwargs):
-    """Approximates derivatives for cubic spline interpolation."""
-    if method == "cubic":
-        dx = jnp.diff(x)
-        df = jnp.diff(f, axis=axis)
-        dxi = jnp.where(dx == 0, 0, 1 / dx)
-        if df.ndim > dxi.ndim:
-            dxi = jnp.expand_dims(dxi, tuple(range(1, df.ndim)))
-            dxi = jnp.moveaxis(dxi, 0, axis)
-        df = dxi * df
-        fx = jnp.concatenate(
-            [
-                jnp.take(df, jnp.array([0]), axis, mode="wrap"),
-                1
-                / 2
-                * (
-                    jnp.take(df, jnp.arange(0, df.shape[axis] - 1), axis, mode="wrap")
-                    + jnp.take(df, jnp.arange(1, df.shape[axis]), axis, mode="wrap")
-                ),
-                jnp.take(df, jnp.array([-1]), axis, mode="wrap"),
-            ],
-            axis=axis,
-        )
-        return fx
-    elif method == "cubic2":
-        dx = jnp.diff(x)
-        df = jnp.diff(f, axis=axis)
-        if df.ndim > dx.ndim:
-            dx = jnp.expand_dims(dx, tuple(range(1, df.ndim)))
-            dx = jnp.moveaxis(dx, 0, axis)
-        dxi = jnp.where(dx == 0, 0, 1 / dx)
-        df = dxi * df
-
-        A = jnp.diag(
-            jnp.concatenate(
-                (
-                    np.array([1.0]),
-                    2 * (dx.flatten()[:-1] + dx.flatten()[1:]),
-                    np.array([1.0]),
-                )
-            )
-        )
-        upper_diag1 = jnp.diag(
-            jnp.concatenate((np.array([1.0]), dx.flatten()[:-1])), k=1
-        )
-        lower_diag1 = jnp.diag(
-            jnp.concatenate((dx.flatten()[1:], np.array([1.0]))), k=-1
-        )
-        A += upper_diag1 + lower_diag1
-        b = jnp.concatenate(
-            [
-                2 * jnp.take(df, jnp.array([0]), axis, mode="wrap"),
-                3
-                * (
-                    jnp.take(dx, jnp.arange(0, df.shape[axis] - 1), axis, mode="wrap")
-                    * jnp.take(df, jnp.arange(1, df.shape[axis]), axis, mode="wrap")
-                    + jnp.take(dx, jnp.arange(1, df.shape[axis]), axis, mode="wrap")
-                    * jnp.take(df, jnp.arange(0, df.shape[axis] - 1), axis, mode="wrap")
-                ),
-                2 * jnp.take(df, jnp.array([-1]), axis, mode="wrap"),
-            ],
-            axis=axis,
-        )
-        b = jnp.moveaxis(b, axis, 0).reshape((b.shape[axis], -1))
-        fx = jnp.linalg.solve(A, b)
-        fx = jnp.moveaxis(fx.reshape(f.shape), 0, axis)
-        return fx
-    elif method in ["cardinal", "catmull-rom"]:
-        dx = x[2:] - x[:-2]
-        df = jnp.take(f, jnp.arange(2, f.shape[axis]), axis, mode="wrap") - jnp.take(
-            f, jnp.arange(0, f.shape[axis] - 2), axis, mode="wrap"
-        )
-        dxi = jnp.where(dx == 0, 0, 1 / dx)
-        if df.ndim > dxi.ndim:
-            dxi = jnp.expand_dims(dxi, tuple(range(1, df.ndim)))
-            dxi = jnp.moveaxis(dxi, 0, axis)
-        df = dxi * df
-        fx0 = (
-            (
-                jnp.take(f, jnp.array([1]), axis, mode="wrap")
-                - jnp.take(f, jnp.array([0]), axis, mode="wrap")
-            )
-            / (x[(1,)] - x[(0,)])
-            if x[0] != x[1]
-            else jnp.zeros_like(jnp.take(f, jnp.array([0]), axis, mode="wrap"))
-        )
-        fx1 = (
-            (
-                jnp.take(f, jnp.array([-1]), axis, mode="wrap")
-                - jnp.take(f, jnp.array([-2]), axis, mode="wrap")
-            )
-            / (x[(-1,)] - x[(-2,)])
-            if x[-1] != x[-2]
-            else jnp.zeros_like(jnp.take(f, jnp.array([0]), axis, mode="wrap"))
-        )
-        if method == "cardinal":
-            c = kwargs.get("c", 0)
-        else:
-            c = 0
-        fx = (1 - c) * jnp.concatenate([fx0, df, fx1], axis=axis)
-        return fx
-    elif method in ["monotonic", "monotonic-0"]:
-        f = jnp.moveaxis(f, axis, 0)
-        fshp = f.shape
-        if f.ndim == 1:
-            # So that _edge_case doesn't end up assigning to scalars
-            x = x[:, None]
-            f = f[:, None]
-        hk = x[1:] - x[:-1]
-        df = jnp.diff(f, axis=axis)
-        hki = jnp.where(hk == 0, 0, 1 / hk)
-        if df.ndim > hki.ndim:
-            hki = jnp.expand_dims(hki, tuple(range(1, df.ndim)))
-            hki = jnp.moveaxis(hki, 0, axis)
-
-        mk = hki * df
-
-        smk = jnp.sign(mk)
-        condition = (smk[1:, :] != smk[:-1, :]) | (mk[1:, :] == 0) | (mk[:-1, :] == 0)
-
-        w1 = 2 * hk[1:] + hk[:-1]
-        w2 = hk[1:] + 2 * hk[:-1]
-
-        if df.ndim > w1.ndim:
-            w1 = jnp.expand_dims(w1, tuple(range(1, df.ndim)))
-            w1 = jnp.moveaxis(w1, 0, axis)
-            w2 = jnp.expand_dims(w2, tuple(range(1, df.ndim)))
-            w2 = jnp.moveaxis(w2, 0, axis)
-
-        whmean = (w1 / mk[:-1, :] + w2 / mk[1:, :]) / (w1 + w2)
-
-        dk = jnp.where(condition, 0, 1.0 / whmean)
-
-        if method == "monotonic-0":
-            d0 = jnp.zeros((1, dk.shape[1]))
-            d1 = jnp.zeros((1, dk.shape[1]))
-
-        else:
-            # special case endpoints, as suggested in
-            # Cleve Moler, Numerical Computing with MATLAB, Chap 3.6 (pchiptx.m)
-            def _edge_case(h0, h1, m0, m1):
-                # one-sided three-point estimate for the derivative
-                d = ((2 * h0 + h1) * m0 - h0 * m1) / (h0 + h1)
-
-                # try to preserve shape
-                mask = jnp.sign(d) != jnp.sign(m0)
-                mask2 = (jnp.sign(m0) != jnp.sign(m1)) & (
-                    jnp.abs(d) > 3.0 * jnp.abs(m0)
-                )
-                mmm = (~mask) & mask2
-
-                d = jnp.where(mask, 0.0, d)
-                d = jnp.where(mmm, 3.0 * m0, d)
-                return d
-
-            hk = 1 / hki
-            d0 = _edge_case(hk[0, :], hk[1, :], mk[0, :], mk[1, :])[None]
-            d1 = _edge_case(hk[-1, :], hk[-2, :], mk[-1, :], mk[-2, :])[None]
-
-        dk = np.concatenate([d0, dk, d1])
-        dk = dk.reshape(fshp)
-        return dk.reshape(fshp)
-    else:  # method passed in does not use df from this function, just return 0
-        return jnp.zeros_like(f)
-
-
 # fmt: off
+A_BICUBIC = np.array([
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    [-3, 3, 0, 0, -2, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    [2, -2, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
+    [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 ],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 ],
+    [0, 0, 0, 0, 0, 0, 0, 0, -3, 3, 0, 0, -2, -1, 0, 0 ],
+    [0, 0, 0, 0, 0, 0, 0, 0, 2, -2, 0, 0, 1, 1, 0, 0 ],
+    [-3, 0, 3, 0, 0, 0, 0, 0, -2, 0, -1, 0, 0, 0, 0, 0 ],
+    [0, 0, 0, 0, -3, 0, 3, 0, 0, 0, 0, 0, -2, 0, -1, 0 ],
+    [9, -9, -9, 9, 6, 3, -6, -3, 6, -6, 3, -3, 4, 2, 2, 1 ],
+    [-6, 6, 6, -6, -3, -3, 3, 3, -4, 4, -2, 2, -2, -2, -1, -1 ],
+    [2, 0, -2, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0 ],
+    [0, 0, 0, 0, 2, 0, -2, 0, 0, 0, 0, 0, 1, 0, 1, 0 ],
+    [-6, 6, 6, -6, -4, -2, 4, 2, -3, 3, -3, 3, -2, -1, -2, -1 ],
+    [4, -4, -4, 4, 2, 2, -2, -2, 2, -2, 2, -2, 1, 1, 1, 1]
+])
+
+A_CUBIC = np.array([
+    [1, 0, 0, 0],
+    [0, 0, 1, 0],
+    [-3, 3, -2, -1],
+    [2, -2, 1, 1],
+])
+
 A_TRICUBIC = np.array([
     [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, # noqa: E501
      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], # noqa: E501
@@ -933,30 +959,4 @@ A_TRICUBIC = np.array([
      -4,-2,-4,-2, 4, 2, 4, 2,-4,-2, 4, 2,-4,-2, 4, 2,-3, 3,-3, 3,-3, 3,-3, 3,-2,-1,-2,-1,-2,-1,-2,-1], # noqa: E501
     [ 8,-8,-8, 8,-8, 8, 8,-8, 4, 4,-4,-4,-4,-4, 4, 4, 4,-4, 4,-4,-4, 4,-4, 4, 4,-4,-4, 4, 4,-4,-4, 4, # noqa: E501
      2, 2, 2, 2,-2,-2,-2,-2, 2, 2,-2,-2, 2, 2,-2,-2, 2,-2, 2,-2, 2,-2, 2,-2, 1, 1, 1, 1, 1, 1, 1, 1] # noqa: E501
-])
-
-A_BICUBIC = np.array([
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
-    [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
-    [-3, 3, 0, 0, -2, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
-    [2, -2, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ],
-    [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 ],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 ],
-    [0, 0, 0, 0, 0, 0, 0, 0, -3, 3, 0, 0, -2, -1, 0, 0 ],
-    [0, 0, 0, 0, 0, 0, 0, 0, 2, -2, 0, 0, 1, 1, 0, 0 ],
-    [-3, 0, 3, 0, 0, 0, 0, 0, -2, 0, -1, 0, 0, 0, 0, 0 ],
-    [0, 0, 0, 0, -3, 0, 3, 0, 0, 0, 0, 0, -2, 0, -1, 0 ],
-    [9, -9, -9, 9, 6, 3, -6, -3, 6, -6, 3, -3, 4, 2, 2, 1 ],
-    [-6, 6, 6, -6, -3, -3, 3, 3, -4, 4, -2, 2, -2, -2, -1, -1 ],
-    [2, 0, -2, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0 ],
-    [0, 0, 0, 0, 2, 0, -2, 0, 0, 0, 0, 0, 1, 0, 1, 0 ],
-    [-6, 6, 6, -6, -4, -2, 4, 2, -3, 3, -3, 3, -2, -1, -2, -1 ],
-    [4, -4, -4, 4, 2, 2, -2, -2, 2, -2, 2, -2, 1, 1, 1, 1]
-])
-
-A_CUBIC = np.array([
-    [1, 0, 0, 0],
-    [0, 0, 1, 0],
-    [-3, 3, -2, -1],
-    [2, -2, 1, 1],
 ])

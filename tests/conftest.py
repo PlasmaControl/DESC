@@ -17,7 +17,6 @@ from desc.vmec import VMECIO
 
 # print full tracebacks to help find sources of warnings
 def _warn_with_traceback(message, category, filename, lineno, file=None, line=None):
-
     log = file if hasattr(file, "write") else sys.stderr
     traceback.print_stack(file=log)
     log.write(warnings.formatwarning(message, category, filename, lineno, line))
@@ -52,7 +51,8 @@ def SOLOVEV_vac(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
-    main(args)
+    with pytest.warns(UserWarning, match="Left handed coordinates"):
+        main(args)
 
     SOLOVEV_vac_out = {
         "input_path": input_path,
@@ -225,7 +225,8 @@ def HELIOTRON_vac(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    main(args)
+    with pytest.warns(UserWarning, match="Vacuum objective does not use any profiles"):
+        main(args)
 
     HELIOTRON_vacuum_out = {
         "input_path": input_path,
@@ -314,11 +315,11 @@ def DummyStellarator(tmpdir_factory):
             [
                 [0, 0, 0, 3, 0],
                 [0, 1, 0, 1, 0],
-                [0, -1, 0, 0, 1],
+                [0, -1, 0, 0, -1],
                 [0, 1, 1, 0.3, 0],
-                [0, -1, -1, -0.3, 0],
+                [0, -1, -1, 0.3, 0],
                 [0, 1, -1, 0, -0.3],
-                [0, -1, 1, 0, -0.3],
+                [0, -1, 1, 0, 0.3],
             ],
         ),
         "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
@@ -363,7 +364,6 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
     vmec = Dataset(str(SOLOVEV["vmec_nc_path"]), mode="r")
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
-    eq._solved = True
     VMECIO.save(
         eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
     )

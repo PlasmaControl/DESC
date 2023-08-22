@@ -5,6 +5,7 @@ import pytest
 from netCDF4 import Dataset
 
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
+from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 from desc.vmec import VMECIO
@@ -29,10 +30,10 @@ class TestVMECIO:
         a2 = 1
         a3 = 2
 
-        m_0 = np.array([0, 0, 1, 1, 1])
-        n_0 = np.array([0, 1, -1, 0, 1])
-        s = np.array([0, a0, a1, a3, 0])
-        c = np.array([a0, 0, a2, 0, a3])
+        m_0 = np.array([0, 1, 1, 1, 0])
+        n_0 = np.array([1, -1, 0, 1, 0])
+        s = np.array([a0, a1, a3, 0, 0])
+        c = np.array([0, a2, 0, a3, a0])
 
         # a0*sin(-z) + a1*sin(t+z) + a3*sin(t)                          # noqa: E800
         #    = -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t)
@@ -44,6 +45,33 @@ class TestVMECIO:
         x_correct = np.array([[a3 - a2, -a0, a1, a3, a0, 0, a1, 0, a2 + a3]])
 
         m_1, n_1, x = ptolemy_identity_fwd(m_0, n_0, s, c)
+
+        np.testing.assert_allclose(m_1, m_1_correct, atol=1e-8)
+        np.testing.assert_allclose(n_1, n_1_correct, atol=1e-8)
+        np.testing.assert_allclose(x, x_correct, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_ptolemy_identity_fwd_sin_series(self):
+        """Tests forward implementation of Ptolemy's identity for sin only."""
+        a1 = -1
+
+        m_0 = np.array([1, 1])
+        n_0 = np.array([-1, 1])
+        s = np.array([[a1, 0]])
+        c = np.array([[0, 0]])
+
+        m_1, n_1, x = ptolemy_identity_fwd(m_0, n_0, s, c)
+
+        print(m_1)
+        print(n_1)
+        print(x)
+
+        #  a1*sin(t+z)  # noqa: E800
+        # = a1*sin(t)*cos(z) + a1*cos(t)*sin(z) # noqa: E800
+
+        m_1_correct = np.array([-1, 1, -1, 1])
+        n_1_correct = np.array([-1, -1, 1, 1])
+        x_correct = np.array([[0, a1, a1, 0]])
 
         np.testing.assert_allclose(m_1, m_1_correct, atol=1e-8)
         np.testing.assert_allclose(n_1, n_1_correct, atol=1e-8)
@@ -70,6 +98,30 @@ class TestVMECIO:
         n_0_correct = np.array([0, 1, -1, 0, 1])
         s_correct = np.array([[0, a0, a1, a3, 0]])
         c_correct = np.array([[a0, 0, a2, 0, a3]])
+
+        m_0, n_0, s, c = ptolemy_identity_rev(m_1, n_1, x)
+
+        np.testing.assert_allclose(m_0, m_0_correct, atol=1e-8)
+        np.testing.assert_allclose(n_0, n_0_correct, atol=1e-8)
+        np.testing.assert_allclose(s, s_correct, atol=1e-8)
+        np.testing.assert_allclose(c, c_correct, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_ptolemy_identity_rev_sin_sym(self):
+        """Tests reverse implementation of Ptolemy's identity for sin series."""
+        a1 = -1
+
+        m_1 = np.array([-1, 1])
+        n_1 = np.array([1, -1])
+        x = np.array([[a1, a1]])
+
+        # a1*sin(t)*cos(z) + a1*cos(t)*sin(z)    # noqa: E800
+        #   = a1*sin(t+z)
+
+        m_0_correct = np.array([0, 1, 1])
+        n_0_correct = np.array([0, -1, 1])
+        s_correct = np.array([[0, a1, 0]])
+        c_correct = np.array([[0, 0, 0]])
 
         m_0, n_0, s, c = ptolemy_identity_rev(m_1, n_1, x)
 
@@ -130,7 +182,7 @@ class TestVMECIO:
                 [1, 3, 3],
             ]
         )
-        np.testing.assert_allclose(modes[~idx], sym_modes)
+        np.testing.assert_allclose(np.delete(modes, idx, axis=0), sym_modes)
 
     @pytest.mark.unit
     def test_fourier_to_zernike(self):
@@ -204,6 +256,35 @@ class TestVMECIO:
         np.testing.assert_allclose(x_mn, x_mn_correct, atol=1e-8)
 
 
+@pytest.mark.unit
+def test_vmec_load_profiles(TmpDir):
+    """Tests that loading with iota or current profiles give same result."""
+    input_path = "./tests/inputs/wout_SOLOVEV.nc"
+
+    eq_iota = VMECIO.load(input_path, profile="iota")
+    eq_current = VMECIO.load(input_path, profile="current")
+
+    assert eq_iota.current is None
+    assert eq_current.iota is None
+
+    grid = LinearGrid(
+        M=eq_iota.M_grid,
+        N=eq_iota.N_grid,
+        NFP=eq_iota.NFP,
+        rho=np.linspace(0.5, 1.0, 21),
+    )
+    data_iota = eq_iota.compute(["iota", "current"], grid=grid)
+    data_current = eq_current.compute(["iota", "current"], grid=grid)
+
+    iota_iota = compress(grid, data_iota["iota"])
+    iota_current = compress(grid, data_current["iota"])
+    current_iota = compress(grid, data_iota["current"])
+    current_current = compress(grid, data_current["current"])
+
+    np.testing.assert_allclose(iota_iota, iota_current, rtol=2e-2)
+    np.testing.assert_allclose(current_current, current_iota, rtol=2e-2)
+
+
 @pytest.mark.slow
 @pytest.mark.unit
 def test_load_then_save(TmpDir):
@@ -211,10 +292,7 @@ def test_load_then_save(TmpDir):
     input_path = "./tests/inputs/wout_SOLOVEV.nc"
     output_path = str(TmpDir.join("DESC_SOLOVEV.nc"))
 
-    eq = VMECIO.load(input_path, profile="current")
-    assert eq.iota is None
     eq = VMECIO.load(input_path, profile="iota")
-    assert eq.current is None
     VMECIO.save(eq, output_path)
 
     file1 = Dataset(input_path, mode="r")
@@ -233,6 +311,56 @@ def test_load_then_save(TmpDir):
 
     file1.close()
     file2.close()
+
+
+@pytest.mark.slow
+@pytest.mark.unit
+def test_axis_surf_after_load():
+    """Tests if loading VMEC solution preserves axis and surface."""
+    input_path = "./tests/inputs/wout_HELIOTRON.nc"
+
+    eq = VMECIO.load(input_path, profile="iota")
+    assert eq.is_nested()
+    f = Dataset(input_path)
+
+    surf1 = eq.surface
+    surf2 = eq.get_surface_at(rho=1)
+    axis1 = eq.axis
+    axis2 = eq.get_axis()
+
+    np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn, atol=1e-14)
+    np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn, atol=1e-14)
+
+    np.testing.assert_allclose(axis1.R_n, axis2.R_n, atol=1e-14)
+    np.testing.assert_allclose(axis1.Z_n, axis2.Z_n, atol=1e-14)
+
+    # surface
+    rm, rn, Rb_cs, Rb_cc = ptolemy_identity_rev(
+        surf1.R_basis.modes[:, 1],
+        surf1.R_basis.modes[:, 2],
+        np.where(surf1.R_basis.modes[:, 1] < 0, -surf1.R_lmn, surf1.R_lmn)[None, :],
+    )
+
+    zm, zn, Zb_cs, Zb_cc = ptolemy_identity_rev(
+        surf1.Z_basis.modes[:, 1],
+        surf1.Z_basis.modes[:, 2],
+        np.where(surf1.Z_basis.modes[:, 1] < 0, -surf1.Z_lmn, surf1.Z_lmn)[None, :],
+    )
+
+    rmnc = f.variables["rmnc"][:].filled()
+    zmns = f.variables["zmns"][:].filled()
+
+    # axis
+    rax_cc = f.variables["raxis_cc"][:].filled()
+    zax_cs = -f.variables["zaxis_cs"][:].filled()
+
+    np.testing.assert_allclose(rmnc[-1], Rb_cc.squeeze(), atol=1e-14)
+    np.testing.assert_allclose(zmns[-1], Zb_cs.squeeze(), atol=1e-14)
+
+    np.testing.assert_allclose(rax_cc, axis1.R_n, atol=1e-14)
+    np.testing.assert_allclose(zax_cs[1:][::-1], axis1.Z_n, atol=1e-14)
+
+    f.close()
 
 
 @pytest.mark.unit

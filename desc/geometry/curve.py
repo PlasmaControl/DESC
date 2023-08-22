@@ -576,6 +576,12 @@ class SplineXYZCurve(Curve):
         - `'cubic'`: C1 cubic splines (aka local splines)
         - `'cubic2'`: C2 cubic splines (aka natural splines)
         - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        - `'cardinal'`: C1 cubic general tension splines. If used, default tension of
+            c = 0 will be used
+        - `'monotonic'`: C1 cubic splines that attempt to preserve monotonicity in the
+            data, and will not introduce new extrema in the interpolated points
+        - `'monotonic-0'`: same as `'monotonic'` but with 0 first derivatives at both
+            endpoints
     name : str
         name for this curve
 
@@ -618,7 +624,7 @@ class SplineXYZCurve(Curve):
             knots = knots - knots[0]
             knots = (knots / knots[-1]) * 2 * np.pi
 
-        self.knots = knots
+        self._knots = knots
         self.method = method
 
     @property
@@ -673,6 +679,50 @@ class SplineXYZCurve(Curve):
             raise ValueError(
                 "Z should have the same size as the knots, "
                 + f"got {len(new)} Z values for {len(self.knots)} knots"
+            )
+
+    @property
+    def knots(self):
+        """Knots for spline."""
+        return self._knots
+
+    @knots.setter
+    def knots(self, new):
+        if len(new) == len(self.knots):
+            knots = jnp.atleast_1d(new)
+            # rescale knots to lie in [0,2pi]
+            knots = knots - knots[0]
+            knots = (knots / knots[-1]) * 2 * np.pi
+            self._knots = jnp.asarray(knots)
+        else:
+            raise ValueError(
+                "new knots should have the same size as the current knots, "
+                + f"got {len(new)} new knots, but expected {len(self.knots)} knots"
+            )
+
+    @property
+    def method(self):
+        """Method of interpolation to usee."""
+        return self._method
+
+    @method.setter
+    def method(self, new):
+        possible_methods = [
+            "nearest",
+            "linear",
+            "cubic",
+            "cubic2",
+            "catmull-rom",
+            "monotonic",
+            "monotonic-0",
+            "cardinal",
+        ]
+        if new in possible_methods:
+            self._method = new
+        else:
+            raise ValueError(
+                "Method must be one of {possible_methods}, "
+                + f"instead got unknown method {new} "
             )
 
     @classmethod

@@ -657,6 +657,13 @@ class TestSplineXYZCurve:
         with pytest.raises(ValueError):
             c.Z = np.zeros_like(phi)
 
+        # setter for knots
+        with pytest.raises(ValueError):
+            c.knots = np.linspace(0, 10, 10)
+        # setter for method
+        with pytest.raises(ValueError):
+            c.method = "not a valid method"
+
     @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting misc attributes of SplineXYZCurve."""

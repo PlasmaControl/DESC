@@ -314,18 +314,26 @@ class SplineXYZCoil(Coil, SplineXYZCurve):
         points for X, Y, Z describing a closed curve
     knots : ndarray
         arbitrary curve parameter values to use for spline knots,
-        should be an 1D ndarray of same length as the input X,Y,Z.
+        should be a monotonic, 1D ndarray of same length as the input X,Y,Z.
         If None, defaults to using an equal-arclength angle as the knots
         If supplied, will be rescaled to lie in [0,2pi]
     method : str
         method of interpolation
-        - `'nearest'`: nearest neighbor interpolation
-        - `'linear'`: linear interpolation
-        - `'cubic'`: C1 cubic splines (aka local splines)
-        - `'cubic2'`: C2 cubic splines (aka natural splines)
-        - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+
+        - ``'nearest'``: nearest neighbor interpolation
+        - ``'linear'``: linear interpolation
+        - ``'cubic'``: C1 cubic splines (aka local splines)
+        - ``'cubic2'``: C2 cubic splines (aka natural splines)
+        - ``'catmull-rom'``: C1 cubic centripetal "tension" splines
+        - ``'cardinal'``: C1 cubic general tension splines. If used, default tension of
+          c = 0 will be used
+        - ``'monotonic'``: C1 cubic splines that attempt to preserve monotonicity in the
+          data, and will not introduce new extrema in the interpolated points
+        - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
+          endpoints
+
     name : str
-        name for this coil
+        name for this curve
 
     """
 
@@ -615,11 +623,19 @@ class CoilSet(Coil, MutableSequence):
             path to coil file in txt format
         method : str
             method of interpolation
-            - `'nearest'`: nearest neighbor interpolation
-            - `'linear'`: linear interpolation
-            - `'cubic'`: C1 cubic splines (aka local splines)
-            - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+
+            - ``'nearest'``: nearest neighbor interpolation
+            - ``'linear'``: linear interpolation
+            - ``'cubic'``: C1 cubic splines (aka local splines)
+            - ``'cubic2'``: C2 cubic splines (aka natural splines)
+            - ``'catmull-rom'``: C1 cubic centripetal "tension" splines
+            - ``'cardinal'``: C1 cubic general tension splines. If used, default tension
+              of c = 0 will be used
+            - ``'monotonic'``: C1 cubic splines that attempt to preserve monotonicity in
+              the data, and will not introduce new extrema in the interpolated points
+            - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at
+              both endpoints
+
         """
         coils = []  # list of SplineXYZCoils
         coilinds = [2]  # always start at the 3rd line
@@ -692,9 +708,6 @@ class CoilSet(Coil, MutableSequence):
         https://princetonuniversity.github.io/STELLOPT/MAKEGRID.html
 
         Note: if a nested CoilSet, will flatten it first before saving
-        #TODO: name each group based off of CoilSet name?
-        #TODO: have CoilGroup be automatically assigned based off of
-        CoilSet if current coilset is a collection of coilsets?
 
         Parameters
         ----------
@@ -710,6 +723,10 @@ class CoilSet(Coil, MutableSequence):
             if None, will default to the coil compute functions's
             default grid
         """
+        # TODO: name each group based off of CoilSet name?
+        # TODO: have CoilGroup be automatically assigned based off of
+        # CoilSet if current coilset is a collection of coilsets?
+
         NFP = 1 if NFP is None else NFP
 
         def flatten_coils(coilset):

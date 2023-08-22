@@ -54,6 +54,10 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
     data["|e_theta x e_zeta|"] = jnp.linalg.norm(
@@ -74,6 +78,10 @@ def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
     data["|e_zeta x e_rho|"] = jnp.linalg.norm(
@@ -94,6 +102,10 @@ def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_theta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
     data["|e_rho x e_theta|"] = jnp.linalg.norm(
@@ -417,6 +429,10 @@ def _sqrtg_rz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_rr(params, transforms, profiles, data, **kwargs):
     data["g_rr"] = dot(data["e_rho"], data["e_rho"])
@@ -435,6 +451,10 @@ def _g_sub_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_tt(params, transforms, profiles, data, **kwargs):
     data["g_tt"] = dot(data["e_theta"], data["e_theta"])
@@ -453,6 +473,10 @@ def _g_sub_tt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_zz(params, transforms, profiles, data, **kwargs):
     data["g_zz"] = dot(data["e_zeta"], data["e_zeta"])
@@ -471,6 +495,10 @@ def _g_sub_zz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_theta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_rt(params, transforms, profiles, data, **kwargs):
     data["g_rt"] = dot(data["e_rho"], data["e_theta"])
@@ -489,6 +517,10 @@ def _g_sub_rt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_rz(params, transforms, profiles, data, **kwargs):
     data["g_rz"] = dot(data["e_rho"], data["e_zeta"])
@@ -507,6 +539,10 @@ def _g_sub_rz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_tz(params, transforms, profiles, data, **kwargs):
     data["g_tz"] = dot(data["e_theta"], data["e_zeta"])
@@ -526,6 +562,10 @@ def _g_sub_tz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_theta_r"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_tt_r(params, transforms, profiles, data, **kwargs):
     data["g_tt_r"] = 2 * dot(data["e_theta"], data["e_theta_r"])
@@ -545,6 +585,10 @@ def _g_sub_tt_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _g_sub_tz_r(params, transforms, profiles, data, **kwargs):
     data["g_tz_r"] = dot(data["e_theta_r"], data["e_zeta"]) + dot(
@@ -718,37 +762,10 @@ def _g_sup_tz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^rho",
-        "sqrt(g)_r",
-        "sqrt(g)",
-        "e_rho",
-        "e_theta",
-        "e_rho_r",
-        "e_theta_r",
-    ],
+    data=["e^rho", "e^rho_r"],
 )
 def _g_sup_rr_r(params, transforms, profiles, data, **kwargs):
-    data["g^rr_r"] = (
-        -data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta_r"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_r"]))
-        - data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta_r"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_r"]))
-    )
+    data["g^rr_r"] = 2 * dot(data["e^rho_r"], data["e^rho"])
     return data
 
 
@@ -764,39 +781,11 @@ def _g_sup_rr_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^rho",
-        "e^theta",
-        "sqrt(g)_r",
-        "sqrt(g)",
-        "e_rho",
-        "e_theta",
-        "e_zeta",
-        "e_rho_r",
-        "e_theta_r",
-        "e_zeta_r",
-    ],
+    data=["e^rho", "e^theta", "e^rho_r", "e^theta_r"],
 )
 def _g_sup_rt_r(params, transforms, profiles, data, **kwargs):
-    data["g^rt_r"] = (
-        -data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_theta_r"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_zeta_r"]))
-        - data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_zeta_r"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho_r"]))
+    data["g^rt_r"] = dot(data["e^rho_r"], data["e^theta"]) + dot(
+        data["e^rho"], data["e^theta_r"]
     )
     return data
 
@@ -813,39 +802,11 @@ def _g_sup_rt_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^rho",
-        "e^zeta",
-        "sqrt(g)_r",
-        "sqrt(g)",
-        "e_rho",
-        "e_zeta",
-        "e_theta",
-        "e_rho_r",
-        "e_zeta_r",
-        "e_theta_r",
-    ],
+    data=["e^rho", "e^zeta", "e^rho_r", "e^zeta_r"],
 )
 def _g_sup_rz_r(params, transforms, profiles, data, **kwargs):
-    data["g^rz_r"] = (
-        -data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_theta_r"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_zeta_r"]))
-        - data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_rho_r"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta_r"]))
+    data["g^rz_r"] = dot(data["e^rho_r"], data["e^zeta"]) + dot(
+        data["e^rho"], data["e^zeta_r"]
     )
     return data
 
@@ -862,40 +823,10 @@ def _g_sup_rz_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^theta",
-        "e^theta",
-        "sqrt(g)_r",
-        "sqrt(g)",
-        "e_theta",
-        "e_theta",
-        "e_rho",
-        "e_theta_r",
-        "e_theta_r",
-        "e_rho_r",
-    ],
+    data=["e^theta", "e^theta_r"],
 )
 def _g_sup_tt_r(params, transforms, profiles, data, **kwargs):
-    data["g^tt_r"] = (
-        -data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta_r"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_r"]))
-        - data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta_r"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_r"]))
-    )
+    data["g^tt_r"] = 2 * dot(data["e^theta_r"], data["e^theta"])
     return data
 
 
@@ -911,39 +842,11 @@ def _g_sup_tt_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^theta",
-        "e^zeta",
-        "sqrt(g)_r",
-        "sqrt(g)",
-        "e_theta",
-        "e_zeta",
-        "e_rho",
-        "e_theta_r",
-        "e_zeta_r",
-        "e_rho_r",
-    ],
+    data=["e^theta", "e^zeta", "e^theta_r", "e^zeta_r"],
 )
 def _g_sup_tz_r(params, transforms, profiles, data, **kwargs):
-    data["g^tz_r"] = (
-        -data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_zeta_r"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho_r"]))
-        - data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_rho_r"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta_r"]))
+    data["g^tz_r"] = dot(data["e^theta_r"], data["e^zeta"]) + dot(
+        data["e^theta"], data["e^zeta_r"]
     )
     return data
 
@@ -960,40 +863,10 @@ def _g_sup_tz_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^zeta",
-        "e^zeta",
-        "sqrt(g)_r",
-        "sqrt(g)",
-        "e_zeta",
-        "e_zeta",
-        "e_rho",
-        "e_zeta_r",
-        "e_zeta_r",
-        "e_rho_r",
-    ],
+    data=["e^zeta", "e^zeta_r"],
 )
 def _g_sup_zz_r(params, transforms, profiles, data, **kwargs):
-    data["g^zz_r"] = (
-        -data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho_r"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_r"]))
-        - data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho_r"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_r"]))
-    )
+    data["g^zz_r"] = 2 * dot(data["e^zeta_r"], data["e^zeta"])
     return data
 
 
@@ -1009,40 +882,10 @@ def _g_sup_zz_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^rho",
-        "e^rho",
-        "sqrt(g)_t",
-        "sqrt(g)",
-        "e_rho",
-        "e_rho",
-        "e_theta",
-        "e_rho_t",
-        "e_rho_t",
-        "e_theta_t",
-    ],
+    data=["e^rho", "e^rho_t"],
 )
 def _g_sup_rr_t(params, transforms, profiles, data, **kwargs):
-    data["g^rr_t"] = (
-        -data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta_t"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_t"]))
-        - data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta_t"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_t"]))
-    )
+    data["g^rr_t"] = 2 * dot(data["e^rho_t"], data["e^rho"])
     return data
 
 
@@ -1058,39 +901,11 @@ def _g_sup_rr_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^rho",
-        "e^theta",
-        "sqrt(g)_t",
-        "sqrt(g)",
-        "e_rho",
-        "e_theta",
-        "e_zeta",
-        "e_rho_t",
-        "e_theta_t",
-        "e_zeta_t",
-    ],
+    data=["e^rho", "e^theta", "e^rho_t", "e^theta_t"],
 )
 def _g_sup_rt_t(params, transforms, profiles, data, **kwargs):
-    data["g^rt_t"] = (
-        -data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_theta_t"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_theta"], data["e_zeta_t"]))
-        - data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_zeta_t"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho_t"]))
+    data["g^rt_t"] = dot(data["e^rho_t"], data["e^theta"]) + dot(
+        data["e^rho"], data["e^theta_t"]
     )
     return data
 
@@ -1107,39 +922,11 @@ def _g_sup_rt_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^rho",
-        "e^zeta",
-        "sqrt(g)_t",
-        "sqrt(g)",
-        "e_rho",
-        "e_zeta",
-        "e_theta",
-        "e_rho_t",
-        "e_zeta_t",
-        "e_theta_t",
-    ],
+    data=["e^rho", "e^zeta", "e^rho_t", "e^zeta_t"],
 )
 def _g_sup_rz_t(params, transforms, profiles, data, **kwargs):
-    data["g^rz_t"] = (
-        -data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_theta_t"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_theta"], data["e_zeta_t"]))
-        - data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_rho_t"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta_t"]))
+    data["g^rz_t"] = dot(data["e^rho_t"], data["e^zeta"]) + dot(
+        data["e^rho"], data["e^zeta_t"]
     )
     return data
 
@@ -1156,40 +943,10 @@ def _g_sup_rz_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^theta",
-        "e^theta",
-        "sqrt(g)_t",
-        "sqrt(g)",
-        "e_theta",
-        "e_theta",
-        "e_rho",
-        "e_theta_t",
-        "e_theta_t",
-        "e_rho_t",
-    ],
+    data=["e^theta", "e^theta_t"],
 )
 def _g_sup_tt_t(params, transforms, profiles, data, **kwargs):
-    data["g^tt_t"] = (
-        -data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta_t"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_t"]))
-        - data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta_t"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_t"]))
-    )
+    data["g^tt_t"] = 2 * dot(data["e^theta_t"], data["e^theta"])
     return data
 
 
@@ -1205,39 +962,11 @@ def _g_sup_tt_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^theta",
-        "e^zeta",
-        "sqrt(g)_t",
-        "sqrt(g)",
-        "e_theta",
-        "e_zeta",
-        "e_rho",
-        "e_theta_t",
-        "e_zeta_t",
-        "e_rho_t",
-    ],
+    data=["e^theta", "e^zeta", "e^theta_t", "e^zeta_t"],
 )
 def _g_sup_tz_t(params, transforms, profiles, data, **kwargs):
-    data["g^tz_t"] = (
-        -data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_zeta_t"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho_t"]))
-        - data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_rho_t"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta_t"]))
+    data["g^tz_t"] = dot(data["e^theta_t"], data["e^zeta"]) + dot(
+        data["e^theta"], data["e^zeta_t"]
     )
     return data
 
@@ -1254,40 +983,10 @@ def _g_sup_tz_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^zeta",
-        "e^zeta",
-        "sqrt(g)_t",
-        "sqrt(g)",
-        "e_zeta",
-        "e_zeta",
-        "e_rho",
-        "e_zeta_t",
-        "e_zeta_t",
-        "e_rho_t",
-    ],
+    data=["e^zeta", "e^zeta_t"],
 )
 def _g_sup_zz_t(params, transforms, profiles, data, **kwargs):
-    data["g^zz_t"] = (
-        -data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho_t"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_t"]))
-        - data["sqrt(g)_t"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho_t"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_t"]))
-    )
+    data["g^zz_t"] = 2 * dot(data["e^zeta_t"], data["e^zeta"])
     return data
 
 
@@ -1303,40 +1002,10 @@ def _g_sup_zz_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^rho",
-        "e^rho",
-        "sqrt(g)_z",
-        "sqrt(g)",
-        "e_rho",
-        "e_rho",
-        "e_theta",
-        "e_rho_z",
-        "e_rho_z",
-        "e_theta_z",
-    ],
+    data=["e^rho", "e^rho_z"],
 )
 def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
-    data["g^rr_z"] = (
-        -data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta_z"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_z"]))
-        - data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta_z"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_z"]))
-    )
+    data["g^rr_z"] = 2 * dot(data["e^rho_z"], data["e^rho"])
     return data
 
 
@@ -1352,39 +1021,11 @@ def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^rho",
-        "e^theta",
-        "sqrt(g)_z",
-        "sqrt(g)",
-        "e_rho",
-        "e_theta",
-        "e_zeta",
-        "e_rho_z",
-        "e_theta_z",
-        "e_zeta_z",
-    ],
+    data=["e^rho", "e^theta", "e^rho_z", "e^theta_z"],
 )
 def _g_sup_rt_z(params, transforms, profiles, data, **kwargs):
-    data["g^rt_z"] = (
-        -data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_theta_z"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_theta"], data["e_zeta_z"]))
-        - data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_zeta_z"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_zeta"], data["e_rho_z"]))
+    data["g^rt_z"] = dot(data["e^rho_z"], data["e^theta"]) + dot(
+        data["e^rho"], data["e^theta_z"]
     )
     return data
 
@@ -1401,39 +1042,11 @@ def _g_sup_rt_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^rho",
-        "e^zeta",
-        "sqrt(g)_z",
-        "sqrt(g)",
-        "e_rho",
-        "e_zeta",
-        "e_theta",
-        "e_rho_z",
-        "e_zeta_z",
-        "e_theta_z",
-    ],
+    data=["e^rho", "e^zeta", "e^rho_z", "e^zeta_z"],
 )
 def _g_sup_rz_z(params, transforms, profiles, data, **kwargs):
-    data["g^rz_z"] = (
-        -data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_theta_z"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_theta"], data["e_zeta_z"]))
-        - data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_rho_z"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_rho"], data["e_theta_z"]))
+    data["g^rz_z"] = dot(data["e^rho_z"], data["e^zeta"]) + dot(
+        data["e^rho"], data["e^zeta_z"]
     )
     return data
 
@@ -1450,40 +1063,10 @@ def _g_sup_rz_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^theta",
-        "e^theta",
-        "sqrt(g)_z",
-        "sqrt(g)",
-        "e_theta",
-        "e_theta",
-        "e_rho",
-        "e_theta_z",
-        "e_theta_z",
-        "e_rho_z",
-    ],
+    data=["e^theta", "e^theta_z"],
 )
 def _g_sup_tt_z(params, transforms, profiles, data, **kwargs):
-    data["g^tt_z"] = (
-        -data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta_z"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_z"]))
-        - data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta_z"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_zeta"], data["e_rho_z"]))
-    )
+    data["g^tt_z"] = 2 * dot(data["e^theta_z"], data["e^theta"])
     return data
 
 
@@ -1499,39 +1082,11 @@ def _g_sup_tt_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^theta",
-        "e^zeta",
-        "sqrt(g)_z",
-        "sqrt(g)",
-        "e_theta",
-        "e_zeta",
-        "e_rho",
-        "e_theta_z",
-        "e_zeta_z",
-        "e_rho_z",
-    ],
+    data=["e^theta", "e^zeta", "e^theta_z", "e^zeta_z"],
 )
 def _g_sup_tz_z(params, transforms, profiles, data, **kwargs):
-    data["g^tz_z"] = (
-        -data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_zeta_z"], data["e_rho"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_zeta"], data["e_rho_z"]))
-        - data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_rho_z"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^theta"], cross(data["e_rho"], data["e_theta_z"]))
+    data["g^tz_z"] = dot(data["e^theta_z"], data["e^zeta"]) + dot(
+        data["e^theta"], data["e^zeta_z"]
     )
     return data
 
@@ -1548,40 +1103,10 @@ def _g_sup_tz_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "e^zeta",
-        "e^zeta",
-        "sqrt(g)_z",
-        "sqrt(g)",
-        "e_zeta",
-        "e_zeta",
-        "e_rho",
-        "e_zeta_z",
-        "e_zeta_z",
-        "e_rho_z",
-    ],
+    data=["e^zeta", "e^zeta_z"],
 )
 def _g_sup_zz_z(params, transforms, profiles, data, **kwargs):
-    data["g^zz_z"] = (
-        -data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho_z"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_z"]))
-        - data["sqrt(g)_z"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho_z"], data["e_theta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^zeta"], cross(data["e_rho"], data["e_theta_z"]))
-    )
+    data["g^zz_z"] = 2 * dot(data["e^zeta_z"], data["e^zeta"])
     return data
 
 

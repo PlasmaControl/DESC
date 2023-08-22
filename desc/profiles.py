@@ -10,7 +10,7 @@ from desc.backend import jit, jnp, put, sign
 from desc.basis import FourierZernikeBasis, PowerSeries
 from desc.derivatives import Derivative
 from desc.grid import Grid, LinearGrid
-from desc.interpolate import _approx_df, interp1d
+from desc.interpolate import interp1d
 from desc.io import IOAble
 from desc.transform import Transform
 from desc.utils import combination_permutation, copy_coeffs, multinomial_coefficients
@@ -32,7 +32,6 @@ class Profile(IOAble, ABC):
     _io_attrs_ = ["_name", "_grid", "_params"]
 
     def __init__(self, grid=None, name=""):
-
         self.name = name
         self.grid = grid if grid is not None else LinearGrid(L=20)
 
@@ -475,7 +474,6 @@ class ProductProfile(Profile):
     _io_attrs_ = Profile._io_attrs_ + ["_profiles"]
 
     def __init__(self, *profiles, **kwargs):
-
         self._profiles = []
         for profile in profiles:
             assert isinstance(profile, Profile), (
@@ -768,6 +766,9 @@ class PowerSeriesProfile(Profile):
             profile in power series basis fit to given data.
 
         """
+        if sym and sym != "auto":
+            x = x**2
+            order = order // 2
         params = np.polyfit(x, y, order, rcond=rcond, w=w, full=False)[::-1]
         return cls(params, grid=grid, sym=sym, name=name)
 
@@ -796,12 +797,11 @@ class SplineProfile(Profile):
 
     """
 
-    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method", "_Dx"]
+    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method"]
 
     def __init__(
         self, values=[0, 0, 0], knots=None, grid=None, method="cubic2", name=""
     ):
-
         super().__init__(grid, name)
 
         values = np.atleast_1d(values)
@@ -812,9 +812,6 @@ class SplineProfile(Profile):
         self._knots = knots
         self._params = values
         self._method = method
-        self._Dx = _approx_df(
-            self._knots, np.eye(self._knots.size), self._method, axis=0
-        )
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -885,8 +882,8 @@ class SplineProfile(Profile):
             return jnp.zeros_like(xq)
         x = self._knots
         f = params
-        df = self._Dx @ f
-        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, df=df)
+
+        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
         return fq
 
 
@@ -918,7 +915,6 @@ class MTanhProfile(Profile):
     """
 
     def __init__(self, params=[0, 0, 1, 1, 0], grid=None, name=""):
-
         super().__init__(grid, name)
 
         self._params = params

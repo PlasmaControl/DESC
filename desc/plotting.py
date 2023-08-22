@@ -103,6 +103,25 @@ _AXIS_LABELS_RPZ = [r"$R ~(\mathrm{m})$", r"$\phi$", r"$Z ~(\mathrm{m})$"]
 _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m})$"]
 
 
+def _set_tight_layout(fig):
+    # compat layer to deal with API changes in mpl 3.6.0
+    if int(matplotlib._version.version.split(".")[1]) < 6:
+        fig.set_tight_layout(True)
+    else:
+        fig.set_layout_engine("tight")
+
+
+def _get_cmap(name, n=None):
+    # compat layer to deal with API changes in mpl 3.6.0
+    if int(matplotlib._version.version.split(".")[1]) < 6:
+        return matplotlib.cm.get_cmap(name, n)
+    else:
+        c = matplotlib.colormaps[name]
+        if n is not None:
+            c = c.resampled(n)
+        return c
+
+
 def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initalize one.
 
@@ -252,7 +271,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Computed quantity.
 
     """
-    if name not in data_index:
+    if name not in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
         raise ValueError("Unrecognized value '{}'.".format(name))
     assert component in [
         None,
@@ -267,13 +286,13 @@ def _compute(eq, name, grid, component=None, reshape=True):
         "Z": 2,
     }
 
-    label = data_index[name]["label"]
+    label = data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         data = eq.compute(name, grid=grid)[name]
 
-    if data_index[name]["dim"] > 1:
+    if data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["dim"] > 1:
         if component is None:
             data = np.linalg.norm(data, axis=-1)
             label = "|" + label + "|"
@@ -285,7 +304,13 @@ def _compute(eq, name, grid, component=None, reshape=True):
             else:
                 label += r"\phi"
 
-    label = r"$" + label + "~(" + data_index[name]["units"] + ")$"
+    label = (
+        r"$"
+        + label
+        + "~("
+        + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
+        + ")$"
+    )
 
     if reshape:
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
@@ -377,8 +402,7 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     ax[0, 0].set_title("$|R_{lmn}|$", fontsize=title_fontsize)
     ax[0, 1].set_title("$|Z_{lmn}|$", fontsize=title_fontsize)
     ax[0, 2].set_title("$|\\lambda_{lmn}|$", fontsize=title_fontsize)
-
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     return fig, ax
 
@@ -443,7 +467,10 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     # sample the entire surface. Computing this on a 1-D grid would return a
     # misleading plot.
     default_L = 100
-    if data_index[name]["coordinates"] == "r":
+    if (
+        data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+        == "r"
+    ):
         if grid is None:
             return plot_fsa(
                 eq,
@@ -503,7 +530,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     xlabel = _AXIS_LABELS_RTZ[plot_axes[0]]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     plot_data = {}
     plot_data[xlabel.strip("$").strip("\\")] = grid.nodes[:, plot_axes[0]]
     plot_data[name] = data
@@ -648,11 +675,17 @@ def plot_2d(
         ax.set_title(
             "%s / %s"
             % (
-                "$" + data_index[name]["label"] + "$",
-                "$" + data_index[norm_name]["label"] + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
+                + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
+                    "label"
+                ]
+                + "$",
             )
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     plot_data = {}
     plot_data[xlabel.strip("$").strip("\\")] = xx
     plot_data[ylabel.strip("$").strip("\\")] = yy
@@ -815,7 +848,7 @@ def plot_3d(
     ax.set_ylabel(_AXIS_LABELS_XYZ[1], fontsize=ylabel_fontsize)
     ax.set_zlabel(_AXIS_LABELS_XYZ[2], fontsize=zlabel_fontsize)
     ax.set_title(label, fontsize=title_fontsize)
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
     x_limits = ax.get_xlim3d()
@@ -941,7 +974,10 @@ def plot_fsa(
 
     """
     if np.isscalar(rho) and (int(rho) == rho):
-        if data_index[name]["coordinates"] == "r":
+        if (
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+            == "r"
+        ):
             # OK to plot origin for most quantities denoted as functions of rho
             rho = np.flipud(np.linspace(1, 0, rho + 1, endpoint=True))
         else:
@@ -962,7 +998,10 @@ def plot_fsa(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
     label = label.split("~")
-    if data_index[name]["coordinates"] == "r":
+    if (
+        data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
+        == "r"
+    ):
         # If the quantity is a surface function, averaging it again has no
         # effect, regardless of whether sqrt(g) is used.
         # So we avoid surface averaging it and forgo the <> around the label.
@@ -1009,12 +1048,18 @@ def plot_fsa(
         ax.set_ylabel(
             "%s / %s"
             % (
-                "$" + data_index[name]["label"] + "$",
-                "$" + data_index[norm_name]["label"] + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
+                + "$",
+                "$"
+                + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
+                    "label"
+                ]
+                + "$",
             ),
             fontsize=ylabel_fontsize,
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["rho"] = rho
@@ -1199,9 +1244,9 @@ def plot_section(
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
             "$"
-            + data_index[name]["label"]
+            + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
             + "$ ($"
-            + data_index[name]["units"]
+            + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
             + "$)"
             + ", $\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
                 eq.NFP * phi[i] / (2 * np.pi)
@@ -1211,15 +1256,23 @@ def plot_section(
             ax[i].set_title(
                 "%s / %s, %s"
                 % (
-                    "$" + data_index[name]["label"] + "$",
-                    "$" + data_index[norm_name]["label"] + "$",
+                    "$"
+                    + data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                        "label"
+                    ]
+                    + "$",
+                    "$"
+                    + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
+                        "label"
+                    ]
+                    + "$",
                     "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
                         eq.NFP * phi[i] / (2 * np.pi)
                     ),
                 ),
                 fontsize=title_fontsize,
             )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["R"] = R
@@ -1461,7 +1514,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_fontsize,
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data["rho_R_coords"] = Rr
     plot_data["rho_Z_coords"] = Zr
@@ -1566,7 +1619,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
     )
 
     if colors is None:
-        colors = matplotlib.cm.get_cmap(cmap, nz - 1)(np.linspace(0, 1, nz - 1))
+        colors = _get_cmap(cmap, nz - 1)(np.linspace(0, 1, nz - 1))
     if lw is None:
         lw = 1
     if isinstance(lw, int):
@@ -1609,7 +1662,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
     ax.tick_params(labelbottom=True, labelleft=True)
 
     fig.legend(fontsize=legend_fontsize)
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["R"] = R
@@ -1697,7 +1750,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     if labels is None:
         labels = [str(i) for i in range(neq)]
     if colors is None:
-        colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+        colors = _get_cmap(cmap, neq)(np.linspace(0, 1, neq))
     if lw is None:
         lw = 1
     if np.isscalar(lw):
@@ -1755,7 +1808,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
 
     if any(labels) and kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {}))
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     assert (
         len(kwargs) == 0
@@ -1862,7 +1915,7 @@ def plot_comparison(
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     neq = len(eqs)
     if color is None:
-        color = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+        color = _get_cmap(cmap, neq)(np.linspace(0, 1, neq))
     if lw is None:
         lw = [1 for i in range(neq)]
     if ls is None:
@@ -1969,7 +2022,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         * ``lw``: float, linewidth of plotted coils
         * ``ls``: str, linestyle of plotted coils
         * ``color``: str, color of plotted coils
-        * ``cmap``: str, colormap to be passed to matplotlib.cm.get_cmap()
+        * ``cmap``: str, name of colormap
 
     Returns
     -------
@@ -1989,7 +2042,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     cbar = False
     if color == "current":
         cbar = True
-        cmap = matplotlib.cm.get_cmap(kwargs.pop("cmap", "Spectral"))
+        cmap = _get_cmap(kwargs.pop("cmap", "Spectral"))
         currents = flatten_list(coils.current)
         norm = matplotlib.colors.Normalize(vmin=np.min(currents), vmax=np.max(currents))
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
@@ -2022,7 +2075,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     plot_data["Y"] = []
     plot_data["Z"] = []
     for i, coil in enumerate(coils_list):
-        x, y, z = coil.compute_coordinates(grid=grid, basis="xyz").T
+        x, y, z = coil.compute("x", grid=grid, basis="xyz")["x"].T
         plot_data["X"].append(x)
         plot_data["Y"].append(y)
         plot_data["Z"].append(z)
@@ -2145,7 +2198,7 @@ def plot_boozer_modes(
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(
-            "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -2209,7 +2262,7 @@ def plot_boozer_modes(
         len(kwargs) == 0
     ), f"plot boozer modes got unexpected keyword argument: {kwargs.keys()}"
 
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     if return_data:
         return fig, ax, plot_data
 
@@ -2310,10 +2363,10 @@ def plot_boozer_surface(
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     transforms_compute = get_transforms(
-        "|B|_mn", eq=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+        "|B|_mn", obj=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
     )
     transforms_plot = get_transforms(
-        "|B|_mn", eq=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+        "|B|_mn", obj=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -2375,7 +2428,7 @@ def plot_boozer_surface(
     ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
     ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
 
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     plot_data = {}
     plot_data["zeta_Boozer"] = zz
     plot_data["theta_Boozer"] = tt
@@ -2503,7 +2556,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
             transforms = get_transforms(
-                "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+                "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
             )
             if i == 0:  # only need to do this once for the first rho surface
                 matrix, modes, idx = ptolemy_linear_transform(
@@ -2620,7 +2673,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         len(kwargs) == 0
     ), f"plot qs error got unexpected keyword argument: {kwargs.keys()}"
 
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     if return_data:
         return fig, ax, plot_data
 
@@ -2722,7 +2775,7 @@ def plot_grid(grid, return_data=False, **kwargs):
             pad=20,
             fontsize=title_fontsize,
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["rho"] = nodes[:, 0]
@@ -2804,7 +2857,7 @@ def plot_basis(basis, return_data=False, **kwargs):
             "{}, $L={}$".format(basis.__class__.__name__, basis.L),
             fontsize=title_fontsize,
         )
-        fig.set_tight_layout(True)
+        _set_tight_layout(fig)
         if return_data:
             return fig, ax, plot_data
 
@@ -2833,7 +2886,7 @@ def plot_basis(basis, return_data=False, **kwargs):
             "{}, $N={}$, $NFP={}$".format(basis.__class__.__name__, basis.N, basis.NFP),
             fontsize=title_fontsize,
         )
-        fig.set_tight_layout(True)
+        _set_tight_layout(fig)
         if return_data:
             return fig, ax, plot_data
 
@@ -2972,7 +3025,7 @@ def plot_basis(basis, return_data=False, **kwargs):
             y=0.98,
             fontsize=title_fontsize,
         )
-        fig.set_tight_layout(True)
+        _set_tight_layout(fig)
         if return_data:
             return fig, ax, plot_data
 
@@ -3365,7 +3418,7 @@ def plot_field_lines_sfl(
     ax.set_title(
         "%d Magnetic Field Lines Traced On $\\rho=%1.2f$ Surface" % (n_lines, rho)
     )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
     x_limits = ax.get_xlim3d()
@@ -3556,7 +3609,7 @@ def plot_field_lines_real_space(
     ax.set_title(
         "%d Magnetic Field Lines Traced On $\\rho=%1.2f$ Surface" % (n_lines, rho)
     )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
     x_limits = ax.get_xlim3d()

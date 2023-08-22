@@ -16,15 +16,10 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.objectives import (
-    AxisRSelfConsistency,
-    AxisZSelfConsistency,
-    BoundaryRSelfConsistency,
-    BoundaryZSelfConsistency,
-    FixAxisR,
-    FixAxisZ,
-    FixBoundaryR,
-    FixBoundaryZ,
     ObjectiveFunction,
+    get_fixed_axis_constraints,
+    get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile, SplineProfile
@@ -162,7 +157,11 @@ class VMECIO:
         file.close()
 
         # initialize Equilibrium
-        eq = Equilibrium(**inputs)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="Left handed coordinates detected"
+            )
+            eq = Equilibrium(**inputs)
 
         # R
         m, n, R_mn = ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)
@@ -178,16 +177,10 @@ class VMECIO:
 
         # apply boundary conditions
 
-        constraints = (
-            FixAxisR(eq=eq),
-            FixAxisZ(eq=eq),
-            AxisRSelfConsistency(eq=eq),
-            AxisZSelfConsistency(eq=eq),
-            FixBoundaryR(eq=eq),
-            FixBoundaryZ(eq=eq),
-            BoundaryRSelfConsistency(eq=eq),
-            BoundaryZSelfConsistency(eq=eq),
-        )
+        constraints = get_fixed_axis_constraints(
+            profiles=False, eq=eq
+        ) + get_fixed_boundary_constraints(iota=eq.iota, eq=eq)
+        constraints = maybe_add_self_consistency(eq, constraints)
         objective = ObjectiveFunction(constraints, verbose=0)
         objective.build()
         _, _, _, _, _, project, recover = factorize_linear_constraints(

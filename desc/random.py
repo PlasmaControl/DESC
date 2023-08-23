@@ -58,7 +58,7 @@ def random_surface(
         will tend to create simpler surfaces. If a tuple, treats as min/max for
         random int.
     rng : numpy.random.Generator
-        Random number generator. If None, uses numpys default_rng
+        Random number generator. If None, uses numpy's default_rng
 
     Returns
     -------
@@ -106,8 +106,8 @@ def random_surface(
     R_mn[R_basis.get_idx(0, 0, 0)] = R0
     if not sym:
         Z_mn[Z_basis.get_idx(0, 0, 0)] = 0  # center at Z=0
-        # flip sign and reduce magnitude of nonsymmetric modes to avoid degenerate cases
-        # with no volume. kind of ad-hoc but seems to produce reasonable results
+        # flip sign and reduce magnitude of non-symmetric modes to avoid degenerate
+        # cases with no volume. kind of ad-hoc but seems to produce reasonable results
         R_mn[sign(R_basis.modes[:, 1]) != sign(R_basis.modes[:, 2])] *= -np.exp(-beta)
         Z_mn[sign(Z_basis.modes[:, 1]) == sign(Z_basis.modes[:, 2])] *= -np.exp(-beta)
 
@@ -128,7 +128,7 @@ def random_surface(
     return surf
 
 
-def random_pressure(n=8, p0=(1e3, 1e4), rng=None):
+def random_pressure(L=8, p0=(1e3, 1e4), rng=None):
     """Create a random monotonic pressure profile.
 
     Profile will be a PowerSeriesProfile with even symmetry,
@@ -139,25 +139,25 @@ def random_pressure(n=8, p0=(1e3, 1e4), rng=None):
 
     Parameters
     ----------
-    n : int
+    L : int
         Order of polynomial.
     p0 : float or tuple
         Pressure on axis. If a tuple, treats as min/max for random value.
     rng : numpy.random.Generator
-        Random number generator. If None, uses numpys default_rng
+        Random number generator. If None, uses numpy's default_rng
 
     Returns
     -------
     pressure : PowerSeriesProfile
         Random pressure profile.
     """
-    assert (n // 2) == (n / 2), "n should be even"
+    assert (L // 2) == (L / 2), "L should be even"
     rng = setdefault(rng, default_rng())
     if isinstance(p0, tuple):
         p0 = rng.uniform(p0[0], p0[1])
 
     # first create random even coeffs
-    p = 1 - 2 * rng.random(n // 2 + 1)
+    p = 1 - 2 * rng.random(L // 2 + 1)
     # make it sum to 0 -> p=0 at r=1
     p[0] -= p.sum()
     # make p(0) = 1
@@ -195,4 +195,4 @@ def random_pressure(n=8, p0=(1e3, 1e4), rng=None):
     )
 
     p = np.vstack([out.x, np.zeros_like(out.x)]).flatten(order="F")
-    return PowerSeriesProfile(p[::2] * p0, modes=np.arange(n + 1)[::2], sym=True)
+    return PowerSeriesProfile(p[::2] * p0, modes=np.arange(L + 1)[::2], sym=True)

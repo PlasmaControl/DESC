@@ -10,10 +10,10 @@ from desc.compute import rpz2xyz, xyz2rpz_vec
 from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
 from desc.grid import Grid
 from desc.magnetic_fields import MagneticField, biot_savart
-from desc.optimizeable import Optimizeable, optimizeable_parameter
+from desc.optimizable import Optimizable, optimizable_parameter
 
 
-class Coil(MagneticField, Optimizeable, ABC):
+class Coil(MagneticField, Optimizable, ABC):
     """Base class representing a magnetic field coil.
 
     Represents coils as a combination of a Curve and current
@@ -37,7 +37,7 @@ class Coil(MagneticField, Optimizeable, ABC):
         self._current = current
         super().__init__(*args, **kwargs)
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def current(self):
         """float: Current passing through the coil, in Amperes."""

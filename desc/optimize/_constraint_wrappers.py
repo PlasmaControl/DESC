@@ -142,7 +142,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         Returns
         -------
         params : list of dict
-            List of parameter dictionary for each optimizeable object tied to the
+            List of parameter dictionary for each optimizable object tied to the
             ObjectiveFunction.
 
         """
@@ -355,7 +355,7 @@ class ProximalProjection(ObjectiveFunction):
     to an unconstrained optimizer.
 
     At each iteration, after a step is taken to reduce the objective, the equilibrium
-    is perturbed and re-solved to bring it back into force balance. This is analagous
+    is perturbed and re-solved to bring it back into force balance. This is analogous
     to a proximal method where each iterate is projected back onto the feasible set.
 
     Parameters
@@ -414,8 +414,8 @@ class ProximalProjection(ObjectiveFunction):
 
     def _set_state_vector(self):
 
-        self._full_args = self._eq.optimizeable_params.copy()
-        self._args = self._eq.optimizeable_params.copy()
+        self._full_args = self._eq.optimizable_params.copy()
+        self._args = self._eq.optimizable_params.copy()
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self._args.remove(arg)
         (
@@ -538,7 +538,7 @@ class ProximalProjection(ObjectiveFunction):
         return [params]
 
     def x(self, *things):
-        """Return the full state vector from the Optimizeable objects things."""
+        """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
         assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
         # things for this is just the equilibrium

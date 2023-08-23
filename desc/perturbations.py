@@ -232,7 +232,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # all other perturbations besides the boundary
     other_args = [
         arg
-        for arg in eq.optimizeable_params
+        for arg in eq.optimizable_params
         if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]
     ]
     if len([arg for arg in other_args if arg in deltas.keys()]):
@@ -240,14 +240,14 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             [
                 deltas[arg]
                 for arg in other_args
-                if arg in deltas.keys() and arg in eq.optimizeable_params
+                if arg in deltas.keys() and arg in eq.optimizable_params
             ]
         )
         x_idx = jnp.concatenate(
             [
                 eq.x_idx[arg]
                 for arg in other_args
-                if arg in deltas.keys() and arg in eq.optimizeable_params
+                if arg in deltas.keys() and arg in eq.optimizable_params
             ]
         )
         tangents += jnp.eye(eq.dim_x)[:, x_idx] @ dc

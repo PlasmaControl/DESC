@@ -8,7 +8,7 @@ import numpy as np
 from desc.backend import jit, jnp, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
-from desc.optimizeable import Optimizeable
+from desc.optimizable import Optimizable
 from desc.utils import Timer, errorif, flatten_list, is_broadcastable, sort_things
 
 from .utils import map_params
@@ -326,7 +326,7 @@ class ObjectiveFunction(IOAble):
         Returns
         -------
         params : list of dict
-            List of parameter dictionary for each optimizeable object tied to the
+            List of parameter dictionary for each optimizable object tied to the
             ObjectiveFunction.
 
         """
@@ -346,7 +346,7 @@ class ObjectiveFunction(IOAble):
         return params
 
     def x(self, *things):
-        """Return the full state vector from the Optimizeable objects things."""
+        """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
         assert [type(t1) == type(t2) for t1, t2 in zip(things, self._all_things)]
         xs = [t.pack_params(t.params_dict) for t in things]
@@ -365,13 +365,13 @@ class ObjectiveFunction(IOAble):
         return jnp.atleast_2d(self._hess(x, constants).squeeze())
 
     def jac_scaled(self, x, constants=None):
-        """Compute Jacobian matrx of vector form of the objective wrt x."""
+        """Compute Jacobian matrix of vector form of the objective wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._jac_scaled(x, constants).squeeze())
 
     def jac_unscaled(self, x, constants=None):
-        """Compute Jacobian matrx of vector form of the objective wrt x, unweighted."""
+        """Compute Jacobian matrix of vector form of the objective wrt x, unweighted."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._jac_unscaled(x, constants).squeeze())
@@ -623,14 +623,14 @@ class ObjectiveFunction(IOAble):
 
     @property
     def things(self):
-        """list: Optimizeable things that this objective is tied to."""
+        """list: Optimizable things that this objective is tied to."""
         return sort_things([obj.things for obj in self._objectives])
 
     @things.setter
     def things(self, new):
         if not isinstance(new, (tuple, list)):
             new = [new]
-        assert all(isinstance(x, Optimizeable) for x in new)
+        assert all(isinstance(x, Optimizable) for x in new)
         # in general this is a hard problem, since we don't really know which object
         # to replace with which if there are multiple of the same type, but we can
         # do our best and throw an error if we can't figure it out here.
@@ -639,7 +639,7 @@ class ObjectiveFunction(IOAble):
         errorif(
             len(inclasses) != len(new) or len(classes) != len(self.things),
             ValueError,
-            "Cannot unambiguosly parse Optimizeable objects to individual Objectives,"
+            "Cannot unambiguously parse Optimizable objects to individual Objectives,"
             + " try setting Objective.things on each sub Objective individually.",
         )
         # now we know that new and self.things contains instances of unique classes, so
@@ -658,7 +658,7 @@ class _Objective(IOAble, ABC):
 
     Parameters
     ----------
-    things : Optimizeable or tuple/list of Optimizeable
+    things : Optimizable or tuple/list of Optimizable
         Objects that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -877,11 +877,11 @@ class _Objective(IOAble, ABC):
         return self._hess(*args, **kwargs)
 
     def jac_scaled(self, *args, **kwargs):
-        """Compute Jacobian matrx of vector form of the objective wrt x."""
+        """Compute Jacobian matrix of vector form of the objective wrt x."""
         return self._jac_scaled(*args, **kwargs)
 
     def jac_unscaled(self, *args, **kwargs):
-        """Compute Jacobian matrx of vector form of the objective wrt x, unweighted."""
+        """Compute Jacobian matrix of vector form of the objective wrt x, unweighted."""
         return self._jac_unscaled(*args, **kwargs)
 
     def print_value(self, *args, **kwargs):
@@ -983,7 +983,7 @@ class _Objective(IOAble, ABC):
 
     @property
     def things(self):
-        """list: Optimizeable things that this objective is tied to."""
+        """list: Optimizable things that this objective is tied to."""
         if not hasattr(self, "_things"):
             self._things = []
         return self._things
@@ -992,5 +992,5 @@ class _Objective(IOAble, ABC):
     def things(self, new):
         if not isinstance(new, (tuple, list)):
             new = [new]
-        assert all(isinstance(x, Optimizeable) for x in new)
+        assert all(isinstance(x, Optimizable) for x in new)
         self._things = list(new)

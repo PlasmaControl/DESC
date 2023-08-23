@@ -121,7 +121,7 @@ class BoundaryRSelfConsistency(_Objective):
         """Compute boundary R self-consistency errors.
 
         IE, the mismatch between the Fourier-Zernike basis evaluated at rho=1 and the
-        double Fourier series definining the equilibrium LCFS
+        double Fourier series defining the equilibrium LCFS
 
         Parameters
         ----------
@@ -221,7 +221,7 @@ class BoundaryZSelfConsistency(_Objective):
         """Compute boundary Z self-consistency errors.
 
         IE, the mismatch between the Fourier-Zernike basis evaluated at rho=1 and the
-        double Fourier series definining the equilibrium LCFS
+        double Fourier series defining the equilibrium LCFS
 
         Parameters
         ----------
@@ -310,7 +310,7 @@ class AxisRSelfConsistency(_Objective):
         """Compute axis R self-consistency errors.
 
         IE, the mismatch between the Fourier-Zernike basis evaluated at rho=0 and the
-        Fourier series definining the equilibrium axis position
+        Fourier series defining the equilibrium axis position
 
         Parameters
         ----------
@@ -400,7 +400,7 @@ class AxisZSelfConsistency(_Objective):
         """Compute axis Z self-consistency errors.
 
         IE, the mismatch between the Fourier-Zernike basis evaluated at rho=0 and the
-        Fourier series definining the equilibrium axis position
+        Fourier series defining the equilibrium axis position
 
         Parameters
         ----------
@@ -796,7 +796,7 @@ class FixLambdaGauge(_Objective):
             self._A = np.zeros((0, L_basis.num_modes))
         else:
             # l(rho,0,0) = 0
-            # at theta=zeta=0, basis for lamba reduces to just a polynomial in rho
+            # at theta=zeta=0, basis for lambda reduces to just a polynomial in rho
             # what this constraint does is make all the coefficients of each power
             # of rho equal to zero
             # i.e. if lambda = (L_200 + 2*L_310) rho**2 + (L_100 + 2*L_210)*rho

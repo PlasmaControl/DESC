@@ -47,7 +47,7 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
         for thing in con.things:
             if thing not in objective.things:
                 warnings.warn(
-                    f"Optimizeable object {thing} is constrained"
+                    f"Optimizable object {thing} is constrained"
                     + " but not included in Objective"
                 )
     # set state vector
@@ -79,7 +79,7 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
                     arg: jnp.zeros((con.dim_f, dimx))
                     for arg, dimx in thing.dimensions.items()
                 }
-            args = objective._args if prox_flag else thing.optimizeable_params
+            args = objective._args if prox_flag else thing.optimizable_params
             A_per_thing.append(jnp.hstack([A_[arg] for arg in args]))
         # using obj.compute instead of obj.target to allow for correct scale/weight
         b_ = -con.compute_scaled_error(map_params(xz, con, objective.things)[0])

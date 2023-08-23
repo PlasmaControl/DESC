@@ -17,10 +17,10 @@ from desc.compute.utils import (
 )
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import IOAble
-from desc.optimizeable import Optimizeable
+from desc.optimizable import Optimizable
 
 
-class Curve(IOAble, Optimizeable, ABC):
+class Curve(IOAble, Optimizable, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
     _io_attrs_ = ["_name", "shift", "rotmat"]
@@ -151,7 +151,7 @@ class Curve(IOAble, Optimizeable, ABC):
         )
 
 
-class Surface(IOAble, Optimizeable, ABC):
+class Surface(IOAble, Optimizable, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
     _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]

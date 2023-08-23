@@ -1,4 +1,4 @@
-"""Base classes for optimizeable objects."""
+"""Base classes for optimizable objects."""
 
 import inspect
 import warnings
@@ -8,17 +8,17 @@ from desc.backend import jnp
 from desc.utils import sort_args
 
 
-class Optimizeable(ABC):
+class Optimizable(ABC):
     """Base class for all objects in DESC that can be optimized.
 
-    Sub-classes should decocate optimizeable attributes with the
-    ``optimizeable_parameter`` decorator.
+    Sub-classes should decorate optimizable attributes with the
+    ``optimizable_parameter`` decorator.
     """
 
     @property
-    def optimizeable_params(self):
-        """list: names of parameters that have been declared optimizeable."""
-        if not hasattr(self, "_optimizeable_params"):
+    def optimizable_params(self):
+        """list: names of parameters that have been declared optimizable."""
+        if not hasattr(self, "_optimizable_params"):
             p = []
             for methodname in dir(self):
                 if methodname.startswith("__"):
@@ -27,22 +27,22 @@ class Optimizeable(ABC):
                 method = inspect.getattr_static(self, methodname)
                 if isinstance(method, property):
                     method = method.fget  # we want the property itself, not the value
-                if hasattr(method, "optimizeable"):
+                if hasattr(method, "optimizable"):
                     p.append(methodname)
-            self._optimizeable_params = sort_args(p)
+            self._optimizable_params = sort_args(p)
             if not len(p):
                 warnings.warn(
-                    f"Object {self} was subclassed from Optimizeable but no "
-                    + "optimizeable parameters were declared"
+                    f"Object {self} was subclassed from Optimizable but no "
+                    + "optimizable parameters were declared"
                 )
-        return self._optimizeable_params
+        return self._optimizable_params
 
     @property
     def params_dict(self):
-        """dict: dictionary of arrays of optimizeable parameters."""
+        """dict: dictionary of arrays of optimizable parameters."""
         return {
             key: jnp.asarray(getattr(self, key)).copy()
-            for key in self.optimizeable_params
+            for key in self.optimizable_params
         }
 
     @params_dict.setter
@@ -53,10 +53,9 @@ class Optimizeable(ABC):
 
     @property
     def dimensions(self):
-        """dict: dictionary of integers of sizes of each optimizeable parameter."""
+        """dict: dictionary of integers of sizes of each optimizable parameter."""
         return {
-            key: jnp.asarray(getattr(self, key)).size
-            for key in self.optimizeable_params
+            key: jnp.asarray(getattr(self, key)).size for key in self.optimizable_params
         }
 
     @property
@@ -65,16 +64,16 @@ class Optimizeable(ABC):
         dimensions = self.dimensions
         idx = {}
         dim_x = 0
-        for arg in self.optimizeable_params:
+        for arg in self.optimizable_params:
             idx[arg] = jnp.arange(dim_x, dim_x + dimensions[arg])
             dim_x += dimensions[arg]
         return idx
 
     @property
     def dim_x(self):
-        """int: total number of optimizeable parameters."""
+        """int: total number of optimizable parameters."""
         return sum(
-            jnp.asarray(getattr(self, key)).size for key in self.optimizeable_params
+            jnp.asarray(getattr(self, key)).size for key in self.optimizable_params
         )
 
     def pack_params(self, p):
@@ -83,16 +82,16 @@ class Optimizeable(ABC):
         Parameters
         ----------
         p : dict
-            Dictionary of ndarray of optimizeable parameters.
+            Dictionary of ndarray of optimizable parameters.
 
         Returns
         -------
         x : ndarray
-            optimizeable parameters concatenated into a single array, with indices
+            optimizable parameters concatenated into a single array, with indices
             given by ``x_idx``
         """
         return jnp.concatenate(
-            [jnp.atleast_1d(p[key]) for key in self.optimizeable_params]
+            [jnp.atleast_1d(p[key]) for key in self.optimizable_params]
         )
 
     def unpack_params(self, x):
@@ -101,23 +100,23 @@ class Optimizeable(ABC):
         Parameters
         ----------
         x : ndarray
-            optimizeable parameters concatenated into a single array, with indices
+            optimizable parameters concatenated into a single array, with indices
             given by ``x_idx``
 
         Returns
         -------
         p : dict
-            Dictionary of ndarray of optimizeable parameters.
+            Dictionary of ndarray of optimizable parameters.
         """
         x_idx = self.x_idx
         params = {}
-        for arg in self.optimizeable_params:
+        for arg in self.optimizable_params:
             params[arg] = jnp.atleast_1d(x[x_idx[arg]])
         return params
 
 
-def optimizeable_parameter(f):
-    """Decorator to declare an attribute or property as optimizeable.
+def optimizable_parameter(f):
+    """Decorator to declare an attribute or property as optimizable.
 
     The attribute should be a scalar or ndarray of floats.
 
@@ -125,13 +124,13 @@ def optimizeable_parameter(f):
     --------
     .. code-block:: python
 
-        class MyClass(Optimizeable):
+        class MyClass(Optimizable):
 
             def __init__(self, x, y):
                 self.x = x
-                self.y = optimizeable_parameter(y)
+                self.y = optimizable_parameter(y)
 
-            @optimizeable_parameter
+            @optimizable_parameter
             @property
             def x(self):
                 return self._x
@@ -143,7 +142,7 @@ def optimizeable_parameter(f):
 
     """
     if isinstance(f, property):
-        f.fget.optimizeable = True
+        f.fget.optimizable = True
     else:
-        f.optimizeable = True
+        f.optimizable = True
     return f

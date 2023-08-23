@@ -8,7 +8,7 @@ import numpy as np
 from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.io import InputReader
-from desc.optimizeable import optimizeable_parameter
+from desc.optimizable import optimizable_parameter
 from desc.utils import copy_coeffs
 
 from .core import Surface
@@ -190,7 +190,7 @@ class FourierRZToroidalSurface(Surface):
             self._M = M
             self._N = N
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients for R."""
@@ -206,7 +206,7 @@ class FourierRZToroidalSurface(Surface):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients for Z."""
@@ -374,7 +374,7 @@ class ZernikeRZToroidalSection(Surface):
         For L>0, the indexing scheme defines order of the basis functions:
 
         ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-        decreasing size, ending in a triagle shape. For L == M,
+        decreasing size, ending in a triangle shape. For L == M,
         the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
         to the bottom of the pyramid, increasing L while keeping M constant,
         giving a "house" shape
@@ -536,7 +536,7 @@ class ZernikeRZToroidalSection(Surface):
             self._L = L
             self._M = M
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients for R."""
@@ -552,7 +552,7 @@ class ZernikeRZToroidalSection(Surface):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients for Z."""

@@ -29,8 +29,8 @@ from desc.objectives import (
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
 )
+from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import Optimizer
-from desc.optimizeable import Optimizeable, optimizeable_parameter
 from desc.perturbations import perturb
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
@@ -47,7 +47,7 @@ from .initial_guess import set_initial_guess
 from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
 
 
-class Equilibrium(IOAble, Optimizeable):
+class Equilibrium(IOAble, Optimizable):
     """Equilibrium is an object that represents a plasma equilibrium.
 
     It contains information about a plasma state, including the shapes of flux surfaces
@@ -1061,7 +1061,7 @@ class Equilibrium(IOAble, Optimizeable):
         """str: Method for specifying boundary condition."""
         return self._bdry_mode
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def Psi(self):
         """float: Total toroidal flux within the last closed flux surface in Webers."""
@@ -1113,7 +1113,7 @@ class Equilibrium(IOAble, Optimizeable):
         _assert_nonnegint(N, "N")
         self.change_resolution(N=N)
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients of R."""
@@ -1123,7 +1123,7 @@ class Equilibrium(IOAble, Optimizeable):
     def R_lmn(self, R_lmn):
         self._R_lmn[:] = R_lmn
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients of Z."""
@@ -1133,7 +1133,7 @@ class Equilibrium(IOAble, Optimizeable):
     def Z_lmn(self, Z_lmn):
         self._Z_lmn[:] = Z_lmn
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def L_lmn(self):
         """ndarray: Spectral coefficients of lambda."""
@@ -1143,7 +1143,7 @@ class Equilibrium(IOAble, Optimizeable):
     def L_lmn(self, L_lmn):
         self._L_lmn[:] = L_lmn
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def Rb_lmn(self):
         """ndarray: Spectral coefficients of R at the boundary."""
@@ -1153,7 +1153,7 @@ class Equilibrium(IOAble, Optimizeable):
     def Rb_lmn(self, Rb_lmn):
         self.surface.R_lmn = Rb_lmn
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def Zb_lmn(self):
         """ndarray: Spectral coefficients of Z at the boundary."""
@@ -1163,7 +1163,7 @@ class Equilibrium(IOAble, Optimizeable):
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def Ra_n(self):
         """ndarray: R coefficients for axis Fourier series."""
@@ -1173,7 +1173,7 @@ class Equilibrium(IOAble, Optimizeable):
     def Ra_n(self, Ra_n):
         self.axis.R_n = Ra_n
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def Za_n(self):
         """ndarray: Z coefficients for axis Fourier series."""
@@ -1192,7 +1192,7 @@ class Equilibrium(IOAble, Optimizeable):
     def pressure(self, new):
         self._pressure = parse_profile(new, "pressure")
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def p_l(self):
         """ndarray: Coefficients of pressure profile."""
@@ -1216,7 +1216,7 @@ class Equilibrium(IOAble, Optimizeable):
     def electron_temperature(self, new):
         self._electron_temperature = parse_profile(new, "electron temperature")
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def Te_l(self):
         """ndarray: Coefficients of electron temperature profile."""
@@ -1244,7 +1244,7 @@ class Equilibrium(IOAble, Optimizeable):
     def electron_density(self, new):
         self._electron_density = parse_profile(new, "electron density")
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def ne_l(self):
         """ndarray: Coefficients of electron density profile."""
@@ -1272,7 +1272,7 @@ class Equilibrium(IOAble, Optimizeable):
     def ion_temperature(self, new):
         self._ion_temperature = parse_profile(new, "ion temperature")
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def Ti_l(self):
         """ndarray: Coefficients of ion temperature profile."""
@@ -1298,7 +1298,7 @@ class Equilibrium(IOAble, Optimizeable):
     def atomic_number(self, new):
         self._atomic_number = parse_profile(new, "atomic number")
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def Zeff_l(self):
         """ndarray: Coefficients of effective atomic number profile."""
@@ -1322,7 +1322,7 @@ class Equilibrium(IOAble, Optimizeable):
     def iota(self, new):
         self._iota = parse_profile(new, "iota")
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def i_l(self):
         """ndarray: Coefficients of iota profile."""
@@ -1347,7 +1347,7 @@ class Equilibrium(IOAble, Optimizeable):
     def current(self, new):
         self._current = parse_profile(new, "current")
 
-    @optimizeable_parameter
+    @optimizable_parameter
     @property
     def c_l(self):
         """ndarray: Coefficients of current profile."""
@@ -2094,7 +2094,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         """Solve for an equilibrium by continuation method.
 
         Steps through an EquilibriaFamily, solving each equilibrium, and uses
-        pertubations to step between different profiles/boundaries.
+        perturbations to step between different profiles/boundaries.
 
         Uses the previous step as an initial guess for each solution.
 
@@ -2104,7 +2104,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             Equilibria to solve for at each step.
         objective : str or ObjectiveFunction (optional)
             function to solve for equilibrium solution
-        optimizer : str or Optimzer (optional)
+        optimizer : str or Optimizer (optional)
             optimizer to use
         pert_order : int or array of int
             order of perturbations to use. If array-like, should be same length as
@@ -2172,7 +2172,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             Unsolved Equilibrium with the final desired boundary, profiles, resolution.
         objective : str or ObjectiveFunction (optional)
             function to solve for equilibrium solution
-        optimizer : str or Optimzer (optional)
+        optimizer : str or Optimizer (optional)
             optimizer to use
         pert_order : int
             order of perturbations to use.

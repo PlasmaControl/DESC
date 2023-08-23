@@ -30,8 +30,13 @@ from .utils import dot, surface_averages
     coordinates="rtz",
     data=["sqrt(g)", "B_zeta_t", "B_theta_z"],
     axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
 )
 def _J_sup_rho(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis,
+    # ∂_θ (𝐁 ⋅ 𝐞_ζ) - ∂_ζ (𝐁 ⋅ 𝐞_θ) = 𝐁 ⋅ (∂_θ 𝐞_ζ - ∂_ζ 𝐞_θ) = 0
+    # because the partial derivatives commute. So 𝐉^ρ is of the indeterminate
+    # form 0/0 and we may compute the limit as follows.
     data["J^rho"] = (
         transforms["grid"].replace_at_axis(
             (data["B_zeta_t"] - data["B_theta_z"]) / data["sqrt(g)"],
@@ -93,8 +98,10 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["sqrt(g)_r", "B_theta_rr", "B_rho_rt"],
 )
 def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
-    # In the axis limit, J^zeta is of indeterminate form 0/0. The cancellation in
-    # the numerator occurs when decomposed into the polar basis vectors.
+    # At the magnetic axis,
+    # ∂ᵨ (𝐁 ⋅ 𝐞_θ) - ∂_θ (𝐁 ⋅ 𝐞ᵨ) = 𝐁 ⋅ (∂ᵨ 𝐞_θ - ∂_θ 𝐞ᵨ) = 0
+    # because the partial derivatives commute. So 𝐉^ζ is of the indeterminate
+    # form 0/0 and we may compute the limit as follows.
     data["J^zeta"] = (
         transforms["grid"].replace_at_axis(
             (data["B_theta_r"] - data["B_rho_t"]) / data["sqrt(g)"],
@@ -170,7 +177,8 @@ def _J_sqrt_g(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} (\\mathbf{J} \\sqrt{g})",
     units="A m",
     units_long="Ampere meters",
-    description="Plasma current density weighted by 3-D volume Jacobian",
+    description="Plasma current density weighted by 3-D volume Jacobian,"
+    " radial derivative",
     dim=3,
     params=[],
     transforms={},
@@ -458,8 +466,8 @@ def _F_zeta(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="F_helical",
     label="F_{helical}",
-    units="N / (T m)",
-    units_long="Newtons / (Tesla meters)",
+    units="A",
+    units_long="Amperes",
     description="Covariant helical component of force balance error",
     dim=1,
     params=[],
@@ -547,7 +555,7 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["B^theta", "B^zeta", "e^theta", "e^zeta"],
 )
-def _e_helical(params, transforms, profiles, data, **kwargs):
+def _e_sup_helical(params, transforms, profiles, data, **kwargs):
     data["e^helical"] = (
         data["B^zeta"] * data["e^theta"].T - data["B^theta"] * data["e^zeta"].T
     ).T
@@ -567,7 +575,7 @@ def _e_helical(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e^helical"],
 )
-def _helical_mag(params, transforms, profiles, data, **kwargs):
+def _e_sup_helical_mag(params, transforms, profiles, data, **kwargs):
     data["|e^helical|"] = jnp.linalg.norm(data["e^helical"], axis=-1)
     return data
 

@@ -1,13 +1,15 @@
 """Tests for compute functions."""
 
+import pickle
+
 import numpy as np
 import pytest
 from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
-import desc.examples
 from desc.compute import data_index, rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -1188,49 +1190,87 @@ def test_compare_quantities_to_vmec():
 
 
 @pytest.mark.unit
-@pytest.mark.slow
-def test_equilibrium_compute_everything():
-    """Make sure we can compute every equilibrium thing without errors."""
-    eq = Equilibrium(1, 1, 1)
-    grid = LinearGrid(1, 1, 1)
-    for key in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
-        data = eq.compute(key, grid=grid)
-        assert key in data
+def test_compute_everything():
+    """Test that the computations on this branch agree with those on master.
 
-
-@pytest.mark.unit
-def test_curve_compute_everything():
-    """Make sure we can compute every curve thing without errors."""
-    curves = {
-        "desc.geometry.curve.FourierXYZCurve": FourierXYZCurve(),
-        "desc.geometry.curve.FourierRZCurve": FourierRZCurve(),
-        "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(),
+    Also make sure we can compute everything without errors.
+    """
+    elliptic_cross_section_with_torsion = {
+        "R_lmn": [10, 1, 0.2],
+        "Z_lmn": [-2, -0.2],
+        "modes_R": [[0, 0], [1, 0], [0, 1]],
+        "modes_Z": [[-1, 0], [0, -1]],
     }
-
-    for p, thing in curves.items():
-        for key in data_index[p].keys():
-            data = thing.compute(key)
-            assert key in data
-
-
-@pytest.mark.unit
-def test_surface_compute_everything():
-    """Make sure we can compute every surface thing without errors."""
-    surfaces = {
-        "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(),
-        "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(),
+    things = {
+        # equilibria
+        "desc.equilibrium.equilibrium.Equilibrium": get("W7-X"),
+        # curves
+        "desc.geometry.curve.FourierXYZCurve": FourierXYZCurve(
+            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
+        ),
+        "desc.geometry.curve.FourierRZCurve": FourierRZCurve(
+            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
+        ),
+        "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(
+            center=[10, 1, 3], normal=[1, 2, 3], r_n=[1, 2, 3], modes=[0, 1, 2]
+        ),
+        # surfaces
+        "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
+            **elliptic_cross_section_with_torsion
+        ),
+        "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
+            **elliptic_cross_section_with_torsion
+        ),
     }
+    # use this low resolution grid for equilibria to reduce file size
+    grid = LinearGrid(
+        # include magnetic axis
+        rho=np.linspace(0, 1, 10),
+        M=5,
+        N=5,
+        NFP=things["desc.equilibrium.equilibrium.Equilibrium"].NFP,
+        sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
+    )
+    grid = {"desc.equilibrium.equilibrium.Equilibrium": {"grid": grid}}
 
-    for p, thing in surfaces.items():
-        for key in data_index[p].keys():
-            data = thing.compute(key)
-            assert key in data
+    with open("tests/inputs/master_compute_data.pkl", "rb") as file:
+        master_data = pickle.load(file)
+    this_branch_data = {}
+    update_master_data = False
+    error = False
+
+    for p in things:
+        this_branch_data[p] = things[p].compute(
+            list(data_index[p].keys()), **grid.get(p, {})
+        )
+        # make sure we can compute everything
+        assert this_branch_data[p].keys() == data_index[p].keys(), p
+        # compare against master branch
+        for name in this_branch_data[p]:
+            if p in master_data and name in master_data[p]:
+                try:
+                    np.testing.assert_allclose(
+                        actual=this_branch_data[p][name],
+                        desired=master_data[p][name],
+                        atol=1e-12,
+                        err_msg=f"Parameterization: {p}. Name: {name}.",
+                    )
+                except AssertionError as e:
+                    error = True
+                    print(e)
+            else:
+                update_master_data = True
+
+    if not error and update_master_data:
+        with open("tests/inputs/master_compute_data.pkl", "wb") as file:
+            pickle.dump(this_branch_data, file)
+    assert not error
 
 
 @pytest.mark.unit
 def test_compute_averages():
     """Test that computing averages uses the correct grid."""
-    eq = desc.examples.get("HELIOTRON")
+    eq = get("HELIOTRON")
     V_r = eq.get_profile("V_r(r)")
     rho = np.linspace(0.01, 1, 20)
     grid = LinearGrid(rho=rho, NFP=eq.NFP)

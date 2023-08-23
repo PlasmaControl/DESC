@@ -28,16 +28,12 @@ from .utils import dot, surface_integrals_map
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["iota_r", "psi_r"],
+    data=["iota_psi"],
 )
 def _D_shear(params, transforms, profiles, data, **kwargs):
     # Implements equation 4.16 in M. Landreman & R. Jorge (2020)
     # doi:10.1017/S002237782000121X.
-    data["D_shear"] = (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
-    # Existence of limit at magnetic axis requires iota_r = 0 at axis.
-    # If iota_rr = 0 at axis as well, then the limit is
-    # iota_rrr / (32 pi^2 psi_rr^2).
-    # Since this seems configuration dependent, we do not implement it here.
+    data["D_shear"] = data["iota_psi"] ** 2 / (16 * jnp.pi**2)
     return data
 
 
@@ -52,7 +48,16 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["psi_r", "iota_r", "B", "J", "G", "I_r", "|grad(psi)|", "|e_theta x e_zeta|"],
+    data=[
+        "psi_r",
+        "iota_psi",
+        "B",
+        "J",
+        "G",
+        "I_r",
+        "|grad(psi)|",
+        "|e_theta x e_zeta|",
+    ],
 )
 def _D_current(params, transforms, profiles, data, **kwargs):
     # Implements equation 4.17 in M. Landreman & R. Jorge (2020)
@@ -62,13 +67,17 @@ def _D_current(params, transforms, profiles, data, **kwargs):
     data["D_current"] = (
         -jnp.sign(data["G"])
         / (2 * jnp.pi) ** 4
-        * data["iota_r"]
-        / data["psi_r"]
-        * integrate(
-            data["|e_theta x e_zeta|"] / data["|grad(psi)|"] ** 3 * dot(Xi, data["B"])
+        * data["iota_psi"]
+        * transforms["grid"].replace_at_axis(
+            integrate(
+                data["|e_theta x e_zeta|"]
+                / data["|grad(psi)|"] ** 3
+                * dot(Xi, data["B"])
+            ),
+            # Todo: implement equivalent of equation 4.3 in desc coordinates
+            jnp.nan,
         )
     )
-    # Axis limit does not exist as 1/|grad(psi)| terms dominate.
     return data
 
 
@@ -117,7 +126,8 @@ def _D_well(params, transforms, profiles, data, **kwargs):
         )
         / (2 * jnp.pi) ** 6
     )
-    # Axis limit does not exist as 1/psi_r and 1/|grad(psi)| terms dominate.
+    # Axis limit does not exist as ∂ᵨ ψ and ‖∇ ψ‖ terms dominate so that D_well
+    # is of the order ρ⁻² near axis.
     return data
 
 
@@ -160,7 +170,8 @@ def _D_geodesic(params, transforms, profiles, data, **kwargs):
         / (2 * jnp.pi) ** 6,
         jnp.nan,  # enforce manually because our integration replaces nan with 0
     )
-    # Axis limit does not exist as 1/|grad(psi)| terms dominate.
+    # Axis limit does not exist as ‖∇ ψ‖ terms dominate so that D_geodesic
+    # is of the order ρ⁻² near axis.
     return data
 
 
@@ -184,7 +195,7 @@ def _D_Mercier(params, transforms, profiles, data, **kwargs):
     data["D_Mercier"] = (
         data["D_shear"] + data["D_current"] + data["D_well"] + data["D_geodesic"]
     )
-    # Axis limit does not exist because of linearly independent unbounded terms.
+    # The axis limit does not exist as D_Mercier is of the order ρ⁻² near axis.
     return data
 
 

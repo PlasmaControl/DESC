@@ -161,7 +161,7 @@ class Profile(IOAble, ABC):
             - `'linear'`: linear interpolation
             - `'cubic'`: C1 cubic splines (aka local splines)
             - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         Returns
         -------
@@ -575,9 +575,10 @@ class PowerSeriesProfile(Profile):
     Parameters
     ----------
     params: array-like
-        Coefficients of the series. If modes is not supplied, assumed to be in ascending
-        order with no missing values. If modes is given, coefficients can be in any
-        order or indexing.
+        Coefficients of the series. Assumed to be zero if not specified.
+        If modes is not supplied, assumed to be in ascending  order with no
+        missing values. If modes is given, coefficients can be in any order or
+        indexing.
     modes : array-like
         Mode numbers for the associated coefficients. eg a[modes[i]] = params[i]
     grid : Grid
@@ -590,9 +591,11 @@ class PowerSeriesProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params=[0], modes=None, grid=None, sym="auto", name=""):
+    def __init__(self, params=None, modes=None, grid=None, sym="auto", name=""):
         super().__init__(grid, name)
 
+        if params is None:
+            params = [0]
         params = np.atleast_1d(params)
 
         if sym == "auto":  # sym = "even" if all odd modes are zero, else sym = False
@@ -629,7 +632,7 @@ class PowerSeriesProfile(Profile):
         transform = Transform(
             grid,
             self.basis,
-            derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
+            derivs=np.array([[i, 0, 0] for i in range(5)]),
             build=True,
         )
         return transform
@@ -799,11 +802,11 @@ class SplineProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method"]
 
-    def __init__(
-        self, values=[0, 0, 0], knots=None, grid=None, method="cubic2", name=""
-    ):
+    def __init__(self, values=None, knots=None, grid=None, method="cubic2", name=""):
         super().__init__(grid, name)
 
+        if values is None:
+            values = [0, 0, 0]
         values = np.atleast_1d(values)
         if knots is None:
             knots = np.linspace(0, 1, values.size)
@@ -914,9 +917,11 @@ class MTanhProfile(Profile):
 
     """
 
-    def __init__(self, params=[0, 0, 1, 1, 0], grid=None, name=""):
+    def __init__(self, params=None, grid=None, name=""):
         super().__init__(grid, name)
 
+        if params is None:
+            params = [0, 0, 1, 1, 0]
         self._params = params
 
     def __repr__(self):
@@ -1165,9 +1170,11 @@ class FourierZernikeProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params=[0], modes=None, grid=None, sym="auto", NFP=1, name=""):
+    def __init__(self, params=None, modes=None, grid=None, sym="auto", NFP=1, name=""):
         super().__init__(grid, name)
 
+        if params is None:
+            params = [0]
         params = np.atleast_1d(params)
 
         if modes is None:
@@ -1211,7 +1218,9 @@ class FourierZernikeProfile(Profile):
         transform = Transform(
             grid,
             self.basis,
-            derivs=3,
+            # zernike profiles are assumed to be also functions of theta, zeta so we
+            # need those derivatives too.
+            derivs=4,
             build=True,
         )
         return transform

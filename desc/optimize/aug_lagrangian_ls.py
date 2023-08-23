@@ -1,4 +1,4 @@
-"""Augmented Langrangian for vector valued objectives."""
+"""Augmented Lagrangian for vector valued objectives."""
 
 from scipy.optimize import NonlinearConstraint, OptimizeResult
 
@@ -30,7 +30,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     maxiter=None,
     options={},
 ):
-    """Minimize a function with constraints using an augmented Langrangian method.
+    """Minimize a function with constraints using an augmented Lagrangian method.
 
     The objective function is assumed to be vector valued, and is minimized in the least
     squares sense.

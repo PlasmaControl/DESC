@@ -7,7 +7,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -219,11 +218,8 @@ class BootstrapRedlConsistency(_Objective):
             profiles=constants["profiles"],
             helicity=constants["helicity"],
         )
-
-        return compress(
-            constants["transforms"]["grid"],
-            data["<J*B>"] - data["<J*B> Redl"],
-            surface_label="rho",
+        return constants["transforms"]["grid"].compress(
+            data["<J*B>"] - data["<J*B> Redl"]
         )
 
     def _scale(self, *args, **kwargs):
@@ -231,10 +227,8 @@ class BootstrapRedlConsistency(_Objective):
         constants = kwargs.get("constants", None)
         if constants is None:
             constants = self.constants
-        w = compress(
-            constants["transforms"]["grid"],
-            constants["transforms"]["grid"].spacing[:, 0],
-            surface_label="rho",
+        w = constants["transforms"]["grid"].compress(
+            constants["transforms"]["grid"].spacing[:, 0]
         )
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 

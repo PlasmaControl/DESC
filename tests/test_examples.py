@@ -828,7 +828,7 @@ def test_regcoil_axisymmetric():
     # no phi_SV is needed since it is axisymmetric,
     # so phi_mn should be zero when running REGCOIL
     # especially with a nonzero alpha
-    phi_mn_opt, curr_pot_trans, _, G, phi_fxn, _, chi_B, _ = run_regcoil(
+    phi_mn_opt, curr_pot_trans, _, G, phi_fxn, _, _, chi_B, _ = run_regcoil(
         basis_M=1,
         basis_N=1,
         eqname=eq,
@@ -847,7 +847,7 @@ def test_regcoil_axisymmetric():
     np.testing.assert_allclose(phi_fxn(grid), correct_phi, atol=5e-9)
 
     # test with alpha large, should have no phi_mn
-    phi_mn_opt, _, _, G, phi_fxn, _, chi_B, _ = run_regcoil(
+    phi_mn_opt, _, _, G, phi_fxn, _, _, chi_B, _ = run_regcoil(
         basis_M=2,
         basis_N=2,
         eqname=eq,
@@ -862,7 +862,7 @@ def test_regcoil_axisymmetric():
     np.testing.assert_allclose(phi_fxn(grid), correct_phi, atol=1e-16)
 
     # test with half the current given external to winding surface
-    phi_mn_opt, _, _, G_half, phi_fxn, _, chi_B, _ = run_regcoil(
+    phi_mn_opt, _, _, G_half, phi_fxn, _, _, chi_B, _ = run_regcoil(
         basis_M=2,
         basis_N=2,
         eqname=eq,

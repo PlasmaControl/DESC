@@ -162,9 +162,16 @@ def run_regcoil(  # noqa: C901 fxn too complex
     phi_total_function: fxn, accepts a LinearGrid object (or any grid),
          and returns the total current potential on that grid. Convenience function.
     TF_B: ToroidalMagneticField, the TF provided by external TF coils.
+    mean_Bn : ndarray
+        the average of the total Bnormal on the surface
+    chi_Bn : ndarray
+        the sum of squares of the total Bnormal on the surface
     lowest_idx_without_saddles: int, the lowest index of the
         phi_mn_opt array that has contours without saddle coils.
         only returned if scan=True
+    Bn_tot_i : ndarray
+        the total Bn at each point on the surface.
+        only returned if scan=False
     """
     # TODO: add defaults for grid values, as stated in docstring
     ##### Load in DESC equilbrium #####
@@ -505,7 +512,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
             )
 
         if show_plots:
-
             plt.figure(figsize=(10, 10))
             plt.rcParams.update({"font.size": 26})
             plt.figure(figsize=(8, 8))
@@ -615,5 +621,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
         phi_total_function,
         TF_B,
         np.mean(np.abs(Bn_tot)),
+        chi_B,
         Bn_tot,
     )

@@ -1,13 +1,19 @@
+"""Field line tracing from a current potential."""
 import os
 import sys
+import time
 
-import jax.numpy as np
+import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import numpy as nnp
 import numpy as np
 from scipy.interpolate import interp1d
 
+import desc.examples
+import desc.io
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.magnetic_fields import (
     SumMagneticField,
@@ -17,25 +23,13 @@ from desc.magnetic_fields import (
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.insert(0, os.path.abspath("../"))
-import os
-import time
 
-import jax
-import jax.numpy as jnp
-
-import desc.examples
-import desc.io
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
-from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
-from desc.magnetic_fields import SplineMagneticField
 
 ##################################
 
 
 # TODO: add option to first make a spline field then use that for integration
-def trace_from_curr_pot(
+def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
     phi_mn_desc_basis,
     curr_pot_trans,
     eqname,
@@ -117,7 +111,8 @@ def trace_from_curr_pot(
 
     @jax.jit
     def biot_loop(re, rs, J, dV):
-        """
+        """Biot Savart loop.
+
         Parameters
         ----------
         re : ndarray, shape(n_eval_pts, 3)
@@ -144,14 +139,9 @@ def trace_from_curr_pot(
         return 1e-7 * jax.lax.fori_loop(0, J.shape[0], body, B)
 
     def get_B_function_from_regcoil_current_potential(phi_mn_desc_basis, M=30, N=30):
-        """Accept regcoil MAKEGRID format coil file, return CoilSet"""
+        """Accept regcoil MAKEGRID format coil file, return CoilSet."""
         # M is grid M for source grid
         # N is grid N for source grid
-        # use what worked in contour cutting
-        if eq.NFP == 1:
-            method = "direct1"
-        else:
-            method = "auto"
 
         # calc surface geometric quantities needed for integration
         sgrid = (
@@ -193,7 +183,6 @@ def trace_from_curr_pot(
     # Field line tracing
 
     R0 = 703.5 / 1000
-    Z0 = 0
     r = 36.5 / 1000
 
     Bfield_currpot = ToroidalMagneticField(B0=1, R0=1)
@@ -220,13 +209,14 @@ def trace_from_curr_pot(
 
     t_elapse = time.time() - t0
     print(
-        f" field line tracing done, took {t_elapse} seconds which is {t_elapse/60} mins or  {t_elapse/3600} hours"
+        f" field line tracing done, took {t_elapse} seconds which"
+        f" is {t_elapse/60} mins or  {t_elapse/3600} hours"
     )
 
     R_list = []
     # save data
     if isinstance(eqname, str):
-        dirname = f"trace_M_{M}_N_{N}_alpha_{alpha}_{str(os.path.basename(eqname)).strip('.h5')}"
+        dirname = f"trace_M_{M}_N_{N}_alpha_{alpha}_{str(os.path.basename(eqname)).strip('.h5')}"  # noqa
     else:
         dirname = "field_trace_from_potential"
     print(f"Saving to {dirname}")
@@ -234,11 +224,11 @@ def trace_from_curr_pot(
     if not os.path.isdir(dirname):
         os.mkdir(dirname)
     for i in range(field_R.shape[1]):
-        nnp.savetxt(
-            f"{dirname}/trace_{ntransit}_transits_R_{i}.txt", nnp.asarray(field_R[:, i])
+        np.savetxt(
+            f"{dirname}/trace_{ntransit}_transits_R_{i}.txt", np.asarray(field_R[:, i])
         )
-        nnp.savetxt(
-            f"{dirname}/trace_{ntransit}_transits_Z_{i}.txt", nnp.asarray(field_Z[:, i])
+        np.savetxt(
+            f"{dirname}/trace_{ntransit}_transits_Z_{i}.txt", np.asarray(field_Z[:, i])
         )
 
     # read data again and plot
@@ -246,12 +236,12 @@ def trace_from_curr_pot(
     fig, ax = plt.subplots(figsize=(8, 8))
 
     for i in range(n_R_points):
-        R = nnp.genfromtxt(f"{dirname}/trace_{ntransit}_transits_R_{i}.txt")
-        Z = nnp.genfromtxt(f"{dirname}/trace_{ntransit}_transits_Z_{i}.txt")
+        R = np.genfromtxt(f"{dirname}/trace_{ntransit}_transits_R_{i}.txt")
+        Z = np.genfromtxt(f"{dirname}/trace_{ntransit}_transits_Z_{i}.txt")
         R_list.append(R[0])
         if (
-            nnp.max(nnp.abs(R)) < np.max(Rs) * 1.5
-            and nnp.min(nnp.abs(R)) > np.min(Rs) * 0.5
+            np.max(np.abs(R)) < np.max(Rs) * 1.5
+            and np.min(np.abs(R)) > np.min(Rs) * 0.5
         ):
             plt.scatter(R, Z, s=1)
         else:
@@ -262,7 +252,6 @@ def trace_from_curr_pot(
 
     data = winding_surf.compute("x", basis="rpz", grid=LinearGrid(rho=1, M=20))["x"]
 
-    theta = np.linspace(0, 2 * np.pi, 100)
     R_ves = data[:, 0]
     Z_ves = data[:, 2]
     plt.plot(R_ves, Z_ves, "k", label="Vacuum vessel")
@@ -278,10 +267,20 @@ def trace_from_curr_pot(
     return field_R, field_Z
 
 
-def compare_surfs_DESC_field_line_trace(eq, ax, R_list, savename_poin=None, phi0=0):
-    # given initial ax object which already has stuff plotted, and a list of R values of different surfaces
+def compare_surfs_DESC_field_line_trace(eqname, ax, R_list, savename_poin=None, phi0=0):
+    """Compare surfaces of an equilibrium to traced flux surfaces."""
+    # given initial ax object which already has stuff plotted,
+    #  and a list of R values of different surfaces
     # plot the flux surfaces of a DESC equiilibrium at the rhos corr. to those surfaces
-    # those are values should be at theta=zeta=0... which should corr. to the outboard plane
+    # those are values should be at theta=zeta=0... which should corr.
+    #  to the outboard plane
+
+    if isinstance(eqname, str):
+        eq = desc.io.load(eqname)
+    elif isinstance(eqname, EquilibriaFamily) or isinstance(eqname, Equilibrium):
+        eq = eqname
+    if hasattr(eq, "__len__"):
+        eq = eq[-1]
 
     Rgrid = LinearGrid(theta=np.array([np.pi]), zeta=np.array([phi0]), L=100)
     Rcoords_no_isl = eq.compute("R", grid=Rgrid)

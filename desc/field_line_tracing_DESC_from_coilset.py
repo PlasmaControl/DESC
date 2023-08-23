@@ -1,3 +1,4 @@
+"""Field line trace from coilset."""
 import os
 import time
 
@@ -5,9 +6,7 @@ import jax.numpy as np
 import matplotlib.pyplot as plt
 import numpy as nnp
 
-from desc import set_device
 from desc.coils import CoilSet
-from desc.equilibrium import Equilibrium
 from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
     compare_surfs_DESC_field_line_trace,
 )
@@ -38,8 +37,42 @@ def field_trace_from_coilset(
     save_files=True,
     only_return_data=False,
 ):
+    """Field line trace from coilset.
+
+    Parameters
+    ----------
+    coils : CoilSet or str
+        CoilSet object to field line trace with
+        if str, is assumed to be a MAKEGRID-formatted coils file and will
+        load the coils from that
+    eqname : Equilibrium or str
+        Equilibrium against whose surfaces to plot the field line tracing
+    ntransit : int, optional
+        number of toroidal transits to follow, by default 100
+    dirname : str, optional
+        directory name to save files to, by default None
+    Rs : ndarray, optional
+        starting seed R points at zeta = 0 for the tracing, by default None
+    Zs : ndarray, optional
+        starting seed R points at zeta = 0 for the tracing, by default None
+    show_surface : bool, optional
+        _description_, by default True
+    xlim : tuple or list, optional
+        x limits for the plot, by default [0.66, 0.74]
+    ylim : list, optional
+        y limits for the plot, by default [-0.04, 0.04]
+    save_files : bool, optional
+        whether to save files or not, by default True
+    only_return_data : bool, optional
+        whether to only return the field line tracing data
+        and not attempt to plot or save anything, by default False
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
     R0 = 703.5 / 1000
-    Z0 = 0
     r = 36.5 / 1000
 
     if isinstance(coils, str):
@@ -63,11 +96,15 @@ def field_trace_from_coilset(
 
     t_elapse = time.time() - t0
 
+    field_R_full = field_R.copy()
+    field_Z_full = field_Z.copy()
+
     if only_return_data:
         return field_R, field_Z
 
     print(
-        f"{dirname} field line tracing done, took {t_elapse} seconds which is {t_elapse/60} mins or  {t_elapse/3600} hours"
+        f"{dirname} field line tracing done, took {t_elapse}"
+        f" seconds which is {t_elapse/60} mins or  {t_elapse/3600} hours"
     )
 
     R_list = []
@@ -115,6 +152,8 @@ def field_trace_from_coilset(
     plt.xlim(xlim)
     plt.ylim(ylim)
 
-    ax = compare_surfs_DESC_field_line_trace(eqname, ax, R_list)
+    ax = compare_surfs_DESC_field_line_trace(load(eqname), ax, R_list)
 
     plt.savefig(f"{dirname}/trace{ntransit}_transits.png")
+
+    return field_R_full, field_Z_full

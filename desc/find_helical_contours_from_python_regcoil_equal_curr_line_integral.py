@@ -251,8 +251,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 # here I assume this contour is on the bottom...
                 # when it could be on top too
                 thetas = np.linspace(
-                    contour_theta_halfway[i - 1][0],
-                    contour_theta_halfway[i][0],
+                    contour_theta_halfway[i - 1],
+                    contour_theta_halfway[i],
                     nthetas,
                     endpoint=False,
                 )

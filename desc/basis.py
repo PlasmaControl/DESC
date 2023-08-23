@@ -770,14 +770,7 @@ class ZernikePolynomial(Basis):
             lm = lm[lmidx]
             m = m[midx]
 
-        # some logic here to use the fastest method, assuming that you're not using
-        # "unique" within jit/AD since that doesn't work
-        if unique and (np.max(modes[:, 0]) <= 24):
-            radial_fun = zernike_radial_poly
-        else:
-            radial_fun = zernike_radial
-
-        radial = radial_fun(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
 
         if unique:
@@ -1141,14 +1134,7 @@ class FourierZernikeBasis(Basis):
             m = m[midx]
             n = n[nidx]
 
-        # some logic here to use the fastest method, assuming that you're not using
-        # "unique" within jit/AD since that doesn't work
-        if unique and (np.max(modes[:, 0]) <= 24):
-            radial_fun = zernike_radial_poly
-        else:
-            radial_fun = zernike_radial
-
-        radial = radial_fun(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
         toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
         if unique:

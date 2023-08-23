@@ -570,22 +570,24 @@ class SplineXYZCurve(Curve):
         points for X, Y, Z describing a closed curve
     knots : ndarray
         arbitrary curve parameter values to use for spline knots,
-        should be a mononotic, 1D ndarray of same length as the input X,Y,Z.
+        should be a monotonic, 1D ndarray of same length as the input X,Y,Z.
         If None, defaults to using an equal-arclength angle as the knots
         If supplied, will be rescaled to lie in [0,2pi]
     method : str
         method of interpolation
-        - `'nearest'`: nearest neighbor interpolation
-        - `'linear'`: linear interpolation
-        - `'cubic'`: C1 cubic splines (aka local splines)
-        - `'cubic2'`: C2 cubic splines (aka natural splines)
-        - `'catmull-rom'`: C1 cubic centripetal "tension" splines
-        - `'cardinal'`: C1 cubic general tension splines. If used, default tension of
-            c = 0 will be used
-        - `'monotonic'`: C1 cubic splines that attempt to preserve monotonicity in the
-            data, and will not introduce new extrema in the interpolated points
-        - `'monotonic-0'`: same as `'monotonic'` but with 0 first derivatives at both
-            endpoints
+
+        - ``'nearest'``: nearest neighbor interpolation
+        - ``'linear'``: linear interpolation
+        - ``'cubic'``: C1 cubic splines (aka local splines)
+        - ``'cubic2'``: C2 cubic splines (aka natural splines)
+        - ``'catmull-rom'``: C1 cubic centripetal "tension" splines
+        - ``'cardinal'``: C1 cubic general tension splines. If used, default tension of
+          c = 0 will be used
+        - ``'monotonic'``: C1 cubic splines that attempt to preserve monotonicity in the
+          data, and will not introduce new extrema in the interpolated points
+        - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
+          endpoints
+
     name : str
         name for this curve
 

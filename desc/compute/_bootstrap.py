@@ -1,16 +1,25 @@
-"""Compute functions for bootstrap current."""
+"""Compute functions for bootstrap current.
+
+Notes
+-----
+Some quantities require additional work to compute at the magnetic axis.
+A Python lambda function is used to lazily compute the magnetic axis limits
+of these quantities. These lambda functions are evaluated only when the
+computational grid has a node on the magnetic axis to avoid potentially
+expensive computations.
+"""
 
 from scipy.constants import elementary_charge
 from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
 from .data_index import register_compute_fun
-from .utils import compress, expand, surface_averages_map
+from .utils import surface_averages_map
 
 
 @register_compute_fun(
     name="trapped fraction",
-    label="1 - \\frac{3}{4} \\langle B^2 \\rangle \\int_0^{1/Bmax} "
+    label="1 - \\frac{3}{4} \\langle |B|^2 \\rangle \\int_0^{1/Bmax} "
     "\\frac{\\lambda\\; d\\lambda}{\\langle \\sqrt{1 - \\lambda B} \\rangle}",
     units="~",
     units_long="None",
@@ -20,22 +29,18 @@ from .utils import compress, expand, surface_averages_map
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["sqrt(g)", "V_r(r)", "|B|", "<B^2>", "max_tz |B|"],
+    data=["sqrt(g)", "V_r(r)", "|B|", "<|B|^2>", "max_tz |B|"],
+    axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
     n_gauss="n_gauss",
 )
 def _trapped_fraction(params, transforms, profiles, data, **kwargs):
-    r"""
-    Evaluate the effective trapped particle fraction.
+    """Evaluate the effective trapped particle fraction.
 
     Compute the effective fraction of trapped particles, which enters
-    several formulae for neoclassical transport. The trapped fraction
-    ``f_t`` has a standard definition in neoclassical theory:
-
-    .. math::
-        f_t = 1 - \frac{3}{4} \langle B^2 \rangle \int_0^{1/Bmax}
-            \frac{\lambda\; d\lambda}{\langle \sqrt{1 - \lambda B} \rangle}
-
-    where :math:`\langle \ldots \rangle` is a flux surface average.
+    several formulae for neoclassical transport.
+    The trapped fraction fₜ has a standard definition in neoclassical theory:
+        fₜ = 1 − 3/4 〈|B|²〉 ∫₀¹/ᴮᵐᵃˣ λ / 〈√(1 − λ B)〉 dλ
+    where 〈 ⋯ 〉 is a flux surface average.
     """
     # Get nodes and weights for Gauss-Legendre integration:
     n_gauss = kwargs.get("n_gauss", 20)
@@ -45,18 +50,20 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     lambda_weights = jnp.asarray(base_weights * 0.5)
 
     grid = transforms["grid"]
-    Bmax = data["max_tz |B|"]
-    modB_over_Bmax = data["|B|"] / Bmax
-    sqrt_g = data["sqrt(g)"]
-    Bmax_squared = compress(grid, Bmax * Bmax)
-    V_r = compress(grid, data["V_r(r)"])
+    modB_over_Bmax = data["|B|"] / data["max_tz |B|"]
+    Bmax_squared = grid.compress(data["max_tz |B|"]) ** 2
+    # to resolve indeterminate form of limit at magnetic axis
+    sqrt_g = grid.replace_at_axis(data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True)
+    V_r = grid.compress(
+        grid.replace_at_axis(data["V_r(r)"], lambda: data["V_rr(r)"], copy=True)
+    )
     compute_surface_averages = surface_averages_map(grid, expand_out=False)
 
     # Sum over the lambda grid points, using fori_loop for efficiency.
     def body_fun(jlambda, lambda_integral):
         flux_surf_avg_term = compute_surface_averages(
             jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax),
-            sqrt_g,
+            sqrt_g=sqrt_g,
             denominator=V_r,
         )
         return lambda_integral + lambda_weights[jlambda] * lambd[jlambda] / (
@@ -64,21 +71,15 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
         )
 
     lambda_integral = fori_loop(0, n_gauss, body_fun, jnp.zeros(grid.num_rho))
-
-    trapped_fraction = 1 - 0.75 * compress(grid, data["<B^2>"]) * lambda_integral
-    data["trapped fraction"] = expand(grid, trapped_fraction)
+    data["trapped fraction"] = 1 - 0.75 * data["<|B|^2>"] * grid.expand(lambda_integral)
     return data
 
 
-def j_dot_B_Redl(
-    geom_data,
-    profile_data,
-    helicity_N=None,
-):
-    r"""Compute the bootstrap current.
+def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
+    """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
 
-    (specifically :math:`\langle\vec{J}\cdot\vec{B}\rangle`) using the formulae in
-    Redl et al, Physics of Plasmas 28, 022502 (2021). This formula for
+    Compute 〈𝐉 ⋅ 𝐁〉 using the formulae in
+    Redl et al., Physics of Plasmas 28, 022502 (2021). This formula for
     the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
     and quasi-helical symmetry, but not in other stellarators.
 
@@ -91,7 +92,7 @@ def j_dot_B_Redl(
     - iota: 1D array with the rotational transform.
     - epsilon: 1D array with the effective inverse aspect ratio to use in
       the Redl formula.
-    - psi_edge: float, the boundary toroidal flux, divided by (2 pi).
+    - psi_edge: float, the boundary toroidal flux, divided by 2π.
     - f_t: 1D array with the effective trapped particle fraction
 
     The argument ``profile_data`` is a Dictionary that should contain the
@@ -153,7 +154,7 @@ def j_dot_B_Redl(
     geometry_factor = abs(R / (iota - helicity_N))
     nu_e = (
         geometry_factor
-        * (6.921e-18)
+        * 6.921e-18
         * ne
         * Zeff
         * ln_Lambda_e
@@ -161,7 +162,7 @@ def j_dot_B_Redl(
     )
     nu_i = (
         geometry_factor
-        * (4.90e-18)
+        * 4.90e-18
         * ni
         * (Zeff**4)
         * ln_Lambda_ii
@@ -339,53 +340,47 @@ def j_dot_B_Redl(
     helicity="helicity",
 )
 def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
-    r"""Compute the bootstrap current.
+    """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
 
-    (specifically :math:`\langle\vec{J}\cdot\vec{B}\rangle`) using the formulae in
-    Redl et al, Physics of Plasmas 28, 022502 (2021). This formula for
+    Compute 〈𝐉 ⋅ 𝐁〉 using the formulae in
+    Redl et al., Physics of Plasmas 28, 022502 (2021). This formula for
     the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
     and quasi-helical symmetry, but not in other stellarators.
     """
     grid = transforms["grid"]
-
     # Note that the geom_data dictionary provided to j_dot_B_Redl()
     # contains info only as a function of rho, not theta or zeta,
     # i.e. on the compressed grid. In contrast, "data" contains
     # quantities on a 3D grid even for quantities that are flux
     # functions.
-    geom_data = {}
-    geom_data["f_t"] = compress(grid, data["trapped fraction"])
-    geom_data["epsilon"] = compress(grid, data["effective r/R0"])
-    geom_data["G"] = compress(grid, data["G"])
-    geom_data["I"] = compress(grid, data["I"])
-    geom_data["iota"] = compress(grid, data["iota"])
-    geom_data["<1/|B|>"] = compress(grid, data["<1/|B|>"])
+    geom_data = {
+        "f_t": grid.compress(data["trapped fraction"]),
+        "epsilon": grid.compress(data["effective r/R0"]),
+        "G": grid.compress(data["G"]),
+        "I": grid.compress(data["I"]),
+        "iota": grid.compress(data["iota"]),
+        "<1/|B|>": grid.compress(data["<1/|B|>"]),
+        "psi_edge": params["Psi"] / (2 * jnp.pi),
+    }
     geom_data["R"] = (geom_data["G"] + geom_data["iota"] * geom_data["I"]) * geom_data[
         "<1/|B|>"
     ]
-    geom_data["psi_edge"] = params["Psi"] / (2 * jnp.pi)
-
-    profile_data = {}
-    profile_data["rho"] = compress(grid, data["rho"])
-    profile_data["ne"] = compress(grid, data["ne"])
-    profile_data["ne_r"] = compress(grid, data["ne_r"])
-    profile_data["Te"] = compress(grid, data["Te"])
-    profile_data["Te_r"] = compress(grid, data["Te_r"])
-    profile_data["Ti"] = compress(grid, data["Ti"])
-    profile_data["Ti_r"] = compress(grid, data["Ti_r"])
+    profile_data = {
+        "rho": grid.compress(data["rho"]),
+        "ne": grid.compress(data["ne"]),
+        "ne_r": grid.compress(data["ne_r"]),
+        "Te": grid.compress(data["Te"]),
+        "Te_r": grid.compress(data["Te_r"]),
+        "Ti": grid.compress(data["Ti"]),
+        "Ti_r": grid.compress(data["Ti_r"]),
+    }
     if profiles["atomic_number"] is None:
-        Zeff = jnp.ones(grid.num_rho)
+        profile_data["Zeff"] = jnp.ones(grid.num_rho)
     else:
-        Zeff = compress(grid, data["Zeff"])
-    profile_data["Zeff"] = Zeff
+        profile_data["Zeff"] = grid.compress(data["Zeff"])
 
     helicity = kwargs.get("helicity", (1, 0))
     helicity_N = helicity[1]
-
-    j_dot_B_data = j_dot_B_Redl(
-        geom_data,
-        profile_data,
-        helicity_N,
-    )
-    data["<J*B> Redl"] = expand(grid, j_dot_B_data["<J*B>"])
+    j_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+    data["<J*B> Redl"] = grid.expand(j_dot_B_data["<J*B>"])
     return data

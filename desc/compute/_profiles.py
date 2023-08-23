@@ -1282,7 +1282,7 @@ def _iota_psi(params, transforms, profiles, data, **kwargs):
     # Assume iota may be expanded as an even power series of ρ so that this
     # condition is satisfied.
     data["iota_psi"] = transforms["grid"].replace_at_axis(
-        data["iota_r"] / data["psi_r"], data["iota_rr"] / data["psi_rr"]
+        data["iota_r"] / data["psi_r"], lambda: data["iota_rr"] / data["psi_rr"]
     )
     return data
 

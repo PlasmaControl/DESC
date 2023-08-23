@@ -3,6 +3,10 @@
 import numpy as np
 from qic import Qic
 
+from desc import set_device
+
+set_device("gpu")
+
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 from desc.objectives import (

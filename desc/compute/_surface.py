@@ -142,6 +142,30 @@ def _e_rho_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
 
 
 @register_compute_fun(
+    name="e_rho_rr",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\rho}",
+    units="m",
+    units_long="meters",
+    description="Covariant radial basis vector,"
+    " second derivative wrt radial coordinate",
+    dim=3,
+    params=[],
+    transforms={
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    basis="basis",
+)
+def _e_rho_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    coords = jnp.zeros((transforms["grid"].num_nodes, 3))
+    data["e_rho_rr"] = coords
+    return data
+
+
+@register_compute_fun(
     name="e_rho_t",
     label="\\partial_{\\theta} \\mathbf{e}_{\\rho}",
     units="m",
@@ -207,6 +231,30 @@ def _e_rho_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
 def _e_theta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
     data["e_theta_r"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="e_theta_rr",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\theta}",
+    units="m",
+    units_long="meters",
+    description="Covariant poloidal basis vector,"
+    " second derivative wrt radial coordinate",
+    dim=3,
+    params=[],
+    transforms={
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    basis="basis",
+)
+def _e_theta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    coords = jnp.zeros((transforms["grid"].num_nodes, 3))
+    data["e_theta_rr"] = coords
     return data
 
 
@@ -290,6 +338,30 @@ def _e_theta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
 def _e_zeta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
     data["e_zeta_r"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="e_zeta_rr",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\zeta}",
+    units="m",
+    units_long="meters",
+    description="Covariant toroidal basis vector,"
+    " second derivative wrt radial coordinate",
+    dim=3,
+    params=[],
+    transforms={
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    basis="basis",
+)
+def _e_zeta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    coords = jnp.zeros((transforms["grid"].num_nodes, 3))
+    data["e_zeta_rr"] = coords
     return data
 
 
@@ -499,6 +571,37 @@ def _e_rho_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwar
 
 
 @register_compute_fun(
+    name="e_rho_rr",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\rho}",
+    units="m",
+    units_long="meters",
+    description="Covariant radial basis vector,"
+    " second derivative wrt radial coordinate",
+    dim=3,
+    params=["R_lmn", "Z_lmn"],
+    transforms={
+        "R": [[3, 0, 0]],
+        "Z": [[3, 0, 0]],
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="rt",
+    data=[],
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
+    basis="basis",
+)
+def _e_rho_rr_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
+    R = transforms["R"].transform(params["R_lmn"], dr=3)
+    Z = transforms["Z"].transform(params["Z_lmn"], dr=3)
+    phi = jnp.zeros(transforms["grid"].num_nodes)
+    coords = jnp.stack([R, phi, Z], axis=1)
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        coords = rpz2xyz(coords)
+    data["e_rho_rr"] = coords
+    return data
+
+
+@register_compute_fun(
     name="e_rho_t",
     label="\\partial_{\\theta} \\mathbf{e}_{\\rho}",
     units="m",
@@ -582,6 +685,37 @@ def _e_theta_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kw
 
 
 @register_compute_fun(
+    name="e_theta_rr",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\theta}",
+    units="m",
+    units_long="meters",
+    description="Covariant poloidal basis vector,"
+    " second derivative wrt radial coordinate",
+    dim=3,
+    params=["R_lmn", "Z_lmn"],
+    transforms={
+        "R": [[2, 1, 0]],
+        "Z": [[2, 1, 0]],
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="rt",
+    data=[],
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
+    basis="basis",
+)
+def _e_theta_rr_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
+    R = transforms["R"].transform(params["R_lmn"], dr=2, dt=1)
+    Z = transforms["Z"].transform(params["Z_lmn"], dr=2, dt=1)
+    phi = jnp.zeros(transforms["grid"].num_nodes)
+    coords = jnp.stack([R, phi, Z], axis=1)
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        coords = rpz2xyz(coords)
+    data["e_theta_rr"] = coords
+    return data
+
+
+@register_compute_fun(
     name="e_theta_t",
     label="\\partial_{\\theta} \\mathbf{e}_{\\theta}",
     units="m",
@@ -654,6 +788,30 @@ def _e_theta_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kw
 def _e_zeta_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
     data["e_zeta_r"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="e_zeta_rr",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\zeta}",
+    units="m",
+    units_long="meters",
+    description="Covariant toroidal basis vector,"
+    " second derivative wrt radial coordinate",
+    dim=3,
+    params=[],
+    transforms={
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="rt",
+    data=[],
+    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
+    basis="basis",
+)
+def _e_zeta_rr_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
+    coords = jnp.zeros((transforms["grid"].num_nodes, 3))
+    data["e_zeta_rr"] = coords
     return data
 
 

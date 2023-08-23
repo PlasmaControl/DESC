@@ -41,7 +41,7 @@ class _FixedObjective(_Objective):
 
 
 class BoundaryRSelfConsistency(_Objective):
-    """Ensure that the boundary and interior surfaces are self consistent.
+    """Ensure that the boundary and interior surfaces are self-consistent.
 
     Note: this constraint is automatically applied when needed, and does not need to be
     included by the user.

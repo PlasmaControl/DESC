@@ -504,11 +504,7 @@ def setdefault(val, default, cond=None):
     If cond is None, then it checks if val is not None, returning val
     or default accordingly.
     """
-    if cond is None:
-        cond = val is not None
-    if cond:
-        return val
-    return default
+    return val if cond or (cond is None and val is not None) else default
 
 
 def isnonnegint(x):

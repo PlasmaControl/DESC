@@ -216,9 +216,9 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_jax_compile_boozer(self):
         """Test compilation of Boozer QA metric in ObjectiveFunction."""
-        # making sure that compiles without any errors from JAX
-        # Related to issue #625
+
         def test(eq):
+            """Ensure compilation without any errors from JAX, related to issue #625."""
             obj = ObjectiveFunction(QuasisymmetryBoozer(eq=eq))
             obj.build()
             obj.compile()
@@ -678,7 +678,7 @@ def test_field_scale_length():
 @pytest.mark.unit
 def test_profile_objective_print(capsys):
     """Test that the profile objectives print correctly."""
-    eq = Equilibrium(current=PowerSeriesProfile([0, 0, 1]))
+    eq = Equilibrium()
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
     def test(obj, values, normalize=False):

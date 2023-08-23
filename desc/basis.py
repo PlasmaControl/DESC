@@ -1239,6 +1239,7 @@ def _polyder_exact(p, m):
 @jit
 def _polyder_jax(p, m):
     p = jnp.atleast_2d(p)
+    m = jnp.asarray(m).astype(int)
     order = p.shape[1] - 1
     D = jnp.arange(order, -1, -1)
 

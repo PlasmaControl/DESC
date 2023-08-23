@@ -183,7 +183,9 @@ class RotationalTransform(_Objective):
 
 
 class Shear(_Objective):
-    """Targets a shear profile (derivative of rotational transform).
+    """Targets a shear profile (normalized derivative of rotational transform).
+
+    f = dι/dρ * (ρ/ι)
 
     Parameters
     ----------

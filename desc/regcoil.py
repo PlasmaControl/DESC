@@ -615,5 +615,5 @@ def run_regcoil(  # noqa: C901 fxn too complex
         phi_total_function,
         TF_B,
         np.mean(np.abs(Bn_tot)),
-        lowest_idx_without_saddles,
+        Bn_tot,
     )

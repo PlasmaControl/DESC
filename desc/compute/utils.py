@@ -66,7 +66,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     names : str or array-like of str
         Name(s) of the quantity(s) to compute.
     params : dict of ndarray
-        Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+        Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc.
         Defaults to attributes of self.
     transforms : dict of Transform
         Transforms for R, Z, lambda, etc. Default is to build from grid
@@ -517,120 +517,6 @@ def cross(a, b, axis=-1):
     return jnp.cross(a, b, axis=axis)
 
 
-def _get_grid_surface(grid, surface_label):
-    """Return grid quantities associated with the given surface label.
-
-    Parameters
-    ----------
-    grid : Grid
-        Collocation grid containing the nodes to evaluate at.
-    surface_label : str
-        The surface label of rho, theta, or zeta.
-
-    Returns
-    -------
-    unique_size : ndarray
-        The number of the unique values of the surface_label.
-    inverse_idx : ndarray
-        Indexing array to go from unique values to full grid.
-    spacing : ndarray
-        The relevant columns of grid.spacing.
-    has_endpoint_dupe : bool
-        Whether this surface label's nodes have a duplicate at the endpoint
-        of a periodic domain. (e.g. a node at 0 and 2π).
-
-    """
-    assert surface_label in {"rho", "theta", "zeta"}
-    if surface_label == "rho":
-        unique_size = grid.num_rho
-        inverse_idx = grid.inverse_rho_idx
-        spacing = grid.spacing[:, 1:]
-        has_endpoint_dupe = False
-    elif surface_label == "theta":
-        unique_size = grid.num_theta
-        inverse_idx = grid.inverse_theta_idx
-        spacing = grid.spacing[:, [0, 2]]
-        has_endpoint_dupe = (grid.nodes[grid.unique_theta_idx[0], 1] == 0) & (
-            grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi
-        )
-    else:
-        unique_size = grid.num_zeta
-        inverse_idx = grid.inverse_zeta_idx
-        spacing = grid.spacing[:, :2]
-        has_endpoint_dupe = (grid.nodes[grid.unique_zeta_idx[0], 2] == 0) & (
-            grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP
-        )
-    return unique_size, inverse_idx, spacing, has_endpoint_dupe
-
-
-def compress(grid, x, surface_label="rho"):
-    """Compress x by returning only the elements at unique surface_label indices.
-
-    Parameters
-    ----------
-    grid : Grid
-        Collocation grid containing the nodes to evaluate at.
-    x : ndarray
-        The array to compress.
-        Should usually represent a surface function (a function constant over a surface)
-        in an array that matches the grid's pattern.
-    surface_label : str
-        The surface label of rho, theta, or zeta.
-
-    Returns
-    -------
-    compress_x : ndarray
-        x[grid.unique_surface_label_indices]
-        This array will be sorted such that the
-            first element corresponds to the value associated with the smallest surface
-            last element  corresponds to the value associated with the largest surface
-
-    """
-    assert surface_label in {"rho", "theta", "zeta"}
-    assert len(x) == grid.num_nodes
-    if surface_label == "rho":
-        return x[grid.unique_rho_idx]
-    if surface_label == "theta":
-        return x[grid.unique_theta_idx]
-    if surface_label == "zeta":
-        return x[grid.unique_zeta_idx]
-
-
-def expand(grid, x, surface_label="rho"):
-    """Expand x by duplicating elements to match the grid's pattern.
-
-    Parameters
-    ----------
-    grid : Grid
-        Collocation grid containing the nodes to evaluate at.
-    x : ndarray
-        Stores the values of a surface function (a function constant over a surface)
-        for all unique surfaces of the specified label on the grid.
-        - len(x) should be grid.num_surface_label
-        - x should be sorted such that the
-            first element corresponds to the value associated with the smallest surface
-            last element  corresponds to the value associated with the largest surface
-    surface_label : str
-        The surface label of rho, theta, or zeta.
-
-    Returns
-    -------
-    expand_x : ndarray
-        X expanded to match the grid's pattern.
-
-    """
-    assert surface_label in {"rho", "theta", "zeta"}
-    if surface_label == "rho":
-        assert len(x) == grid.num_rho
-        return x[grid.inverse_rho_idx]
-    if surface_label == "theta":
-        assert len(x) == grid.num_theta
-        return x[grid.inverse_theta_idx]
-    if surface_label == "zeta":
-        assert len(x) == grid.num_zeta
-        return x[grid.inverse_zeta_idx]
-
-
 def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
     """Cumulatively integrate y(x) using the composite trapezoidal rule.
 
@@ -705,6 +591,52 @@ def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
         )
 
     return res
+
+
+def _get_grid_surface(grid, surface_label):
+    """Return grid quantities associated with the given surface label.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    surface_label : str
+        The surface label of rho, theta, or zeta.
+
+    Returns
+    -------
+    unique_size : int
+        The number of the unique values of the surface_label.
+    inverse_idx : ndarray
+        Indexing array to go from unique values to full grid.
+    spacing : ndarray
+        The relevant columns of grid.spacing.
+    has_endpoint_dupe : bool
+        Whether this surface label's nodes have a duplicate at the endpoint
+        of a periodic domain. (e.g. a node at 0 and 2π).
+
+    """
+    assert surface_label in {"rho", "theta", "zeta"}
+    if surface_label == "rho":
+        unique_size = grid.num_rho
+        inverse_idx = grid.inverse_rho_idx
+        spacing = grid.spacing[:, 1:]
+        has_endpoint_dupe = False
+    elif surface_label == "theta":
+        unique_size = grid.num_theta
+        inverse_idx = grid.inverse_theta_idx
+        spacing = grid.spacing[:, [0, 2]]
+        has_endpoint_dupe = (grid.nodes[grid.unique_theta_idx[0], 1] == 0) & (
+            grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi
+        )
+    else:
+        unique_size = grid.num_zeta
+        inverse_idx = grid.inverse_zeta_idx
+        spacing = grid.spacing[:, :2]
+        has_endpoint_dupe = (grid.nodes[grid.unique_zeta_idx[0], 2] == 0) & (
+            grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP
+        )
+    return unique_size, inverse_idx, spacing, has_endpoint_dupe
 
 
 def line_integrals(
@@ -805,7 +737,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho", expand_out=
 
     Notes
     -----
-        It is assumed that the integration surface has area 4π^2 when the
+        It is assumed that the integration surface has area 4π² when the
         surface label is rho and area 2π when the surface label is theta or
         zeta. You may want to multiply the input by the surface area Jacobian.
 
@@ -880,8 +812,8 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         grid, surface_label
     )
 
-    # Todo: Define masks as a sparse matrix once sparse matrices are
-    #       are no longer experimental in jax.
+    # Todo: Define masks as a sparse matrix once sparse matrices are no longer
+    #       experimental in jax.
     # The ith row of masks is True only at the indices which correspond to the
     # ith surface. The integral over the ith surface is the dot product of the
     # ith row vector and the vector of integrands of all surfaces.
@@ -896,7 +828,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
     # surface will have the correct total area of π+π = 2π.
     #     An edge case exists if the duplicate surface has nodes with
     # different values for the surface label, which only occurs when
-    # has_endpoint_dupe is true. If has_endpoint_dupe is true, this grid
+    # has_endpoint_dupe is true. If ``has_endpoint_dupe`` is true, this grid
     # has a duplicate surface at surface_label=0 and
     # surface_label=max surface value. Although the modulo of these values
     # are equal, their numeric values are not, so the integration
@@ -906,9 +838,8 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
     # previous paragraph.
     masks = cond(
         has_endpoint_dupe,
-        lambda masks: put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1]),
-        lambda masks: masks,
-        masks,
+        lambda: put(masks, jnp.array([0, -1]), masks[0] | masks[-1]),
+        lambda: masks,
     )
     spacing = jnp.prod(spacing, axis=1)
 
@@ -917,7 +848,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
 
         Notes
         -----
-            It is assumed that the integration surface has area 4π^2 when the
+            It is assumed that the integration surface has area 4π² when the
             surface label is rho and area 2π when the surface label is theta or
             zeta. You may want to multiply the input by the surface area Jacobian.
 
@@ -945,6 +876,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
             Surface integral of the input over each surface in the grid.
 
         """
+        axis_to_move = (jnp.ndim(q) == 3) * 2
         integrands = (spacing * jnp.nan_to_num(q).T).T
         # `integrands` may have shape (g.size, f.size, v.size), where
         #     g is the grid function depending on the integration variables
@@ -976,11 +908,10 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         # shape (v.size, g.size, f.size). As we expect f.size >> v.size, the
         # integration is in theory faster since numpy optimizes large matrix
         # products. However, timing results showed no difference.
-        axis_to_move = (integrands.ndim == 3) * 2
         integrals = jnp.moveaxis(
             masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
         )
-        return expand(grid, integrals, surface_label) if expand_out else integrals
+        return grid.expand(integrals, surface_label) if expand_out else integrals
 
     return _surface_integrals
 
@@ -1024,9 +955,10 @@ def surface_averages(
     surface_label : str
         The surface label of rho, theta, or zeta to compute the average over.
     denominator : ndarray
-        This can optionally be supplied to avoid redundant computations.
-        Volume enclosed by the surfaces, derivative wrt the surface label.
-        This array should succeed broadcasting with arrays of size
+        By default, the denominator is computed as the surface integral of
+        ``sqrt_g``. This parameter can optionally be supplied to avoid
+        redundant computations or to use a different denominator to compute
+        the average. This array should broadcast with arrays of size
         ``grid.num_nodes`` (``grid.num_surface_label``) if ``expand_out``
         is true (false).
     expand_out : bool
@@ -1064,7 +996,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True):
     -------
     function : callable
         Method to compute any surface average of the input ``q`` and optionally
-        the volume Jacobian ``sqrt_g``  over each surface in the grid with code:
+        the volume Jacobian ``sqrt_g`` over each surface in the grid with code:
         ``function(q, sqrt_g)``.
 
     """
@@ -1098,9 +1030,10 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True):
         sqrt_g : ndarray
             Coordinate system Jacobian determinant; see ``data_index["sqrt(g)"]``.
         denominator : ndarray
-            This can optionally be supplied to avoid redundant computations.
-            Volume enclosed by the surfaces, derivative wrt the surface label.
-            This array should succeed broadcasting with arrays of size
+            By default, the denominator is computed as the surface integral of
+            ``sqrt_g``. This parameter can optionally be supplied to avoid
+            redundant computations or to use a different denominator to compute
+            the average. This array should broadcast with arrays of size
             ``grid.num_nodes`` (``grid.num_surface_label``) if ``expand_out``
             is true (false).
 
@@ -1123,11 +1056,11 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True):
             )
             averages = (numerator.T / denominator).T
             if expand_out:
-                averages = expand(grid, averages, surface_label)
+                averages = grid.expand(averages, surface_label)
         else:
             if expand_out:
                 # implies denominator given with size grid.num_nodes
-                numerator = expand(grid, numerator, surface_label)
+                numerator = grid.expand(numerator, surface_label)
             averages = (numerator.T / denominator).T
         return averages
 
@@ -1143,15 +1076,15 @@ def surface_integrals_transform(grid, surface_label="rho"):
     five variables, the returned method computes an integral transform,
     reducing ``q`` to a set of functions of at most three variables.
 
-    Define the domain D = u_1 × u_2 × u_3 and the codomain C = u_4 × u_5 × u_6.
-    For every surface of constant u_1 in the domain, the returned method
-    evaluates the transform T_{u_1}: (u_2 × u_3) × C → C, where T_{u_1} projects
-    away the parameters u_2 and u_3 via an integration of the given kernel
-    function K_{u_1} over the corresponding surface of constant u_1.
+    Define the domain D = u₁ × u₂ × u₃ and the codomain C = u₄ × u₅ × u₆.
+    For every surface of constant u₁ in the domain, the returned method
+    evaluates the transform Tᵤ₁ : u₂ × u₃ × C → C, where Tᵤ₁ projects
+    away the parameters u₂ and u₃ via an integration of the given kernel
+    function Kᵤ₁ over the corresponding surface of constant u₁.
 
     Notes
     -----
-        It is assumed that the integration surface has area 4π^2 when the
+        It is assumed that the integration surface has area 4π² when the
         surface label is rho and area 2π when the surface label is theta or
         zeta. You may want to multiply the input ``q`` by the surface area
         Jacobian.
@@ -1163,7 +1096,7 @@ def surface_integrals_transform(grid, surface_label="rho"):
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
         These correspond to the domain parameters discussed in this method's
-        description. In particular, ``surface_label`` names u_1.
+        description. In particular, ``surface_label`` names u₁.
 
     Returns
     -------
@@ -1202,8 +1135,8 @@ def surface_integrals_transform(grid, surface_label="rho"):
         Output
         ------
         Each element along the first dimension of the returned array, stores
-        T_{u_1} for a particular surface of constant u_1 in the given grid.
-        The order is sorted in increasing order of the values which specify u_1.
+        Tᵤ₁ for a particular surface of constant u₁ in the given grid.
+        The order is sorted in increasing order of the values which specify u₁.
 
         If ``q`` is one-dimensional, the returned array has shape
         (grid.num_surface_label, ).
@@ -1233,31 +1166,19 @@ def surface_variance(
     surface_label="rho",
     expand_out=True,
 ):
-    r"""Compute the weighted sample variance of ``q`` on each surface of the grid.
+    """Compute the weighted sample variance of ``q`` on each surface of the grid.
 
-    Computes the following quantity on each surface of the grid.
+    Computes nₑ / (nₑ − b) * (∑ᵢ₌₁ⁿ (qᵢ − q̅)² wᵢ) / (∑ᵢ₌₁ⁿ wᵢ).
+    wᵢ is the weight assigned to qᵢ given by the product of ``weights[i]`` and
+       the differential surface area element (not already weighted by the area
+       Jacobian) at the node where qᵢ is evaluated,
+    q̅ is the weighted mean of q,
+    b is 0 if the biased sample variance is to be returned and 1 otherwise,
+    n is the number of samples on a surface, and
+    nₑ ≝ (∑ᵢ₌₁ⁿ wᵢ)² / ∑ᵢ₌₁ⁿ wᵢ² is the effective number of samples.
 
-    .. math::
-        \frac{n_e}{n_e - b}
-        \frac{ \sum_{i=1}^{n} (q_i - \bar{q})^2 w_i }{ \sum_{i=1}^{n} w_i }
-
-    where
-    :math:`w_i` is the weight assigned to :math:`q_i` given by the product
-    of ``weights[i]`` and the differential surface area element (not already
-    weighted by the area Jacobian) at the node where ``q[i]`` is evaluated,
-    :math:`\bar{q}` is the weighted mean of :math:`q`,
-    :math:`b` is 0 if the biased sample variance is to be returned and 1 otherwise,
-    :math:`n` is the number of samples on a surface, and
-    :math:`n_e` is the effective number of samples on a surface defined as
-
-    .. math::
-        (\sum_{i=1}^{n} w_i)^2 / (\sum_{i=1}^{n} w_i^2)
-
-    As the weights :math:`w_i` approach each other, :math:`n_e` approaches
-    :math:`n`, and the output converges to
-
-    .. math::
-        \frac{1}{n - b} \sum_{i=1}^{n} (q_i - \bar{q})^2
+    As the weights wᵢ approach each other, nₑ approaches n, and the output
+    converges to ∑ᵢ₌₁ⁿ (qᵢ − q̅)² / (n − b).
 
     Notes
     -----
@@ -1276,7 +1197,7 @@ def surface_variance(
         https://en.wikipedia.org/wiki/Inverse-variance_weighting.
         The unbiased sample variance for this case is obtained by replacing the
         effective number of samples in the formula this function implements,
-        :math:`n_e`, with the actual number of samples :math:`n`.
+        nₑ, with the actual number of samples n.
 
         The third case is when the weights denote the integer frequency of each
         sample. See
@@ -1384,8 +1305,6 @@ def surface_min(grid, x, surface_label="rho"):
         return mins
 
     mins = fori_loop(0, inverse_idx.size, body, mins)
-    # The above implementation was benchmarked to be more efficient, after jit
-    # compilation, than the alternative given in the two lines below.
-    # masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]  # noqa: E501,E800
-    # mins = jnp.amin(x[jnp.newaxis, :], axis=1, initial=jnp.inf, where=masks)  # noqa: E501,E800
-    return expand(grid, mins, surface_label)
+    # The above implementation was benchmarked to be more efficient than
+    # alternatives without explicit loops in GitHub pull request #501.
+    return grid.expand(mins, surface_label)

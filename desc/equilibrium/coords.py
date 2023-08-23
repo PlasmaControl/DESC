@@ -76,7 +76,7 @@ def map_coordinates(  # noqa: C901
     basis_derivs = tuple([f"{X}_{d}" for X in inbasis for d in ("r", "t", "z")])
     for key in basis_derivs:
         assert (
-            key in data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()
+            key in data_index["desc.equilibrium.equilibrium.Equilibrium"]
         ), f"don't have recipe to compute partial derivative {key}"
 
     rhomin = kwargs.pop("rhomin", tol / 10)

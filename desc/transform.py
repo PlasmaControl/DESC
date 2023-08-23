@@ -109,9 +109,9 @@ class Transform(IOAble):
         """
         if isinstance(derivs, int) and derivs >= 0:
             derivatives = combination_permutation(3, derivs, False)
-        elif np.atleast_1d(derivs).ndim == 1 and len(derivs) == 3:
+        elif np.ndim(derivs) == 1 and len(derivs) == 3:
             derivatives = np.asarray(derivs).reshape((1, 3))
-        elif np.atleast_2d(derivs).ndim == 2 and np.atleast_2d(derivs).shape[1] == 3:
+        elif np.ndim(derivs) == 2 and np.atleast_2d(derivs).shape[1] == 3:
             derivatives = np.atleast_2d(derivs)
         else:
             raise NotImplementedError(

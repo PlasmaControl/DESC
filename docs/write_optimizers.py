@@ -21,15 +21,15 @@ with open("optimizers.csv", "w", newline="") as f:
     writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
 
     writer.writeheader()
-    keys = optimizers.keys()
-    for key in keys:
-        d = {}
-        d["Name"] = "``" + key + "``"
-        d["Scalar"] = optimizers[key]["scalar"]
-        d["Equality Constraints"] = optimizers[key]["equality_constraints"]
-        d["Inequality Constraints"] = optimizers[key]["inequality_constraints"]
-        d["Stochastic"] = optimizers[key]["stochastic"]
-        d["Hessian"] = optimizers[key]["hessian"]
-        d["GPU"] = optimizers[key]["GPU"]
-        d["Description"] = optimizers[key]["description"]
+    for key, val in optimizers.items():
+        d = {
+            "Name": "``" + key + "``",
+            "Scalar": val["scalar"],
+            "Equality Constraints": val["equality_constraints"],
+            "Inequality Constraints": val["inequality_constraints"],
+            "Stochastic": val["stochastic"],
+            "Hessian": val["hessian"],
+            "GPU": val["GPU"],
+            "Description": val["description"],
+        }
         writer.writerow(d)

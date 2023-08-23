@@ -80,7 +80,7 @@ class TestObjectiveFunction:
         def myfun(grid, data):
             x = data["X"]
             y = data["Y"]
-            r = jnp.sqrt(x**2 + y**2)
+            r = jnp.sqrt(x * data["X"] + y**2)
             return r
 
         eq = Equilibrium()

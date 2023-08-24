@@ -71,6 +71,10 @@ class Basis(IOAble, ABC):
 
     def _sort_modes(self):
         """Sorts modes for use with FFT."""
+        # older numpy versions can load the modes with an extra dimension of len 1,
+        # remove that unneeded first dimension
+        if self.modes.ndim == 3:
+            self.modes = self.modes.squeeze(axis=0)
         sort_idx = np.lexsort((self.modes[:, 1], self.modes[:, 0], self.modes[:, 2]))
         self._modes = self.modes[sort_idx]
 

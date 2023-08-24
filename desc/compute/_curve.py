@@ -924,7 +924,11 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["s", "x_s"],
-    parameterization="desc.geometry.core.Curve",
+    parameterization=[
+        "desc.geometry.curve.FourierRZCurve",
+        "desc.geometry.curve.FourierXYZCurve",
+        "desc.geometry.curve.FourierPlanarCurve",
+    ],
 )
 def _length(params, transforms, profiles, data, **kwargs):
     T = jnp.linalg.norm(data["x_s"], axis=-1)

@@ -96,12 +96,7 @@ class TestRZCurve:
         np.testing.assert_allclose(R, 10)
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 5, None)
-        np.testing.assert_allclose(
-            c.R_n,
-            [
-                5,
-            ],
-        )
+        np.testing.assert_allclose(c.R_n, [5])
         np.testing.assert_allclose(c.Z_n, [])
 
         s = c.copy()
@@ -110,10 +105,7 @@ class TestRZCurve:
         c.change_resolution(5)
         assert c.N == 5
         c.set_coeffs(-1, None, 2)
-        np.testing.assert_allclose(
-            c.R_n,
-            [5, 0, 0, 0, 0, 0],
-        )
+        np.testing.assert_allclose(c.R_n, [5, 0, 0, 0, 0, 0])
         np.testing.assert_allclose(c.Z_n, [0, 0, 0, 0, 2])
 
         with pytest.raises(ValueError):
@@ -143,7 +135,7 @@ class TestRZCurve:
         """Test conversion to FourierXYZCurve."""
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
         grid = LinearGrid(N=20, endpoint=True)
-        xyz = rz.to_FourierXYZCurve(N=2, grid=grid, phis=grid.nodes[:, 2])
+        xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=grid.nodes[:, 2])
 
         np.testing.assert_allclose(
             rz.compute("curvature", grid=grid)["curvature"],
@@ -165,13 +157,25 @@ class TestRZCurve:
 
         # same thing but with arclength angle
 
-        xyz = rz.to_FourierXYZCurve(N=2, grid=grid, phis=None)
+        xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=None)
 
         np.testing.assert_allclose(
             rz.compute("length", grid=grid)["length"],
             xyz.compute("length", grid=grid)["length"],
             atol=3e-3,
         )
+
+        # pass in unclosed curve
+        grid = LinearGrid(N=20, endpoint=False)
+        with pytest.raises(AssertionError):
+            xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=grid.nodes[:, 2])
+
+        # pass in non-monotonic s
+        grid = LinearGrid(N=20, endpoint=False)
+        s = grid.nodes[:, 2]
+        s[-2] = s[-1]
+        with pytest.raises(AssertionError):
+            xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=s)
 
     @pytest.mark.unit
     def test_to_SplineXYZCurve(self):
@@ -422,12 +426,7 @@ class TestPlanarCurve:
         r = c.get_coeffs(0)
         np.testing.assert_allclose(r, 2)
         c.set_coeffs(0, 3)
-        np.testing.assert_allclose(
-            c.r_n,
-            [
-                3,
-            ],
-        )
+        np.testing.assert_allclose(c.r_n, [3])
 
         c.normal = [1, 2, 3]
         c.center = [3, 2, 1]
@@ -651,6 +650,18 @@ class TestSplineXYZCurve:
             c.Y = R * np.sin(phi)
         with pytest.raises(ValueError):
             c.Z = np.zeros_like(phi)
+
+        # setter for knots
+        with pytest.raises(ValueError):
+            c.knots = np.linspace(0, 10, 10)
+        knots = c.knots
+        knots[-2] = knots[-1]  # make it non-monotonic
+        with pytest.raises(ValueError):
+            c.knots = knots
+
+        # setter for method
+        with pytest.raises(ValueError):
+            c.method = "not a valid method"
 
     @pytest.mark.unit
     def test_misc(self):

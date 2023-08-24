@@ -42,11 +42,12 @@ class Basis(IOAble, ABC):
         """Do things after loading or changing resolution."""
         # Also recreates any attributes not in _io_attrs on load from input file.
         # See IOAble class docstring for more info.
-        # older numpy versions can load the modes with an extra dimension of len 1,
+        self._enforce_symmetry()
+        # in older numpy versions, self._modes after enforce_symmetry ends up
+        # with an extra dimension of len 1,
         # check and remove that unneeded first dimension if it is present
         if self.modes.ndim == 3:
             self.modes = self.modes.squeeze(axis=0)
-        self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()
 

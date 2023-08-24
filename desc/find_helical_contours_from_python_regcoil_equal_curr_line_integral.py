@@ -553,7 +553,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             contour_X.append(coords[:, 0])
             contour_Y.append(coords[:, 1])
             contour_Z.append(coords[:, 2])
-            coil_coords.append(jnp.vstack((coords[:, 0], coords[:, 1], coords[:, 2]).T))
+            coil_coords.append(jnp.vstack((coords[:, 0], coords[:, 1], coords[:, 2])).T)
         if save_figs:
             if ax is None:
                 fig = plt.figure(figsize=(12, 12))

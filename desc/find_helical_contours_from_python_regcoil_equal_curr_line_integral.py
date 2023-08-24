@@ -540,6 +540,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         contour_X = []
         contour_Y = []
         contour_Z = []
+        coil_coords = []
 
         for thetas, zetas in zip(theta_pts, zeta_pts):
             coords = surface.compute(
@@ -552,6 +553,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             contour_X.append(coords[:, 0])
             contour_Y.append(coords[:, 1])
             contour_Z.append(coords[:, 2])
+            coil_coords.append(jnp.vstack((coords[:, 0], coords[:, 1], coords[:, 2]).T))
         if save_figs:
             if ax is None:
                 fig = plt.figure(figsize=(12, 12))
@@ -562,23 +564,24 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 else:
                     ax.plot(contour_X[j], contour_Y[j], contour_Z[j], ls)
 
-        # # Find the point of minimum separation
-        # if find_min_dist:
-        #     minSeparation2 = 1.0e20
-        #     for whichCoil1 in range(desirednumcoils):
-        #         for whichCoil2 in range(whichCoil1):
-        #             for whichPoint in range(len(contour_X[whichCoil1])):
-        #                 dx = contour_X[whichCoil1][whichPoint] - contour_X[whichCoil2]
-        #                 dy = contour_Y[whichCoil1][whichPoint] - contour_Y[whichCoil2]
-        #                 dz = contour_Z[whichCoil1][whichPoint] - contour_Z[whichCoil2]
-        #                 separation2 = dx * dx + dy * dy + dz * dz
-        #                 this_minSeparation2 = np.min(separation2)
-        #                 if this_minSeparation2 < minSeparation2:
-        #                     minSeparation2 = this_minSeparation2
+        # Find the point of minimum separation
+        if find_min_dist:
+            minSeparation2 = 1.0e20
+            for whichCoil1 in range(desirednumcoils):
+                coords1 = coil_coords[whichCoil1]
+                for whichCoil2 in range(whichCoil1):
+                    coords2 = coil_coords[whichCoil2]
 
-        #     print(
-        #         f"Minimum coil-coil separation: {np.sqrt(minSeparation2)*1000:3.2f} mm"
-        #     )
+                    d = jnp.linalg.norm(
+                        coords1[:, None, :] - coords2[None, :, :],
+                        axis=-1,
+                    )
+                    # for whichPoint in range(len(contour_X[whichCoil1])):
+                    this_minSeparation2 = np.min(d)
+                    if this_minSeparation2 < minSeparation2:
+                        minSeparation2 = this_minSeparation2
+
+            print(f"Minimum coil-coil separation: {minSeparation2*1000:3.2f} mm")
         return contour_X, contour_Y, contour_Z, ax
 
     contour_X, contour_Y, contour_Z, ax = find_XYZ_points(

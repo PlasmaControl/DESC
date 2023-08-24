@@ -85,7 +85,6 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
         by curpol)
         requires an Equilibrium to be passed in
 
-
     Returns
     -------
     Bnormal: ndarray,

@@ -69,8 +69,11 @@ def field_trace_from_coilset(
 
     Returns
     -------
-    _type_
-        _description_
+    field_R  : ndarray, size [ntransits, Rs.size]
+        R locations each transit for each field line traced
+    field_Z : ndarray, size [ntransits, Rs.size]
+        Z locations each transit for each field line traced
+
     """
     R0 = 703.5 / 1000
     r = 36.5 / 1000

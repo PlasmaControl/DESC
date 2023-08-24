@@ -44,47 +44,67 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
     Rs=None,
     phi0=0,
     surface=None,
+    xlim=[0.66, 0.74],
+    ylim=[-0.04, 0.04],
 ):
     """Field line trace from current potential.
 
     Parameters
     ----------
-    phi_mn_desc_basis : _type_
-        _description_
-    curr_pot_trans : _type_
-        _description_
-    eqname : _type_
-        _description_
-    net_toroidal_current_Amperes : _type_
-        _description_
-    net_poloidal_current_Amperes : _type_
-        _description_
+    phi_mn_desc_basis : ndarray
+        The DoubleFourierSeries coefficients for the surface current potential.
+    curr_pot_trans : Transform
+        The transform object for the current potential
+        an output of the run_regcoil function.
+    eqname : str or Equilibrium
+        The DESC equilibrum the surface current potential was found for
+        If str, assumes it is the name of the equilibrium .h5 output and will
+        load it
+    net_toroidal_current : float
+        Net current linking the plasma and the coils toroidally
+        Denoted I in the algorithm
+        An output of the run_regcoil function
+        If nonzero, helical coils are sought
+        If 0, then modular coils are sought, and this function is not
+        appropriate for that, and will raise an error
+    net_poloidal_current : float
+        Net current linking the plasma and the coils poloidally
+        Denoted G in the algorithm
+        an output of the run_regcoil function
     M : int, optional
-        _description_, by default 30
+        Poloidal resolution of source grid, by default 30
     N : int, optional
-        _description_, by default 30
-    alpha : int, optional
-        _description_, by default 0
+        Toroidal resolution of source grid, by default 30
+    alpha : float
+        regularization parameter used in run_regcoil
+        #TODO: can remove this and replace with something like
+        basename to be used for every saved figure
     ntransit : int, optional
         _description_, by default 100
     external_TF : _type_, optional
         _description_, by default None
     savename : _type_, optional
         _description_, by default None
-    Rs : _type_, optional
-        _description_, by default None
+    Rs : ndarray, optional
+        starting seed R points at zeta = 0 for the tracing, by default None
     phi0 : int, optional
-        _description_, by default 0
-    surface
+        phi plane to create poincare plot at, by default 0
+    surface : FourierRZToroidalSurface
+        surface upon which the winding surface lies. Also will
+        be used to plot the surface with the poincare plot of
+        the field lines to show where the vessel is
+    xlim : tuple or list, optional
+        x limits for the plot, by default [0.66, 0.74]
+    ylim : list, optional
+        y limits for the plot, by default [-0.04, 0.04]
 
     Returns
     -------
-    field_R
-        _description_
-    field_Z
-        _description_
-    field_phis
-        _description_
+    field_R  : ndarray, size [ntransits, Rs.size]
+        R locations each transit for each field line traced
+    field_Z : ndarray, size [ntransits, Rs.size]
+        Z locations each transit for each field line traced
+
     """
     if isinstance(eqname, str):
         eq = desc.io.load(eqname)
@@ -258,6 +278,9 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
     plt.legend()
     plt.ylabel("Z")
     plt.xlabel("R")
+
+    plt.xlim(xlim)
+    plt.ylim(ylim)
 
     ax = compare_surfs_DESC_field_line_trace(eq, ax, R_list)
     if not savename:

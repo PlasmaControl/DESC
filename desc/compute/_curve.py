@@ -1,7 +1,13 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from .geom_utils import (
+    _rotation_matrix_from_normal,
+    rpz2xyz,
+    rpz2xyz_vec,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 from .utils import cross, dot
 
 
@@ -22,20 +28,6 @@ from .utils import cross, dot
 def _s(params, transforms, profiles, data, **kwargs):
     data["s"] = transforms["grid"].nodes[:, 2]
     return data
-
-
-def _rotation_matrix_from_normal(normal):
-    nx, ny, nz = normal
-    nxny = jnp.sqrt(nx**2 + ny**2)
-    R = jnp.array(
-        [
-            [ny / nxny, -nx / nxny, 0],
-            [nx * nx / nxny, ny * nz / nxny, -nxny],
-            [nx, ny, nz],
-        ]
-    ).T
-    R = jnp.where(nxny == 0, jnp.eye(3), R)
-    return R
 
 
 @register_compute_fun(

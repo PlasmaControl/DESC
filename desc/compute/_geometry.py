@@ -1,3 +1,14 @@
+"""Compute functions for quantities with obvious geometric meaning.
+
+Notes
+-----
+Some quantities require additional work to compute at the magnetic axis.
+A Python lambda function is used to lazily compute the magnetic axis limits
+of these quantities. These lambda functions are evaluated only when the
+computational grid has a node on the magnetic axis to avoid potentially
+expensive computations.
+"""
+
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
@@ -105,12 +116,31 @@ def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["sqrt(g)_r", "sqrt(g)"],
+    data=["sqrt(g)_r"],
 )
 def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
-    data["V_rr(r)"] = surface_integrals(
-        transforms["grid"], data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"])
-    )
+    # The sign of sqrt(g) is enforced to be non-negative.
+    data["V_rr(r)"] = surface_integrals(transforms["grid"], data["sqrt(g)_r"])
+    return data
+
+
+@register_compute_fun(
+    name="V_rrr(r)",
+    label="\\partial_{\\rho\\rho\\rho} V(\\rho)",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Volume enclosed by flux surfaces, third derivative wrt radial "
+    + "coordinate",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["sqrt(g)_rr"],
+)
+def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
+    # The sign of sqrt(g) is enforced to be non-negative.
+    data["V_rrr(r)"] = surface_integrals(transforms["grid"], data["sqrt(g)_rr"])
     return data
 
 
@@ -143,7 +173,22 @@ def _A(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: compute cross section area for toroidal surface using stokes?
+@register_compute_fun(
+    name="A(r)",
+    label="A(\\rho)",
+    units="m^{2}",
+    units_long="square meters",
+    description="Average cross-sectional area enclosed by flux surfaces",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["R0", "V(r)"],
+)
+def _A_of_r(params, transforms, profiles, data, **kwargs):
+    data["A(r)"] = data["V(r)"] / (2 * jnp.pi * data["R0"])
+    return data
 
 
 @register_compute_fun(
@@ -189,6 +234,45 @@ def _S(params, transforms, profiles, data, **kwargs):
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
     data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
+    return data
+
+
+@register_compute_fun(
+    name="S_r(r)",
+    label="\\partial_{\\rho} S(\\rho)",
+    units="m^{2}",
+    units_long="square meters",
+    description="Surface area of flux surfaces, derivative wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|e_theta x e_zeta|_r"],
+)
+def _S_r_of_r(params, transforms, profiles, data, **kwargs):
+    data["S_r(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|_r"])
+    return data
+
+
+@register_compute_fun(
+    name="S_rr(r)",
+    label="\\partial_{\\rho\\rho} S(\\rho)",
+    units="m^{2}",
+    units_long="square meters",
+    description="Surface area of flux surfaces, second derivative wrt radial"
+    " coordinate",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|e_theta x e_zeta|_rr"],
+)
+def _S_rr_of_r(params, transforms, profiles, data, **kwargs):
+    data["S_rr(r)"] = surface_integrals(
+        transforms["grid"], data["|e_theta x e_zeta|_rr"]
+    )
     return data
 
 
@@ -257,11 +341,11 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["sqrt(g)", "g_tt"],
+    data=["sqrt(g)", "g_tt", "R"],
 )
 def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     max_rho = transforms["grid"].nodes[transforms["grid"].unique_rho_idx[-1], 0]
-    P = (  # perimeter
+    P = (  # perimeter at rho=1
         line_integrals(
             transforms["grid"],
             jnp.sqrt(data["g_tt"]),
@@ -284,9 +368,11 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
         * (
             jnp.sqrt(8 * jnp.pi * A + P**2)
             + jnp.sqrt(
-                2 * jnp.sqrt(3) * P * jnp.sqrt(8 * jnp.pi * A + P**2)
-                - 40 * jnp.pi * A
-                + 4 * P**2
+                jnp.abs(
+                    2 * jnp.sqrt(3) * P * jnp.sqrt(8 * jnp.pi * A + P**2)
+                    - 40 * jnp.pi * A
+                    + 4 * P**2
+                )
             )
         )
         + 3 * P
@@ -399,6 +485,9 @@ def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    # In the axis limit, the matrix of the first fundamental form is singular.
+    # The diagonal of the shape operator becomes unbounded,
+    # so the eigenvalues do not exist.
     data["curvature_k1_rho"] = jnp.maximum(r1, r2)
     data["curvature_k2_rho"] = jnp.minimum(r1, r2)
     return data
@@ -435,6 +524,9 @@ def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    # In the axis limit, the matrix of the first fundamental form is singular.
+    # The diagonal of the shape operator becomes unbounded,
+    # so the eigenvalues do not exist.
     data["curvature_k1_rho"] = jnp.maximum(r1, r2)
     data["curvature_k2_rho"] = jnp.minimum(r1, r2)
     return data
@@ -757,6 +849,9 @@ def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    # In the axis limit, the matrix of the first fundamental form is singular.
+    # The diagonal of the shape operator becomes unbounded,
+    # so the eigenvalues do not exist.
     data["curvature_k1_zeta"] = jnp.maximum(r1, r2)
     data["curvature_k2_zeta"] = jnp.minimum(r1, r2)
     return data
@@ -793,6 +888,9 @@ def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    # In the axis limit, the matrix of the first fundamental form is singular.
+    # The diagonal of the shape operator becomes unbounded,
+    # so the eigenvalues do not exist.
     data["curvature_k1_zeta"] = jnp.maximum(r1, r2)
     data["curvature_k2_zeta"] = jnp.minimum(r1, r2)
     return data

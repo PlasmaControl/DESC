@@ -1,11 +1,9 @@
-"""Tests for Grid classes."""
+"""Tests Grid classes."""
 
 import numpy as np
 import pytest
 from scipy import special
 
-from desc.basis import FourierZernikeBasis
-from desc.compute.utils import surface_averages
 from desc.equilibrium import Equilibrium
 from desc.grid import (
     ConcentricGrid,
@@ -17,11 +15,10 @@ from desc.grid import (
     find_most_rational_surfaces,
 )
 from desc.profiles import PowerSeriesProfile
-from desc.transform import Transform
 
 
 class TestGrid:
-    """Test Grid classes."""
+    """Test for Grid classes."""
 
     @pytest.mark.unit
     def test_custom_grid(self):
@@ -163,9 +160,9 @@ class TestGrid:
 
         # non-uniform spacing
         pts = np.linspace(0, 1, 10)
-        rho = np.asarray([r**3 for r in pts])
-        theta = 2 * np.pi * np.asarray([t**1.85 for t in pts])
-        zeta = 2 * np.pi * np.asarray([z**4 for z in pts])
+        rho = np.array([r**3 for r in pts])
+        theta = 2 * np.pi * np.array([t**1.85 for t in pts])
+        zeta = 2 * np.pi * np.array([z**4 for z in pts])
         lg_1 = LinearGrid(rho=rho, theta=theta, zeta=zeta, sym=True)
         lg_2 = LinearGrid(rho=rho, theta=theta[theta <= np.pi], zeta=zeta, sym=True)
         np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
@@ -452,26 +449,17 @@ class TestGrid:
         M = 2
         N = 0
         NFP = 1
-
         grid_ansi = ConcentricGrid(
             M, M, N, NFP, sym=False, axis=True, node_pattern="linear"
         )
         grid_fringe = ConcentricGrid(
             2 * M, M, N, NFP, sym=True, axis=True, node_pattern="linear"
         )
-
         ansi_nodes = np.stack(
             [
                 np.array([0, 1, 1, 1, 1, 1]),
                 np.array(
-                    [
-                        0,
-                        0,
-                        2 * np.pi / 5,
-                        4 * np.pi / 5,
-                        6 * np.pi / 5,
-                        8 * np.pi / 5,
-                    ]
+                    [0, 0, 2 * np.pi / 5, 4 * np.pi / 5, 6 * np.pi / 5, 8 * np.pi / 5]
                 ),
                 np.zeros((int((M + 1) * (M + 2) / 2),)),
             ]
@@ -492,10 +480,17 @@ class TestGrid:
                 np.zeros((6,)),
             ]
         ).T
-
         np.testing.assert_allclose(grid_ansi.nodes, ansi_nodes, err_msg="ansi")
         np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, err_msg="fringe")
         np.testing.assert_allclose(grid_ansi.weights.sum(), (2 * np.pi) ** 2)
+
+    @pytest.mark.unit
+    def test_concentric_grid_high_res(self):
+        """Test that we can create high resolution grids without crashing.
+
+        Verifies solution to GH issue #207.
+        """
+        _ = ConcentricGrid(L=32, M=28, N=30)
 
     @pytest.mark.unit
     def test_quadrature_grid(self):
@@ -504,11 +499,8 @@ class TestGrid:
         M = 2
         N = 0
         NFP = 1
-
         grid_quad = QuadratureGrid(L, M, N, NFP)
-
         roots, weights = special.js_roots(3, 2, 2)
-
         quadrature_nodes = np.stack(
             [
                 np.array([roots[0]] * 5 + [roots[1]] * 5 + [roots[2]] * 5),
@@ -518,17 +510,8 @@ class TestGrid:
                 np.zeros(15),
             ]
         ).T
-
         np.testing.assert_allclose(grid_quad.spacing.prod(axis=1), grid_quad.weights)
         np.testing.assert_allclose(grid_quad.nodes, quadrature_nodes)
-
-    @pytest.mark.unit
-    def test_concentric_grid_high_res(self):
-        """Test that we can create high resolution grids without crashing.
-
-        Verifies solution to GH issue #207.
-        """
-        _ = ConcentricGrid(L=32, M=28, N=30)
 
     @pytest.mark.unit
     def test_quad_grid_volume_integration(self):
@@ -636,133 +619,6 @@ class TestGrid:
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
         np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 
-    @pytest.mark.unit
-    def test_symmetry_surface_average_1(self):
-        """Test surface average of a symmetric function."""
-
-        def test(grid):
-            r = grid.nodes[:, 0]
-            t = grid.nodes[:, 1]
-            z = grid.nodes[:, 2] * grid.NFP
-            true_surface_avg = 5
-            function_of_rho = 1 / (r + 0.35)
-            f = (
-                true_surface_avg
-                + np.cos(t)
-                - 0.5 * np.cos(z)
-                + 3 * np.cos(t) * np.cos(z) ** 2
-                - 2 * np.sin(z) * np.sin(t)
-            ) * function_of_rho
-            np.testing.assert_allclose(
-                surface_averages(grid, f),
-                true_surface_avg * function_of_rho,
-                rtol=1e-15,
-                err_msg=type(grid),
-            )
-
-        # these tests should be run on relatively low resolution grids,
-        # or at least low enough so that the asymmetric spacing test fails
-        L = [3, 3, 5, 3]
-        M = [3, 6, 5, 7]
-        N = [2, 2, 2, 2]
-        NFP = [5, 3, 5, 3]
-        sym = np.asarray([True, True, False, False])
-        # to test code not tested on grids made with M=.
-        even_number = 4
-        n_theta = even_number - sym
-
-        # asymmetric spacing
-        with pytest.raises(AssertionError):
-            theta = 2 * np.pi * np.asarray([t**2 for t in np.linspace(0, 1, max(M))])
-            test(LinearGrid(L=max(L), theta=theta, N=max(N), sym=False))
-
-        for i in range(len(L)):
-            test(LinearGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
-            test(LinearGrid(L=L[i], theta=n_theta[i], N=N[i], NFP=NFP[i], sym=sym[i]))
-            test(
-                LinearGrid(
-                    L=L[i],
-                    theta=np.linspace(0, 2 * np.pi, n_theta[i]),
-                    N=N[i],
-                    NFP=NFP[i],
-                    sym=sym[i],
-                )
-            )
-            test(
-                LinearGrid(
-                    L=L[i],
-                    theta=np.linspace(0, 2 * np.pi, n_theta[i] + 1),
-                    N=N[i],
-                    NFP=NFP[i],
-                    sym=sym[i],
-                )
-            )
-            test(QuadratureGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i]))
-            test(ConcentricGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
-            # nonuniform spacing when sym is False, but spacing is still symmetric
-            test(
-                LinearGrid(
-                    L=L[i],
-                    theta=np.linspace(0, np.pi, n_theta[i]),
-                    N=N[i],
-                    NFP=NFP[i],
-                    sym=sym[i],
-                )
-            )
-            test(
-                LinearGrid(
-                    L=L[i],
-                    theta=np.linspace(0, np.pi, n_theta[i] + 1),
-                    N=N[i],
-                    NFP=NFP[i],
-                    sym=sym[i],
-                )
-            )
-
-    @pytest.mark.unit
-    def test_symmetry_surface_average_2(self):
-        """Tests that surface averages are correct using specified basis."""
-
-        def test(grid, basis, true_avg=1):
-            transform = Transform(grid, basis)
-
-            # random data with specified average on each surface
-            coeffs = np.random.rand(basis.num_modes)
-            coeffs[np.where((basis.modes[:, 1:] == [0, 0]).all(axis=1))[0]] = 0
-            coeffs[np.where((basis.modes == [0, 0, 0]).all(axis=1))[0]] = true_avg
-
-            # compute average for each surface in grid
-            values = transform.transform(coeffs)
-            numerical_avg = surface_averages(grid, values, expand_out=False)
-            if isinstance(grid, ConcentricGrid):
-                # values closest to axis are never accurate enough
-                numerical_avg = numerical_avg[1:]
-            np.testing.assert_allclose(
-                numerical_avg,
-                true_avg,
-                err_msg=str(type(grid)) + " " + str(grid.sym),
-            )
-
-        M = 10
-        M_grid = 23
-        test(
-            QuadratureGrid(L=M_grid, M=M_grid, N=0),
-            FourierZernikeBasis(L=M, M=M, N=0),
-        )
-        test(
-            LinearGrid(L=M_grid, M=M_grid, N=0, sym=True),
-            FourierZernikeBasis(L=M, M=M, N=0, sym="cos"),
-        )
-        test(
-            ConcentricGrid(L=M_grid, M=M_grid, N=0),
-            FourierZernikeBasis(L=M, M=M, N=0),
-        )
-        test(
-            ConcentricGrid(L=M_grid, M=M_grid, N=0, sym=True),
-            FourierZernikeBasis(L=M, M=M, N=0, sym="cos"),
-        )
-
-    @pytest.mark.unit
     def test_symmetry_volume_integral(self):
         """Test volume integral of a symmetric function."""
         # Currently, midpoint rule is false for LinearGrid made with L=number.
@@ -812,7 +668,7 @@ class TestGrid:
         M = [3, 6, 5, 7]
         N = [2, 2, 2, 2]
         NFP = [5, 3, 5, 3]
-        sym = np.asarray([True, True, False, False])
+        sym = np.array([True, True, False, False])
         # to test code not tested on grids made with M=.
         even_number = 4
         n_theta = even_number - sym
@@ -861,6 +717,38 @@ class TestGrid:
                     sym=sym[i],
                 )
             )
+
+    @pytest.mark.unit
+    def test_compress_expand_inverse_op(self):
+        """Test that compress & expand are inverse operations for surface functions.
+
+        Each test should be done on different types of grids
+        (e.g. LinearGrid, ConcentricGrid) and grids with duplicate nodes
+        (e.g. endpoint=True).
+        """
+
+        def test(surface_label, grid):
+            r = np.random.random_sample(
+                size={
+                    "rho": grid.num_rho,
+                    "theta": grid.num_theta,
+                    "zeta": grid.num_zeta,
+                }[surface_label]
+            )
+            expanded = grid.expand(r, surface_label)
+            assert expanded.size == grid.num_nodes
+            s = grid.compress(expanded, surface_label)
+            np.testing.assert_allclose(r, s, err_msg=surface_label)
+
+        L, M, N, NFP = 6, 6, 3, 5
+        lg_endpoint = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=True)
+        cg_sym = ConcentricGrid(L=L, M=M, N=N, NFP=NFP, sym=True)
+        test("rho", lg_endpoint)
+        test("theta", lg_endpoint)
+        test("zeta", lg_endpoint)
+        test("rho", cg_sym)
+        test("theta", cg_sym)
+        test("zeta", cg_sym)
 
 
 @pytest.mark.unit

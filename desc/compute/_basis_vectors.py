@@ -3466,7 +3466,7 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="n_rho_z",
-    label="\\hat{\\mathbf{n}}_{\\rho}",
+    label="\\partial_{\\zeta}\\hat{\\mathbf{n}}_{\\rho}",
     units="~",
     units_long="None",
     description="Unit vector normal to constant rho surface (direction of e^rho),"
@@ -3491,20 +3491,14 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _n_rho_z(params, transforms, profiles, data, **kwargs):
-    # equal to e^rho / |e^rho| but works correctly for surfaces as well that don't have
-    # contravariant basis defined
     data["n_rho_z"] = (
         cross(data["e_theta_z"], data["e_zeta"])
         + cross(data["e_theta"], data["e_zeta_z"])
-    ) / data["|e_theta x e_zeta|"][:, None] + data["n_rho"] / data[
-        "|e_theta x e_zeta|"
-    ][
-        :, None
-    ] * data[
-        "|e_theta x e_zeta|_z"
-    ][
-        :, None
-    ]
+    ) / data["|e_theta x e_zeta|"][:, None] - data["n_rho"] / (
+        data["|e_theta x e_zeta|"][:, None]
+    ) * (
+        data["|e_theta x e_zeta|_z"][:, None]
+    )
     return data
 
 

@@ -55,6 +55,8 @@ not_implemented_limits = {
     "iota_num_rrr",
     "iota_den_rrr",
     "D_current",
+    "n_rho_z",
+    "|e_theta x e_zeta|_z",
 }
 
 
@@ -91,7 +93,6 @@ not_implemented_limits = grow_seeds(
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
 )
-not_implemented_limits.discard("D_Mercier")
 
 
 def _skip_this(eq, name):

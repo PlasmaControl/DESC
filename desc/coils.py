@@ -799,7 +799,7 @@ class CoilSet(Coil, MutableSequence):
             delimiter=" ",
             header=header,
             footer=footer,
-            fmt="%14.8e",
+            fmt="%14.12e",
             comments="",  # to avoid the # appended to the start of the header/footer
         )
         # now need to re-load the file and place coilgroup markers at end of each coil

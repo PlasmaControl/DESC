@@ -29,6 +29,7 @@ from ._qs import (
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
 )
+from ._gx import GX
 from ._stability import MagneticWell, MercierStability
 from .linear_objectives import (
     AxisRSelfConsistency,

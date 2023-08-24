@@ -157,7 +157,7 @@ class Optimizer(IOAble):
                     nonlinear_constraint, linear_constraints, eq=eq
                 )
         if not objective.built:
-            objective.build(eq, verbose=verbose)
+            objective.build(eq, verbose=verbose,use_jit=False)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
             nonlinear_constraint.build(eq, verbose=verbose)
         if nonlinear_constraint is not None:

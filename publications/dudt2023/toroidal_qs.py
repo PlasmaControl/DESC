@@ -63,10 +63,12 @@ constraints = get_NAE_constraints(eq, qsc, order=1)
 eq, result = eq.solve(
     objective="force",
     constraints=constraints,
+    optimizer="lsq-exact",
     ftol=1e-2,
     xtol=1e-6,
     gtol=1e-6,
     maxiter=200,
+    x_scale=1,
     verbose=3,
     copy=True,
 )
@@ -109,6 +111,7 @@ for i in range(len(LM)):
         xtol=1e-6,
         gtol=1e-6,
         maxiter=200,
+        x_scale=1,
         verbose=3,
         copy=True,
     )
@@ -120,10 +123,12 @@ constraints = get_fixed_boundary_constraints(iota=False)
 eq, result = eq.solve(
     objective="force",
     constraints=constraints,
+    optimizer="lsq-exact",
     ftol=1e-2,
     xtol=1e-6,
     gtol=1e-6,
     maxiter=200,
+    x_scale=1,
     verbose=3,
     copy=True,
 )

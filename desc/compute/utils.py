@@ -838,8 +838,9 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
     # previous paragraph.
     masks = cond(
         has_endpoint_dupe,
-        lambda: put(masks, jnp.array([0, -1]), masks[0] | masks[-1]),
-        lambda: masks,
+        lambda _: put(masks, jnp.array([0, -1]), masks[0] | masks[-1]),
+        lambda _: masks,
+        operand=None,
     )
     spacing = jnp.prod(spacing, axis=1)
 

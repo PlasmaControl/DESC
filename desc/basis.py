@@ -43,6 +43,11 @@ class Basis(IOAble, ABC):
         # Also recreates any attributes not in _io_attrs on load from input file.
         # See IOAble class docstring for more info.
         self._enforce_symmetry()
+        # in older numpy versions, self._modes after enforce_symmetry ends up
+        # with an extra dimension of len 1,
+        # check and remove that unneeded first dimension if it is present
+        if self.modes.ndim == 3:
+            self.modes = self.modes.squeeze(axis=0)
         self._sort_modes()
         self._create_idx()
 

@@ -43,11 +43,6 @@ class Basis(IOAble, ABC):
         # Also recreates any attributes not in _io_attrs on load from input file.
         # See IOAble class docstring for more info.
         self._enforce_symmetry()
-        # in older numpy versions, self._modes after enforce_symmetry ends up
-        # with an extra dimension of len 1,
-        # check and remove that unneeded first dimension if it is present
-        if self.modes.ndim == 3:
-            self.modes = self.modes.squeeze(axis=0)
         self._sort_modes()
         self._create_idx()
 
@@ -64,13 +59,17 @@ class Basis(IOAble, ABC):
             None,
         ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
-            self._modes = self.modes[sign(self.modes[:, 1]) == sign(self.modes[:, 2])]
+            self._modes = self.modes[
+                np.asarray(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
+            ]
         elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
-            self._modes = self.modes[sign(self.modes[:, 1]) != sign(self.modes[:, 2])]
+            self._modes = self.modes[
+                np.asarray(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
+            ]
         elif self.sym == "even":  # even powers of rho
-            self._modes = self.modes[self.modes[:, 0] % 2 == 0]
+            self._modes = self.modes[np.asarray(self.modes[:, 0] % 2 == 0)]
         elif self.sym == "cos(t)":  # cos(m*t) terms only
-            self._modes = self.modes[sign(self.modes[:, 1]) >= 0]
+            self._modes = self.modes[np.asarray(sign(self.modes[:, 1]) >= 0)]
         elif self.sym is None:
             self._sym = False
 

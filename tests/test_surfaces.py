@@ -41,19 +41,8 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 0, 5, None)
         c.set_coeffs(-1, 0, None, 2)
-        np.testing.assert_allclose(
-            c.R_lmn,
-            [
-                5,
-                1,
-            ],
-        )
-        np.testing.assert_allclose(
-            c.Z_lmn,
-            [
-                2,
-            ],
-        )
+        np.testing.assert_allclose(c.R_lmn, [5, 1])
+        np.testing.assert_allclose(c.Z_lmn, [2])
 
         s = c.copy()
         assert s.eq(c)
@@ -303,19 +292,8 @@ class TestZernikeRZToroidalSection:
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 0, 5, None)
         c.set_coeffs(1, -1, None, 2)
-        np.testing.assert_allclose(
-            c.R_lmn,
-            [
-                5,
-                1,
-            ],
-        )
-        np.testing.assert_allclose(
-            c.Z_lmn,
-            [
-                2,
-            ],
-        )
+        np.testing.assert_allclose(c.R_lmn, [5, 1])
+        np.testing.assert_allclose(c.Z_lmn, [2])
         with pytest.raises(ValueError):
             c.set_coeffs(0, 0, None, 2)
         s = c.copy()

@@ -169,6 +169,74 @@ def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e^rho_zz",
+    label="\\partial{\\zeta \\zeta} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant radial basis vector, derivative wrt toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta",
+        "e_zeta",
+        "e_theta_z",
+        "e_zeta_z",
+        "e_theta_zz",
+        "e_zeta_zz",
+        "sqrt(g)",
+        "sqrt(g)_z",
+        "sqrt(g)_zz",
+    ],
+    axis_limit_data=[
+        "e_theta_r",
+        "e_theta_rz",
+        "e_theta_rzz",
+        "sqrt(g)_r",
+        "sqrt(g)_rz",
+        "sqrt(g)_rzz",
+    ],
+)
+def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
+    data["e^rho_zz"] = transforms["grid"].replace_at_axis(
+        (
+            (
+                cross(data["e_theta_zz"], data["e_zeta"])
+                + 2 * cross(data["e_theta_z"], data["e_zeta_z"])
+                + cross(data["e_theta"], data["e_zeta_zz"])
+            ).T
+            / data["sqrt(g)"]
+            + 2
+            * cross(data["e_theta"], data["e_zeta"]).T
+            * data["sqrt(g)_zz"]
+            / data["sqrt(g)"] ** 2
+            + data["e^rho_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 2
+        ).T,
+        lambda: (
+            (
+                cross(data["e_theta_rzz"], data["e_zeta"])
+                + 2 * cross(data["e_theta_rz"], data["e_zeta_z"])
+                + cross(data["e_theta_r"], data["e_zeta_zz"])
+            ).T
+            / data["sqrt(g)_r"]
+            + (
+                cross(data["e_theta_rz"], data["e_zeta"])
+                + cross(data["e_theta_r"], data["e_zeta_z"])
+            )
+            * data["sqrt(g)_rz"]
+            / data["sqrt(g)_r"] ** 2
+            + 2
+            * cross(data["e_theta_r"], data["e_zeta"]).T
+            * data["sqrt(g)_rzz"]
+            / data["sqrt(g)_r"] ** 2
+        ).T,
+    )
+    return data
+
+
+@register_compute_fun(
     name="e^theta",
     label="\\mathbf{e}^{\\theta}",
     units="m^{-1}",
@@ -3410,6 +3478,75 @@ def _grad_alpha(params, transforms, profiles, data, **kwargs):
         data["alpha_r"] * data["e^rho"].T
         + data["alpha_t"] * data["e^theta"].T
         + data["alpha_z"] * data["e^zeta"].T
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="grad(alpha)_z",
+    label="\\partial_{\\zeta} (\\nabla \\alpha)",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal derivative of the gradient of the field line label",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "e^rho_z",
+        "e^theta",
+        "e^theta_z",
+        "e^zeta",
+        "e^zeta_z",
+        "alpha_r",
+        "alpha_t",
+        "alpha_z",
+    ],
+)
+def _grad_alpha_z(params, transforms, profiles, data, **kwargs):
+    data["grad(alpha)_z"] = (
+        data["alpha_rz"] * data["e^rho"].T
+        + data["alpha_r"] * data["e^rho_z"].T
+        + data["e^theta_z"].T
+        + data["alpha_z"] * data["e^zeta_z"].T
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="grad(alpha)_zz",
+    label="\\partial_{\\zeta \\zeta} (\\nabla \\alpha)",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Toroidal derivative of the gradient of the field line label",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "e^rho_z",
+        "e^rho_zz",
+        "e^theta",
+        "e^theta_z",
+        "e^theta_zz",
+        "e^zeta",
+        "e^zeta_z",
+        "e^zeta_zz",
+        "alpha_r",
+        "alpha_t",
+        "alpha_z",
+    ],
+)
+def _grad_alpha_zz(params, transforms, profiles, data, **kwargs):
+    data["grad(alpha)_zz"] = (
+        data["alpha_rzz"] * data["e^rho"].T
+        + data["alpha_rz"] * data["e^rho_z"].T
+        + data["e^theta_zz"].T
+        + data["alpha_z"] * data["e^zeta_zz"].T
     ).T
     return data
 

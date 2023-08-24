@@ -42,6 +42,10 @@ class Basis(IOAble, ABC):
         """Do things after loading or changing resolution."""
         # Also recreates any attributes not in _io_attrs on load from input file.
         # See IOAble class docstring for more info.
+        # older numpy versions can load the modes with an extra dimension of len 1,
+        # check and remove that unneeded first dimension if it is present
+        if self.modes.ndim == 3:
+            self.modes = self.modes.squeeze(axis=0)
         self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()
@@ -71,10 +75,6 @@ class Basis(IOAble, ABC):
 
     def _sort_modes(self):
         """Sorts modes for use with FFT."""
-        # older numpy versions can load the modes with an extra dimension of len 1,
-        # remove that unneeded first dimension
-        if self.modes.ndim == 3:
-            self.modes = self.modes.squeeze(axis=0)
         sort_idx = np.lexsort((self.modes[:, 1], self.modes[:, 0], self.modes[:, 2]))
         self._modes = self.modes[sort_idx]
 

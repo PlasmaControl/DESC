@@ -888,7 +888,7 @@ def test_regcoil_ellipse():
     """Test elliptical eq and circular winding surf regcoil solution."""
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
-    (phi_mn_opt_0, trans, I, G, _, _, chi_B, _,) = run_regcoil(
+    (phi_mn_opt_0, trans, I, G, _, _, _, chi_B, _,) = run_regcoil(
         basis_M=8,
         basis_N=8,
         eqname=eq,
@@ -920,7 +920,7 @@ def test_regcoil_ellipse():
     assert np.min(fieldZ) > -0.02
 
     # test with alpha large, should have very small phi_mn
-    phi_mn_opt_0, trans, I, G, phi_fxn, _, _, _ = run_regcoil(
+    phi_mn_opt_0, trans, I, G, phi_fxn, _, _, _, _ = run_regcoil(
         basis_M=2,
         basis_N=2,
         eqname=eq,
@@ -941,7 +941,7 @@ def test_regcoil_ellipse_helical():
     """Test elliptical eq and circular winding surf helical regcoil solution."""
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
-    (phi_mn_opt_0, trans, I, G, _, _, chi_B, _,) = run_regcoil(
+    (phi_mn_opt_0, trans, I, G, _, _, _, chi_B, _,) = run_regcoil(
         basis_M=8,
         basis_N=8,
         eqname=eq,

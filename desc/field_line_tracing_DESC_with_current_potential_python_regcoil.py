@@ -139,7 +139,7 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
         return 1e-7 * jax.lax.fori_loop(0, J.shape[0], body, B)
 
     def get_B_function_from_regcoil_current_potential(phi_mn_desc_basis, M=30, N=30):
-        """Accept regcoil MAKEGRID format coil file, return CoilSet."""
+        """Given current potential, return fxn that calculates B."""
         # M is grid M for source grid
         # N is grid N for source grid
 
@@ -169,7 +169,7 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
         # changed signs here
         K = -(phi_t * (1 / ns_mag) * rs_z.T).T + (phi_z * (1 / ns_mag) * rs_t.T).T
 
-        def B_from_K_trace(re, params=None, basis="rpz"):
+        def B_from_K_trace(re, params=None, basis="rpz", grid=None):
             dV = sgrid.weights * jnp.linalg.norm(
                 jnp.cross(rs_t, rs_z, axis=-1), axis=-1
             )

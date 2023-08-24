@@ -12,8 +12,6 @@ from .objective_funs import ObjectiveFunction, _Objective
 from .utils import (
     align_jacobian,
     factorize_linear_constraints,
-    get_equilibrium_objective,
-    get_fixed_boundary_constraints,
 )
 from desc.utils import Timer
 from desc.compute import compute as compute_fun

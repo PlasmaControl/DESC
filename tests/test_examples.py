@@ -10,7 +10,6 @@ from qic import Qic
 from qsc import Qsc
 
 import desc.examples
-from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -332,7 +331,7 @@ def test_qh_optimization3():
     eq3a = run_qh_step(2, eq2)
     rho_err, theta_err = area_difference_desc(eq3, eq3a, Nr=1, Nt=1)
     # only need crude tolerances here to make sure the boundaries are
-    # similar, the main test is ensuring its not pathological and has good qs
+    # similar, the main test is ensuring it's not pathological and has good qs
     assert rho_err.mean() < 1
 
     obj = QuasisymmetryBoozer(helicity=(1, eq3a.NFP), eq=eq3a)
@@ -563,7 +562,7 @@ def test_NAE_QSC_solve():
 
     # Make sure iota of solved equilibrium is same near axis as QSC
     grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
-    iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
+    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
     np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5)
     np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3)
@@ -659,13 +658,13 @@ def test_NAE_QIC_solve():
 
     np.testing.assert_allclose(rho_err[:, 0:3], 0, atol=5e-2)
     # theta error isn't really an indicator of near axis behavior
-    # since its computed over the full radius, but just indicates that
+    # since it's computed over the full radius, but just indicates that
     # eq is similar to eq_fit
     np.testing.assert_allclose(theta_err, 0, atol=5e-2)
 
     # Make sure iota of solved equilibrium is same near axis as QIC
     grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
-    iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
+    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
     np.testing.assert_allclose(iota[1], qic.iota, atol=1e-5)
 

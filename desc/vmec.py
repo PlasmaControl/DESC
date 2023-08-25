@@ -11,7 +11,7 @@ from scipy.constants import mu_0
 
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
-from desc.compute.utils import compress, surface_averages
+from desc.compute.utils import surface_averages
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
@@ -429,7 +429,7 @@ class VMECIO:
             iotaf[:] = -eq.iota(r_full)  # negative sign for negative Jacobian
         else:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_full, NFP=NFP)
-            iotaf[:] = -compress(grid, eq.compute("iota", grid=grid)["iota"])
+            iotaf[:] = -grid.compress(eq.compute("iota", grid=grid)["iota"])
 
         q_factor = file.createVariable("q_factor", np.float64, ("radius",))
         q_factor.long_name = "inverse rotational transform on full mesh"
@@ -444,7 +444,7 @@ class VMECIO:
             iotas[1:] = -eq.iota(r_half)  # negative sign for negative Jacobian
         else:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
-            iotas[1:] = -compress(grid, eq.compute("iota", grid=grid)["iota"])
+            iotas[1:] = -grid.compress(eq.compute("iota", grid=grid)["iota"])
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"
@@ -541,33 +541,42 @@ class VMECIO:
         # grid for computing radial profile data
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
         data = eq.compute(
-            ["<B^2>", "I", "G", "<J*B>", "sqrt(g)", "J^theta", "J^zeta", "D_Mercier"],
+            [
+                "<|B|^2>",
+                "I",
+                "G",
+                "<J*B>",
+                "sqrt(g)",
+                "J^theta*sqrt(g)",
+                "J^zeta",
+                "D_Mercier",
+            ],
             grid=grid,
         )
 
         bdotb = file.createVariable("bdotb", np.float64, ("radius",))
         bdotb.long_name = "flux surface average of magnetic field squared"
         bdotb.units = "T^2"
-        bdotb[:] = compress(grid, data["<B^2>"])
+        bdotb[:] = grid.compress(data["<|B|^2>"])
         bdotb[0] = 0
 
         # currents
         buco = file.createVariable("buco", np.float64, ("radius",))
         buco.long_name = "Boozer toroidal current I"
         buco.units = "T*m"
-        buco[:] = compress(grid, data["I"])
+        buco[:] = grid.compress(data["I"])
         buco[0] = 0
 
         bvco = file.createVariable("bvco", np.float64, ("radius",))
         bvco.long_name = "Boozer poloidal current G"
         bvco.units = "T*m"
-        bvco[:] = compress(grid, data["G"])
+        bvco[:] = grid.compress(data["G"])
         bvco[0] = 0
 
         jdotb = file.createVariable("jdotb", np.float64, ("radius",))
         jdotb.long_name = "flux surface average of J*B"
         jdotb.units = "N/m^3"
-        jdotb[:] = compress(grid, data["<J*B>"])
+        jdotb[:] = grid.compress(data["<J*B>"])
         jdotb[0] = 0
 
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
@@ -575,7 +584,7 @@ class VMECIO:
         jcuru.units = "A/m^3"
         jcuru[:] = surface_averages(
             grid,
-            data["sqrt(g)"] * data["J^theta"] / (2 * data["rho"]),
+            data["J^theta*sqrt(g)"] / (2 * data["rho"]),
             sqrt_g=data["sqrt(g)"],
             expand_out=False,
         )
@@ -596,38 +605,38 @@ class VMECIO:
         DShear = file.createVariable("DShear", np.float64, ("radius",))
         DShear.long_name = "Mercier stability criterion magnetic shear term"
         DShear.units = "1/Wb^2"
-        DShear[:] = compress(grid, data["D_shear"])
+        DShear[:] = grid.compress(data["D_shear"])
         DShear[0] = 0
 
         DCurr = file.createVariable("DCurr", np.float64, ("radius",))
         DCurr.long_name = "Mercier stability criterion toroidal current term"
         DCurr.units = "1/Wb^2"
-        DCurr[:] = compress(grid, data["D_current"])
+        DCurr[:] = grid.compress(data["D_current"])
         DCurr[0] = 0
 
         DWell = file.createVariable("DWell", np.float64, ("radius",))
         DWell.long_name = "Mercier stability criterion magnetic well term"
         DWell.units = "1/Wb^2"
-        DWell[:] = compress(grid, data["D_well"])
+        DWell[:] = grid.compress(data["D_well"])
         DWell[0] = 0
 
         DGeod = file.createVariable("DGeod", np.float64, ("radius",))
         DGeod.long_name = "Mercier stability criterion geodesic curvature term"
         DGeod.units = "1/Wb^2"
-        DGeod[:] = compress(grid, data["D_geodesic"])
+        DGeod[:] = grid.compress(data["D_geodesic"])
         DGeod[0] = 0
 
         DMerc = file.createVariable("DMerc", np.float64, ("radius",))
         DMerc.long_name = "Mercier stability criterion"
         DMerc.units = "1/Wb^2"
-        DMerc[:] = compress(grid, data["D_Mercier"])
+        DMerc[:] = grid.compress(data["D_Mercier"])
         DMerc[0] = 0
 
         timer.stop("parameters")
         if verbose > 1:
             timer.disp("parameters")
 
-        # indepentent variables (exact conversion)
+        # independent variables (exact conversion)
 
         # R axis
         idx = np.where(eq.R_basis.modes[:, 1] == 0)[0]
@@ -781,12 +790,14 @@ class VMECIO:
         # half grid quantities
         half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
         data_half_grid = eq.compute(
-            ["J", "|B|", "B_rho", "B_theta", "B_zeta"], grid=half_grid
+            ["J", "|B|", "B_rho", "B_theta", "B_zeta", "sqrt(g)"], grid=half_grid
         )
 
         # full grid quantities
         full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
-        data_full_grid = eq.compute(["J", "B_rho", "B_theta", "B_zeta"], grid=full_grid)
+        data_full_grid = eq.compute(
+            ["J", "B_rho", "B_theta", "B_zeta", "J^theta*sqrt(g)"], grid=full_grid
+        )
 
         # Jacobian
         timer.start("Jacobian")
@@ -989,7 +1000,7 @@ class VMECIO:
         bsubsmns[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # Todo: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             bsubsmnc[:, :] = c
             bsubsmnc[0, :] = (
@@ -1085,10 +1096,9 @@ class VMECIO:
         if verbose > 1:
             timer.disp("B_zeta")
 
-        # J^theta * sqrt(g)   # noqa: E800
-        timer.start("J^theta")
+        timer.start("J^theta*sqrt(g)")
         if verbose > 0:
-            print("Saving J^theta")
+            print("Saving J^theta*sqrt(g)")
         currumnc = file.createVariable(
             "currumnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -1107,11 +1117,7 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            (
-                data_full_grid["J^theta"]
-                * data_full_grid["sqrt(g)"]
-                / (2 * data_full_grid["rho"])
-            )
+            (data_full_grid["J^theta*sqrt(g)"] / (2 * data_full_grid["rho"]))
             .reshape(
                 (full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta), order="F"
             )
@@ -1129,20 +1135,19 @@ class VMECIO:
         currumnc[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # Todo: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currumns[:, :] = s
             currumns[0, :] = (
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
-        timer.stop("J^theta")
+        timer.stop("J^theta*sqrt(g)")
         if verbose > 1:
-            timer.disp("J^theta")
+            timer.disp("J^theta*sqrt(g)")
 
-        # J^zeta * sqrt(g)   # noqa: E800
-        timer.start("J^zeta")
+        timer.start("J^zeta*sqrt(g)")
         if verbose > 0:
-            print("Saving J^zeta")
+            print("Saving J^zeta*sqrt(g)")
         currvmnc = file.createVariable(
             "currvmnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -1183,22 +1188,22 @@ class VMECIO:
         currvmnc[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # Todo: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currvmns[:, :] = -s
             currumns[0, :] = -(
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
-        timer.stop("J^zeta")
+        timer.stop("J^zeta*sqrt(g)")
         if verbose > 1:
-            timer.disp("J^zeta")
+            timer.disp("J^zeta*sqrt(g)")
 
         # TODO: these output quantities need to be added
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
         bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
         bdotgradv.long_name = "Not Implemented: This output is hard-coded to 0!"
         bdotgradv.units = "None"
-        # beta_vol = something like p/(B^2-p) ? It's not <beta>_vol(r)
+        # beta_vol = something like p/(|B|^2 - p) ? It's not <beta>_vol(r)
         beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
         beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
         beta_vol.long_name = "Not Implemented: This output is hard-coded to 0!"

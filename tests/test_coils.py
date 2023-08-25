@@ -451,6 +451,79 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
+    """Test save/load CoilSet linspaced angular from MAKEGRID file with int grid."""
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    path = tmpdir.join("coils.MAKEGRID_format_angular_coil")
+
+    # make a coilset with angular coilset
+    N = 10
+    coil = FourierPlanarCoil()
+    coil.current = 1
+    coilset = CoilSet.linspaced_angular(coil, n=N, angle=2 * np.pi)
+
+    grid = 200
+    coilset.save_in_makegrid_format(str(path), grid=grid, NFP=2)
+
+    coilset2 = CoilSet.from_makegrid_coilfile(str(path))
+
+    # check values at saved points, ensure they match
+    for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
+        grid = LinearGrid(zeta=coilset2[0].knots, endpoint=False)
+        coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
+        X1 = coords1[:, 0]
+        Y1 = coords1[:, 1]
+        Z1 = coords1[:, 2]
+
+        coords2 = c2.compute("x", grid=grid, basis="xyz")["x"]
+        X2 = coords2[:, 0]
+        Y2 = coords2[:, 1]
+        Z2 = coords2[:, 2]
+
+        np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
+
+    # check values at interpolated points, ensure they match closely
+    grid = LinearGrid(N=51, endpoint=True)
+    for c1, c2 in zip(coilset, coilset2):
+        coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
+        X1 = coords1[:, 0]
+        Y1 = coords1[:, 1]
+        Z1 = coords1[:, 2]
+
+        coords2 = c2.compute("x", grid=grid, basis="xyz")["x"]
+        X2 = coords2[:, 0]
+        Y2 = coords2[:, 1]
+        Z2 = coords2[:, 2]
+
+        np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
+
+    # check Bnormal on torus and ensure is near zero
+    surf = FourierRZToroidalSurface(
+        R_lmn=np.array([10, 0.1]),
+        Z_lmn=np.array([-0.1]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+    )
+
+    B_normal, _ = coilset.compute_Bnormal(surf, source_grid=grid)
+    np.testing.assert_allclose(B_normal, 0, atol=1e-16)
+    B_normal2, _ = coilset2.compute_Bnormal(surf)
+    np.testing.assert_allclose(B_normal2, 0, atol=1e-16)
+
+    # check B btwn the two coilsets
+    B1 = coilset.compute_magnetic_field(np.array([[10, 0, 0]]), basis="xyz", grid=grid)
+    B2 = coilset2.compute_magnetic_field(np.array([[10, 0, 0]]), basis="xyz", grid=grid)
+
+    np.testing.assert_allclose(B1, B2, atol=1e-16)
+
+
+@pytest.mark.unit
 def test_save_makegrid_coils_assert_NFP(tmpdir_factory):
     """Test saving CoilSet that with incompatible NFP throws an error."""
     Ncoils = 22

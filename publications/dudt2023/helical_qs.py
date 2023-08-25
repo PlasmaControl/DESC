@@ -98,7 +98,6 @@ eq, result = eq.solve(
     xtol=1e-6,
     gtol=1e-6,
     maxiter=100,
-    x_scale=1,
     verbose=3,
     copy=True,
 )
@@ -141,7 +140,6 @@ for i in range(len(LM)):
         xtol=1e-6,
         gtol=1e-6,
         maxiter=200,
-        x_scale=1,
         verbose=3,
         copy=True,
     )
@@ -158,7 +156,6 @@ eq, result = eq.solve(
     xtol=1e-6,
     gtol=1e-6,
     maxiter=200,
-    x_scale=1,
     verbose=3,
     copy=True,
 )

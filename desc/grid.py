@@ -733,10 +733,12 @@ class LinearGrid(Grid):
         self._endpoint = (
             t.size > 0
             and z.size > 0
-            and (t[0] == 0 and t[-1] == THETA_ENDPOINT)
-            and (z[0] == 0 and z[-1] == ZETA_ENDPOINT)
-        )
-
+            and (
+                (t[0] == 0 and t[-1] == THETA_ENDPOINT) or (t.size == 1 and z.size > 1)
+            )
+            and ((z[0] == 0 and z[-1] == ZETA_ENDPOINT) or (z.size == 1 and t.size > 1))
+        )  # if only one theta or one zeta point, can have endpoint=True
+        # if the other one is a full array
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()
         t = t.flatten()
@@ -957,7 +959,6 @@ class ConcentricGrid(Grid):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
-
         self._L = L
         self._M = M
         self._N = N

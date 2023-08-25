@@ -366,7 +366,7 @@ class CoilSet(Coil, MutableSequence):
 
     """
 
-    _io_attrs_ = Coil._io_attrs_ + ["_coils"] + ["_NFP"]
+    _io_attrs_ = Coil._io_attrs_ + ["_coils"]
 
     def __init__(self, *coils, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
@@ -661,8 +661,8 @@ class CoilSet(Coil, MutableSequence):
                     names.append(" ".join(line.split()[4:]))
         if len(lines[3].split()) != 4:
             raise OSError(
-                "4th line in file must be the start of the first coil!"
-                + "Expected a line of length 4 (after .split()),"
+                "4th line in file must be the start of the first coil! "
+                + "Expected a line of length 4 (after .split()), "
                 + f"instead got length {lines[3].split()}"
             )
         header_lines_not_as_expected = np.array(
@@ -674,10 +674,10 @@ class CoilSet(Coil, MutableSequence):
         )
         if np.any(header_lines_not_as_expected):
             raise OSError(
-                "first 3 lines in file must be the header lines,"
-                + " each of length 2 (after .split())!"
+                "First 3 lines in file must be the header lines,"
+                + " each of length 2 (after .split())! "
                 + f"Line(s) {lines[np.where(header_lines_not_as_expected)[0]]}"
-                + " is not length 2"
+                + " are not length 2"
             )
 
         for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
@@ -700,8 +700,8 @@ class CoilSet(Coil, MutableSequence):
 
         return CoilSet(*coils)
 
-    def save_in_MAKEGRID_format(self, coilsFilename, NFP=None, grid=None):
-        """Save CoilSet of as a MAKEGRID-formatted coil txtfile.
+    def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
+        """Save CoilSet as a MAKEGRID-formatted coil txtfile.
 
         By default, each coil is assigned to the same Coilgroup in MAKEGRID
         with the name "Modular". For more details see the MAKEGRID documentation
@@ -799,7 +799,7 @@ class CoilSet(Coil, MutableSequence):
             delimiter=" ",
             header=header,
             footer=footer,
-            fmt="%14.8e",
+            fmt="%14.12e",
             comments="",  # to avoid the # appended to the start of the header/footer
         )
         # now need to re-load the file and place coilgroup markers at end of each coil

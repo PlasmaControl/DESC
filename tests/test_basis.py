@@ -31,7 +31,7 @@ class TestBasis:
         """Test polyder_vec function."""
         p0 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
         p1 = polyder_vec(p0, 1)
-        p2 = polyder_vec(p0, 2)
+        p2 = polyder_vec(p0, 2, exact=True)
 
         correct_p1 = np.array([[0, 2, 0], [0, 0, 1], [0, 0, 0], [0, 2, 1]])
         correct_p2 = np.array([[0, 0, 2], [0, 0, 0], [0, 0, 0], [0, 0, 2]])
@@ -78,19 +78,19 @@ class TestBasis:
         exactdf = np.array(
             [
                 np.asarray(mpmath.polyval(list(ci), r), dtype=float)
-                for ci in polyder_vec(coeffs, 1)
+                for ci in polyder_vec(coeffs, 1, exact=True)
             ]
         ).T
         exactddf = np.array(
             [
                 np.asarray(mpmath.polyval(list(ci), r), dtype=float)
-                for ci in polyder_vec(coeffs, 2)
+                for ci in polyder_vec(coeffs, 2, exact=True)
             ]
         ).T
         exactdddf = np.array(
             [
                 np.asarray(mpmath.polyval(list(ci), r), dtype=float)
-                for ci in polyder_vec(coeffs, 3)
+                for ci in polyder_vec(coeffs, 3, exact=True)
             ]
         ).T
 

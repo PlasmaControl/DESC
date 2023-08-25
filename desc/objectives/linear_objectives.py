@@ -2515,14 +2515,14 @@ class FixPsi(_FixedObjective):
         Target value(s) of the objective. If None, uses Equilibrium value.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-    weight : float, optional
-        Weighting to apply to the Objective, relative to other Objectives.
     name : str
         Name of the objective function.
 
@@ -2594,44 +2594,32 @@ class FixPsi(_FixedObjective):
         """
         return Psi
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Psi"
 
-
-class FixWell(_Objective):
+class FixWell(_FixedObjective):
     """Fixes well_l.
 
     Parameters
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+    weight : float, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
     normalize_target : bool
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-        Note: has no effect for this objective.
     name : str
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "well_l"
     _units = "(T)"
     _print_value_fmt = "Fixed well_l error: {:10.3e} "
 
@@ -2701,44 +2689,32 @@ class FixWell(_Objective):
         """
         return well_l[self._idx]
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "well_l"
 
-
-class FixOmni(_Objective):
+class FixOmni(_FixedObjective):
     """Fixes omni_lmn.
 
     Parameters
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+    weight : float, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
     normalize_target : bool
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-        Note: has no effect for this objective.
     name : str
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "omni_lmn"
     _units = "(rad)"
     _print_value_fmt = "Fixed omni_lmn error: {:10.3e} "
 
@@ -2808,44 +2784,33 @@ class FixOmni(_Objective):
         """
         return omni_lmn[self._idx]
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "omni_lmn"
 
-
-class StraightBmaxContour(_Objective):
+class StraightBmaxContour(_FixedObjective):
     """Ensures the B_max contour is straight in Boozer coordinates.
 
     Parameters
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+    weight : float, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
     normalize_target : bool
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-        Note: has no effect for this objective.
     name : str
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
+    _target_arg = "omni_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(rad)"
     _print_value_fmt = "Straight B_max error: {:10.3e} "
 
@@ -2916,8 +2881,3 @@ class StraightBmaxContour(_Objective):
 
         """
         return jnp.dot(self._A, omni_lmn)
-
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "omni_lmn"

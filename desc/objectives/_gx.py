@@ -113,7 +113,6 @@ class GX(_Objective):
             Level of output.
 
         """
-
         if self.grid is None:
             self.grid_eq = QuadratureGrid(
                 L=eq.L_grid,
@@ -147,7 +146,7 @@ class GX(_Objective):
             "iota_r",
             "a",
             "rho",
-            "psi"
+            "psi",
         ]
         self._data_keys = [
             "B", "|B|",
@@ -158,8 +157,15 @@ class GX(_Objective):
             "B_theta", "B_zeta", "B_rho", "|B|_t", "|B|_z",
             "B^theta", "B^zeta_r", "B^theta_r", "B^zeta",
             "e_theta", "e_theta_r", "e_zeta_r", "e_zeta",
-            "p_r","grad(psi)"
+            "p_r","grad(psi)",
         ]
+
+#        self._args = get_params(self._data_keys,obj="desc.equilibrium.equilibrium.Equilibrium")
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=self.grid_eq.axis.size,
+        )
 
         if verbose > 0:
             print("Precomputing transforms")
@@ -167,25 +173,29 @@ class GX(_Objective):
         
         #Need separate transforms and profiles for the equilibrium and flux-tube
         self.eq = eq
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._profiles_eq = get_profiles(self._data_keys, eq=eq, grid=self.grid_eq)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms_eq = get_transforms(self._data_keys, eq=eq, grid=self.grid_eq)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=self.grid)
+        self._profiles_eq = get_profiles(self._data_eq_keys, obj=eq, grid=self.grid_eq)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=self.grid)
+        self._transforms_eq = get_transforms(self._data_eq_keys, obj=eq, grid=self.grid_eq)
 
-        self._args = get_params(self._data_keys)
+        self._constants = {
+            "transforms": self._transforms_eq,
+            "profiles": self._profiles_eq,
+        }
+
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
 
         self.gx_compute = core.Primitive("gx")
         self.gx_compute.def_impl(self.compute_impl)
         ad.primitive_jvps[self.gx_compute] = self.compute_gx_jvp
         batching.primitive_batchers[self.gx_compute] = self.compute_gx_batch
 
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+#        self._check_dimensions()
+#        self._set_dimensions(eq)
+        super().build(eq=self.eq, use_jit=use_jit, verbose=verbose)
     
     def compute(self, *args, **kwargs):
         """Computes flux-tube geometric coefficients and calls GX.
@@ -212,32 +222,17 @@ class GX(_Objective):
             The time-averaged nonlinear turbulent heat flux.
 
         """
- 
-        params = self._parse_args(*args, **kwargs)
-        R_lmn = params['R_lmn']
-        Z_lmn = params['Z_lmn']
-        L_lmn = params['L_lmn']
-        p_l = params['p_l']
-        i_l = params['i_l']
-        c_l = params['c_l']
-        Psi = params['Psi']
-        v = (R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi)
-        return self.gx_compute.bind(*v)
 
-    def compute_impl(self, *args):
-        (R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi) = args
-        rho = np.sqrt(self.psi)
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "p_l": p_l,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
-        
+        return self.gx_compute.bind(*args,**kwargs)
+
+    def compute_impl(self, *args, **kwargs):
+
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
+        rho = np.sqrt(self.psi)       
         data_eq = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_eq_keys,
             params=params,
             transforms=self._transforms_eq,
@@ -261,16 +256,17 @@ class GX(_Objective):
 
         rhoa = rho*np.ones(len(zeta))
         c = np.vstack([rhoa,thetas,zeta]).T
-        coords = self.eq.compute_theta_coords(c,L_lmn=L_lmn,tol=1e-10,maxiter=50)
+        coords = self.eq.compute_theta_coords(c,tol=1e-10,maxiter=50)
         th = coords[:,1]
 
         if self._profiles_eq["iota"] is None:
             self.grid = Grid(coords)
-            self._transforms = get_transforms(self._data_keys, eq=self.eq, grid=self.grid)
-            self._profiles = get_profiles(self._data_keys, eq=self.eq, grid=self.grid)
+            self._transforms = get_transforms(self._data_keys, obj=self.eq, grid=self.grid)
+            self._profiles = get_profiles(self._data_keys, obj=self.eq, grid=self.grid)
             data = {}
         
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=self._transforms,
@@ -400,6 +396,38 @@ class GX(_Objective):
         
         return jnp.atleast_1d(qflux_avg)
 
+    def compute_gx_jvp(self,values,tangents):
+        
+        R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi = values
+        primal_out = jnp.atleast_1d(0.0)
+
+        n = len(values) 
+        argnum = np.arange(0,n,1)
+        
+        jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values,rel_step=1e-2)
+        
+        return (primal_out, jvp)
+
+    def compute_gx_batch(self, values, axis):
+        numdiff = len(values[0])
+        res = jnp.array([0.0])
+
+        for i in range(numdiff):
+            R_lmn = values[0][i]
+            Z_lmn = values[1][i]
+            L_lmn = values[2][i]
+            i_l = values[3][i]
+            p_l = values[4][i]
+            Psi = values[5][i]
+            
+            res = jnp.vstack([res,self.compute(R_lmn,Z_lmn,L_lmn,i_l,p_l,Psi)])
+
+        res = res[1:]
+
+
+        return res, axis[0]
+
+
     def interp_to_new_grid(self,geo_array,zgrid,uniform_grid):
         geo_array_gx = np.zeros(len(geo_array))
         f = interp1d(zgrid,geo_array,kind='cubic')
@@ -430,11 +458,11 @@ class GX(_Objective):
 
         for i in range(2*self.nzgrid):
             temp_grid[i+1] = temp_grid[i] + dzeta * (1 / np.abs(gradpar_half_grid[i]))
-        
+               
         for i in range(2*self.nzgrid+1):
             z_on_theta_grid[i] = temp_grid[i] - temp_grid[index_of_middle]
         desired_gradpar = np.pi/np.abs(z_on_theta_grid[0])
-        
+
         for i in range(2*self.nzgrid+1):
             z_on_theta_grid[i] = z_on_theta_grid[i] * desired_gradpar
             gradpar_temp[i] = desired_gradpar

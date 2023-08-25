@@ -1,5 +1,6 @@
 """Classes for magnetic field coils."""
 
+import numbers
 from abc import ABC
 from collections.abc import MutableSequence
 
@@ -761,6 +762,10 @@ class CoilSet(Coil, MutableSequence):
         coil_end_inds = []  # indices where the coils end, need to track these
         # to place the coilgroup number and name later, which MAKEGRID expects
         # at the end of each individual coil
+        if isinstance(grid, Grid):
+            endpoint = grid.endpoint
+        elif isinstance(grid, numbers.Integral):
+            endpoint = True  # if int, will create a grid w/ endpoint=True in compute
         for i in range(int(len(coils))):
             coil = coils[i]
             coords = coil.compute("x", basis="xyz", grid=grid)["x"]
@@ -771,7 +776,7 @@ class CoilSet(Coil, MutableSequence):
 
             currents = np.ones_like(contour_X) * float(coil.current)
 
-            if grid.endpoint:
+            if endpoint:
                 currents[-1] = 0  # this last point must have 0 current
             else:  # close the curves if needed
                 contour_X = np.append(contour_X, contour_X[0])

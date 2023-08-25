@@ -441,7 +441,7 @@ def check_termination(
     **kwargs,
 ):
     """Check termination condition and get message."""
-    ftol_satisfied = dF < abs(ftol * F) and reduction_ratio > 0.25
+    ftol_satisfied = 0 < dF < abs(ftol * F) and reduction_ratio > 0.25
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
     gtol_satisfied = g_norm < gtol
     ctol_satisfied = kwargs.get("constr_violation", 0) < kwargs.get("ctol", np.inf)

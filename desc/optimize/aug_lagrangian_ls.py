@@ -355,8 +355,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             alpha *= tr_old / trust_radius
 
             success, message = check_termination(
-                Lactual_reduction,
-                Lcost,
+                actual_reduction,
+                cost,
                 step_norm,
                 z_norm,
                 g_norm,

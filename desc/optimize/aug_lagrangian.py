@@ -393,8 +393,8 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
             alpha *= tr_old / trust_radius
 
             success, message = check_termination(
-                Lactual_reduction,
-                L,
+                actual_reduction,
+                f,
                 step_norm,
                 z_norm,
                 g_norm,

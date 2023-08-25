@@ -643,6 +643,7 @@ class Omnigenity(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
@@ -672,8 +673,8 @@ class Omnigenity(_Objective):
             self._data_keys,
             obj=eq,
             grid=grid,
-            M_booz=self.M_booz,
-            N_booz=self.N_booz,
+            M_booz=M_booz,
+            N_booz=N_booz,
         )
         self._constants = {
             "transforms": self._transforms,

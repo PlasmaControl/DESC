@@ -5,6 +5,7 @@ from scipy import optimize, special
 
 from desc.backend import jnp, put
 from desc.io import IOAble
+from desc.utils import Index
 
 __all__ = [
     "Grid",
@@ -28,6 +29,10 @@ class Grid(IOAble):
         node coordinates, in (rho,theta,zeta)
     sort : bool
         whether to sort the nodes for use with FFT method.
+    jitable : bool
+        Whether to skip certain checks and conditionals that don't work under jit.
+        Allows grid to be created on the fly with custom nodes, but weights, symmetry
+        etc may be wrong if grid contains duplicate nodes.
 
     """
 
@@ -51,7 +56,7 @@ class Grid(IOAble):
         "_inverse_zeta_idx",
     ]
 
-    def __init__(self, nodes, sort=True):
+    def __init__(self, nodes, sort=True, jitable=False):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
@@ -59,22 +64,39 @@ class Grid(IOAble):
         self._sym = False
         self._node_pattern = "custom"
         self._nodes, self._spacing = self._create_nodes(nodes)
-        self._enforce_symmetry()
         if sort:
             self._sort_nodes()
-        self._axis = self._find_axis()
-        (
-            self._unique_rho_idx,
-            self._inverse_rho_idx,
-            self._unique_theta_idx,
-            self._inverse_theta_idx,
-            self._unique_zeta_idx,
-            self._inverse_zeta_idx,
-        ) = self._find_unique_inverse_nodes()
+        if jitable:
+            # dont do anything with symmetry since that changes # of nodes
+            # avoid point at the axis, for now. FIXME: make axis boolean mask?
+            r, t, z = self._nodes.T
+            r = jnp.where(r == 0, 1e-12, r)
+            self._nodes = jnp.array([r, t, z]).T
+            self._axis = np.array([], dtype=int)
+            self._unique_rho_idx = np.arange(self._nodes.shape[0])
+            self._unique_theta_idx = np.arange(self._nodes.shape[0])
+            self._unique_zeta_idx = np.arange(self._nodes.shape[0])
+            self._inverse_rho_idx = np.arange(self._nodes.shape[0])
+            self._inverse_theta_idx = np.arange(self._nodes.shape[0])
+            self._inverse_zeta_idx = np.arange(self._nodes.shape[0])
+            # don't do anything fancy with weights
+            self._weights = self._spacing.prod(axis=1)
+        else:
+            self._enforce_symmetry()
+            self._axis = self._find_axis()
+            (
+                self._unique_rho_idx,
+                self._inverse_rho_idx,
+                self._unique_theta_idx,
+                self._inverse_theta_idx,
+                self._unique_zeta_idx,
+                self._inverse_zeta_idx,
+            ) = self._find_unique_inverse_nodes()
+            self._weights = self._scale_weights()
+
         self._L = self.num_rho
         self._M = self.num_theta
         self._N = self.num_zeta
-        self._weights = self._scale_weights()
 
     def _create_nodes(self, nodes):
         """Allow for custom node creation.
@@ -92,14 +114,14 @@ class Grid(IOAble):
             Node spacing, in (rho,theta,zeta).
 
         """
-        nodes = np.atleast_2d(nodes).reshape((-1, 3)).astype(float)
+        nodes = jnp.atleast_2d(nodes).reshape((-1, 3)).astype(float)
         # Do not alter nodes given by the user for custom grids.
         # In particular, do not modulo nodes by 2pi or 2pi/NFP.
         # This may cause the surface_integrals() function to fail recognizing
         # surfaces outside the interval [0, 2pi] as duplicates. However, most
         # surface integral computations are done with LinearGrid anyway.
         spacing = (  # make weights sum to 4pi^2
-            np.ones_like(nodes) * np.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
+            jnp.ones_like(nodes) * jnp.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
         )
         return nodes, spacing
 
@@ -193,8 +215,8 @@ class Grid(IOAble):
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce duplicate node weights."""
         nodes = self.nodes.copy().astype(float)
-        nodes[:, 1] %= 2 * np.pi
-        nodes[:, 2] %= 2 * np.pi / self.NFP
+        nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
+        nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))
         # reduce weights for duplicated nodes
         _, inverse, counts = np.unique(
             nodes, axis=0, return_inverse=True, return_counts=True
@@ -1325,7 +1347,7 @@ def find_most_rational_surfaces(iota, n, atol=1e-14, itol=1e-14, eps=1e-12, **kw
     itol : float, optional
         tolerance for rounding float to nearest int
     eps : float, optional
-        amount to dislace points to avoid duplicates
+        amount to displace points to avoid duplicates
 
     Returns
     -------

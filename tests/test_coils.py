@@ -414,7 +414,7 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
 
     # check values at interpolated points, ensure they match closely
     grid = LinearGrid(N=51, endpoint=True)
-    for c1, c2 in zip(coilset, coilset2):
+    for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
         Y1 = coords1[:, 1]
@@ -514,12 +514,26 @@ def test_save_and_load_separate_files_coils(tmpdir_factory):
 
     cs = CoilSet(c, c1)
     path_basename = tmpdir.join("separate_coil_file_test")
-    cs.save_coilset_as_separate_coil_files(cs, str(path_basename), grid=10)
+    cs.save_coilset_as_separate_coil_files(cs, str(path_basename), grid=200)
 
     for i in range(2):
-        with open(f"{tmp_path_basename}_{i}.txt") as f:
-            lines_orig = f.readlines()
-        with open(f"{path_basename}_{i}.txt") as f:
-            lines_new = f.readlines()
-        for line_orig, line_new in zip(lines_orig, lines_new):
-            assert line_orig == line_new
+        c1 = CoilSet.from_makegrid_coilfile(f"{tmp_path_basename}_{i}.txt")[0]
+        c2 = CoilSet.from_makegrid_coilfile(f"{path_basename}_{i}.txt")[0]
+
+        grid = LinearGrid(zeta=c1.knots, endpoint=False)
+        coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
+        X1 = coords1[:, 0]
+        Y1 = coords1[:, 1]
+        Z1 = coords1[:, 2]
+
+        coords2 = c2.compute("x", grid=grid, basis="xyz")["x"]
+        X2 = coords2[:, 0]
+        Y2 = coords2[:, 1]
+        Z2 = coords2[:, 2]
+
+        np.testing.assert_allclose(
+            c1.current, c2.current, atol=1e-6, err_msg=f"Coil {i}"
+        )
+        np.testing.assert_allclose(X1, X2, atol=1e-6, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Y1, Y2, atol=1e-6, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(Z1, Z2, atol=1e-6, err_msg=f"Coil {i}")

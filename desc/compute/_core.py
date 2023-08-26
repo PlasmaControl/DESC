@@ -1843,7 +1843,7 @@ def _omega_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="omega_rrr",
-    label="\\partial_{\rho \\rho \\rho} \\omega",
+    label="\\partial_{\\rho \\rho \\rho} \\omega",
     units="rad",
     units_long="radians",
     description="Toroidal stream function, third radial derivative",
@@ -1861,7 +1861,7 @@ def _omega_rrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="omega_rrrr",
-    label="\\partial_{\rho \\rho \\rho \\rho} \\omega",
+    label="\\partial_{\\rho \\rho \\rho \\rho} \\omega",
     units="rad",
     units_long="radians",
     description="Toroidal stream function, fourth radial derivative",
@@ -1879,7 +1879,7 @@ def _omega_rrrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="omega_rrrt",
-    label="\\partial_{\rho \\rho \\rho \\theta} \\omega",
+    label="\\partial_{\\rho \\rho \\rho \\theta} \\omega",
     units="rad",
     units_long="radians",
     description="Toroidal stream function, fourth derivative wrt radial coordinate"
@@ -1898,7 +1898,7 @@ def _omega_rrrt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="omega_rrrz",
-    label="\\partial_{\rho \\rho \\rho \\zeta} \\omega",
+    label="\\partial_{\\rho \\rho \\rho \\zeta} \\omega",
     units="rad",
     units_long="radians",
     description="Toroidal stream function, fourth derivative wrt radial coordinate"

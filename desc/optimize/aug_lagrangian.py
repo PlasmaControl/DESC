@@ -1,4 +1,4 @@
-"""Augmented Langrangian for scalar valued objectives."""
+"""Augmented Lagrangian for scalar valued objectives."""
 
 from scipy.optimize import BFGS, NonlinearConstraint, OptimizeResult
 
@@ -44,7 +44,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     maxiter=None,
     options={},
 ):
-    """Minimize a function with constraints using an augmented Langrangian method.
+    """Minimize a function with constraints using an augmented Lagrangian method.
 
     Parameters
     ----------

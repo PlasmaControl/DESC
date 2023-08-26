@@ -17,7 +17,7 @@ from desc.objectives import (
 from desc.perturbations import optimal_perturb, perturb
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
 @pytest.mark.solve
 def test_perturbation_orders(SOLOVEV):
@@ -125,7 +125,7 @@ def test_perturb_with_float_without_error():
 def test_optimal_perturb():
     """Test that a single step of optimal_perturb doesn't mess things up."""
     # as of v0.6.1, the recover operation from optimal_perturb would give
-    # R_lmn etc that are inconsistent with Rb_lmn due to recovering x with the wrong
+    # R_lmn etc. that are inconsistent with Rb_lmn due to recovering x with the wrong
     # particular solution. Here we do a simple test to ensure the interior and boundary
     # agree
     eq1 = desc.examples.get("DSHAPE")

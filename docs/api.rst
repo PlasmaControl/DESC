@@ -14,8 +14,21 @@ Basis
     desc.basis.FourierSeries
     desc.basis.DoubleFourierSeries
     desc.basis.ZernikePolynomial
+    desc.basis.ChebyshevDoubleFourierBasis
     desc.basis.FourierZernikeBasis
 
+Coils
+*****
+
+.. autosummary::
+    :toctree: _api/coils/
+    :recursive:
+    :template: class.rst
+
+    desc.coils.FourierRZCoil
+    desc.coils.FourierXYZCoil
+    desc.coils.FourierPlanarCoil
+    desc.coils.CoilSet
 
 Continuation
 ************
@@ -89,6 +102,8 @@ Grid
     desc.grid.LinearGrid
     desc.grid.QuadratureGrid
     desc.grid.ConcentricGrid
+    desc.grid.find_least_rational_surfaces
+    desc.grid.find_most_rational_surfaces
 
 IO
 ***
@@ -101,6 +116,22 @@ IO
     desc.io.InputReader
     desc.io.load
 
+Magnetic Fields
+***************
+
+.. autosummary::
+    :toctree: _api/magnetic_fields/
+    :recursive:
+
+    desc.magnetic_fields.ScaledMagneticField
+    desc.magnetic_fields.SumMagneticField
+    desc.magnetic_fields.ToroidalMagneticField
+    desc.magnetic_fields.VerticalMagneticField
+    desc.magnetic_fields.PoloidalMagneticField
+    desc.magnetic_fields.SplineMagneticField
+    desc.magnetic_fields.ScalarPotentialField
+    desc.magnetic_fields.field_line_integrate
+
 Objective Functions
 *******************
 
@@ -111,36 +142,39 @@ Objective Functions
 
     desc.objectives.AspectRatio
     desc.objectives.BootstrapRedlConsistency
+    desc.objectives.BScaleLength
     desc.objectives.CurrentDensity
     desc.objectives.Elongation
     desc.objectives.Energy
-    desc.objectives.FixAtomicNumber,
-    desc.objectives.FixAxisR,
-    desc.objectives.FixAxisZ,
-    desc.objectives.FixBoundaryR,
-    desc.objectives.FixBoundaryZ,
-    desc.objectives.FixCurrent,
-    desc.objectives.FixElectronDensity,
-    desc.objectives.FixElectronTemperature,
-    desc.objectives.FixIonTemperature,
-    desc.objectives.FixIota,
-    desc.objectives.FixModeR,
-    desc.objectives.FixModeZ,
-    desc.objectives.FixPressure,
-    desc.objectives.FixPsi,
-    desc.objectives.FixSumModesR,
-    desc.objectives.FixSumModesZ,
-    desc.objectives.FixThetaSFL,
+    desc.objectives.FixAtomicNumber
+    desc.objectives.FixAxisR
+    desc.objectives.FixAxisZ
+    desc.objectives.FixBoundaryR
+    desc.objectives.FixBoundaryZ
+    desc.objectives.FixCurrent
+    desc.objectives.FixElectronDensity
+    desc.objectives.FixElectronTemperature
+    desc.objectives.FixIonTemperature
+    desc.objectives.FixIota
+    desc.objectives.FixModeR
+    desc.objectives.FixModeZ
+    desc.objectives.FixPressure
+    desc.objectives.FixPsi
+    desc.objectives.FixSumModesR
+    desc.objectives.FixSumModesZ
+    desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
     desc.objectives.GenericObjective
-    desc.objectives.get_equilibrium_objective,
-    desc.objectives.get_fixed_axis_constraints,
-    desc.objectives.get_fixed_boundary_constraints,
-    desc.objectives.get_NAE_constraints,
+    desc.objectives.get_equilibrium_objective
+    desc.objectives.get_fixed_axis_constraints
+    desc.objectives.get_fixed_boundary_constraints
+    desc.objectives.get_NAE_constraints
     desc.objectives.HelicalForceBalance
+    desc.objectives.Isodynamicity
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability
+    desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.PlasmaVesselDistance
     desc.objectives.PrincipalCurvature

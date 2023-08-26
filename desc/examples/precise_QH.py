@@ -43,8 +43,10 @@ for n in range(1, eq.M + 1):
     print("====================================")
     objective = ObjectiveFunction(
         (
-            QuasisymmetryTwoTerm(helicity=(1, eq.NFP), grid=grid, normalize=False),
-            AspectRatio(target=8, weight=1e1, normalize=False),
+            QuasisymmetryTwoTerm(
+                eq=eqfam[-1], helicity=(1, eq.NFP), grid=grid, normalize=False
+            ),
+            AspectRatio(eq=eqfam[-1], target=8, weight=1e1, normalize=False),
         ),
         verbose=0,
     )
@@ -60,12 +62,12 @@ for n in range(1, eq.M + 1):
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > n, :
     ]
     constraints = (
-        ForceBalance(),  # J x B - grad(p) = 0
-        FixBoundaryR(modes=R_modes),
-        FixBoundaryZ(modes=Z_modes),
-        FixPressure(),
-        FixCurrent(),
-        FixPsi(),
+        ForceBalance(eq=eqfam[-1]),  # J x B - grad(p) = 0
+        FixBoundaryR(eq=eqfam[-1], modes=R_modes),
+        FixBoundaryZ(eq=eqfam[-1], modes=Z_modes),
+        FixPressure(eq=eqfam[-1]),
+        FixCurrent(eq=eqfam[-1]),
+        FixPsi(eq=eqfam[-1]),
     )
     optimizer = Optimizer("lsq-exact")
     eq_new, out = eqfam[-1].optimize(

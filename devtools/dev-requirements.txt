@@ -14,9 +14,9 @@ flake8 >= 5.0.0, <=6.0.0
 flake8-docstrings >= 1.0.0, <=2.0.0
 flake8-eradicate >= 1.0.0, <=2.0.0
 flake8-isort >=5.0.0, <= 6.0.0
+pre-commit
 
 # testing and benchmarking
-codecov
 markupsafe == 2.0.1
 nbmake
 pytest >= 5.0.0

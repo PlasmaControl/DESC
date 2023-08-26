@@ -11,10 +11,16 @@ from scipy.constants import mu_0
 
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
-from desc.compute.utils import compress, surface_averages
+from desc.compute.utils import surface_averages
 from desc.equilibrium import Equilibrium
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
-from desc.objectives import FixBoundaryR, FixBoundaryZ, ObjectiveFunction
+from desc.objectives import (
+    ObjectiveFunction,
+    get_fixed_axis_constraints,
+    get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
+)
 from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
@@ -104,27 +110,58 @@ class VMECIO:
             inputs["sym"] = True
 
         # profiles
-        r = np.sqrt(np.linspace(0, 1, file.variables["ns"][:]))
-        pres = file.variables["presf"][:]
-        inputs["pressure"] = SplineProfile(r, pres, name="pressure")
+        r = np.sqrt(np.linspace(0, 1, file.variables["ns"][:].filled()))
+        pres = file.variables["presf"][:].filled()
+        inputs["pressure"] = SplineProfile(pres, r, name="pressure")
         if profile == "iota":
-            iota = file.variables["iotaf"][:]
-            inputs["iota"] = SplineProfile(r, iota, name="iota")
+            iota = file.variables["iotaf"][:].filled()
+            inputs["iota"] = SplineProfile(iota, r, name="iota")
             inputs["current"] = None
         if profile == "current":
-            curr = 2 * np.pi / mu_0 * file.variables["buco"][:]
-            inputs["current"] = SplineProfile(r, curr, name="current")
+            curr = 2 * np.pi / mu_0 * file.variables["buco"][:].filled()
+            inputs["current"] = SplineProfile(curr, r, name="current")
             inputs["iota"] = None
-
-        file.close()
 
         # boundary
         m, n, Rb_lmn = ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
         m, n, Zb_lmn = ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
-        inputs["surface"] = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
+        surface = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
+        # need to create surface object here so we can tell it not to flip the
+        # orientation yet. If we did it here, it would mess up the self-consistency
+        # stuff later
+        inputs["surface"] = FourierRZToroidalSurface(
+            surface[:, 3],
+            surface[:, 4],
+            surface[:, 1:3].astype(int),
+            surface[:, 1:3].astype(int),
+            inputs["NFP"],
+            inputs["sym"],
+            check_orientation=False,
+        )
+
+        # axis
+        rax_cc = file.variables["raxis_cc"][:].filled()
+        zax_cs = file.variables["zaxis_cs"][:].filled()
+        try:
+            rax_cs = file.variables["raxis_cs"][:].filled()
+            rax_cc = file.variables["zaxis_cc"][:].filled()
+        except KeyError:
+            rax_cs = np.zeros_like(rax_cc)
+            zax_cc = np.zeros_like(zax_cs)
+        rax = np.concatenate([-rax_cs[1:][::-1], rax_cc])
+        zax = np.concatenate([-zax_cs[1:][::-1], zax_cc])
+        nax = len(rax_cc) - 1
+        nax = np.arange(-nax, nax + 1)
+        inputs["axis"] = np.vstack([nax, rax, zax]).T
+
+        file.close()
 
         # initialize Equilibrium
-        eq = Equilibrium(**inputs)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="Left handed coordinates detected"
+            )
+            eq = Equilibrium(**inputs)
 
         # R
         m, n, R_mn = ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)
@@ -138,20 +175,23 @@ class VMECIO:
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
-        eq = ensure_positive_jacobian(eq)
-
         # apply boundary conditions
-        constraints = (
-            FixBoundaryR(fixed_boundary=True),
-            FixBoundaryZ(fixed_boundary=True),
-        )
-        objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
-        _, _, _, _, _, _, project, recover = factorize_linear_constraints(
+
+        constraints = get_fixed_axis_constraints(
+            profiles=False, eq=eq
+        ) + get_fixed_boundary_constraints(iota=eq.iota, eq=eq)
+        constraints = maybe_add_self_consistency(eq, constraints)
+        objective = ObjectiveFunction(constraints, verbose=0)
+        objective.build()
+        _, _, _, _, _, project, recover = factorize_linear_constraints(
             constraints, objective.args
         )
         args = objective.unpack_state(recover(project(objective.x(eq))))
         for key, value in args.items():
             setattr(eq, key, value)
+
+        # now we flip the orientation at the very end
+        eq = ensure_positive_jacobian(eq)
 
         return eq
 
@@ -243,8 +283,11 @@ class VMECIO:
         )
 
         ier_flag = file.createVariable("ier_flag", np.int32)
-        ier_flag.long_name = "error flag (0 = solved equilibrium, 1 = unsolved)"
-        ier_flag[:] = int(not eq.solved)
+        ier_flag.long_name = (
+            "error flag (DESC always outputs 0; "
+            + "manually check for a good equilibrium solution)"
+        )
+        ier_flag[:] = 0
 
         lfreeb = file.createVariable("lfreeb__logical__", np.int32)
         lfreeb.long_name = "free boundary logical (0 = fixed boundary)"
@@ -388,9 +431,8 @@ class VMECIO:
         if eq.iota is not None:
             iotaf[:] = -eq.iota(r_full)  # negative sign for negative Jacobian
         else:
-            # value closest to axis will be nan
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_full, NFP=NFP)
-            iotaf[:] = -compress(grid, eq.compute("iota", grid=grid)["iota"])
+            iotaf[:] = -grid.compress(eq.compute("iota", grid=grid)["iota"])
 
         q_factor = file.createVariable("q_factor", np.float64, ("radius",))
         q_factor.long_name = "inverse rotational transform on full mesh"
@@ -405,7 +447,7 @@ class VMECIO:
             iotas[1:] = -eq.iota(r_half)  # negative sign for negative Jacobian
         else:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
-            iotas[1:] = -compress(grid, eq.compute("iota", grid=grid)["iota"])
+            iotas[1:] = -grid.compress(eq.compute("iota", grid=grid)["iota"])
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"
@@ -502,58 +544,63 @@ class VMECIO:
         # grid for computing radial profile data
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
         data = eq.compute(
-            ["<B^2>", "I", "G", "<J*B>", "sqrt(g)", "J^theta", "J^zeta", "D_Mercier"],
+            [
+                "<|B|^2>",
+                "I",
+                "G",
+                "<J*B>",
+                "sqrt(g)",
+                "J^theta*sqrt(g)",
+                "J^zeta",
+                "D_Mercier",
+            ],
             grid=grid,
         )
 
         bdotb = file.createVariable("bdotb", np.float64, ("radius",))
         bdotb.long_name = "flux surface average of magnetic field squared"
         bdotb.units = "T^2"
-        bdotb[:] = compress(grid, data["<B^2>"])
+        bdotb[:] = grid.compress(data["<|B|^2>"])
         bdotb[0] = 0
 
         # currents
         buco = file.createVariable("buco", np.float64, ("radius",))
         buco.long_name = "Boozer toroidal current I"
         buco.units = "T*m"
-        buco[:] = compress(grid, data["I"])
+        buco[:] = grid.compress(data["I"])
         buco[0] = 0
 
         bvco = file.createVariable("bvco", np.float64, ("radius",))
         bvco.long_name = "Boozer poloidal current G"
         bvco.units = "T*m"
-        bvco[:] = compress(grid, data["G"])
+        bvco[:] = grid.compress(data["G"])
         bvco[0] = 0
 
         jdotb = file.createVariable("jdotb", np.float64, ("radius",))
         jdotb.long_name = "flux surface average of J*B"
         jdotb.units = "N/m^3"
-        jdotb[:] = compress(grid, data["<J*B>"])
+        jdotb[:] = grid.compress(data["<J*B>"])
         jdotb[0] = 0
 
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^theta"
         jcuru.units = "A/m^3"
-        jcuru[:] = compress(
+        jcuru[:] = surface_averages(
             grid,
-            surface_averages(
-                grid,
-                data["sqrt(g)"] * data["J^theta"] / (2 * data["rho"]),
-                sqrt_g=data["sqrt(g)"],
-            ),
+            data["J^theta*sqrt(g)"] / (2 * data["rho"]),
+            sqrt_g=data["sqrt(g)"],
+            expand_out=False,
         )
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^zeta"
         jcurv.units = "A/m^3"
-        jcurv[:] = compress(
+        jcurv[:] = surface_averages(
             grid,
-            surface_averages(
-                grid,
-                data["sqrt(g)"] * data["J^zeta"] / (2 * data["rho"]),
-                sqrt_g=data["sqrt(g)"],
-            ),
+            data["sqrt(g)"] * data["J^zeta"] / (2 * data["rho"]),
+            sqrt_g=data["sqrt(g)"],
+            expand_out=False,
         )
         jcurv[0] = 0
 
@@ -561,38 +608,38 @@ class VMECIO:
         DShear = file.createVariable("DShear", np.float64, ("radius",))
         DShear.long_name = "Mercier stability criterion magnetic shear term"
         DShear.units = "1/Wb^2"
-        DShear[:] = compress(grid, data["D_shear"])
+        DShear[:] = grid.compress(data["D_shear"])
         DShear[0] = 0
 
         DCurr = file.createVariable("DCurr", np.float64, ("radius",))
         DCurr.long_name = "Mercier stability criterion toroidal current term"
         DCurr.units = "1/Wb^2"
-        DCurr[:] = compress(grid, data["D_current"])
+        DCurr[:] = grid.compress(data["D_current"])
         DCurr[0] = 0
 
         DWell = file.createVariable("DWell", np.float64, ("radius",))
         DWell.long_name = "Mercier stability criterion magnetic well term"
         DWell.units = "1/Wb^2"
-        DWell[:] = compress(grid, data["D_well"])
+        DWell[:] = grid.compress(data["D_well"])
         DWell[0] = 0
 
         DGeod = file.createVariable("DGeod", np.float64, ("radius",))
         DGeod.long_name = "Mercier stability criterion geodesic curvature term"
         DGeod.units = "1/Wb^2"
-        DGeod[:] = compress(grid, data["D_geodesic"])
+        DGeod[:] = grid.compress(data["D_geodesic"])
         DGeod[0] = 0
 
         DMerc = file.createVariable("DMerc", np.float64, ("radius",))
         DMerc.long_name = "Mercier stability criterion"
         DMerc.units = "1/Wb^2"
-        DMerc[:] = compress(grid, data["D_Mercier"])
+        DMerc[:] = grid.compress(data["D_Mercier"])
         DMerc[0] = 0
 
         timer.stop("parameters")
         if verbose > 1:
             timer.disp("parameters")
 
-        # indepentent variables (exact conversion)
+        # independent variables (exact conversion)
 
         # R axis
         idx = np.where(eq.R_basis.modes[:, 1] == 0)[0]
@@ -710,10 +757,23 @@ class VMECIO:
             cos_transform = Transform(
                 grid=grid, basis=cos_basis, build=False, build_pinv=True
             )
+
+            def cosfit(x):
+                y = cos_transform.fit(x)
+                return np.where(cos_transform.basis.modes[:, 1] < 0, -y, y)
+
+            def sinfit(x):
+                y = sin_transform.fit(x)
+                return np.where(sin_transform.basis.modes[:, 1] < 0, -y, y)
+
         else:
             full_transform = Transform(
                 grid=grid, basis=full_basis, build=False, build_pinv=True
             )
+
+            def fullfit(x):
+                y = full_transform.fit(x)
+                return np.where(full_transform.basis.modes[:, 1] < 0, -y, y)
 
         rmin_surf = file.createVariable("rmin_surf", np.float64)
         rmin_surf.long_name = "minimum R coordinate range"
@@ -733,12 +793,14 @@ class VMECIO:
         # half grid quantities
         half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
         data_half_grid = eq.compute(
-            ["J", "|B|", "B_rho", "B_theta", "B_zeta"], grid=half_grid
+            ["J", "|B|", "B_rho", "B_theta", "B_zeta", "sqrt(g)"], grid=half_grid
         )
 
         # full grid quantities
         full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
-        data_full_grid = eq.compute(["J", "B_rho", "B_theta", "B_zeta"], grid=full_grid)
+        data_full_grid = eq.compute(
+            ["J", "B_rho", "B_theta", "B_zeta", "J^theta*sqrt(g)"], grid=full_grid
+        )
 
         # Jacobian
         timer.start("Jacobian")
@@ -767,9 +829,9 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         gmnc[0, :] = 0
         gmnc[1:, :] = -c  # negative sign for negative Jacobian
@@ -806,7 +868,7 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
@@ -849,7 +911,7 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
@@ -892,7 +954,7 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
@@ -933,18 +995,18 @@ class VMECIO:
         x_mn = np.zeros((surfs, m.size))
         for i in range(surfs):
             if eq.sym:
-                x_mn[i, :] = sin_transform.fit(data[i, :])
+                x_mn[i, :] = sinfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
-        bsubsmns[:, :] = -s  # negative sign for negative Jacobian
-        bsubsmns[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
+        bsubsmns[:, :] = s
+        bsubsmns[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # Todo: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
-            bsubsmnc[:, :] = -c
-            bsubsmnc[0, :] = -(
+            bsubsmnc[:, :] = c
+            bsubsmnc[0, :] = (
                 c[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("B_psi")
@@ -981,9 +1043,9 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubumnc[0, :] = 0
         bsubumnc[1:, :] = -c  # negative sign for negative Jacobian
@@ -1024,9 +1086,9 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubvmnc[0, :] = 0
         bsubvmnc[1:, :] = c
@@ -1037,10 +1099,9 @@ class VMECIO:
         if verbose > 1:
             timer.disp("B_zeta")
 
-        # J^theta * sqrt(g)   # noqa: E800
-        timer.start("J^theta")
+        timer.start("J^theta*sqrt(g)")
         if verbose > 0:
-            print("Saving J^theta")
+            print("Saving J^theta*sqrt(g)")
         currumnc = file.createVariable(
             "currumnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -1059,11 +1120,7 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            (
-                data_full_grid["J^theta"]
-                * data_full_grid["sqrt(g)"]
-                / (2 * data_full_grid["rho"])
-            )
+            (data_full_grid["J^theta*sqrt(g)"] / (2 * data_full_grid["rho"]))
             .reshape(
                 (full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta), order="F"
             )
@@ -1073,28 +1130,27 @@ class VMECIO:
         x_mn = np.zeros((surfs, m.size))
         for i in range(surfs):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         currumnc[:, :] = c
         currumnc[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # Todo: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currumns[:, :] = s
             currumns[0, :] = (
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
-        timer.stop("J^theta")
+        timer.stop("J^theta*sqrt(g)")
         if verbose > 1:
-            timer.disp("J^theta")
+            timer.disp("J^theta*sqrt(g)")
 
-        # J^zeta * sqrt(g)   # noqa: E800
-        timer.start("J^zeta")
+        timer.start("J^zeta*sqrt(g)")
         if verbose > 0:
-            print("Saving J^zeta")
+            print("Saving J^zeta*sqrt(g)")
         currvmnc = file.createVariable(
             "currvmnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -1127,33 +1183,39 @@ class VMECIO:
         x_mn = np.zeros((surfs, m.size))
         for i in range(surfs):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         currvmnc[:, :] = -c  # negative sign for negative Jacobian
         currvmnc[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # Todo: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currvmns[:, :] = -s
             currumns[0, :] = -(
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
-        timer.stop("J^zeta")
+        timer.stop("J^zeta*sqrt(g)")
         if verbose > 1:
-            timer.disp("J^zeta")
+            timer.disp("J^zeta*sqrt(g)")
 
         # TODO: these output quantities need to be added
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
         bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
-        # beta_vol = something like p/(B^2-p) ? It's not <beta>_vol(r)
+        bdotgradv.long_name = "Not Implemented: This output is hard-coded to 0!"
+        bdotgradv.units = "None"
+        # beta_vol = something like p/(|B|^2 - p) ? It's not <beta>_vol(r)
         beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
         beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
+        beta_vol.long_name = "Not Implemented: This output is hard-coded to 0!"
+        beta_vol.units = "None"
         # betaxis = beta_vol at the axis?
         betaxis = file.createVariable("betaxis", np.float64)
         betaxis[:] = 0
+        betaxis.long_name = "Not Implemented: This output is hard-coded to 0!"
+        betaxis.units = "None"
         """
         IonLarmor = file.createVariable("IonLarmor", np.float64)
         IonLarmor[:] = 0.0

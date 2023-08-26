@@ -3,7 +3,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-
 from scipy.interpolate import interp1d
 
 from desc.basis import (
@@ -13,6 +12,8 @@ from desc.basis import (
     PowerSeries,
 )
 from desc.coils import CoilSet, FourierXYZCoil
+from desc.compute import data_index
+from desc.compute.utils import surface_averages
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -50,6 +51,15 @@ def test_kwarg_warning(DummyStellarator):
     eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
     with pytest.raises(AssertionError):
         fig, ax = plot_1d(eq, "psi_rr", not_a_kwarg=True)
+    return None
+
+
+@pytest.mark.unit
+def test_kwarg_future_warning(DummyStellarator):
+    """Test that passing in deprecated kwargs throws a warning."""
+    eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
+    with pytest.warns(FutureWarning):
+        fig, ax = plot_surfaces(eq, zeta=2)
     return None
 
 
@@ -255,6 +265,78 @@ def test_3d_rt(DSHAPE_current):
 
 
 @pytest.mark.unit
+def test_plot_fsa_axis_limit():
+    """Test magnetic axis limit of flux surface average is plotted."""
+    eq = get("W7-X")
+    rho = np.linspace(0, 1, 10)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho)
+    assert grid.axis.size
+
+    name = "J*B"
+    assert (
+        "<" + name + ">" in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
+    # should forward computation to compute function
+    _, _, plot_data = plot_fsa(
+        eq=eq,
+        name=name,
+        rho=rho,
+        M=eq.M_grid,
+        N=eq.N_grid,
+        with_sqrt_g=True,
+        return_data=True,
+    )
+    desired = grid.compress(
+        eq.compute(names="<" + name + ">", grid=grid)["<" + name + ">"]
+    )
+    np.testing.assert_allclose(plot_data["<" + name + ">"], desired, equal_nan=False)
+
+    name = "B0"
+    assert (
+        "<" + name + ">" not in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
+    # should automatically compute axis limit
+    _, _, plot_data = plot_fsa(
+        eq=eq,
+        name=name,
+        rho=rho,
+        M=eq.M_grid,
+        N=eq.N_grid,
+        with_sqrt_g=True,
+        return_data=True,
+    )
+    data = eq.compute(names=[name, "sqrt(g)", "sqrt(g)_r"], grid=grid)
+    desired = surface_averages(
+        grid=grid,
+        q=data[name],
+        sqrt_g=grid.replace_at_axis(data["sqrt(g)"], data["sqrt(g)_r"], copy=True),
+        expand_out=False,
+    )
+    np.testing.assert_allclose(
+        plot_data["<" + name + ">_fsa"], desired, equal_nan=False
+    )
+
+    name = "|B|"
+    assert (
+        "<" + name + ">" in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
+    _, _, plot_data = plot_fsa(
+        eq=eq,
+        name=name,
+        rho=rho,
+        M=eq.M_grid,
+        N=eq.N_grid,
+        with_sqrt_g=False,  # Test that does not compute data_index["<|B|>"]
+        return_data=True,
+    )
+    data = eq.compute(names=name, grid=grid)
+    desired = surface_averages(grid=grid, q=data[name], expand_out=False)
+    np.testing.assert_allclose(
+        plot_data["<" + name + ">_fsa"], desired, equal_nan=False
+    )
+
+
+@pytest.mark.unit
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_fsa_I(DSHAPE_current):
@@ -286,8 +368,8 @@ def test_fsa_G(DSHAPE_current):
 def test_fsa_F_normalized(DSHAPE_current):
     """Test plotting flux surface average normalized force error on log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
-    ax.set_ylim([1e-5, 1e-2])
+    fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True, norm_name="<|grad(p)|>_vol")
+    ax.set_ylim([1e-6, 1e-3])
     return fig
 
 
@@ -711,7 +793,7 @@ def test_plot_boozer_surface():
     """Test plotting B in boozer coordinates."""
     eq = get("WISTELL-A")
     fig, ax, data = plot_boozer_surface(
-        eq, M_booz=eq.M, N_booz=eq.N, return_data=True, fill=True
+        eq, M_booz=eq.M, N_booz=eq.N, return_data=True, rho=0.5, fieldlines=4
     )
     for string in [
         "|B|",

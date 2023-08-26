@@ -653,6 +653,9 @@ class ProximalProjection(ObjectiveFunction):
                 constraints=self._linear_constraints,
                 **self._solve_options,
             )
+            # reset to full args because perturb step overwrites constraint args
+            self._objective.set_args(*self._full_args)
+            self._constraint.set_args(*self._full_args)
             xopt = self._objective.x(self._eq)
             xeq = self._constraint.x(self._eq)
             self._allx.append(x)

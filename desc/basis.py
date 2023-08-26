@@ -1,5 +1,6 @@
 """Classes for spectral bases and functions for evaluation."""
 
+import functools
 from abc import ABC, abstractmethod
 from math import factorial
 
@@ -773,14 +774,7 @@ class ZernikePolynomial(Basis):
             lm = lm[lmidx]
             m = m[midx]
 
-        # some logic here to use the fastest method, assuming that you're not using
-        # "unique" within jit/AD since that doesn't work
-        if unique and (np.max(modes[:, 0]) <= 24):
-            radial_fun = zernike_radial_poly
-        else:
-            radial_fun = zernike_radial
-
-        radial = radial_fun(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
 
         if unique:
@@ -817,7 +811,7 @@ class ZernikePolynomial(Basis):
 
 
 class ChebyshevDoubleFourierBasis(Basis):
-    """3D basis: tensor product of Chebyshev poynomials and two Fourier series.
+    """3D basis: tensor product of Chebyshev polynomials and two Fourier series.
 
     Fourier series in both the poloidal and toroidal coordinates.
 
@@ -856,7 +850,7 @@ class ChebyshevDoubleFourierBasis(Basis):
         Parameters
         ----------
         L : int
-            Maximum radial resoltuion.
+            Maximum radial resolution.
         M : int
             Maximum poloidal resolution.
         N : int
@@ -1117,6 +1111,8 @@ class FourierZernikeBasis(Basis):
         lm = modes[:, :2]
 
         if unique:
+            # TODO: can avoid this here by using grid.unique_idx etc
+            # and adding unique_modes attributes to basis
             _, ridx, routidx = np.unique(
                 r, return_index=True, return_inverse=True, axis=0
             )
@@ -1142,14 +1138,7 @@ class FourierZernikeBasis(Basis):
             m = m[midx]
             n = n[nidx]
 
-        # some logic here to use the fastest method, assuming that you're not using
-        # "unique" within jit/AD since that doesn't work
-        if unique and (np.max(modes[:, 0]) <= 24):
-            radial_fun = zernike_radial_poly
-        else:
-            radial_fun = zernike_radial
-
-        radial = radial_fun(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
         toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
         if unique:
@@ -1192,7 +1181,7 @@ class FourierZernikeBasis(Basis):
             self._set_up()
 
 
-def polyder_vec(p, m):
+def polyder_vec(p, m, exact=False):
     """Vectorized version of polyder.
 
     For differentiating multiple polynomials of the same degree
@@ -1204,6 +1193,9 @@ def polyder_vec(p, m):
         each column is a power of x
     m : int >=0
         order of derivative
+    exact : bool
+        Whether to use exact integer arithmetic (not compatible with JAX, but may be
+        needed for very high degree polynomials)
 
     Returns
     -------
@@ -1211,6 +1203,13 @@ def polyder_vec(p, m):
         polynomial coefficients for derivative in descending order
 
     """
+    if exact:
+        return _polyder_exact(p, m)
+    else:
+        return _polyder_jax(p, m)
+
+
+def _polyder_exact(p, m):
     factorial = np.math.factorial
     m = np.asarray(m, dtype=int)  # order of derivative
     p = np.atleast_2d(p)
@@ -1224,6 +1223,24 @@ def polyder_vec(p, m):
     p = np.roll(D * p, m, axis=1)
     idx = np.arange(p.shape[1])
     p = np.where(idx < m, 0, p)
+    return p
+
+
+@jit
+def _polyder_jax(p, m):
+    p = jnp.atleast_2d(p)
+    m = jnp.asarray(m).astype(int)
+    order = p.shape[1] - 1
+    D = jnp.arange(order, -1, -1)
+
+    def body(i, Di):
+        return Di * jnp.maximum(D - i, 1)
+
+    D = fori_loop(0, m, body, jnp.ones_like(D))
+
+    p = jnp.roll(D * p, m, axis=1)
+    idx = jnp.arange(p.shape[1])
+    p = jnp.where(idx < m, 0, p)
 
     return p
 
@@ -1253,31 +1270,36 @@ def polyval_vec(p, x, prec=None):
         Each row corresponds to a polynomial, each column to a value of x
 
     """
+    if prec is not None and prec > 18:
+        return _polyval_exact(p, x, prec)
+    else:
+        return _polyval_jax(p, x)
+
+
+def _polyval_exact(p, x, prec):
     p = np.atleast_2d(p)
     x = np.atleast_1d(x).flatten()
-    # for modest to large arrays, faster to find unique values and
-    # only evaluate those. Have to cast to float because np.unique
-    # can't handle object types like python native int
-    unq_x, xidx = np.unique(x, return_inverse=True)
-    _, pidx, outidx = np.unique(
-        p.astype(float), return_index=True, return_inverse=True, axis=0
-    )
-    unq_p = p[pidx]
+    # TODO: possibly multithread this bit
+    mpmath.mp.dps = prec
+    y = np.array([np.asarray(mpmath.polyval(list(pi), x)) for pi in p])
+    return y.astype(float)
 
-    if prec is not None and prec > 18:
-        # TODO: possibly multithread this bit
-        mpmath.mp.dps = prec
-        y = np.array([np.asarray(mpmath.polyval(list(pi), unq_x)) for pi in unq_p])
-    else:
-        npoly = unq_p.shape[0]  # number of polynomials
-        order = unq_p.shape[1]  # order of polynomials
-        nx = len(unq_x)  # number of coordinates
-        y = np.zeros((npoly, nx))
 
-        for k in range(order):
-            y = y * unq_x + np.atleast_2d(unq_p[:, k]).T
+@jit
+def _polyval_jax(p, x):
+    p = jnp.atleast_2d(p)
+    x = jnp.atleast_1d(x).flatten()
+    npoly = p.shape[0]  # number of polynomials
+    order = p.shape[1]  # order of polynomials
+    nx = len(x)  # number of coordinates
+    y = jnp.zeros((npoly, nx))
 
-    return y[outidx][:, xidx].astype(float)
+    def body(k, y):
+        return y * x + jnp.atleast_2d(p[:, k]).T
+
+    y = fori_loop(0, order, body, y)
+
+    return y.astype(float)
 
 
 def zernike_radial_coeffs(l, m, exact=True):
@@ -1337,7 +1359,7 @@ def zernike_radial_coeffs(l, m, exact=True):
     return c
 
 
-def zernike_radial_poly(r, l, m, dr=0):
+def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
     """Radial part of zernike polynomials.
 
     Evaluates basis functions using numpy to
@@ -1356,6 +1378,9 @@ def zernike_radial_poly(r, l, m, dr=0):
         azimuthal mode number(s)
     dr : int
         order of derivative (Default = 0)
+    exact : {"auto", True, False}
+        Whether to use exact/extended precision arithmetic. Slower but more accurate.
+        "auto" will use higher accuracy when needed.
 
     Returns
     -------
@@ -1363,14 +1388,20 @@ def zernike_radial_poly(r, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    coeffs = zernike_radial_coeffs(l, m)
-    lmax = np.max(l)
-    coeffs = polyder_vec(coeffs, dr)
-    # this should give accuracy of ~1e-10 in the eval'd polynomials
-    prec = int(0.4 * lmax + 8.4)
+    if exact == "auto":
+        exact = np.max(l) > 54
+    if exact:
+        # this should give accuracy of ~1e-10 in the eval'd polynomials
+        lmax = np.max(l)
+        prec = int(0.4 * lmax + 8.4)
+    else:
+        prec = None
+    coeffs = zernike_radial_coeffs(l, m, exact=exact)
+    coeffs = polyder_vec(coeffs, dr, exact=exact)
     return polyval_vec(coeffs, r, prec=prec).T
 
 
+@functools.partial(jit, static_argnums=3)
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
@@ -1493,6 +1524,7 @@ def powers(rho, l, dr=0):
     return polyval_vec(coeffs, rho).T
 
 
+@functools.partial(jit, static_argnums=2)
 def chebyshev(r, l, dr=0):
     """Shifted Chebyshev polynomial.
 
@@ -1511,8 +1543,8 @@ def chebyshev(r, l, dr=0):
         basis function(s) evaluated at specified points
 
     """
+    r, l = map(jnp.asarray, (r, l))
     x = 2 * r - 1  # shift
-    x, l, dr = map(jnp.asarray, (x, l, dr))
     if dr == 0:
         return jnp.cos(l * jnp.arccos(x))
     else:

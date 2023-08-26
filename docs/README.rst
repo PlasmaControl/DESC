@@ -1,4 +1,4 @@
-To build the documentation locally, from the DESC directory:
+To build the documentation locally, install the developer requirements and run from the DESC directory:
 
 .. code-block:: sh
 

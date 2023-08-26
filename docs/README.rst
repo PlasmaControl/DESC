@@ -3,11 +3,9 @@ To build the documentation locally, from the DESC directory:
 .. code-block:: sh
 
     cd docs
-    pip install sphinx
-    pip install sphinx-rtd-theme
-    pip install sphinx-argparse
-    make html
+    conda install -c conda-forge pandoc
+    make clean html
 
 will build the documentation in the _build/html/ folder of the docs folder.
 
-To build the pdf, type ``make pdf`` from the docs/ directory.
+To build the pdf, type ``make clean latexpdf`` from the docs/ directory.

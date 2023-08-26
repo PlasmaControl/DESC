@@ -958,9 +958,7 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         X = coords[:, 0]
         Y = coords[:, 1]
         Z = coords[:, 2]
-        lengths = jnp.sqrt(
-            (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2
-        )
+        lengths = jnp.sqrt(jnp.diff(X) ** 2 + jnp.diff(Y) ** 2 + jnp.diff(Z) ** 2)
         data["length"] = jnp.sum(lengths)
     else:
         T = jnp.linalg.norm(data["x_s"], axis=-1)

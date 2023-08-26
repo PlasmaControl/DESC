@@ -2,6 +2,8 @@
 
 from scipy.optimize import OptimizeResult
 
+import numpy as np
+
 from desc.backend import jnp
 
 from .utils import (
@@ -13,7 +15,7 @@ from .utils import (
 
 
 def sgd(
-    fun,
+    obj,
     x0,
     grad,
     args=(),
@@ -93,9 +95,15 @@ def sgd(
     N = x0.size
     x = x0.copy()
     v = jnp.zeros_like(x)
-    f = fun(x, *args)
+    fd_step = options.pop("fd_step", 0.01)
+    num_grad = options.pop("num_grad", 1)
+    fd_step0 = fd_step
+    
+    fx = obj.compute_scaled_error(x, *args)
+    f = np.linalg.norm(fx)**2/2
     nfev += 1
-    g = grad(x, *args)
+    grad_args = (fx, fd_step, num_grad)
+    g = grad(x, *grad_args)
     ngev += 1
 
     if maxiter is None:
@@ -107,6 +115,7 @@ def sgd(
     return_all = options.pop("return_all", True)
     alpha = options.pop("alpha", 1e-2 * x_norm / g_norm)
     beta = options.pop("beta", 0.9)
+    alpha0 = alpha
     assert len(options) == 0, "sgd got an unexpected option {}".format(options.keys())
 
     success = None
@@ -119,6 +128,13 @@ def sgd(
 
     if return_all:
         allx = [x]
+
+    v = beta * v + (1 - beta) * g
+    x = x - alpha * v
+    obj._objective._update_equilibrium(obj.recover(x),store=True)
+    fx = obj.compute_scaled_error(x, *args)
+
+    iteration += 1
 
     while True:
         success, message = check_termination(
@@ -142,14 +158,20 @@ def sgd(
         )
         if success is not None:
             break
+        
+        alpha = alpha0/(1+iteration)**0.602
+        fd_step = fd_step0/(iteration+1)**0.101
+        grad_args = (fx, fd_step, num_grad)
 
+        g = grad(x, *grad_args)
         v = beta * v + (1 - beta) * g
         x = x - alpha * v
-        g = grad(x, *args)
+        obj._objective._update_equilibrium(obj.recover(x),store=True)
         ngev += 1
         step_norm = jnp.linalg.norm(alpha * v, ord=xnorm_ord)
         g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
-        fnew = fun(x, *args)
+        fx = obj.compute_scaled_error(x, *args)
+        fnew = np.linalg.norm(fx)**2/2
         nfev += 1
         df = f - fnew
         f = fnew
@@ -166,6 +188,8 @@ def sgd(
                 message = STATUS_MESSAGES["callback"]
 
         iteration += 1
+    obj._objective._update_equilibrium(obj.recover(x),store=True)
+    success = True
 
     result = OptimizeResult(
         x=x,

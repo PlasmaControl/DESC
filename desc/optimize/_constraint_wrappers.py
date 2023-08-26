@@ -144,9 +144,11 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     def x(self, eq):
         """Return the reduced state vector from the Equilibrium eq."""
-        x = np.zeros((self._dim_x_full,))
-        for arg in self.args:
-            x[self.x_idx[arg]] = getattr(eq, arg)
+#        x = np.zeros((self._dim_x_full,))
+#        for arg in self.args:
+#            x[self.x_idx[arg]] = getattr(eq, arg)
+        x = self._objective.x(eq)
+
         return self.project(x)
 
     def unpack_state(self, x):

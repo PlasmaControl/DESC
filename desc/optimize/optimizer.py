@@ -190,12 +190,12 @@ class Optimizer(IOAble):
 #            except ValueError:
 #                objective.build(eq, verbose=verbose)
 #                objective.compile(mode, verbose=verbose)
-        if nonlinear_constraint is not None and not nonlinear_constraint.compiled:
-            try:
-                nonlinear_constraint.compile("lsq", verbose)
-            except ValueError:
-                nonlinear_constraint.build(eq, verbose=verbose)
-                nonlinear_constraint.compile("lsq", verbose)
+#        if nonlinear_constraint is not None and not nonlinear_constraint.compiled:
+#            try:
+#                nonlinear_constraint.compile("lsq", verbose)
+#            except ValueError:
+#                nonlinear_constraint.build(eq, verbose=verbose)
+#                nonlinear_constraint.compile("lsq", verbose)
 
         if objective.scalar and (not optimizers[method]["scalar"]):
             warnings.warn(

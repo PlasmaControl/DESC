@@ -373,6 +373,7 @@ class GX(_Objective):
                 
         stdout = 'stdout.out_' + t
         stderr = 'stderr.out_' + t
+        print("bmag is " + str(self.bmag_gx))
         self.run_gx(t)
 
         out_file = self.path_in + '_' + t + '.nc'
@@ -547,7 +548,7 @@ class GX(_Objective):
 
         f = open(path_in,"r")
         data = f.read()
-
+        
         data = data.replace(geo_temp,geo)
         f.close()
 

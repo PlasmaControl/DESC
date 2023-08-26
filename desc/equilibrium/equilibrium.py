@@ -1633,7 +1633,6 @@ class Equilibrium(IOAble):
                 "Solving equilibrium with poincare XS as BC is not supported yet "
                 + "on master branch."
             )
-
         result = optimizer.optimize(
             eq,
             objective,
@@ -1646,7 +1645,6 @@ class Equilibrium(IOAble):
             maxiter=maxiter,
             options=options,
         )
-
         if verbose > 0:
             print("Start of solver")
             objective.print_value(objective.x(eq))
@@ -1733,7 +1731,8 @@ class Equilibrium(IOAble):
             eq = self.copy()
         else:
             eq = self
-
+        
+#        print("eq x initial is " + str(objective.x(eq)))
         result = optimizer.optimize(
             eq,
             objective,
@@ -1747,7 +1746,8 @@ class Equilibrium(IOAble):
             maxiter=maxiter,
             options=options,
         )
-
+        
+        print("eq x final is " + str(objective.x(eq)))
         if verbose > 0:
             print("Start of solver")
             objective.print_value(objective.x(eq))

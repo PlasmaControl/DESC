@@ -2,6 +2,8 @@ from scipy.optimize import NonlinearConstraint
 
 from desc.backend import jnp
 
+import numpy as np
+
 from .aug_lagrangian import fmin_auglag
 from .aug_lagrangian_ls import lsq_auglag
 from .fmin_scalar import fmintr
@@ -444,10 +446,55 @@ def _optimize_desc_stochastic(
     """
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
+
+    def grad_fd(x_reduced,x0,f):
+        x = x_reduced
+        fx = f
+        print("FX IS " + str(fx))
+        dx = 1.0e-1*np.abs(x)               
+        x = jnp.asarray(x).at[x == 0].set(0.001)
+
+        tang = np.eye(len(dx))
+        jac = np.zeros((len(fx),len(tang)))
+        for i in range(len(tang)):
+            tang[i][i] = dx[i]
+        for i in range(len(tang)):
+            df = (objective.compute(x_reduced+tang[:,i].T) - objective.compute(x_reduced-tang[:,i].T))/(np.linalg.norm(objective.recover(tang[:,i].T)))
+            jac[:,i] = df
+        return fx.T @ jac
+
+    def grad_spsa(x_reduced,*args):
+        fx, fd_step, num_grad = args
+
+        x = x_reduced
+        h = fd_step*jnp.abs(x)
+        h = jnp.asarray(h).at[h == 0].set(min(h[jnp.nonzero(h)]))
+
+        jac = jnp.zeros((len(fx),len(h)))
+        
+        for j in range(num_grad):
+            djac = np.zeros((len(fx),len(h)))
+            dx = (np.random.binomial(1,0.5,x.shape)*2-1)*h
+            print("dx is " + str(dx))
+            
+            print("x + dx is " + str(x + dx))
+            ob = objective.compute_scaled_error(x + dx)
+            print("ob is " + str(ob))
+            obm = objective.compute_scaled_error(x - dx)
+            df = ob - obm
+            for i in range(len(x)):
+                zx = np.zeros(len(x))
+                zx[i] = dx[i]
+                djac[:,i] = jnp.abs(dx[i])/dx[i]*df/(2*jnp.linalg.norm(objective.recover(zx)))
+            jac = jac + djac
+        jac = jac/num_grad
+
+        return fx.T @ jac
+
     result = sgd(
-        objective.compute_scalar,
+        objective,
         x0=x0,
-        grad=objective.grad,
+        grad=grad_spsa,
         args=(objective.constants,),
         method=method,
         ftol=stoptol["ftol"],

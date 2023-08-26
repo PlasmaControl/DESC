@@ -434,6 +434,11 @@ def run_regcoil(  # noqa: C901 fxn too complex
             mpl.rc("ytick", labelsize=7)
             plt.title(f"External TF fraction = {external_TF_fraction}")
 
+            plt.savefig(
+                f"{dirname}/Scan_ext_TF{external_TF_fraction}"
+                f"_M{basis_M}_N{basis_N}_chi_B_plot.png"
+            )
+
             ########################################################
             # Plot total current potential
             ########################################################

@@ -221,7 +221,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
             NFP=1,  # number of (toroidal) field periods
         )
     # make basis for current potential double fourier series
-    curr_pot_basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=eq.NFP)
+    sym = "sin" if eq.sym else False
+    curr_pot_basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=eq.NFP, sym=sym)
     curr_pot_trans = Transform(sgrid, curr_pot_basis, derivs=1, build=True)
 
     # calc quantities on winding surface (source)

@@ -861,7 +861,7 @@ def test_constrained_AL_lsq():
         FixBoundaryZ(eq=eq),  # fix Z shape but not R
         FixPressure(eq=eq),  # fix pressure profile
         FixIota(eq=eq),  # fix rotational transform profile
-        FixPsi(eq=eq),  # fix total toroidal magnetic flux
+        FixPsi(eq=eq, bounds=(eq.Psi * 0.99, eq.Psi * 1.01)),  # linear inequality
     )
     # some random constraints to keep the shape from getting wacky
     V = eq.compute("V")["V"]

@@ -1509,6 +1509,11 @@ class Equilibrium(IOAble):
         N=None,
         ntheta=None,
         spectral_indexing="ansi",
+        L_well=0,
+        M_well=2,
+        L_omni=0,
+        M_omni=1,
+        N_omni=1,
         **kwargs,
     ):
         """Initialize an Equilibrium from a near-axis solution.
@@ -1569,6 +1574,11 @@ class Equilibrium(IOAble):
                     NFP=na_eq.nfp,
                 ),
                 "surface": None,
+                "L_well": L_well,
+                "M_well": M_well,
+                "L_omni": L_omni,
+                "M_omni": M_omni,
+                "N_omni": N_omni,
             }
         except AttributeError as e:
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e

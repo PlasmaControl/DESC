@@ -8,6 +8,8 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
+from desc.backend import fori_loop, jit, jnp
+
 
 class Timer:
     """Simple object for organizing timing info.
@@ -366,22 +368,27 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
     return isalmostequal(np.diff(x, axis=axis), rtol=rtol, atol=atol, axis=axis)
 
 
+@jit
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
     """Copy coefficients from one resolution to another."""
-    modes_old, modes_new = np.atleast_1d(modes_old), np.atleast_1d(modes_new)
+    modes_old, modes_new = jnp.atleast_1d(modes_old), jnp.atleast_1d(modes_new)
+
     if modes_old.ndim == 1:
         modes_old = modes_old.reshape((-1, 1))
     if modes_new.ndim == 1:
         modes_new = modes_new.reshape((-1, 1))
 
-    num_modes = modes_new.shape[0]
     if c_new is None:
-        c_new = np.zeros((num_modes,))
+        c_new = jnp.zeros((modes_new.shape[0],))
+    c_old, c_new = jnp.asarray(c_old), jnp.asarray(c_new)
 
-    for i in range(num_modes):
-        idx = np.where((modes_old == modes_new[i, :]).all(axis=1))[0]
-        if len(idx):
-            c_new[i] = c_old[idx]
+    def body(i, c_new):
+        mask = (modes_old[i, :] == modes_new).all(axis=1)
+        c_new = jnp.where(mask, c_old[i], c_new)
+        return c_new
+
+    if c_old.size:
+        c_new = fori_loop(0, modes_old.shape[0], body, c_new)
     return c_new
 
 
@@ -427,7 +434,7 @@ def combination_permutation(m, n, equals=True):
     n : int
         Maximum sum
     equals : bool
-        If True, return only where sum == n, else retun where sum <= n
+        If True, return only where sum == n, else return where sum <= n
 
     Returns
     -------
@@ -483,7 +490,7 @@ def get_instance(things, cls):
 
 
 def parse_argname_change(arg, kwargs, oldname, newname):
-    """Warn and parse arguemnts whose names have changed."""
+    """Warn and parse arguments whose names have changed."""
     if oldname in kwargs:
         warnings.warn(
             FutureWarning(

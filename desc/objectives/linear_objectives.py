@@ -1988,7 +1988,7 @@ class FixAnisotropy(_FixProfile):
 
         Parameters
         ----------
-        d_lmn : ndarray
+        a_lmn : ndarray
             parameters of the anisotropic pressure profile.
 
         Returns

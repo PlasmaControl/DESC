@@ -250,7 +250,7 @@ def get_derivs(keys, obj, has_axis=False):
     return {key: np.unique(val, axis=0).tolist() for key, val in derivs.items()}
 
 
-def get_profiles(keys, obj, grid=None, has_axis=False, **kwargs):
+def get_profiles(keys, obj, grid=None, has_axis=False, jitable=False, **kwargs):
     """Get profiles needed to compute a given quantity on a given grid.
 
     Parameters
@@ -263,6 +263,8 @@ def get_profiles(keys, obj, grid=None, has_axis=False, **kwargs):
         Grid to compute quantity on.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
+    jitable: bool
+        Whether to skip certain checks so that this operation works under JIT
 
     Returns
     -------
@@ -288,6 +290,8 @@ def get_profiles(keys, obj, grid=None, has_axis=False, **kwargs):
         return profiles
     for val in profiles.values():
         if val is not None:
+            if jitable and hasattr(val, "_transform"):
+                val._transform.method = "jitable"
             val.grid = grid
     return profiles
 
@@ -327,7 +331,7 @@ def get_params(keys, obj, has_axis=False, **kwargs):
     return params
 
 
-def get_transforms(keys, obj, grid, **kwargs):
+def get_transforms(keys, obj, grid, jitable=False, **kwargs):
     """Get transforms needed to compute a given quantity on a given grid.
 
     Parameters
@@ -338,6 +342,8 @@ def get_transforms(keys, obj, grid, **kwargs):
         Object to compute quantity for.
     grid : Grid
         Grid to compute quantity on
+    jitable: bool
+        Whether to skip certain checks so that this operation works under JIT
 
     Returns
     -------
@@ -349,13 +355,18 @@ def get_transforms(keys, obj, grid, **kwargs):
     from desc.basis import DoubleFourierSeries
     from desc.transform import Transform
 
+    method = "jitable" if jitable else "auto"
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys, obj, has_axis=grid.axis.size)
     transforms = {"grid": grid}
     for c in derivs.keys():
         if hasattr(obj, c + "_basis"):
             transforms[c] = Transform(
-                grid, getattr(obj, c + "_basis"), derivs=derivs[c], build=True
+                grid,
+                getattr(obj, c + "_basis"),
+                derivs=derivs[c],
+                build=True,
+                method=method,
             )
         elif c == "B":
             transforms["B"] = Transform(
@@ -369,6 +380,7 @@ def get_transforms(keys, obj, grid, **kwargs):
                 derivs=derivs["B"],
                 build=True,
                 build_pinv=True,
+                method=method,
             )
         elif c == "w":
             transforms["w"] = Transform(
@@ -382,6 +394,7 @@ def get_transforms(keys, obj, grid, **kwargs):
                 derivs=derivs["w"],
                 build=True,
                 build_pinv=True,
+                method=method,
             )
         elif c == "rotmat":
             transforms["rotmat"] = obj.rotmat
@@ -827,8 +840,9 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
     # previous paragraph.
     masks = cond(
         has_endpoint_dupe,
-        lambda: put(masks, jnp.array([0, -1]), masks[0] | masks[-1]),
-        lambda: masks,
+        lambda _: put(masks, jnp.array([0, -1]), masks[0] | masks[-1]),
+        lambda _: masks,
+        operand=None,
     )
     spacing = jnp.prod(spacing, axis=1)
 

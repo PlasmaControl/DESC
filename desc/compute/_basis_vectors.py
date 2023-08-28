@@ -55,7 +55,7 @@ def _e_sup_rho(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^rho_r",
-    label="\\partial{\\rho} \\mathbf{e}^{\\rho}",
+    label="\\partial_{\\rho} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector, derivative wrt radial coordinate",
@@ -90,7 +90,7 @@ def _e_sup_rho_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^rho_t",
-    label="\\partial{\\theta} \\mathbf{e}^{\\rho}",
+    label="\\partial_{\\theta} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector, derivative wrt poloidal coordinate",
@@ -115,11 +115,7 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
             / data["sqrt(g)"] ** 2
         ).T,
         lambda: (
-            (
-                cross(data["e_theta_r"], data["e_zeta_t"])
-                + cross(data["e_theta_rt"], data["e_zeta"])
-            ).T
-            / data["sqrt(g)_r"]
+            cross(data["e_theta_rt"], data["e_zeta"]).T / data["sqrt(g)_r"]
             - cross(data["e_theta_r"], data["e_zeta"]).T
             * data["sqrt(g)_rt"]
             / data["sqrt(g)_r"] ** 2
@@ -130,7 +126,7 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^rho_z",
-    label="\\partial{\\zeta} \\mathbf{e}^{\\rho}",
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector, derivative wrt toroidal coordinate",
@@ -212,7 +208,7 @@ def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^theta_r",
-    label="\\partial{\\rho} \\mathbf{e}^{\\theta}",
+    label="\\partial_{\\rho} \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal basis vector, derivative wrt radial coordinate",
@@ -239,7 +235,7 @@ def _e_sup_theta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^theta_t",
-    label="\\partial{\\theta} \\mathbf{e}^{\\theta}",
+    label="\\partial_{\\theta} \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal basis vector, derivative wrt poloidal"
@@ -267,7 +263,7 @@ def _e_sup_theta_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^theta_z",
-    label="\\partial{\\zeta} \\mathbf{e}^{\\theta}",
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal basis vector, derivative wrt toroidal"
@@ -315,7 +311,7 @@ def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^zeta_r",
-    label="\\partial{\\rho} \\mathbf{e}^{\\zeta}",
+    label="\\partial_{\\rho} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt radial coordinate",
@@ -350,7 +346,7 @@ def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^zeta_t",
-    label="\\partial{\\theta} \\mathbf{e}^{\\zeta}",
+    label="\\partial_{\\theta} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt poloidal"
@@ -391,7 +387,7 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^zeta_z",
-    label="\\partial{\\zeta} \\mathbf{e}^{\\zeta}",
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt toroidal"

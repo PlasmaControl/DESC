@@ -1181,7 +1181,6 @@ class FourierCurrentPotentialField(CurrentPotentialField):
             f"Expected Phi_mn size {basis.num_modes.size}, instead got {Phi_mn.size}"
         )
         self._Phi_mn = Phi_mn
-        self._surface_grid = surface_grid
 
         assert np.isscalar(I), "I must be a scalar"
         assert np.isscalar(G), "G must be a scalar"

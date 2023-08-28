@@ -10,17 +10,11 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
+from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.utils import (
-    compress,
-    expand,
-    get_data_deps,
-    get_params,
-    get_profiles,
-    get_transforms,
-)
+from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -381,6 +375,10 @@ class Equilibrium(IOAble):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+        if self.current is not None and hasattr(self.current, "_get_transform"):
+            # Need to rebuild derivative matrices to get higher order derivatives
+            # on equilibrium's saved before GitHub pull request #586.
+            self.current._transform = self.current._get_transform(self.current.grid)
 
     def __repr__(self):
         """String form of the object."""
@@ -657,7 +655,7 @@ class Equilibrium(IOAble):
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
         x = data[name]
-        x = compress(grid, x, surface_label="rho")
+        x = grid.compress(x, surface_label="rho")
         return SplineProfile(
             x, grid.nodes[grid.unique_rho_idx, 0], grid=grid, name=name
         )
@@ -808,9 +806,9 @@ class Equilibrium(IOAble):
                 data=None,
                 **kwargs,
             )
-            # need to make this data broadcastable with the data on the original grid
+            # need to make this data broadcast with the data on the original grid
             data1d = {
-                key: expand(grid, compress(grid1d, val))
+                key: grid.expand(grid1d.compress(val))
                 for key, val in data1d.items()
                 if key in dep1d
             }
@@ -859,7 +857,7 @@ class Equilibrium(IOAble):
             same as the compute function data key
         guess : None or ndarray, shape(k,3)
             Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
-            coresponding to coords in inbasis. If None, heuristics are used based on
+            corresponding to coords in inbasis. If None, heuristics are used based on
             in basis and a nearest neighbor search on a coarse grid.
         period : tuple of float
             Assumed periodicity for each quantity in inbasis.
@@ -1120,7 +1118,14 @@ class Equilibrium(IOAble):
 
     @R_lmn.setter
     def R_lmn(self, R_lmn):
-        self._R_lmn[:] = R_lmn
+        R_lmn = jnp.atleast_1d(R_lmn)
+        errorif(
+            R_lmn.size != self._R_lmn.size,
+            ValueError,
+            "R_lmn should have the same size as R_basis, "
+            + f"got {len(R_lmn)} for basis with {self.R_basis.num_modes} modes",
+        )
+        self._R_lmn = R_lmn
 
     @property
     def Z_lmn(self):
@@ -1129,7 +1134,14 @@ class Equilibrium(IOAble):
 
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
-        self._Z_lmn[:] = Z_lmn
+        Z_lmn = jnp.atleast_1d(Z_lmn)
+        errorif(
+            Z_lmn.size != self._Z_lmn.size,
+            ValueError,
+            "Z_lmn should have the same size as Z_basis, "
+            + f"got {len(Z_lmn)} for basis with {self.Z_basis.num_modes} modes",
+        )
+        self._Z_lmn = Z_lmn
 
     @property
     def L_lmn(self):
@@ -1138,7 +1150,14 @@ class Equilibrium(IOAble):
 
     @L_lmn.setter
     def L_lmn(self, L_lmn):
-        self._L_lmn[:] = L_lmn
+        L_lmn = jnp.atleast_1d(L_lmn)
+        errorif(
+            L_lmn.size != self._L_lmn.size,
+            ValueError,
+            "L_lmn should have the same size as L_basis, "
+            + f"got {len(L_lmn)} for basis with {self.L_basis.num_modes} modes",
+        )
+        self._L_lmn = L_lmn
 
     @property
     def Rb_lmn(self):
@@ -1467,25 +1486,24 @@ class Equilibrium(IOAble):
             if ntheta is None:
                 ntheta = 2 * M + 1
 
-            inputs = {}
-            inputs["Psi"] = np.pi * r**2 * na_eq.Bbar
-            inputs["NFP"] = na_eq.nfp
-            inputs["L"] = L
-            inputs["M"] = M
-            inputs["N"] = N
-            inputs["sym"] = not na_eq.lasym
-            inputs["spectral_indexing "] = spectral_indexing
-            inputs["pressure"] = np.array(
-                [[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]
-            )
-            inputs["iota"] = None
-            inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]])
-            inputs["axis"] = FourierRZCurve(
-                R_n=np.concatenate((np.flipud(na_eq.rs[1:]), na_eq.rc)),
-                Z_n=np.concatenate((np.flipud(na_eq.zs[1:]), na_eq.zc)),
-                NFP=na_eq.nfp,
-            )
-            inputs["surface"] = None
+            inputs = {
+                "Psi": np.pi * r**2 * na_eq.Bbar,
+                "NFP": na_eq.nfp,
+                "L": L,
+                "M": M,
+                "N": N,
+                "sym": not na_eq.lasym,
+                "spectral_indexing ": spectral_indexing,
+                "pressure": np.array([[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]),
+                "iota": None,
+                "current": np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]]),
+                "axis": FourierRZCurve(
+                    R_n=np.concatenate((np.flipud(na_eq.rs[1:]), na_eq.rc)),
+                    Z_n=np.concatenate((np.flipud(na_eq.zs[1:]), na_eq.zc)),
+                    NFP=na_eq.nfp,
+                ),
+                "surface": None,
+            }
         except AttributeError as e:
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
 
@@ -1526,7 +1544,6 @@ class Equilibrium(IOAble):
         Z_1D = np.zeros((grid.num_nodes,))
         L_1D = np.zeros((grid.num_nodes,))
         for rho_i in rho:
-            idx = idx = np.where(grid.nodes[:, 0] == rho_i)[0]
             R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
             phi_cyl_ax = np.linspace(
                 0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False
@@ -1534,6 +1551,7 @@ class Equilibrium(IOAble):
             nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
             phi_B = phi_cyl_ax + nu_B_ax
             nu_B = phi_B - phi0_2D
+            idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
             R_1D[idx] = R_2D.flatten(order="F")
             Z_1D[idx] = Z_2D.flatten(order="F")
             L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota

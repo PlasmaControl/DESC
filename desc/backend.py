@@ -201,7 +201,7 @@ else:
             val = body_fun(i, val)
         return val
 
-    def cond(pred, true_fun, false_fun, operand):
+    def cond(pred, true_fun, false_fun, *operand):
         """Conditionally apply true_fun or false_fun.
 
         This version is for the numpy backend, for jax backend see jax.lax.cond
@@ -227,9 +227,9 @@ else:
 
         """
         if pred:
-            return true_fun(operand)
+            return true_fun(*operand)
         else:
-            return false_fun(operand)
+            return false_fun(*operand)
 
     def switch(index, branches, operand):
         """Apply exactly one of branches given by index.

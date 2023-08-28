@@ -1035,7 +1035,9 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
             phi=self.surface_grid.nodes[:, 2],
         )
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", surface_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -1046,6 +1048,8 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
             parameters to pass to current potential function
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
+        surface_grid : Grid,
+            grid upon which to evaluate the surface current density K
 
         Returns
         -------
@@ -1062,10 +1066,12 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
 
         if (params is None) or (len(params) == 0):
             params = self._params
-        self._compute_surface_current()
+        # compute surface current, and store grid quantities
+        # needed for integration in class
+        self._compute_surface_current(surface_grid=surface_grid, params=params)
 
         def nfp_loop(j, f):
-            # calc (or actually just rotate?) rs, rs_t, rz_t
+            # calculate (by rotating) rs, rs_t, rz_t
             phi = (
                 self.surface_grid.nodes[:, 2] + j * 2 * jnp.pi / self.surface_grid.NFP
             ) % (2 * jnp.pi)

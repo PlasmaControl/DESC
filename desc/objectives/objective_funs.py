@@ -707,8 +707,9 @@ class ObjectiveFunction(IOAble):
             else:
                 # need to return something, so use midpoint of bounds as approx target
                 target_i = jnp.ones(obj.dim_f) * (obj.bounds[0] + obj.bounds[1]) / 2
-            if obj._normalize_target:
-                target_i /= obj.normalization
+            target_i = obj._scale(target_i)
+            if not obj._normalize_target:
+                target_i *= obj.normalization
             target += [target_i]
         return jnp.concatenate(target)
 
@@ -723,9 +724,11 @@ class ObjectiveFunction(IOAble):
             else:
                 lb_i = jnp.ones(obj.dim_f) * obj.target
                 ub_i = jnp.ones(obj.dim_f) * obj.target
-            if obj._normalize_target:
-                lb_i /= obj.normalization
-                ub_i /= obj.normalization
+            lb_i = obj._scale(lb_i)
+            ub_i = obj._scale(ub_i)
+            if not obj._normalize_target:
+                lb_i *= obj.normalization
+                ub_i *= obj.normalization
             lb += [lb_i]
             ub += [ub_i]
         return (jnp.concatenate(lb), jnp.concatenate(ub))

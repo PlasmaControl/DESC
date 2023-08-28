@@ -71,9 +71,10 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     switch = jax.lax.switch
     while_loop = jax.lax.while_loop
     vmap = jax.vmap
+    bincount = jnp.bincount
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
-    from jax.scipy.special import gammaln
+    from jax.scipy.special import gammaln, logsumexp
     from jax.tree_util import register_pytree_node
 
     def put(arr, inds, vals):
@@ -126,7 +127,7 @@ else:
         qr,
         solve_triangular,
     )
-    from scipy.special import gammaln  # noqa: F401
+    from scipy.special import gammaln, logsumexp  # noqa: F401
 
     def register_pytree_node(foo, *args):
         """Dummy decorator for non-jax pytrees."""
@@ -200,7 +201,7 @@ else:
             val = body_fun(i, val)
         return val
 
-    def cond(pred, true_fun, false_fun, operand):
+    def cond(pred, true_fun, false_fun, *operand):
         """Conditionally apply true_fun or false_fun.
 
         This version is for the numpy backend, for jax backend see jax.lax.cond
@@ -226,9 +227,9 @@ else:
 
         """
         if pred:
-            return true_fun(operand)
+            return true_fun(*operand)
         else:
-            return false_fun(operand)
+            return false_fun(*operand)
 
     def switch(index, branches, operand):
         """Apply exactly one of branches given by index.
@@ -302,3 +303,7 @@ else:
             return np.stack([fun(fun_input) for fun_input in fun_inputs], axis=out_axes)
 
         return fun_vmap
+
+    def bincount(x, weights=None, minlength=None, length=None):
+        """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""
+        return np.bincount(x, weights, minlength)

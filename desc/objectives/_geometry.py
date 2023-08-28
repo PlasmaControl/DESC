@@ -6,14 +6,13 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms
-from desc.geometry.utils import rpz2xyz
+from desc.compute import get_params, get_profiles, get_transforms, rpz2xyz
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-from .utils import jax_softmin
+from .utils import softmin
 
 
 class AspectRatio(_Objective):
@@ -552,9 +551,9 @@ class PlasmaVesselDistance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._surface_coords = self._surface.compute_coordinates(
-            grid=surface_grid, basis="xyz"
-        )
+        self._surface_coords = self._surface.compute(
+            "x", grid=surface_grid, basis="xyz"
+        )["x"]
         self._profiles = get_profiles(
             self._data_keys,
             obj=eq,
@@ -614,7 +613,7 @@ class PlasmaVesselDistance(_Objective):
             plasma_coords[:, None, :] - constants["surface_coords"][None, :, :], axis=-1
         )
         if self._use_softmin:  # do softmin
-            return jnp.apply_along_axis(jax_softmin, 0, d, self._alpha)
+            return jnp.apply_along_axis(softmin, 0, d, self._alpha)
         else:  # do hardmin
             return d.min(axis=0)
 
@@ -727,7 +726,7 @@ class MeanCurvature(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["curvature_H"]
+        self._data_keys = ["curvature_H_rho"]
         self._args = get_params(
             self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
@@ -782,7 +781,7 @@ class MeanCurvature(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["curvature_H"]
+        return data["curvature_H_rho"]
 
 
 class PrincipalCurvature(_Objective):
@@ -872,7 +871,7 @@ class PrincipalCurvature(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["curvature_k1", "curvature_k2"]
+        self._data_keys = ["curvature_k1_rho", "curvature_k2_rho"]
         self._args = get_params(
             self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
@@ -927,7 +926,9 @@ class PrincipalCurvature(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return jnp.maximum(jnp.abs(data["curvature_k1"]), jnp.abs(data["curvature_k2"]))
+        return jnp.maximum(
+            jnp.abs(data["curvature_k1_rho"]), jnp.abs(data["curvature_k2_rho"])
+        )
 
 
 class BScaleLength(_Objective):

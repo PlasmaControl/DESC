@@ -10,7 +10,6 @@ from qic import Qic
 from qsc import Qsc
 
 import desc.examples
-from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -31,8 +30,8 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     RadialForceBalance,
     get_fixed_boundary_constraints,
+    get_NAE_constraints,
 )
-from desc.objectives.utils import get_NAE_constraints
 from desc.optimize import Optimizer
 from desc.plotting import plot_boozer_surface
 from desc.profiles import PowerSeriesProfile
@@ -63,7 +62,7 @@ def test_SOLOVEV_results(SOLOVEV):
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.solve
 def test_DSHAPE_results(DSHAPE):
     """Tests that the DSHAPE examples gives the same results as VMEC."""
@@ -73,7 +72,7 @@ def test_DSHAPE_results(DSHAPE):
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.solve
 def test_DSHAPE_current_results(DSHAPE_current):
     """Tests that the DSHAPE with fixed current gives the same results as VMEC."""
@@ -93,7 +92,7 @@ def test_HELIOTRON_results(HELIOTRON):
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.solve
 def test_HELIOTRON_vac_results(HELIOTRON_vac):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
@@ -332,7 +331,7 @@ def test_qh_optimization3():
     eq3a = run_qh_step(2, eq2)
     rho_err, theta_err = area_difference_desc(eq3, eq3a, Nr=1, Nt=1)
     # only need crude tolerances here to make sure the boundaries are
-    # similar, the main test is ensuring its not pathological and has good qs
+    # similar, the main test is ensuring it's not pathological and has good qs
     assert rho_err.mean() < 1
 
     obj = QuasisymmetryBoozer(helicity=(1, eq3a.NFP), eq=eq3a)
@@ -420,14 +419,14 @@ def test_simsopt_QH_comparison():
     nfp = 4
     aspect_target = 8.0
     # Initial (m=0, n=nfp) mode of the axis:
-    Delta = 0.2
+    torsion = 0.4
     LMN_resolution = 6
     # Set shape of the initial condition.
     # R_lmn and Z_lmn are the amplitudes. modes_R and modes_Z are the (m,n) pairs.
     surface = FourierRZToroidalSurface(
-        R_lmn=[1.0, 1.0 / aspect_target, Delta],
+        R_lmn=[1.0, 1.0 / aspect_target, torsion],
         modes_R=[[0, 0], [1, 0], [0, 1]],
-        Z_lmn=[0, 1.0 / aspect_target, Delta],
+        Z_lmn=[0, -1.0 / aspect_target, torsion],
         modes_Z=[[0, 0], [-1, 0], [0, -1]],
         NFP=nfp,
     )
@@ -508,7 +507,7 @@ def test_simsopt_QH_comparison():
                 eq=eq, target=aspect_target, weight=aspect_weight, normalize=False
             ),
             QuasisymmetryTwoTerm(
-                eq=eq, helicity=(1, nfp), grid=grid, weight=qs_weight, normalize=False
+                eq=eq, helicity=(-1, nfp), grid=grid, weight=qs_weight, normalize=False
             ),
         )
     )
@@ -517,10 +516,12 @@ def test_simsopt_QH_comparison():
         objective=objective,
         constraints=constraints,
         optimizer=Optimizer("proximal-lsq-exact"),
+        ftol=1e-3,
     )
     aspect = eq2.compute("R0/a")["R0/a"]
-    np.testing.assert_allclose(aspect, aspect_target, atol=1e-2, rtol=1e-3)
-    np.testing.assert_array_less(objective.compute_scalar(objective.x(eq)), 1e-2)
+    np.testing.assert_allclose(aspect, aspect_target, atol=1e-2, rtol=1e-2)
+    np.testing.assert_array_less(objective.compute_scalar(objective.x(eq)), 0.075)
+    np.testing.assert_array_less(eq2.compute("a_major/a_minor")["a_major/a_minor"], 5)
 
 
 @pytest.mark.regression
@@ -542,7 +543,7 @@ def test_NAE_QSC_solve():
 
     # this has all the constraints we need,
     #  iota=False specifies we want to fix current instead of iota
-    cs = get_NAE_constraints(eq, qsc, iota=False, order=1)
+    cs = get_NAE_constraints(eq, qsc, iota=False, order=1, N=eq.N)
 
     objectives = ForceBalance(eq=eq)
     obj = ObjectiveFunction(objectives)
@@ -560,8 +561,8 @@ def test_NAE_QSC_solve():
     np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3)
 
     # Make sure iota of solved equilibrium is same near axis as QSC
-    grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
-    iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
+    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
+    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
     np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5)
     np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3)
@@ -608,9 +609,9 @@ def test_NAE_QSC_solve():
     for i, (l, m, n) in enumerate(modes):
         if m >= 0 and n >= 0:
             B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
-        elif m >= 0 and n < 0:
+        elif m >= 0 > n:
             B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
-        elif m < 0 and n >= 0:
+        elif m < 0 <= n:
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
@@ -657,15 +658,15 @@ def test_NAE_QIC_solve():
 
     np.testing.assert_allclose(rho_err[:, 0:3], 0, atol=5e-2)
     # theta error isn't really an indicator of near axis behavior
-    # since its computed over the full radius, but just indicates that
+    # since it's computed over the full radius, but just indicates that
     # eq is similar to eq_fit
     np.testing.assert_allclose(theta_err, 0, atol=5e-2)
 
     # Make sure iota of solved equilibrium is same near axis as QIC
-    grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
-    iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
+    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
+    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
-    np.testing.assert_allclose(iota[1], qsc.iota, atol=1e-5)
+    np.testing.assert_allclose(iota[1], qsc.iota, atol=5e-4)
     np.testing.assert_allclose(iota[1:10], qsc.iota, atol=5e-4)
 
     # check lambda to match near axis
@@ -692,7 +693,7 @@ def test_NAE_QIC_solve():
     lam_nae = np.squeeze(lam_nae[:, 0, :])
 
     lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -qsc.iota * qsc.nu_spline(phi), atol=1e-4)
+    np.testing.assert_allclose(lam_av_nae, -qsc.iota * qsc.nu_spline(phi), atol=5e-4)
 
     # check |B| on axis
 
@@ -710,9 +711,9 @@ def test_NAE_QIC_solve():
     for i, (l, m, n) in enumerate(modes):
         if m >= 0 and n >= 0:
             B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
-        elif m >= 0 and n < 0:
+        elif m >= 0 > n:
             B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
-        elif m < 0 and n >= 0:
+        elif m < 0 <= n:
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)

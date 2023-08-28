@@ -68,7 +68,7 @@ def load(load_from, file_format=None):
             )
     else:
         raise ValueError("Unknown file format: {}".format(file_format))
-    # to set other secondary stuff that wasnt saved possibly:
+    # to set other secondary stuff that wasn't saved possibly:
     if hasattr(obj, "_set_up"):
         obj._set_up()
     return obj
@@ -82,7 +82,7 @@ def _unjittable(x):
     if isinstance(x, dict):
         return any([_unjittable(y) for y in x.values()])
     if hasattr(x, "dtype"):
-        return x.dtype in (bool, int, np.int_)
+        return np.issubdtype(x.dtype, np.integer) or np.issubdtype(x.dtype, np.bool_)
     return isinstance(x, (str, types.FunctionType, bool, int, np.int_))
 
 

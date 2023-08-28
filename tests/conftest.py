@@ -51,7 +51,8 @@ def SOLOVEV_vac(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
-    main(args)
+    with pytest.warns(UserWarning, match="Left handed coordinates"):
+        main(args)
 
     SOLOVEV_vac_out = {
         "input_path": input_path,
@@ -224,7 +225,8 @@ def HELIOTRON_vac(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    main(args)
+    with pytest.warns(UserWarning, match="Vacuum objective does not use any profiles"):
+        main(args)
 
     HELIOTRON_vacuum_out = {
         "input_path": input_path,
@@ -313,11 +315,11 @@ def DummyStellarator(tmpdir_factory):
             [
                 [0, 0, 0, 3, 0],
                 [0, 1, 0, 1, 0],
-                [0, -1, 0, 0, 1],
+                [0, -1, 0, 0, -1],
                 [0, 1, 1, 0.3, 0],
-                [0, -1, -1, -0.3, 0],
+                [0, -1, -1, 0.3, 0],
                 [0, 1, -1, 0, -0.3],
-                [0, -1, 1, 0, -0.3],
+                [0, -1, 1, 0, 0.3],
             ],
         ),
         "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
@@ -327,9 +329,7 @@ def DummyStellarator(tmpdir_factory):
     eq = Equilibrium(**inputs)
     eq.save(output_path)
 
-    DummyStellarator_out = {
-        "output_path": output_path,
-    }
+    DummyStellarator_out = {"output_path": output_path}
     return DummyStellarator_out
 
 

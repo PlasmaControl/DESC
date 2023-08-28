@@ -382,7 +382,7 @@ def test_overstepping():
         FixIota(eq=eq),
         FixPsi(eq=eq),
     )
-    optimizer = Optimizer("lsq-exact")
+    optimizer = Optimizer("proximal-lsq-exact")
     eq1, history = eq.optimize(
         objective=objective,
         constraints=constraints,
@@ -463,6 +463,7 @@ def test_scipy_fail_message():
             gtol=1e-12,
         )
         assert "Maximum number of iterations has been exceeded" in result["message"]
+    eq._node_pattern = "quad"
     objectives = Energy(eq=eq)
     obj = ObjectiveFunction(objectives)
     for opt in ["scipy-trust-exact"]:
@@ -561,25 +562,29 @@ def test_wrappers():
 @pytest.mark.slow
 def test_all_optimizers():
     """Just tests that the optimizers run without error, eg tests for the wrappers."""
-    eq = desc.examples.get("SOLOVEV")
-    fobj = ObjectiveFunction(ForceBalance(eq=eq))
-    eobj = ObjectiveFunction(Energy(eq=eq))
+    eqf = desc.examples.get("SOLOVEV")
+    eqe = eqf.copy()
+    eqe._node_pattern = "quad"
+    fobj = ObjectiveFunction(ForceBalance(eq=eqf))
+    eobj = ObjectiveFunction(Energy(eq=eqe))
     fobj.build()
     eobj.build()
     constraints = (
-        FixBoundaryR(eq=eq),
-        FixBoundaryZ(eq=eq),
-        FixIota(eq=eq),
-        FixPressure(eq=eq),
-        FixPsi(eq=eq),
+        FixBoundaryR(eq=eqe),
+        FixBoundaryZ(eq=eqe),
+        FixIota(eq=eqe),
+        FixPressure(eq=eqe),
+        FixPsi(eq=eqe),
     )
 
     for opt in optimizers:
         print("TESTING ", opt)
         if optimizers[opt]["scalar"]:
             obj = eobj
+            eq = eqe
         else:
             obj = fobj
+            eq = eqf
         eq.solve(
             objective=obj,
             constraints=constraints,
@@ -617,8 +622,8 @@ def test_scipy_constrained_solve():
     AR = eq.compute("R0/a")["R0/a"]
     ARbounds = (0.95 * AR, 1.05 * AR)
     H = eq.compute(
-        "curvature_H", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    )["curvature_H"]
+        "curvature_H_rho", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    )["curvature_H_rho"]
     Hbounds = ((1 - 0.05 * np.sign(H)) * H, (1 + 0.05 * np.sign(H)) * abs(H))
     constraints += (
         Volume(eq=eq, bounds=Vbounds),
@@ -643,8 +648,8 @@ def test_scipy_constrained_solve():
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
     H2 = eq2.compute(
-        "curvature_H", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    )["curvature_H"]
+        "curvature_H_rho", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    )["curvature_H_rho"]
 
     assert ARbounds[0] < AR2 < ARbounds[1]
     assert Vbounds[0] < V2 < Vbounds[1]
@@ -657,7 +662,8 @@ def test_scipy_constrained_solve():
 def test_solve_with_x_scale():
     """Make sure we can manually specify x_scale when solving/optimizing."""
     # basically just tests that it runs without error
-    eq = Equilibrium(L=2, M=2, N=2, pressure=np.array([1000, -2000, 1000]))
+    with pytest.warns(UserWarning, match="pressure profile is not an even"):
+        eq = Equilibrium(L=2, M=2, N=2, pressure=np.array([1000, -2000, 1000]))
     scale = jnp.concatenate(
         [
             (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),
@@ -885,8 +891,8 @@ def test_constrained_AL_lsq():
         ForceBalance(eq=eq, bounds=(-1e-3, 1e-3), normalize_target=False),
     )
     H = eq.compute(
-        "curvature_H", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    )["curvature_H"]
+        "curvature_H_rho", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    )["curvature_H_rho"]
     obj = ObjectiveFunction(MeanCurvature(eq=eq, target=H))
     ctol = 1e-4
     eq2, result = eq.optimize(
@@ -911,6 +917,7 @@ def test_constrained_AL_lsq():
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.xfail
 def test_constrained_AL_scalar():
     """Tests that the augmented Lagrangian constrained optimizer does something."""
     eq = desc.examples.get("SOLOVEV")

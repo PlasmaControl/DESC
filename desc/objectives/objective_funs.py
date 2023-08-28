@@ -707,8 +707,9 @@ class ObjectiveFunction(IOAble):
             else:
                 # need to return something, so use midpoint of bounds as approx target
                 target_i = jnp.ones(obj.dim_f) * (obj.bounds[0] + obj.bounds[1]) / 2
-            if obj._normalize_target:
-                target_i /= obj.normalization
+            target_i = obj._scale(target_i)
+            if not obj._normalize_target:
+                target_i *= obj.normalization
             target += [target_i]
         return jnp.concatenate(target)
 
@@ -723,9 +724,11 @@ class ObjectiveFunction(IOAble):
             else:
                 lb_i = jnp.ones(obj.dim_f) * obj.target
                 ub_i = jnp.ones(obj.dim_f) * obj.target
-            if obj._normalize_target:
-                lb_i /= obj.normalization
-                ub_i /= obj.normalization
+            lb_i = obj._scale(lb_i)
+            ub_i = obj._scale(ub_i)
+            if not obj._normalize_target:
+                lb_i *= obj.normalization
+                ub_i *= obj.normalization
             lb += [lb_i]
             ub += [ub_i]
         return (jnp.concatenate(lb), jnp.concatenate(ub))
@@ -928,19 +931,6 @@ class _Objective(IOAble, ABC):
         if not is_broadcastable((self.dim_f,), self.weight.shape):
             raise ValueError("len(weight) != dim_f")
 
-    def update_target(self, eq):
-        """Update target values using an Equilibrium.
-
-        Parameters
-        ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
-
-        """
-        self.target = np.atleast_1d(getattr(eq, self.target_arg, self.target))
-        if self._use_jit:
-            self.jit()
-
     @abstractmethod
     def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays."""
@@ -1101,11 +1091,6 @@ class _Objective(IOAble, ABC):
     def args(self):
         """list: Names (str) of arguments to the compute functions."""
         return self._args
-
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return ""
 
     @property
     def dimensions(self):

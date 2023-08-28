@@ -36,6 +36,7 @@ def field_trace_from_coilset(
     ylim=[-0.04, 0.04],
     save_files=True,
     only_return_data=False,
+    savename=None,
 ):
     """Field line trace from coilset.
 
@@ -66,7 +67,9 @@ def field_trace_from_coilset(
     only_return_data : bool, optional
         whether to only return the field line tracing data
         and not attempt to plot or save anything, by default False
-
+    savename : str, optional
+        Name of .png to save figure to (inside of dirname directory)
+        by default None
     Returns
     -------
     field_R  : ndarray, size [ntransits, Rs.size]
@@ -156,7 +159,9 @@ def field_trace_from_coilset(
     plt.ylim(ylim)
 
     ax = compare_surfs_DESC_field_line_trace(load(eqname), ax, R_list)
-
-    plt.savefig(f"{dirname}/trace{ntransit}_transits.png")
+    if not savename:
+        plt.savefig(f"{dirname}/trace{ntransit}_transits_{dirname}.png")
+    else:
+        plt.savefig(f"{dirname}/{savename}.png")
 
     return field_R_full, field_Z_full

@@ -80,11 +80,13 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
         #TODO: can remove this and replace with something like
         basename to be used for every saved figure
     ntransit : int, optional
-        _description_, by default 100
-    external_TF : _type_, optional
-        _description_, by default None
-    savename : _type_, optional
-        _description_, by default None
+        number of toroidal transits to trace, by default 100
+    external_TF : MagneticField, optional
+        external magnetic field to include to trace with, in addition to
+        the current potential's magnetic field, by default None
+    savename : str, optional
+        Name of .png to save figure to (inside of dirname directory)
+        by default None
     Rs : ndarray, optional
         starting seed R points at zeta = 0 for the tracing, by default None
     phi0 : int, optional

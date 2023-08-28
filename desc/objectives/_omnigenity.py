@@ -524,6 +524,8 @@ class Omnigenity(_Objective):
 
     Parameters
     ----------
+    field : OmnigeneousField
+        Target omnigeneous field.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
@@ -564,6 +566,7 @@ class Omnigenity(_Objective):
 
     def __init__(
         self,
+        field,
         eq=None,
         target=0,
         bounds=None,
@@ -585,7 +588,7 @@ class Omnigenity(_Objective):
         self.N_booz = N_booz
         self.well_weight = well_weight
         super().__init__(
-            eq=eq,
+            things=[eq, field],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -607,7 +610,8 @@ class Omnigenity(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
+        field = self.things[1]
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
@@ -617,7 +621,8 @@ class Omnigenity(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["omnigenity"]
+        self._eq_data_keys = ["|B|_mn"]
+        self._field_data_keys = ["|B|_omni", "h"]
 
         assert grid.sym is False
         assert grid.num_rho == 1
@@ -627,17 +632,25 @@ class Omnigenity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(
-            self._data_keys,
+        self._profiles = get_profiles(self._eq_data_keys, obj=eq, grid=grid)
+        self._eq_transforms = get_transforms(
+            self._eq_data_keys,
             obj=eq,
             grid=grid,
             M_booz=M_booz,
             N_booz=N_booz,
         )
+        self._field_transforms = get_transforms(
+            self._field_data_keys,
+            obj=field,
+            grid=grid,
+            M_booz=M_booz,
+            N_booz=N_booz,
+        )
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "equil_transforms": self._eq_transforms,
+            "equil_profiles": self._profiles,
+            "field_transforms": self._field_transforms,
             "helicity": self.helicity,
         }
 
@@ -647,32 +660,23 @@ class Omnigenity(_Objective):
 
         if self._normalize:
             self._normalization = jnp.mean(
-                eq.well_l[: eq.M_well]
+                field.well_l[: field.M_well]
             )  # average |B| on axis
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=(eq, field), use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, equil_params, field_params, constants=None):
         """Compute omnigenity errors.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        well_l : ndarray
-            Spectral coefficients of B(eta).
-        omni_lmn : ndarray
-            Spectral coefficients of tilde(zeta)_B(rho, alpha, eta).
+        equil_params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        field_params : dict
+            Dictionary of field degrees of freedom, eg OmnigeneousField.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -680,26 +684,47 @@ class Omnigenity(_Objective):
             Omnigenity error at each node (T).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
-        data = compute_fun(
+        eq_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
-            helicity=constants["helicity"],
+            self._eq_data_keys,
+            params=equil_params,
+            transforms=constants["equil_transforms"],
+            profiles=constants["equil_profiles"],
         )
+        field_data = compute_fun(
+            "desc.magnetic_fields.OmnigeneousField",
+            self._field_data_keys,
+            params=field_params,
+            transforms=constants["field_transforms"],
+            profiles={},
+        )
+
+        M, N = constants["helicity"]
+        iota = eq_data["iota"][0]  # FIXME: assumes a single flux surface
+        matrix = jnp.where(
+            M == 0,
+            jnp.array([N - M * iota, iota / N, 0, 1 / N]),
+            jnp.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),
+        ).reshape((2, 2))
+
+        # solve for (theta_B,zeta_B) corresponding to (eta,alpha)
+        booz = matrix @ jnp.vstack((field_data["alpha"], field_data["h"]))
+        nodes = jnp.vstack((eq_data["rho"], booz[0, :], booz[1, :])).T
+        B_eta_alpha = jnp.matmul(
+            constants["equil_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
+        )
+        omnigenity = B_eta_alpha - field_data["|B|_omni"]
         weights = (self.well_weight + 1) / 2 + (self.well_weight - 1) / 2 * jnp.cos(
-            data["eta"]
+            field_data["eta"]
         )
-        return data["omnigenity"] * weights
+        return omnigenity * weights
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         return super().compute_scaled(*args, **kwargs) * jnp.sqrt(
-            self._transforms["grid"].weights
+            self._eq_transforms["grid"].weights
         )
 
     @property

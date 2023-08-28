@@ -2763,10 +2763,10 @@ class FixWell(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
+    field : OmnigeneousField, optional
+        Field that will be optimized to satisfy the Objective.
     target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
+        Target value(s) of the objective. If None, uses field value.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
     weight : float, optional
@@ -2788,7 +2788,7 @@ class FixWell(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        field=None,
         target=None,
         bounds=None,
         weight=1,
@@ -2799,7 +2799,7 @@ class FixWell(_FixedObjective):
     ):
         self._indices = indices
         super().__init__(
-            things=eq,
+            things=field,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -2808,21 +2808,24 @@ class FixWell(_FixedObjective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, field=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
+        field : OmnigeneousField, optional
+            Field that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
+        self.things = setdefault(field, self.things)
+        field = self.things[0]
+
         if self.target is None:
-            self._target = eq.well_l
+            self._target = field.well_l
 
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
@@ -2834,7 +2837,7 @@ class FixWell(_FixedObjective):
 
         self._dim_f = self._idx.size
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=field, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, **kwargs):
         """Compute fixed well_l error.
@@ -2861,10 +2864,10 @@ class FixOmni(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
+    field : OmnigeneousField, optional
+        Field that will be optimized to satisfy the Objective.
     target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
+        Target value(s) of the objective. If None, uses field value.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
     weight : float, optional
@@ -2886,7 +2889,7 @@ class FixOmni(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        field=None,
         target=None,
         bounds=None,
         weight=1,
@@ -2897,7 +2900,7 @@ class FixOmni(_FixedObjective):
     ):
         self._indices = indices
         super().__init__(
-            things=eq,
+            things=field,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -2906,21 +2909,24 @@ class FixOmni(_FixedObjective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, field=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
+        field : OmnigeneousField, optional
+            Field that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
+        self.things = setdefault(field, self.things)
+        field = self.things[0]
+
         if self.target is None:
-            self._target = eq.omni_lmn
+            self._target = field.omni_lmn
 
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
@@ -2932,7 +2938,7 @@ class FixOmni(_FixedObjective):
 
         self._dim_f = self._idx.size
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=field, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, **kwargs):
         """Compute fixed omni_lmn error.
@@ -2959,10 +2965,10 @@ class StraightBmaxContour(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
+    field : OmnigeneousField, optional
+        Field that will be optimized to satisfy the Objective.
     target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
+        Target value(s) of the objective. If None, uses field value.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
     weight : float, optional
@@ -2985,7 +2991,7 @@ class StraightBmaxContour(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        field=None,
         target=0,
         bounds=None,
         weight=1,
@@ -2994,7 +3000,7 @@ class StraightBmaxContour(_FixedObjective):
         name="straight B_max contour",
     ):
         super().__init__(
-            things=eq,
+            things=field,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -3003,20 +3009,23 @@ class StraightBmaxContour(_FixedObjective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, field=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
+        field : OmnigeneousField, optional
+            Field that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        basis = eq.omni_basis
+        self.things = setdefault(field, self.things)
+        field = self.things[0]
+
+        basis = field.omni_basis
         self._dim_f = int(basis.num_modes / (basis.M + 1))
 
         self._A = np.zeros((self._dim_f, basis.num_modes))
@@ -3033,7 +3042,7 @@ class StraightBmaxContour(_FixedObjective):
             self._A[i, idx_0] = 1
             self._A[i, idx_m] = (mm % 2 - 1) * (mm % 4 - 1)
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(things=field, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, **kwargs):
         """Compute fixed omni_lmn error.

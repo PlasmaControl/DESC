@@ -348,6 +348,26 @@ def _f_T(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="rho",
+    label="\\rho",
+    units="~",
+    units_long="None",
+    description="Radial coordinate, proportional to the square root "
+    + "of the toroidal flux",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[],
+    parameterization="desc.magnetic_fields.OmnigeneousField",
+)
+def _rho(params, transforms, profiles, data, **kwargs):
+    data["rho"] = transforms["grid"].nodes[:, 0]
+    return data
+
+
+@register_compute_fun(
     name="eta",
     label="\\eta",
     units="rad",
@@ -355,14 +375,35 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     description="Intermediate omnigenity coordinate along field lines",
     dim=1,
     params=[],
-    transforms={},
+    transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["theta"],
+    data=[],
+    parameterization="desc.magnetic_fields.OmnigeneousField",
 )
 def _eta(params, transforms, profiles, data, **kwargs):
     # theta is used as a placeholder for eta (angle along field lines)
-    data["eta"] = (data["theta"] - jnp.pi) / 2
+    data["eta"] = (transforms["grid"].nodes[:, 1] - jnp.pi) / 2
+    return data
+
+
+@register_compute_fun(
+    name="alpha",
+    label="\\alpha",
+    units="rad",
+    units_long="radians",
+    description="Field line label, defined on [0, 2pi)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.magnetic_fields.OmnigeneousField",
+)
+def _alpha(params, transforms, profiles, data, **kwargs):
+    # zeta is used as a placeholder for alpha (field line label)
+    data["alpha"] = transforms["grid"].nodes[:, 2]
     return data
 
 
@@ -377,12 +418,11 @@ def _eta(params, transforms, profiles, data, **kwargs):
     transforms={"omni": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["rho", "zeta", "eta"],
+    data=["rho", "alpha", "eta"],
+    parameterization="desc.magnetic_fields.OmnigeneousField",
 )
 def _omni_angle(params, transforms, profiles, data, **kwargs):
-    alpha = data["zeta"]  # zeta is used as a placeholder for alpha (field line label)
-    nodes = jnp.array([data["rho"], data["eta"], alpha]).T
-
+    nodes = jnp.array([data["rho"], data["eta"], data["alpha"]]).T
     data["h"] = (
         transforms["omni"].basis.evaluate(nodes) @ params["omni_lmn"]
         + 2 * data["eta"]
@@ -403,6 +443,7 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["eta"],
+    parameterization="desc.magnetic_fields.OmnigeneousField",
 )
 def _B_well(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_well, M_well)
@@ -416,60 +457,6 @@ def _B_well(params, transforms, profiles, data, **kwargs):
     data["|B|_omni"] = interp1d(
         jnp.abs(data["eta"]), eta_input, B_input, method="monotonic-0"
     )
-    return data
-
-
-@register_compute_fun(
-    name="|B|(eta,alpha)",
-    label="|\\mathbf{B}|(\\eta,\\alpha)",
-    units="T",
-    units_long="Tesla",
-    description="Magnitude of magnetic field at (eta,alpha) coordinates",
-    dim=1,
-    params=[],
-    transforms={"B": [[0, 0, 0]]},
-    profiles=[],
-    coordinates="rtz",
-    data=["zeta", "h", "iota", "|B|_mn"],
-    helicity="helicity",
-)
-def _B_omni_coords(params, transforms, profiles, data, **kwargs):
-    M, N = kwargs.get("helicity", (0, 1))
-    iota = data["iota"][0]  # FIXME: assumes a single flux surface
-    matrix = jnp.where(
-        M == 0,
-        jnp.array([N - M * iota, iota / N, 0, 1 / N]),
-        jnp.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),
-    ).reshape((2, 2))
-    alpha = data["zeta"]  # zeta is used as a placeholder for alpha (field line label)
-
-    # solve for (theta_B,zeta_B) cooresponding to (eta,alpha)
-    booz = matrix @ jnp.vstack((alpha, data["h"]))
-    data["theta_B(eta,alpha)"] = booz[0, :]
-    data["zeta_B(eta,alpha)"] = booz[1, :]
-
-    nodes = jnp.vstack((data["rho"], booz)).T
-    data["|B|(eta,alpha)"] = jnp.matmul(
-        transforms["B"].basis.evaluate(nodes), data["|B|_mn"]
-    )
-    return data
-
-
-@register_compute_fun(
-    name="omnigenity",
-    label="f_{omnigenity}",
-    units="T",
-    units_long="Tesla",
-    description="Omnigenity error",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["|B|_omni", "|B|(eta,alpha)"],
-)
-def _omnigenity(params, transforms, profiles, data, **kwargs):
-    data["omnigenity"] = data["|B|(eta,alpha)"] - data["|B|_omni"]
     return data
 
 

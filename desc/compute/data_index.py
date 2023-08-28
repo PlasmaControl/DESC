@@ -133,6 +133,7 @@ _class_inheritance = {
         "desc.geometry.curve.FourierPlanarCurve",
         "desc.geometry.core.Curve",
     ],
+    "desc.magnetic_fields.OmnigeneousField": [],
 }
 
 data_index = {p: {} for p in _class_inheritance.keys()}

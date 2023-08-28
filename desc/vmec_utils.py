@@ -469,3 +469,20 @@ def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa:
     boundary_subspace = block_diag(Rb_subspace, Zb_subspace)
     opt_subspace = null_space(boundary_subspace)
     return opt_subspace
+
+
+def print_vmec_boundary(eq):
+    """Print the VMEC input boundary coefficients."""
+    M, N, RBS, RBC = ptolemy_identity_rev(
+        eq.surface.R_basis.modes[:, 1], eq.surface.R_basis.modes[:, 2], eq.Rb_lmn
+    )
+    _, _, ZBS, ZBC = ptolemy_identity_rev(
+        eq.surface.Z_basis.modes[:, 1], eq.surface.Z_basis.modes[:, 2], eq.Zb_lmn
+    )
+
+    for m, n, rbc, zbs in np.vstack((np.atleast_2d(M), np.atleast_2d(N), RBC, ZBS)).T:
+        print(
+            f"  RBC({n:2.0f},{m:2.0f}) = {rbc:+14.8e}"
+            + f"  ZBS({n:2.0f},{m:2.0f}) = {zbs:+14.8e}"
+        )
+    return None

@@ -23,8 +23,9 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
-from ._qs import (
+from ._omnigenity import (
     Isodynamicity,
+    Omnigenity,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -55,10 +56,13 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixModeR,
     FixModeZ,
+    FixOmni,
     FixPressure,
     FixPsi,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    FixWell,
+    StraightBmaxContour,
 )
 from .objective_funs import ObjectiveFunction

@@ -7,7 +7,7 @@ Psi = 1.0
 
 # spectral resolution
 M_pol  =  8, 14
-N_tor  =  1, 3
+N_tor  =  1,  3
 
 # continuation parameters
 bdry_ratio = 0.5, 1

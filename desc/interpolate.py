@@ -796,7 +796,7 @@ def _approx_df(x, f, method, axis, **kwargs):
             d0 = _edge_case(hk[0, :], hk[1, :], mk[0, :], mk[1, :])[None]
             d1 = _edge_case(hk[-1, :], hk[-2, :], mk[-1, :], mk[-2, :])[None]
 
-        dk = np.concatenate([d0, dk, d1])
+        dk = jnp.concatenate([d0, dk, d1])
         dk = dk.reshape(fshp)
         return dk.reshape(fshp)
     else:  # method passed in does not use df from this function, just return 0

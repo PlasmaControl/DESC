@@ -519,6 +519,212 @@ class QuasisymmetryTripleProduct(_Objective):
         return data["f_T"] * constants["transforms"]["grid"].weights
 
 
+class Omnigenity(_Objective):
+    """Omnigenity error.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+       Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    helicity : tuple, optional
+        Type of omnigenity (M, N). Default = quasi-isodynamic (0, 1).
+    M_booz : int, optional
+        Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
+    N_booz : int, optional
+        Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
+    well_weight : float, optional
+        Weight applied to the bottom of the magnetic well (B_min) relative to the top
+        of the magnetic well (B_max). Default = 1, which weights all points equally.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+    _units = "(T)"
+    _print_value_fmt = "Omnigenity error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        helicity=(0, 1),
+        M_booz=None,
+        N_booz=None,
+        well_weight=1,
+        name="omnigenity",
+    ):
+        assert len(helicity) == 2
+        assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
+        self._grid = grid
+        self.helicity = helicity
+        self.M_booz = M_booz
+        self.N_booz = N_booz
+        self.well_weight = well_weight
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        M_booz = self.M_booz or 2 * eq.M
+        N_booz = self.N_booz or 2 * eq.N
+
+        if self._grid is None:
+            grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False)
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["omnigenity"]
+
+        assert grid.sym is False
+        assert grid.num_rho == 1
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(
+            self._data_keys,
+            obj=eq,
+            grid=grid,
+            M_booz=M_booz,
+            N_booz=N_booz,
+        )
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+            "helicity": self.helicity,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            self._normalization = jnp.mean(
+                eq.well_l[: eq.M_well]
+            )  # average |B| on axis
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute omnigenity errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+        well_l : ndarray
+            Spectral coefficients of B(eta).
+        omni_lmn : ndarray
+            Spectral coefficients of tilde(zeta)_B(rho, alpha, eta).
+
+        Returns
+        -------
+        f : ndarray
+            Omnigenity error at each node (T).
+
+        """
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+            helicity=constants["helicity"],
+        )
+        weights = (self.well_weight + 1) / 2 + (self.well_weight - 1) / 2 * jnp.cos(
+            data["eta"]
+        )
+        return data["omnigenity"] * weights
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(
+            self._transforms["grid"].weights
+        )
+
+    @property
+    def helicity(self):
+        """tuple: Type of omnigenity (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        if hasattr(self, "_helicity") and self._helicity != helicity:
+            self._built = False
+            warnings.warn("Re-build objective after changing the helicity!")
+        self._helicity = helicity
+        if hasattr(self, "_print_value_fmt"):
+            self._print_value_fmt = (
+                "Omnigenity ({},{}) error: ".format(self.helicity[0], self.helicity[1])
+                + "{:10.3e} "
+            )
+
+
 class Isodynamicity(_Objective):
     """Isodynamicity metric for cross field transport.
 

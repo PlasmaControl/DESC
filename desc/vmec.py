@@ -225,9 +225,6 @@ class VMECIO:
         """
         file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
 
-        # desc throws NaN for r == 0, so we use something small to approximate it
-        ONAXIS = np.array([1e-6])
-
         Psi = eq.Psi
         NFP = eq.NFP
         M = eq.M
@@ -531,13 +528,13 @@ class VMECIO:
         rbtor0 = file.createVariable("rbtor0", np.float64)
         rbtor0.long_name = "<R*B_tor> on axis"
         rbtor0.units = "T*m"
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[0.0], NFP=NFP)
         rbtor0[:] = eq.compute("G", grid=grid)["G"][0]
 
         b0 = file.createVariable("b0", np.float64)
         b0.long_name = "average B_tor on axis"
         b0.units = "T"
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[0.0], NFP=NFP)
         b0[:] = eq.compute("G", grid=grid)["G"][0] / eq.compute("R", grid=grid)["R"][0]
 
         # grid for computing radial profile data
@@ -1407,7 +1404,7 @@ class VMECIO:
         s : array-like
             desired radial coordinates (normalized toroidal magnetic flux)
         theta_star : array-like
-            desired straigh field-line poloidal angles (PEST/VMEC-like flux coordinates)
+            desired straigh field line poloidal angles (PEST/VMEC-like flux coordinates)
         zeta : array-like
             desired toroidal angles (toroidal coordinate phi)
         si : ndarray
@@ -1425,7 +1422,7 @@ class VMECIO:
             si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
         lmbda_mn = interpolate.CubicSpline(si, lmns)
 
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
 
         def root_fun(theta):
@@ -1492,13 +1489,13 @@ class VMECIO:
         rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
         r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
 
-        # straight field-line angles to plot
+        # straight field line angles to plot
         tr = np.linspace(0, 1, 50)
         tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
         tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
         t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
 
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
 
         # find theta angles corresponding to desired theta* angles

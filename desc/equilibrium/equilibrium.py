@@ -11,7 +11,13 @@ from scipy.constants import mu_0
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import (
+    ChebyshevDoubleFourierBasis,
+    ChebyshevPolynomial,
+    FourierZernikeBasis,
+    fourier,
+    zernike_radial,
+)
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
@@ -142,6 +148,15 @@ class Equilibrium(IOAble, Optimizable):
         "_M_grid",
         "_N_grid",
         "_node_pattern",
+        "_L_well",
+        "_M_well",
+        "_L_omni",
+        "_M_omni",
+        "_N_omni",
+        "_well_basis",
+        "_omni_basis",
+        "_well_l",
+        "_omni_lmn",
     ]
 
     def __init__(
@@ -367,6 +382,44 @@ class Equilibrium(IOAble, Optimizable):
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
 
+        # initialize omnigenity parameters
+        data = self.compute(
+            ["min_tz |B|", "max_tz |B|"],
+            LinearGrid(M=self.M_grid, N=self.N_grid, NFP=self.NFP, sym=self.sym),
+        )
+        self._L_well = int(kwargs.pop("L_well", 0))
+        self._M_well = int(kwargs.pop("M_well", 2))
+        self._L_omni = int(kwargs.pop("L_omni", 0))
+        self._M_omni = int(kwargs.pop("M_omni", 1))
+        self._N_omni = int(kwargs.pop("N_omni", 1))
+        self._well_basis = ChebyshevPolynomial(L=self.L_well)
+        self._omni_basis = ChebyshevDoubleFourierBasis(
+            L=self.L_omni,
+            M=self.M_omni,
+            N=self.N_omni,
+            NFP=self.NFP,
+            sym="cos(t)",
+        )
+        self._well_l = np.array(
+            kwargs.pop(
+                "well_l",
+                np.concatenate(
+                    (
+                        np.linspace(
+                            np.min(data["min_tz |B|"]),
+                            np.max(data["max_tz |B|"]),
+                            self.M_well,
+                        ),
+                        np.zeros((self.L_well * self.M_well,)),
+                    )
+                ),
+            ),
+            dtype=float,
+        )
+        self._omni_lmn = np.array(
+            kwargs.pop("omni_lmn", np.zeros(self.omni_basis.num_modes)), dtype=float
+        )
+
     def _set_up(self):
         """Set unset attributes after loading.
 
@@ -470,6 +523,11 @@ class Equilibrium(IOAble, Optimizable):
         N_grid=None,
         NFP=None,
         sym=None,
+        L_well=None,
+        M_well=None,
+        L_omni=None,
+        M_omni=None,
+        N_omni=None,
     ):
         """Set the spectral resolution and real space grid resolution.
 
@@ -501,10 +559,17 @@ class Equilibrium(IOAble, Optimizable):
         self._N_grid = setdefault(N_grid, self.N_grid)
         self._NFP = setdefault(NFP, self.NFP)
         self._sym = setdefault(sym, self.sym)
+        self._L_well = setdefault(L_well, self.L_well)
+        self._M_well = setdefault(M_well, self.M_well)
+        self._L_omni = setdefault(L_omni, self.L_omni)
+        self._M_omni = setdefault(M_omni, self.M_omni)
+        self._N_omni = setdefault(N_omni, self.N_omni)
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
+        old_modes_well = self.well_basis.modes
+        old_modes_omni = self.omni_basis.modes
 
         self.R_basis.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
@@ -514,6 +579,10 @@ class Equilibrium(IOAble, Optimizable):
         )
         self.L_basis.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
+        self.well_basis.change_resolution(self.L_well)
+        self.omni_basis.change_resolution(
+            self.L_omni, self.M_omni, self.N_omni, NFP=self.NFP, sym="cos(t)"
         )
 
         for profile in [
@@ -537,6 +606,17 @@ class Equilibrium(IOAble, Optimizable):
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
+        self._omni_lmn = copy_coeffs(
+            self.omni_lmn, old_modes_omni, self.omni_basis.modes
+        )
+
+        old_well = self.well_l.reshape((-1, self.M_well))
+        new_well = np.zeros((self.L_well + 1, self.M_well))
+        for j in range(self.M_well):
+            new_well[:, j] = copy_coeffs(
+                old_well[:, j], old_modes_well, self.well_basis.modes
+            )
+        self._well_l = new_well.flatten()
 
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
@@ -1460,7 +1540,20 @@ class Equilibrium(IOAble, Optimizable):
 
     @classmethod
     def from_near_axis(
-        cls, na_eq, r=0.1, L=None, M=8, N=None, ntheta=None, spectral_indexing="ansi"
+        cls,
+        na_eq,
+        r=0.1,
+        L=None,
+        M=8,
+        N=None,
+        ntheta=None,
+        spectral_indexing="ansi",
+        L_well=0,
+        M_well=2,
+        L_omni=0,
+        M_omni=1,
+        N_omni=1,
+        **kwargs,
     ):
         """Initialize an Equilibrium from a near-axis solution.
 
@@ -1520,6 +1613,11 @@ class Equilibrium(IOAble, Optimizable):
                     NFP=na_eq.nfp,
                 ),
                 "surface": None,
+                "L_well": L_well,
+                "M_well": M_well,
+                "L_omni": L_omni,
+                "M_omni": M_omni,
+                "N_omni": N_omni,
             }
         except AttributeError as e:
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
@@ -2062,6 +2160,61 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         return eq
+
+    @property
+    def L_well(self):
+        """int: Radial resolution of the magnetic well parameters well_l."""
+        return self._L_well
+
+    @property
+    def M_well(self):
+        """int: Number of spline points in the magnetic well parameters well_l."""
+        return self._M_well
+
+    @property
+    def L_omni(self):
+        """int: Radial resolution of omni_lmn."""
+        return self._L_omni
+
+    @property
+    def M_omni(self):
+        """int: Poloidal resolution of omni_lmn."""
+        return self._M_omni
+
+    @property
+    def N_omni(self):
+        """int: Toroidal resolution of omni_lmn."""
+        return self._N_omni
+
+    @property
+    def well_basis(self):
+        """ChebyshevPolynomial: Spectral basis for well_l."""
+        return self._well_basis
+
+    @property
+    def omni_basis(self):
+        """FourierZernikeBasis: Spectral basis for omni_lmn."""
+        return self._omni_basis
+
+    @optimizable_parameter
+    @property
+    def well_l(self):
+        """ndarray: Omnigenity magnetic well shape parameters."""
+        return self._well_l
+
+    @well_l.setter
+    def well_l(self, well_l):
+        self._well_l[:] = well_l
+
+    @optimizable_parameter
+    @property
+    def omni_lmn(self):
+        """ndarray: Omnigenity magnetic well shift parameters."""
+        return self._omni_lmn
+
+    @omni_lmn.setter
+    def omni_lmn(self, omni_lmn):
+        self._omni_lmn[:] = omni_lmn
 
 
 class EquilibriaFamily(IOAble, MutableSequence):

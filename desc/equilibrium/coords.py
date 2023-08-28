@@ -235,7 +235,7 @@ def compute_theta_coords(eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
     if jnp.any(rho < 0):
         raise ValueError("rho values must be positive")
 
-    # Note: theta* (also known as vartheta) is the poloidal straight field-line
+    # Note: theta* (also known as vartheta) is the poloidal straight field line
     # angle in PEST-like flux coordinates
 
     nodes = flux_coords.copy()

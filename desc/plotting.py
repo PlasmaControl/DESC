@@ -2296,9 +2296,7 @@ def plot_boozer_surface(
         if True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
-
             plot_X(figsize=(4,6),cmap="plasma")
-
         Valid keyword arguments are:
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
@@ -2321,9 +2319,7 @@ def plot_boozer_surface(
     Examples
     --------
     .. image:: ../../_static/images/plotting/plot_boozer_surface.png
-
     .. code-block:: python
-
         from desc.plotting import plot_boozer_surface
         fig, ax = plot_boozer_surface(eq)
 

@@ -688,6 +688,7 @@ class _Objective(IOAble, ABC):
     _equilibrium = False
     _io_attrs_ = [
         "_target",
+        "_bounds",
         "_weight",
         "_name",
         "_normalize",

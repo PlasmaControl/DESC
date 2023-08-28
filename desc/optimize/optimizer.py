@@ -6,8 +6,13 @@ import numpy as np
 from termcolor import colored
 
 from desc.io import IOAble
-from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
-from desc.objectives.utils import combine_args, maybe_add_self_consistency
+from desc.objectives import (
+    FixCurrent,
+    FixIota,
+    ObjectiveFunction,
+    maybe_add_self_consistency,
+)
+from desc.objectives.utils import combine_args
 from desc.utils import Timer
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection

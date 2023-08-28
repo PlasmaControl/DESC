@@ -12,6 +12,8 @@ from desc.basis import (
     PowerSeries,
 )
 from desc.coils import CoilSet, FourierXYZCoil
+from desc.compute import data_index
+from desc.compute.utils import surface_averages
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -260,6 +262,78 @@ def test_3d_rt(DSHAPE_current):
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)
     fig, ax = plot_3d(eq, "psi", grid=grid)
     return fig
+
+
+@pytest.mark.unit
+def test_plot_fsa_axis_limit():
+    """Test magnetic axis limit of flux surface average is plotted."""
+    eq = get("W7-X")
+    rho = np.linspace(0, 1, 10)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho)
+    assert grid.axis.size
+
+    name = "J*B"
+    assert (
+        "<" + name + ">" in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
+    # should forward computation to compute function
+    _, _, plot_data = plot_fsa(
+        eq=eq,
+        name=name,
+        rho=rho,
+        M=eq.M_grid,
+        N=eq.N_grid,
+        with_sqrt_g=True,
+        return_data=True,
+    )
+    desired = grid.compress(
+        eq.compute(names="<" + name + ">", grid=grid)["<" + name + ">"]
+    )
+    np.testing.assert_allclose(plot_data["<" + name + ">"], desired, equal_nan=False)
+
+    name = "B0"
+    assert (
+        "<" + name + ">" not in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
+    # should automatically compute axis limit
+    _, _, plot_data = plot_fsa(
+        eq=eq,
+        name=name,
+        rho=rho,
+        M=eq.M_grid,
+        N=eq.N_grid,
+        with_sqrt_g=True,
+        return_data=True,
+    )
+    data = eq.compute(names=[name, "sqrt(g)", "sqrt(g)_r"], grid=grid)
+    desired = surface_averages(
+        grid=grid,
+        q=data[name],
+        sqrt_g=grid.replace_at_axis(data["sqrt(g)"], data["sqrt(g)_r"], copy=True),
+        expand_out=False,
+    )
+    np.testing.assert_allclose(
+        plot_data["<" + name + ">_fsa"], desired, equal_nan=False
+    )
+
+    name = "|B|"
+    assert (
+        "<" + name + ">" in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
+    _, _, plot_data = plot_fsa(
+        eq=eq,
+        name=name,
+        rho=rho,
+        M=eq.M_grid,
+        N=eq.N_grid,
+        with_sqrt_g=False,  # Test that does not compute data_index["<|B|>"]
+        return_data=True,
+    )
+    data = eq.compute(names=name, grid=grid)
+    desired = surface_averages(grid=grid, q=data[name], expand_out=False)
+    np.testing.assert_allclose(
+        plot_data["<" + name + ">_fsa"], desired, equal_nan=False
+    )
 
 
 @pytest.mark.unit

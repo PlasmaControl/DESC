@@ -617,10 +617,8 @@ class SplineXYZCurve(Curve):
         if knots is None:
             # find equal arclength angle-like variable, and use that as theta
             # L_along_curve / L = theta / 2pi
-            lengths = jnp.sqrt(
-                (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2
-            )
-            thetas = 2 * jnp.pi * np.cumsum(lengths) / jnp.sum(lengths)
+            lengths = np.sqrt(np.diff(X) ** 2 + np.diff(Y) ** 2 + np.diff(Z) ** 2)
+            thetas = 2 * np.pi * np.cumsum(lengths) / np.sum(lengths)
             thetas = np.insert(thetas, 0, 0)
             knots = thetas
 

@@ -329,9 +329,7 @@ def DummyStellarator(tmpdir_factory):
     eq = Equilibrium(**inputs)
     eq.save(output_path)
 
-    DummyStellarator_out = {
-        "output_path": output_path,
-    }
+    DummyStellarator_out = {"output_path": output_path}
     return DummyStellarator_out
 
 

@@ -55,7 +55,7 @@ def sgd(
         If None, the termination by this condition is disabled.
     gtol : float or None, optional
         Absolute tolerance for termination by the norm of the gradient.
-        Optimizer teriminates when ``max(abs(g)) < gtol``.
+        Optimizer terminates when ``max(abs(g)) < gtol``.
         If None, the termination by this condition is disabled.
     verbose : {0, 1, 2}, optional
         * 0 (default) : work silently.

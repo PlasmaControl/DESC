@@ -1009,26 +1009,24 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         # surface is the source of current density for the magnetic field
         # compute source positions rs, and their theta/zeta derivatives
         # store in "rpz" basis so can rotate them during compute_magnetic_field
-        data = self.compute(["x", "e_theta", "e_zeta"], grid=surface_grid, basis="xyz")
+        data = self.compute(
+            ["x", "e_theta", "e_zeta", "|e_theta x e_zeta|"],
+            grid=surface_grid,
+            basis="xyz",
+        )
         self._rs = xyz2rpz_vec(data["x"], phi=self.surface_grid.nodes[:, 2])
         theta = surface_grid.nodes[:, 1]
         zeta = surface_grid.nodes[:, 2]
+        ns_mag = data["|e_theta x e_zeta|"]
         # compute the dV element for the surface needed for biot savart
         self._dV = (
-            surface_grid.weights
-            * jnp.linalg.norm(
-                jnp.cross(data["e_theta"], data["e_zeta"], axis=-1), axis=-1
-            )
-            / surface_grid.NFP
+            surface_grid.weights * ns_mag / surface_grid.NFP
         )  # divide by NFP here so that the NFP loop
         # in compute_magnetic_field is correct
 
         # compute the potential derivatives on the surface
         phi_t = self._potential_t(theta, zeta)
         phi_z = self._potential_z(theta, zeta)
-
-        # compute surface normal magnitude
-        ns_mag = jnp.linalg.norm(jnp.cross(data["e_theta"], data["e_zeta"]), axis=1)
 
         # compute K = n x nabla(Phi)
         self._K = xyz2rpz_vec(

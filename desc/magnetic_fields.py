@@ -7,12 +7,14 @@ import numpy as np
 from netCDF4 import Dataset
 
 from desc.backend import fori_loop, jit, jnp, odeint, vmap
+from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
+from desc.transform import Transform
 
 
 # TODO: vectorize this over multiple coils
@@ -462,7 +464,6 @@ class SplineMagneticField(MagneticField):
     ]
 
     def __init__(self, R, phi, Z, BR, Bphi, BZ, method="cubic", extrap=False, period=0):
-
         R, phi, Z = np.atleast_1d(R), np.atleast_1d(phi), np.atleast_1d(Z)
         assert R.ndim == 1
         assert phi.ndim == 1
@@ -657,7 +658,6 @@ class SplineMagneticField(MagneticField):
         bz = np.zeros([kp, jz, ir])
         extcur = np.broadcast_to(extcur, nextcur)
         for i in range(nextcur):
-
             # apply scaling by currents given in VMEC input file
             scale = extcur[i]
 
@@ -837,7 +837,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
         surface current K is assumed given by
-        K = n x nabla(Phi)
+         K = ∇ Φ x n
         where n is the winding surface unit normal
               Phi is the current potential function,
               which is a function of theta and zeta
@@ -845,7 +845,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         B field from this current density K on the surface
 
         Note: potential function derivatives, if AD is used,
-         will not be vectorized over the params
+        will not be vectorized over the params
 
     Parameters
     ----------
@@ -864,7 +864,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         function to compute the theta derivative of the current potential
         if None, will use AD to calculate
     R_lmn, Z_lmn : array-like, shape(k,)
-        Fourier coefficients for R and Z in cylindrical coordinates
+        Fourier coefficients for winding surface R and Z in cylindrical coordinates
     modes_R : array-like, shape(k,2)
         poloidal and toroidal mode numbers [m,n] for R_lmn.
     modes_Z : array-like, shape(k,2)
@@ -933,6 +933,8 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
             NFP = surface.NFP
             sym = surface.sym
             rho = surface.rho
+
+        assert surface_grid.NFP == NFP, "NFP of surface must match NFP of surface_grid"
 
         super().__init__(
             R_lmn, Z_lmn, modes_R, modes_Z, NFP, sym, rho, name, check_orientation
@@ -1053,7 +1055,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
         params : dict, optional
-            parameters to pass to scalar potential function
+            parameters to pass to current potential function
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
 
@@ -1093,3 +1095,206 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         if basis == "rpz":
             B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
         return B
+
+
+class FourierCurrentPotentialField(CurrentPotentialField):
+    """Magnetic field due to a surface current potential on a toroidal surface.
+
+        surface current K is assumed given by
+
+        K = ∇ Φ x n
+        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+        where n is the winding surface unit normal
+              Phi is the current potential function,
+              which is a function of theta and zeta,
+              which is given as a secular linear term in theta/zeta
+              and a double Fourier series in theta/zeta
+        this function then uses biot-savart to find the
+        B field from this current density K on the surface
+
+    Parameters
+    ----------
+    Phi_mn : ndarray
+        Fourier coefficients of the double FourierSeries part of the current potential.
+        Should correspond to the given DoubleFourierSeries basis object passed in.
+    basis : DoubleFourierSeries
+        DoubleFourierSeries corresponding to the Phi_mn coefficients passed in.
+    I : float
+        Net current linking the plasma and the coils toroidally
+        Denoted I in the algorithm
+    G : float
+        Net current linking the plasma and the coils poloidally
+        Denoted G in the algorithm
+    surface_grid : Grid
+        grid upon which to evaluate the surface current density K
+    R_lmn, Z_lmn : array-like, shape(k,)
+        Fourier coefficients for winding surface R and Z in cylindrical coordinates
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry. Default is "auto" which enforces if
+        modes are symmetric. If True, non-symmetric modes will be truncated.
+    rho : float [0,1]
+        flux surface label for the toroidal surface
+    name : str
+        name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+    surface: FourierRZToroidalSurface, optional, default None
+        Existing FourierRZToroidalSurface object to create a
+        CurrentPotentialField with, if provided will use this
+        object's R_lmn, Z_lmn etc instead of any passed-in values
+
+    """
+
+    _io_attrs_ = (
+        MagneticField._io_attrs_
+        + FourierRZToroidalSurface._io_attrs_
+        + ["_surface_grid", "Phi_mn", ""]
+    )
+
+    def __init__(
+        self,
+        Phi_mn,
+        basis,
+        I,
+        G,
+        surface_grid,
+        R_lmn=None,
+        Z_lmn=None,
+        modes_R=None,
+        modes_Z=None,
+        NFP=1,
+        sym="auto",
+        rho=1,
+        name="",
+        check_orientation=True,
+        surface=None,
+    ):
+        assert isinstance(
+            basis, DoubleFourierSeries
+        ), "Must pass in a DoubleFourierSeries object for basis"
+        assert Phi_mn.size == basis.num_modes, (
+            "Basis size must match Phi_mn size!"
+            f"Expected Phi_mn size {basis.num_modes.size}, instead got {Phi_mn.size}"
+        )
+        self._Phi_mn = Phi_mn
+        self._surface_grid = surface_grid
+
+        assert np.isscalar(I), "I must be a scalar"
+        assert np.isscalar(G), "G must be a scalar"
+        self._I = I
+        self._G = G
+
+        def _fourier_potential(theta, zeta, I, G, Phi_mn):
+            # theta, zeta are eval points on the winding surface
+            nodes = jnp.vstack(
+                (
+                    jnp.zeros_like(theta.flatten(order="F")),
+                    theta.flatten(order="F"),
+                    zeta.flatten(order="F"),
+                )
+            ).T
+            trans_temp = Transform(
+                Grid(nodes, sort=False, jitable=True),
+                basis,
+            )
+            return (
+                trans_temp.transform(Phi_mn, jitable=True)
+                + G * zeta.flatten(order="F") / 2 / jnp.pi
+                + I * theta.flatten(order="F") / 2 / jnp.pi
+            )
+
+        def _fourier_potential_d_theta(theta, zeta, I, G, Phi_mn):
+            # theta, zeta are eval points on the winding surface
+            nodes = jnp.vstack(
+                (
+                    jnp.zeros_like(theta.flatten(order="F")),
+                    theta.flatten(order="F"),
+                    zeta.flatten(order="F"),
+                )
+            ).T
+            trans_temp = Transform(
+                Grid(nodes, sort=False, jitable=True),
+                basis,
+                derivs=jnp.array([[0, 1, 0]]),
+            )
+            return trans_temp.transform(Phi_mn, dt=1) + I / 2 / jnp.pi
+
+        def _fourier_potential_d_zeta(theta, zeta, I, G, Phi_mn):
+            # theta, zeta are eval points on the winding surface
+            nodes = jnp.vstack(
+                (
+                    jnp.zeros_like(theta.flatten(order="F")),
+                    theta.flatten(order="F"),
+                    zeta.flatten(order="F"),
+                )
+            ).T
+            trans_temp = Transform(
+                Grid(nodes, sort=False, jitable=True),
+                basis,
+                derivs=jnp.array([[0, 0, 1]]),
+            )
+            return trans_temp.transform(Phi_mn, dz=1) + G / 2 / jnp.pi
+
+        super().__init__(
+            potential=_fourier_potential,
+            surface_grid=surface_grid,
+            params={"I": self.I, "G": self.G, "Phi_mn": self.Phi_mn},
+            potential_dtheta=_fourier_potential_d_theta,
+            potential_dzeta=_fourier_potential_d_zeta,
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            modes_R=modes_R,
+            modes_Z=modes_Z,
+            NFP=NFP,
+            sym=sym,
+            rho=rho,
+            name=name,
+            check_orientation=check_orientation,
+            surface=surface,
+        )
+
+    @property
+    def I(self):  # noqa: E743
+        """Net current linking the plasma and the coils toroidally."""
+        return self._I
+
+    @I.setter
+    def I(self, new):  # noqa: E743
+        assert np.isscalar(new), "I must be a scalar"
+        self._I = new
+        self._params["I"] = new
+
+    @property
+    def G(self):
+        """Net current linking the plasma and the coils poloidally."""
+        return self._G
+
+    @G.setter
+    def G(self, new):
+        assert np.isscalar(new), "G must be a scalar"
+        self._G = new
+        self._params["G"] = new
+
+    @property
+    def Phi_mn(self):
+        """Fourier coefficients describing single-valued part of potential."""
+        return self._Phi_mn
+
+    @Phi_mn.setter
+    def Phi_mn(self, new):
+        assert new.size == self._Phi_mn.size, (
+            "New Phi_mn must be same size as old!"
+            f"Expected size {self._Phi_mn.size},"
+            f" instead got {new.size}"
+        )
+        self._Phi_mn = new
+        self._params["Phi_mn"] = new

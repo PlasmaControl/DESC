@@ -950,3 +950,22 @@ def test_bd_min_objective():
     L2 = obj2.compute_scaled(*obj2.xs(eq))
     # second surface is further away, so should have larger obj
     np.testing.assert_array_less(L1, L2)
+
+    # check for surface_grid
+    surf_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    obj1 = B_dmin(
+        winding_surf1, eq=eq, normalize=False, plasma_grid=grid, surface_grid=surf_grid
+    )
+    obj2 = B_dmin(
+        winding_surf2, eq=eq, normalize=False, plasma_grid=grid, surface_grid=surf_grid
+    )
+    with pytest.warns(UserWarning):
+        obj1.build()
+    with pytest.warns(UserWarning):
+        obj2.build()
+
+    L1 = obj1.compute_unscaled(*obj1.xs(eq))
+    L2 = obj2.compute_unscaled(*obj2.xs(eq))
+
+    # second surface is further away, so should have larger obj
+    np.testing.assert_array_less(L1, L2)

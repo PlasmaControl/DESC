@@ -756,11 +756,16 @@ class LinearGrid(Grid):
             t.size > 0
             and z.size > 0
             and (
-                (t[0] == 0 and t[-1] == THETA_ENDPOINT) or (t.size == 1 and z.size > 1)
+                (np.isclose(t[0], 0) and np.isclose(t[-1], THETA_ENDPOINT))
+                or (t.size == 1 and z.size > 1)
             )
-            and ((z[0] == 0 and z[-1] == ZETA_ENDPOINT) or (z.size == 1 and t.size > 1))
+            and (
+                (np.isclose(z[0], 0) and np.isclose(z[-1], ZETA_ENDPOINT))
+                or (z.size == 1 and t.size > 1)
+            )
         )  # if only one theta or one zeta point, can have endpoint=True
         # if the other one is a full array
+
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()
         t = t.flatten()

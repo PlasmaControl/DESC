@@ -756,11 +756,17 @@ class LinearGrid(Grid):
             t.size > 0
             and z.size > 0
             and (
-                (np.isclose(t[0], 0) and np.isclose(t[-1], THETA_ENDPOINT))
+                (
+                    np.isclose(t[0], 0, atol=1e-12)
+                    and np.isclose(t[-1], THETA_ENDPOINT, atol=1e-12)
+                )
                 or (t.size == 1 and z.size > 1)
             )
             and (
-                (np.isclose(z[0], 0) and np.isclose(z[-1], ZETA_ENDPOINT))
+                (
+                    np.isclose(z[0], 0, atol=1e-12)
+                    and np.isclose(z[-1], ZETA_ENDPOINT, atol=1e-12)
+                )
                 or (z.size == 1 and t.size > 1)
             )
         )  # if only one theta or one zeta point, can have endpoint=True

@@ -775,7 +775,6 @@ class CoilSet(Coil, MutableSequence):
             contour_Z = np.asarray(coords[0:, 2])
 
             currents = np.ones_like(contour_X) * float(coil.current)
-
             if endpoint:
                 currents[-1] = 0  # this last point must have 0 current
             else:  # close the curves if needed

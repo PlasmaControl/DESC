@@ -941,9 +941,6 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         )
         self._set_derivatives(potential_dtheta, potential_dzeta)
 
-        # K can/should be precomputed I think
-        self._compute_surface_current()
-
     @property
     def surface_grid(self):
         """Grid of points to evaluate surface current at."""
@@ -953,9 +950,6 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     def surface_grid(self, new):
         if new != self._surface_grid:
             self._surface_grid = new
-            # recompute K if surface grid changed
-            self._compute_surface_current()
-        # TODO: if surface properties are changed, should also recompute
 
     @property
     def params(self):
@@ -971,8 +965,6 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
                     "May cause errors unless potential function is also changed."
                 )
             self._params = new
-            # recompute K if params changed
-            self._compute_surface_current()
 
     @property
     def potential(self):
@@ -985,8 +977,6 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
             self._potential = new
             # reset derivatives if potential has changed, using AD
             self._set_derivatives()
-            # recompute K if potential changed
-            self._compute_surface_current()
 
     def _set_derivatives(self, potential_dtheta=None, potential_dzeta=None):
         if potential_dtheta:
@@ -1074,6 +1064,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
 
         if (params is None) or (len(params) == 0):
             params = self._params
+        self._compute_surface_current()
 
         def nfp_loop(j, f):
             # calc (or actually just rotate?) rs, rs_t, rz_t

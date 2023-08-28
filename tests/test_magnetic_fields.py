@@ -76,6 +76,7 @@ class TestMagneticFields:
             Z_lmn=jnp.array([0, -1]),
             modes_R=jnp.array([[0, 0], [1, 0]]),
             modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
         )
         # make a current potential corresponding a purely poloidal current
         G = 10  # net poloidal current
@@ -96,6 +97,7 @@ class TestMagneticFields:
             params=params,
             potential_dtheta=potential_dtheta,
             potential_dzeta=potential_dzeta,
+            NFP=surface.NFP,
         )
 
         np.testing.assert_allclose(

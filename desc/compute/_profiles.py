@@ -608,6 +608,97 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="iota_current",
+    label="\\iota_{\\mathrm{current}}",
+    units="~",
+    units_long="None",
+    description="Rotational transform (normalized by 2pi), current contribution",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["iota_den", "iota_current_num"],
+)
+def _iota_current(params, transforms, profiles, data, **kwargs):
+    data["iota_current"] = transforms["grid"].replace_at_axis(
+        data["iota_current_num"] / data["iota_den"], 0
+    )
+    return data
+
+
+@register_compute_fun(
+    name="iota_vacuum",
+    label="\\iota_{\\mathrm{vacuum}}",
+    units="~",
+    units_long="None",
+    description="Rotational transform (normalized by 2pi), vacuum contribution",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["iota_den", "iota_vacuum_num"],
+    axis_limit_data=["iota_den_r", "iota_num_r"],
+)
+def _iota_vacuum(params, transforms, profiles, data, **kwargs):
+    data["iota_vacuum"] = transforms["grid"].replace_at_axis(
+        data["iota_vacuum_num"] / data["iota_den"],
+        lambda: data["iota_num_r"] / data["iota_den_r"],
+    )
+    return data
+
+
+@register_compute_fun(
+    name="iota_current_num",
+    label="\\iota_{\\mathrm{current, numerator}}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Numerator of rotational transform formula, current contribution",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["current", "psi_r"],
+)
+def _iota_current_num(params, transforms, profiles, data, **kwargs):
+    """Current contribution to the numerator of rotational transform formula."""
+    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+    data["iota_current_num"] = 2 * jnp.pi * mu_0 * data["current"] / data["psi_r"]
+    data["iota_current_num"] = transforms["grid"].replace_at_axis(
+        data["iota_current_num"], 0
+    )
+    return data
+
+
+@register_compute_fun(
+    name="iota_vacuum_num",
+    label="\\iota_{\\mathrm{vacuum, numerator}}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Numerator of rotational transform formula, vacuum contribution",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["lambda_z", "g_tt", "lambda_t", "g_tz", "sqrt(g)"],
+)
+def _iota_vacuum_num(params, transforms, profiles, data, **kwargs):
+    """Vacuum contribution to the numerator of rotational transform formula."""
+    data["iota_vacuum_num"] = surface_integrals(
+        transforms["grid"],
+        (data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"])
+        / data["sqrt(g)"],
+    )
+    data["iota_vacuum_num"] = transforms["grid"].replace_at_axis(
+        data["iota_vacuum_num"], 0
+    )
+    return data
+
+
+@register_compute_fun(
     name="iota_num",
     label="\\iota_{\\mathrm{numerator}}",
     units="m^{-1}",

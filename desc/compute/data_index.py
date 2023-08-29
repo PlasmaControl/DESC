@@ -46,7 +46,7 @@ def register_compute_fun(
         a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty.
-    parameterization: str
+    parameterization: str or list of str
         Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
         or `desc.equilibrium.Equilibrium`.
     axis_limit_data : list of str
@@ -84,6 +84,10 @@ def register_compute_fun(
             flag = False
             for base_class, superclasses in _class_inheritance.items():
                 if p in superclasses or p == base_class:
+                    if name in data_index[base_class]:
+                        raise ValueError(
+                            f"Already registered function with parameterization {p} and name {name}."
+                        )
                     data_index[base_class][name] = d.copy()
                     flag = True
             if not flag:
@@ -111,6 +115,9 @@ _class_inheritance = {
     "desc.geometry.curve.FourierPlanarCurve": [
         "desc.geometry.core.Curve",
     ],
+    "desc.geometry.curve.SplineXYZCurve": [
+        "desc.geometry.core.Curve",
+    ],
     "desc.geometry.surface.FourierRZToroidalSurface": [
         "desc.geometry.core.Surface",
     ],
@@ -127,6 +134,10 @@ _class_inheritance = {
     ],
     "desc.coils.FourierPlanarCoil": [
         "desc.geometry.curve.FourierPlanarCurve",
+        "desc.geometry.core.Curve",
+    ],
+    "desc.coils.SplineXYZCoil": [
+        "desc.geometry.curve.SplineXYZCurve",
         "desc.geometry.core.Curve",
     ],
 }

@@ -21,7 +21,7 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -735,6 +735,11 @@ class Equilibrium(IOAble, Optimizable):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        elif not isinstance(grid, Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
 
         if params is None:
             params = get_params(names, obj=self, has_axis=grid.axis.size)

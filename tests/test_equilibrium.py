@@ -349,3 +349,13 @@ def test_change_NFP():
         eq.change_resolution(NFP=4)
         obj = get_equilibrium_objective(eq=eq)
         obj.build()
+
+
+@pytest.mark.unit
+def test_error_when_ndarray_or_integer_passed():
+    """Test that errors raise correctly when a non-Grid object is passed."""
+    eq = desc.examples.get("DSHAPE")
+    with pytest.raises(TypeError):
+        eq.compute("R", grid=1)
+    with pytest.raises(TypeError):
+        eq.compute("R", grid=np.linspace(0, 1, 10))

@@ -382,6 +382,32 @@ class Equilibrium(IOAble, Optimizable):
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
 
+    def _sort_args(self, args):
+        """Put arguments in a canonical order. Returns unique sorted elements.
+
+        For Equilibrium, alphabetical order seems to lead to some numerical instability
+        so we enforce a particular order that has worked well.
+        """
+        arg_order = (
+            "R_lmn",
+            "Z_lmn",
+            "L_lmn",
+            "p_l",
+            "i_l",
+            "c_l",
+            "Psi",
+            "Te_l",
+            "ne_l",
+            "Ti_l",
+            "Zeff_l",
+            "Ra_n",
+            "Za_n",
+            "Rb_lmn",
+            "Zb_lmn",
+        )
+        assert sorted(args) == sorted(arg_order)
+        return [arg for arg in arg_order if arg in args]
+
     def __repr__(self):
         """String form of the object."""
         return (

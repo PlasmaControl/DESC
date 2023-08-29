@@ -5,7 +5,6 @@ import warnings
 from abc import ABC
 
 from desc.backend import jnp
-from desc.utils import sort_args
 
 
 class Optimizable(ABC):
@@ -29,7 +28,7 @@ class Optimizable(ABC):
                     method = method.fget  # we want the property itself, not the value
                 if hasattr(method, "optimizable"):
                     p.append(methodname)
-            self._optimizable_params = sort_args(p)
+            self._optimizable_params = self._sort_args(p)
             if not len(p):
                 warnings.warn(
                     f"Object {self} was subclassed from Optimizable but no "
@@ -113,6 +112,14 @@ class Optimizable(ABC):
         for arg in self.optimizable_params:
             params[arg] = jnp.atleast_1d(x[x_idx[arg]])
         return params
+
+    def _sort_args(self, args):
+        """Put arguments in a canonical order. Returns unique sorted elements.
+
+        Actual order doesn't really matter as long as its consistent, though subclasses
+        may override this method to enforce a specific ordering
+        """
+        return sorted(set(list(args)))
 
 
 def optimizable_parameter(f):

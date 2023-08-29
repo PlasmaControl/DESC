@@ -9,7 +9,6 @@ from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, LinearGrid
-from desc.utils import sort_args
 
 from .data_index import data_index
 
@@ -298,10 +297,6 @@ def get_params(keys, obj, has_axis=False, **kwargs):
     params = []
     for key in deps:
         params += data_index[p][key]["dependencies"]["params"]
-    if p == "desc.equilibrium.equilibrium.Equilibrium":
-        # probably need some way to distinguish between params from different instances
-        # of the same class?
-        params = sort_args(params)
     if isinstance(obj, str) or inspect.isclass(obj):
         return params
     params = {name: np.atleast_1d(getattr(obj, name)).copy() for name in params}

@@ -541,16 +541,6 @@ def only1(*args):
     return any(i) and not any(i)
 
 
-def sort_args(args):
-    """Put arguments in a canonical order. Returns unique sorted elements.
-
-    Actual order doesn't really matter as long as its consistent, though for some reason
-    things seem numerically unstable if L_lmn is the first non-fixed arg, so for now we
-    sort things in reverse lexicographical order.
-    """
-    return sorted(set(list(args)))[::-1]
-
-
 def sort_things(things):
     """Sort a list of things by their class and instance name."""
     things = list(set(flatten_list(things, True)))

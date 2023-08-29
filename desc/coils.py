@@ -1,5 +1,6 @@
 """Classes for magnetic field coils."""
 
+import numbers
 from abc import ABC
 from collections.abc import MutableSequence
 
@@ -7,9 +8,15 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import rpz2xyz, xyz2rpz_vec
-from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
+from desc.geometry import (
+    FourierPlanarCurve,
+    FourierRZCurve,
+    FourierXYZCurve,
+    SplineXYZCurve,
+)
 from desc.grid import Grid
 from desc.magnetic_fields import MagneticField, biot_savart
+from desc.utils import flatten_list
 
 
 class Coil(MagneticField, ABC):
@@ -49,11 +56,7 @@ class Coil(MagneticField, ABC):
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
-        The coil is discretized into a series of straight line segments, using
-        the coil ``grid`` attribute. To override this, include 'grid' as a key
-        in the `params` dictionary with the desired grid resolution.
-
-        Similarly, the coil current may be overridden by including `current`
+        The coil current may be overridden by including `current`
         in the `params` dictionary.
 
         Parameters
@@ -132,7 +135,7 @@ class FourierRZCoil(Coil, FourierRZCurve):
         R_coil = 10
         # circular coil given by R(phi) = 10
         coil = FourierRZCoil(
-            current=I, R_n=R_coil, Z_n=0, modes_R=[0], grid=LinearGrid(N=100)
+            current=I, R_n=R_coil, Z_n=0, modes_R=[0]
         )
         z0 = 10
         field_evaluated = coil.compute_magnetic_field(
@@ -199,7 +202,6 @@ class FourierXYZCoil(Coil, FourierXYZCurve):
             Y_n=[0, 0, R_coil],
             Z_n=[0, 0, 0],
             modes=[0, 1, -1],
-            grid=LinearGrid(N=100),
         )
         z0 = 10
         field_evaluated = coil.compute_magnetic_field(
@@ -272,7 +274,6 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
             normal=[0, 0, 1],
             r_n=R_coil,
             modes=[0],
-            grid=LinearGrid(N=100),
         )
         z0 = 10
         field_evaluated = coil.compute_magnetic_field(
@@ -303,6 +304,55 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
         super().__init__(current, center, normal, r_n, modes, name)
 
 
+class SplineXYZCoil(Coil, SplineXYZCurve):
+    """Coil parameterized by spline points in X,Y,Z.
+
+    Parameters
+    ----------
+    current : float
+        current through coil, in Amperes
+    X, Y, Z: array-like
+        points for X, Y, Z describing a closed curve
+    knots : ndarray
+        arbitrary curve parameter values to use for spline knots,
+        should be a monotonic, 1D ndarray of same length as the input X,Y,Z.
+        If None, defaults to using an equal-arclength angle as the knots
+        If supplied, will be rescaled to lie in [0,2pi]
+    method : str
+        method of interpolation
+
+        - ``'nearest'``: nearest neighbor interpolation
+        - ``'linear'``: linear interpolation
+        - ``'cubic'``: C1 cubic splines (aka local splines)
+        - ``'cubic2'``: C2 cubic splines (aka natural splines)
+        - ``'catmull-rom'``: C1 cubic centripetal "tension" splines
+        - ``'cardinal'``: C1 cubic general tension splines. If used, default tension of
+          c = 0 will be used
+        - ``'monotonic'``: C1 cubic splines that attempt to preserve monotonicity in the
+          data, and will not introduce new extrema in the interpolated points
+        - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
+          endpoints
+
+    name : str
+        name for this curve
+
+    """
+
+    _io_attrs_ = Coil._io_attrs_ + SplineXYZCurve._io_attrs_
+
+    def __init__(
+        self,
+        current,
+        X,
+        Y,
+        Z,
+        knots=None,
+        method="cubic",
+        name="",
+    ):
+        super().__init__(current, X, Y, Z, knots, method, name)
+
+
 class CoilSet(Coil, MutableSequence):
     """Set of coils of different geometry.
 
@@ -312,11 +362,15 @@ class CoilSet(Coil, MutableSequence):
         collection of coils
     currents : float or array-like of float
         currents in each coil, or a single current shared by all coils in the set
+    name : str
+        name of this CoilSet
+
     """
 
     _io_attrs_ = Coil._io_attrs_ + ["_coils"]
 
     def __init__(self, *coils, name=""):
+        coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (Coil)) for coil in coils])
         self._coils = list(coils)
         self._name = str(name)
@@ -559,6 +613,210 @@ class CoilSet(Coil, MutableSequence):
             coilset.append(coil)
 
         return cls(*coilset)
+
+    @classmethod
+    def from_makegrid_coilfile(cls, coil_file, method="cubic"):
+        """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
+
+        Parameters
+        ----------
+        coil_file : str or path-like
+            path to coil file in txt format
+        method : str
+            method of interpolation
+
+            - ``'nearest'``: nearest neighbor interpolation
+            - ``'linear'``: linear interpolation
+            - ``'cubic'``: C1 cubic splines (aka local splines)
+            - ``'cubic2'``: C2 cubic splines (aka natural splines)
+            - ``'catmull-rom'``: C1 cubic centripetal "tension" splines
+            - ``'cardinal'``: C1 cubic general tension splines. If used, default tension
+              of c = 0 will be used
+            - ``'monotonic'``: C1 cubic splines that attempt to preserve monotonicity in
+              the data, and will not introduce new extrema in the interpolated points
+            - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at
+              both endpoints
+
+        """
+        coils = []  # list of SplineXYZCoils
+        coilinds = [2]  # always start at the 3rd line
+        names = []
+
+        # read in the coils file
+        with open(coil_file) as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                if line.find("periods") != -1:
+                    continue
+                if (
+                    line.find("begin filament") != -1
+                    or line.find("end") != -1
+                    or line.find("mirror") != -1
+                ):
+                    continue  # skip headers and last line
+                if (
+                    len(line.split()) != 4
+                    and line.strip()  # ensure not counting blank lines
+                ):
+                    coilinds.append(i)
+                    names.append(" ".join(line.split()[4:]))
+        if len(lines[3].split()) != 4:
+            raise OSError(
+                "4th line in file must be the start of the first coil! "
+                + "Expected a line of length 4 (after .split()), "
+                + f"instead got length {lines[3].split()}"
+            )
+        header_lines_not_as_expected = np.array(
+            [
+                len(lines[0].split()) != 2,
+                len(lines[1].split()) != 2,
+                len(lines[2].split()) != 2,
+            ]
+        )
+        if np.any(header_lines_not_as_expected):
+            raise OSError(
+                "First 3 lines in file must be the header lines,"
+                + " each of length 2 (after .split())! "
+                + f"Line(s) {lines[np.where(header_lines_not_as_expected)[0]]}"
+                + " are not length 2"
+            )
+
+        for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
+            coords = np.genfromtxt(lines[start + 1 : end])
+
+            tempx = np.append(coords[:, 0], np.array([coords[0, 0]]))
+            tempy = np.append(coords[:, 1], np.array([coords[0, 1]]))
+            tempz = np.append(coords[:, 2], np.array([coords[0, 2]]))
+
+            coils.append(
+                SplineXYZCoil(
+                    coords[:, -1][0],
+                    tempx,
+                    tempy,
+                    tempz,
+                    method=method,
+                    name=names[i],
+                )
+            )
+
+        return CoilSet(*coils)
+
+    def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
+        """Save CoilSet as a MAKEGRID-formatted coil txtfile.
+
+        By default, each coil is assigned to the same Coilgroup in MAKEGRID
+        with the name "Modular". For more details see the MAKEGRID documentation
+        https://princetonuniversity.github.io/STELLOPT/MAKEGRID.html
+
+        Note: if a nested CoilSet, will flatten it first before saving
+
+        Parameters
+        ----------
+        filename : str or path-like
+            path save CoilSet as a file in MAKEGRID txt format
+        NFP : int, default None
+            If > 1, assumes that the CoilSet is the coils for a coilset
+            with a nominal discrete toroidal symmetry of NFP, and will
+            put that NFP in the periods line of the coils file generated.
+            defaults to 1
+        grid: Grid, ndarray, int,
+            Grid of sample points along each coil to save.
+            if None, will default to the coil compute functions's
+            default grid
+        """
+        # TODO: name each group based off of CoilSet name?
+        # TODO: have CoilGroup be automatically assigned based off of
+        # CoilSet if current coilset is a collection of coilsets?
+
+        NFP = 1 if NFP is None else NFP
+
+        def flatten_coils(coilset):
+            if hasattr(coilset, "__len__"):
+                return [a for i in coilset for a in flatten_coils(i)]
+            else:
+                return [coilset]
+
+        coils = flatten_coils(self.coils)
+        assert (
+            int(len(coils) / NFP) == len(coils) / NFP
+        ), "Number of coils in coilset must be evenly divisible by NFP!"
+
+        header = (
+            # number of field period
+            "periods "
+            + str(NFP)
+            + "\n"
+            + "begin filament\n"
+            # not 100% sure of what this line is, neither is MAKEGRID,
+            # but it is needed and expected by other codes
+            # "The third line is read by MAKEGRID but ignored"
+            # https://princetonuniversity.github.io/STELLOPT/MAKEGRID.html
+            + "mirror NIL"
+        )
+        footer = "end\n"
+
+        x_arr = []
+        y_arr = []
+        z_arr = []
+        currents_arr = []
+        coil_end_inds = []  # indices where the coils end, need to track these
+        # to place the coilgroup number and name later, which MAKEGRID expects
+        # at the end of each individual coil
+        if isinstance(grid, Grid):
+            endpoint = grid.endpoint
+        elif isinstance(grid, numbers.Integral):
+            endpoint = True  # if int, will create a grid w/ endpoint=True in compute
+        for i in range(int(len(coils))):
+            coil = coils[i]
+            coords = coil.compute("x", basis="xyz", grid=grid)["x"]
+
+            contour_X = np.asarray(coords[0:, 0])
+            contour_Y = np.asarray(coords[0:, 1])
+            contour_Z = np.asarray(coords[0:, 2])
+
+            currents = np.ones_like(contour_X) * float(coil.current)
+            if endpoint:
+                currents[-1] = 0  # this last point must have 0 current
+            else:  # close the curves if needed
+                contour_X = np.append(contour_X, contour_X[0])
+                contour_Y = np.append(contour_Y, contour_Y[0])
+                contour_Z = np.append(contour_Z, contour_Z[0])
+                currents = np.append(currents, 0)  # this last point must have 0 current
+
+            coil_end_inds.append(contour_X.size)
+
+            x_arr.append(contour_X)
+            y_arr.append(contour_Y)
+            z_arr.append(contour_Z)
+            currents_arr.append(currents)
+        # form full array to save
+        x_arr = np.concatenate(x_arr)
+        y_arr = np.concatenate(y_arr)
+        z_arr = np.concatenate(z_arr)
+        currents_arr = np.concatenate(currents_arr)
+
+        save_arr = np.vstack((x_arr, y_arr, z_arr, currents_arr)).T
+        # save initial file
+        np.savetxt(
+            coilsFilename,
+            save_arr,
+            delimiter=" ",
+            header=header,
+            footer=footer,
+            fmt="%14.12e",
+            comments="",  # to avoid the # appended to the start of the header/footer
+        )
+        # now need to re-load the file and place coilgroup markers at end of each coil
+        with open(coilsFilename) as f:
+            lines = f.readlines()
+        for i in range(len(coil_end_inds)):
+            name = coils[i].name if coils[i].name != "" else "1 Modular"
+            real_end_ind = int(
+                np.sum(coil_end_inds[0 : i + 1]) + 2
+            )  # to account for the 3 header lines
+            lines[real_end_ind] = lines[real_end_ind].strip("\n") + f" {name}\n"
+        with open(coilsFilename, "w") as f:
+            f.writelines(lines)
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):

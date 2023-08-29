@@ -10,6 +10,7 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
+from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -20,7 +21,7 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -732,6 +733,11 @@ class Equilibrium(IOAble):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        elif not isinstance(grid, Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
 
         if params is None:
             params = get_params(names, obj=self, has_axis=grid.axis.size)
@@ -1117,7 +1123,14 @@ class Equilibrium(IOAble):
 
     @R_lmn.setter
     def R_lmn(self, R_lmn):
-        self._R_lmn[:] = R_lmn
+        R_lmn = jnp.atleast_1d(R_lmn)
+        errorif(
+            R_lmn.size != self._R_lmn.size,
+            ValueError,
+            "R_lmn should have the same size as R_basis, "
+            + f"got {len(R_lmn)} for basis with {self.R_basis.num_modes} modes",
+        )
+        self._R_lmn = R_lmn
 
     @property
     def Z_lmn(self):
@@ -1126,7 +1139,14 @@ class Equilibrium(IOAble):
 
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
-        self._Z_lmn[:] = Z_lmn
+        Z_lmn = jnp.atleast_1d(Z_lmn)
+        errorif(
+            Z_lmn.size != self._Z_lmn.size,
+            ValueError,
+            "Z_lmn should have the same size as Z_basis, "
+            + f"got {len(Z_lmn)} for basis with {self.Z_basis.num_modes} modes",
+        )
+        self._Z_lmn = Z_lmn
 
     @property
     def L_lmn(self):
@@ -1135,7 +1155,14 @@ class Equilibrium(IOAble):
 
     @L_lmn.setter
     def L_lmn(self, L_lmn):
-        self._L_lmn[:] = L_lmn
+        L_lmn = jnp.atleast_1d(L_lmn)
+        errorif(
+            L_lmn.size != self._L_lmn.size,
+            ValueError,
+            "L_lmn should have the same size as L_basis, "
+            + f"got {len(L_lmn)} for basis with {self.L_basis.num_modes} modes",
+        )
+        self._L_lmn = L_lmn
 
     @property
     def Rb_lmn(self):

@@ -28,6 +28,7 @@ Coils
     desc.coils.FourierRZCoil
     desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
+    desc.coils.SplineXYZCoil
     desc.coils.CoilSet
 
 Continuation
@@ -88,6 +89,7 @@ Geometry
     desc.geometry.FourierXYZCurve
     desc.geometry.FourierPlanarCurve
     desc.geometry.FourierRZToroidalSurface
+    desc.geometry.SplineXYZCurve
     desc.geometry.ZernikeRZToroidalSection
 
 Grid
@@ -116,12 +118,14 @@ IO
     desc.io.InputReader
     desc.io.load
 
+
 Magnetic Fields
 ***************
 
 .. autosummary::
-    :toctree: _api/magnetic_fields/
+    :toctree: _api/magnetic_fields
     :recursive:
+    :template: class.rst
 
     desc.magnetic_fields.ScaledMagneticField
     desc.magnetic_fields.SumMagneticField
@@ -131,6 +135,8 @@ Magnetic Fields
     desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.field_line_integrate
+    desc.magnetic_fields.read_BNORM_file
+    desc.magnetic_fields.biot_savart
 
 Objective Functions
 *******************
@@ -187,6 +193,7 @@ Objective Functions
     desc.objectives.Volume
 
 
+
 Optimize
 ********
 
@@ -198,6 +205,7 @@ Optimize
    desc.optimize.Optimizer
    desc.optimize.fmintr
    desc.optimize.lsqtr
+
 
 Perturbations
 *************

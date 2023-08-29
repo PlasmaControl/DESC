@@ -55,7 +55,7 @@ def _e_sup_rho(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^rho_r",
-    label="\\partial{\\rho} \\mathbf{e}^{\\rho}",
+    label="\\partial_{\\rho} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector, derivative wrt radial coordinate",
@@ -90,7 +90,7 @@ def _e_sup_rho_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^rho_t",
-    label="\\partial{\\theta} \\mathbf{e}^{\\rho}",
+    label="\\partial_{\\theta} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector, derivative wrt poloidal coordinate",
@@ -115,11 +115,7 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
             / data["sqrt(g)"] ** 2
         ).T,
         lambda: (
-            (
-                cross(data["e_theta_r"], data["e_zeta_t"])
-                + cross(data["e_theta_rt"], data["e_zeta"])
-            ).T
-            / data["sqrt(g)_r"]
+            cross(data["e_theta_rt"], data["e_zeta"]).T / data["sqrt(g)_r"]
             - cross(data["e_theta_r"], data["e_zeta"]).T
             * data["sqrt(g)_rt"]
             / data["sqrt(g)_r"] ** 2
@@ -130,7 +126,7 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^rho_z",
-    label="\\partial{\\zeta} \\mathbf{e}^{\\rho}",
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector, derivative wrt toroidal coordinate",
@@ -280,7 +276,7 @@ def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^theta_r",
-    label="\\partial{\\rho} \\mathbf{e}^{\\theta}",
+    label="\\partial_{\\rho} \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal basis vector, derivative wrt radial coordinate",
@@ -307,7 +303,7 @@ def _e_sup_theta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^theta_t",
-    label="\\partial{\\theta} \\mathbf{e}^{\\theta}",
+    label="\\partial_{\\theta} \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal basis vector, derivative wrt poloidal"
@@ -335,7 +331,7 @@ def _e_sup_theta_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^theta_z",
-    label="\\partial{\\zeta} \\mathbf{e}^{\\theta}",
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal basis vector, derivative wrt toroidal"
@@ -383,7 +379,7 @@ def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^zeta_r",
-    label="\\partial{\\rho} \\mathbf{e}^{\\zeta}",
+    label="\\partial_{\\rho} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt radial coordinate",
@@ -418,7 +414,7 @@ def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^zeta_t",
-    label="\\partial{\\theta} \\mathbf{e}^{\\zeta}",
+    label="\\partial_{\\theta} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt poloidal"
@@ -459,7 +455,7 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^zeta_z",
-    label="\\partial{\\zeta} \\mathbf{e}^{\\zeta}",
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt toroidal"
@@ -566,7 +562,7 @@ def _e_sub_rho_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rr",
-    label="\\partial_{\\rho}{\\rho} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -596,7 +592,7 @@ def _e_sub_rho_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rrr",
-    label="\\partial_{\\rho}{\\rho}{\\rho} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\rho \\rho} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -645,7 +641,7 @@ def _e_sub_rho_rrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rrt",
-    label="\\partial_{\\rho}{\\rho}{\\theta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\rho \\theta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -720,7 +716,7 @@ def _e_sub_rho_rrt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rrz",
-    label="\\partial_{\\rho}{\\rho}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\rho \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -815,7 +811,7 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rt",
-    label="\\partial_{\\rho}{\\theta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -863,7 +859,7 @@ def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rtt",
-    label="\\partial_{\\rho}{\\theta}{\\theta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\theta \\theta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -939,7 +935,7 @@ def _e_sub_rho_rtt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rtz",
-    label="\\partial_{\\rho}{\\theta}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\theta \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -1074,7 +1070,7 @@ def _e_sub_rho_rtz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rz",
-    label="\\partial_{\\rho}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -1123,7 +1119,7 @@ def _e_sub_rho_rz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rzz",
-    label="\\partial_{\\rho}{\\zeta}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\zeta \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -1246,7 +1242,7 @@ def _e_sub_rho_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_tt",
-    label="\\partial_{\\theta}{\\theta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\theta \\theta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -1295,7 +1291,7 @@ def _e_sub_rho_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_tz",
-    label="\\partial_{\\theta}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\theta \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -1384,7 +1380,7 @@ def _e_sub_rho_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_zz",
-    label="\\partial_{\\zeta}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\zeta \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -1524,7 +1520,7 @@ def _e_sub_theta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rr",
-    label="\\partial_{\\rho}{\\rho} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -1572,7 +1568,7 @@ def _e_sub_theta_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rrr",
-    label="\\partial_{\\rho}{\\rho}{\\rho} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\rho \\rho} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -1644,7 +1640,7 @@ def _e_sub_theta_rrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rrt",
-    label="\\partial_{\\rho}{\\rho}{\\theta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\rho \\theta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -1742,7 +1738,7 @@ def _e_sub_theta_rrt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rrz",
-    label="\\partial_{\\rho}{\\rho}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\rho \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -1879,7 +1875,7 @@ def _e_sub_theta_rrz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rt",
-    label="\\partial_{\\rho}{\\theta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -1928,7 +1924,7 @@ def _e_sub_theta_rt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rtt",
-    label="\\partial_{\\rho}{\\theta}{\\theta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\theta \\theta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2004,7 +2000,7 @@ def _e_sub_theta_rtt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rtz",
-    label="\\partial_{\\rho}{\\theta}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\theta \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2107,7 +2103,7 @@ def _e_sub_theta_rtz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rz",
-    label="\\partial_{\\rho}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2171,7 +2167,7 @@ def _e_sub_theta_rz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rzz",
-    label="\\partial_{\\rho}{\\zeta}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\zeta \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2301,7 +2297,7 @@ def _e_sub_theta_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_tt",
-    label="\\partial_{\\theta}{\\theta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\theta \\theta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2331,7 +2327,7 @@ def _e_sub_theta_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_tz",
-    label="\\partial_{\\theta}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\theta \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2406,7 +2402,7 @@ def _e_sub_theta_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_zz",
-    label="\\partial_{\\zeta}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\zeta \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2501,7 +2497,7 @@ def _e_sub_zeta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rr",
-    label="\\partial_{\\rho}{\\rho} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -2550,7 +2546,7 @@ def _e_sub_zeta_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rrr",
-    label="\\partial_{\\rho}{\\rho}{\\rho} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\rho \\rho} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -2628,7 +2624,7 @@ def _e_sub_zeta_rrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rrt",
-    label="\\partial_{\\rho}{\\theta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -2765,7 +2761,7 @@ def _e_sub_zeta_rrt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rrz",
-    label="\\partial_{\\rho}{\\rho}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\rho \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -2864,7 +2860,7 @@ def _e_sub_zeta_rrz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rt",
-    label="\\partial_{\\rho}{\\theta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -2928,7 +2924,7 @@ def _e_sub_zeta_rt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rtt",
-    label="\\partial_{\\rho}{\\theta}{\\theta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\theta \\theta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3031,7 +3027,7 @@ def _e_sub_zeta_rtt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rtz",
-    label="\\partial_{\\rho}{\\theta}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\theta \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3139,7 +3135,7 @@ def _e_sub_zeta_rtz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rz",
-    label="\\partial_{\\rho}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3188,7 +3184,7 @@ def _e_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rzz",
-    label="\\partial_{\\rho}{\\zeta}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\zeta \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3302,7 +3298,7 @@ def _e_sub_zeta_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_tt",
-    label="\\partial_{\\theta}{\\theta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\theta \\theta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3351,7 +3347,7 @@ def _e_sub_zeta_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_tz",
-    label="\\partial_{\\theta}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\theta \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3424,7 +3420,7 @@ def _e_sub_zeta_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_zz",
-    label="\\partial_{\\zeta}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\zeta \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(

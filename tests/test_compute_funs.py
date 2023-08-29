@@ -1214,6 +1214,9 @@ def test_compute_everything():
         "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(
             center=[10, 1, 3], normal=[1, 2, 3], r_n=[1, 2, 3], modes=[0, 1, 2]
         ),
+        "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
+            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
+        ).to_SplineXYZCurve(grid=LinearGrid(N=50, endpoint=True)),
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
@@ -1222,6 +1225,11 @@ def test_compute_everything():
             **elliptic_cross_section_with_torsion
         ),
     }
+    things_keys = list(things.keys()).sort()
+    data_keys = list(data_index.keys()).sort()
+    assert (
+        things_keys == data_keys
+    ), "Missing a parameterization to test against master."
     # use this low resolution grid for equilibria to reduce file size
     grid = LinearGrid(
         # include magnetic axis

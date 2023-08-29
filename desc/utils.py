@@ -227,13 +227,15 @@ def equals(a, b):
     return a == b
 
 
-def flatten_list(x):
+def flatten_list(x, flatten_tuple=False):
     """Flatten a nested list.
 
     Parameters
     ----------
     x : list
         nested list of lists to flatten
+    flatten_tuple : bool
+        Whether to also flatten nested tuples.
 
     Returns
     -------
@@ -241,8 +243,11 @@ def flatten_list(x):
         flattened input
 
     """
-    if isinstance(x, list):
-        return [a for i in x for a in flatten_list(i)]
+    types = (list,)
+    if flatten_tuple:
+        types += (tuple,)
+    if isinstance(x, types):
+        return [a for i in x for a in flatten_list(i, flatten_tuple)]
     else:
         return [x]
 

@@ -231,7 +231,7 @@ def test_1d_optimization_old():
         },
     )
 
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-3)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=1e-3)
 
 
 def run_qh_step(n, eq):
@@ -617,7 +617,7 @@ def test_NAE_QSC_solve():
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
-    # Eliminate the poloidal angle to focus on the toroidal behavior
+    # Eliminate the poloidal angle to focus on the toroidal behaviour
     B_av_nae = np.mean(B_nae, axis=1)
     np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=1e-4)
 
@@ -629,7 +629,7 @@ def test_NAE_QIC_solve():
     """Test O(rho) NAE QIC constraints solve."""
     # get Qic example
     qsc = Qic.from_paper("QI NFP2 r2", nphi=301, order="r1")
-    qsc.lasym = False  # don't need to consider stellarator asym for order 1 constraints
+    qsc.lasym = False  # don't need to consider stell asym for order 1 constraints
     ntheta = 75
     r = 0.01
     N = 11
@@ -719,7 +719,7 @@ def test_NAE_QIC_solve():
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
-    # Eliminate the poloidal angle to focus on the toroidal behavior
+    # Eliminate the poloidal angle to focus on the toroidal behaviour
     B_av_nae = np.mean(B_nae, axis=1)
     np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=2e-2)
 

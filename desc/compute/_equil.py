@@ -465,7 +465,7 @@ def _F_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="F_helical",
-    label="F_{helical}",
+    label="F_{\\mathrm{helical}}",
     units="A",
     units_long="Amperes",
     description="Covariant helical component of force balance error",

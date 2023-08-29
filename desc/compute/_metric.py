@@ -55,7 +55,7 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_theta x e_zeta|",
-    label="|\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
+    label="|e_{\\theta} \\times e_{\\zeta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant rho surface",
@@ -79,7 +79,7 @@ def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_theta x e_zeta|_r",
-    label="\\partial_{\\rho} |\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
+    label="\\partial_{\\rho} |e_{\\theta} \\times e_{\\zeta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant rho surface"
@@ -113,7 +113,7 @@ def _e_theta_x_e_zeta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_theta x e_zeta|_rr",
-    label="\\partial_{\\rho\\rho} |\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
+    label="\\partial_{\\rho \\rho} |e_{\\theta} \\times e_{\\zeta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant rho surface"
@@ -152,7 +152,7 @@ def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_zeta x e_rho|",
-    label="|\\mathbf{e}_{\\zeta} \\times \\mathbf{e}_{\\rho}|",
+    label="|e_{\\zeta} \\times e_{\\rho}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant theta surface",
@@ -174,7 +174,7 @@ def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_rho x e_theta|",
-    label="|\\mathbf{e}_{\\rho} \\times \\mathbf{e}_{\\theta}|",
+    label="|e_{\\rho} \\times e_{\\theta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant zeta surface",
@@ -198,7 +198,7 @@ def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_rho x e_theta|_r",
-    label="\\partial_{\\rho} |\\mathbf{e}_{\\rho} \\times \\mathbf{e}_{\\theta}|",
+    label="\\partial_{\\rho} |e_{\\rho} \\times e_{\\theta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant zeta surface"
@@ -232,7 +232,7 @@ def _e_rho_x_e_theta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_rho x e_theta|_rr",
-    label="\\partial_{\\rho \\rho} |\\mathbf{e}_{\\rho} \\times \\mathbf{e}_{\\theta}|",
+    label="\\partial_{\\rho \\rho} |e_{\\rho} \\times e_{\\theta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant zeta surface"
@@ -1349,7 +1349,7 @@ def _g_sup_tz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rr_r",
-    label="\\partial_{\\rho} g^{\\rho \\rho}",
+    label="g^{\\rho}{\\rho}_{\\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
@@ -1367,8 +1367,27 @@ def _g_sup_rr_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="g^rr_zz",
+    label="g^{rr}_{zz}",
+    units="~",
+    units_long="None",
+    description="Double zeta derivative of the flux expansion term",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^rho_z", "e^rho_zz"],
+)
+def _g_sup_rr_sub_zz(params, transforms, profiles, data, **kwargs):
+    data["g^rr_zz"] = 2 * (
+        dot(data["e^rho_zz"], data["e^rho"]) + dot(data["e^rho_z"], data["e^rho_z"])
+    )
+
+
+@register_compute_fun(
     name="g^rt_r",
-    label="\\partial_{\\rho} g^{\\rho \\theta}",
+    label="g^{\\rho}{\\theta}_{\\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
@@ -1389,7 +1408,7 @@ def _g_sup_rt_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rz_r",
-    label="\\partial_{\\rho} g^{\\rho \\zeta}",
+    label="g^{\\rho}{\\zeta}_{\\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
@@ -1410,7 +1429,7 @@ def _g_sup_rz_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tt_r",
-    label="\\partial_{\\rho} g^{\\theta \\theta}",
+    label="g^{\\theta}{\\theta}_{\\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
@@ -1429,7 +1448,7 @@ def _g_sup_tt_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tz_r",
-    label="\\partial_{\\rho} g^{\\theta \\zeta}",
+    label="g^{\\theta}{\\zeta}_{\\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
@@ -1450,7 +1469,7 @@ def _g_sup_tz_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^zz_r",
-    label="\\partial_{\\rho} g^{\\zeta \\zeta}",
+    label="g^{\\zeta}{\\zeta}_{\\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "
@@ -1469,7 +1488,7 @@ def _g_sup_zz_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rr_t",
-    label="\\partial_{\\theta} g^{\\rho \\rho}",
+    label="g^{\\rho}{\\rho}_{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
@@ -1488,7 +1507,7 @@ def _g_sup_rr_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rt_t",
-    label="\\partial_{\\theta} g^{\\rho \\theta}",
+    label="g^{\\rho}{\\theta}_{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
@@ -1509,7 +1528,7 @@ def _g_sup_rt_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rz_t",
-    label="\\partial_{\\theta} g^{\\rho \\zeta}",
+    label="g^{\\rho}{\\zeta}_{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
@@ -1530,7 +1549,7 @@ def _g_sup_rz_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tt_t",
-    label="\\partial_{\\theta} g^{\\theta \\theta}",
+    label="g^{\\theta}{\\theta}_{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
@@ -1549,7 +1568,7 @@ def _g_sup_tt_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tz_t",
-    label="\\partial_{\\theta} g^{\\theta \\zeta}",
+    label="g^{\\theta}{\\zeta}_{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
@@ -1570,7 +1589,7 @@ def _g_sup_tz_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^zz_t",
-    label="\\partial_{\\theta} g^{\\zeta \\zeta}",
+    label="g^{\\zeta}{\\zeta}_{\\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "
@@ -1589,7 +1608,7 @@ def _g_sup_zz_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rr_z",
-    label="\\partial_{\\zeta} g^{\\rho \\rho}",
+    label="g^{\\rho}{\\rho}_{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
@@ -1608,7 +1627,7 @@ def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rt_z",
-    label="\\partial_{\\zeta} g^{\\rho \\theta}",
+    label="g^{\\rho}{\\theta}_{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
@@ -1629,7 +1648,7 @@ def _g_sup_rt_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rz_z",
-    label="\\partial_{\\zeta} g^{\\rho \\zeta}",
+    label="g^{\\rho}{\\zeta}_{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
@@ -1650,7 +1669,7 @@ def _g_sup_rz_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tt_z",
-    label="\\partial_{\\zeta} g^{\\theta \\theta}",
+    label="g^{\\theta}{\\theta}_{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
@@ -1669,7 +1688,7 @@ def _g_sup_tt_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tz_z",
-    label="\\partial_{\\zeta} g^{\\theta \\zeta}",
+    label="g^{\\theta}{\\zeta}_{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
@@ -1690,7 +1709,7 @@ def _g_sup_tz_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^zz_z",
-    label="\\partial_{\\zeta} g^{\\zeta \\zeta}",
+    label="g^{\\zeta}{\\zeta}_{\\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "
@@ -1795,3 +1814,188 @@ def _gradtheta(params, transforms, profiles, data, **kwargs):
 def _gradzeta(params, transforms, profiles, data, **kwargs):
     data["|grad(zeta)|"] = jnp.sqrt(data["g^zz"])
     return data
+
+
+@register_compute_fun(
+    name="g^aa",
+    label="g^{\\alpha \\alpha}",
+    units="T^2 m^2",
+    units_long="None",
+    description="Fieldline bending term1",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["grad(alpha)", "dpsidr"],
+)
+def _g_sup_aa(params, transforms, profiles, data, **kwargs):
+    data["g^aa"] = dot(data["grad(alpha)"], data["grad(alpha)"])
+
+
+@register_compute_fun(
+    name="g^aa_z",
+    label="g^{\\alpha \\alpha}_{\\zeta}",
+    units="~",
+    units_long="None",
+    description="Fieldline bending term3",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["dpsidr", "grad(alpha)", "grad(alpha)_z"],
+)
+def _g_sup_aa_sub_z(params, transforms, profiles, data, **kwargs):
+    data["g^aa_z"] = 2 * dot(data["grad(alpha)"], data["grad(alpha)_z"])
+
+
+@register_compute_fun(
+    name="g^aa_zz",
+    label="g^{\\alpha \\alpha}_{\\zeta \\zeta}",
+    units="~",
+    units_long="None",
+    description="Fieldline bending term3",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["dpsidr", "grad(alpha)_z", "grad(alpha)_zz"],
+)
+def _g_sup_aa_sub_zz(params, transforms, profiles, data, **kwargs):
+    data["g^aa_zz"] = dot(data["grad(alpha)_z"], data["grad(alpha)_z"]) + dot(
+        data["grad(alpha)"], data["grad(alpha)_zz"]
+    )
+
+
+@register_compute_fun(
+    name="g^ra",
+    label="g^{\\rho \\alpha}",
+    units="~",
+    units_long="None",
+    description="Fieldline bending term2",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["grad(alpha)", "e^rho", "dpsidr", "iota_r"],
+)
+def _g_sup_ra(params, transforms, profiles, data, **kwargs):
+    data["g^ra"] = dot(data["grad(alpha)"], data["grad(rho)"])
+
+
+@register_compute_fun(
+    name="g^ra_z",
+    label="g^{\\rho \\alpha}_{\\zeta}",
+    units="~",
+    units_long="None",
+    description="Single zeta derivative of a fieldline bending term2",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["grad(alpha)", "e^rho", "grad(alpha)_z", "e^rho_z", "dpsidr", "iota_r"],
+)
+def _g_sup_ra_sub_z(params, transforms, profiles, data, **kwargs):
+    data["g^ra"] = dot(data["grad(alpha)_z"], data["e^rho"]) + dot(
+        data["grad(alpha)"], data["e^rho_z"]
+    )
+
+
+@register_compute_fun(
+    name="g^ra_zz",
+    label="g^{\\rho \\alpha}_{\\zeta \\zeta}",
+    units="~",
+    units_long="None",
+    description="Double zeta derivative of a fieldline bending term2",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "grad(alpha)",
+        "e^rho",
+        "grad(alpha)_z",
+        "grad(alpha)_zz",
+        "e^rho_z",
+        "e^rho_zz",
+        "dpsidr",
+        "iota_r",
+    ],
+)
+def _g_sup_ra_sub_zz(params, transforms, profiles, data, **kwargs):
+    data["g^ra"] = (
+        dot(data["grad(alpha)_zz"], data["e^rho"])
+        + 2 * dot(data["grad(alpha)_z"], data["e^rho_z"])
+        + dot(data["grad(alpha)"], data["e^rho_zz"])
+    )
+
+
+@register_compute_fun(
+    name="gbdrift",
+    label="\\mathrm{gradB-drift}",
+    units="~",
+    units_long="None",
+    description="Geometric part of the gradB drift"
+    + " used for local stability analyses",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|", "b", "sqrt(g)", "grad(alpha)" "grad(|B|)", "dpsidr"],
+)
+def _gbdrift(params, transforms, profiles, data, **kwargs):
+    data["gbdrift"] = (
+        data["dpsidr"]
+        * 2
+        / data["|B|"] ** 2
+        * dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha)"]))
+    )
+
+
+@register_compute_fun(
+    name="cvdrift",
+    label="\\mathrm{curvature-drift}",
+    units="~",
+    units_long="None",
+    description="Geometric part of the curvature drift"
+    + "used for local stability analyses",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["dp_dpsi", "psi_r", "|B|", "gbdrift", "dpsidr"],
+)
+def _cvdrift(params, transforms, profiles, data, **kwargs):
+    data["cvdrift"] = (
+        data["dpsidr"] * 1 / data["B"] ** 2 * data["dp_dpsi"] + data["gbdrift"]
+    )
+
+
+@register_compute_fun(
+    name="cvdrift0",
+    label="\\mathrm{curvature-drift-1}",
+    units="~",
+    units_long="None",
+    description="Geometric part of the curvature drift1"
+    + "used for local stability analyses",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|", "b", "iota", "iota_r", "sqrt(g)", "grad(alpha)" "grad(|B|)"],
+)
+def _cvdrift0(params, transforms, profiles, data, **kwargs):
+    data["cvdrift0"] = (
+        1
+        / data["|B|"] ** 2
+        * data["iota_r"]
+        * (dot(data["b"], cross(data["grad(|B|)"], data["grad(rho)"])))
+    )

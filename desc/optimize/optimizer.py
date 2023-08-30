@@ -13,7 +13,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import combine_args
-from desc.utils import Timer, get_instance
+from desc.utils import Timer, flatten_list, get_instance
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 
@@ -83,6 +83,7 @@ class Optimizer(IOAble):
         verbose=1,
         maxiter=None,
         options=None,
+        copy=False,
     ):
         """Optimize an objective function.
 
@@ -130,6 +131,9 @@ class Optimizer(IOAble):
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
             settings. See the code for more details.
+        copy : bool
+            Whether to return the current things or a copy (leaving the original
+            unchanged).
 
         Returns
         -------
@@ -141,8 +145,7 @@ class Optimizer(IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
-        if not isinstance(things, (list, tuple)):
-            things = [things]
+        things = flatten_list(things, flatten_tuple=True)
 
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
@@ -171,6 +174,7 @@ class Optimizer(IOAble):
                 objective, nonlinear_constraint
             )
             assert set(objective.things) == set(nonlinear_constraint.things)
+        assert set(objective.things) == set(things)
 
         # wrap to handle linear constraints
         if not isinstance(objective, ProximalProjection) and eq is not None:
@@ -274,6 +278,7 @@ class Optimizer(IOAble):
 
         if isinstance(objective, ProximalProjection):
             result["history"] = objective.history
+            objective = objective._objective
         else:
             result["history"] = [
                 objective.unpack_state(xi, False) for xi in result["allx"]
@@ -290,10 +295,25 @@ class Optimizer(IOAble):
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)
 
-        # TODO: do we want to update the objects and return them here?
-        # or at least separate out the "optimal" result from the history?
+        if verbose > 0:
+            print("Start of solver")
+            objective.print_value(objective.x())
+            for con in constraints:
+                con.print_value(*con.xs())
 
-        return result
+        if copy:
+            things = [thing.copy() for thing in things]
+
+        for thing, params in zip(things, result["history"][-1]):
+            thing.params_dict = params
+
+        if verbose > 0:
+            print("End of solver")
+            objective.print_value(objective.x())
+            for con in constraints:
+                con.print_value(*con.xs())
+
+        return things, result
 
 
 def _parse_method(method):

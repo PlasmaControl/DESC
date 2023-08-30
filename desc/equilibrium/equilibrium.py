@@ -1701,7 +1701,7 @@ class Equilibrium(IOAble, Optimizable):
                 + "on master branch."
             )
 
-        result = optimizer.optimize(
+        things, result = optimizer.optimize(
             self,
             objective,
             constraints,
@@ -1714,22 +1714,7 @@ class Equilibrium(IOAble, Optimizable):
             options=options,
         )
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x(self))
-
-        if copy:
-            eq = self.copy()
-        else:
-            eq = self
-
-        eq.params_dict = result["history"][-1][0]
-
-        if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x(eq))
-
-        return eq, result
+        return things[0], result
 
     def optimize(
         self,
@@ -1801,7 +1786,7 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
 
-        result = optimizer.optimize(
+        things, result = optimizer.optimize(
             self,
             objective,
             constraints,
@@ -1813,28 +1798,10 @@ class Equilibrium(IOAble, Optimizable):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
+            copy=copy,
         )
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x(self))
-            for con in constraints:
-                con.print_value(*con.xs(self))
-
-        if copy:
-            eq = self.copy()
-        else:
-            eq = self
-
-        eq.params_dict = result["history"][-1][0]
-
-        if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x(eq))
-            for con in constraints:
-                con.print_value(*con.xs(eq))
-
-        return eq, result
+        return things[0], result
 
     def _optimize(  # noqa: C901
         self,

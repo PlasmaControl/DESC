@@ -396,6 +396,7 @@ class ObjectiveFunction(IOAble):
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
+        things = things or self.things
         assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
         xs = [t.pack_params(t.params_dict) for t in things]
         return jnp.concatenate(xs)
@@ -954,6 +955,7 @@ class _Objective(IOAble, ABC):
 
     def xs(self, *things):
         """Return a tuple of args required by this objective from the Equilibrium eq."""
+        things = things or self.things
         return tuple([t.params_dict for t in things])
 
     @property

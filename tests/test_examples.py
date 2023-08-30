@@ -753,12 +753,9 @@ def test_multiobject_optimization():
     eq.solve(verbose=3)
 
     optimizer = Optimizer("lsq-auglag")
-    result = optimizer.optimize(
+    (eq, surf), result = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=500
     )
-
-    eq.params_dict = result["history"][-1][0]
-    surf.params_dict = result["history"][-1][1]
 
     np.testing.assert_allclose(
         constraints[-1].compute(*constraints[-1].xs(eq, surf)), 1, atol=1e-3

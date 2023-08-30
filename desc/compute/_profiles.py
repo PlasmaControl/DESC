@@ -1478,10 +1478,10 @@ def _current_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="shear",
-    label="\\rho \\partial_{\\rho} \\iota / \\iota",
+    label="-\\rho \\frac{\\partial_{\\rho}\\iota}{\\iota}",
     units="~",
     units_long="None",
-    description="Normalized derivative of the rotational transform",
+    description="Global magnetic shear",
     dim=1,
     params=[],
     transforms={},
@@ -1490,16 +1490,18 @@ def _current_rr(params, transforms, profiles, data, **kwargs):
     data=["0", "iota", "iota_r", "iota_rr", "rho"],
 )
 def _shear(params, transforms, profiles, data, **kwargs):
+    """Global magnetic shear, as defined in the tokamak literature: -dι/dρ * (ρ/ι).
+
+    When ι=0 ∀ρ (such as in a vacuum tokamak) the shear is defined to be 0 everywhere.
+    This implementation is undefined whenever ι=0 otherwise, which is the correct value
+    in the case of a Reverse Field Configuration.
+    The case where both ι=0 and dι/dρ=0 is rare, and that limit is not implemented.
+    """
     eps = 1e2 * jnp.finfo(data["iota"].dtype).eps
     data["shear"] = cond(
         jnp.all(jnp.abs(data["iota"]) < eps),
-        lambda _: data["0"],  # if iota profile is all 0, set shear to 0
-        lambda _: jnp.where(  # apply l'Hopital rule where necessary
-            (jnp.abs(data["iota"]) < eps)
-            & ((jnp.abs(data["rho"]) < eps) | (jnp.abs(data["iota_r"]) < eps)),
-            1 + data["rho"] * data["iota_rr"] / data["iota_r"],  # limit
-            data["rho"] * data["iota_r"] / data["iota"],  # shear
-        ),
+        lambda _: data["0"],  # if iota is 0 everywhere, set shear to 0 everywhere
+        lambda _: -data["rho"] * data["iota_r"] / data["iota"],
         None,
     )
     return data

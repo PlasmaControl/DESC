@@ -185,7 +185,7 @@ class RotationalTransform(_Objective):
 class Shear(_Objective):
     """Targets a shear profile (normalized derivative of rotational transform).
 
-    f = dι/dρ * (ρ/ι)
+    f = -dι/dρ * (ρ/ι)
 
     Parameters
     ----------
@@ -232,7 +232,7 @@ class Shear(_Objective):
         name="shear",
     ):
         if target is None and bounds is None:
-            bounds = (0, np.inf)
+            bounds = (-np.inf, 0)
         self._grid = grid
         super().__init__(
             eq=eq,

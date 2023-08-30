@@ -9,6 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from scipy.constants import mu_0
+
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
@@ -1827,7 +1829,7 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["grad(alpha)", "dpsidr"],
+    data=["grad(alpha)"],
 )
 def _g_sup_aa(params, transforms, profiles, data, **kwargs):
     data["g^aa"] = dot(data["grad(alpha)"], data["grad(alpha)"])
@@ -1844,7 +1846,7 @@ def _g_sup_aa(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["dpsidr", "grad(alpha)", "grad(alpha)_z"],
+    data=["grad(alpha)", "grad(alpha)_z"],
 )
 def _g_sup_aa_sub_z(params, transforms, profiles, data, **kwargs):
     data["g^aa_z"] = 2 * dot(data["grad(alpha)"], data["grad(alpha)_z"])
@@ -1861,7 +1863,7 @@ def _g_sup_aa_sub_z(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["dpsidr", "grad(alpha)_z", "grad(alpha)_zz"],
+    data=["grad(alpha)_z", "grad(alpha)_zz"],
 )
 def _g_sup_aa_sub_zz(params, transforms, profiles, data, **kwargs):
     data["g^aa_zz"] = dot(data["grad(alpha)_z"], data["grad(alpha)_z"]) + dot(
@@ -1880,7 +1882,7 @@ def _g_sup_aa_sub_zz(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["grad(alpha)", "e^rho", "dpsidr", "iota_r"],
+    data=["grad(alpha)", "e^rho", "iota_r"],
 )
 def _g_sup_ra(params, transforms, profiles, data, **kwargs):
     data["g^ra"] = dot(data["grad(alpha)"], data["grad(rho)"])
@@ -1897,7 +1899,7 @@ def _g_sup_ra(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["grad(alpha)", "e^rho", "grad(alpha)_z", "e^rho_z", "dpsidr", "iota_r"],
+    data=["grad(alpha)", "e^rho", "grad(alpha)_z", "e^rho_z", "iota_r"],
 )
 def _g_sup_ra_sub_z(params, transforms, profiles, data, **kwargs):
     data["g^ra"] = dot(data["grad(alpha)_z"], data["e^rho"]) + dot(
@@ -1923,8 +1925,6 @@ def _g_sup_ra_sub_z(params, transforms, profiles, data, **kwargs):
         "grad(alpha)_zz",
         "e^rho_z",
         "e^rho_zz",
-        "dpsidr",
-        "iota_r",
     ],
 )
 def _g_sup_ra_sub_zz(params, transforms, profiles, data, **kwargs):
@@ -1947,11 +1947,11 @@ def _g_sup_ra_sub_zz(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "b", "sqrt(g)", "grad(alpha)" "grad(|B|)", "dpsidr"],
+    data=["|B|", "b", "sqrt(g)", "grad(alpha)", "grad(|B|)", "psi_r"],
 )
 def _gbdrift(params, transforms, profiles, data, **kwargs):
     data["gbdrift"] = (
-        data["dpsidr"]
+        data["psi_r"]
         * 2
         / data["|B|"] ** 2
         * dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha)"]))
@@ -1970,12 +1970,11 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["dp_dpsi", "psi_r", "|B|", "gbdrift", "dpsidr"],
+    data=["p_r", "psi_r", "|B|", "gbdrift"],
 )
 def _cvdrift(params, transforms, profiles, data, **kwargs):
-    data["cvdrift"] = (
-        data["dpsidr"] * 1 / data["B"] ** 2 * data["dp_dpsi"] + data["gbdrift"]
-    )
+    dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
+    data["cvdrift"] = data["psi_r"] * 1 / data["|B|"] ** 2 * dp_dpsi + data["gbdrift"]
 
 
 @register_compute_fun(
@@ -1990,7 +1989,7 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "b", "iota", "iota_r", "sqrt(g)", "grad(alpha)" "grad(|B|)"],
+    data=["|B|", "b", "iota", "iota_r", "sqrt(g)", "grad(alpha)", "grad(|B|)"],
 )
 def _cvdrift0(params, transforms, profiles, data, **kwargs):
     data["cvdrift0"] = (

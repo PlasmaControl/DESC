@@ -668,9 +668,9 @@ def _iota_vacuum(params, transforms, profiles, data, **kwargs):
 def _iota_current_num(params, transforms, profiles, data, **kwargs):
     """Current contribution to the numerator of rotational transform formula."""
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
-    data["iota_current_num"] = 2 * jnp.pi * mu_0 * data["current"] / data["psi_r"]
+    iota_current_num = 2 * jnp.pi * mu_0 * data["current"] / data["psi_r"]
     data["iota_current_num"] = transforms["grid"].replace_at_axis(
-        data["iota_current_num"], 2 * jnp.pi * mu_0 * data["current_r"] / data["psi_rr"]
+        iota_current_num, 2 * jnp.pi * mu_0 * data["current_r"] / data["psi_rr"]
     )
     return data
 

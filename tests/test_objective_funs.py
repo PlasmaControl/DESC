@@ -174,16 +174,17 @@ class TestObjectiveFunction:
     def test_target_shear(self):
         """Test calculation of shear profile."""
 
-        def test(eq):
+        def test(eq, raw, scaled):
             obj = Shear(target=1, weight=2, eq=eq)
             obj.build()
             shear = obj.compute_unscaled(*obj.xs(eq))
             shear_scaled = obj.compute_scaled_error(*obj.xs(eq))
-            np.testing.assert_allclose(shear, 0)
-            np.testing.assert_allclose(shear_scaled, -2 / np.sqrt(3))
+            np.testing.assert_allclose(shear, raw)
+            np.testing.assert_allclose(shear_scaled, scaled)
 
-        test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        test(Equilibrium(iota=PowerSeriesProfile(0)), 0, -2 / np.sqrt(3))
+        test(Equilibrium(current=PowerSeriesProfile(0)), 0, -2 / np.sqrt(3))
+        test(Equilibrium(iota=PowerSeriesProfile([0, 0, 0.5])), 2, 2 / np.sqrt(3))
 
     @pytest.mark.unit
     def test_toroidal_current(self):
@@ -678,7 +679,7 @@ def test_field_scale_length():
 @pytest.mark.unit
 def test_profile_objective_print(capsys):
     """Test that the profile objectives print correctly."""
-    eq = Equilibrium()
+    eq = Equilibrium(iota=PowerSeriesProfile([1, 0, 0.5]))
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
     def test(obj, values, normalize=False):
@@ -722,7 +723,7 @@ def test_profile_objective_print(capsys):
     obj = RotationalTransform(eq=eq, grid=grid)
     obj.build()
     test(obj, iota)
-    shear = eq.compute("iota_r", grid=grid)["iota_r"]
+    shear = eq.compute("shear", grid=grid)["shear"]
     obj = Shear(eq=eq, grid=grid)
     obj.build()
     test(obj, shear)

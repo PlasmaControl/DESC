@@ -1484,14 +1484,13 @@ def _current_rr(params, transforms, profiles, data, **kwargs):
     description="Normalized derivative of the rotational transform",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="r",
     data=["0", "iota", "iota_r", "iota_rr", "rho"],
-    axis_limit_data=["iota_den_r", "iota_num_r"],
 )
 def _shear(params, transforms, profiles, data, **kwargs):
-    eps = 1e2 * jnp.finfo(jnp.array([1.0]).dtype).eps
+    eps = 1e2 * jnp.finfo(data["iota"].dtype).eps
     data["shear"] = cond(
         jnp.all(jnp.abs(data["iota"])) < eps,
         lambda _: data["0"],  # if iota profile is all 0, set shear to 0
@@ -1501,6 +1500,6 @@ def _shear(params, transforms, profiles, data, **kwargs):
             1 + data["rho"] * data["iota_rr"] / data["iota_r"],  # limit
             data["rho"] * data["iota_r"] / data["iota"],  # shear
         ),
-        1,
+        None,
     )
     return data

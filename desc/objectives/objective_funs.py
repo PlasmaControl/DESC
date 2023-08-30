@@ -690,23 +690,21 @@ class ObjectiveFunction(IOAble):
         # in general this is a hard problem, since we don't really know which object
         # to replace with which if there are multiple of the same type, but we can
         # do our best and throw an error if we can't figure it out here.
-        inclasses = {thing.__class__ for thing in new}
-        classes = {thing.__class__ for thing in self.things}
+        expected_types = [type(a) for a in self.things]
+        got_types = [type(a) for a in new]
         errorif(
-            len(inclasses) != len(new) or len(classes) != len(self.things),
-            ValueError,
-            "Cannot unambiguously parse Optimizable objects to individual Objectives,"
-            + " try setting Objective.things on each sub Objective individually.",
+            expected_types != got_types,
+            TypeError,
+            "Cannot unambiguously parse Optimizable objects to individual Objectives, "
+            + f"expected types {expected_types} but got types {got_types}. "
+            + "Try setting Objective.things on each sub Objective individually then "
+            + "call ObjectiveFunction.build().",
         )
         # now we know that new and self.things contains instances of unique classes, so
         # we should be able to just replace like with like
-        for obj in self.objectives:
-            objthings = obj.things.copy()
-            for i, thing1 in enumerate(obj.things):
-                for thing2 in new:
-                    if type(thing1) == type(thing2):
-                        objthings[i] = thing2
-            obj.things = objthings
+        things = self._unflatten(new)
+        for obj, t in zip(self.objectives, things[: -len(self._extra_things)]):
+            obj.things = t
 
 
 class _Objective(IOAble, ABC):
@@ -1049,4 +1047,5 @@ class _Objective(IOAble, ABC):
         if not isinstance(new, (tuple, list)):
             new = [new]
         assert all(isinstance(x, Optimizable) for x in new)
+        assert all(type(a) == type(b) for a, b in zip(new, self.things))
         self._things = list(new)

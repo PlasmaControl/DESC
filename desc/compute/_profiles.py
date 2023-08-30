@@ -618,11 +618,13 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["iota_den", "iota_current_num"],
+    data=["iota_current_num", "iota_den"],
+    axis_limit_data=["iota_current_num_r", "iota_den_r"],
 )
 def _iota_current(params, transforms, profiles, data, **kwargs):
     data["iota_current"] = transforms["grid"].replace_at_axis(
-        data["iota_current_num"] / data["iota_den"], 0
+        data["iota_current_num"] / data["iota_den"],
+        data["iota_current_num_r"] / data["iota_den_r"],
     )
     return data
 
@@ -639,12 +641,12 @@ def _iota_current(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["iota_den", "iota_vacuum_num"],
-    axis_limit_data=["iota_den_r", "iota_num_r"],
+    axis_limit_data=["iota_den_r", "iota_vacuum_num_r"],
 )
 def _iota_vacuum(params, transforms, profiles, data, **kwargs):
     data["iota_vacuum"] = transforms["grid"].replace_at_axis(
         data["iota_vacuum_num"] / data["iota_den"],
-        lambda: data["iota_num_r"] / data["iota_den_r"],
+        data["iota_vacuum_num_r"] / data["iota_den_r"],
     )
     return data
 
@@ -661,13 +663,14 @@ def _iota_vacuum(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["current", "psi_r"],
+    axis_limit_data=["current_r", "psi_rr"],
 )
 def _iota_current_num(params, transforms, profiles, data, **kwargs):
     """Current contribution to the numerator of rotational transform formula."""
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
     data["iota_current_num"] = 2 * jnp.pi * mu_0 * data["current"] / data["psi_r"]
     data["iota_current_num"] = transforms["grid"].replace_at_axis(
-        data["iota_current_num"], 0
+        data["iota_current_num"], 2 * jnp.pi * mu_0 * data["current_r"] / data["psi_rr"]
     )
     return data
 
@@ -684,17 +687,106 @@ def _iota_current_num(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["lambda_z", "g_tt", "lambda_t", "g_tz", "sqrt(g)"],
+    axis_limit_data=["g_tt_r", "g_tz_r", "lambda_rt", "lambda_rz", "sqrt(g)_r"],
 )
 def _iota_vacuum_num(params, transforms, profiles, data, **kwargs):
     """Vacuum contribution to the numerator of rotational transform formula."""
-    data["iota_vacuum_num"] = surface_integrals(
-        transforms["grid"],
+    iota_vacuum_num = transforms["grid"].replace_at_axis(
         (data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"])
         / data["sqrt(g)"],
+        (
+            data["lambda_rz"] * data["g_tt"]
+            + data["lambda_z"] * data["g_tt_r"]
+            - data["lambda_rt"] * data["g_tz"]
+            - (1 + data["lambda_t"]) * data["g_tz_r"]
+        )
+        / data["sqrt(g)_r"],
     )
-    data["iota_vacuum_num"] = transforms["grid"].replace_at_axis(
-        data["iota_vacuum_num"], 0
+    data["iota_vacuum_num"] = surface_integrals(transforms["grid"], iota_vacuum_num)
+    return data
+
+
+@register_compute_fun(
+    name="iota_current_num_r",
+    label="\\partial_{\\rho} \\iota_{\\mathrm{current, numerator}}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Numerator of rotational transform formula, current contribution, "
+    + "first radial derivative",
+    dim=1,
+    params=["c_l"],
+    transforms={"grid": []},
+    profiles=["current"],
+    coordinates="r",
+    data=["current", "current_r", "psi_r", "psi_rr"],
+    axis_limit_data=["current_rr"],
+)
+def _iota_current_num_r(params, transforms, profiles, data, **kwargs):
+    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+    data["iota_current_num_r"] = (
+        jnp.pi
+        * mu_0
+        * transforms["grid"].replace_at_axis(
+            2
+            * (data["current_r"] * data["psi_r"] - data["current"] * data["psi_rr"])
+            / data["psi_r"] ** 2,
+            data["current_rr"] / data["psi_rr"],  # FIXME
+        )
     )
+    return data
+
+
+@register_compute_fun(
+    name="iota_vacuum_num_r",
+    label="\\partial_{\\rho} \\iota_{\\mathrm{vacuum, numerator}}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Numerator of rotational transform formula, vacuum contribution, "
+    + "first radial derivative",
+    dim=1,
+    params=["c_l"],
+    transforms={"grid": []},
+    profiles=["current"],
+    coordinates="r",
+    data=[
+        "iota_vacuum_num",
+        "lambda_t",
+        "lambda_rt",
+        "lambda_z",
+        "lambda_rz",
+        "g_tt",
+        "g_tt_r",
+        "g_tz",
+        "g_tz_r",
+        "sqrt(g)",
+        "sqrt(g)_r",
+    ],
+    axis_limit_data=["g_tt_rr", "g_tz_rr", "sqrt(g)_rr"],
+)
+def _iota_vacuum_num_r(params, transforms, profiles, data, **kwargs):
+    iota_vacuum_num_r = transforms["grid"].replace_at_axis(
+        (
+            data["lambda_rz"] * data["g_tt"]
+            + data["lambda_z"] * data["g_tt_r"]
+            - data["lambda_rt"] * data["g_tz"]
+            - (1 + data["lambda_t"]) * data["g_tz_r"]
+            - data["iota_vacuum_num"] * data["sqrt(g)_r"]
+        )
+        / data["sqrt(g)"],
+        (
+            (1 + data["lambda_t"])
+            * data["g_tz_r"]
+            * data["sqrt(g)_rr"]
+            / (2 * data["sqrt(g)_r"] ** 2)
+            + (
+                data["lambda_z"] * data["g_tt_rr"]
+                - 2 * data["lambda_rt"] * data["g_tz_r"]
+                - (1 + data["lambda_t"]) * data["g_tz_rr"]
+            )
+            / (2 * data["sqrt(g)_r"])  # FIXME
+        ),
+    )
+    data["iota_vacuum_num_r"] = surface_integrals(transforms["grid"], iota_vacuum_num_r)
     return data
 
 
@@ -792,7 +884,7 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
             / data["psi_r"] ** 2,
             lambda: (
                 profiles["current"].compute(params["c_l"], dr=2) * data["psi_rr"]
-                - current_r * data["psi_rrr"]
+                - current_r * data["psi_rrr"]  # FIXME: psi_rrr=0
             )
             / data["psi_rr"] ** 2,
         )

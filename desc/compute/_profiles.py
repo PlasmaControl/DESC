@@ -11,7 +11,7 @@ expensive computations.
 
 from scipy.constants import elementary_charge, mu_0
 
-from desc.backend import jnp
+from desc.backend import cond, jnp
 
 from .data_index import register_compute_fun
 from .utils import cumtrapz, dot, surface_averages, surface_integrals
@@ -1473,4 +1473,34 @@ def _current_r(params, transforms, profiles, data, **kwargs):
 )
 def _current_rr(params, transforms, profiles, data, **kwargs):
     data["current_rr"] = 2 * jnp.pi / mu_0 * data["I_rr"]
+    return data
+
+
+@register_compute_fun(
+    name="shear",
+    label="\\rho \\partial_{\\rho} \\iota / \\iota",
+    units="~",
+    units_long="None",
+    description="Normalized derivative of the rotational transform",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["0", "iota", "iota_r", "iota_rr", "rho"],
+    axis_limit_data=["iota_den_r", "iota_num_r"],
+)
+def _shear(params, transforms, profiles, data, **kwargs):
+    eps = 1e2 * jnp.finfo(jnp.array([1.0]).dtype).eps
+    data["shear"] = cond(
+        jnp.all(jnp.abs(data["iota"])) < eps,
+        lambda _: data["0"],
+        lambda _: jnp.where(
+            (jnp.abs(data["iota"]) < eps)
+            & ((jnp.abs(data["rho"]) < eps) | (jnp.abs(data["iota_r"]) < eps)),
+            1 + data["rho"] * data["iota_rr"] / data["iota_r"],
+            data["rho"] * data["iota_r"] / data["iota"],
+        ),
+        1,
+    )
     return data

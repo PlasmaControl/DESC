@@ -274,7 +274,7 @@ class Shear(_Objective):
             self._target = self._target(grid.nodes[grid.unique_rho_idx])
 
         self._dim_f = grid.num_rho
-        self._data_keys = ["rho", "iota", "iota_r", "iota_rr"]
+        self._data_keys = ["shear"]
         self._args = get_params(
             self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
@@ -296,8 +296,6 @@ class Shear(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
-
-        self._eps = 1e2 * jnp.finfo(jnp.array([1.0]).dtype).eps
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -335,13 +333,7 @@ class Shear(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        shear = jnp.where(
-            jnp.abs(data["iota"]) < self._eps,
-            1 + data["rho"] * data["iota_rr"] / data["iota_r"],
-            data["rho"] * data["iota_r"] / data["iota"],
-        )
-        shear = jnp.where(jnp.all(jnp.abs(data["iota"])) < self._eps, 0, shear)
-        return constants["transforms"]["grid"].compress(shear)
+        return constants["transforms"]["grid"].compress(data["shear"])
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""

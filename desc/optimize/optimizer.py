@@ -160,23 +160,31 @@ class Optimizer(IOAble):
             eq, objective, nonlinear_constraint, self.method, options
         )
 
-        if not isinstance(objective, ProximalProjection) and eq is not None:
-            # need to include self consistency constraints
-            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
-        if nonlinear_constraint is not None:
-            objective, nonlinear_constraint = combine_args(
-                objective, nonlinear_constraint
-            )
-        if len(linear_constraints):
-            objective = LinearConstraintProjection(objective, linear_constraints)
-            if nonlinear_constraint is not None:
-                nonlinear_constraint = LinearConstraintProjection(
-                    nonlinear_constraint, linear_constraints
-                )
+        # make sure everything is built
         if not objective.built:
             objective.build(verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
             nonlinear_constraint.build(verbose=verbose)
+
+        if nonlinear_constraint is not None:
+            objective, nonlinear_constraint = combine_args(
+                objective, nonlinear_constraint
+            )
+            assert set(objective.things) == set(nonlinear_constraint.things)
+
+        # wrap to handle linear constraints
+        if not isinstance(objective, ProximalProjection) and eq is not None:
+            # need to include self consistency constraints
+            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
+        if len(linear_constraints):
+            objective = LinearConstraintProjection(objective, linear_constraints)
+            objective.build(verbose=verbose)
+            if nonlinear_constraint is not None:
+                nonlinear_constraint = LinearConstraintProjection(
+                    nonlinear_constraint, linear_constraints
+                )
+                nonlinear_constraint.build(verbose=verbose)
+
         if len(linear_constraints) and not isinstance(x_scale, str):
             # need to project x_scale down to correct size
             Z = objective._Z

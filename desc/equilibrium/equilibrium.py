@@ -1684,12 +1684,7 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
 
-        if copy:
-            eq = self.copy()
-        else:
-            eq = self
-
-        if eq.N > eq.N_grid or eq.M > eq.M_grid or eq.L > eq.L_grid:
+        if self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid:
             warnings.warn(
                 colored(
                     "Equilibrium has one or more spectral resolutions "
@@ -1700,18 +1695,14 @@ class Equilibrium(IOAble, Optimizable):
                     "yellow",
                 )
             )
-        if eq.bdry_mode == "poincare":
+        if self.bdry_mode == "poincare":
             raise NotImplementedError(
                 "Solving equilibrium with poincare XS as BC is not supported yet "
                 + "on master branch."
             )
 
-        objective.things = eq
-        for con in constraints:
-            con.things = eq
-
         result = optimizer.optimize(
-            eq,
+            self,
             objective,
             constraints,
             ftol=ftol,
@@ -1725,7 +1716,13 @@ class Equilibrium(IOAble, Optimizable):
 
         if verbose > 0:
             print("Start of solver")
-            objective.print_value(objective.x(eq))
+            objective.print_value(objective.x(self))
+
+        if copy:
+            eq = self.copy()
+        else:
+            eq = self
+
         eq.params_dict = result["history"][-1][0]
 
         if verbose > 0:
@@ -1804,17 +1801,8 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
 
-        if copy:
-            eq = self.copy()
-        else:
-            eq = self
-
-        objective.things = eq
-        for con in constraints:
-            con.things = eq
-
         result = optimizer.optimize(
-            eq,
+            self,
             objective,
             constraints,
             ftol=ftol,
@@ -1829,9 +1817,14 @@ class Equilibrium(IOAble, Optimizable):
 
         if verbose > 0:
             print("Start of solver")
-            objective.print_value(objective.x(eq))
+            objective.print_value(objective.x(self))
             for con in constraints:
-                con.print_value(*con.xs(eq))
+                con.print_value(*con.xs(self))
+
+        if copy:
+            eq = self.copy()
+        else:
+            eq = self
 
         eq.params_dict = result["history"][-1][0]
 
@@ -1900,13 +1893,12 @@ class Equilibrium(IOAble, Optimizable):
         timer = Timer()
         timer.start("Total time")
 
-        eq = self
         if not objective.built:
-            objective.build(eq)
+            objective.build()
         if not constraint.built:
-            constraint.build(eq)
+            constraint.build()
 
-        cost = objective.compute_scalar(objective.x(eq))
+        cost = objective.compute_scalar(objective.x(self))
         perturb_options = deepcopy(perturb_options)
         tr_ratio = perturb_options.get(
             "tr_ratio",
@@ -1914,7 +1906,9 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         if verbose > 0:
-            objective.print_value(objective.x(eq))
+            objective.print_value(objective.x(self))
+
+        params = orig_params = self.params_dict.copy()
 
         iteration = 1
         success = None
@@ -1925,30 +1919,19 @@ class Equilibrium(IOAble, Optimizable):
                 print("Optimization Step {}".format(iteration))
                 print("====================")
                 print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
-            objective.things = eq
-            constraint.things = eq
 
             # perturb + solve
-            (
-                eq_new,
-                predicted_reduction,
-                dc_opt,
-                dc,
-                c_norm,
-                bound_hit,
-            ) = optimal_perturb(
-                eq,
+            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit,) = optimal_perturb(
+                self,
                 constraint,
                 objective,
-                copy=True,
+                copy=False,
                 **perturb_options,
             )
-            objective.things = eq_new
-            constraint.things = eq_new
-            eq_new.solve(objective=constraint, **solve_options)
+            self.solve(objective=constraint, **solve_options)
 
             # update trust region radius
-            cost_new = objective.compute_scalar(objective.x(eq_new))
+            cost_new = objective.compute_scalar(objective.x(self))
             actual_reduction = cost - cost_new
             trust_radius, ratio = update_tr_radius(
                 tr_ratio[0] * c_norm,
@@ -1962,7 +1945,7 @@ class Equilibrium(IOAble, Optimizable):
 
             timer.stop("Step {} time".format(iteration))
             if verbose > 0:
-                objective.print_value(objective.x(eq_new))
+                objective.print_value(objective.x(self))
                 print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
                 print("Reduction Ratio = {:+.3f}".format(ratio))
             if verbose > 1:
@@ -1989,8 +1972,11 @@ class Equilibrium(IOAble, Optimizable):
                 np.inf,
             )
             if actual_reduction > 0:
-                eq = eq_new
+                params = self.params_dict.copy()
                 cost = cost_new
+            else:
+                # reset equilibrium to last good params
+                self.params_dict = params
             if success is not None:
                 break
 
@@ -2005,12 +1991,11 @@ class Equilibrium(IOAble, Optimizable):
             timer.disp("Total time")
 
         if copy:
-            return eq
+            eq = self.copy()
+            self.params = orig_params
         else:
-            for attr in self._io_attrs_:
-                val = getattr(eq, attr)
-                setattr(self, attr, val)
-            return self
+            eq = self
+        return eq
 
     def perturb(
         self,

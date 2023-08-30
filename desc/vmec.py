@@ -186,7 +186,7 @@ class VMECIO:
         _, _, _, _, _, project, recover = factorize_linear_constraints(
             constraints, objective
         )
-        args = objective.unpack_state(recover(project(objective.x(eq))))[0]
+        args = objective.unpack_state(recover(project(objective.x(eq))), False)[0]
         eq.params_dict = args
 
         # now we flip the orientation at the very end

@@ -541,14 +541,26 @@ def only1(*args):
     return any(i) and not any(i)
 
 
-def sort_things(things):
-    """Sort a list of things by their class and instance name."""
-    things = list(set(flatten_list(things, True)))
-    names = [t.__class__.__name__ + getattr(t, "name", "") for t in things]
-    # TODO: make this error message more clear
-    assert len(set(names)) == len(
-        things
-    ), "Duplicate object names detected, cannot determine unique ordering."
-    named_things = list(zip(names, things))
-    named_things = sorted(named_things)
-    return [thing for name, thing in named_things]
+def unique_list(thelist):
+    """Get the unique elements from a list, and indices to recreate it.
+
+    Parameters
+    ----------
+    thelist : list
+        List to get unique elements from.
+
+    Returns
+    -------
+    unique : list
+        Unique elements from the input.
+    inds : list of int
+        Indices of unique elements in original list, such that
+        unique[inds[i]] == thelist[i]
+    """
+    inds = []
+    unique = []
+    for i, x in enumerate(thelist):
+        if x not in unique:
+            unique.append(x)
+        inds.append(unique.index(x))
+    return unique, inds

@@ -9,9 +9,14 @@ from desc.backend import jit, jnp, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
-from desc.utils import Timer, errorif, flatten_list, is_broadcastable, sort_things
-
-from .utils import map_params
+from desc.utils import (
+    Timer,
+    errorif,
+    flatten_list,
+    is_broadcastable,
+    setdefault,
+    unique_list,
+)
 
 
 class ObjectiveFunction(IOAble):
@@ -181,10 +186,53 @@ class ObjectiveFunction(IOAble):
         if self.use_jit:
             self.jit()
 
+        self._set_things()
+
         self._built = True
         timer.stop("Objective build")
         if verbose > 1:
             timer.disp("Objective build")
+
+    def _set_things(self, things=None):
+        """Tell the ObjectiveFunction what things it is optimizing.
+
+        Parameters
+        ----------
+        things : list, tuple, or nested list, tuple of Optimizable
+            Collection of things used by this objective. Defaults to all things from
+            all sub-objectives.
+
+        Notes
+        -----
+        Sets ``self._flatten`` as a function to return unique flattened list of things
+        and ``self._unflatten`` to recreate full nested list of things
+        from unique flattened version.
+        """
+        from jax.tree_util import tree_flatten, tree_unflatten
+
+        things = setdefault(things, [obj.things for obj in self.objectives])
+
+        flat_, treedef_ = tree_flatten(
+            things, is_leaf=lambda x: isinstance(x, Optimizable)
+        )
+        unique_, inds_ = unique_list(flat_)
+
+        def unflatten(unique):
+            assert len(unique) == len(unique_)
+            flat = [unique[i] for i in inds_]
+            return tree_unflatten(treedef_, flat)
+
+        def flatten(things):
+            flat, treedef = tree_flatten(
+                things, is_leaf=lambda x: isinstance(x, Optimizable)
+            )
+            assert treedef == treedef_
+            assert len(flat) == len(flat_)
+            unique, inds = unique_list(flat)
+            return unique
+
+        self._unflatten = unflatten
+        self._flatten = flatten
 
     def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
@@ -207,10 +255,8 @@ class ObjectiveFunction(IOAble):
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_unscaled(
-                    *map_params(params, obj, self._all_things), constants=const
-                )
-                for obj, const in zip(self.objectives, constants)
+                obj.compute_unscaled(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
             ]
         )
         return f
@@ -236,10 +282,8 @@ class ObjectiveFunction(IOAble):
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled(
-                    *map_params(params, obj, self._all_things), constants=const
-                )
-                for obj, const in zip(self.objectives, constants)
+                obj.compute_scaled(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
             ]
         )
         return f
@@ -265,10 +309,8 @@ class ObjectiveFunction(IOAble):
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled_error(
-                    *map_params(params, obj, self._all_things), constants=const
-                )
-                for obj, const in zip(self.objectives, constants)
+                obj.compute_scaled_error(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
             ]
         )
         return f
@@ -311,24 +353,28 @@ class ObjectiveFunction(IOAble):
             f = jnp.sum(self.compute_scaled(x, constants=constants) ** 2) / 2
         print("Total (sum of squares): {:10.3e}, ".format(f))
         params = self.unpack_state(x)
-        for obj, const in zip(self.objectives, constants):
-            obj.print_value(*map_params(params, obj, self._all_things), constants=const)
+        for par, obj, const in zip(params, self.objectives, constants):
+            obj.print_value(*par, constants=const)
         return None
 
-    def unpack_state(self, x):
+    def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        per_objective : bool
+            Whether to return param dicts for each objective (default) or for each
+            unique optimizable thing.
 
         Returns
         -------
-        params : list of dict
-            List of parameter dictionary for each optimizable object tied to the
-            ObjectiveFunction.
-
+        params : pytree of dict
+            if per_objective is True, this is a nested list of of parameters for each
+            sub-Objective, such that self.objectives[i] has parameters params[i].
+            Otherwise, it is a list of parameters tied to each optimizable thing
+            such that params[i] = self.things[i].params_dict
         """
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
@@ -340,15 +386,17 @@ class ObjectiveFunction(IOAble):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs_splits = np.cumsum([t.dim_x for t in self._all_things])
+        xs_splits = np.cumsum([t.dim_x for t in self.things])
         xs = jnp.split(x, xs_splits)
-        params = [t.unpack_params(xi) for t, xi in zip(self._all_things, xs)]
+        params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
+        if per_objective:
+            params = self._unflatten(params)
         return params
 
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
-        assert [type(t1) == type(t2) for t1, t2 in zip(things, self._all_things)]
+        assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
         xs = [t.pack_params(t.params_dict) for t in things]
         return jnp.concatenate(xs)
 
@@ -565,7 +613,7 @@ class ObjectiveFunction(IOAble):
     @property
     def dim_x(self):
         """int: Dimensional of the state vector."""
-        return sum(t.dim_x for t in self._all_things)
+        return sum(t.dim_x for t in self.things)
 
     @property
     def dim_f(self):
@@ -622,12 +670,17 @@ class ObjectiveFunction(IOAble):
         """list: all things known to this objective, used and unused."""
         if not hasattr(self, "_extra_things"):
             self._extra_things = []
-        return sort_things(self.things + self._extra_things)
+        return [obj.things for obj in self.objectives] + self._extra_things
 
     @property
     def things(self):
         """list: Optimizable things that this objective is tied to."""
-        return sort_things([obj.things for obj in self._objectives])
+        errorif(
+            not hasattr(self, "_flatten"),
+            RuntimeError,
+            "ObjectiveFunction must be built with ObjectiveFunction.build() first",
+        )
+        return self._flatten(self._all_things)
 
     @things.setter
     def things(self, new):
@@ -989,7 +1042,7 @@ class _Objective(IOAble, ABC):
         """list: Optimizable things that this objective is tied to."""
         if not hasattr(self, "_things"):
             self._things = []
-        return self._things
+        return list(self._things)
 
     @things.setter
     def things(self, new):

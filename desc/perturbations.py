@@ -202,7 +202,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dx2_reduced = jnp.zeros_like(x_reduced)
     dx3_reduced = jnp.zeros_like(x_reduced)
 
-    xz = objective.unpack_state(jnp.zeros_like(x))[0]
+    xz = objective.unpack_state(jnp.zeros_like(x), False)[0]
     # tangent vectors
     tangents = jnp.zeros((eq.dim_x,))
     if "Rb_lmn" in deltas.keys():
@@ -396,7 +396,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
     x_new = recover(x_reduced + dx_reduced)
-    params = objective.unpack_state(x_new)[0]
+    params = objective.unpack_state(x_new, False)[0]
     for key, value in params.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0
@@ -600,7 +600,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # dx/dc
     dxdc = []
-    xz = objective_f.unpack_state(jnp.zeros_like(xf))[0]
+    xz = objective_f.unpack_state(jnp.zeros_like(xf), False)[0]
 
     for arg in deltas:
         if arg not in ["Rb_lmn", "Zb_lmn"]:
@@ -791,7 +791,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced
     x_new = recover(x_reduced + dx_reduced)
-    params = objective_f.unpack_state(x_new)[0]
+    params = objective_f.unpack_state(x_new, False)[0]
     for key, value in params.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0

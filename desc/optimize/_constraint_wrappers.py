@@ -10,7 +10,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
-from desc.objectives.utils import factorize_linear_constraints
+from desc.objectives.utils import combine_args, factorize_linear_constraints
 from desc.utils import Timer, get_instance
 
 from .utils import compute_jac_scale, f_where_x
@@ -131,19 +131,24 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self._objective.x(*things)
         return self.project(x)
 
-    def unpack_state(self, x):
+    def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
 
         Parameters
         ----------
         x : ndarray
             State vector, either full or reduced.
+        per_objective : bool
+            Whether to return param dicts for each objective (default) or for each
+            unique optimizable thing.
 
         Returns
         -------
-        params : list of dict
-            List of parameter dictionary for each optimizable object tied to the
-            ObjectiveFunction.
+        params : pytree of dict
+            if per_objective is True, this is a nested list of of parameters for each
+            sub-Objective, such that self.objectives[i] has parameters params[i].
+            Otherwise, it is a list of parameters tied to each optimizable thing
+            such that params[i] = self.things[i].params_dict
 
         """
         if x.size != self._dim_x_reduced:
@@ -152,7 +157,7 @@ class LinearConstraintProjection(ObjectiveFunction):
                 + f"{self._dim_x_reduced} got {x.size}."
             )
         x = self.recover(x)
-        return self._objective.unpack_state(x)
+        return self._objective.unpack_state(x, per_objective)
 
     def compute_unscaled(self, x_reduced, constants=None):
         """Compute the unscaled form of the objective function.
@@ -400,7 +405,6 @@ class ProximalProjection(ObjectiveFunction):
         self._constraint = constraint
         solve_options = {} if solve_options is None else solve_options
         perturb_options = {} if perturb_options is None else perturb_options
-        self._objectives = [objective, constraint]
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
         solve_options.setdefault("verbose", 0)
@@ -489,6 +493,9 @@ class ProximalProjection(ObjectiveFunction):
         for constraint in self._linear_constraints:
             constraint.build(self._eq, verbose=verbose)
 
+        self._objectives = combine_args(self._objective, self._constraint)
+        self._set_things(self._all_things)
+
         self._dim_f = self._objective.dim_f
         if self._dim_f == 1:
             self._scalar = True
@@ -508,13 +515,16 @@ class ProximalProjection(ObjectiveFunction):
         if verbose > 1:
             timer.disp("Proximal projection build")
 
-    def unpack_state(self, x):
+    def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        per_objective : bool
+            Whether to return param dicts for each objective (default) or for each
+            unique optimizable thing.
 
         Returns
         -------
@@ -534,8 +544,11 @@ class ProximalProjection(ObjectiveFunction):
             )
 
         xs_splits = np.cumsum([self._eq.dimensions[arg] for arg in self._args])
-        params = {arg: xs for arg, xs in zip(self._args, jnp.split(x, xs_splits))}
-        return [params]
+        # kludge for now if things is only equilibrium
+        params = [{arg: xs for arg, xs in zip(self._args, jnp.split(x, xs_splits))}]
+        if per_objective:
+            params = self._unflatten(params)
+        return params
 
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
@@ -588,8 +601,8 @@ class ProximalProjection(ObjectiveFunction):
         if xopt.size > 0 and xeq.size > 0:
             pass
         else:
-            x_dict = self.unpack_state(x)[0]
-            x_dict_old = self.unpack_state(self._x_old)[0]
+            x_dict = self.unpack_state(x, False)[0]
+            x_dict_old = self.unpack_state(self._x_old, False)[0]
             deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
             self._eq = self._eq.perturb(
                 objective=self._constraint,
@@ -610,7 +623,7 @@ class ProximalProjection(ObjectiveFunction):
 
         if store:
             self._x_old = x
-            xd = self._objective.unpack_state(xopt)[0]
+            xd = self._objective.unpack_state(xopt, False)[0]
             self._eq.params_dict = xd
             self.history.append([self._eq.params_dict])
             for con in self._linear_constraints:

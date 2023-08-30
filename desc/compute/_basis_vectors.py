@@ -209,7 +209,13 @@ def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
             * cross(data["e_theta"], data["e_zeta"]).T
             * data["sqrt(g)_zz"]
             / data["sqrt(g)"] ** 2
-            + data["e^rho_z"].T * data["sqrt(g)_z"] / data["sqrt(g)"] ** 2
+            - 2
+            * (
+                cross(data["e_theta_z"], data["e_zeta"])
+                + cross(data["e_theta"], data["e_zeta_z"])
+            ).T
+            * data["sqrt(g)_z"]
+            / data["sqrt(g)"] ** 2
         ).T,
         lambda: (
             (
@@ -371,7 +377,19 @@ def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_zeta", "e_rho", "e_zeta_z", "e_rho_z", "sqrt(g)", "sqrt(g)_z"],
+    data=[
+        "e^theta",
+        "e^theta_z",
+        "e_zeta",
+        "e_zeta_z",
+        "e_zeta_zz",
+        "e_rho",
+        "e_rho_z",
+        "e_rho_zz",
+        "sqrt(g)",
+        "sqrt(g)_z",
+        "sqrt(g)_zz",
+    ],
 )
 def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     data["e^theta_zz"] = (
@@ -536,8 +554,29 @@ def _e_sup_zeta_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_rho_z", "e_theta", "e_theta_z", "sqrt(g)", "sqrt(g)_z"],
-    axis_limit_data=["e_theta_r", "e_theta_rz", "sqrt(g)_r", "sqrt(g)_rz"],
+    data=[
+        "e_rho",
+        "e_rho_z",
+        "e_rho_zz",
+        "e_theta",
+        "e_theta_z",
+        "e_theta_rzz",
+        "e_theta_rz",
+        "sqrt(g)",
+        "sqrt(g)_z",
+        "sqrt(g)_rzz",
+    ],
+    axis_limit_data=[
+        "e_theta_r",
+        "e_theta_rz",
+        "e_theta_zz",
+        "e_rho_z",
+        "e_rho_zz",
+        "sqrt(g)_r",
+        "sqrt(g)_z",
+        "sqrt(g)_rz",
+        "sqrt(g)_zz",
+    ],
 )
 def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     data["e^zeta_zz"] = transforms["grid"].replace_at_axis(
@@ -3618,9 +3657,10 @@ def _grad_alpha_z(params, transforms, profiles, data, **kwargs):
         "e^theta_zz",
         "e^zeta",
         "e^zeta_zz",
-        "alpha_rzz",
-        "alpha_rz",
         "alpha_z",
+        "alpha_r",
+        "alpha_rz",
+        "alpha_rzz",
     ],
 )
 def _grad_alpha_zz(params, transforms, profiles, data, **kwargs):

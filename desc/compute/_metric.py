@@ -1863,7 +1863,7 @@ def _g_sup_aa_sub_z(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["grad(alpha)_z", "grad(alpha)_zz"],
+    data=["grad(alpha)", "grad(alpha)_z", "grad(alpha)_zz"],
 )
 def _g_sup_aa_sub_zz(params, transforms, profiles, data, **kwargs):
     data["g^aa_zz"] = dot(data["grad(alpha)_z"], data["grad(alpha)_z"]) + dot(
@@ -1882,10 +1882,10 @@ def _g_sup_aa_sub_zz(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["grad(alpha)", "e^rho", "iota_r"],
+    data=["grad(alpha)", "e^rho"],
 )
 def _g_sup_ra(params, transforms, profiles, data, **kwargs):
-    data["g^ra"] = dot(data["grad(alpha)"], data["grad(rho)"])
+    data["g^ra"] = dot(data["grad(alpha)"], data["e^rho"])
 
 
 @register_compute_fun(
@@ -1899,7 +1899,7 @@ def _g_sup_ra(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["grad(alpha)", "e^rho", "grad(alpha)_z", "e^rho_z", "iota_r"],
+    data=["grad(alpha)", "e^rho", "grad(alpha)_z", "e^rho_z"],
 )
 def _g_sup_ra_sub_z(params, transforms, profiles, data, **kwargs):
     data["g^ra"] = dot(data["grad(alpha)_z"], data["e^rho"]) + dot(
@@ -1920,9 +1920,9 @@ def _g_sup_ra_sub_z(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=[
         "grad(alpha)",
-        "e^rho",
         "grad(alpha)_z",
         "grad(alpha)_zz",
+        "e^rho",
         "e^rho_z",
         "e^rho_zz",
     ],

@@ -1492,7 +1492,7 @@ def _current_rr(params, transforms, profiles, data, **kwargs):
 def _shear(params, transforms, profiles, data, **kwargs):
     eps = 1e2 * jnp.finfo(data["iota"].dtype).eps
     data["shear"] = cond(
-        jnp.all(jnp.abs(data["iota"])) < eps,
+        jnp.all(jnp.abs(data["iota"]) < eps),
         lambda _: data["0"],  # if iota profile is all 0, set shear to 0
         lambda _: jnp.where(  # apply l'Hopital rule where necessary
             (jnp.abs(data["iota"]) < eps)

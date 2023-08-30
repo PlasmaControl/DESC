@@ -1494,12 +1494,12 @@ def _shear(params, transforms, profiles, data, **kwargs):
     eps = 1e2 * jnp.finfo(jnp.array([1.0]).dtype).eps
     data["shear"] = cond(
         jnp.all(jnp.abs(data["iota"])) < eps,
-        lambda _: data["0"],
-        lambda _: jnp.where(
+        lambda _: data["0"],  # if iota profile is all 0, set shear to 0
+        lambda _: jnp.where(  # apply l'Hopital rule where necessary
             (jnp.abs(data["iota"]) < eps)
             & ((jnp.abs(data["rho"]) < eps) | (jnp.abs(data["iota_r"]) < eps)),
-            1 + data["rho"] * data["iota_rr"] / data["iota_r"],
-            data["rho"] * data["iota_r"] / data["iota"],
+            1 + data["rho"] * data["iota_rr"] / data["iota_r"],  # limit
+            data["rho"] * data["iota_r"] / data["iota"],  # shear
         ),
         1,
     )

@@ -21,7 +21,7 @@ __all__ = [
 ]
 
 
-class Basis(IOAble, ABC):
+class _Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets."""
 
     _io_attrs_ = [
@@ -223,7 +223,7 @@ class Basis(IOAble, ABC):
         )
 
 
-class PowerSeries(Basis):
+class PowerSeries(_Basis):
     """1D basis set for flux surface quantities.
 
     Power series in the radial coordinate.
@@ -333,7 +333,7 @@ class PowerSeries(Basis):
             self._set_up()
 
 
-class FourierSeries(Basis):
+class FourierSeries(_Basis):
     """1D basis set for use with the magnetic axis.
 
     Fourier series in the toroidal coordinate.
@@ -453,7 +453,7 @@ class FourierSeries(Basis):
             self._set_up()
 
 
-class DoubleFourierSeries(Basis):
+class DoubleFourierSeries(_Basis):
     """2D basis set for use on a single flux surface.
 
     Fourier series in both the poloidal and toroidal coordinates.
@@ -600,7 +600,7 @@ class DoubleFourierSeries(Basis):
             self._set_up()
 
 
-class ZernikePolynomial(Basis):
+class ZernikePolynomial(_Basis):
     """2D basis set for analytic functions in a unit disc.
 
     Parameters
@@ -810,7 +810,7 @@ class ZernikePolynomial(Basis):
             self._set_up()
 
 
-class ChebyshevDoubleFourierBasis(Basis):
+class ChebyshevDoubleFourierBasis(_Basis):
     """3D basis: tensor product of Chebyshev polynomials and two Fourier series.
 
     Fourier series in both the poloidal and toroidal coordinates.
@@ -943,7 +943,7 @@ class ChebyshevDoubleFourierBasis(Basis):
             self._set_up()
 
 
-class FourierZernikeBasis(Basis):
+class FourierZernikeBasis(_Basis):
     """3D basis set for analytic functions in a toroidal volume.
 
     Zernike polynomials in the radial & poloidal coordinates, and a Fourier

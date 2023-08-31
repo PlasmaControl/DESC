@@ -10,7 +10,7 @@ from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz_vec, xyz2rpz
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
 from desc.transform import Transform
@@ -142,7 +142,7 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     return Bnorm
 
 
-class MagneticField(IOAble, ABC):
+class _MagneticField(IOAble, ABC):
     """Base class for all magnetic fields.
 
     Subclasses must implement the "compute_magnetic_field" method
@@ -161,7 +161,7 @@ class MagneticField(IOAble, ABC):
         return self.__mul__(x)
 
     def __add__(self, x):
-        if isinstance(x, MagneticField):
+        if isinstance(x, _MagneticField):
             return SumMagneticField(self, x)
         else:
             return NotImplemented
@@ -378,7 +378,7 @@ class MagneticField(IOAble, ABC):
         return None
 
 
-class ScaledMagneticField(MagneticField):
+class ScaledMagneticField(_MagneticField):
     """Magnetic field scaled by a scalar value.
 
     ie B_new = scalar * B_old
@@ -392,12 +392,12 @@ class ScaledMagneticField(MagneticField):
 
     """
 
-    _io_attrs = MagneticField._io_attrs_ + ["_field", "_scalar"]
+    _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
 
     def __init__(self, scalar, field):
         assert np.isscalar(scalar), "scalar must actually be a scalar value"
         assert isinstance(
-            field, MagneticField
+            field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
             type(field)
         )
@@ -430,7 +430,7 @@ class ScaledMagneticField(MagneticField):
         )
 
 
-class SumMagneticField(MagneticField):
+class SumMagneticField(_MagneticField):
     """Sum of two or more magnetic field sources.
 
     Parameters
@@ -439,11 +439,11 @@ class SumMagneticField(MagneticField):
         two or more MagneticFields to add together
     """
 
-    _io_attrs = MagneticField._io_attrs_ + ["_fields"]
+    _io_attrs = _MagneticField._io_attrs_ + ["_fields"]
 
     def __init__(self, *fields):
         assert all(
-            [isinstance(field, MagneticField) for field in fields]
+            [isinstance(field, _MagneticField) for field in fields]
         ), "fields should each be a subclass of MagneticField, got {}".format(
             [type(field) for field in fields]
         )
@@ -485,7 +485,7 @@ class SumMagneticField(MagneticField):
         return B
 
 
-class ToroidalMagneticField(MagneticField):
+class ToroidalMagneticField(_MagneticField):
     """Magnetic field purely in the toroidal (phi) direction.
 
     Magnitude is B0*R0/R where R0 is the major radius of the axis and B0
@@ -499,7 +499,7 @@ class ToroidalMagneticField(MagneticField):
 
     """
 
-    _io_attrs_ = MagneticField._io_attrs_ + ["_B0", "_R0"]
+    _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0"]
 
     def __init__(self, B0, R0):
         assert float(B0) == B0, "B0 must be a scalar"
@@ -530,7 +530,7 @@ class ToroidalMagneticField(MagneticField):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if isinstance(coords, Grid):
+        if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
@@ -544,7 +544,7 @@ class ToroidalMagneticField(MagneticField):
         return B
 
 
-class VerticalMagneticField(MagneticField):
+class VerticalMagneticField(_MagneticField):
     """Uniform magnetic field purely in the vertical (Z) direction.
 
     Parameters
@@ -554,7 +554,7 @@ class VerticalMagneticField(MagneticField):
 
     """
 
-    _io_attrs_ = MagneticField._io_attrs_ + ["_B0"]
+    _io_attrs_ = _MagneticField._io_attrs_ + ["_B0"]
 
     def __init__(self, B0):
         assert np.isscalar(B0), "B0 must be a scalar"
@@ -584,7 +584,7 @@ class VerticalMagneticField(MagneticField):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if isinstance(coords, Grid):
+        if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
@@ -598,7 +598,7 @@ class VerticalMagneticField(MagneticField):
         return B
 
 
-class PoloidalMagneticField(MagneticField):
+class PoloidalMagneticField(_MagneticField):
     """Pure poloidal magnetic field (ie in theta direction).
 
     Field strength is B0*iota*r/R0 where B0 is the toroidal field on axis,
@@ -622,7 +622,7 @@ class PoloidalMagneticField(MagneticField):
 
     """
 
-    _io_attrs_ = MagneticField._io_attrs_ + ["_B0", "_R0", "_iota"]
+    _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0", "_iota"]
 
     def __init__(self, B0, R0, iota):
         assert np.isscalar(B0), "B0 must be a scalar"
@@ -656,7 +656,7 @@ class PoloidalMagneticField(MagneticField):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if isinstance(coords, Grid):
+        if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
@@ -676,7 +676,7 @@ class PoloidalMagneticField(MagneticField):
         return B
 
 
-class SplineMagneticField(MagneticField):
+class SplineMagneticField(_MagneticField):
     """Magnetic field from precomputed values on a grid.
 
     Parameters
@@ -788,7 +788,7 @@ class SplineMagneticField(MagneticField):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if isinstance(coords, Grid):
+        if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
@@ -981,7 +981,7 @@ class SplineMagneticField(MagneticField):
         )
 
 
-class ScalarPotentialField(MagneticField):
+class ScalarPotentialField(_MagneticField):
     """Magnetic field due to a scalar magnetic potential in cylindrical coordinates.
 
     Parameters
@@ -1023,7 +1023,7 @@ class ScalarPotentialField(MagneticField):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if isinstance(coords, Grid):
+        if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":

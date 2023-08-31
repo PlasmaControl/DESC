@@ -1,5 +1,7 @@
 """Classes for representing flux coordinates."""
 
+from abc import ABC, abstractmethod
+
 import numpy as np
 from scipy import optimize, special
 
@@ -17,24 +19,8 @@ __all__ = [
 ]
 
 
-class Grid(IOAble):
-    """Base class for collocation grids.
-
-    Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
-    to pass in a custom set of collocation nodes.
-
-    Parameters
-    ----------
-    nodes : ndarray of float, size(num_nodes,3)
-        node coordinates, in (rho,theta,zeta)
-    sort : bool
-        whether to sort the nodes for use with FFT method.
-    jitable : bool
-        Whether to skip certain checks and conditionals that don't work under jit.
-        Allows grid to be created on the fly with custom nodes, but weights, symmetry
-        etc may be wrong if grid contains duplicate nodes.
-
-    """
+class _Grid(IOAble, ABC):
+    """Base class for collocation grids."""
 
     # TODO: calculate weights automatically using voronoi / delaunay triangulation
     _io_attrs_ = [
@@ -56,74 +42,10 @@ class Grid(IOAble):
         "_inverse_zeta_idx",
     ]
 
-    def __init__(self, nodes, sort=True, jitable=False):
-        # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
-        # This change measurably reduces memory usage of objects that
-        # define all attributes in their __init__ method.
-        self._NFP = 1
-        self._sym = False
-        self._node_pattern = "custom"
-        self._nodes, self._spacing = self._create_nodes(nodes)
-        if sort:
-            self._sort_nodes()
-        if jitable:
-            # dont do anything with symmetry since that changes # of nodes
-            # avoid point at the axis, for now. FIXME: make axis boolean mask?
-            r, t, z = self._nodes.T
-            r = jnp.where(r == 0, 1e-12, r)
-            self._nodes = jnp.array([r, t, z]).T
-            self._axis = np.array([], dtype=int)
-            self._unique_rho_idx = np.arange(self._nodes.shape[0])
-            self._unique_theta_idx = np.arange(self._nodes.shape[0])
-            self._unique_zeta_idx = np.arange(self._nodes.shape[0])
-            self._inverse_rho_idx = np.arange(self._nodes.shape[0])
-            self._inverse_theta_idx = np.arange(self._nodes.shape[0])
-            self._inverse_zeta_idx = np.arange(self._nodes.shape[0])
-            # don't do anything fancy with weights
-            self._weights = self._spacing.prod(axis=1)
-        else:
-            self._enforce_symmetry()
-            self._axis = self._find_axis()
-            (
-                self._unique_rho_idx,
-                self._inverse_rho_idx,
-                self._unique_theta_idx,
-                self._inverse_theta_idx,
-                self._unique_zeta_idx,
-                self._inverse_zeta_idx,
-            ) = self._find_unique_inverse_nodes()
-            self._weights = self._scale_weights()
-
-        self._L = self.num_rho
-        self._M = self.num_theta
-        self._N = self.num_zeta
-
-    def _create_nodes(self, nodes):
-        """Allow for custom node creation.
-
-        Parameters
-        ----------
-        nodes : ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
-
-        Returns
-        -------
-        nodes : ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
-        spacing : ndarray of float, size(num_nodes,3)
-            Node spacing, in (rho,theta,zeta).
-
-        """
-        nodes = jnp.atleast_2d(nodes).reshape((-1, 3)).astype(float)
-        # Do not alter nodes given by the user for custom grids.
-        # In particular, do not modulo nodes by 2pi or 2pi/NFP.
-        # This may cause the surface_integrals() function to fail recognizing
-        # surfaces outside the interval [0, 2pi] as duplicates. However, most
-        # surface integral computations are done with LinearGrid anyway.
-        spacing = (  # make weights sum to 4pi^2
-            jnp.ones_like(nodes) * jnp.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
-        )
-        return nodes, spacing
+    @abstractmethod
+    def _create_nodes(self, *args, **kwargs):
+        """Allow for custom node creation."""
+        pass
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry.
@@ -465,7 +387,95 @@ class Grid(IOAble):
         return x
 
 
-class LinearGrid(Grid):
+class Grid(_Grid):
+    """Collocation grid with custom node placement.
+
+    Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
+    to pass in a custom set of collocation nodes.
+
+    Parameters
+    ----------
+    nodes : ndarray of float, size(num_nodes,3)
+        node coordinates, in (rho,theta,zeta)
+    sort : bool
+        whether to sort the nodes for use with FFT method.
+    jitable : bool
+        Whether to skip certain checks and conditionals that don't work under jit.
+        Allows grid to be created on the fly with custom nodes, but weights, symmetry
+        etc may be wrong if grid contains duplicate nodes.
+    """
+
+    def __init__(self, nodes, sort=True, jitable=False):
+        # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
+        # This change measurably reduces memory usage of objects that
+        # define all attributes in their __init__ method.
+        self._NFP = 1
+        self._sym = False
+        self._node_pattern = "custom"
+        self._nodes, self._spacing = self._create_nodes(nodes)
+        if sort:
+            self._sort_nodes()
+        if jitable:
+            # dont do anything with symmetry since that changes # of nodes
+            # avoid point at the axis, for now. FIXME: make axis boolean mask?
+            r, t, z = self._nodes.T
+            r = jnp.where(r == 0, 1e-12, r)
+            self._nodes = jnp.array([r, t, z]).T
+            self._axis = np.array([], dtype=int)
+            self._unique_rho_idx = np.arange(self._nodes.shape[0])
+            self._unique_theta_idx = np.arange(self._nodes.shape[0])
+            self._unique_zeta_idx = np.arange(self._nodes.shape[0])
+            self._inverse_rho_idx = np.arange(self._nodes.shape[0])
+            self._inverse_theta_idx = np.arange(self._nodes.shape[0])
+            self._inverse_zeta_idx = np.arange(self._nodes.shape[0])
+            # don't do anything fancy with weights
+            self._weights = self._spacing.prod(axis=1)
+        else:
+            self._enforce_symmetry()
+            self._axis = self._find_axis()
+            (
+                self._unique_rho_idx,
+                self._inverse_rho_idx,
+                self._unique_theta_idx,
+                self._inverse_theta_idx,
+                self._unique_zeta_idx,
+                self._inverse_zeta_idx,
+            ) = self._find_unique_inverse_nodes()
+            self._weights = self._scale_weights()
+
+        self._L = self.num_rho
+        self._M = self.num_theta
+        self._N = self.num_zeta
+
+    def _create_nodes(self, nodes):
+        """Allow for custom node creation.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+
+        Returns
+        -------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        spacing : ndarray of float, size(num_nodes,3)
+            Node spacing, in (rho,theta,zeta).
+
+        """
+        nodes = jnp.atleast_2d(nodes).reshape((-1, 3)).astype(float)
+        # Do not alter nodes given by the user for custom grids.
+        # In particular, do not modulo nodes by 2pi or 2pi/NFP.
+        # This may cause the surface_integrals() function to fail recognizing
+        # surfaces outside the interval [0, 2pi] as duplicates. However, most
+        # surface integral computations are done with LinearGrid anyway.
+        spacing = (  # make weights sum to 4pi^2
+            jnp.ones_like(nodes) * jnp.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
+        )
+        return nodes, spacing
+
+
+class LinearGrid(_Grid):
     """Grid in which the nodes are linearly spaced in each coordinate.
 
     Useful for plotting and other analysis, though not very efficient for using as the
@@ -827,7 +837,7 @@ class LinearGrid(Grid):
         return self.__dict__.setdefault("_endpoint", False)
 
 
-class QuadratureGrid(Grid):
+class QuadratureGrid(_Grid):
     """Grid used for numerical quadrature.
 
     Exactly integrates a Fourier-Zernike basis of resolution (L,M,N)
@@ -957,7 +967,7 @@ class QuadratureGrid(Grid):
             self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
 
 
-class ConcentricGrid(Grid):
+class ConcentricGrid(_Grid):
     """Grid in which the nodes are arranged in concentric circles.
 
     Nodes are arranged concentrically within each toroidal cross-section, with more

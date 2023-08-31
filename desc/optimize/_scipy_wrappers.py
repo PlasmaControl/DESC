@@ -44,7 +44,7 @@ from .utils import (
         + "optimize.minimize-trustexact.html",
         "Trust region method using conjugate gradient to solve subproblem. See "
         + "https://docs.scipy.org/doc/scipy/reference/optimize.minimize-trustncg.html",
-        "Trust region method using Kyrlov iterations to solve subproblem. See "
+        "Trust region method using Krylov iterations to solve subproblem. See "
         + "https://docs.scipy.org/doc/scipy/reference/"
         + "optimize.minimize-trustkrylov.html",
     ],
@@ -377,7 +377,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
         return f
 
     def jac_wrapped(x):
-        # record all the xs and jacs we see
+        # record all the xs and jacobians we see
         jac_allx.append(x)
         J = jac(x, objective.constants)
         jac_allf.append(J)

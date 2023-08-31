@@ -94,11 +94,12 @@ class MercierStability(_Objective):
         eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
+                L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=np.linspace(1 / 5, 1, 5),
+                axis=False,
             )
         else:
             grid = self._grid
@@ -296,11 +297,12 @@ class MagneticWell(_Objective):
         eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
+                L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=np.linspace(1 / 5, 1, 5),
+                axis=False,
             )
         else:
             grid = self._grid

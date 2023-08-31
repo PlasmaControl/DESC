@@ -1385,6 +1385,7 @@ def _g_sup_rr_sub_zz(params, transforms, profiles, data, **kwargs):
     data["g^rr_zz"] = 2 * (
         dot(data["e^rho_zz"], data["e^rho"]) + dot(data["e^rho_z"], data["e^rho_z"])
     )
+    return data
 
 
 @register_compute_fun(
@@ -1833,6 +1834,7 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
 )
 def _g_sup_aa(params, transforms, profiles, data, **kwargs):
     data["g^aa"] = dot(data["grad(alpha)"], data["grad(alpha)"])
+    return data
 
 
 @register_compute_fun(
@@ -1850,6 +1852,7 @@ def _g_sup_aa(params, transforms, profiles, data, **kwargs):
 )
 def _g_sup_aa_sub_z(params, transforms, profiles, data, **kwargs):
     data["g^aa_z"] = 2 * dot(data["grad(alpha)"], data["grad(alpha)_z"])
+    return data
 
 
 @register_compute_fun(
@@ -1869,6 +1872,7 @@ def _g_sup_aa_sub_zz(params, transforms, profiles, data, **kwargs):
     data["g^aa_zz"] = dot(data["grad(alpha)_z"], data["grad(alpha)_z"]) + dot(
         data["grad(alpha)"], data["grad(alpha)_zz"]
     )
+    return data
 
 
 @register_compute_fun(
@@ -1886,6 +1890,7 @@ def _g_sup_aa_sub_zz(params, transforms, profiles, data, **kwargs):
 )
 def _g_sup_ra(params, transforms, profiles, data, **kwargs):
     data["g^ra"] = dot(data["grad(alpha)"], data["e^rho"])
+    return data
 
 
 @register_compute_fun(
@@ -1902,9 +1907,10 @@ def _g_sup_ra(params, transforms, profiles, data, **kwargs):
     data=["grad(alpha)", "e^rho", "grad(alpha)_z", "e^rho_z"],
 )
 def _g_sup_ra_sub_z(params, transforms, profiles, data, **kwargs):
-    data["g^ra"] = dot(data["grad(alpha)_z"], data["e^rho"]) + dot(
+    data["g^ra_z"] = dot(data["grad(alpha)_z"], data["e^rho"]) + dot(
         data["grad(alpha)"], data["e^rho_z"]
     )
+    return data
 
 
 @register_compute_fun(
@@ -1928,11 +1934,12 @@ def _g_sup_ra_sub_z(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _g_sup_ra_sub_zz(params, transforms, profiles, data, **kwargs):
-    data["g^ra"] = (
+    data["g^ra_zz"] = (
         dot(data["grad(alpha)_zz"], data["e^rho"])
         + 2 * dot(data["grad(alpha)_z"], data["e^rho_z"])
         + dot(data["grad(alpha)"], data["e^rho_zz"])
     )
+    return data
 
 
 @register_compute_fun(
@@ -1956,6 +1963,7 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
         / data["|B|"] ** 2
         * dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha)"]))
     )
+    return data
 
 
 @register_compute_fun(
@@ -1975,6 +1983,7 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
 def _cvdrift(params, transforms, profiles, data, **kwargs):
     dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
     data["cvdrift"] = data["psi_r"] * 1 / data["|B|"] ** 2 * dp_dpsi + data["gbdrift"]
+    return data
 
 
 @register_compute_fun(
@@ -1989,12 +1998,13 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "b", "iota", "iota_r", "sqrt(g)", "grad(alpha)", "grad(|B|)"],
+    data=["|B|", "b", "e^rho", "iota", "iota_r", "sqrt(g)", "grad(alpha)", "grad(|B|)"],
 )
 def _cvdrift0(params, transforms, profiles, data, **kwargs):
     data["cvdrift0"] = (
         1
         / data["|B|"] ** 2
         * data["iota_r"]
-        * (dot(data["b"], cross(data["grad(|B|)"], data["grad(rho)"])))
+        * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
     )
+    return data

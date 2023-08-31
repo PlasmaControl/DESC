@@ -164,7 +164,6 @@ def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# RG
 @register_compute_fun(
     name="e^rho_zz",
     label="\\partial{\\zeta \\zeta} \\mathbf{e}^{\\rho}",
@@ -191,6 +190,9 @@ def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
         "e_theta_r",
         "e_theta_rz",
         "e_theta_rzz",
+        "e_zeta",
+        "e_zeta_z",
+        "e_zeta_zz",
         "sqrt(g)_r",
         "sqrt(g)_rz",
         "sqrt(g)_rzz",
@@ -364,7 +366,6 @@ def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# RG
 @register_compute_fun(
     name="e^theta_zz",
     label="\\partial_{\\zeta \\zeta} \\mathbf{e}^{\\theta}",

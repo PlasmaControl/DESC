@@ -51,7 +51,7 @@ class TestRZCurve:
 
     @pytest.mark.unit
     def test_frenet(self):
-        """Test frenet-seret frame of circular curve."""
+        """Test frenet-serret frame of circular curve."""
         c = FourierRZCurve()
         data = c.compute(
             ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="rpz", grid=0
@@ -249,7 +249,7 @@ class TestFourierXYZCurve:
 
     @pytest.mark.unit
     def test_frenet(self):
-        """Test frenet-seret frame of circular curve."""
+        """Test frenet-serret frame of circular curve."""
         c = FourierXYZCurve()
         data = c.compute(
             ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="rpz", grid=0
@@ -378,7 +378,7 @@ class TestPlanarCurve:
 
     @pytest.mark.unit
     def test_frenet(self):
-        """Test frenet-seret frame of circular curve."""
+        """Test frenet-serret frame of circular curve."""
         c = FourierPlanarCurve()
         data = c.compute(
             ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
@@ -530,7 +530,7 @@ class TestSplineXYZCurve:
                 continue  # don't test changing the grid if nearest
                 # since it will give wrong answers for
                 # grids with more than the initial num of knots
-            # check lengths when changing X,Y,Z from intial values
+            # check lengths when changing X,Y,Z from initial values
             # and from changing grids
             R = 1.1
             c.X = R * np.cos(phi)

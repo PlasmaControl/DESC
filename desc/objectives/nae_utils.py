@@ -150,10 +150,10 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
     -------
     Rconstraints : tuple of Objective
         tuple of constraints of type FixSumModesR, which enforce
-        the O(rho) behavior of the equilibrium R coefficents to match the NAE.
+        the O(rho) behavior of the equilibrium R coefficients to match the NAE.
     Zconstraints : tuple of Objective
         tuple of constraints of type FixSumModesZ, which enforce
-        the O(rho) behavior of the equilibrium Z coefficents to match the NAE.
+        the O(rho) behavior of the equilibrium Z coefficients to match the NAE.
     """
     # r is the ratio  r_NAE / rho_DESC
     r = np.sqrt(2 * abs(desc_eq.Psi / qsc.Bbar) / 2 / np.pi)

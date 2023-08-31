@@ -7,8 +7,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms
-from desc.geometry.utils import xyz2rpz_vec
+from desc.compute import get_params, get_profiles, get_transforms, xyz2rpz_vec
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective

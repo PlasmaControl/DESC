@@ -3,9 +3,9 @@
 from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, put
-from desc.geometry.utils import rpz2xyz
 
 from .data_index import register_compute_fun
+from .geom_utils import rpz2xyz
 from .utils import cross, dot
 
 

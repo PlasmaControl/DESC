@@ -15,7 +15,7 @@ from desc.compute.utils import (
     get_params,
     get_transforms,
 )
-from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 
 
@@ -69,7 +69,7 @@ class Curve(IOAble, ABC):
             Computed quantity and intermediate variables.
 
         """
-        # set a default numpts for the SplineXYZCurve
+        # set a default number of points for the SplineXYZCurve
         N = self.N if hasattr(self, "N") else self.X.size
         if isinstance(names, str):
             names = [names]
@@ -79,7 +79,7 @@ class Curve(IOAble, ABC):
         elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1
             grid = LinearGrid(N=grid, NFP=NFP, endpoint=True)
-        elif isinstance(grid, Grid):
+        elif hasattr(grid, "NFP"):
             NFP = grid.NFP
         else:
             raise TypeError(
@@ -343,7 +343,7 @@ class Surface(IOAble, ABC):
             elif hasattr(self, "zeta"):  # constant zeta surface
                 grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
                 grid._nodes[:, 2] = self.zeta
-        elif not isinstance(grid, Grid):
+        elif not isinstance(grid, _Grid):
             raise TypeError(
                 "must pass in a Grid object or an integer for argument grid!"
                 f" instead got type {type(grid)}"

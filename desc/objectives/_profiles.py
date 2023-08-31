@@ -6,7 +6,6 @@ from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.profiles import Profile
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
@@ -99,7 +98,7 @@ class RotationalTransform(_Objective):
         else:
             grid = self._grid
 
-        if isinstance(self._target, Profile):
+        if callable(self._target):
             self._target = self._target(grid.nodes[grid.unique_rho_idx])
 
         self._dim_f = grid.num_rho
@@ -270,7 +269,7 @@ class Shear(_Objective):
         else:
             grid = self._grid
 
-        if isinstance(self._target, Profile):
+        if callable(self._target):
             self._target = self._target(grid.nodes[grid.unique_rho_idx])
 
         self._dim_f = grid.num_rho
@@ -437,7 +436,7 @@ class ToroidalCurrent(_Objective):
         else:
             grid = self._grid
 
-        if isinstance(self._target, Profile):
+        if callable(self._target):
             self._target = self._target(grid.nodes[grid.unique_rho_idx])
 
         self._dim_f = grid.num_rho

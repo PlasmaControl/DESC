@@ -156,7 +156,7 @@ def gershgorin_bounds(H):
     """Upper and lower bounds for eigenvalues of a square matrix.
 
     Given a square matrix ``H`` compute upper
-    and lower bounds for its eigenvalues (Gregoshgorin Bounds).
+    and lower bounds for its eigenvalues (Gershgorin Bounds).
     Defined ref. [1].
 
     References

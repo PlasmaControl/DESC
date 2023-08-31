@@ -43,7 +43,6 @@ def myconvolve_2d(arr_1d, stencil, shape):
     return conv
 
 
-# TODO: add more tests for compute_geometry
 @pytest.mark.unit
 def test_total_volume(DummyStellarator):
     """Test that the volume enclosed by the LCFS is equal to the total volume."""
@@ -1114,11 +1113,11 @@ def test_BdotgradB(DummyStellarator):
     test_partial_derivative("(B*grad(|B|))_z")
 
 
-# TODO: add test with stellarator example
 @pytest.mark.unit
 @pytest.mark.solve
 def test_boozer_transform(DSHAPE_current):
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
+    # TODO: add test with stellarator example
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)

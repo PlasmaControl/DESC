@@ -1318,7 +1318,7 @@ def zernike_radial_coeffs(l, m, exact=True):
     Returns
     -------
     coeffs : ndarray
-
+        Polynomial coefficients for Zernike polynomials, in descending powers of r.
 
     Notes
     -----

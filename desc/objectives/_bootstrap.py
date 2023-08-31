@@ -20,7 +20,7 @@ class BootstrapRedlConsistency(_Objective):
 
     This objective function penalizes the difference between the MHD
     and neoclassical profiles of parallel current, using the Redl
-    formula for the boostrap current. The scalar objective is defined as
+    formula for the bootstrap current. The scalar objective is defined as
 
     f = ½ ∫dρ [(⟨J⋅B⟩_MHD - ⟨J⋅B⟩_Redl) / (J_ref B_ref)]²
 

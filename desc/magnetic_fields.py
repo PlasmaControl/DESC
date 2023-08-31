@@ -18,7 +18,6 @@ from desc.utils import copy_coeffs
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
-# TODO: vectorize this over multiple coils
 def biot_savart(eval_pts, coil_pts, current):
     """Biot-Savart law following [1].
 
@@ -39,8 +38,9 @@ def biot_savart(eval_pts, coil_pts, current):
     [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart
     fields of a filamentary segment" (2002)
     """
-    dvec = jnp.diff(coil_pts, axis=0)
-    L = jnp.linalg.norm(dvec, axis=-1)
+    # TODO: vectorize this over multiple coils
+    d_vec = jnp.diff(coil_pts, axis=0)
+    L = jnp.linalg.norm(d_vec, axis=-1)
 
     Ri_vec = eval_pts[jnp.newaxis, :] - coil_pts[:-1, jnp.newaxis, :]
     Ri = jnp.linalg.norm(Ri_vec, axis=-1)
@@ -50,7 +50,7 @@ def biot_savart(eval_pts, coil_pts, current):
     Ri_p_Rf = Ri + Rf
 
     # 1.0e-7 == mu_0/(4 pi)
-    Bmag = (
+    B_mag = (
         1.0e-7
         * current
         * 2.0
@@ -58,9 +58,9 @@ def biot_savart(eval_pts, coil_pts, current):
         / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - (L * L)[:, jnp.newaxis]))
     )
 
-    # cross product of L*hat(eps)==dvec with Ri_vec, scaled by Bmag
-    vec = jnp.cross(dvec[:, jnp.newaxis, :], Ri_vec, axis=-1)
-    B = jnp.sum(Bmag[:, :, jnp.newaxis] * vec, axis=0)
+    # cross product of L*hat(eps)==d_vec with Ri_vec, scaled by B_mag
+    vec = jnp.cross(d_vec[:, jnp.newaxis, :], Ri_vec, axis=-1)
+    B = jnp.sum(B_mag[:, :, jnp.newaxis] * vec, axis=0)
     return B
 
 

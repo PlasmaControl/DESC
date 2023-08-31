@@ -1487,7 +1487,7 @@ def _current_rr(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["0", "iota", "iota_r", "iota_rr", "rho"],
+    data=["0", "iota", "iota_r", "rho"],
 )
 def _shear(params, transforms, profiles, data, **kwargs):
     """Global magnetic shear, as defined in the tokamak literature: -dι/dρ * (ρ/ι).

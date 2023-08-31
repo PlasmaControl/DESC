@@ -175,16 +175,16 @@ class TestObjectiveFunction:
         """Test calculation of shear profile."""
 
         def test(eq, raw, scaled):
-            obj = Shear(target=1, weight=2, eq=eq)
+            obj = Shear(target=-1, weight=2, eq=eq)
             obj.build()
             shear = obj.compute_unscaled(*obj.xs(eq))
             shear_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(shear, raw)
             np.testing.assert_allclose(shear_scaled, scaled)
 
-        test(Equilibrium(iota=PowerSeriesProfile(0)), 0, -2 / np.sqrt(3))
-        test(Equilibrium(current=PowerSeriesProfile(0)), 0, -2 / np.sqrt(3))
-        test(Equilibrium(iota=PowerSeriesProfile([0, 0, 0.5])), 2, 2 / np.sqrt(3))
+        test(Equilibrium(iota=PowerSeriesProfile(0)), 0, 2 / np.sqrt(3))
+        test(Equilibrium(current=PowerSeriesProfile(0)), 0, 2 / np.sqrt(3))
+        test(Equilibrium(iota=PowerSeriesProfile([0, 0, 0.5])), -2, -2 / np.sqrt(3))
 
     @pytest.mark.unit
     def test_toroidal_current(self):

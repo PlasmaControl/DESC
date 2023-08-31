@@ -1,19 +1,24 @@
 """Alphabetize classes and functions in a python source file.
 
-Run on a single file at a time, and by default prints the sorted file to the terminal
-rather than modify in place.
+Run on a single file at a time like so:
 
-``python alphabetize.py desc/foo.py > desc/foo_sorted.py``
+``python alphabetize.py desc/foo.py desc/foo_sorted.py``
+
+Should throw an error (and not overwrite anything) if the sorted file doesn't contain
+the same info as the original.
+
+Most common source of errors is the presence of two blank lines in the middle of a
+function or class docstring body. The parser treats this as the end of the declaration,
+and starts reading the next lines as a new thing, so you may need to clean up the
+original file before running this.
 """
 
 import re
+import subprocess
 import sys
 
-import black
-import isort
 
-
-def verify_same_lines(lines1, lines2, report=True):
+def verify_same_lines(orig_lines, sort_lines, report=True):
     """Make sure we didn't accidentally delete or add extra lines.
 
     Just compares set equality, not ordering, so should return True
@@ -23,7 +28,7 @@ def verify_same_lines(lines1, lines2, report=True):
 
     Parameters
     ----------
-    lines1, lines2 : list of str
+    orig_lines, sort_lines : list of str
         Lines of text to compare. Need not be in the same order.
     report : bool
         Whether to print any mismatched lines.
@@ -34,17 +39,17 @@ def verify_same_lines(lines1, lines2, report=True):
         Whether the two sets of lines contain the same strings.
     """
     # remove empty lines and sort
-    lines1 = [line.strip("\n") for line in lines1 if not line.isspace()]
-    lines2 = [line.strip("\n") for line in lines2 if not line.isspace()]
-    valid = set(lines1) == set(lines2)
+    orig_lines = [line.strip("\n") for line in orig_lines if not line.isspace()]
+    sort_lines = [line.strip("\n") for line in sort_lines if not line.isspace()]
+    valid = set(orig_lines) == set(sort_lines)
     if not valid and report:
-        print("########## lines in 1 that are not in 2: ##########")
-        for line in lines1:
-            if line not in lines2:
+        print("########## lines in original that are not in sorted: ##########")
+        for line in orig_lines:
+            if line not in sort_lines:
                 print(line)
-        print("########## lines in 2 that are not in 1: ##########")
-        for line in lines2:
-            if line not in lines1:
+        print("########## lines in sorted that are not in original: ##########")
+        for line in sort_lines:
+            if line not in orig_lines:
                 print(line)
 
     return valid
@@ -74,9 +79,12 @@ def extract_functions(lines):
     flag = False
 
     for i, line in enumerate(lines):
-        if (lines[i].isspace() or len(lines[i]) == 0) and (
-            lines[i + 1].isspace() or len(lines[i + 1]) == 0
+        if (i == len(lines) - 1) or (
+            (lines[i].isspace() or len(lines[i]) == 0)
+            and (lines[i + 1].isspace() or len(lines[i + 1]) == 0)
         ):
+            if (i == len(lines) - 1) and flag:
+                thisfunc.append(line)
             flag = False
             temp = []
             if len(thisfunc):
@@ -94,6 +102,8 @@ def extract_functions(lines):
 
     if len(thisfunc):
         functions.append("\n".join(thisfunc))
+
+    assert len(names) == len(functions)
 
     funcs = [(name, fun) for name, fun in zip(names, functions)]
     funcs = sorted(funcs)
@@ -125,9 +135,13 @@ def extract_classes(lines):
     flag = False
 
     for i, line in enumerate(lines):
-        if (lines[i].isspace() or len(lines[i]) == 0) and (
-            lines[i + 1].isspace() or len(lines[i + 1]) == 0
+        # look for double blank line between definitions
+        if (i == len(lines) - 1) or (
+            (lines[i].isspace() or len(lines[i]) == 0)
+            and (lines[i + 1].isspace() or len(lines[i + 1]) == 0)
         ):
+            if (i == len(lines) - 1) and flag:
+                thisclass.append(line)
             flag = False
             temp = []
             if len(thisclass):
@@ -146,7 +160,7 @@ def extract_classes(lines):
     if len(thisclass):
         classes.append("\n".join(thisclass))
 
-    classes = [sort_methods(cls) for cls in classes]
+    assert len(names) == len(classes)
 
     classes = [(name, cls) for name, cls in zip(names, classes)]
     classes = sorted(classes)
@@ -154,12 +168,12 @@ def extract_classes(lines):
     return classes
 
 
-def sort_methods(cls):
-    """Sort class methods.
+def sort_methods(klass):
+    """Sort class methods
 
     Parameters
     ----------
-    cls : str
+    klass : str
         Source code of class definition
 
     Returns
@@ -167,11 +181,12 @@ def sort_methods(cls):
     cls : str
         Source code with methods sorted alphabetically
     """
-    lines = cls.split("\n")
+    lines = klass.split("\n")
     method_pattern = re.compile(r"^    def\s+([a-zA-Z_]\w*)\s*\(", re.MULTILINE)
+    decorator_pattern = re.compile("^    @", re.MULTILINE)
     # first grab everything up to the first def of decorator, ie docstring and io_attrs
     for i in range(len(lines)):
-        if method_pattern.match(lines[i]) or "@" in lines[i]:
+        if method_pattern.match(lines[i]) or decorator_pattern.match(lines[i]):
             break
     preamble = lines[:i]
     lines = lines[i:]
@@ -179,10 +194,11 @@ def sort_methods(cls):
     methods = []
     names = []
     thismethod = []
-    flag = True
+    flag = True  # are we looking for the start of a method
 
     for line in lines:
-        if method_pattern.match(line) or "@" in line:
+        if method_pattern.match(line) or decorator_pattern.match(line):
+            # found the start
             if flag:
                 flag = False
                 # start of a new thing, save the old thing
@@ -200,6 +216,11 @@ def sort_methods(cls):
     if len(temp) and not temp.isspace():
         methods.append(temp)
 
+    for i in range(len(methods)):
+        if not methods[i].endswith("\n"):
+            methods[i] = methods[i] + "\n"
+
+    assert len(names) == len(methods)
     props = []
     meths = []
     init = ("", "")
@@ -207,7 +228,7 @@ def sort_methods(cls):
     for name, method in zip(names, methods):
         if "__init__" in name:
             init = (name, method)
-        elif "@property" in method or ("@" in method and "setter" in method):
+        elif "@property" in method or ("    @" in method and "setter" in method):
             props.append((name, method))
         else:
             meths.append((name, method))
@@ -226,7 +247,7 @@ def sort_methods(cls):
         out += prop
         out += "\n"
 
-    assert verify_same_lines(out.split("\n"), cls.split("\n"))
+    assert verify_same_lines(klass.split("\n"), out.split("\n"))
 
     return out
 
@@ -291,27 +312,21 @@ def extract_preamble(lines):
         Single string for block of text at the start of the file.
     """
     for i in range(len(lines)):
-        if (lines[i].isspace() or len(lines[i]) == 0) and (
-            lines[i + 1].isspace() or len(lines[i + 1]) == 0
+        if (i == len(lines) - 1) or (
+            (lines[i].isspace() or len(lines[i]) == 0)
+            and (lines[i + 1].isspace() or len(lines[i + 1]) == 0)
         ):
             break
     return "\n".join(lines[:i])
 
 
-def cleanup(code):
+def cleanup(path):
     """Apply black formatting and isort to a block of code."""
-    # for some reason black throws a blank exception when nothing is changed
-    try:
-        code = black.format_file_contents(code, fast=False, mode=black.FileMode())
-    except Exception as e:
-        if str(e):  # if its not a blank exception
-            raise e
-
-    code = isort.code(code)
-    return code
+    subprocess.run(["black", "-q", path])
+    subprocess.run(["isort", "-q", path])
 
 
-def sort_file(pathin):
+def sort_file(pathin, pathout):
     """Alphabetize the functions and classes in a python source file.
 
     Orders classes before functions before constants.
@@ -321,10 +336,10 @@ def sort_file(pathin):
 
     Also applies black and isort formatting.
     """
-    with open(pathin) as f:
-        linesin = "".join(f.readlines())
+    cleanup(pathin)
 
-    linesin = cleanup(linesin).split("\n")
+    with open(pathin) as f:
+        linesin = f.readlines()
 
     # strip newline characters
     for i in range(len(linesin)):
@@ -334,6 +349,8 @@ def sort_file(pathin):
     classes = extract_classes(linesin)
     functions = extract_functions(linesin)
     constants = extract_constants(linesin)
+
+    classes = [sort_methods(cls) for cls in classes]
 
     out = preamble + "\n\n"  # 2 blank lines between preamble and classes
     for cls in classes:
@@ -346,12 +363,12 @@ def sort_file(pathin):
         out += "\n"  # 1 blank lines between constants
         out += con + "\n"
 
-    out = cleanup(out)
     linesout = out.split("\n")
     assert verify_same_lines(linesin, linesout)
-    return out
+    with open(pathout, "w+") as f:
+        f.write(out)
+    cleanup(pathout)
 
 
 if __name__ == "__main__":
-    out = sort_file(sys.argv[1])
-    print(out)
+    sort_file(sys.argv[1], sys.argv[2])

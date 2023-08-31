@@ -662,15 +662,14 @@ def _iota_vacuum(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["current", "psi_r"],
-    axis_limit_data=["current_r", "psi_rr"],
+    data=["I", "psi_r"],
+    axis_limit_data=["I_r", "psi_rr"],
 )
 def _iota_current_num(params, transforms, profiles, data, **kwargs):
     """Current contribution to the numerator of rotational transform formula."""
-    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
-    iota_current_num = 2 * jnp.pi * mu_0 * data["current"] / data["psi_r"]
     data["iota_current_num"] = transforms["grid"].replace_at_axis(
-        iota_current_num, 2 * jnp.pi * mu_0 * data["current_r"] / data["psi_rr"]
+        4 * jnp.pi**2 * data["I"] / data["psi_r"],
+        4 * jnp.pi**2 * data["I_r"] / data["psi_rr"],
     )
     return data
 
@@ -714,23 +713,21 @@ def _iota_vacuum_num(params, transforms, profiles, data, **kwargs):
     description="Numerator of rotational transform formula, current contribution, "
     + "first radial derivative",
     dim=1,
-    params=["c_l"],
+    params=[],
     transforms={"grid": []},
-    profiles=["current"],
+    profiles=[],
     coordinates="r",
-    data=["current", "current_r", "psi_r", "psi_rr"],
-    axis_limit_data=["current_rr"],
+    data=["I", "I_r", "psi_r", "psi_rr"],
+    axis_limit_data=["I_rr"],
 )
 def _iota_current_num_r(params, transforms, profiles, data, **kwargs):
-    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
     data["iota_current_num_r"] = (
-        jnp.pi
-        * mu_0
+        4
+        * jnp.pi**2
         * transforms["grid"].replace_at_axis(
-            2
-            * (data["current_r"] * data["psi_r"] - data["current"] * data["psi_rr"])
+            (data["I_r"] * data["psi_r"] - data["I"] * data["psi_rr"])
             / data["psi_r"] ** 2,
-            data["current_rr"] / data["psi_rr"],  # FIXME
+            data["I_rr"] / (2 * data["psi_rr"]),  # XXX: this factor of 2 not in Eq. 48
         )
     )
     return data
@@ -744,12 +741,11 @@ def _iota_current_num_r(params, transforms, profiles, data, **kwargs):
     description="Numerator of rotational transform formula, vacuum contribution, "
     + "first radial derivative",
     dim=1,
-    params=["c_l"],
+    params=[],
     transforms={"grid": []},
-    profiles=["current"],
+    profiles=[],
     coordinates="r",
     data=[
-        "iota_vacuum_num",
         "lambda_t",
         "lambda_rt",
         "lambda_z",
@@ -764,26 +760,29 @@ def _iota_current_num_r(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["g_tt_rr", "g_tz_rr", "sqrt(g)_rr"],
 )
 def _iota_vacuum_num_r(params, transforms, profiles, data, **kwargs):
+    iota_vacuum_num = (
+        data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
+    ) / data["sqrt(g)"]
     iota_vacuum_num_r = transforms["grid"].replace_at_axis(
         (
             data["lambda_rz"] * data["g_tt"]
             + data["lambda_z"] * data["g_tt_r"]
             - data["lambda_rt"] * data["g_tz"]
             - (1 + data["lambda_t"]) * data["g_tz_r"]
-            - data["iota_vacuum_num"] * data["sqrt(g)_r"]
+            - iota_vacuum_num * data["sqrt(g)_r"]
         )
         / data["sqrt(g)"],
         (
             (1 + data["lambda_t"])
             * data["g_tz_r"]
             * data["sqrt(g)_rr"]
-            / (2 * data["sqrt(g)_r"] ** 2)
+            / (2 * data["sqrt(g)_r"] ** 2)  # XXX: this factor of 2 not in Eq. 48
             + (
                 data["lambda_z"] * data["g_tt_rr"]
                 - 2 * data["lambda_rt"] * data["g_tz_r"]
                 - (1 + data["lambda_t"]) * data["g_tz_rr"]
             )
-            / (2 * data["sqrt(g)_r"])  # FIXME
+            / (2 * data["sqrt(g)_r"])  # XXX: this factor of 2 not in Eq. 48
         ),
     )
     data["iota_vacuum_num_r"] = surface_integrals(transforms["grid"], iota_vacuum_num_r)
@@ -1248,13 +1247,13 @@ def _iota_den_r(params, transforms, profiles, data, **kwargs):
             data["omega_t"]
             * data["g_tz_r"]
             * data["sqrt(g)_rr"]
-            / (2 * data["sqrt(g)_r"] ** 2)
+            / (2 * data["sqrt(g)_r"] ** 2)  # XXX: this factor of 2 not in Eq. 48
             + (
                 (1 + data["omega_z"]) * data["g_tt_rr"]
                 - 2 * data["omega_rt"] * data["g_tz_r"]
                 - data["omega_t"] * data["g_tz_rr"]
             )
-            / (2 * data["sqrt(g)_r"])
+            / (2 * data["sqrt(g)_r"])  # XXX: this factor of 2 not in Eq. 48
         ),
     )
     gamma_r = surface_integrals(transforms["grid"], gamma_r)

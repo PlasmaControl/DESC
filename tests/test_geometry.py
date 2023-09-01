@@ -21,18 +21,6 @@ def test_rotation_matrix():
 
 
 @pytest.mark.unit
-def test_xyz2rpz():
-    """Test converting between cartesian and polar coordinates."""
-    xyz = np.array([1, 1, 1])
-    rpz = xyz2rpz(xyz)
-    np.testing.assert_allclose(rpz, [np.sqrt(2), np.pi / 4, 1], atol=1e-10)
-
-    xyz = np.array([0, 1, 1])
-    rpz = xyz2rpz_vec(xyz, x=0, y=1)
-    np.testing.assert_allclose(rpz, np.array([[1, 0, 1]]), atol=1e-10)
-
-
-@pytest.mark.unit
 def test_rpz2xyz():
     """Test converting between polar and cartesian coordinates."""
     rpz = np.array([np.sqrt(2), np.pi / 4, 1])
@@ -42,3 +30,15 @@ def test_rpz2xyz():
     rpz = np.array([[1, 0, 1]])
     xyz = rpz2xyz_vec(rpz, x=0, y=1)
     np.testing.assert_allclose(xyz, np.array([[0, 1, 1]]), atol=1e-10)
+
+
+@pytest.mark.unit
+def test_xyz2rpz():
+    """Test converting between cartesian and polar coordinates."""
+    xyz = np.array([1, 1, 1])
+    rpz = xyz2rpz(xyz)
+    np.testing.assert_allclose(rpz, [np.sqrt(2), np.pi / 4, 1], atol=1e-10)
+
+    xyz = np.array([0, 1, 1])
+    rpz = xyz2rpz_vec(xyz, x=0, y=1)
+    np.testing.assert_allclose(rpz, np.array([[1, 0, 1]]), atol=1e-10)

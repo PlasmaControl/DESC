@@ -176,7 +176,7 @@ class InputReader:
         f.write("\n")
 
         f.write("\n# fixed-boundary surface shape\n")
-        # boundary paramters
+        # boundary parameters
         if eq0.sym:
             for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
                 if abs(eq0.Rb_lmn[k]) > 1e-8:
@@ -342,6 +342,7 @@ class InputReader:
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
 
         for line in lines:
+
             # check if VMEC input file format
             isVMEC = re.search(r"&INDATA", line)
             if isVMEC:
@@ -698,7 +699,7 @@ class InputReader:
         if inputs["objective"] == "vacuum" and (pres_flag or iota_flag or curr_flag):
             warnings.warn(
                 "Vacuum objective does not use any profiles, "
-                + "ignoring presssure, iota, and current"
+                + "ignoring pressure, iota, and current"
             )
 
         # sort axis array
@@ -1580,7 +1581,7 @@ class InputReader:
             )
 
         f.write("\n# fixed-boundary surface shape\n")
-        for l, m, n, R1, Z1 in inputs[-1]["surface"]:
+        for (l, m, n, R1, Z1) in inputs[-1]["surface"]:
             f.write(
                 "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
                     int(l), int(m), int(n), R1, Z1
@@ -1588,7 +1589,7 @@ class InputReader:
             )
 
         f.write("\n# magnetic axis initial guess\n")
-        for n, R0, Z0 in inputs[0]["axis"]:
+        for (n, R0, Z0) in inputs[0]["axis"]:
             f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
 
         f.close()
@@ -1614,9 +1615,6 @@ class InputReader:
         return self._output_path
 
 
-# NOTE: this has to be outside the class to work with autodoc
-
-
 def get_parser():
     """Get parser for command line arguments.
 
@@ -1626,6 +1624,7 @@ def get_parser():
         argument parser
 
     """
+    # NOTE: this has to be outside the class to work with autodoc
     parser = argparse.ArgumentParser(
         prog="desc",
         allow_abbrev=True,

@@ -22,6 +22,22 @@ def TmpDir(tmpdir_factory):
     return dir_path
 
 
+@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
+def test_build_transform_fft_highres(benchmark):
+    """Test time to build a transform (after compilation) for high resolution."""
+
+    def build():
+        L = 25
+        M = 25
+        N = 25
+        grid = ConcentricGrid(L=L, M=M, N=N)
+        basis = FourierZernikeBasis(L=L, M=M, N=N)
+        transf = Transform(grid, basis, method="fft", build=False)
+        transf.build()
+
+    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
+
+
 @pytest.mark.benchmark(
     min_rounds=1, max_time=50, disable_gc=False, warmup=True, warmup_iterations=50
 )
@@ -57,17 +73,14 @@ def test_build_transform_fft_midres(benchmark):
 
 
 @pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
-def test_build_transform_fft_highres(benchmark):
-    """Test time to build a transform (after compilation) for high resolution."""
+def test_equilibrium_init_highres(benchmark):
+    """Test time to create an equilibrium for high resolution."""
 
     def build():
         L = 25
         M = 25
         N = 25
-        grid = ConcentricGrid(L=L, M=M, N=N)
-        basis = FourierZernikeBasis(L=L, M=M, N=N)
-        transf = Transform(grid, basis, method="fft", build=False)
-        transf.build()
+        _ = Equilibrium(L=L, M=M, N=N)
 
     benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
 
@@ -98,32 +111,16 @@ def test_equilibrium_init_medres(benchmark):
     benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
 
 
-@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
-def test_equilibrium_init_highres(benchmark):
-    """Test time to create an equilibrium for high resolution."""
-
-    def build():
-        L = 25
-        M = 25
-        N = 25
-        _ = Equilibrium(L=L, M=M, N=N)
-
-    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
-
-
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_objective_compile_heliotron(benchmark):
+def test_objective_compile_atf(benchmark):
     """Benchmark compiling objective."""
 
     def setup():
-        eq = desc.examples.get("HELIOTRON")
+        eq = desc.examples.get("ATF")
         objective = get_equilibrium_objective(eq)
         objective.build(eq)
-        args = (
-            objective,
-            eq,
-        )
+        args = (objective, eq)
         kwargs = {}
         return args, kwargs
 
@@ -159,14 +156,17 @@ def test_objective_compile_dshape_current(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_objective_compile_atf(benchmark):
+def test_objective_compile_heliotron(benchmark):
     """Benchmark compiling objective."""
 
     def setup():
-        eq = desc.examples.get("ATF")
+        eq = desc.examples.get("HELIOTRON")
         objective = get_equilibrium_objective(eq)
         objective.build(eq)
-        args = (objective, eq)
+        args = (
+            objective,
+            eq,
+        )
         kwargs = {}
         return args, kwargs
 
@@ -179,9 +179,9 @@ def test_objective_compile_atf(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_objective_compute_heliotron(benchmark):
+def test_objective_compute_atf(benchmark):
     """Benchmark computing objective."""
-    eq = desc.examples.get("HELIOTRON")
+    eq = desc.examples.get("ATF")
     objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
@@ -213,9 +213,9 @@ def test_objective_compute_dshape_current(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_objective_compute_atf(benchmark):
+def test_objective_compute_heliotron(benchmark):
     """Benchmark computing objective."""
-    eq = desc.examples.get("ATF")
+    eq = desc.examples.get("HELIOTRON")
     objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
@@ -230,9 +230,9 @@ def test_objective_compute_atf(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_objective_jac_heliotron(benchmark):
+def test_objective_jac_atf(benchmark):
     """Benchmark computing jacobian."""
-    eq = desc.examples.get("HELIOTRON")
+    eq = desc.examples.get("ATF")
     objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
@@ -264,9 +264,9 @@ def test_objective_jac_dshape_current(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_objective_jac_atf(benchmark):
+def test_objective_jac_heliotron(benchmark):
     """Benchmark computing jacobian."""
-    eq = desc.examples.get("ATF")
+    eq = desc.examples.get("HELIOTRON")
     objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()

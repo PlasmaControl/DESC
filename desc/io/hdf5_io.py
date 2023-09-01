@@ -9,15 +9,6 @@ import numpy as np
 from .core_io import IO, Reader, Writer
 
 
-def fullname(o):
-    """Find where an object is defined."""
-    klass = o.__class__
-    module = klass.__module__
-    if module == "builtins":
-        return klass.__qualname__  # avoid outputs like 'builtins.str'
-    return module + "." + klass.__qualname__
-
-
 class hdf5IO(IO):
     """Class to wrap ABC IO for hdf5 file format."""
 
@@ -97,6 +88,7 @@ class hdf5Reader(hdf5IO, Reader):
         super().__init__()
 
     def _decode_attr(self, loc, attr):
+
         if isinstance(loc[attr][()], bytes):
             s = loc[attr][()].decode("utf-8")
         else:
@@ -160,7 +152,7 @@ class hdf5Reader(hdf5IO, Reader):
         Parameters
         ----------
         where : None or file instance
-            specifies wehre to read dict from
+            specifies where to read dict from
 
         """
         thelist = []
@@ -212,7 +204,7 @@ class hdf5Reader(hdf5IO, Reader):
         ----------
         obj : python object instance
             object must have _io_attrs_ attribute to have attributes read and loaded
-        where : None or file insance
+        where : None or file instance
             specifies where to read obj from
 
         """
@@ -391,6 +383,7 @@ class hdf5Writer(hdf5IO, Writer):
                     self.write_list(theattr, where=group)
                 else:
                     try:
+
                         group = loc.create_group(attr)
                         sub_obj = getattr(obj, attr)
                         sub_obj.save(group)
@@ -398,3 +391,12 @@ class hdf5Writer(hdf5IO, Writer):
                         warnings.warn(
                             "Could not save object '{}'.".format(attr), RuntimeWarning
                         )
+
+
+def fullname(o):
+    """Find where an object is defined."""
+    klass = o.__class__
+    module = klass.__module__
+    if module == "builtins":
+        return klass.__qualname__  # avoid outputs like 'builtins.str'
+    return module + "." + klass.__qualname__

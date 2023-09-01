@@ -46,13 +46,13 @@ class _Objective(IOAble, ABC):
     _linear = False
     _equilibrium = False
     _io_attrs_ = [
-        "_args",
-        "_name",
-        "_normalization",
-        "_normalize",
-        "_normalize_target",
         "_target",
         "_weight",
+        "_name",
+        "_args",
+        "_normalize",
+        "_normalize_target",
+        "_normalization",
     ]
 
     def __init__(
@@ -111,6 +111,25 @@ class _Objective(IOAble, ABC):
         self._weight = np.asarray(self._weight)
         if not is_broadcastable((self.dim_f,), self.weight.shape):
             raise ValueError("len(weight) != dim_f")
+
+    def _parse_args(self, *args, **kwargs):
+        constants = kwargs.pop("constants", None)
+        assert (len(args) == 0) or (len(kwargs) == 0), (
+            "compute should be called with either positional or keyword arguments,"
+            + " not both"
+        )
+        if len(args):
+            assert len(args) == len(
+                self.args
+            ), f"compute expected {len(self.args)} arguments, got {len(args)}"
+            params = {key: val for key, val in zip(self.args, args)}
+        else:
+            assert all([arg in kwargs for arg in self.args]), (
+                "compute missing required keyword arguments "
+                + f"{set(self.args).difference(kwargs.keys())}"
+            )
+            params = kwargs
+        return params, constants
 
     def _scale(self, f):
         """Apply weighting, normalization etc."""
@@ -200,25 +219,6 @@ class _Objective(IOAble, ABC):
             f_target = f - target
         return f_target
 
-    def _parse_args(self, *args, **kwargs):
-        constants = kwargs.pop("constants", None)
-        assert (len(args) == 0) or (len(kwargs) == 0), (
-            "compute should be called with either positional or keyword arguments,"
-            + " not both"
-        )
-        if len(args):
-            assert len(args) == len(
-                self.args
-            ), f"compute expected {len(self.args)} arguments, got {len(args)}"
-            params = {key: val for key, val in zip(self.args, args)}
-        else:
-            assert all([arg in kwargs for arg in self.args]), (
-                "compute missing required keyword arguments "
-                + f"{set(self.args).difference(kwargs.keys())}"
-            )
-            params = kwargs
-        return params, constants
-
     @abstractmethod
     def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays."""
@@ -232,10 +232,6 @@ class _Objective(IOAble, ABC):
             self.jit()
         self._built = True
 
-    @abstractmethod
-    def compute(self, *args, **kwargs):
-        """Compute the objective function."""
-
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
         if self.scalar:
@@ -244,19 +240,23 @@ class _Objective(IOAble, ABC):
             f = jnp.sum(self.compute_scaled_error(*args, **kwargs) ** 2) / 2
         return f.squeeze()
 
-    def compute_scaled(self, *args, **kwargs):
-        """Compute and apply weighting and normalization."""
-        f = self.compute(*args, **kwargs)
-        return self._scale(f)
-
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         f = self.compute(*args, **kwargs)
         return self._scale(self._shift(f))
 
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply weighting and normalization."""
+        f = self.compute(*args, **kwargs)
+        return self._scale(f)
+
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
         return jnp.atleast_1d(self.compute(*args, **kwargs))
+
+    @abstractmethod
+    def compute(self, *args, **kwargs):
+        """Compute the objective function."""
 
     def jit(self):
         """Apply JIT to compute methods, or re-apply after updating self."""
@@ -675,35 +675,6 @@ class ObjectiveFunction(IOAble):
         f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         return f
 
-    def compute_scaled(self, x, constants=None):
-        """Compute the objective function and apply weighting and normalization.
-
-        Parameters
-        ----------
-        x : ndarray
-            State vector.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
-        Returns
-        -------
-        f : ndarray
-            Objective function value(s).
-
-        """
-        kwargs = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled(
-                    *self._kwargs_to_args(kwargs, obj.args), constants=const
-                )
-                for obj, const in zip(self.objectives, constants)
-            ]
-        )
-        return f
-
     def compute_scaled_error(self, x, constants=None):
         """Compute and apply the target/bounds, weighting, and normalization.
 
@@ -726,6 +697,35 @@ class ObjectiveFunction(IOAble):
         f = jnp.concatenate(
             [
                 obj.compute_scaled_error(
+                    *self._kwargs_to_args(kwargs, obj.args), constants=const
+                )
+                for obj, const in zip(self.objectives, constants)
+            ]
+        )
+        return f
+
+    def compute_scaled(self, x, constants=None):
+        """Compute the objective function and apply weighting and normalization.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        kwargs = self.unpack_state(x)
+        if constants is None:
+            constants = self.constants
+        f = jnp.concatenate(
+            [
+                obj.compute_scaled(
                     *self._kwargs_to_args(kwargs, obj.args), constants=const
                 )
                 for obj, const in zip(self.objectives, constants)
@@ -775,13 +775,13 @@ class ObjectiveFunction(IOAble):
         return jnp.atleast_2d(self._hess(x, constants).squeeze())
 
     def jac_scaled(self, x, constants=None):
-        """Compute Jacobian matrx of vector form of the objective wrt x."""
+        """Compute Jacobian matrix of vector form of the objective wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._jac_scaled(x, constants).squeeze())
 
     def jac_unscaled(self, x, constants=None):
-        """Compute Jacobian matrx of vector form of the objective wrt x, unweighted."""
+        """Compute Jacobian matrix of vector form of the objective wrt x, unweighted."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._jac_unscaled(x, constants).squeeze())
@@ -1042,9 +1042,11 @@ class ObjectiveFunction(IOAble):
             else:
                 lb_i = jnp.ones(obj.dim_f) * obj.target
                 ub_i = jnp.ones(obj.dim_f) * obj.target
-            if obj._normalize_target:
-                lb_i /= obj.normalization
-                ub_i /= obj.normalization
+            lb_i = obj._scale(lb_i)
+            ub_i = obj._scale(ub_i)
+            if not obj._normalize_target:
+                lb_i *= obj.normalization
+                ub_i *= obj.normalization
             lb += [lb_i]
             ub += [ub_i]
         return (jnp.concatenate(lb), jnp.concatenate(ub))
@@ -1105,8 +1107,9 @@ class ObjectiveFunction(IOAble):
             else:
                 # need to return something, so use midpoint of bounds as approx target
                 target_i = jnp.ones(obj.dim_f) * (obj.bounds[0] + obj.bounds[1]) / 2
-            if obj._normalize_target:
-                target_i /= obj.normalization
+            target_i = obj._scale(target_i)
+            if not obj._normalize_target:
+                target_i *= obj.normalization
             target += [target_i]
         return jnp.concatenate(target)
 

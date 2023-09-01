@@ -11,7 +11,7 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.profiles import PowerSeriesProfile, Profile
+from desc.profiles import PowerSeriesProfile, _Profile
 from desc.utils import isnonnegint
 
 
@@ -113,7 +113,7 @@ def parse_profile(prof, name="", **kwargs):
     TypeError
         If the object cannot be parsed as a Profile
     """
-    if isinstance(prof, Profile):
+    if isinstance(prof, _Profile):
         return prof
     if isinstance(prof, numbers.Number) or (
         isinstance(prof, (np.ndarray, jnp.ndarray)) and prof.ndim == 1

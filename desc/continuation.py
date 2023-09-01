@@ -121,7 +121,7 @@ def _add_pressure(
         if pres_step <= MIN_PRES_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with "
-                + f"pres_step={pres_step}, something is probaby very wrong with your "
+                + f"pres_step={pres_step}, something is probably very wrong with your "
                 + "desired equilibrium."
             )
         else:
@@ -254,7 +254,7 @@ def _add_shaping(
         if bdry_step <= MIN_BDRY_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with "
-                + f"bdry_step={bdry_step}, something is probaby very wrong with your "
+                + f"bdry_step={bdry_step}, something is probably very wrong with your "
                 + "desired equilibrium."
             )
         else:
@@ -485,7 +485,7 @@ def _solve_axisym(
         if mres_step == MIN_MRES_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with mres_step=1, "
-                + "something is probaby very wrong with your desired equilibrium."
+                + "something is probably very wrong with your desired equilibrium."
             )
         else:
             warnings.warn(
@@ -512,6 +512,142 @@ def _solve_axisym(
     return eqfam
 
 
+def solve_continuation_automatic(  # noqa: C901
+    eq,
+    objective="force",
+    optimizer="lsq-exact",
+    pert_order=2,
+    ftol=None,
+    xtol=None,
+    gtol=None,
+    maxiter=100,
+    verbose=1,
+    checkpoint_path=None,
+    **kwargs,
+):
+    """Solve for an equilibrium using an automatic continuation method.
+
+    By default, the method first solves for a no pressure tokamak, then a finite beta
+    tokamak, then a finite beta stellarator. Steps in resolution, pressure, and 3D
+    shaping are determined adaptively, and the method may backtrack to use smaller steps
+    if the initial steps are too large.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Unsolved Equilibrium with the final desired boundary, profiles, resolution.
+    objective : {"force", "energy", "vacuum"}
+        function to solve for equilibrium solution
+    optimizer : str or Optimizer (optional)
+        optimizer to use
+    pert_order : int
+        order of perturbations to use.
+    ftol, xtol, gtol : float
+        stopping tolerances for subproblem at each step. `None` will use defaults
+        for given optimizer.
+    maxiter : int
+        maximum number of iterations in each equilibrium subproblem.
+    verbose : integer
+        * 0: no output
+        * 1: summary of each iteration
+        * 2: as above plus timing information
+        * 3: as above plus detailed solver output
+    checkpoint_path : str or path-like
+        file to save checkpoint data (Default value = None)
+    **kwargs : dict, optional
+        * ``mres_step``: int, default 6. The amount to increase Mpol by at each
+          continuation step
+        * ``pres_step``: float, ``0<=pres_step<=1``, default 0.5. The amount to
+          increase pres_ratio by at each continuation step
+        * ``bdry_step``: float, ``0<=bdry_step<=1``, default 0.25. The amount to
+          increase bdry_ratio by at each continuation step
+
+    Returns
+    -------
+    eqfam : EquilibriaFamily
+        family of equilibria for the intermediate steps, where the last member is the
+        final desired configuration,
+
+    """
+    if eq.electron_temperature is not None:
+        raise NotImplementedError(
+            "Continuation method with kinetic profiles is not currently supported"
+        )
+
+    timer = Timer()
+    timer.start("Total time")
+
+    mres_step = kwargs.pop("mres_step", 6)
+    pres_step = kwargs.pop("pres_step", 1 / 2)
+    bdry_step = kwargs.pop("bdry_step", 1 / 4)
+    assert len(kwargs) == 0, "Got an unexpected kwarg {}".format(kwargs.keys())
+    if not isinstance(optimizer, Optimizer):
+        optimizer = Optimizer(optimizer)
+
+    eqfam = _solve_axisym(
+        eq,
+        mres_step,
+        objective,
+        optimizer,
+        pert_order,
+        ftol,
+        xtol,
+        gtol,
+        maxiter,
+        verbose,
+        checkpoint_path,
+    )
+
+    eqfam = _add_pressure(
+        eq,
+        eqfam,
+        pres_step,
+        objective,
+        optimizer,
+        pert_order,
+        ftol,
+        xtol,
+        gtol,
+        maxiter,
+        verbose,
+        checkpoint_path,
+    )
+
+    eqfam = _add_shaping(
+        eq,
+        eqfam,
+        bdry_step,
+        objective,
+        optimizer,
+        pert_order,
+        ftol,
+        xtol,
+        gtol,
+        maxiter,
+        verbose,
+        checkpoint_path,
+    )
+    for arg in arg_order:
+        val = np.asarray(getattr(eqfam[-1], arg))
+        if val.size:
+            setattr(eq, arg, val)
+    eqfam[-1] = eq
+    timer.stop("Total time")
+    if verbose > 0:
+        print("====================")
+        print("Done")
+    if verbose > 1:
+        timer.disp("Total time")
+    if checkpoint_path is not None:
+        if verbose > 0:
+            print("Output written to {}".format(checkpoint_path))
+        eqfam.save(checkpoint_path)
+    if verbose:
+        print("====================")
+
+    return eqfam
+
+
 def solve_continuation(  # noqa: C901
     eqfam,
     objective="force",
@@ -526,7 +662,7 @@ def solve_continuation(  # noqa: C901
 ):
     """Solve for an equilibrium by continuation method.
 
-    Steps through an EquilibriaFamily, solving each equilibrium, and uses pertubations
+    Steps through an EquilibriaFamily, solving each equilibrium, and uses perturbations
     to step between different profiles/boundaries.
 
     Uses the previous step as an initial guess for each solution.
@@ -537,7 +673,7 @@ def solve_continuation(  # noqa: C901
         Equilibria to solve for at each step.
     objective : {"force", "energy", "vacuum"}
         function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
+    optimizer : str or Optimizer (optional)
         optimizer to use
     pert_order : int or array of int
         order of perturbations to use. If array-like, should be same length as eqfam
@@ -695,137 +831,9 @@ def solve_continuation(  # noqa: C901
     return eqfam
 
 
-def solve_continuation_automatic(  # noqa: C901
-    eq,
-    objective="force",
-    optimizer="lsq-exact",
-    pert_order=2,
-    ftol=None,
-    xtol=None,
-    gtol=None,
-    maxiter=100,
-    verbose=1,
-    checkpoint_path=None,
-    **kwargs,
-):
-    """Solve for an equilibrium using an automatic continuation method.
-
-    By default, the method first solves for a no pressure tokamak, then a finite beta
-    tokamak, then a finite beta stellarator. Steps in resolution, pressure, and 3D
-    shaping are determined adaptively, and the method may backtrack to use smaller steps
-    if the initial steps are too large.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Unsolved Equilibrium with the final desired boundary, profiles, resolution.
-    objective : {"force", "energy", "vacuum"}
-        function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
-        optimizer to use
-    pert_order : int
-        order of perturbations to use.
-    ftol, xtol, gtol : float
-        stopping tolerances for subproblem at each step. `None` will use defaults
-        for given optimizer.
-    maxiter : int
-        maximum number of iterations in each equilibrium subproblem.
-    verbose : integer
-        * 0: no output
-        * 1: summary of each iteration
-        * 2: as above plus timing information
-        * 3: as above plus detailed solver output
-    checkpoint_path : str or path-like
-        file to save checkpoint data (Default value = None)
-    **kwargs : dict, optional
-        * ``mres_step``: int, default 6. The amount to increase Mpol by at each
-          continuation step
-        * ``pres_step``: float, ``0<=pres_step<=1``, default 0.5. The amount to
-          increase pres_ratio by at each continuation step
-        * ``bdry_step``: float, ``0<=bdry_step<=1``, default 0.25. The amount to
-          increase bdry_ratio by at each continuation step
-
-    Returns
-    -------
-    eqfam : EquilibriaFamily
-        family of equilibria for the intermediate steps, where the last member is the
-        final desired configuration,
-
-    """
-    if eq.electron_temperature is not None:
-        raise NotImplementedError(
-            "Continuation method with kinetic profiles is not currently supported"
-        )
-
-    timer = Timer()
-    timer.start("Total time")
-
-    mres_step = kwargs.pop("mres_step", 6)
-    pres_step = kwargs.pop("pres_step", 1 / 2)
-    bdry_step = kwargs.pop("bdry_step", 1 / 4)
-    assert len(kwargs) == 0, "Got an unexpected kwarg {}".format(kwargs.keys())
-    if not isinstance(optimizer, Optimizer):
-        optimizer = Optimizer(optimizer)
-
-    eqfam = _solve_axisym(
-        eq,
-        mres_step,
-        objective,
-        optimizer,
-        pert_order,
-        ftol,
-        xtol,
-        gtol,
-        maxiter,
-        verbose,
-        checkpoint_path,
-    )
-
-    eqfam = _add_pressure(
-        eq,
-        eqfam,
-        pres_step,
-        objective,
-        optimizer,
-        pert_order,
-        ftol,
-        xtol,
-        gtol,
-        maxiter,
-        verbose,
-        checkpoint_path,
-    )
-
-    eqfam = _add_shaping(
-        eq,
-        eqfam,
-        bdry_step,
-        objective,
-        optimizer,
-        pert_order,
-        ftol,
-        xtol,
-        gtol,
-        maxiter,
-        verbose,
-        checkpoint_path,
-    )
-    for arg in arg_order:
-        val = np.asarray(getattr(eqfam[-1], arg))
-        if val.size:
-            setattr(eq, arg, val)
-    eqfam[-1] = eq
-    timer.stop("Total time")
-    if verbose > 0:
-        print("====================")
-        print("Done")
-    if verbose > 1:
-        timer.disp("Total time")
-    if checkpoint_path is not None:
-        if verbose > 0:
-            print("Output written to {}".format(checkpoint_path))
-        eqfam.save(checkpoint_path)
-    if verbose:
-        print("====================")
-
-    return eqfam
+MIN_MRES_STEP = 1
+MIN_PRES_STEP = 0.1
+MIN_MRES_STEP = 1
+MIN_MRES_STEP = 1
+MIN_PRES_STEP = 0.1
+MIN_BDRY_STEP = 0.05

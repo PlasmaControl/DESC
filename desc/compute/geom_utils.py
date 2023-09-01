@@ -3,6 +3,20 @@
 from desc.backend import jnp
 
 
+def _rotation_matrix_from_normal(normal):
+    nx, ny, nz = normal
+    nxny = jnp.sqrt(nx**2 + ny**2)
+    R = jnp.array(
+        [
+            [ny / nxny, -nx / nxny, 0],
+            [nx * nx / nxny, ny * nz / nxny, -nxny],
+            [nx, ny, nz],
+        ]
+    ).T
+    R = jnp.where(nxny == 0, jnp.eye(3), R)
+    return R
+
+
 def reflection_matrix(normal):
     """Matrix to reflect points across plane through origin with specified normal.
 
@@ -46,23 +60,33 @@ def rotation_matrix(axis, angle=None):
     return R1 + R2 + R3
 
 
-def xyz2rpz(pts):
-    """Transform points from cartesian (X,Y,Z) to polar (R,phi,Z) form.
+def rpz2xyz_vec(vec, x=None, y=None, phi=None):
+    """Transform vectors from polar (R,phi,Z) to cartesian (X,Y,Z) form.
 
     Parameters
     ----------
-    pts : ndarray, shape(n,3)
-        points in cartesian (X,Y,Z) coordinates
+    vec : ndarray, shape(n,3)
+        vectors, in polar (R,phi,Z) form
+    x, y, phi : ndarray, shape(n,)
+        anchor points for vectors. Either x and y, or phi must be supplied
 
     Returns
     -------
-    pts : ndarray, shape(n,3)
-        points in polar (R,phi,Z) coordinates
+    vec : ndarray, shape(n,3)
+        vectors, in cartesian (X,Y,Z) form
     """
-    x, y, z = pts.T
-    r = jnp.sqrt(x**2 + y**2)
-    p = jnp.arctan2(y, x)
-    return jnp.array([r, p, z]).T
+    if x is not None and y is not None:
+        phi = jnp.arctan2(y, x)
+    rot = jnp.array(
+        [
+            [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
+            [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+            [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+        ]
+    )
+    rot = rot.T
+    cart = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
+    return cart.reshape((-1, 3))
 
 
 def rpz2xyz(pts):
@@ -113,44 +137,20 @@ def xyz2rpz_vec(vec, x=None, y=None, phi=None):
     return polar.reshape((-1, 3))
 
 
-def rpz2xyz_vec(vec, x=None, y=None, phi=None):
-    """Transform vectors from polar (R,phi,Z) to cartesian (X,Y,Z) form.
+def xyz2rpz(pts):
+    """Transform points from cartesian (X,Y,Z) to polar (R,phi,Z) form.
 
     Parameters
     ----------
-    vec : ndarray, shape(n,3)
-        vectors, in polar (R,phi,Z) form
-    x, y, phi : ndarray, shape(n,)
-        anchor points for vectors. Either x and y, or phi must be supplied
+    pts : ndarray, shape(n,3)
+        points in cartesian (X,Y,Z) coordinates
 
     Returns
     -------
-    vec : ndarray, shape(n,3)
-        vectors, in cartesian (X,Y,Z) form
+    pts : ndarray, shape(n,3)
+        points in polar (R,phi,Z) coordinates
     """
-    if x is not None and y is not None:
-        phi = jnp.arctan2(y, x)
-    rot = jnp.array(
-        [
-            [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
-            [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
-            [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
-        ]
-    )
-    rot = rot.T
-    cart = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
-    return cart.reshape((-1, 3))
-
-
-def _rotation_matrix_from_normal(normal):
-    nx, ny, nz = normal
-    nxny = jnp.sqrt(nx**2 + ny**2)
-    R = jnp.array(
-        [
-            [ny / nxny, -nx / nxny, 0],
-            [nx * nx / nxny, ny * nz / nxny, -nxny],
-            [nx, ny, nz],
-        ]
-    ).T
-    R = jnp.where(nxny == 0, jnp.eye(3), R)
-    return R
+    x, y, z = pts.T
+    r = jnp.sqrt(x**2 + y**2)
+    p = jnp.arctan2(y, x)
+    return jnp.array([r, p, z]).T

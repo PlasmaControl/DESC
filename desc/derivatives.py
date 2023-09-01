@@ -124,6 +124,7 @@ class AutoDiffDerivative(_Derivative):
     """
 
     def __init__(self, fun, argnum=0, mode="fwd", **kwargs):
+
         self._fun = fun
         self._argnum = argnum
 
@@ -133,6 +134,7 @@ class AutoDiffDerivative(_Derivative):
         return self.compute_jvp(self._fun, self.argnum, v, *args, **kwargs)
 
     def _jac_looped(self, *args, **kwargs):
+
         n = args[self._argnum].size
         shp = jax.eval_shape(self._fun, *args).shape
         I = jnp.eye(n)
@@ -165,25 +167,6 @@ class AutoDiffDerivative(_Derivative):
             self._compute = self._compute_jvp
         elif self._mode == "looped":
             self._compute = self._jac_looped
-
-    def compute(self, *args, **kwargs):
-        """Compute the derivative matrix.
-
-        Parameters
-        ----------
-        *args : list
-            Arguments of the objective function where the derivative is to be
-            evaluated at.
-
-        Returns
-        -------
-        D : ndarray of float
-            derivative of f evaluated at x, where f is the output of the function
-            fun and x is the input argument at position argnum. Exact shape and meaning
-            will depend on "mode"
-
-        """
-        return self._compute(*args, **kwargs)
 
     @classmethod
     def compute_jvp(cls, fun, argnum, v, *args, **kwargs):
@@ -348,6 +331,25 @@ class AutoDiffDerivative(_Derivative):
 
         return jax.grad(_fun, argnum)(*args)
 
+    def compute(self, *args, **kwargs):
+        """Compute the derivative matrix.
+
+        Parameters
+        ----------
+        *args : list
+            Arguments of the objective function where the derivative is to be
+            evaluated at.
+
+        Returns
+        -------
+        D : ndarray of float
+            derivative of f evaluated at x, where f is the output of the function
+            fun and x is the input argument at position argnum. Exact shape and meaning
+            will depend on "mode"
+
+        """
+        return self._compute(*args, **kwargs)
+
 
 class FiniteDiffDerivative(_Derivative):
     """Computes derivatives using 2nd order centered finite differences.
@@ -372,6 +374,7 @@ class FiniteDiffDerivative(_Derivative):
     """
 
     def __init__(self, fun, argnum=0, mode="fwd", rel_step=1e-3, **kwargs):
+
         self._fun = fun
         self._argnum = argnum
         self.rel_step = rel_step
@@ -387,7 +390,6 @@ class FiniteDiffDerivative(_Derivative):
             evaluated at.
         kwargs : dict
             keyword arguments passed to fun
-
 
         Returns
         -------
@@ -466,11 +468,6 @@ class FiniteDiffDerivative(_Derivative):
 
         return hess
 
-    def _compute_jvp(self, v, *args, **kwargs):
-        return self.compute_jvp(
-            self._fun, self._argnum, v, *args, rel_step=self.rel_step, **kwargs
-        )
-
     @classmethod
     def _compute_jvp_1arg(cls, fun, argnum, v, *args, **kwargs):
         """Compute a jvp wrt a single argument."""
@@ -490,24 +487,30 @@ class FiniteDiffDerivative(_Derivative):
         df = (f(x + h * vh) - f(x - h * vh)) / (2 * h)
         return df * normv
 
-    def compute(self, *args, **kwargs):
-        """Compute the derivative matrix.
+    def _compute_jvp(self, v, *args, **kwargs):
+        return self.compute_jvp(
+            self._fun, self._argnum, v, *args, rel_step=self.rel_step, **kwargs
+        )
 
-        Parameters
-        ----------
-        *args : list
-            Arguments of the objective function where the derivative is to be
-            evaluated at.
+    def _set_mode(self, mode):
+        if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
+            raise ValueError(
+                colored(
+                    "invalid mode option for finite difference differentiation", "red"
+                )
+            )
 
-        Returns
-        -------
-        D : ndarray of float
-            derivative of f evaluated at x, where f is the output of the function
-            fun and x is the input argument at position argnum. Exact shape and meaning
-            will depend on "mode"
-
-        """
-        return self._compute(*args, **kwargs)
+        self._mode = mode
+        if self._mode == "fwd":
+            self._compute = self._compute_grad_or_jac
+        elif self._mode == "rev":
+            self._compute = self._compute_grad_or_jac
+        elif self._mode == "grad":
+            self._compute = self._compute_grad_or_jac
+        elif self._mode == "hess":
+            self._compute = self._compute_hessian
+        elif self._mode == "jvp":
+            self._compute = self._compute_jvp
 
     @classmethod
     def compute_jvp(cls, fun, argnum, v, *args, **kwargs):
@@ -678,28 +681,24 @@ class FiniteDiffDerivative(_Derivative):
 
         return FiniteDiffDerivative(_fun, argnum, "grad", rel_step)(*args)
 
-    def _set_mode(self, mode):
-        if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
-            raise ValueError(
-                colored(
-                    "invalid mode option for finite difference differentiation", "red"
-                )
-            )
+    def compute(self, *args, **kwargs):
+        """Compute the derivative matrix.
 
-        self._mode = mode
-        if self._mode == "fwd":
-            self._compute = self._compute_grad_or_jac
-        elif self._mode == "rev":
-            self._compute = self._compute_grad_or_jac
-        elif self._mode == "grad":
-            self._compute = self._compute_grad_or_jac
-        elif self._mode == "hess":
-            self._compute = self._compute_hessian
-        elif self._mode == "jvp":
-            self._compute = self._compute_jvp
+        Parameters
+        ----------
+        *args : list
+            Arguments of the objective function where the derivative is to be
+            evaluated at.
+
+        Returns
+        -------
+        D : ndarray of float
+            derivative of f evaluated at x, where f is the output of the function
+            fun and x is the input argument at position argnum. Exact shape and meaning
+            will depend on "mode"
+
+        """
+        return self._compute(*args, **kwargs)
 
 
-if use_jax:
-    Derivative = AutoDiffDerivative
-else:
-    Derivative = FiniteDiffDerivative
+Derivative = AutoDiffDerivative if use_jax else FiniteDiffDerivative

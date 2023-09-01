@@ -52,24 +52,6 @@ class Optimizer(IOAble):
             + " (method={})".format(self.method)
         )
 
-    @property
-    def method(self):
-        """str: Name of the optimization method."""
-        return self._method
-
-    @method.setter
-    def method(self, method):
-        wrapper, submethod = _parse_method(method)
-        if submethod not in optimizers:
-            raise NotImplementedError(
-                colored(
-                    "method must be one of {}".format(".".join([*optimizers.keys()])),
-                    "red",
-                )
-            )
-        self._method = method
-
-    # TODO: add copy argument and return the equilibrium?
     def optimize(  # noqa: C901 - FIXME: simplify this
         self,
         eq,
@@ -280,16 +262,108 @@ class Optimizer(IOAble):
 
         return result
 
+    @property
+    def method(self):
+        """str: Name of the optimization method."""
+        return self._method
 
-def _parse_method(method):
-    """Split string into wrapper and method parts."""
-    wrapper = None
-    submethod = method
-    for key in Optimizer._wrappers[1:]:
-        if method.lower().startswith(key):
-            wrapper = key
-            submethod = method[len(key) + 1 :]
-    return wrapper, submethod
+    @method.setter
+    def method(self, method):
+        wrapper, submethod = _parse_method(method)
+        if submethod not in optimizers:
+            raise NotImplementedError(
+                colored(
+                    "method must be one of {}".format(".".join([*optimizers.keys()])),
+                    "red",
+                )
+            )
+        self._method = method
+
+    # TODO: add copy argument and return the equilibrium?
+
+
+def _get_default_tols(
+    method,
+    ftol=None,
+    xtol=None,
+    gtol=None,
+    ctol=None,
+    maxiter=None,
+    options=None,
+):
+    """Parse and set defaults for stopping tolerances."""
+    if options is None:
+        options = {}
+    stoptol = {}
+    if xtol is not None:
+        stoptol["xtol"] = xtol
+    if ftol is not None:
+        stoptol["ftol"] = ftol
+    if gtol is not None:
+        stoptol["gtol"] = gtol
+    if ctol is not None:
+        stoptol["ctol"] = ctol
+    if maxiter is not None:
+        stoptol["maxiter"] = maxiter
+    stoptol.setdefault(
+        "xtol",
+        options.pop("xtol", 1e-6),
+    )
+    stoptol.setdefault(
+        "ftol",
+        options.pop("ftol", 1e-6 if optimizers[method]["stochastic"] else 1e-2),
+    )
+    stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
+    stoptol.setdefault("ctol", options.pop("ctol", 1e-4))
+    stoptol.setdefault("maxiter", options.pop("maxiter", 100))
+
+    # if we define an "iteration" as a successful step, it can take a few function
+    # evaluations per iteration
+    stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
+    # pretty much all the methods only evaluate derivatives once per iteration
+    stoptol["max_ngev"] = options.pop("max_ngev", stoptol["maxiter"] + 1)
+    stoptol["max_njev"] = options.pop("max_njev", stoptol["maxiter"] + 1)
+    stoptol["max_nhev"] = options.pop("max_nhev", stoptol["maxiter"] + 1)
+
+    return stoptol
+
+
+def _maybe_wrap_nonlinear_constraints(
+    eq, objective, nonlinear_constraint, method, options
+):
+    """Use ProximalProjection to handle nonlinear constraints."""
+    wrapper, method = _parse_method(method)
+    if nonlinear_constraint is None:
+        if wrapper is not None:
+            warnings.warn(
+                f"No nonlinear constraints detected, ignoring wrapper method {wrapper}"
+            )
+        return objective, nonlinear_constraint
+    if wrapper is None and not optimizers[method]["equality_constraints"]:
+        warnings.warn(
+            FutureWarning(
+                f"""
+                Nonlinear constraints detected but method {method} does not support
+                nonlinear constraints. Defaulting to method "proximal-{method}"
+                In the future this will raise an error. To ignore this warning, specify
+                a wrapper "proximal-" to convert the nonlinearly constrained problem
+                into an unconstrained one.
+                """
+            )
+        )
+        wrapper = "proximal"
+    if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
+        perturb_options = options.pop("perturb_options", {})
+        solve_options = options.pop("solve_options", {})
+        objective = ProximalProjection(
+            objective,
+            constraint=nonlinear_constraint,
+            perturb_options=perturb_options,
+            solve_options=solve_options,
+            eq=eq,
+        )
+        nonlinear_constraint = None
+    return objective, nonlinear_constraint
 
 
 def _parse_constraints(constraints):
@@ -332,91 +406,15 @@ def _parse_constraints(constraints):
     return linear_constraints, nonlinear_constraints
 
 
-def _maybe_wrap_nonlinear_constraints(
-    eq, objective, nonlinear_constraint, method, options
-):
-    """Use ProximalProjection to handle nonlinear constraints."""
-    wrapper, method = _parse_method(method)
-    if nonlinear_constraint is None:
-        if wrapper is not None:
-            warnings.warn(
-                f"No nonlinear constraints detected, ignoring wrapper method {wrapper}"
-            )
-        return objective, nonlinear_constraint
-    if wrapper is None and not optimizers[method]["equality_constraints"]:
-        warnings.warn(
-            FutureWarning(
-                f"""
-                Nonlinear constraints detected but method {method} does not support
-                nonlinear constraints. Defaulting to method "proximal-{method}"
-                In the future this will raise an error. To ignore this warnging, specify
-                a wrapper "proximal-" to convert the nonlinearly constrained problem
-                into an unconstrained one.
-                """
-            )
-        )
-        wrapper = "proximal"
-    if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
-        perturb_options = options.pop("perturb_options", {})
-        solve_options = options.pop("solve_options", {})
-        objective = ProximalProjection(
-            objective,
-            constraint=nonlinear_constraint,
-            perturb_options=perturb_options,
-            solve_options=solve_options,
-            eq=eq,
-        )
-        nonlinear_constraint = None
-    return objective, nonlinear_constraint
-
-
-def _get_default_tols(
-    method,
-    ftol=None,
-    xtol=None,
-    gtol=None,
-    ctol=None,
-    maxiter=None,
-    options=None,
-):
-    """Parse and set defaults for stopping tolerances."""
-    if options is None:
-        options = {}
-    stoptol = {}
-    if xtol is not None:
-        stoptol["xtol"] = xtol
-    if ftol is not None:
-        stoptol["ftol"] = ftol
-    if gtol is not None:
-        stoptol["gtol"] = gtol
-    if ctol is not None:
-        stoptol["ctol"] = ctol
-    if maxiter is not None:
-        stoptol["maxiter"] = maxiter
-    stoptol.setdefault(
-        "xtol",
-        options.pop("xtol", 1e-6),
-    )
-    stoptol.setdefault(
-        "ftol",
-        options.pop("ftol", 1e-6 if optimizers[method]["stochastic"] else 1e-2),
-    )
-    stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
-    stoptol.setdefault("ctol", options.pop("ctol", 1e-4))
-    stoptol.setdefault("maxiter", options.pop("maxiter", 100))
-
-    # if we define an "iteration" as a sucessful step, it can take a few function
-    # evaluations per iteration
-    stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
-    # pretty much all the methods only evaluate derivatives once per iteration
-    stoptol["max_ngev"] = options.pop("max_ngev", stoptol["maxiter"] + 1)
-    stoptol["max_njev"] = options.pop("max_njev", stoptol["maxiter"] + 1)
-    stoptol["max_nhev"] = options.pop("max_nhev", stoptol["maxiter"] + 1)
-
-    return stoptol
-
-
-optimizers = {}
+def _parse_method(method):
+    """Split string into wrapper and method parts."""
+    wrapper = None
+    submethod = method
+    for key in Optimizer._wrappers[1:]:
+        if method.lower().startswith(key):
+            wrapper = key
+            submethod = method[len(key) + 1 :]
+    return wrapper, submethod
 
 
 def register_optimizer(
@@ -458,7 +456,6 @@ def register_optimizer(
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
         settings.
-
 
     Parameters
     ----------
@@ -540,3 +537,6 @@ def register_optimizer(
         return func
 
     return _decorator
+
+
+optimizers = {}

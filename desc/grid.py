@@ -1,10 +1,13 @@
 """Classes for representing flux coordinates."""
 
+from abc import ABC, abstractmethod
+
 import numpy as np
 from scipy import optimize, special
 
 from desc.backend import jnp, put
 from desc.io import IOAble
+from desc.utils import Index
 
 __all__ = [
     "Grid",
@@ -16,20 +19,8 @@ __all__ = [
 ]
 
 
-class Grid(IOAble):
-    """Base class for collocation grids.
-
-    Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
-    to pass in a custom set of collocation nodes.
-
-    Parameters
-    ----------
-    nodes : ndarray of float, size(num_nodes,3)
-        node coordinates, in (rho,theta,zeta)
-    sort : bool
-        whether to sort the nodes for use with FFT method.
-
-    """
+class _Grid(IOAble, ABC):
+    """Base class for collocation grids."""
 
     # TODO: calculate weights automatically using voronoi / delaunay triangulation
     _io_attrs_ = [
@@ -51,57 +42,21 @@ class Grid(IOAble):
         "_inverse_zeta_idx",
     ]
 
-    def __init__(self, nodes, sort=True):
-        # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
-        # This change measurably reduces memory usage of objects that
-        # define all attributes in their __init__ method.
-        self._NFP = 1
-        self._sym = False
-        self._node_pattern = "custom"
-        self._nodes, self._spacing = self._create_nodes(nodes)
-        self._enforce_symmetry()
-        if sort:
-            self._sort_nodes()
-        self._axis = self._find_axis()
-        (
-            self._unique_rho_idx,
-            self._inverse_rho_idx,
-            self._unique_theta_idx,
-            self._inverse_theta_idx,
-            self._unique_zeta_idx,
-            self._inverse_zeta_idx,
-        ) = self._find_unique_inverse_nodes()
-        self._L = self.num_rho
-        self._M = self.num_theta
-        self._N = self.num_zeta
-        self._weights = self._scale_weights()
-
-    def _create_nodes(self, nodes):
-        """Allow for custom node creation.
-
-        Parameters
-        ----------
-        nodes : ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
-
-        Returns
-        -------
-        nodes : ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
-        spacing : ndarray of float, size(num_nodes,3)
-            Node spacing, in (rho,theta,zeta).
-
-        """
-        nodes = np.atleast_2d(nodes).reshape((-1, 3)).astype(float)
-        # Do not alter nodes given by the user for custom grids.
-        # In particular, do not modulo nodes by 2pi or 2pi/NFP.
-        # This may cause the surface_integrals() function to fail recognizing
-        # surfaces outside the interval [0, 2pi] as duplicates. However, most
-        # surface integral computations are done with LinearGrid anyway.
-        spacing = (  # make weights sum to 4pi^2
-            np.ones_like(nodes) * np.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
+    def __repr__(self):
+        """str: string form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (L={}, M={}, N={}, NFP={}, sym={}, node_pattern={})".format(
+                self.L, self.M, self.N, self.NFP, self.sym, self.node_pattern
+            )
         )
-        return nodes, spacing
+
+    @abstractmethod
+    def _create_nodes(self, *args, **kwargs):
+        """Allow for custom node creation."""
+        pass
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry.
@@ -160,12 +115,6 @@ class Grid(IOAble):
         self._nodes = self.nodes[~to_delete_idx]
         self._spacing = self.spacing[~to_delete_idx]
 
-    def _sort_nodes(self):
-        """Sort nodes for use with FFT."""
-        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
-        self._nodes = self.nodes[sort_idx]
-        self._spacing = self.spacing[sort_idx]
-
     def _find_axis(self):
         """Find indices of axis nodes."""
         return np.nonzero(self.nodes[:, 0] == 0)[0]
@@ -193,8 +142,8 @@ class Grid(IOAble):
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce duplicate node weights."""
         nodes = self.nodes.copy().astype(float)
-        nodes[:, 1] %= 2 * np.pi
-        nodes[:, 2] %= 2 * np.pi / self.NFP
+        nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
+        nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))
         # reduce weights for duplicated nodes
         _, inverse, counts = np.unique(
             nodes, axis=0, return_inverse=True, return_counts=True
@@ -237,116 +186,11 @@ class Grid(IOAble):
             ) ** (1 / 3)
         return weights
 
-    @property
-    def L(self):
-        """int: Radial grid resolution."""
-        return self.__dict__.setdefault("_L", 0)
-
-    @property
-    def M(self):
-        """int: Poloidal grid resolution."""
-        return self.__dict__.setdefault("_M", 0)
-
-    @property
-    def N(self):
-        """int: Toroidal grid resolution."""
-        return self.__dict__.setdefault("_N", 0)
-
-    @property
-    def NFP(self):
-        """int: Number of (toroidal) field periods."""
-        return self.__dict__.setdefault("_NFP", 1)
-
-    @property
-    def sym(self):
-        """bool: True for stellarator symmetry, False otherwise."""
-        return self.__dict__.setdefault("_sym", False)
-
-    @property
-    def num_nodes(self):
-        """int: Total number of nodes."""
-        return self.nodes.shape[0]
-
-    @property
-    def num_rho(self):
-        """int: Number of unique rho coordinates."""
-        return self.unique_rho_idx.size
-
-    @property
-    def num_theta(self):
-        """int: Number of unique theta coordinates."""
-        return self.unique_theta_idx.size
-
-    @property
-    def num_zeta(self):
-        """int: Number of unique zeta coordinates."""
-        return self.unique_zeta_idx.size
-
-    @property
-    def unique_rho_idx(self):
-        """ndarray: Indices of unique rho coordinates."""
-        return self.__dict__.setdefault("_unique_rho_idx", np.array([]))
-
-    @property
-    def unique_theta_idx(self):
-        """ndarray: Indices of unique theta coordinates."""
-        return self.__dict__.setdefault("_unique_theta_idx", np.array([]))
-
-    @property
-    def unique_zeta_idx(self):
-        """ndarray: Indices of unique zeta coordinates."""
-        return self.__dict__.setdefault("_unique_zeta_idx", np.array([]))
-
-    @property
-    def inverse_rho_idx(self):
-        """ndarray: Indices of unique_rho_idx that recover the rho coordinates."""
-        return self.__dict__.setdefault("_inverse_rho_idx", np.array([]))
-
-    @property
-    def inverse_theta_idx(self):
-        """ndarray: Indices of unique_theta_idx that recover the theta coordinates."""
-        return self.__dict__.setdefault("_inverse_theta_idx", np.array([]))
-
-    @property
-    def inverse_zeta_idx(self):
-        """ndarray: Indices of unique_zeta_idx that recover the zeta coordinates."""
-        return self.__dict__.setdefault("_inverse_zeta_idx", np.array([]))
-
-    @property
-    def axis(self):
-        """ndarray: Indices of nodes at magnetic axis."""
-        return self.__dict__.setdefault("_axis", np.array([]))
-
-    @property
-    def node_pattern(self):
-        """str: Pattern for placement of nodes in (rho,theta,zeta)."""
-        return self.__dict__.setdefault("_node_pattern", "custom")
-
-    @property
-    def nodes(self):
-        """ndarray: Node coordinates, in (rho,theta,zeta)."""
-        return self.__dict__.setdefault("_nodes", np.array([]).reshape((0, 3)))
-
-    @property
-    def spacing(self):
-        """ndarray: Node spacing, in (rho,theta,zeta)."""
-        return self.__dict__.setdefault("_spacing", np.array([]).reshape((0, 3)))
-
-    @property
-    def weights(self):
-        """ndarray: Weight for each node, either exact quadrature or volume based."""
-        return self.__dict__.setdefault("_weights", np.array([]).reshape((0, 3)))
-
-    def __repr__(self):
-        """str: string form of the object."""
-        return (
-            type(self).__name__
-            + " at "
-            + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, sym={}, node_pattern={})".format(
-                self.L, self.M, self.N, self.NFP, self.sym, self.node_pattern
-            )
-        )
+    def _sort_nodes(self):
+        """Sort nodes for use with FFT."""
+        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
+        self._nodes = self.nodes[sort_idx]
+        self._spacing = self.spacing[sort_idx]
 
     def compress(self, x, surface_label="rho"):
         """Return elements of ``x`` at indices of unique surface label values.
@@ -442,8 +286,408 @@ class Grid(IOAble):
             )
         return x
 
+    @property
+    def L(self):
+        """int: Radial grid resolution."""
+        return self.__dict__.setdefault("_L", 0)
 
-class LinearGrid(Grid):
+    @property
+    def M(self):
+        """int: Poloidal grid resolution."""
+        return self.__dict__.setdefault("_M", 0)
+
+    @property
+    def N(self):
+        """int: Toroidal grid resolution."""
+        return self.__dict__.setdefault("_N", 0)
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self.__dict__.setdefault("_NFP", 1)
+
+    @property
+    def axis(self):
+        """ndarray: Indices of nodes at magnetic axis."""
+        return self.__dict__.setdefault("_axis", np.array([]))
+
+    @property
+    def inverse_rho_idx(self):
+        """ndarray: Indices of unique_rho_idx that recover the rho coordinates."""
+        return self.__dict__.setdefault("_inverse_rho_idx", np.array([]))
+
+    @property
+    def inverse_theta_idx(self):
+        """ndarray: Indices of unique_theta_idx that recover the theta coordinates."""
+        return self.__dict__.setdefault("_inverse_theta_idx", np.array([]))
+
+    @property
+    def inverse_zeta_idx(self):
+        """ndarray: Indices of unique_zeta_idx that recover the zeta coordinates."""
+        return self.__dict__.setdefault("_inverse_zeta_idx", np.array([]))
+
+    @property
+    def node_pattern(self):
+        """str: Pattern for placement of nodes in (rho,theta,zeta)."""
+        return self.__dict__.setdefault("_node_pattern", "custom")
+
+    @property
+    def nodes(self):
+        """ndarray: Node coordinates, in (rho,theta,zeta)."""
+        return self.__dict__.setdefault("_nodes", np.array([]).reshape((0, 3)))
+
+    @property
+    def num_nodes(self):
+        """int: Total number of nodes."""
+        return self.nodes.shape[0]
+
+    @property
+    def num_rho(self):
+        """int: Number of unique rho coordinates."""
+        return self.unique_rho_idx.size
+
+    @property
+    def num_theta(self):
+        """int: Number of unique theta coordinates."""
+        return self.unique_theta_idx.size
+
+    @property
+    def num_zeta(self):
+        """int: Number of unique zeta coordinates."""
+        return self.unique_zeta_idx.size
+
+    @property
+    def spacing(self):
+        """ndarray: Node spacing, in (rho,theta,zeta)."""
+        return self.__dict__.setdefault("_spacing", np.array([]).reshape((0, 3)))
+
+    @property
+    def sym(self):
+        """bool: True for stellarator symmetry, False otherwise."""
+        return self.__dict__.setdefault("_sym", False)
+
+    @property
+    def unique_rho_idx(self):
+        """ndarray: Indices of unique rho coordinates."""
+        return self.__dict__.setdefault("_unique_rho_idx", np.array([]))
+
+    @property
+    def unique_theta_idx(self):
+        """ndarray: Indices of unique theta coordinates."""
+        return self.__dict__.setdefault("_unique_theta_idx", np.array([]))
+
+    @property
+    def unique_zeta_idx(self):
+        """ndarray: Indices of unique zeta coordinates."""
+        return self.__dict__.setdefault("_unique_zeta_idx", np.array([]))
+
+    @property
+    def weights(self):
+        """ndarray: Weight for each node, either exact quadrature or volume based."""
+        return self.__dict__.setdefault("_weights", np.array([]).reshape((0, 3)))
+
+
+class ConcentricGrid(_Grid):
+    """Grid in which the nodes are arranged in concentric circles.
+
+    Nodes are arranged concentrically within each toroidal cross-section, with more
+    nodes per flux surface at larger radius. Typically used as the solution grid,
+    cannot be easily used for plotting due to non-uniform spacing.
+
+    Parameters
+    ----------
+    L : int
+        radial grid resolution
+    M : int
+        poloidal grid resolution
+    N : int
+        toroidal grid resolution
+    NFP : int
+        number of field periods (Default = 1)
+    sym : bool
+        True for stellarator symmetry, False otherwise (Default = False)
+    axis : bool
+        True to include the magnetic axis, False otherwise (Default = False)
+    node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``linear``}
+        pattern for radial coordinates
+
+            * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
+            * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
+            * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of
+              degree M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
+            * ``'ocs'``: optimal concentric sampling to minimize the condition number
+              of the resulting transform matrix, for doing inverse transform.
+            * ``linear`` : linear spacing in r=[0,1]
+
+    """
+
+    def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
+        self._L = L
+        self._M = M
+        self._N = N
+        self._NFP = NFP
+        self._sym = sym
+        self._node_pattern = node_pattern
+        self._nodes, self._spacing = self._create_nodes(
+            L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern
+        )
+        self._enforce_symmetry()
+        self._sort_nodes()
+        self._axis = self._find_axis()
+        (
+            self._unique_rho_idx,
+            self._inverse_rho_idx,
+            self._unique_theta_idx,
+            self._inverse_theta_idx,
+            self._unique_zeta_idx,
+            self._inverse_zeta_idx,
+        ) = self._find_unique_inverse_nodes()
+        self._weights = self._scale_weights()
+
+    def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
+        """Create grid nodes and weights.
+
+        Parameters
+        ----------
+        L : int
+            radial grid resolution
+        M : int
+            poloidal grid resolution
+        N : int
+            toroidal grid resolution
+        NFP : int
+            number of field periods (Default = 1)
+        axis : bool
+            True to include the magnetic axis, False otherwise (Default = False)
+        node_pattern : {``'linear'``, ``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
+            pattern for radial coordinates
+                * ``linear`` : linear spacing in r=[0,1]
+                * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
+                * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
+                * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of
+                  degree M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per
+                  surface.
+                * ``'ocs'``: optimal concentric sampling to minimize the condition
+                  number of the resulting transform matrix, for doing inverse transform.
+
+        Returns
+        -------
+        nodes : ndarray of float, size(num_nodes, 3)
+            node coordinates, in (rho,theta,zeta)
+        spacing : ndarray of float, size(num_nodes,3)
+            node spacing, based on local volume around the node
+
+        """
+        self._L = L
+        self._M = M
+        self._N = N
+        self._NFP = NFP
+
+        def ocs(L):
+            # Ramos-Lopez, et al. “Optimal Sampling Patterns for Zernike Polynomials.”
+            # Applied Mathematics and Computation 274 (February 2016): 247–57.
+            # https://doi.org/10.1016/j.amc.2015.11.006.
+            j = np.arange(1, L // 2 + 2)
+            z = np.cos((2 * j - 1) * np.pi / (2 * L + 2))
+            rj = 1.1565 * z - 0.76535 * z**2 + 0.60517 * z**3
+            return np.sort(rj)
+
+        pattern = {
+            "linear": np.linspace(0, 1, num=L // 2 + 1),
+            "cheb1": (np.cos(np.arange(L // 2, -1, -1) * np.pi / (L // 2)) + 1) / 2,
+            "cheb2": -np.cos(np.arange(L // 2, L + 1, 1) * np.pi / L),
+            "jacobi": special.js_roots(L // 2 + 1, 2, 2)[0],
+            "ocs": ocs(L),
+        }
+        rho = pattern.get(node_pattern)
+        if rho is None:
+            raise ValueError("node_pattern '{}' is not supported".format(node_pattern))
+        rho = np.sort(rho, axis=None)
+        if axis:
+            rho[0] = 0
+        elif rho[0] == 0:
+            rho[0] = rho[1] / 10
+
+        drho = np.zeros_like(rho)
+        if rho.size > 1:
+            drho[0] = (rho[0] + rho[1]) / 2
+            drho[1:-1] = (rho[2:] - rho[:-2]) / 2
+            drho[-1] = 1 - (rho[-2] + rho[-1]) / 2
+        else:
+            drho = np.array([1.0])
+        r = []
+        t = []
+        dr = []
+        dt = []
+
+        for iring in range(L // 2 + 1, 0, -1):
+            ntheta = 2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int)
+            if ntheta % 2 == 0:
+                # ensure an odd number of nodes on each surface
+                ntheta += 1
+            if self.sym:
+                # for symmetry, we want M+1 nodes on outer surface, so (2M+1+1)
+                # for now, cut in half in _enforce_symmetry
+                ntheta += 1
+            dtheta = 2 * np.pi / ntheta
+            theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
+            if self.sym:
+                theta = (theta + dtheta / 2) % (2 * np.pi)
+            for tk in theta:
+                r.append(rho[-iring])
+                t.append(tk)
+                dt.append(dtheta)
+                dr.append(drho[-iring])
+
+        r = np.asarray(r)
+        t = np.asarray(t)
+        dr = np.asarray(dr)
+        dt = np.asarray(dt)
+        dimzern = r.size
+
+        z = np.linspace(0, 2 * np.pi / NFP, 2 * N + 1, endpoint=False)
+        dz = 2 * np.pi / z.size
+
+        r = np.tile(r, 2 * N + 1)
+        t = np.tile(t, 2 * N + 1)
+        z = np.tile(z[np.newaxis], (dimzern, 1)).flatten(order="F")
+        dr = np.tile(dr, 2 * N + 1)
+        dt = np.tile(dt, 2 * N + 1)
+        dz = np.ones_like(z) * dz
+        nodes = np.stack([r, t, z]).T
+        spacing = np.stack([dr, dt, dz]).T
+
+        return nodes, spacing
+
+    def change_resolution(self, L, M, N, NFP=None):
+        """Change the resolution of the grid.
+
+        Parameters
+        ----------
+        L : int
+            new radial grid resolution
+        M : int
+            new poloidal grid resolution
+        N : int
+            new toroidal grid resolution
+        NFP : int
+            Number of field periods.
+
+        """
+        if NFP is None:
+            NFP = self.NFP
+        if L != self.L or M != self.M or N != self.N or NFP != self.NFP:
+            self._nodes, self._spacing = self._create_nodes(
+                L=L,
+                M=M,
+                N=N,
+                NFP=NFP,
+                axis=self.axis.size > 0,
+                node_pattern=self.node_pattern,
+            )
+            self._enforce_symmetry()
+            self._sort_nodes()
+            self._axis = self._find_axis()
+            (
+                self._unique_rho_idx,
+                self._inverse_rho_idx,
+                self._unique_theta_idx,
+                self._inverse_theta_idx,
+                self._unique_zeta_idx,
+                self._inverse_zeta_idx,
+            ) = self._find_unique_inverse_nodes()
+            self._weights = self._scale_weights()
+
+
+class Grid(_Grid):
+    """Collocation grid with custom node placement.
+
+    Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
+    to pass in a custom set of collocation nodes.
+
+    Parameters
+    ----------
+    nodes : ndarray of float, size(num_nodes,3)
+        node coordinates, in (rho,theta,zeta)
+    sort : bool
+        whether to sort the nodes for use with FFT method.
+    jitable : bool
+        Whether to skip certain checks and conditionals that don't work under jit.
+        Allows grid to be created on the fly with custom nodes, but weights, symmetry
+        etc may be wrong if grid contains duplicate nodes.
+    """
+
+    def __init__(self, nodes, sort=True, jitable=False):
+        # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
+        # This change measurably reduces memory usage of objects that
+        # define all attributes in their __init__ method.
+        self._NFP = 1
+        self._sym = False
+        self._node_pattern = "custom"
+        self._nodes, self._spacing = self._create_nodes(nodes)
+        if sort:
+            self._sort_nodes()
+        if jitable:
+            # dont do anything with symmetry since that changes # of nodes
+            # avoid point at the axis, for now. FIXME: make axis boolean mask?
+            r, t, z = self._nodes.T
+            r = jnp.where(r == 0, 1e-12, r)
+            self._nodes = jnp.array([r, t, z]).T
+            self._axis = np.array([], dtype=int)
+            self._unique_rho_idx = np.arange(self._nodes.shape[0])
+            self._unique_theta_idx = np.arange(self._nodes.shape[0])
+            self._unique_zeta_idx = np.arange(self._nodes.shape[0])
+            self._inverse_rho_idx = np.arange(self._nodes.shape[0])
+            self._inverse_theta_idx = np.arange(self._nodes.shape[0])
+            self._inverse_zeta_idx = np.arange(self._nodes.shape[0])
+            # don't do anything fancy with weights
+            self._weights = self._spacing.prod(axis=1)
+        else:
+            self._enforce_symmetry()
+            self._axis = self._find_axis()
+            (
+                self._unique_rho_idx,
+                self._inverse_rho_idx,
+                self._unique_theta_idx,
+                self._inverse_theta_idx,
+                self._unique_zeta_idx,
+                self._inverse_zeta_idx,
+            ) = self._find_unique_inverse_nodes()
+            self._weights = self._scale_weights()
+
+        self._L = self.num_rho
+        self._M = self.num_theta
+        self._N = self.num_zeta
+
+    def _create_nodes(self, nodes):
+        """Allow for custom node creation.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+
+        Returns
+        -------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        spacing : ndarray of float, size(num_nodes,3)
+            Node spacing, in (rho,theta,zeta).
+
+        """
+        nodes = jnp.atleast_2d(nodes).reshape((-1, 3)).astype(float)
+        # Do not alter nodes given by the user for custom grids.
+        # In particular, do not modulo nodes by 2pi or 2pi/NFP.
+        # This may cause the surface_integrals() function to fail recognizing
+        # surfaces outside the interval [0, 2pi] as duplicates. However, most
+        # surface integral computations are done with LinearGrid anyway.
+        spacing = (  # make weights sum to 4pi^2
+            jnp.ones_like(nodes) * jnp.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
+        )
+        return nodes, spacing
+
+
+class LinearGrid(_Grid):
     """Grid in which the nodes are linearly spaced in each coordinate.
 
     Useful for plotting and other analysis, though not very efficient for using as the
@@ -733,9 +977,22 @@ class LinearGrid(Grid):
         self._endpoint = (
             t.size > 0
             and z.size > 0
-            and (t[0] == 0 and t[-1] == THETA_ENDPOINT)
-            and (z[0] == 0 and z[-1] == ZETA_ENDPOINT)
-        )
+            and (
+                (
+                    np.isclose(t[0], 0, atol=1e-12)
+                    and np.isclose(t[-1], THETA_ENDPOINT, atol=1e-12)
+                )
+                or (t.size == 1 and z.size > 1)
+            )
+            and (
+                (
+                    np.isclose(z[0], 0, atol=1e-12)
+                    and np.isclose(z[-1], ZETA_ENDPOINT, atol=1e-12)
+                )
+                or (z.size == 1 and t.size > 1)
+            )
+        )  # if only one theta or one zeta point, can have endpoint=True
+        # if the other one is a full array
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()
@@ -792,7 +1049,7 @@ class LinearGrid(Grid):
         return self.__dict__.setdefault("_endpoint", False)
 
 
-class QuadratureGrid(Grid):
+class QuadratureGrid(_Grid):
     """Grid used for numerical quadrature.
 
     Exactly integrates a Fourier-Zernike basis of resolution (L,M,N)
@@ -922,217 +1179,19 @@ class QuadratureGrid(Grid):
             self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
 
 
-class ConcentricGrid(Grid):
-    """Grid in which the nodes are arranged in concentric circles.
-
-    Nodes are arranged concentrically within each toroidal cross-section, with more
-    nodes per flux surface at larger radius. Typically used as the solution grid,
-    cannot be easily used for plotting due to non-uniform spacing.
-
-    Parameters
-    ----------
-    L : int
-        radial grid resolution
-    M : int
-        poloidal grid resolution
-    N : int
-        toroidal grid resolution
-    NFP : int
-        number of field periods (Default = 1)
-    sym : bool
-        True for stellarator symmetry, False otherwise (Default = False)
-    axis : bool
-        True to include the magnetic axis, False otherwise (Default = False)
-    node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``linear``}
-        pattern for radial coordinates
-
-            * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
-            * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-            * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of
-              degree M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
-            * ``'ocs'``: optimal concentric sampling to minimize the condition number
-              of the resulting transform matrix, for doing inverse transform.
-            * ``linear`` : linear spacing in r=[0,1]
-
-    """
-
-    def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
-
-        self._L = L
-        self._M = M
-        self._N = N
-        self._NFP = NFP
-        self._sym = sym
-        self._node_pattern = node_pattern
-        self._nodes, self._spacing = self._create_nodes(
-            L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern
-        )
-        self._enforce_symmetry()
-        self._sort_nodes()
-        self._axis = self._find_axis()
-        (
-            self._unique_rho_idx,
-            self._inverse_rho_idx,
-            self._unique_theta_idx,
-            self._inverse_theta_idx,
-            self._unique_zeta_idx,
-            self._inverse_zeta_idx,
-        ) = self._find_unique_inverse_nodes()
-        self._weights = self._scale_weights()
-
-    def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
-        """Create grid nodes and weights.
-
-        Parameters
-        ----------
-        L : int
-            radial grid resolution
-        M : int
-            poloidal grid resolution
-        N : int
-            toroidal grid resolution
-        NFP : int
-            number of field periods (Default = 1)
-        axis : bool
-            True to include the magnetic axis, False otherwise (Default = False)
-        node_pattern : {``'linear'``, ``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
-            pattern for radial coordinates
-                * ``linear`` : linear spacing in r=[0,1]
-                * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
-                * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-                * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of
-                  degree M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per
-                  surface.
-                * ``'ocs'``: optimal concentric sampling to minimize the condition
-                  number of the resulting transform matrix, for doing inverse transform.
-
-        Returns
-        -------
-        nodes : ndarray of float, size(num_nodes, 3)
-            node coordinates, in (rho,theta,zeta)
-        spacing : ndarray of float, size(num_nodes,3)
-            node spacing, based on local volume around the node
-
-        """
-        self._L = L
-        self._M = M
-        self._N = N
-        self._NFP = NFP
-
-        def ocs(L):
-            # Ramos-Lopez, et al. “Optimal Sampling Patterns for Zernike Polynomials.”
-            # Applied Mathematics and Computation 274 (February 2016): 247–57.
-            # https://doi.org/10.1016/j.amc.2015.11.006.
-            j = np.arange(1, L // 2 + 2)
-            z = np.cos((2 * j - 1) * np.pi / (2 * L + 2))
-            rj = 1.1565 * z - 0.76535 * z**2 + 0.60517 * z**3
-            return np.sort(rj)
-
-        pattern = {
-            "linear": np.linspace(0, 1, num=L // 2 + 1),
-            "cheb1": (np.cos(np.arange(L // 2, -1, -1) * np.pi / (L // 2)) + 1) / 2,
-            "cheb2": -np.cos(np.arange(L // 2, L + 1, 1) * np.pi / L),
-            "jacobi": special.js_roots(L // 2 + 1, 2, 2)[0],
-            "ocs": ocs(L),
-        }
-        rho = pattern.get(node_pattern)
-        if rho is None:
-            raise ValueError("node_pattern '{}' is not supported".format(node_pattern))
-        rho = np.sort(rho, axis=None)
-        if axis:
-            rho[0] = 0
-        elif rho[0] == 0:
-            rho[0] = rho[1] / 10
-
-        drho = np.zeros_like(rho)
-        if rho.size > 1:
-            drho[0] = (rho[0] + rho[1]) / 2
-            drho[1:-1] = (rho[2:] - rho[:-2]) / 2
-            drho[-1] = 1 - (rho[-2] + rho[-1]) / 2
-        else:
-            drho = np.array([1.0])
-        r = []
-        t = []
-        dr = []
-        dt = []
-
-        for iring in range(L // 2 + 1, 0, -1):
-            ntheta = 2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int)
-            if ntheta % 2 == 0:
-                # ensure an odd number of nodes on each surface
-                ntheta += 1
-            if self.sym:
-                # for symmetry, we want M+1 nodes on outer surface, so (2M+1+1)
-                # for now, cut in half in _enforce_symmetry
-                ntheta += 1
-            dtheta = 2 * np.pi / ntheta
-            theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
-            if self.sym:
-                theta = (theta + dtheta / 2) % (2 * np.pi)
-            for tk in theta:
-                r.append(rho[-iring])
-                t.append(tk)
-                dt.append(dtheta)
-                dr.append(drho[-iring])
-
-        r = np.asarray(r)
-        t = np.asarray(t)
-        dr = np.asarray(dr)
-        dt = np.asarray(dt)
-        dimzern = r.size
-
-        z = np.linspace(0, 2 * np.pi / NFP, 2 * N + 1, endpoint=False)
-        dz = 2 * np.pi / z.size
-
-        r = np.tile(r, 2 * N + 1)
-        t = np.tile(t, 2 * N + 1)
-        z = np.tile(z[np.newaxis], (dimzern, 1)).flatten(order="F")
-        dr = np.tile(dr, 2 * N + 1)
-        dt = np.tile(dt, 2 * N + 1)
-        dz = np.ones_like(z) * dz
-        nodes = np.stack([r, t, z]).T
-        spacing = np.stack([dr, dt, dz]).T
-
-        return nodes, spacing
-
-    def change_resolution(self, L, M, N, NFP=None):
-        """Change the resolution of the grid.
-
-        Parameters
-        ----------
-        L : int
-            new radial grid resolution
-        M : int
-            new poloidal grid resolution
-        N : int
-            new toroidal grid resolution
-        NFP : int
-            Number of field periods.
-
-        """
-        if NFP is None:
-            NFP = self.NFP
-        if L != self.L or M != self.M or N != self.N or NFP != self.NFP:
-            self._nodes, self._spacing = self._create_nodes(
-                L=L,
-                M=M,
-                N=N,
-                NFP=NFP,
-                axis=self.axis.size > 0,
-                node_pattern=self.node_pattern,
-            )
-            self._enforce_symmetry()
-            self._sort_nodes()
-            self._axis = self._find_axis()
-            (
-                self._unique_rho_idx,
-                self._inverse_rho_idx,
-                self._unique_theta_idx,
-                self._inverse_theta_idx,
-                self._unique_zeta_idx,
-                self._inverse_zeta_idx,
-            ) = self._find_unique_inverse_nodes()
-            self._weights = self._scale_weights()
+def _find_rho(iota, iota_vals, tol=1e-14):
+    """Find rho values for iota_vals in iota profile."""
+    r = np.linspace(0, 1, 1000)
+    io = iota(r)
+    rho = []
+    for ior in iota_vals:
+        f = lambda r: iota(np.atleast_1d(r))[0] - ior
+        df = lambda r: iota(np.atleast_1d(r), dr=1)[0]
+        # nearest neighbor search for initial guess
+        x0 = r[np.argmin(np.abs(io - ior))]
+        rho_i = optimize.root_scalar(f, x0=x0, fprime=df, xtol=tol).root
+        rho.append(rho_i)
+    return np.array(rho)
 
 
 def _round(x, tol):
@@ -1141,6 +1200,26 @@ def _round(x, tol):
     if abs(x % 1) < tol or abs((x % 1) - 1) < tol:
         return round(x)
     return x
+
+
+def cf_to_dec(cf):
+    """Compute decimal form of a continued fraction.
+
+    Parameters
+    ----------
+    cf : array-like
+        coefficients of continued fraction.
+
+    Returns
+    -------
+    x : float
+        floating point representation of cf
+
+    """
+    if len(cf) == 1:
+        return cf[0]
+    else:
+        return cf[0] + 1 / cf_to_dec(cf[1:])
 
 
 def dec_to_cf(x, dmax=20, itol=1e-14):
@@ -1176,24 +1255,130 @@ def dec_to_cf(x, dmax=20, itol=1e-14):
     return np.array(cf).astype(int)
 
 
-def cf_to_dec(cf):
-    """Compute decimal form of a continued fraction.
+def find_least_rational_surfaces(
+    iota, n, nrational=100, atol=1e-14, itol=1e-14, eps=1e-12, **kwargs
+):
+    """Find "least rational" surfaces for given iota profile.
+
+    By least rational we mean points farthest in iota from the nrational lowest
+    order rational surfaces and each other.
+
+    Note: May not work as expected for non-monotonic profiles with duplicate rational
+    surfaces. (generally only 1 of each rational is found)
 
     Parameters
     ----------
-    cf : array-like
-        coefficients of continued fraction.
+    iota : Profile
+        iota profile to search
+    n : integer
+        number of approximately irrational surfaces to find
+    nrational : int, optional
+        number of lowest order rational surfaces to avoid.
+    atol : float, optional
+        Stopping tolerance for minimization
+    itol : float, optional
+        tolerance for rounding float to nearest int
+    eps : float, optional
+        amount to displace points to avoid duplicates
 
     Returns
     -------
-    x : float
-        floating point representation of cf
-
+    rho : ndarray
+        locations of least rational surfaces
+    io : ndarray
+        values of iota at least rational surfaces
+    rho_rat : ndarray
+        rho values of lowest order rational surfaces
+    io_rat : ndarray
+        iota values at lowest order rational surfaces
     """
-    if len(cf) == 1:
-        return cf[0]
-    else:
-        return cf[0] + 1 / cf_to_dec(cf[1:])
+    rho_rat, io_rat = find_most_rational_surfaces(
+        iota, nrational, atol, itol, eps, **kwargs
+    )
+    a, b = iota([0.0, 1.0])
+    io = find_most_distant(io_rat, n, a, b, tol=atol, **kwargs)
+    rho = _find_rho(iota, io, tol=atol)
+    return rho, io
+
+
+def find_most_distant(pts, n, a=None, b=None, atol=1e-14, **kwargs):
+    """Find n points in interval that are maximally distant from pts and each other.
+
+    Parameters
+    ----------
+    pts : ndarray
+        Points to avoid
+    n : int
+        Number of points to find.
+    a, b : float, optional
+        Start and end points for interval. Default is min/max of pts
+    atol : float, optional
+        Stopping tolerance for minimization
+    """
+
+    def foo(x, xs):
+        xs = np.atleast_1d(xs)
+        d = x - xs[:, None]
+        return -np.prod(np.abs(d), axis=0).squeeze()
+
+    if a is None:
+        a = np.min(pts)
+    if b is None:
+        b = np.max(pts)
+
+    pts = list(pts)
+    nsamples = kwargs.get("nsamples", 1000)
+    x = np.linspace(a, b, nsamples)
+    out = []
+    for i in range(n):
+        y = foo(x, pts)
+        x0 = x[np.argmin(y)]
+        bracket = (max(a, x0 - 5 / nsamples), min(x0 + 5 / nsamples, b))
+        c = optimize.minimize_scalar(
+            foo, bracket=bracket, bounds=(a, b), args=(pts,), options={"xatol": atol}
+        ).x
+        pts.append(c)
+        out.append(c)
+    return np.array(out)
+
+
+def find_most_rational_surfaces(iota, n, atol=1e-14, itol=1e-14, eps=1e-12, **kwargs):
+    """Find "most rational" surfaces for a give iota profile.
+
+    By most rational, we generally mean lowest order ie smallest continued fraction.
+
+    Note: May not work as expected for non-monotonic profiles with duplicate rational
+    surfaces. (generally only 1 of each rational is found)
+
+    Parameters
+    ----------
+    iota : Profile
+        iota profile to search
+    n : integer
+        number of rational surfaces to find
+    atol : float, optional
+        stopping tolerance for root finding
+    itol : float, optional
+        tolerance for rounding float to nearest int
+    eps : float, optional
+        amount to displace points to avoid duplicates
+
+    Returns
+    -------
+    rho : ndarray
+        sorted radial locations of rational surfaces
+    rationals: ndarray
+        values of iota at rational surfaces
+    """
+    # find approx min/max
+    r = np.linspace(0, 1, kwargs.get("nsamples", 1000))
+    io = iota(r)
+    iomin, iomax = np.min(io), np.max(io)
+    # find rational values of iota and corresponding rho
+    io_rational = n_most_rational(iomin, iomax, n, itol=itol, eps=eps)
+    rho = _find_rho(iota, io_rational, tol=atol)
+    idx = np.argsort(rho)
+    return rho[idx], io_rational[idx]
 
 
 def most_rational(a, b, itol=1e-14):
@@ -1290,142 +1475,11 @@ def n_most_rational(a, b, n, eps=1e-12, itol=1e-14):
     return np.array(out)
 
 
-def _find_rho(iota, iota_vals, tol=1e-14):
-    """Find rho values for iota_vals in iota profile."""
-    r = np.linspace(0, 1, 1000)
-    io = iota(r)
-    rho = []
-    for ior in iota_vals:
-        f = lambda r: iota(np.atleast_1d(r))[0] - ior
-        df = lambda r: iota(np.atleast_1d(r), dr=1)[0]
-        # nearest neighbor search for initial guess
-        x0 = r[np.argmin(np.abs(io - ior))]
-        rho_i = optimize.root_scalar(f, x0=x0, fprime=df, xtol=tol).root
-        rho.append(rho_i)
-    return np.array(rho)
-
-
-def find_most_rational_surfaces(iota, n, atol=1e-14, itol=1e-14, eps=1e-12, **kwargs):
-    """Find "most rational" surfaces for a give iota profile.
-
-    By most rational, we generally mean lowest order ie smallest continued fraction.
-
-    Note: May not work as expected for non-monotonic profiles with duplicate rational
-    surfaces. (generally only 1 of each rational is found)
-
-    Parameters
-    ----------
-    iota : Profile
-        iota profile to search
-    n : integer
-        number of rational surfaces to find
-    atol : float, optional
-        stopping tolerance for root finding
-    itol : float, optional
-        tolerance for rounding float to nearest int
-    eps : float, optional
-        amount to dislace points to avoid duplicates
-
-    Returns
-    -------
-    rho : ndarray
-        sorted radial locations of rational surfaces
-    rationals: ndarray
-        values of iota at rational surfaces
-    """
-    # find approx min/max
-    r = np.linspace(0, 1, kwargs.get("nsamples", 1000))
-    io = iota(r)
-    iomin, iomax = np.min(io), np.max(io)
-    # find rational values of iota and corresponding rho
-    io_rational = n_most_rational(iomin, iomax, n, itol=itol, eps=eps)
-    rho = _find_rho(iota, io_rational, tol=atol)
-    idx = np.argsort(rho)
-    return rho[idx], io_rational[idx]
-
-
-def find_most_distant(pts, n, a=None, b=None, atol=1e-14, **kwargs):
-    """Find n points in interval that are maximally distant from pts and each other.
-
-    Parameters
-    ----------
-    pts : ndarray
-        Points to avoid
-    n : int
-        Number of points to find.
-    a, b : float, optional
-        Start and end points for interval. Default is min/max of pts
-    atol : float, optional
-        Stopping tolerance for minimization
-    """
-
-    def foo(x, xs):
-        xs = np.atleast_1d(xs)
-        d = x - xs[:, None]
-        return -np.prod(np.abs(d), axis=0).squeeze()
-
-    if a is None:
-        a = np.min(pts)
-    if b is None:
-        b = np.max(pts)
-
-    pts = list(pts)
-    nsamples = kwargs.get("nsamples", 1000)
-    x = np.linspace(a, b, nsamples)
-    out = []
-    for i in range(n):
-        y = foo(x, pts)
-        x0 = x[np.argmin(y)]
-        bracket = (max(a, x0 - 5 / nsamples), min(x0 + 5 / nsamples, b))
-        c = optimize.minimize_scalar(
-            foo, bracket=bracket, bounds=(a, b), args=(pts,), options={"xatol": atol}
-        ).x
-        pts.append(c)
-        out.append(c)
-    return np.array(out)
-
-
-def find_least_rational_surfaces(
-    iota, n, nrational=100, atol=1e-14, itol=1e-14, eps=1e-12, **kwargs
-):
-    """Find "least rational" surfaces for given iota profile.
-
-    By least rational we mean points farthest in iota from the nrational lowest
-    order rational surfaces and each other.
-
-    Note: May not work as expected for non-monotonic profiles with duplicate rational
-    surfaces. (generally only 1 of each rational is found)
-
-    Parameters
-    ----------
-    iota : Profile
-        iota profile to search
-    n : integer
-        number of approximately irrational surfaces to find
-    nrational : int, optional
-        number of lowest order rational surfaces to avoid.
-    atol : float, optional
-        Stopping tolerance for minimization
-    itol : float, optional
-        tolerance for rounding float to nearest int
-    eps : float, optional
-        amount to displace points to avoid duplicates
-
-    Returns
-    -------
-    rho : ndarray
-        locations of least rational surfaces
-    io : ndarray
-        values of iota at least rational surfaces
-    rho_rat : ndarray
-        rho values of lowest order rational surfaces
-    io_rat : ndarray
-        iota values at lowest order rational surfaces
-    """
-    rho_rat, io_rat = find_most_rational_surfaces(
-        iota, nrational, atol, itol, eps, **kwargs
-    )
-    a, b = iota([0.0, 1.0])
-    io = find_most_distant(io_rat, n, a, b, tol=atol, **kwargs)
-    rho = _find_rho(iota, io, tol=atol)
-    return rho, io
+__all__ = [
+    "Grid",
+    "LinearGrid",
+    "QuadratureGrid",
+    "ConcentricGrid",
+    "find_least_rational_surfaces",
+    "find_most_rational_surfaces",
+]

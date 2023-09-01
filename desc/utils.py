@@ -8,6 +8,8 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
+from desc.backend import fori_loop, jit, jnp
+
 
 class _Indexable:
     """Helper object for building indexes for indexed update functions.
@@ -183,17 +185,6 @@ class Timer:
         del self._timers[name]
 
 
-"""
-Helper object for building indexes for indexed update functions.
-This is a singleton object that overrides the ``__getitem__`` method
-to return the index it is passed.
->>> Index[1:2, 3, None, ..., ::2]
-(slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
-copied from jax.ops.index to work with either backend
-"""
-Index = _Indexable()
-
-
 def combination_permutation(m, n, equals=True):
     """Compute all m-tuples of non-negative ints that sum to less than or equal to n.
 
@@ -204,7 +195,7 @@ def combination_permutation(m, n, equals=True):
     n : int
         Maximum sum
     equals : bool
-        If True, return only where sum == n, else retun where sum <= n
+        If True, return only where sum == n, else return where sum <= n
 
     Returns
     -------
@@ -225,22 +216,27 @@ def combination_permutation(m, n, equals=True):
     return out
 
 
+@jit
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
     """Copy coefficients from one resolution to another."""
-    modes_old, modes_new = np.atleast_1d(modes_old), np.atleast_1d(modes_new)
+    modes_old, modes_new = jnp.atleast_1d(modes_old), jnp.atleast_1d(modes_new)
+
     if modes_old.ndim == 1:
         modes_old = modes_old.reshape((-1, 1))
     if modes_new.ndim == 1:
         modes_new = modes_new.reshape((-1, 1))
 
-    num_modes = modes_new.shape[0]
     if c_new is None:
-        c_new = np.zeros((num_modes,))
+        c_new = jnp.zeros((modes_new.shape[0],))
+    c_old, c_new = jnp.asarray(c_old), jnp.asarray(c_new)
 
-    for i in range(num_modes):
-        idx = np.where((modes_old == modes_new[i, :]).all(axis=1))[0]
-        if len(idx):
-            c_new[i] = c_old[idx]
+    def body(i, c_new):
+        mask = (modes_old[i, :] == modes_new).all(axis=1)
+        c_new = jnp.where(mask, c_old[i], c_new)
+        return c_new
+
+    if c_old.size:
+        c_new = fori_loop(0, modes_old.shape[0], body, c_new)
     return c_new
 
 
@@ -285,13 +281,15 @@ def errorif(cond, err=ValueError, msg=""):
         raise err(msg)
 
 
-def flatten_list(x):
+def flatten_list(x, flatten_tuple=False):
     """Flatten a nested list.
 
     Parameters
     ----------
     x : list
         nested list of lists to flatten
+    flatten_tuple : bool
+        Whether to also flatten nested tuples.
 
     Returns
     -------
@@ -299,8 +297,11 @@ def flatten_list(x):
         flattened input
 
     """
-    if isinstance(x, list):
-        return [a for i in x for a in flatten_list(i)]
+    types = (list,)
+    if flatten_tuple:
+        types += (tuple,)
+    if isinstance(x, types):
+        return [a for i in x for a in flatten_list(i, flatten_tuple)]
     else:
         return [x]
 
@@ -344,7 +345,7 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
         relative tolerance for comparison.
     atol : float
         absolute tolerance for comparison.
-        If the following equation is element-wise True, then isalmostequal returns True.
+        If the following equation is element-wise True, then returns True.
             absolute(a - b) <= (atol + rtol * absolute(b))
         where a= x[0] and b is every other element of x, if flattened array,
         or if axis is not None, a = x[:,0,:] and b = x[:,i,:] for all i, and
@@ -352,7 +353,7 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
 
     Returns
     -------
-    isalmostequal : bool
+    is_almost_equal : bool
         whether the array is equal along specified axis
 
     """
@@ -397,13 +398,10 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
         relative tolerance for comparison.
     atol : float
         absolute tolerance for comparison.
-        If the following equation is element-wise True for,
-         then isalmostequal returns True.
-            absolute(a - b) <= (atol + rtol * absolute(b))
 
     Returns
     -------
-    islinspaced : bool
+    is_linspaced : bool
         whether the array is linearly spaced along specified axis
 
     """
@@ -446,7 +444,7 @@ def issorted(x, axis=None, tol=1e-12):
 
     Returns
     -------
-    issorted : bool
+    is_sorted : bool
         whether the array is sorted along specified axis
 
     """
@@ -473,7 +471,7 @@ def only1(*args):
 
 
 def parse_argname_change(arg, kwargs, oldname, newname):
-    """Warn and parse arguemnts whose names have changed."""
+    """Warn and parse arguments whose names have changed."""
     if oldname in kwargs:
         warnings.warn(
             FutureWarning(
@@ -491,11 +489,7 @@ def setdefault(val, default, cond=None):
     If cond is None, then it checks if val is not None, returning val
     or default accordingly.
     """
-    if cond is None:
-        cond = val is not None
-    if cond:
-        return val
-    return default
+    return val if cond or (cond is None and val is not None) else default
 
 
 def svd_inv_null(A):
@@ -528,3 +522,14 @@ def svd_inv_null(A):
     Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
     Z = vh[num:, :].T.conj()
     return Ainv, Z
+
+
+"""
+Helper object for building indexes for indexed update functions.
+This is a singleton object that overrides the ``__getitem__`` method
+to return the index it is passed.
+>>> Index[1:2, 3, None, ..., ::2]
+(slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
+copied from jax.ops.index to work with either backend
+"""
+Index = _Indexable()

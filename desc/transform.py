@@ -30,13 +30,15 @@ class Transform(IOAble):
         whether to precompute the transforms now or do it later
     build_pinv : bool
         whether to precompute the pseudoinverse now or do it later
-    method : {```'auto'``, `'fft'``, ``'direct1'``, ``'direct2'``}
+    method : {```'auto'``, `'fft'``, ``'direct1'``, ``'direct2'``, ``'jitable'``}
         * ``'fft'`` uses fast fourier transforms in the zeta direction, and so must have
-          equally spaced toroidal nodes, and the same node pattern on each zeta plane
+          equally spaced toroidal nodes, and the same node pattern on each zeta plane.
         * ``'direct1'`` uses full matrices and can handle arbitrary node patterns and
           spectral bases.
-        * ``'direct2'`` uses a DFT instead of FFT that can be faster in practice
-        * ``'auto'`` selects the method based on the grid and basis resolution
+        * ``'direct2'`` uses a DFT instead of FFT that can be faster in practice.
+        * ``'jitable'`` is the same as ``'direct1'`` but avoids some checks, allowing
+          you to create transforms inside JIT compiled functions.
+        * ``'auto'`` selects the method based on the grid and basis resolution.
 
     """
 
@@ -58,10 +60,11 @@ class Transform(IOAble):
         self._rcond = rcond if rcond is not None else "auto"
 
         if (
-            np.any(self.grid.nodes[:, 2] != 0)
+            method != "jitable"
+            and grid.node_pattern != "custom"
             and self.basis.N != 0
             and self.grid.NFP != self.basis.NFP
-            and grid.node_pattern != "custom"
+            and np.any(self.grid.nodes[:, 2] != 0)
         ):
             warnings.warn(
                 colored(
@@ -85,61 +88,98 @@ class Transform(IOAble):
         if build_pinv:
             self.build_pinv()
 
-    def _get_derivatives(self, derivs):
-        """Get array of derivatives needed for calculating objective function.
+    def __repr__(self):
+        """String form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (method={}, basis={}, grid={})".format(
+                self.method, repr(self.basis), repr(self.grid)
+            )
+        )
 
-        Parameters
-        ----------
-        derivs : int or string
-             order of derivatives needed, if an int (Default = 0)
-             OR
-             array of derivative orders, shape (N,3)
-             [dr, dt, dz]
+    def _check_inputs_direct2(self, grid, basis):
+        """Check that inputs are formatted correctly for direct2 method."""
+        if grid.num_nodes == 0 or basis.num_modes == 0:
+            # trivial case where we just return all zeros, so it doesn't matter
+            self._method = "direct1"
+            return
 
-        Returns
-        -------
-        derivatives : ndarray
-            combinations of derivatives needed
-            Each row is one set, columns represent the order of derivatives
-            for [rho, theta, zeta]
+        zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 
-        """
-        if isinstance(derivs, int) and derivs >= 0:
-            derivatives = combination_permutation(3, derivs, False)
-        elif np.atleast_1d(derivs).ndim == 1 and len(derivs) == 3:
-            derivatives = np.asarray(derivs).reshape((1, 3))
-        elif np.atleast_2d(derivs).ndim == 2 and np.atleast_2d(derivs).shape[1] == 3:
-            derivatives = np.atleast_2d(derivs)
-        else:
-            raise NotImplementedError(
+        if not issorted(grid.nodes[:, 2]):
+            warnings.warn(
                 colored(
-                    "derivs should be array-like with 3 columns, or a non-negative int",
-                    "red",
+                    "direct2 method requires nodes to be sorted by toroidal angle in "
+                    + "ascending order, falling back to direct1 method",
+                    "yellow",
                 )
             )
-        # always include the 0,0,0 derivative
-        if not (np.array([0, 0, 0]) == derivatives).all(axis=-1).any():
-            derivatives = np.concatenate([derivatives, np.array([[0, 0, 0]])])
-        return derivatives
+            self.method = "direct1"
+            return
 
-    def _sort_derivatives(self):
-        """Sort derivatives."""
-        sort_idx = np.lexsort(
-            (self.derivatives[:, 0], self.derivatives[:, 1], self.derivatives[:, 2])
+        if not isalmostequal(zeta_cts):
+            warnings.warn(
+                colored(
+                    "direct2 method requires the same number of nodes on each zeta "
+                    + "plane, falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        if len(zeta_vals) > 1 and not isalmostequal(
+            grid.nodes[:, :2].T.reshape((2, zeta_cts[0], -1), order="F")
+        ):
+            warnings.warn(
+                colored(
+                    "direct2 method requires that node pattern is the same on each "
+                    + "zeta plane, falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        id2 = np.lexsort((basis.modes[:, 1], basis.modes[:, 0], basis.modes[:, 2]))
+        if not issorted(id2):
+            warnings.warn(
+                colored(
+                    "direct2 method requires zernike indices to be sorted by toroidal "
+                    + "mode number, falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        n_vals, n_cts = np.unique(basis.modes[:, 2], return_counts=True)
+
+        self._method = "direct2"
+        self.lm_modes = np.unique(basis.modes[:, :2], axis=0)
+        self.n_modes = n_vals
+        self.zeta_nodes = zeta_vals
+        self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
+        self.num_n_modes = self.n_modes.size  # number of toroidal modes
+        self.num_z_nodes = len(zeta_vals)  # number of zeta nodes
+        self.N = basis.N  # toroidal resolution of basis
+
+        self.fft_index = np.zeros((basis.num_modes,), dtype=int)
+        for k in range(basis.num_modes):
+            row = np.where((basis.modes[k, :2] == self.lm_modes).all(axis=1))[0]
+            col = np.where(basis.modes[k, 2] == n_vals)[0]
+            self.fft_index[k] = self.num_n_modes * row + col
+        self.fft_nodes = np.hstack(
+            [
+                grid.nodes[:, :2][: grid.num_nodes // self.num_z_nodes],
+                np.zeros((grid.num_nodes // self.num_z_nodes, 1)),
+            ]
         )
-        self._derivatives = self.derivatives[sort_idx]
-
-    def _get_matrices(self):
-        """Get matrices to compute all derivatives."""
-        n = np.amax(self.derivatives) + 1
-        matrices = {
-            "direct1": {
-                i: {j: {k: {} for k in range(n)} for j in range(n)} for i in range(n)
-            },
-            "fft": {i: {j: {} for j in range(n)} for i in range(n)},
-            "direct2": {i: {} for i in range(n)},
-        }
-        return matrices
+        self.dft_nodes = np.hstack(
+            [np.zeros((self.zeta_nodes.size, 2)), self.zeta_nodes[:, np.newaxis]]
+        )
 
     def _check_inputs_fft(self, grid, basis):
         """Check that inputs are formatted correctly for fft method."""
@@ -280,132 +320,68 @@ class Transform(IOAble):
             ]
         )
 
-    def _check_inputs_direct2(self, grid, basis):
-        """Check that inputs are formatted correctly for direct2 method."""
-        if grid.num_nodes == 0 or basis.num_modes == 0:
-            # trivial case where we just return all zeros, so it doesn't matter
-            self._method = "direct1"
-            return
+    def _get_derivatives(self, derivs):
+        """Get array of derivatives needed for calculating objective function.
 
-        zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
+        Parameters
+        ----------
+        derivs : int or string
+             order of derivatives needed, if an int (Default = 0)
+             OR
+             array of derivative orders, shape (N,3)
+             [dr, dt, dz]
 
-        if not issorted(grid.nodes[:, 2]):
-            warnings.warn(
+        Returns
+        -------
+        derivatives : ndarray
+            combinations of derivatives needed
+            Each row is one set, columns represent the order of derivatives
+            for [rho, theta, zeta]
+
+        """
+        if isinstance(derivs, int) and derivs >= 0:
+            derivatives = combination_permutation(3, derivs, False)
+        elif np.ndim(derivs) == 1 and len(derivs) == 3:
+            derivatives = np.asarray(derivs).reshape((1, 3))
+        elif np.ndim(derivs) == 2 and np.atleast_2d(derivs).shape[1] == 3:
+            derivatives = np.atleast_2d(derivs)
+        else:
+            raise NotImplementedError(
                 colored(
-                    "direct2 method requires nodes to be sorted by toroidal angle in "
-                    + "ascending order, falling back to direct1 method",
-                    "yellow",
+                    "derivs should be array-like with 3 columns, or a non-negative int",
+                    "red",
                 )
             )
-            self.method = "direct1"
-            return
+        # always include the 0,0,0 derivative
+        if not (np.array([0, 0, 0]) == derivatives).all(axis=-1).any():
+            derivatives = np.concatenate([derivatives, np.array([[0, 0, 0]])])
+        return derivatives
 
-        if not isalmostequal(zeta_cts):
-            warnings.warn(
-                colored(
-                    "direct2 method requires the same number of nodes on each zeta "
-                    + "plane, falling back to direct1 method",
-                    "yellow",
-                )
-            )
-            self.method = "direct1"
-            return
+    def _get_matrices(self):
+        """Get matrices to compute all derivatives."""
+        n = np.amax(self.derivatives) + 1
+        matrices = {
+            "direct1": {
+                i: {j: {k: {} for k in range(n)} for j in range(n)} for i in range(n)
+            },
+            "fft": {i: {j: {} for j in range(n)} for i in range(n)},
+            "direct2": {i: {} for i in range(n)},
+        }
+        return matrices
 
-        if len(zeta_vals) > 1 and not isalmostequal(
-            grid.nodes[:, :2].T.reshape((2, zeta_cts[0], -1), order="F")
-        ):
-            warnings.warn(
-                colored(
-                    "direct2 method requires that node pattern is the same on each "
-                    + "zeta plane, falling back to direct1 method",
-                    "yellow",
-                )
-            )
-            self.method = "direct1"
-            return
-
-        id2 = np.lexsort((basis.modes[:, 1], basis.modes[:, 0], basis.modes[:, 2]))
-        if not issorted(id2):
-            warnings.warn(
-                colored(
-                    "direct2 method requires zernike indices to be sorted by toroidal "
-                    + "mode number, falling back to direct1 method",
-                    "yellow",
-                )
-            )
-            self.method = "direct1"
-            return
-
-        n_vals, n_cts = np.unique(basis.modes[:, 2], return_counts=True)
-
-        self._method = "direct2"
-        self.lm_modes = np.unique(basis.modes[:, :2], axis=0)
-        self.n_modes = n_vals
-        self.zeta_nodes = zeta_vals
-        self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
-        self.num_n_modes = self.n_modes.size  # number of toroidal modes
-        self.num_z_nodes = len(zeta_vals)  # number of zeta nodes
-        self.N = basis.N  # toroidal resolution of basis
-
-        self.fft_index = np.zeros((basis.num_modes,), dtype=int)
-        for k in range(basis.num_modes):
-            row = np.where((basis.modes[k, :2] == self.lm_modes).all(axis=1))[0]
-            col = np.where(basis.modes[k, 2] == n_vals)[0]
-            self.fft_index[k] = self.num_n_modes * row + col
-        self.fft_nodes = np.hstack(
-            [
-                grid.nodes[:, :2][: grid.num_nodes // self.num_z_nodes],
-                np.zeros((grid.num_nodes // self.num_z_nodes, 1)),
-            ]
+    def _sort_derivatives(self):
+        """Sort derivatives."""
+        sort_idx = np.lexsort(
+            (self.derivatives[:, 0], self.derivatives[:, 1], self.derivatives[:, 2])
         )
-        self.dft_nodes = np.hstack(
-            [np.zeros((self.zeta_nodes.size, 2)), self.zeta_nodes[:, np.newaxis]]
-        )
-
-    def build(self):
-        """Build the transform matrices for each derivative order."""
-        if self.built:
-            return
-
-        if self.basis.num_modes == 0:
-            self._built = True
-            return
-
-        if self.method == "direct1":
-            for d in self.derivatives:
-                self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
-                    self.grid.nodes, d, unique=True
-                )
-
-        if self.method in ["fft", "direct2"]:
-            temp_d = np.hstack(
-                [self.derivatives[:, :2], np.zeros((len(self.derivatives), 1))]
-            )
-            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
-            for d in temp_d:
-                self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
-                    self.fft_nodes, d, modes=temp_modes, unique=True
-                )
-        if self.method == "direct2":
-            temp_d = np.hstack(
-                [np.zeros((len(self.derivatives), 2)), self.derivatives[:, 2:]]
-            )
-            temp_modes = np.hstack(
-                [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
-            )
-            for d in temp_d:
-                self.matrices["direct2"][d[2]] = self.basis.evaluate(
-                    self.dft_nodes, d, modes=temp_modes, unique=True
-                )
-
-        self._built = True
+        self._derivatives = self.derivatives[sort_idx]
 
     def build_pinv(self):
         """Build the pseudoinverse for fitting."""
         if self.built_pinv:
             return
         rcond = None if self.rcond == "auto" else self.rcond
-        if self.method == "direct1":
+        if self.method in ["direct1", "jitable"]:
             A = self.basis.evaluate(self.grid.nodes, np.array([0, 0, 0]))
             self.matrices["pinv"] = (
                 scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)
@@ -437,90 +413,117 @@ class Transform(IOAble):
             )
         self._built_pinv = True
 
-    def transform(self, c, dr=0, dt=0, dz=0):
-        """Transform from spectral domain to physical.
+    def build(self):
+        """Build the transform matrices for each derivative order."""
+        if self.built:
+            return
+
+        if self.basis.num_modes == 0:
+            self._built = True
+            return
+
+        if self.method == "direct1":
+            for d in self.derivatives:
+                self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
+                    self.grid.nodes, d, unique=True
+                )
+
+        if self.method == "jitable":
+            for d in self.derivatives:
+                self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
+                    self.grid.nodes, d, unique=False
+                )
+
+        if self.method in ["fft", "direct2"]:
+            temp_d = np.hstack(
+                [self.derivatives[:, :2], np.zeros((len(self.derivatives), 1))]
+            )
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
+            for d in temp_d:
+                self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
+                    self.fft_nodes, d, modes=temp_modes, unique=True
+                )
+        if self.method == "direct2":
+            temp_d = np.hstack(
+                [np.zeros((len(self.derivatives), 2)), self.derivatives[:, 2:]]
+            )
+            temp_modes = np.hstack(
+                [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
+            )
+            for d in temp_d:
+                self.matrices["direct2"][d[2]] = self.basis.evaluate(
+                    self.dft_nodes, d, modes=temp_modes, unique=True
+                )
+
+        self._built = True
+
+    def change_derivatives(self, derivs, build=True):
+        """Change the order and updates the matrices accordingly.
+
+        Doesn't delete any old orders, only adds new ones if not already there
 
         Parameters
         ----------
-        c : ndarray, shape(num_coeffs,)
-            spectral coefficients, indexed to correspond to the spectral basis
-        dr : int
-            order of radial derivative
-        dt : int
-            order of poloidal derivative
-        dz : int
-            order of toroidal derivative
+        derivs : int or array-like
+              * if an int, order of derivatives needed (default=0)
+              * if an array, derivative orders specified explicitly.
+                shape should be (N,3), where each row is one set of partial derivatives
+                [dr, dt, dz]
 
-        Returns
-        -------
-        x : ndarray, shape(num_nodes,)
-            array of values of function at node locations
+        build : bool
+            whether to build transforms immediately or wait
+
         """
-        if not self.built:
-            raise RuntimeError(
-                "Transform must be precomputed with transform.build() before being used"
-            )
+        new_derivatives = self._get_derivatives(derivs)
+        new_not_in_old = (new_derivatives[:, None] == self.derivatives).all(-1).any(-1)
+        derivs_to_add = new_derivatives[~new_not_in_old]
+        self._derivatives = np.vstack([self.derivatives, derivs_to_add])
+        self._sort_derivatives()
 
-        if self.basis.num_modes != c.size:
-            raise ValueError(
-                colored(
-                    "Coefficients dimension ({}) is incompatible with ".format(c.size)
-                    + "the number of basis modes({})".format(self.basis.num_modes),
-                    "red",
-                )
-            )
+        if len(derivs_to_add):
+            # if we actually added derivatives and didn't build them, then it's not
+            # built
+            self._built = False
+        if build:
+            # we don't update self._built here because it is still built from before,
+            # but it still might have unbuilt matrices from new derivatives
+            self.build()
 
-        if len(c) == 0:
-            return np.zeros(self.grid.num_nodes)
+    def change_resolution(
+        self, grid=None, basis=None, build=True, build_pinv=False, method="auto"
+    ):
+        """Re-build the matrices with a new grid and basis.
 
-        if self.method == "direct1":
-            A = self.matrices["direct1"].get(dr, {}).get(dt, {}).get(dz, {})
-            if isinstance(A, dict):
-                raise ValueError(
-                    colored("Derivative orders are out of initialized bounds", "red")
-                )
-            return A @ c
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid of real space coordinates
+        basis : Basis
+            Spectral basis of modes
+        build : bool
+            whether to recompute matrices now or wait until requested
+        method : {"auto", "direct1", "direct2", "fft"}
+            method to use for computing transforms
 
-        elif self.method == "direct2":
-            A = self.matrices["fft"].get(dr, {}).get(dt, {})
-            B = self.matrices["direct2"].get(dz, {})
-            if isinstance(A, dict) or isinstance(B, dict):
-                raise ValueError(
-                    colored("Derivative orders are out of initialized bounds", "red")
-                )
-            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
-            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
-            cc = A @ c_mtrx
-            return (cc @ B.T).flatten(order="F")
+        """
+        if grid is None:
+            grid = self.grid
+        if basis is None:
+            basis = self.basis
 
-        elif self.method == "fft":
-            A = self.matrices["fft"].get(dr, {}).get(dt, {})
-            if isinstance(A, dict):
-                raise ValueError(
-                    colored("Derivative orders are out of initialized bounds", "red")
-                )
-            # reshape coefficients
-            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
-            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
-            # differentiate
-            c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)
-            # re-format in complex notation
-            c_real = jnp.pad(
-                (self.num_z_nodes / 2)
-                * (c_diff[:, self.N + 1 :] - 1j * c_diff[:, self.N - 1 :: -1]),
-                ((0, 0), (0, self.pad_dim)),
-                mode="constant",
-            )
-            c_cplx = jnp.hstack(
-                (
-                    self.num_z_nodes * c_diff[:, self.N, jnp.newaxis],
-                    c_real,
-                    jnp.fliplr(jnp.conj(c_real)),
-                )
-            )
-            # transform coefficients
-            c_fft = jnp.real(jnp.fft.ifft(c_cplx))
-            return (A @ c_fft).flatten(order="F")
+        if not self.grid.eq(grid):
+            self._grid = grid
+            self._built = False
+            self._built_pinv = False
+        if not self.basis.eq(basis):
+            self._basis = basis
+            self._built = False
+            self._built_pinv = False
+        self.method = method
+        if build:
+            self.build()
+        if build_pinv:
+            self.build_pinv()
 
     def fit(self, x):
         """Transform from physical domain to spectral using weighted least squares fit.
@@ -614,61 +617,90 @@ class Transform(IOAble):
             ).flatten()[self.fft_index]
             return b
 
-    def change_resolution(
-        self, grid=None, basis=None, build=True, build_pinv=False, method="auto"
-    ):
-        """Re-build the matrices with a new grid and basis.
+    def transform(self, c, dr=0, dt=0, dz=0):
+        """Transform from spectral domain to physical.
 
         Parameters
         ----------
-        grid : Grid
-            Collocation grid of real space coordinates
-        basis : Basis
-            Spectral basis of modes
-        build : bool
-            whether to recompute matrices now or wait until requested
-        method : {"auto", "direct1", "direct2", "fft"}
-            method to use for computing transforms
+        c : ndarray, shape(num_coeffs,)
+            spectral coefficients, indexed to correspond to the spectral basis
+        dr : int
+            order of radial derivative
+        dt : int
+            order of poloidal derivative
+        dz : int
+            order of toroidal derivative
 
+        Returns
+        -------
+        x : ndarray, shape(num_nodes,)
+            array of values of function at node locations
         """
-        if grid is None:
-            grid = self.grid
-        if basis is None:
-            basis = self.basis
+        if not self.built:
+            raise RuntimeError(
+                "Transform must be precomputed with transform.build() before being used"
+            )
 
-        if not self.grid.eq(grid):
-            self._grid = grid
-            self._built = False
-            self._built_pinv = False
-        if not self.basis.eq(basis):
-            self._basis = basis
-            self._built = False
-            self._built_pinv = False
-        self.method = method
-        if build:
-            self.build()
-        if build_pinv:
-            self.build_pinv()
+        if self.basis.num_modes != c.size:
+            raise ValueError(
+                colored(
+                    "Coefficients dimension ({}) is incompatible with ".format(c.size)
+                    + "the number of basis modes({})".format(self.basis.num_modes),
+                    "red",
+                )
+            )
 
-    @property
-    def grid(self):
-        """Grid : collocation grid for the transform."""
-        return self.__dict__.setdefault("_grid", None)
+        if len(c) == 0:
+            return np.zeros(self.grid.num_nodes)
 
-    @grid.setter
-    def grid(self, grid):
-        if not self.grid.eq(grid):
-            self._grid = grid
-            if self.method == "fft":
-                self._check_inputs_fft(self.grid, self.basis)
-            if self.method == "direct2":
-                self._check_inputs_direct2(self.grid, self.basis)
-            if self.built:
-                self._built = False
-                self.build()
-            if self.built_pinv:
-                self._built_pinv = False
-                self.build_pinv()
+        if self.method in ["direct1", "jitable"]:
+            A = self.matrices["direct1"].get(dr, {}).get(dt, {}).get(dz, {})
+            if isinstance(A, dict):
+                raise ValueError(
+                    colored("Derivative orders are out of initialized bounds", "red")
+                )
+            return A @ c
+
+        elif self.method == "direct2":
+            A = self.matrices["fft"].get(dr, {}).get(dt, {})
+            B = self.matrices["direct2"].get(dz, {})
+            if isinstance(A, dict) or isinstance(B, dict):
+                raise ValueError(
+                    colored("Derivative orders are out of initialized bounds", "red")
+                )
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
+            cc = A @ c_mtrx
+            return (cc @ B.T).flatten(order="F")
+
+        elif self.method == "fft":
+            A = self.matrices["fft"].get(dr, {}).get(dt, {})
+            if isinstance(A, dict):
+                raise ValueError(
+                    colored("Derivative orders are out of initialized bounds", "red")
+                )
+            # reshape coefficients
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
+            # differentiate
+            c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)
+            # re-format in complex notation
+            c_real = jnp.pad(
+                (self.num_z_nodes / 2)
+                * (c_diff[:, self.N + 1 :] - 1j * c_diff[:, self.N - 1 :: -1]),
+                ((0, 0), (0, self.pad_dim)),
+                mode="constant",
+            )
+            c_cplx = jnp.hstack(
+                (
+                    self.num_z_nodes * c_diff[:, self.N, jnp.newaxis],
+                    c_real,
+                    jnp.fliplr(jnp.conj(c_real)),
+                )
+            )
+            # transform coefficients
+            c_fft = jnp.real(jnp.fft.ifft(c_cplx))
+            return (A @ c_fft).flatten(order="F")
 
     @property
     def basis(self):
@@ -691,6 +723,16 @@ class Transform(IOAble):
                 self.build_pinv()
 
     @property
+    def built_pinv(self):
+        """bool: whether the pseudoinverse matrix has been built."""
+        return self.__dict__.setdefault("_built_pinv", False)
+
+    @property
+    def built(self):
+        """bool: whether the transform matrices have been built."""
+        return self.__dict__.setdefault("_built", False)
+
+    @property
     def derivatives(self):
         """Set of derivatives the transform can compute.
 
@@ -703,37 +745,25 @@ class Transform(IOAble):
         """
         return self._derivatives
 
-    def change_derivatives(self, derivs, build=True):
-        """Change the order and updates the matrices accordingly.
+    @property
+    def grid(self):
+        """Grid : collocation grid for the transform."""
+        return self.__dict__.setdefault("_grid", None)
 
-        Doesn't delete any old orders, only adds new ones if not already there
-
-        Parameters
-        ----------
-        derivs : int or array-like
-              * if an int, order of derivatives needed (default=0)
-              * if an array, derivative orders specified explicitly.
-                shape should be (N,3), where each row is one set of partial derivatives
-                [dr, dt, dz]
-
-        build : bool
-            whether to build transforms immediately or wait
-
-        """
-        new_derivatives = self._get_derivatives(derivs)
-        new_not_in_old = (new_derivatives[:, None] == self.derivatives).all(-1).any(-1)
-        derivs_to_add = new_derivatives[~new_not_in_old]
-        self._derivatives = np.vstack([self.derivatives, derivs_to_add])
-        self._sort_derivatives()
-
-        if len(derivs_to_add):
-            # if we actually added derivatives and didn't build them, then it's not
-            # built
-            self._built = False
-        if build:
-            # we don't update self._built here because it is still built from before,
-            # but it still might have unbuilt matrices from new derivatives
-            self.build()
+    @grid.setter
+    def grid(self, grid):
+        if not self.grid.eq(grid):
+            self._grid = grid
+            if self.method == "fft":
+                self._check_inputs_fft(self.grid, self.basis)
+            if self.method == "direct2":
+                self._check_inputs_direct2(self.grid, self.basis)
+            if self.built:
+                self._built = False
+                self.build()
+            if self.built_pinv:
+                self._built_pinv = False
+                self.build_pinv()
 
     @property
     def matrices(self):
@@ -741,41 +771,6 @@ class Transform(IOAble):
         if not hasattr(self, "_matrices"):
             self._matrices = self._get_matrices()
         return self._matrices
-
-    @property
-    def num_nodes(self):
-        """int: number of nodes in the collocation grid."""
-        return self.grid.num_nodes
-
-    @property
-    def num_modes(self):
-        """int: number of modes in the spectral basis."""
-        return self.basis.num_modes
-
-    @property
-    def nodes(self):
-        """ndarray: collocation nodes."""
-        return self.grid.nodes
-
-    @property
-    def modes(self):
-        """ndarray: spectral mode numbers."""
-        return self.basis.modes
-
-    @property
-    def built(self):
-        """bool: whether the transform matrices have been built."""
-        return self.__dict__.setdefault("_built", False)
-
-    @property
-    def built_pinv(self):
-        """bool: whether the pseudoinverse matrix has been built."""
-        return self.__dict__.setdefault("_built_pinv", False)
-
-    @property
-    def rcond(self):
-        """float: reciprocal condition number for inverse transform."""
-        return self.__dict__.setdefault("_rcond", "auto")
 
     @property
     def method(self):
@@ -797,18 +792,34 @@ class Transform(IOAble):
             self._check_inputs_direct2(self.grid, self.basis)
         elif method == "direct1":
             self._method = "direct1"
+        elif method == "jitable":
+            self._method = "jitable"
         else:
             raise ValueError("Unknown transform method: {}".format(method))
         if self.method != old_method:
             self._built = False
 
-    def __repr__(self):
-        """String form of the object."""
-        return (
-            type(self).__name__
-            + " at "
-            + str(hex(id(self)))
-            + " (method={}, basis={}, grid={})".format(
-                self.method, repr(self.basis), repr(self.grid)
-            )
-        )
+    @property
+    def modes(self):
+        """ndarray: spectral mode numbers."""
+        return self.basis.modes
+
+    @property
+    def nodes(self):
+        """ndarray: collocation nodes."""
+        return self.grid.nodes
+
+    @property
+    def num_modes(self):
+        """int: number of modes in the spectral basis."""
+        return self.basis.num_modes
+
+    @property
+    def num_nodes(self):
+        """int: number of nodes in the collocation grid."""
+        return self.grid.num_nodes
+
+    @property
+    def rcond(self):
+        """float: reciprocal condition number for inverse transform."""
+        return self.__dict__.setdefault("_rcond", "auto")

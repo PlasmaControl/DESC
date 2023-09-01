@@ -12,44 +12,6 @@ class TestDerivative:
     """Tests Derivative classes."""
 
     @pytest.mark.unit
-    def test_finite_diff_vec(self):
-        """Test finite differences of vector function."""
-
-        def test_fun(x, y, a):
-            return x * y + a
-
-        x = np.array([1, 5, 0.01, 200])
-        y = np.array([60, 1, 100, 0.02])
-        a = -2
-
-        jac = FiniteDiffDerivative(test_fun, argnum=0)
-        J = jac.compute(x, y, a)
-        correct_J = np.diag(y)
-
-        np.testing.assert_allclose(J, correct_J, atol=1e-8)
-
-    @pytest.mark.unit
-    def test_finite_diff_scalar(self):
-        """Test finite differences of scalar function."""
-
-        def test_fun(x, y, a):
-            return np.dot(x, y) + a
-
-        x = np.array([1, 5, 0.01, 200])
-        y = np.array([60, 1, 100, 0.02])
-        a = -2
-
-        jac = FiniteDiffDerivative(test_fun, argnum=0)
-        J = jac.compute(x, y, a)
-        correct_J = y
-
-        np.testing.assert_allclose(J, correct_J, atol=1e-8)
-
-        jac.argnum = 1
-        J = jac.compute(x, y, a)
-        np.testing.assert_allclose(J, x, atol=1e-8)
-
-    @pytest.mark.unit
     def test_auto_diff(self):
         """Test automatic differentiation."""
 
@@ -65,6 +27,22 @@ class TestDerivative:
         correct_J = np.diag(-np.sin(x) + y)
 
         np.testing.assert_allclose(J, correct_J, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_block_jacobian(self):
+        """Test calculation of jacobian using blocked method."""
+        rando = default_rng(seed=0)
+        A = rando.random((19, 17))
+
+        def fun(x):
+            return jnp.dot(A, x)
+
+        x = rando.random(17)
+
+        jac = AutoDiffDerivative(fun, block_size=4, shape=A.shape)
+        np.testing.assert_allclose(jac(x), A)
+        jac = AutoDiffDerivative(fun, num_blocks=3, shape=A.shape)
+        np.testing.assert_allclose(jac(x), A)
 
     @pytest.mark.unit
     def test_compare_AD_FD(self):
@@ -106,20 +84,42 @@ class TestDerivative:
         np.testing.assert_allclose(A1, A)
 
     @pytest.mark.unit
-    def test_block_jacobian(self):
-        """Test calculation of jacoiban using blocked method."""
-        rando = default_rng(seed=0)
-        A = rando.random((19, 17))
+    def test_finite_diff_scalar(self):
+        """Test finite differences of scalar function."""
 
-        def fun(x):
-            return jnp.dot(A, x)
+        def test_fun(x, y, a):
+            return np.dot(x, y) + a
 
-        x = rando.random(17)
+        x = np.array([1, 5, 0.01, 200])
+        y = np.array([60, 1, 100, 0.02])
+        a = -2
 
-        jac = AutoDiffDerivative(fun, block_size=4, shape=A.shape)
-        np.testing.assert_allclose(jac(x), A)
-        jac = AutoDiffDerivative(fun, num_blocks=3, shape=A.shape)
-        np.testing.assert_allclose(jac(x), A)
+        jac = FiniteDiffDerivative(test_fun, argnum=0)
+        J = jac.compute(x, y, a)
+        correct_J = y
+
+        np.testing.assert_allclose(J, correct_J, atol=1e-8)
+
+        jac.argnum = 1
+        J = jac.compute(x, y, a)
+        np.testing.assert_allclose(J, x, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_finite_diff_vec(self):
+        """Test finite differences of vector function."""
+
+        def test_fun(x, y, a):
+            return x * y + a
+
+        x = np.array([1, 5, 0.01, 200])
+        y = np.array([60, 1, 100, 0.02])
+        a = -2
+
+        jac = FiniteDiffDerivative(test_fun, argnum=0)
+        J = jac.compute(x, y, a)
+        correct_J = np.diag(y)
+
+        np.testing.assert_allclose(J, correct_J, atol=1e-8)
 
     @pytest.mark.unit
     def test_jac_looped(self):
@@ -176,22 +176,6 @@ class TestJVP:
         np.testing.assert_allclose(df, np.array([-342.0, -630.0, -918.0, -1206.0]))
 
     @pytest.mark.unit
-    def test_finitediff_jvp(self):
-        """Tests using FD for JVP calculation."""
-        df = FiniteDiffDerivative.compute_jvp(
-            self.fun, 0, self.dx, self.x, self.c1, self.c2
-        )
-        np.testing.assert_allclose(df, np.array([1554.0, 4038.0, 6522.0, 9006.0]))
-        df = FiniteDiffDerivative.compute_jvp(
-            self.fun, 1, self.dc1, self.x, self.c1, self.c2
-        )
-        np.testing.assert_allclose(df, np.array([10296.0, 26658.0, 43020.0, 59382.0]))
-        df = FiniteDiffDerivative.compute_jvp(
-            self.fun, (0, 2), (self.dx, self.dc2), self.x, self.c1, self.c2
-        )
-        np.testing.assert_allclose(df, np.array([-342.0, -630.0, -918.0, -1206.0]))
-
-    @pytest.mark.unit
     def test_autodiff_jvp2(self):
         """Tests using AD for 2nd order JVP calculation."""
         df = AutoDiffDerivative.compute_jvp2(
@@ -224,43 +208,6 @@ class TestJVP:
         )
         np.testing.assert_allclose(df, np.array([22368.0, 63066.0, 103764.0, 144462.0]))
         df = AutoDiffDerivative.compute_jvp2(
-            self.fun, 0, (1, 2), self.dx, (self.dc1, self.dc2), self.x, self.c1, self.c2
-        )
-        np.testing.assert_allclose(df, np.array([5808.0, 15564.0, 25320.0, 35076.0]))
-
-    @pytest.mark.unit
-    def test_finitediff_jvp2(self):
-        """Tests using FD for 2nd order JVP calculation."""
-        df = FiniteDiffDerivative.compute_jvp2(
-            self.fun, 0, 0, self.dx + 1, self.dx, self.x, self.c1, self.c2
-        )
-        np.testing.assert_allclose(df, np.array([1440.0, 3852.0, 6264.0, 8676.0]))
-        df = FiniteDiffDerivative.compute_jvp2(
-            self.fun, 1, 1, self.dc1 + 1, self.dc1, self.x, self.c1, self.c2
-        )
-        np.testing.assert_allclose(
-            df, np.array([56160.0, 147744.0, 239328.0, 330912.0])
-        )
-        df = FiniteDiffDerivative.compute_jvp2(
-            self.fun, 0, 2, self.dx, self.dc2, self.x, self.c1, self.c2
-        )
-        np.testing.assert_allclose(df, np.array([-1248.0, -3048.0, -4848.0, -6648.0]))
-        df = FiniteDiffDerivative.compute_jvp2(
-            self.fun, 0, (1, 2), self.dx, (self.dc1, self.dc2), self.x, self.c1, self.c2
-        )
-        np.testing.assert_allclose(df, np.array([5808.0, 15564.0, 25320.0, 35076.0]))
-        df = FiniteDiffDerivative.compute_jvp2(
-            self.fun,
-            (1, 2),
-            (1, 2),
-            (self.dc1, self.dc2),
-            (self.dc1, self.dc2),
-            self.x,
-            self.c1,
-            self.c2,
-        )
-        np.testing.assert_allclose(df, np.array([22368.0, 63066.0, 103764.0, 144462.0]))
-        df = FiniteDiffDerivative.compute_jvp2(
             self.fun, 0, (1, 2), self.dx, (self.dc1, self.dc2), self.x, self.c1, self.c2
         )
         np.testing.assert_allclose(df, np.array([5808.0, 15564.0, 25320.0, 35076.0]))
@@ -310,6 +257,59 @@ class TestJVP:
         np.testing.assert_allclose(
             df, np.array([-33858.0, -55584.0, -77310.0, -99036.0])
         )
+
+    @pytest.mark.unit
+    def test_finitediff_jvp(self):
+        """Tests using FD for JVP calculation."""
+        df = FiniteDiffDerivative.compute_jvp(
+            self.fun, 0, self.dx, self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, np.array([1554.0, 4038.0, 6522.0, 9006.0]))
+        df = FiniteDiffDerivative.compute_jvp(
+            self.fun, 1, self.dc1, self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, np.array([10296.0, 26658.0, 43020.0, 59382.0]))
+        df = FiniteDiffDerivative.compute_jvp(
+            self.fun, (0, 2), (self.dx, self.dc2), self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, np.array([-342.0, -630.0, -918.0, -1206.0]))
+
+    @pytest.mark.unit
+    def test_finitediff_jvp2(self):
+        """Tests using FD for 2nd order JVP calculation."""
+        df = FiniteDiffDerivative.compute_jvp2(
+            self.fun, 0, 0, self.dx + 1, self.dx, self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, np.array([1440.0, 3852.0, 6264.0, 8676.0]))
+        df = FiniteDiffDerivative.compute_jvp2(
+            self.fun, 1, 1, self.dc1 + 1, self.dc1, self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(
+            df, np.array([56160.0, 147744.0, 239328.0, 330912.0])
+        )
+        df = FiniteDiffDerivative.compute_jvp2(
+            self.fun, 0, 2, self.dx, self.dc2, self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, np.array([-1248.0, -3048.0, -4848.0, -6648.0]))
+        df = FiniteDiffDerivative.compute_jvp2(
+            self.fun, 0, (1, 2), self.dx, (self.dc1, self.dc2), self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, np.array([5808.0, 15564.0, 25320.0, 35076.0]))
+        df = FiniteDiffDerivative.compute_jvp2(
+            self.fun,
+            (1, 2),
+            (1, 2),
+            (self.dc1, self.dc2),
+            (self.dc1, self.dc2),
+            self.x,
+            self.c1,
+            self.c2,
+        )
+        np.testing.assert_allclose(df, np.array([22368.0, 63066.0, 103764.0, 144462.0]))
+        df = FiniteDiffDerivative.compute_jvp2(
+            self.fun, 0, (1, 2), self.dx, (self.dc1, self.dc2), self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, np.array([5808.0, 15564.0, 25320.0, 35076.0]))
 
     @pytest.mark.unit
     def test_finitediff_jvp3(self):

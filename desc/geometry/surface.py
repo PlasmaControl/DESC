@@ -12,6 +12,8 @@ from desc.utils import copy_coeffs
 
 from .core import Surface
 
+__all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
+
 
 class FourierRZToroidalSurface(Surface):
     """Toroidal surface represented by Fourier series in poloidal and toroidal angles.
@@ -41,12 +43,12 @@ class FourierRZToroidalSurface(Surface):
     """
 
     _io_attrs_ = Surface._io_attrs_ + [
-        "_NFP",
-        "_R_basis",
         "_R_lmn",
-        "_Z_basis",
         "_Z_lmn",
+        "_R_basis",
+        "_Z_basis",
         "rho",
+        "_NFP",
     ]
 
     def __init__(
@@ -369,7 +371,7 @@ class ZernikeRZToroidalSection(Surface):
         For L>0, the indexing scheme defines order of the basis functions:
 
         ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-        decreasing size, ending in a triagle shape. For L == M,
+        decreasing size, ending in a triangle shape. For L == M,
         the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
         to the bottom of the pyramid, increasing L while keeping M constant,
         giving a "house" shape
@@ -390,12 +392,12 @@ class ZernikeRZToroidalSection(Surface):
     """
 
     _io_attrs_ = Surface._io_attrs_ + [
-        "_R_basis",
         "_R_lmn",
-        "_spectral_indexing",
-        "_Z_basis",
         "_Z_lmn",
+        "_R_basis",
+        "_Z_basis",
         "zeta",
+        "_spectral_indexing",
     ]
 
     def __init__(
@@ -575,11 +577,6 @@ class ZernikeRZToroidalSection(Surface):
             )
 
     @property
-    def spectral_indexing(self):
-        """str: Type of spectral indexing for Zernike basis."""
-        return self._spectral_indexing
-
-    @property
     def Z_basis(self):
         """ZernikePolynomial: Spectral basis for Z."""
         return self._Z_basis
@@ -598,3 +595,11 @@ class ZernikeRZToroidalSection(Surface):
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "
                 + f"basis with {self.R_basis.num_modes} modes."
             )
+
+    @property
+    def spectral_indexing(self):
+        """str: Type of spectral indexing for Zernike basis."""
+        return self._spectral_indexing
+
+
+__all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]

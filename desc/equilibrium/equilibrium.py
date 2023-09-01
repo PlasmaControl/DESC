@@ -10,24 +10,18 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
+from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.utils import (
-    compress,
-    expand,
-    get_data_deps,
-    get_params,
-    get_profiles,
-    get_transforms,
-)
+from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -90,8 +84,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         + "Equilibrium or dictionary"
                     )
 
-    # dunder methods required by MutableSequence
-
     def __delitem__(self, i):
         del self._equilibria[i]
 
@@ -115,71 +107,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )
         self._equilibria.insert(i, new_item)
-
-    def solve_continuation(
-        self,
-        objective="force",
-        optimizer="lsq-exact",
-        pert_order=2,
-        ftol=None,
-        xtol=None,
-        gtol=None,
-        maxiter=100,
-        verbose=1,
-        checkpoint_path=None,
-    ):
-        """Solve for an equilibrium by continuation method.
-
-        Steps through an EquilibriaFamily, solving each equilibrium, and uses
-        pertubations to step between different profiles/boundaries.
-
-        Uses the previous step as an initial guess for each solution.
-
-        Parameters
-        ----------
-        eqfam : EquilibriaFamily or list of Equilibria
-            Equilibria to solve for at each step.
-        objective : str or ObjectiveFunction (optional)
-            function to solve for equilibrium solution
-        optimizer : str or Optimzer (optional)
-            optimizer to use
-        pert_order : int or array of int
-            order of perturbations to use. If array-like, should be same length as
-            family to specify different values for each step.
-        ftol, xtol, gtol : float or array-like of float
-            stopping tolerances for subproblem at each step. `None` will use defaults
-            for given optimizer.
-        maxiter : int or array-like of int
-            maximum number of iterations in each equilibrium subproblem.
-        verbose : integer
-            * 0: no output
-            * 1: summary of each iteration
-            * 2: as above plus timing information
-            * 3: as above plus detailed solver output
-        checkpoint_path : str or path-like
-            file to save checkpoint data (Default value = None)
-
-        Returns
-        -------
-        eqfam : EquilibriaFamily
-            family of equilibria for the intermediate steps, where the last member is
-            the final desired configuration,
-
-        """
-        from desc.continuation import solve_continuation
-
-        return solve_continuation(
-            self,
-            objective,
-            optimizer,
-            pert_order,
-            ftol,
-            xtol,
-            gtol,
-            maxiter,
-            verbose,
-            checkpoint_path,
-        )
 
     @classmethod
     def solve_continuation_automatic(
@@ -209,7 +136,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             Unsolved Equilibrium with the final desired boundary, profiles, resolution.
         objective : str or ObjectiveFunction (optional)
             function to solve for equilibrium solution
-        optimizer : str or Optimzer (optional)
+        optimizer : str or Optimizer (optional)
             optimizer to use
         pert_order : int
             order of perturbations to use.
@@ -254,6 +181,71 @@ class EquilibriaFamily(IOAble, MutableSequence):
             verbose,
             checkpoint_path,
             **kwargs,
+        )
+
+    def solve_continuation(
+        self,
+        objective="force",
+        optimizer="lsq-exact",
+        pert_order=2,
+        ftol=None,
+        xtol=None,
+        gtol=None,
+        maxiter=100,
+        verbose=1,
+        checkpoint_path=None,
+    ):
+        """Solve for an equilibrium by continuation method.
+
+        Steps through an EquilibriaFamily, solving each equilibrium, and uses
+        perturbations to step between different profiles/boundaries.
+
+        Uses the previous step as an initial guess for each solution.
+
+        Parameters
+        ----------
+        eqfam : EquilibriaFamily or list of Equilibria
+            Equilibria to solve for at each step.
+        objective : str or ObjectiveFunction (optional)
+            function to solve for equilibrium solution
+        optimizer : str or Optimizer (optional)
+            optimizer to use
+        pert_order : int or array of int
+            order of perturbations to use. If array-like, should be same length as
+            family to specify different values for each step.
+        ftol, xtol, gtol : float or array-like of float
+            stopping tolerances for subproblem at each step. `None` will use defaults
+            for given optimizer.
+        maxiter : int or array-like of int
+            maximum number of iterations in each equilibrium subproblem.
+        verbose : integer
+            * 0: no output
+            * 1: summary of each iteration
+            * 2: as above plus timing information
+            * 3: as above plus detailed solver output
+        checkpoint_path : str or path-like
+            file to save checkpoint data (Default value = None)
+
+        Returns
+        -------
+        eqfam : EquilibriaFamily
+            family of equilibria for the intermediate steps, where the last member is
+            the final desired configuration,
+
+        """
+        from desc.continuation import solve_continuation
+
+        return solve_continuation(
+            self,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            maxiter,
+            verbose,
+            checkpoint_path,
         )
 
     @property
@@ -341,35 +333,35 @@ class Equilibrium(IOAble):
     """
 
     _io_attrs_ = [
-        "_atomic_number",
-        "_axis",
-        "_bdry_mode",
-        "_current",
-        "_electron_density",
-        "_electron_temperature",
-        "_ion_temperature",
-        "_iota",
-        "_L",
-        "_L_basis",
-        "_L_grid",
-        "_L_lmn",
-        "_M",
-        "_M_grid",
-        "_N",
-        "_N_grid",
-        "_NFP",
-        "_node_pattern",
-        "_pressure",
-        "_Psi",
-        "_R_basis",
-        "_R_lmn",
-        "_R_sym",
-        "_spectral_indexing",
-        "_surface",
         "_sym",
-        "_Z_basis",
-        "_Z_lmn",
+        "_R_sym",
         "_Z_sym",
+        "_Psi",
+        "_NFP",
+        "_L",
+        "_M",
+        "_N",
+        "_R_lmn",
+        "_Z_lmn",
+        "_L_lmn",
+        "_R_basis",
+        "_Z_basis",
+        "_L_basis",
+        "_surface",
+        "_axis",
+        "_pressure",
+        "_iota",
+        "_current",
+        "_electron_temperature",
+        "_electron_density",
+        "_ion_temperature",
+        "_atomic_number",
+        "_spectral_indexing",
+        "_bdry_mode",
+        "_L_grid",
+        "_M_grid",
+        "_N_grid",
+        "_node_pattern",
     ]
 
     def __init__(
@@ -780,6 +772,10 @@ class Equilibrium(IOAble):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+        if self.current is not None and hasattr(self.current, "_get_transform"):
+            # Need to rebuild derivative matrices to get higher order derivatives
+            # on equilibrium's saved before GitHub pull request #586.
+            self.current._transform = self.current._get_transform(self.current.grid)
 
     def change_resolution(
         self,
@@ -859,6 +855,61 @@ class Equilibrium(IOAble):
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
+    def compute_flux_coords(
+        self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
+    ):
+        """Find the (rho, theta, zeta) that correspond to given (R, phi, Z).
+
+        Parameters
+        ----------
+        real_coords : ndarray, shape(k,3)
+            2D array of real space coordinates [R,phi,Z]. Each row is a different
+            point in space.
+        R_lmn, Z_lmn : ndarray
+            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
+        tol : float
+            Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
+        maxiter : int > 0
+            maximum number of Newton iterations
+        rhomin : float
+            minimum allowable value of rho (to avoid singularity at rho=0)
+
+        Returns
+        -------
+        flux_coords : ndarray, shape(k,3)
+            flux coordinates [rho,theta,zeta]. If Newton method doesn't converge for
+            a given coordinate (often because it is outside the plasma boundary),
+            nan will be returned for those values
+
+        """
+        return compute_flux_coords(
+            self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
+        )
+
+    def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
+        """Find geometric theta for given straight field line theta.
+
+        Parameters
+        ----------
+        flux_coords : ndarray, shape(k,3)
+            2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
+            point in space.
+        L_lmn : ndarray
+            spectral coefficients for lambda. Defaults to eq.L_lmn
+        tol : float
+            Stopping tolerance.
+        maxiter : int > 0
+            maximum number of Newton iterations
+
+        Returns
+        -------
+        coords : ndarray, shape(k,3)
+            coordinates [rho,theta,zeta]. If Newton method doesn't converge for
+            a given coordinate nan will be returned for those values
+
+        """
+        return compute_theta_coords(self, flux_coords, L_lmn, tol, maxiter)
+
     def compute(
         self,
         names,
@@ -898,6 +949,11 @@ class Equilibrium(IOAble):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
 
         if params is None:
             params = get_params(names, obj=self, has_axis=grid.axis.size)
@@ -971,9 +1027,9 @@ class Equilibrium(IOAble):
                 data=None,
                 **kwargs,
             )
-            # need to make this data broadcastable with the data on the original grid
+            # need to make this data broadcast with the data on the original grid
             data1d = {
-                key: expand(grid, compress(grid1d, val))
+                key: grid.expand(grid1d.compress(val))
                 for key, val in data1d.items()
                 if key in dep1d
             }
@@ -992,61 +1048,6 @@ class Equilibrium(IOAble):
             **kwargs,
         )
         return data
-
-    def compute_flux_coords(
-        self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
-    ):
-        """Find the (rho, theta, zeta) that correspond to given (R, phi, Z).
-
-        Parameters
-        ----------
-        real_coords : ndarray, shape(k,3)
-            2D array of real space coordinates [R,phi,Z]. Each row is a different
-            point in space.
-        R_lmn, Z_lmn : ndarray
-            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
-        tol : float
-            Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
-        maxiter : int > 0
-            maximum number of Newton iterations
-        rhomin : float
-            minimum allowable value of rho (to avoid singularity at rho=0)
-
-        Returns
-        -------
-        flux_coords : ndarray, shape(k,3)
-            flux coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-            a given coordinate (often because it is outside the plasma boundary),
-            nan will be returned for those values
-
-        """
-        return compute_flux_coords(
-            self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
-        )
-
-    def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
-        """Find geometric theta for given straight field line theta.
-
-        Parameters
-        ----------
-        flux_coords : ndarray, shape(k,3)
-            2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-            point in space.
-        L_lmn : ndarray
-            spectral coefficients for lambda. Defaults to eq.L_lmn
-        tol : float
-            Stopping tolerance.
-        maxiter : int > 0
-            maximum number of Newton iterations
-
-        Returns
-        -------
-        coords : ndarray, shape(k,3)
-            coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-            a given coordinate nan will be returned for those values
-
-        """
-        return compute_theta_coords(self, flux_coords, L_lmn, tol, maxiter)
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""
@@ -1101,25 +1102,24 @@ class Equilibrium(IOAble):
             if ntheta is None:
                 ntheta = 2 * M + 1
 
-            inputs = {}
-            inputs["Psi"] = np.pi * r**2 * na_eq.Bbar
-            inputs["NFP"] = na_eq.nfp
-            inputs["L"] = L
-            inputs["M"] = M
-            inputs["N"] = N
-            inputs["sym"] = not na_eq.lasym
-            inputs["spectral_indexing "] = spectral_indexing
-            inputs["pressure"] = np.array(
-                [[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]
-            )
-            inputs["iota"] = None
-            inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]])
-            inputs["axis"] = FourierRZCurve(
-                R_n=np.concatenate((np.flipud(na_eq.rs[1:]), na_eq.rc)),
-                Z_n=np.concatenate((np.flipud(na_eq.zs[1:]), na_eq.zc)),
-                NFP=na_eq.nfp,
-            )
-            inputs["surface"] = None
+            inputs = {
+                "Psi": np.pi * r**2 * na_eq.Bbar,
+                "NFP": na_eq.nfp,
+                "L": L,
+                "M": M,
+                "N": N,
+                "sym": not na_eq.lasym,
+                "spectral_indexing ": spectral_indexing,
+                "pressure": np.array([[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]),
+                "iota": None,
+                "current": np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]]),
+                "axis": FourierRZCurve(
+                    R_n=np.concatenate((np.flipud(na_eq.rs[1:]), na_eq.rc)),
+                    Z_n=np.concatenate((np.flipud(na_eq.zs[1:]), na_eq.zc)),
+                    NFP=na_eq.nfp,
+                ),
+                "surface": None,
+            }
         except AttributeError as e:
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
 
@@ -1160,7 +1160,6 @@ class Equilibrium(IOAble):
         Z_1D = np.zeros((grid.num_nodes,))
         L_1D = np.zeros((grid.num_nodes,))
         for rho_i in rho:
-            idx = idx = np.where(grid.nodes[:, 0] == rho_i)[0]
             R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
             phi_cyl_ax = np.linspace(
                 0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False
@@ -1168,6 +1167,7 @@ class Equilibrium(IOAble):
             nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
             phi_B = phi_cyl_ax + nu_B_ax
             nu_B = phi_B - phi0_2D
+            idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
             R_1D[idx] = R_2D.flatten(order="F")
             Z_1D[idx] = Z_2D.flatten(order="F")
             L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
@@ -1236,7 +1236,7 @@ class Equilibrium(IOAble):
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
         x = data[name]
-        x = compress(grid, x, surface_label="rho")
+        x = grid.compress(x, surface_label="rho")
         return SplineProfile(
             x, grid.nodes[grid.unique_rho_idx, 0], grid=grid, name=name
         )
@@ -1397,7 +1397,7 @@ class Equilibrium(IOAble):
             same as the compute function data key
         guess : None or ndarray, shape(k,3)
             Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
-            coresponding to coords in inbasis. If None, heuristics are used based on
+            corresponding to coords in inbasis. If None, heuristics are used based on
             in basis and a nearest neighbor search on a coarse grid.
         period : tuple of float
             Assumed periodicity for each quantity in inbasis.
@@ -1731,7 +1731,6 @@ class Equilibrium(IOAble):
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
 
-
         """
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
@@ -1841,6 +1840,234 @@ class Equilibrium(IOAble):
         return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy)
 
     @property
+    def L_basis(self):
+        """FourierZernikeBasis: Spectral basis for lambda."""
+        return self._L_basis
+
+    @property
+    def L_grid(self):
+        """int: Radial resolution of grid in real space."""
+        return self._L_grid
+
+    @L_grid.setter
+    def L_grid(self, L_grid):
+        if self.L_grid != L_grid:
+            self._L_grid = L_grid
+
+    @property
+    def L_lmn(self):
+        """ndarray: Spectral coefficients of lambda."""
+        return self._L_lmn
+
+    @L_lmn.setter
+    def L_lmn(self, L_lmn):
+        L_lmn = jnp.atleast_1d(L_lmn)
+        errorif(
+            L_lmn.size != self._L_lmn.size,
+            ValueError,
+            "L_lmn should have the same size as L_basis, "
+            + f"got {len(L_lmn)} for basis with {self.L_basis.num_modes} modes",
+        )
+        self._L_lmn = L_lmn
+
+    @property
+    def L(self):
+        """int: Maximum radial mode number."""
+        return self._L
+
+    @L.setter
+    def L(self, L):
+        _assert_nonnegint(L, "L")
+        self.change_resolution(L=L)
+
+    @property
+    def M_grid(self):
+        """int: Poloidal resolution of grid in real space."""
+        return self._M_grid
+
+    @M_grid.setter
+    def M_grid(self, M_grid):
+        if self.M_grid != M_grid:
+            self._M_grid = M_grid
+
+    @property
+    def M(self):
+        """int: Maximum poloidal fourier mode number."""
+        return self._M
+
+    @M.setter
+    def M(self, M):
+        _assert_nonnegint(M, "M")
+        self.change_resolution(M=M)
+
+    @property
+    def N_grid(self):
+        """int: Toroidal resolution of grid in real space."""
+        return self._N_grid
+
+    @N_grid.setter
+    def N_grid(self, N_grid):
+        if self.N_grid != N_grid:
+            self._N_grid = N_grid
+
+    @property
+    def N(self):
+        """int: Maximum toroidal fourier mode number."""
+        return self._N
+
+    @N.setter
+    def N(self, N):
+        _assert_nonnegint(N, "N")
+        self.change_resolution(N=N)
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @NFP.setter
+    def NFP(self, NFP):
+        assert (
+            isinstance(NFP, numbers.Real) and (NFP == int(NFP)) and (NFP > 0)
+        ), f"NFP should be a positive integer, got {type(NFP)}"
+        self.change_resolution(NFP=NFP)
+
+    @property
+    def Psi(self):
+        """float: Total toroidal flux within the last closed flux surface in Webers."""
+        return self._Psi
+
+    @Psi.setter
+    def Psi(self, Psi):
+        self._Psi = float(Psi)
+
+    @property
+    def R_basis(self):
+        """FourierZernikeBasis: Spectral basis for R."""
+        return self._R_basis
+
+    @property
+    def R_lmn(self):
+        """ndarray: Spectral coefficients of R."""
+        return self._R_lmn
+
+    @R_lmn.setter
+    def R_lmn(self, R_lmn):
+        R_lmn = jnp.atleast_1d(R_lmn)
+        errorif(
+            R_lmn.size != self._R_lmn.size,
+            ValueError,
+            "R_lmn should have the same size as R_basis, "
+            + f"got {len(R_lmn)} for basis with {self.R_basis.num_modes} modes",
+        )
+        self._R_lmn = R_lmn
+
+    @property
+    def Ra_n(self):
+        """ndarray: R coefficients for axis Fourier series."""
+        return self.axis.R_n
+
+    @Ra_n.setter
+    def Ra_n(self, Ra_n):
+        self.axis.R_n = Ra_n
+
+    @property
+    def Rb_lmn(self):
+        """ndarray: Spectral coefficients of R at the boundary."""
+        return self.surface.R_lmn
+
+    @Rb_lmn.setter
+    def Rb_lmn(self, Rb_lmn):
+        self.surface.R_lmn = Rb_lmn
+
+    @property
+    def Te_l(self):
+        """ndarray: Coefficients of electron temperature profile."""
+        return (
+            np.empty(0)
+            if self.electron_temperature is None
+            else self.electron_temperature.params
+        )
+
+    @Te_l.setter
+    def Te_l(self, Te_l):
+        errorif(
+            self.electron_temperature is None,
+            ValueError,
+            "Attempt to set electron temperature on an equilibrium with fixed pressure",
+        )
+        self.electron_temperature.params = Te_l
+
+    @property
+    def Ti_l(self):
+        """ndarray: Coefficients of ion temperature profile."""
+        return (
+            np.empty(0) if self.ion_temperature is None else self.ion_temperature.params
+        )
+
+    @Ti_l.setter
+    def Ti_l(self, Ti_l):
+        errorif(
+            self.ion_temperature is None,
+            ValueError,
+            "Attempt to set ion temperature on an equilibrium with fixed pressure",
+        )
+        self.ion_temperature.params = Ti_l
+
+    @property
+    def Z_basis(self):
+        """FourierZernikeBasis: Spectral basis for Z."""
+        return self._Z_basis
+
+    @property
+    def Z_lmn(self):
+        """ndarray: Spectral coefficients of Z."""
+        return self._Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, Z_lmn):
+        Z_lmn = jnp.atleast_1d(Z_lmn)
+        errorif(
+            Z_lmn.size != self._Z_lmn.size,
+            ValueError,
+            "Z_lmn should have the same size as Z_basis, "
+            + f"got {len(Z_lmn)} for basis with {self.Z_basis.num_modes} modes",
+        )
+        self._Z_lmn = Z_lmn
+
+    @property
+    def Za_n(self):
+        """ndarray: Z coefficients for axis Fourier series."""
+        return self.axis.Z_n
+
+    @Za_n.setter
+    def Za_n(self, Za_n):
+        self.axis.Z_n = Za_n
+
+    @property
+    def Zb_lmn(self):
+        """ndarray: Spectral coefficients of Z at the boundary."""
+        return self.surface.Z_lmn
+
+    @Zb_lmn.setter
+    def Zb_lmn(self, Zb_lmn):
+        self.surface.Z_lmn = Zb_lmn
+
+    @property
+    def Zeff_l(self):
+        """ndarray: Coefficients of effective atomic number profile."""
+        return np.empty(0) if self.atomic_number is None else self.atomic_number.params
+
+    @Zeff_l.setter
+    def Zeff_l(self, Zeff_l):
+        errorif(
+            self.atomic_number is None,
+            ValueError,
+            "Attempt to set atomic number on an equilibrium with fixed pressure",
+        )
+        self.atomic_number.params = Zeff_l
+
+    @property
     def atomic_number(self):
         """Profile: Effective atomic number (Z_eff) profile."""
         return self._atomic_number
@@ -1945,80 +2172,6 @@ class Equilibrium(IOAble):
         self._iota = parse_profile(new, "iota")
 
     @property
-    def L(self):
-        """int: Maximum radial mode number."""
-        return self._L
-
-    @L.setter
-    def L(self, L):
-        _assert_nonnegint(L, "L")
-        self.change_resolution(L=L)
-
-    @property
-    def L_basis(self):
-        """FourierZernikeBasis: Spectral basis for lambda."""
-        return self._L_basis
-
-    @property
-    def L_grid(self):
-        """int: Radial resolution of grid in real space."""
-        return self._L_grid
-
-    @L_grid.setter
-    def L_grid(self, L_grid):
-        if self.L_grid != L_grid:
-            self._L_grid = L_grid
-
-    @property
-    def L_lmn(self):
-        """ndarray: Spectral coefficients of lambda."""
-        return self._L_lmn
-
-    @L_lmn.setter
-    def L_lmn(self, L_lmn):
-        self._L_lmn[:] = L_lmn
-
-    @property
-    def M(self):
-        """int: Maximum poloidal fourier mode number."""
-        return self._M
-
-    @M.setter
-    def M(self, M):
-        _assert_nonnegint(M, "M")
-        self.change_resolution(M=M)
-
-    @property
-    def M_grid(self):
-        """int: Poloidal resolution of grid in real space."""
-        return self._M_grid
-
-    @M_grid.setter
-    def M_grid(self, M_grid):
-        if self.M_grid != M_grid:
-            self._M_grid = M_grid
-
-    @property
-    def N(self):
-        """int: Maximum toroidal fourier mode number."""
-        return self._N
-
-    @N.setter
-    def N(self, N):
-        _assert_nonnegint(N, "N")
-        self.change_resolution(N=N)
-
-    @property
-    def N_grid(self):
-        """int: Toroidal resolution of grid in real space."""
-        return self._N_grid
-
-    @N_grid.setter
-    def N_grid(self, N_grid):
-        if self.N_grid != N_grid:
-            self._N_grid = N_grid
-
-    @property
     def ne_l(self):
         """ndarray: Coefficients of electron density profile."""
         return (
@@ -2035,18 +2188,6 @@ class Equilibrium(IOAble):
             "Attempt to set electron density on an equilibrium with fixed pressure",
         )
         self.electron_density.params = ne_l
-
-    @property
-    def NFP(self):
-        """int: Number of (toroidal) field periods."""
-        return self._NFP
-
-    @NFP.setter
-    def NFP(self, NFP):
-        assert (
-            isinstance(NFP, numbers.Real) and (NFP == int(NFP)) and (NFP > 0)
-        ), f"NFP should be a positive integer, got {type(NFP)}"
-        self.change_resolution(NFP=NFP)
 
     @property
     def node_pattern(self):
@@ -2075,47 +2216,6 @@ class Equilibrium(IOAble):
     @pressure.setter
     def pressure(self, new):
         self._pressure = parse_profile(new, "pressure")
-
-    @property
-    def Psi(self):
-        """float: Total toroidal flux within the last closed flux surface in Webers."""
-        return self._Psi
-
-    @Psi.setter
-    def Psi(self, Psi):
-        self._Psi = float(Psi)
-
-    @property
-    def R_basis(self):
-        """FourierZernikeBasis: Spectral basis for R."""
-        return self._R_basis
-
-    @property
-    def R_lmn(self):
-        """ndarray: Spectral coefficients of R."""
-        return self._R_lmn
-
-    @R_lmn.setter
-    def R_lmn(self, R_lmn):
-        self._R_lmn[:] = R_lmn
-
-    @property
-    def Ra_n(self):
-        """ndarray: R coefficients for axis Fourier series."""
-        return self.axis.R_n
-
-    @Ra_n.setter
-    def Ra_n(self, Ra_n):
-        self.axis.R_n = Ra_n
-
-    @property
-    def Rb_lmn(self):
-        """ndarray: Spectral coefficients of R at the boundary."""
-        return self.surface.R_lmn
-
-    @Rb_lmn.setter
-    def Rb_lmn(self, Rb_lmn):
-        self.surface.R_lmn = Rb_lmn
 
     @property
     def resolution(self):
@@ -2158,83 +2258,3 @@ class Equilibrium(IOAble):
     def sym(self):
         """bool: Whether this equilibrium is stellarator symmetric."""
         return self._sym
-
-    @property
-    def Te_l(self):
-        """ndarray: Coefficients of electron temperature profile."""
-        return (
-            np.empty(0)
-            if self.electron_temperature is None
-            else self.electron_temperature.params
-        )
-
-    @Te_l.setter
-    def Te_l(self, Te_l):
-        errorif(
-            self.electron_temperature is None,
-            ValueError,
-            "Attempt to set electron temperature on an equilibrium with fixed pressure",
-        )
-        self.electron_temperature.params = Te_l
-
-    @property
-    def Ti_l(self):
-        """ndarray: Coefficients of ion temperature profile."""
-        return (
-            np.empty(0) if self.ion_temperature is None else self.ion_temperature.params
-        )
-
-    @Ti_l.setter
-    def Ti_l(self, Ti_l):
-        errorif(
-            self.ion_temperature is None,
-            ValueError,
-            "Attempt to set ion temperature on an equilibrium with fixed pressure",
-        )
-        self.ion_temperature.params = Ti_l
-
-    @property
-    def Z_basis(self):
-        """FourierZernikeBasis: Spectral basis for Z."""
-        return self._Z_basis
-
-    @property
-    def Z_lmn(self):
-        """ndarray: Spectral coefficients of Z."""
-        return self._Z_lmn
-
-    @Z_lmn.setter
-    def Z_lmn(self, Z_lmn):
-        self._Z_lmn[:] = Z_lmn
-
-    @property
-    def Za_n(self):
-        """ndarray: Z coefficients for axis Fourier series."""
-        return self.axis.Z_n
-
-    @Za_n.setter
-    def Za_n(self, Za_n):
-        self.axis.Z_n = Za_n
-
-    @property
-    def Zb_lmn(self):
-        """ndarray: Spectral coefficients of Z at the boundary."""
-        return self.surface.Z_lmn
-
-    @Zb_lmn.setter
-    def Zb_lmn(self, Zb_lmn):
-        self.surface.Z_lmn = Zb_lmn
-
-    @property
-    def Zeff_l(self):
-        """ndarray: Coefficients of effective atomic number profile."""
-        return np.empty(0) if self.atomic_number is None else self.atomic_number.params
-
-    @Zeff_l.setter
-    def Zeff_l(self, Zeff_l):
-        errorif(
-            self.atomic_number is None,
-            ValueError,
-            "Attempt to set atomic number on an equilibrium with fixed pressure",
-        )
-        self.atomic_number.params = Zeff_l

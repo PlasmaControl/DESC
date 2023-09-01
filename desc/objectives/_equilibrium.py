@@ -192,7 +192,7 @@ class CurrentDensity(_Objective):
 class Energy(_Objective):
     """MHD energy.
 
-    W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV  (J)
+    W = integral( ||B||^2 / (2*mu0) + p / (gamma - 1) ) dV  (J)
 
     Parameters
     ----------

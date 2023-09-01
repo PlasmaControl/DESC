@@ -10,57 +10,85 @@ from desc.grid import Grid, LinearGrid
 from desc.vmec import VMECIO
 
 
-def compute_coords(equil, Nr=10, Nt=8, Nz=None):
-    """Computes coordinate values from a given equilibrium."""
-    if Nz is None and equil.N == 0:
-        Nz = 1
-    elif Nz is None:
-        Nz = 6
+def area_difference_desc(eq1, eq2, Nr=10, Nt=8, Nz=None):
+    """Compute average normalized area difference between two DESC equilibria.
 
-    num_theta = 1000
-    num_rho = 1000
+    Parameters
+    ----------
+    eq1, eq2 : Equilibrium
+        desc equilibria to compare
+    Nr : int, optional
+        Number of radial surfaces to average over
+    Nt : int, optional
+        Number of vartheta contours to compare
+    Nz : int, optional
+        Number of zeta planes to compare. If None, use 1 plane for axisymmetric cases
+        or 6 for non-axisymmetric.
 
-    # flux surfaces to plot
-    rr = np.linspace(1, 0, Nr, endpoint=False)[::-1]
-    rt = np.linspace(0, 2 * np.pi, num_theta)
-    rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
+    Returns
+    -------
+    area_rho : ndarray, shape(Nr, Nz)
+        normalized area difference of rho contours, computed as the symmetric
+        difference divided by the intersection
+    area_theta : ndarray, shape(Nt, Nz)
+        normalized area difference between vartheta contours, computed as the area
+        of the polygon created by closing the two vartheta contours divided by the
+        perimeter squared
 
-    # straight field-line angles to plot
-    tr = np.linspace(0, 1, num_rho)
-    tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
-    tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
+    """
+    Rr1, Zr1, Rv1, Zv1 = compute_coords(eq1, Nr=Nr, Nt=Nt, Nz=Nz)
+    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq2, Nr=Nr, Nt=Nt, Nz=Nz)
 
-    # Note: theta* (also known as vartheta) is the poloidal straight field-line
-    # angle in PEST-like flux coordinates
+    area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+    return area_rho, area_theta
 
-    # find theta angles corresponding to desired theta* angles
-    v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
-    r_coords = equil.compute(["R", "Z"], grid=r_grid)
-    v_coords = equil.compute(["R", "Z"], grid=v_grid)
 
-    # rho contours
-    Rr1 = r_coords["R"].reshape(
-        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
-    )
-    Rr1 = np.swapaxes(Rr1, 0, 1)
-    Zr1 = r_coords["Z"].reshape(
-        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
-    )
-    Zr1 = np.swapaxes(Zr1, 0, 1)
+def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, Nz=None, **kwargs):
+    """Compute average normalized area difference between VMEC and DESC equilibria.
 
-    # vartheta contours
-    Rv1 = v_coords["R"].reshape(
-        (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
-    )
-    Rv1 = np.swapaxes(Rv1, 0, 1)
-    Zv1 = v_coords["Z"].reshape(
-        (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
-    )
-    Zv1 = np.swapaxes(Zv1, 0, 1)
+    Parameters
+    ----------
+    equil : Equilibrium
+        desc equilibrium to compare
+    vmec_data : dict
+        dictionary of vmec outputs
+    Nr : int, optional
+        number of radial surfaces to average over
+    Nt : int, optional
+        number of vartheta contours to compare
+    Nz : int, optional
+        Number of zeta planes to compare. If None, use 1 plane for axisymmetric cases
+        or 6 for non-axisymmetric.
 
-    return Rr1, Zr1, Rv1, Zv1
+    Returns
+    -------
+    area_rho : ndarray, shape(Nz, Nr)
+        normalized area difference of rho contours, computed as the symmetric
+        difference divided by the intersection
+    area_theta : ndarray, shape(Nt, Nz)
+        normalized area difference between vartheta contours, computed as the area
+        of the polygon created by closing the two vartheta contours divided by the
+        perimeter squared
+
+    """
+    # 1e-3 tolerance seems reasonable for testing, similar to comparison by eye
+    if isinstance(vmec_data, (str, os.PathLike)):
+        vmec_data = VMECIO.read_vmec_output(vmec_data)
+
+    signgs = vmec_data["signgs"]
+    coords = VMECIO.compute_coord_surfaces(equil, vmec_data, Nr, Nt, Nz, **kwargs)
+
+    Rr1 = coords["Rr_desc"]
+    Zr1 = coords["Zr_desc"]
+    Rv1 = coords["Rv_desc"]
+    Zv1 = coords["Zv_desc"]
+    Rr2 = coords["Rr_vmec"]
+    Zr2 = coords["Zr_vmec"]
+    # need to reverse the order of these due to different sign conventions for theta
+    Rv2 = coords["Rv_vmec"][::signgs]
+    Zv2 = coords["Zv_vmec"][::signgs]
+    area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+    return area_rho, area_theta
 
 
 def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
@@ -137,82 +165,54 @@ def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
     return area_rho, area_theta
 
 
-def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, Nz=None, **kwargs):
-    """Compute average normalized area difference between VMEC and DESC equilibria.
+def compute_coords(equil, Nr=10, Nt=8, Nz=None):
+    """Computes coordinate values from a given equilibrium."""
+    if Nz is None and equil.N == 0:
+        Nz = 1
+    elif Nz is None:
+        Nz = 6
 
-    Parameters
-    ----------
-    equil : Equilibrium
-        desc equilibrium to compare
-    vmec_data : dict
-        dictionary of vmec outputs
-    Nr : int, optional
-        number of radial surfaces to average over
-    Nt : int, optional
-        number of vartheta contours to compare
-    Nz : int, optional
-        Number of zeta planes to compare. If None, use 1 plane for axisymmetric cases
-        or 6 for non-axisymmetric.
+    num_theta = 1000
+    num_rho = 1000
 
-    Returns
-    -------
-    area_rho : ndarray, shape(Nz, Nr)
-        normalized area difference of rho contours, computed as the symmetric
-        difference divided by the intersection
-    area_theta : ndarray, shape(Nt, Nz)
-        normalized area difference between vartheta contours, computed as the area
-        of the polygon created by closing the two vartheta contours divided by the
-        perimeter squared
+    # flux surfaces to plot
+    rr = np.linspace(1, 0, Nr, endpoint=False)[::-1]
+    rt = np.linspace(0, 2 * np.pi, num_theta)
+    rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
+    r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
 
-    """
-    # 1e-3 tolerance seems reasonable for testing, similar to comparison by eye
-    if isinstance(vmec_data, (str, os.PathLike)):
-        vmec_data = VMECIO.read_vmec_output(vmec_data)
+    # straight field-line angles to plot
+    tr = np.linspace(0, 1, num_rho)
+    tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
+    tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
+    t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
 
-    signgs = vmec_data["signgs"]
-    coords = VMECIO.compute_coord_surfaces(equil, vmec_data, Nr, Nt, Nz, **kwargs)
+    # Note: theta* (also known as vartheta) is the poloidal straight field-line
+    # angle in PEST-like flux coordinates
 
-    Rr1 = coords["Rr_desc"]
-    Zr1 = coords["Zr_desc"]
-    Rv1 = coords["Rv_desc"]
-    Zv1 = coords["Zv_desc"]
-    Rr2 = coords["Rr_vmec"]
-    Zr2 = coords["Zr_vmec"]
-    # need to reverse the order of these due to different sign conventions for theta
-    Rv2 = coords["Rv_vmec"][::signgs]
-    Zv2 = coords["Zv_vmec"][::signgs]
-    area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
-    return area_rho, area_theta
+    # find theta angles corresponding to desired theta* angles
+    v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
+    r_coords = equil.compute(["R", "Z"], grid=r_grid)
+    v_coords = equil.compute(["R", "Z"], grid=v_grid)
 
+    # rho contours
+    Rr1 = r_coords["R"].reshape(
+        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+    )
+    Rr1 = np.swapaxes(Rr1, 0, 1)
+    Zr1 = r_coords["Z"].reshape(
+        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+    )
+    Zr1 = np.swapaxes(Zr1, 0, 1)
 
-def area_difference_desc(eq1, eq2, Nr=10, Nt=8, Nz=None):
-    """Compute average normalized area difference between two DESC equilibria.
+    # vartheta contours
+    Rv1 = v_coords["R"].reshape(
+        (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+    )
+    Rv1 = np.swapaxes(Rv1, 0, 1)
+    Zv1 = v_coords["Z"].reshape(
+        (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+    )
+    Zv1 = np.swapaxes(Zv1, 0, 1)
 
-    Parameters
-    ----------
-    eq1, eq2 : Equilibrium
-        desc equilibria to compare
-    Nr : int, optional
-        Number of radial surfaces to average over
-    Nt : int, optional
-        Number of vartheta contours to compare
-    Nz : int, optional
-        Number of zeta planes to compare. If None, use 1 plane for axisymmetric cases
-        or 6 for non-axisymmetric.
-
-    Returns
-    -------
-    area_rho : ndarray, shape(Nr, Nz)
-        normalized area difference of rho contours, computed as the symmetric
-        difference divided by the intersection
-    area_theta : ndarray, shape(Nt, Nz)
-        normalized area difference between vartheta contours, computed as the area
-        of the polygon created by closing the two vartheta contours divided by the
-        perimeter squared
-
-    """
-    Rr1, Zr1, Rv1, Zv1 = compute_coords(eq1, Nr=Nr, Nt=Nt, Nz=Nz)
-    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq2, Nr=Nr, Nt=Nt, Nz=Nz)
-
-    area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
-    return area_rho, area_theta
+    return Rr1, Zr1, Rv1, Zv1

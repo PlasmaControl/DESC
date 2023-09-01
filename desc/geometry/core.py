@@ -15,14 +15,14 @@ from desc.compute.utils import (
     get_params,
     get_transforms,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 
 
 class Curve(IOAble, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
-    _io_attrs_ = ["_name", "rotmat", "shift"]
+    _io_attrs_ = ["_name", "shift", "rotmat"]
 
     def __init__(self, name=""):
         self.shift = jnp.array([0, 0, 0])
@@ -69,14 +69,23 @@ class Curve(IOAble, ABC):
             Computed quantity and intermediate variables.
 
         """
+        # set a default number of points for the SplineXYZCurve
+        N = self.N if hasattr(self, "N") else self.X.size
         if isinstance(names, str):
             names = [names]
         if grid is None:
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=True)
-        if isinstance(grid, numbers.Integral):
+            grid = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=True)
+        elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1
             grid = LinearGrid(N=grid, NFP=NFP, endpoint=True)
+        elif hasattr(grid, "NFP"):
+            NFP = grid.NFP
+        else:
+            raise TypeError(
+                "must pass in a Grid object or an integer for argument grid!"
+                f" instead got type {type(grid)}"
+            )
 
         if params is None:
             params = get_params(names, obj=self)
@@ -95,11 +104,11 @@ class Curve(IOAble, ABC):
         ]
         calc0d = bool(len(dep0d))
         # see if the grid we're already using will work for desired qtys
-        if calc0d and (grid.N >= 2 * self.N + 5) and isinstance(grid, LinearGrid):
+        if calc0d and (grid.N >= 2 * N + 5) and isinstance(grid, LinearGrid):
             calc0d = False
 
         if calc0d:
-            grid0d = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=True)
+            grid0d = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=True)
             data0d = compute_fun(
                 self,
                 dep0d,
@@ -136,6 +145,75 @@ class Curve(IOAble, ABC):
         self.rotmat = R @ self.rotmat
         self.shift = self.shift @ R.T
 
+    def to_FourierXYZCurve(self, N=None, grid=None, s=None, name=""):
+        """Convert Curve to FourierXYZCurve representation.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
+            If an integer, uses that many equally spaced points.
+        s : ndarray
+            arbitrary curve parameter to use for the fitting. if None, defaults to
+            normalized arclength
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        curve : FourierXYZCurve
+            New representation of the curve parameterized by Fourier series for X,Y,Z.
+
+        """
+        from .curve import FourierXYZCurve
+
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierXYZCurve.from_values(coords, N=N, s=s, basis="xyz", name=name)
+
+    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic", name=""):
+        """Convert Curve to SplineXYZCurve.
+
+        Parameters
+        ----------
+        knots : ndarray
+            arbitrary curve parameter values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Curve.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCurve.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        SplineXYZCurve: SplineXYZCurve
+            New representation of the curve parameterized by a spline for X,Y,Z.
+
+        """
+        from .curve import SplineXYZCurve
+
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return SplineXYZCurve.from_values(
+            coords, knots=knots, method=method, name=name, basis="xyz"
+        )
+
+    # TODO: to_rz method for converting to FourierRZCurve representation
+    # (might be impossible to parameterize some curves with toroidal angle phi)
+
     def translate(self, displacement=[0, 0, 0]):
         """Translate the curve by a rigid displacement in x, y, z."""
         self.shift += jnp.asarray(displacement)
@@ -153,7 +231,7 @@ class Curve(IOAble, ABC):
 class Surface(IOAble, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
-    _io_attrs_ = ["_L", "_M", "_N", "_name", "_sym"]
+    _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -245,6 +323,11 @@ class Surface(IOAble, ABC):
             elif hasattr(self, "zeta"):  # constant zeta surface
                 grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
                 grid._nodes[:, 2] = self.zeta
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object or an integer for argument grid!"
+                f" instead got type {type(grid)}"
+            )
         if params is None:
             params = get_params(names, obj=self)
         if transforms is None:

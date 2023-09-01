@@ -30,6 +30,88 @@ from .nae_utils import make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
 
 
+def get_NAE_constraints(
+    desc_eq,
+    qsc_eq,
+    order=1,
+    profiles=True,
+    iota=False,
+    kinetic=False,
+    normalize=True,
+    N=None,
+):
+    """Get the constraints necessary for fixing NAE behavior in an equilibrium problem.
+
+    Parameters
+    ----------
+    desc_eq : Equilibrium
+        Equilibrium to constrain behavior of
+        (assumed to be a fit from the NAE equil using .from_near_axis()).
+    qsc_eq : Qsc
+        Qsc object defining the near-axis equilibrium to constrain behavior to.
+    order : int
+        order (in rho) of near-axis behavior to constrain
+    profiles : bool
+        Whether to also return constraints to fix input profiles.
+    iota : bool
+        Whether to add FixIota or FixCurrent as a constraint.
+    kinetic : bool
+        Whether to also fix kinetic profiles.
+    normalize : bool
+        Whether to apply constraints in normalized units.
+    N : int,
+        max toroidal resolution to constrain.
+        If None, defaults to equilibrium's toroidal resolution
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed-axis problems.
+    """
+    constraints = (
+        FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+        FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+        FixPsi(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+    )
+    if profiles:
+        if kinetic:
+            constraints += (
+                FixElectronDensity(
+                    eq=desc_eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixElectronTemperature(
+                    eq=desc_eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixIonTemperature(
+                    eq=desc_eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixAtomicNumber(
+                    eq=desc_eq, normalize=normalize, normalize_target=normalize
+                ),
+            )
+        else:
+            constraints += (
+                FixPressure(
+                    eq=desc_eq, normalize=normalize, normalize_target=normalize
+                ),
+            )
+
+        if iota:
+            constraints += (
+                FixIota(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+            )
+        else:
+            constraints += (
+                FixCurrent(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+            )
+    if order >= 1:  # first order constraints
+        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq, N=N)
+    if order >= 2:  # 2nd order constraints
+        raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
+
+    return constraints
+
+
 def get_equilibrium_objective(eq=None, mode="force", normalize=True):
     """Get the objective function for a typical force balance equilibrium problem.
 
@@ -180,88 +262,6 @@ def get_fixed_boundary_constraints(
             constraints += (
                 FixCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
             )
-    return constraints
-
-
-def get_NAE_constraints(
-    desc_eq,
-    qsc_eq,
-    order=1,
-    profiles=True,
-    iota=False,
-    kinetic=False,
-    normalize=True,
-    N=None,
-):
-    """Get the constraints necessary for fixing NAE behavior in an equilibrium problem.
-
-    Parameters
-    ----------
-    desc_eq : Equilibrium
-        Equilibrium to constrain behavior of
-        (assumed to be a fit from the NAE equil using .from_near_axis()).
-    qsc_eq : Qsc
-        Qsc object defining the near-axis equilibrium to constrain behavior to.
-    order : int
-        order (in rho) of near-axis behavior to constrain
-    profiles : bool
-        Whether to also return constraints to fix input profiles.
-    iota : bool
-        Whether to add FixIota or FixCurrent as a constraint.
-    kinetic : bool
-        Whether to also fix kinetic profiles.
-    normalize : bool
-        Whether to apply constraints in normalized units.
-    N : int,
-        max toroidal resolution to constrain.
-        If None, defaults to equilibrium's toroidal resolution
-
-    Returns
-    -------
-    constraints, tuple of _Objectives
-        A list of the linear constraints used in fixed-axis problems.
-    """
-    constraints = (
-        FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-        FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-        FixPsi(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-    )
-    if profiles:
-        if kinetic:
-            constraints += (
-                FixElectronDensity(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixElectronTemperature(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixIonTemperature(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixAtomicNumber(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-            )
-        else:
-            constraints += (
-                FixPressure(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-            )
-
-        if iota:
-            constraints += (
-                FixIota(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixCurrent(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-            )
-    if order >= 1:  # first order constraints
-        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq, N=N)
-    if order >= 2:  # 2nd order constraints
-        raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
-
     return constraints
 
 

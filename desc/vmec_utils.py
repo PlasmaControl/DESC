@@ -54,7 +54,7 @@ def _modes_x_to_mnsc(vmec_modes, x):
     cmask = vmec_modes[:, 0] == 1
     smask = vmec_modes[:, 0] == -1
     _, xm, xn = vmec_modes[cmask].T
-    if not np.any(cmask):  #  there are no cos modes, so use smask to get modenumbers
+    if not np.any(cmask):  #  there are no cos modes, so use mask to get mode numbers
         _, xm, xn = vmec_modes[smask].T
         # concatenate the 0,0 mode
         xm = np.insert(xm, 0, 0)
@@ -213,7 +213,7 @@ def ptolemy_identity_rev(m_1, n_1, x):
 
 
 def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=None):
-    """Compute linear trasformation matrix equivalent to reverse Ptolemy's identity.
+    """Compute linear transformation matrix equivalent to reverse Ptolemy's identity.
 
     Parameters
     ----------
@@ -427,7 +427,6 @@ def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa:
     return opt_subspace
 
 
-# FIXME: this always returns the full double Fourier basis regardless of symmetry
 def zernike_to_fourier(x_lmn, basis, rho):
     """Convert from a Fourier-Zernike basis to a double Fourier series.
 
@@ -452,6 +451,7 @@ def zernike_to_fourier(x_lmn, basis, rho):
         axis to the boundary.
 
     """
+    # FIXME: this always returns the full double Fourier basis regardless of symmetry
     M = basis.M
     N = basis.N
 

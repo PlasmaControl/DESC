@@ -21,58 +21,32 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(s.compute("S", grid=grid)["S"], area)
 
     @pytest.mark.unit
-    def test_normal(self):
-        """Test calculation of surface normal vector."""
+    def test_compute_ndarray_error(self):
+        """Test raising TypeError if ndarray is passed in."""
         s = FourierRZToroidalSurface()
-        grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
-        N = s.compute("n_rho", grid=grid)["n_rho"]
-        np.testing.assert_allclose(N[0], [0, 0, -1], atol=1e-14)
-        grid = LinearGrid(theta=0.0, zeta=0.0)
-        N = s.compute("n_rho", grid=grid)["n_rho"]
-        np.testing.assert_allclose(N[0], [1, 0, 0], atol=1e-12)
+        with pytest.raises(TypeError):
+            s.compute("S", grid=1)
+        with pytest.raises(TypeError):
+            s.compute("S", grid=np.linspace(0, 1, 10))
 
     @pytest.mark.unit
-    def test_misc(self):
-        """Test getting/setting attributes of surface."""
-        c = FourierRZToroidalSurface()
-
-        R, Z = c.get_coeffs(0, 0)
-        np.testing.assert_allclose(R, 10)
-        np.testing.assert_allclose(Z, 0)
-        c.set_coeffs(0, 0, 5, None)
-        c.set_coeffs(-1, 0, None, 2)
-        np.testing.assert_allclose(
-            c.R_lmn,
+    def test_curvature(self):
+        """Tests for gaussian, mean, principle curvatures."""
+        s = FourierRZToroidalSurface()
+        grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
+        data = s.compute(
             [
-                5,
-                1,
+                "curvature_K_rho",
+                "curvature_H_rho",
+                "curvature_k1_rho",
+                "curvature_k2_rho",
             ],
+            grid=grid,
         )
-        np.testing.assert_allclose(
-            c.Z_lmn,
-            [
-                2,
-            ],
-        )
-
-        s = c.copy()
-        assert s.eq(c)
-
-        c.change_resolution(0, 5, 5)
-        with pytest.raises(ValueError):
-            c.R_lmn = s.R_lmn
-        with pytest.raises(ValueError):
-            c.Z_lmn = s.Z_lmn
-
-        c.name = "my curve"
-        assert "my" in c.name
-        assert c.name in str(c)
-        assert "FourierRZToroidalSurface" in str(c)
-
-        c.NFP = 3
-        assert c.NFP == 3
-        assert c.R_basis.NFP == 3
-        assert c.Z_basis.NFP == 3
+        np.testing.assert_allclose(data["curvature_K_rho"], 0)
+        np.testing.assert_allclose(data["curvature_H_rho"], -1 / 2)
+        np.testing.assert_allclose(data["curvature_k1_rho"], 0)
+        np.testing.assert_allclose(data["curvature_k2_rho"], -1)
 
     @pytest.mark.unit
     def test_from_input_file(self):
@@ -119,27 +93,51 @@ class TestFourierRZToroidalSurface:
         )
 
     @pytest.mark.unit
-    def test_curvature(self):
-        """Tests for gaussian, mean, principle curvatures."""
+    def test_misc(self):
+        """Test getting/setting attributes of surface."""
+        c = FourierRZToroidalSurface()
+
+        R, Z = c.get_coeffs(0, 0)
+        np.testing.assert_allclose(R, 10)
+        np.testing.assert_allclose(Z, 0)
+        c.set_coeffs(0, 0, 5, None)
+        c.set_coeffs(-1, 0, None, 2)
+        np.testing.assert_allclose(c.R_lmn, [5, 1])
+        np.testing.assert_allclose(c.Z_lmn, [2])
+
+        s = c.copy()
+        assert s.eq(c)
+
+        c.change_resolution(0, 5, 5)
+        with pytest.raises(ValueError):
+            c.R_lmn = s.R_lmn
+        with pytest.raises(ValueError):
+            c.Z_lmn = s.Z_lmn
+
+        c.name = "my curve"
+        assert "my" in c.name
+        assert c.name in str(c)
+        assert "FourierRZToroidalSurface" in str(c)
+
+        c.NFP = 3
+        assert c.NFP == 3
+        assert c.R_basis.NFP == 3
+        assert c.Z_basis.NFP == 3
+
+    @pytest.mark.unit
+    def test_normal(self):
+        """Test calculation of surface normal vector."""
         s = FourierRZToroidalSurface()
         grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
-        data = s.compute(
-            [
-                "curvature_K_rho",
-                "curvature_H_rho",
-                "curvature_k1_rho",
-                "curvature_k2_rho",
-            ],
-            grid=grid,
-        )
-        np.testing.assert_allclose(data["curvature_K_rho"], 0)
-        np.testing.assert_allclose(data["curvature_H_rho"], -1 / 2)
-        np.testing.assert_allclose(data["curvature_k1_rho"], 0)
-        np.testing.assert_allclose(data["curvature_k2_rho"], -1)
+        N = s.compute("n_rho", grid=grid)["n_rho"]
+        np.testing.assert_allclose(N[0], [0, 0, -1], atol=1e-14)
+        grid = LinearGrid(theta=0.0, zeta=0.0)
+        N = s.compute("n_rho", grid=grid)["n_rho"]
+        np.testing.assert_allclose(N[0], [1, 0, 0], atol=1e-12)
 
 
 class TestZernikeRZToroidalSection:
-    """Tests for ZerinkeRZTorioidalSection class."""
+    """Tests for ZernikeRZToroidalSection class."""
 
     @pytest.mark.unit
     def test_area(self):
@@ -148,50 +146,6 @@ class TestZernikeRZToroidalSection:
         grid = LinearGrid(L=10, M=10)
         area = np.pi * 1**2
         np.testing.assert_allclose(s.compute("A", grid=grid)["A"], area)
-
-    @pytest.mark.unit
-    def test_normal(self):
-        """Test calculation of surface normal vector."""
-        s = ZernikeRZToroidalSection()
-        grid = LinearGrid(L=8, M=4, N=0, axis=False)
-        N = s.compute("n_zeta", grid=grid)["n_zeta"]
-        np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
-
-    @pytest.mark.unit
-    def test_misc(self):
-        """Test getting/setting surface attributes."""
-        c = ZernikeRZToroidalSection()
-
-        R, Z = c.get_coeffs(0, 0)
-        np.testing.assert_allclose(R, 10)
-        np.testing.assert_allclose(Z, 0)
-        c.set_coeffs(0, 0, 5, None)
-        c.set_coeffs(1, -1, None, 2)
-        np.testing.assert_allclose(
-            c.R_lmn,
-            [
-                5,
-                1,
-            ],
-        )
-        np.testing.assert_allclose(
-            c.Z_lmn,
-            [
-                2,
-            ],
-        )
-        with pytest.raises(ValueError):
-            c.set_coeffs(0, 0, None, 2)
-        s = c.copy()
-        assert s.eq(c)
-
-        c.change_resolution(5, 5, 0)
-        with pytest.raises(ValueError):
-            c.R_lmn = s.R_lmn
-        with pytest.raises(ValueError):
-            c.Z_lmn = s.Z_lmn
-
-        assert c.sym
 
     @pytest.mark.unit
     def test_curvature(self):
@@ -214,6 +168,39 @@ class TestZernikeRZToroidalSection:
         np.testing.assert_allclose(data["curvature_H_zeta"], 0)
         np.testing.assert_allclose(data["curvature_k1_zeta"], 0)
         np.testing.assert_allclose(data["curvature_k2_zeta"], 0)
+
+    @pytest.mark.unit
+    def test_misc(self):
+        """Test getting/setting surface attributes."""
+        c = ZernikeRZToroidalSection()
+
+        R, Z = c.get_coeffs(0, 0)
+        np.testing.assert_allclose(R, 10)
+        np.testing.assert_allclose(Z, 0)
+        c.set_coeffs(0, 0, 5, None)
+        c.set_coeffs(1, -1, None, 2)
+        np.testing.assert_allclose(c.R_lmn, [5, 1])
+        np.testing.assert_allclose(c.Z_lmn, [2])
+        with pytest.raises(ValueError):
+            c.set_coeffs(0, 0, None, 2)
+        s = c.copy()
+        assert s.eq(c)
+
+        c.change_resolution(5, 5, 0)
+        with pytest.raises(ValueError):
+            c.R_lmn = s.R_lmn
+        with pytest.raises(ValueError):
+            c.Z_lmn = s.Z_lmn
+
+        assert c.sym
+
+    @pytest.mark.unit
+    def test_normal(self):
+        """Test calculation of surface normal vector."""
+        s = ZernikeRZToroidalSection()
+        grid = LinearGrid(L=8, M=4, N=0, axis=False)
+        N = s.compute("n_zeta", grid=grid)["n_zeta"]
+        np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
 
 
 @pytest.mark.unit

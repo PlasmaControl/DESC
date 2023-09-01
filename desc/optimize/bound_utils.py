@@ -5,6 +5,107 @@ from desc.backend import jnp
 from .utils import evaluate_quadratic_form_hess, evaluate_quadratic_form_jac
 
 
+def build_quadratic_1d_hess(H, g, s, diag=None, s0=None):
+    """Parameterize a multivariate quadratic function along a line.
+
+    The resulting univariate quadratic function is given as follows:
+    ::
+        f(t) = 0.5 * (s0 + s*t).T * (H + diag) * (s0 + s*t) +
+               g.T * (s0 + s*t)
+
+    Parameters
+    ----------
+    H : ndarray, shape (n, n)
+        Hessian matrix, affects the quadratic term.
+    g : ndarray, shape (n,)
+        Gradient, defines the linear term.
+    s : ndarray, shape (n,)
+        Direction vector of a line.
+    diag : None or ndarray with shape (n,), optional
+        Addition diagonal part, affects the quadratic term.
+        If None, assumed to be 0.
+    s0 : None or ndarray with shape (n,), optional
+        Initial point. If None, assumed to be 0.
+
+    Returns
+    -------
+    a : float
+        Coefficient for t**2.
+    b : float
+        Coefficient for t.
+    c : float
+        Free term. Returned only if `s0` is provided.
+    """
+    a = H.dot(s).dot(s)
+    if diag is not None:
+        a += jnp.dot(s * diag, s)
+    a *= 0.5
+
+    b = jnp.dot(g, s)
+
+    if s0 is not None:
+        u = H.dot(s0)
+        b += jnp.dot(u, s)
+        c = 0.5 * jnp.dot(u, s0) + jnp.dot(g, s0)
+        if diag is not None:
+            b += jnp.dot(s0 * diag, s)
+            c += 0.5 * jnp.dot(s0 * diag, s0)
+        return a, b, c
+    else:
+        return a, b
+
+
+def build_quadratic_1d_jac(J, g, s, diag=None, s0=None):
+    """Parameterize a multivariate quadratic function along a line.
+
+    The resulting univariate quadratic function is given as follows:
+    ::
+        f(t) = 0.5 * (s0 + s*t).T * (J.T*J + diag) * (s0 + s*t) +
+               g.T * (s0 + s*t)
+
+    Parameters
+    ----------
+    J : ndarray, shape (m, n)
+        Jacobian matrix, affects the quadratic term.
+    g : ndarray, shape (n,)
+        Gradient, defines the linear term.
+    s : ndarray, shape (n,)
+        Direction vector of a line.
+    diag : None or ndarray with shape (n,), optional
+        Addition diagonal part, affects the quadratic term.
+        If None, assumed to be 0.
+    s0 : None or ndarray with shape (n,), optional
+        Initial point. If None, assumed to be 0.
+
+    Returns
+    -------
+    a : float
+        Coefficient for t**2.
+    b : float
+        Coefficient for t.
+    c : float
+        Free term. Returned only if `s0` is provided.
+    """
+    v = J.dot(s)
+    a = jnp.dot(v, v)
+    if diag is not None:
+        a += jnp.dot(s * diag, s)
+    a *= 0.5
+
+    b = jnp.dot(g, s)
+
+    if s0 is not None:
+        u = J.dot(s0)
+        b += jnp.dot(u, v)
+        c = 0.5 * jnp.dot(u, u) + jnp.dot(g, s0)
+        if diag is not None:
+            b += jnp.dot(s0 * diag, s)
+            c += 0.5 * jnp.dot(s0 * diag, s0)
+        return a, b, c
+    else:
+        return a, b
+
+
 def cl_scaling_vector(x, g, lb, ub):
     """Compute Coleman-Li scaling vector and its derivatives.
 
@@ -58,39 +159,6 @@ def cl_scaling_vector(x, g, lb, ub):
     return v, dv
 
 
-def step_size_to_bound(x, s, lb, ub):
-    """Compute a min_step size required to reach a bound.
-
-    The function computes a positive scalar t, such that x + s * t is on
-    the bound.
-
-    Parameters
-    ----------
-    x : ndarray
-        state vector
-    s : ndarray
-        proposed step
-    lb, ub : ndarray
-        lower and upper bounds on x
-
-    Returns
-    -------
-    step : float
-        Computed step. Non-negative value.
-    hits : ndarray of int with shape of x
-        Each element indicates whether a corresponding variable reaches the
-        bound:
-             *  0 - the bound was not hit.
-             * -1 - the lower bound was hit.
-             *  1 - the upper bound was hit.
-    """
-    steps = jnp.inf * jnp.ones(x.size)
-    mask = s != 0
-    steps = jnp.where(mask, jnp.maximum((lb - x) / s, (ub - x) / s), steps)
-    min_step = jnp.min(steps)
-    return min_step, jnp.equal(steps, min_step) * jnp.sign(s).astype(int)
-
-
 def find_active_constraints(x, lb, ub, rtol=1e-10):
     """Determine which constraints are active in a given point.
 
@@ -138,6 +206,48 @@ def find_active_constraints(x, lb, ub, rtol=1e-10):
     return active
 
 
+def in_bounds(x, lb, ub):
+    """Check if a point lies within bounds."""
+    return jnp.all((x >= lb) & (x <= ub))
+
+
+def intersect_trust_region(x, s, Delta):
+    """Find the intersection of a line with the boundary of a trust region.
+
+    This function solves the quadratic equation with respect to t
+
+    ||(x + s*t)||**2 = Delta**2.
+
+    Returns
+    -------
+    t_neg, t_pos : tuple of float
+        Negative and positive roots.
+
+    Raises
+    ------
+    AssertionError
+        If `s` is zero or `x` is not within the trust region.
+    """
+    a = jnp.dot(s, s)
+    assert a != 0, "`s` is zero."
+
+    b = jnp.dot(x, s)
+
+    c = jnp.dot(x, x) - Delta**2
+    assert c <= 0, f"`x` is not within the trust region, c={c}"
+
+    d = jnp.sqrt(b * b - a * c)  # Root from one fourth of the discriminant.
+
+    q = -(b + jnp.sign(b) * jnp.abs(d))
+    t1 = q / a
+    t2 = c / q
+
+    if t1 < t2:
+        return t1, t2
+    else:
+        return t2, t1
+
+
 def make_strictly_feasible(x, lb, ub, rstep=1e-10):
     """Shift a point to the interior of a feasible region.
 
@@ -164,9 +274,27 @@ def make_strictly_feasible(x, lb, ub, rstep=1e-10):
     return x_new
 
 
-def in_bounds(x, lb, ub):
-    """Check if a point lies within bounds."""
-    return jnp.all((x >= lb) & (x <= ub))
+def minimize_quadratic_1d(a, b, lb, ub, c=0):
+    """Minimize a 1-D quadratic function subject to bounds.
+
+    The free term `c` is 0 by default. Bounds must be finite.
+
+    Returns
+    -------
+    t : float
+        Minimum point.
+    y : float
+        Minimum value.
+    """
+    t = [lb, ub]
+    if a != 0:
+        extremum = -0.5 * b / a
+        if lb < extremum < ub:
+            t.append(extremum)
+    t = jnp.asarray(t)
+    y = t * (a * t + b) + c
+    min_index = jnp.argmin(y)
+    return t[min_index], y[min_index]
 
 
 def select_step(x, JorH, diag_h, g_h, p, p_h, d, Delta, lb, ub, theta, mode="jac"):
@@ -254,162 +382,34 @@ def select_step(x, JorH, diag_h, g_h, p, p_h, d, Delta, lb, ub, theta, mode="jac
         return ag, ag_h, -ag_value
 
 
-def build_quadratic_1d_jac(J, g, s, diag=None, s0=None):
-    """Parameterize a multivariate quadratic function along a line.
+def step_size_to_bound(x, s, lb, ub):
+    """Compute a min_step size required to reach a bound.
 
-    The resulting univariate quadratic function is given as follows:
-    ::
-        f(t) = 0.5 * (s0 + s*t).T * (J.T*J + diag) * (s0 + s*t) +
-               g.T * (s0 + s*t)
+    The function computes a positive scalar t, such that x + s * t is on
+    the bound.
 
     Parameters
     ----------
-    J : ndarray, shape (m, n)
-        Jacobian matrix, affects the quadratic term.
-    g : ndarray, shape (n,)
-        Gradient, defines the linear term.
-    s : ndarray, shape (n,)
-        Direction vector of a line.
-    diag : None or ndarray with shape (n,), optional
-        Addition diagonal part, affects the quadratic term.
-        If None, assumed to be 0.
-    s0 : None or ndarray with shape (n,), optional
-        Initial point. If None, assumed to be 0.
+    x : ndarray
+        state vector
+    s : ndarray
+        proposed step
+    lb, ub : ndarray
+        lower and upper bounds on x
 
     Returns
     -------
-    a : float
-        Coefficient for t**2.
-    b : float
-        Coefficient for t.
-    c : float
-        Free term. Returned only if `s0` is provided.
+    step : float
+        Computed step. Non-negative value.
+    hits : ndarray of int with shape of x
+        Each element indicates whether a corresponding variable reaches the
+        bound:
+             *  0 - the bound was not hit.
+             * -1 - the lower bound was hit.
+             *  1 - the upper bound was hit.
     """
-    v = J.dot(s)
-    a = jnp.dot(v, v)
-    if diag is not None:
-        a += jnp.dot(s * diag, s)
-    a *= 0.5
-
-    b = jnp.dot(g, s)
-
-    if s0 is not None:
-        u = J.dot(s0)
-        b += jnp.dot(u, v)
-        c = 0.5 * jnp.dot(u, u) + jnp.dot(g, s0)
-        if diag is not None:
-            b += jnp.dot(s0 * diag, s)
-            c += 0.5 * jnp.dot(s0 * diag, s0)
-        return a, b, c
-    else:
-        return a, b
-
-
-def build_quadratic_1d_hess(H, g, s, diag=None, s0=None):
-    """Parameterize a multivariate quadratic function along a line.
-
-    The resulting univariate quadratic function is given as follows:
-    ::
-        f(t) = 0.5 * (s0 + s*t).T * (H + diag) * (s0 + s*t) +
-               g.T * (s0 + s*t)
-
-    Parameters
-    ----------
-    H : ndarray, shape (n, n)
-        Hessian matrix, affects the quadratic term.
-    g : ndarray, shape (n,)
-        Gradient, defines the linear term.
-    s : ndarray, shape (n,)
-        Direction vector of a line.
-    diag : None or ndarray with shape (n,), optional
-        Addition diagonal part, affects the quadratic term.
-        If None, assumed to be 0.
-    s0 : None or ndarray with shape (n,), optional
-        Initial point. If None, assumed to be 0.
-
-    Returns
-    -------
-    a : float
-        Coefficient for t**2.
-    b : float
-        Coefficient for t.
-    c : float
-        Free term. Returned only if `s0` is provided.
-    """
-    a = H.dot(s).dot(s)
-    if diag is not None:
-        a += jnp.dot(s * diag, s)
-    a *= 0.5
-
-    b = jnp.dot(g, s)
-
-    if s0 is not None:
-        u = H.dot(s0)
-        b += jnp.dot(u, s)
-        c = 0.5 * jnp.dot(u, s0) + jnp.dot(g, s0)
-        if diag is not None:
-            b += jnp.dot(s0 * diag, s)
-            c += 0.5 * jnp.dot(s0 * diag, s0)
-        return a, b, c
-    else:
-        return a, b
-
-
-def minimize_quadratic_1d(a, b, lb, ub, c=0):
-    """Minimize a 1-D quadratic function subject to bounds.
-
-    The free term `c` is 0 by default. Bounds must be finite.
-
-    Returns
-    -------
-    t : float
-        Minimum point.
-    y : float
-        Minimum value.
-    """
-    t = [lb, ub]
-    if a != 0:
-        extremum = -0.5 * b / a
-        if lb < extremum < ub:
-            t.append(extremum)
-    t = jnp.asarray(t)
-    y = t * (a * t + b) + c
-    min_index = jnp.argmin(y)
-    return t[min_index], y[min_index]
-
-
-def intersect_trust_region(x, s, Delta):
-    """Find the intersection of a line with the boundary of a trust region.
-
-    This function solves the quadratic equation with respect to t
-
-    ||(x + s*t)||**2 = Delta**2.
-
-    Returns
-    -------
-    t_neg, t_pos : tuple of float
-        Negative and positive roots.
-
-    Raises
-    ------
-    AssertionError
-        If `s` is zero or `x` is not within the trust region.
-    """
-    a = jnp.dot(s, s)
-    assert a != 0, "`s` is zero."
-
-    b = jnp.dot(x, s)
-
-    c = jnp.dot(x, x) - Delta**2
-    assert c <= 0, f"`x` is not within the trust region, c={c}"
-
-    d = jnp.sqrt(b * b - a * c)  # Root from one fourth of the discriminant.
-
-    q = -(b + jnp.sign(b) * jnp.abs(d))
-    t1 = q / a
-    t2 = c / q
-
-    if t1 < t2:
-        return t1, t2
-    else:
-        return t2, t1
+    steps = jnp.inf * jnp.ones(x.size)
+    mask = s != 0
+    steps = jnp.where(mask, jnp.maximum((lb - x) / s, (ub - x) / s), steps)
+    min_step = jnp.min(steps)
+    return min_step, jnp.equal(steps, min_step) * jnp.sign(s).astype(int)

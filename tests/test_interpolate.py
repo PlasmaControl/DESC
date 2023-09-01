@@ -10,38 +10,6 @@ class TestInterp1D:
     """Tests for interp1d function."""
 
     @pytest.mark.unit
-    def test_interp1d(self):
-        """Test accuracy of different 1d interpolation methods."""
-        xp = np.linspace(0, 2 * np.pi, 100)
-        x = np.linspace(0, 2 * np.pi, 10000)
-        f = lambda x: np.sin(x)
-        fp = f(xp)
-
-        fq = interp1d(x, xp, fp, method="nearest")
-        np.testing.assert_allclose(fq, f(x), rtol=1e-2, atol=1e-1)
-
-        fq = interp1d(x, xp, fp, method="linear")
-        np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-3)
-
-        fq = interp1d(x, xp, fp, method="cubic")
-        np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
-
-        fq = interp1d(x, xp, fp, method="cubic2")
-        np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
-
-        fq = interp1d(x, xp, fp, method="cardinal")
-        np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
-
-        fq = interp1d(x, xp, fp, method="catmull-rom")
-        np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
-
-        fq = interp1d(x, xp, fp, method="monotonic")
-        np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-3)
-
-        fq = interp1d(x, xp, fp, method="monotonic-0")
-        np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-2)
-
-    @pytest.mark.unit
     def test_interp1d_extrap_periodic(self):
         """Test extrapolation and periodic BC of 1d interpolation."""
         xp = np.linspace(0, 2 * np.pi, 200)
@@ -75,6 +43,38 @@ class TestInterp1D:
         assert dfm0.min() >= 0  # monotonic-0 doesn't overshoot either
         # ensure monotonic-0 has 0 slope at end points
         np.testing.assert_allclose(dfm0[np.array([0, -1])], 0, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_interp1d(self):
+        """Test accuracy of different 1d interpolation methods."""
+        xp = np.linspace(0, 2 * np.pi, 100)
+        x = np.linspace(0, 2 * np.pi, 10000)
+        f = lambda x: np.sin(x)
+        fp = f(xp)
+
+        fq = interp1d(x, xp, fp, method="nearest")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-2, atol=1e-1)
+
+        fq = interp1d(x, xp, fp, method="linear")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-3)
+
+        fq = interp1d(x, xp, fp, method="cubic")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
+
+        fq = interp1d(x, xp, fp, method="cubic2")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
+
+        fq = interp1d(x, xp, fp, method="cardinal")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
+
+        fq = interp1d(x, xp, fp, method="catmull-rom")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
+
+        fq = interp1d(x, xp, fp, method="monotonic")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-3)
+
+        fq = interp1d(x, xp, fp, method="monotonic-0")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-2)
 
 
 class TestInterp2D:

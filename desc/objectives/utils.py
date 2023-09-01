@@ -73,7 +73,6 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     and the null space Z st. Axp=b and AZ=0, so that the full space of solutions to
     Ax=b can be written as x=xp + Zy where y is now unconstrained.
 
-
     Parameters
     ----------
     constraints : tuple of Objectives

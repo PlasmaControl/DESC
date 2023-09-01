@@ -5,7 +5,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -80,6 +79,16 @@ class MagneticWell(_Objective):
             name=name,
         )
 
+    def _scale(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
+        w = constants["transforms"]["grid"].compress(
+            constants["transforms"]["grid"].spacing[:, 0]
+        )
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
+
     def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
@@ -95,11 +104,12 @@ class MagneticWell(_Objective):
         eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
+                L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=np.linspace(1 / 5, 1, 5),
+                axis=False,
             )
         else:
             grid = self._grid
@@ -174,21 +184,7 @@ class MagneticWell(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return compress(
-            constants["transforms"]["grid"], data["magnetic well"], surface_label="rho"
-        )
-
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = compress(
-            constants["transforms"]["grid"],
-            constants["transforms"]["grid"].spacing[:, 0],
-            surface_label="rho",
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
+        return constants["transforms"]["grid"].compress(data["magnetic well"])
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -264,6 +260,16 @@ class MercierStability(_Objective):
             name=name,
         )
 
+    def _scale(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
+        w = constants["transforms"]["grid"].compress(
+            constants["transforms"]["grid"].spacing[:, 0]
+        )
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
+
     def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
@@ -280,11 +286,12 @@ class MercierStability(_Objective):
         eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
+                L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=np.linspace(1 / 5, 1, 5),
+                axis=False,
             )
         else:
             grid = self._grid
@@ -363,21 +370,7 @@ class MercierStability(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return compress(
-            constants["transforms"]["grid"], data["D_Mercier"], surface_label="rho"
-        )
-
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = compress(
-            constants["transforms"]["grid"],
-            constants["transforms"]["grid"].spacing[:, 0],
-            surface_label="rho",
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
+        return constants["transforms"]["grid"].compress(data["D_Mercier"])
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

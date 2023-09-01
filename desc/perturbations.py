@@ -90,340 +90,6 @@ def get_deltas(things1, things2):  # noqa: C901
     return deltas
 
 
-def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
-    eq,
-    objective,
-    constraints,
-    deltas,
-    order=2,
-    tr_ratio=0.1,
-    weight="auto",
-    include_f=True,
-    verbose=1,
-    copy=True,
-):
-    """Perturb an Equilibrium with respect to input parameters.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium to perturb.
-    objective : ObjectiveFunction
-        Objective function to satisfy.
-    constraints : tuple of Objective, optional
-        List of objectives to be used as constraints during perturbation.
-    deltas : dict of ndarray
-        Deltas for perturbations. Keys should names of Equilibrium attributes ("p_l",
-        "Rb_lmn", "L_lmn" etc.) and values of arrays of desired change in the attribute.
-    order : {0,1,2,3}
-        Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
-    tr_ratio : float or array of float
-        Radius of the trust region, as a fraction of ||x||.
-        Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
-        If a scalar, uses the same ratio for all steps. If an array, uses the first
-        element for the first step and so on.
-    weight : ndarray, "auto", or None, optional
-        1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
-        matrices. Default is to weight by (mode number)**2. None applies no weighting.
-    include_f : bool, optional
-        Whether to include the 0th order objective residual in the perturbation
-        equation. Including this term can improve force balance if the perturbation
-        step is large, but can result in too large a step if the perturbation is small.
-    verbose : int
-        Level of output.
-    copy : bool
-        Whether to perturb the input equilibrium (False) or make a copy (True, Default).
-
-    Returns
-    -------
-    eq_new : Equilibrium
-        Perturbed equilibrium.
-
-    """
-    if not use_jax:
-        warnings.warn(
-            colored(
-                "Computing perturbations with finite differences can be "
-                + "highly inaccurate. Consider using JAX for exact derivatives.",
-                "yellow",
-            )
-        )
-    if jnp.isscalar(tr_ratio):
-        tr_ratio = tr_ratio * jnp.ones(order)
-    elif len(tr_ratio) < order:
-        raise ValueError(
-            "Got only {} tr_ratios for order {} perturbations.".format(
-                len(tr_ratio), order
-            )
-        )
-    # remove deltas that are zero
-    deltas = {key: val for key, val in deltas.items() if jnp.any(val)}
-
-    # make sure things are at least 1D for jnp.concatenate later
-    # in case only a single delta is being passed
-    for key in deltas.keys():
-        deltas[key] = jnp.atleast_1d(deltas[key])
-
-    if not objective.built:
-        objective.build(eq, verbose=verbose)
-    constraints = maybe_add_self_consistency(eq=eq, constraints=constraints)
-    con_args = []
-    for con in constraints:
-        con_args += con.args
-        if not con.built:
-            con.build(eq, verbose=verbose)
-    objective.set_args(*con_args)
-
-    if objective.scalar:  # FIXME: change to num objectives >= num parameters
-        raise AttributeError(
-            "Cannot perturb with a scalar objective: {}.".format(objective)
-        )
-
-    if verbose > 0:
-        print("Perturbing {}".format(", ".join(deltas.keys())))
-
-    timer = Timer()
-    timer.start("Total perturbation")
-
-    if verbose > 0:
-        print("Factorizing linear constraints")
-    timer.start("linear constraint factorize")
-    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective.args
-    )
-    timer.stop("linear constraint factorize")
-    if verbose > 1:
-        timer.disp("linear constraint factorize")
-
-    # state vector
-    x = objective.x(eq)
-    x_reduced = project(x)
-    x_norm = jnp.linalg.norm(x_reduced)
-
-    # perturbation vectors
-    dx1_reduced = jnp.zeros_like(x_reduced)
-    dx2_reduced = jnp.zeros_like(x_reduced)
-    dx3_reduced = jnp.zeros_like(x_reduced)
-
-    # tangent vectors
-    tangents = jnp.zeros((objective.dim_x,))
-    if "Rb_lmn" in deltas.keys():
-        con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["R_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Rb_lmn"]
-        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
-    if "Zb_lmn" in deltas.keys():
-        con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["Z_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Zb_lmn"]
-        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
-    if "Ra_n" in deltas.keys():
-        con = get_instance(constraints, AxisRSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["R_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Ra_n"]
-        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
-    if "Za_n" in deltas.keys():
-        con = get_instance(constraints, AxisZSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["Z_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Za_n"]
-        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
-    # all other perturbations besides the boundary
-    other_args = [
-        arg for arg in arg_order if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]
-    ]
-    if len([arg for arg in other_args if arg in deltas.keys()]):
-        dc = jnp.concatenate(
-            [
-                deltas[arg]
-                for arg in other_args
-                if arg in deltas.keys() and arg in objective.args
-            ]
-        )
-        x_idx = jnp.concatenate(
-            [
-                objective.x_idx[arg]
-                for arg in other_args
-                if arg in deltas.keys() and arg in objective.args
-            ]
-        )
-        x_idx = jnp.sort(x_idx)
-        tangents += jnp.eye(objective.dim_x)[:, x_idx] @ dc
-
-    # 1st order
-    if order > 0:
-
-        if (weight is None) or (weight == "auto"):
-            w = jnp.ones((objective.dim_x,))
-            if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
-                w = put(
-                    w,
-                    objective.x_idx["R_lmn"],
-                    (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),
-                )
-                w = put(
-                    w,
-                    objective.x_idx["Z_lmn"],
-                    (abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1),
-                )
-                w = put(
-                    w,
-                    objective.x_idx["L_lmn"],
-                    (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
-                )
-            weight = w
-        weight = jnp.atleast_1d(weight)
-        assert (
-            len(weight) == objective.dim_x
-        ), "Size of weight supplied to perturbation does not match objective.dim_x."
-        if weight.ndim == 1:
-            weight = weight[unfixed_idx]
-            weight = jnp.diag(weight)
-        else:
-            weight = weight[unfixed_idx, unfixed_idx]
-        W = Z.T @ weight @ Z
-        scale_inv = W
-        scale = jnp.linalg.inv(scale_inv)
-
-        # 1st partial derivatives wrt both state vector (x) and input parameters (c)
-        if verbose > 0:
-            print("Computing df")
-        timer.start("df computation")
-        Jx = objective.jac_scaled(x)
-        Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
-        RHS1 = objective.jvp_scaled(tangents, x)
-        if include_f:
-            f = objective.compute_scaled_error(x)
-            RHS1 += f
-        timer.stop("df computation")
-        if verbose > 1:
-            timer.disp("df computation")
-
-        if verbose > 0:
-            print("Factoring df")
-        timer.start("df/dx factorization")
-        u, s, vt = jnp.linalg.svd(Jx_reduced, full_matrices=False)
-        timer.stop("df/dx factorization")
-        if verbose > 1:
-            timer.disp("df/dx factorization")
-
-        dx1_h, hit, alpha = trust_region_step_exact_svd(
-            RHS1,
-            u,
-            s,
-            vt.T,
-            tr_ratio[0] * jnp.linalg.norm(scale_inv @ x_reduced),
-            initial_alpha=None,
-            rtol=0.01,
-            max_iter=10,
-        )
-        dx1_reduced = scale @ dx1_h
-        dx1 = recover(dx1_reduced) - xp
-
-    # 2nd order
-    if order > 1:
-
-        # 2nd partial derivatives wrt both state vector (x) and input parameters (c)
-        if verbose > 0:
-            print("Computing d^2f")
-        timer.start("d^2f computation")
-        tangents += dx1
-        RHS2 = 0.5 * objective.jvp_scaled((tangents, tangents), x)
-        timer.stop("d^2f computation")
-        if verbose > 1:
-            timer.disp("d^2f computation")
-
-        dx2_h, hit, alpha = trust_region_step_exact_svd(
-            RHS2,
-            u,
-            s,
-            vt.T,
-            tr_ratio[1] * jnp.linalg.norm(dx1_h),
-            initial_alpha=alpha / tr_ratio[1],
-            rtol=0.01,
-            max_iter=10,
-        )
-        dx2_reduced = scale @ dx2_h
-        dx2 = recover(dx2_reduced) - xp
-
-    # 3rd order
-    if order > 2:
-
-        # 3rd partial derivatives wrt both state vector (x) and input parameters (c)
-        if verbose > 0:
-            print("Computing d^3f")
-        timer.start("d^3f computation")
-        RHS3 = (1 / 6) * objective.jvp_scaled((tangents, tangents, tangents), x)
-        RHS3 += objective.jvp_scaled((dx2, tangents), x)
-        timer.stop("d^3f computation")
-        if verbose > 1:
-            timer.disp("d^3f computation")
-
-        dx3_h, hit, alpha = trust_region_step_exact_svd(
-            RHS3,
-            u,
-            s,
-            vt.T,
-            tr_ratio[2] * jnp.linalg.norm(dx2_h),
-            initial_alpha=alpha / tr_ratio[2],
-            rtol=0.01,
-            max_iter=10,
-        )
-        dx3_reduced = scale @ dx3_h
-
-    if order > 3:
-        raise ValueError(
-            "Higher-order perturbations not yet implemented: {}".format(order)
-        )
-
-    if copy:
-        eq_new = eq.copy()
-    else:
-        eq_new = eq
-
-    # update perturbation attributes
-    for key, value in deltas.items():
-        setattr(eq_new, key, getattr(eq_new, key) + value)
-    for constraint in constraints:
-        if hasattr(constraint, "update_target"):
-            constraint.update_target(eq_new)
-    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective.args
-    )
-
-    # update other attributes
-    dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
-    x_new = recover(x_reduced + dx_reduced)
-    args = objective.unpack_state(x_new)
-    for key, value in args.items():
-        if key not in deltas:
-            value = put(  # parameter values below threshold are set to 0
-                value, jnp.where(jnp.abs(value) < 10 * jnp.finfo(value.dtype).eps)[0], 0
-            )
-            # don't set nonexistent profile (values are empty ndarrays)
-            if value.size:
-                setattr(eq_new, key, value)
-
-    timer.stop("Total perturbation")
-    if verbose > 0:
-        print("||dx||/||x|| = {:10.3e}".format(jnp.linalg.norm(dx_reduced) / x_norm))
-    if verbose > 1:
-        timer.disp("Total perturbation")
-
-    return eq_new
-
-
 def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     eq,
     objective_f,
@@ -848,3 +514,340 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         timer.disp("Total perturbation")
 
     return eq_new, predicted_reduction, dc_opt, dc, jnp.linalg.norm(c), bound_hit
+
+
+def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
+    eq,
+    objective,
+    constraints,
+    deltas,
+    order=2,
+    tr_ratio=0.1,
+    weight="auto",
+    include_f=True,
+    verbose=1,
+    copy=True,
+):
+    """Perturb an Equilibrium with respect to input parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to perturb.
+    objective : ObjectiveFunction
+        Objective function to satisfy.
+    constraints : tuple of Objective, optional
+        List of objectives to be used as constraints during perturbation.
+    deltas : dict of ndarray
+        Deltas for perturbations. Keys should names of Equilibrium attributes ("p_l",
+        "Rb_lmn", "L_lmn" etc.) and values of arrays of desired change in the attribute.
+    order : {0,1,2,3}
+        Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
+    tr_ratio : float or array of float
+        Radius of the trust region, as a fraction of ||x||.
+        Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
+        If a scalar, uses the same ratio for all steps. If an array, uses the first
+        element for the first step and so on.
+    weight : ndarray, "auto", or None, optional
+        1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
+        matrices. Default is to weight by (mode number)**2. None applies no weighting.
+    include_f : bool, optional
+        Whether to include the 0th order objective residual in the perturbation
+        equation. Including this term can improve force balance if the perturbation
+        step is large, but can result in too large a step if the perturbation is small.
+    verbose : int
+        Level of output.
+    copy : bool
+        Whether to perturb the input equilibrium (False) or make a copy (True, Default).
+
+    Returns
+    -------
+    eq_new : Equilibrium
+        Perturbed equilibrium.
+
+    """
+    if not use_jax:
+        warnings.warn(
+            colored(
+                "Computing perturbations with finite differences can be "
+                + "highly inaccurate. Consider using JAX for exact derivatives.",
+                "yellow",
+            )
+        )
+    if jnp.isscalar(tr_ratio):
+        tr_ratio = tr_ratio * jnp.ones(order)
+    elif len(tr_ratio) < order:
+        raise ValueError(
+            "Got only {} tr_ratios for order {} perturbations.".format(
+                len(tr_ratio), order
+            )
+        )
+    # remove deltas that are zero
+    deltas = {key: val for key, val in deltas.items() if jnp.any(val)}
+
+    # make sure things are at least 1D for jnp.concatenate later
+    # in case only a single delta is being passed
+    for key in deltas.keys():
+        deltas[key] = jnp.atleast_1d(deltas[key])
+
+    if not objective.built:
+        objective.build(eq, verbose=verbose)
+    constraints = maybe_add_self_consistency(eq=eq, constraints=constraints)
+    con_args = []
+    for con in constraints:
+        con_args += con.args
+        if not con.built:
+            con.build(eq, verbose=verbose)
+    objective.set_args(*con_args)
+
+    if objective.scalar:  # FIXME: change to num objectives >= num parameters
+        raise AttributeError(
+            "Cannot perturb with a scalar objective: {}.".format(objective)
+        )
+
+    if verbose > 0:
+        print("Perturbing {}".format(", ".join(deltas.keys())))
+
+    timer = Timer()
+    timer.start("Total perturbation")
+
+    if verbose > 0:
+        print("Factorizing linear constraints")
+    timer.start("linear constraint factorize")
+    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        constraints, objective.args
+    )
+    timer.stop("linear constraint factorize")
+    if verbose > 1:
+        timer.disp("linear constraint factorize")
+
+    # state vector
+    x = objective.x(eq)
+    x_reduced = project(x)
+    x_norm = jnp.linalg.norm(x_reduced)
+
+    # perturbation vectors
+    dx1_reduced = jnp.zeros_like(x_reduced)
+    dx2_reduced = jnp.zeros_like(x_reduced)
+    dx3_reduced = jnp.zeros_like(x_reduced)
+
+    # tangent vectors
+    tangents = jnp.zeros((objective.dim_x,))
+    if "Rb_lmn" in deltas.keys():
+        con = get_instance(constraints, BoundaryRSelfConsistency)
+        A = con.derivatives["jac_unscaled"]["R_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
+        )
+        Ainv = jnp.linalg.pinv(A)
+        dc = deltas["Rb_lmn"]
+        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
+    if "Zb_lmn" in deltas.keys():
+        con = get_instance(constraints, BoundaryZSelfConsistency)
+        A = con.derivatives["jac_unscaled"]["Z_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
+        )
+        Ainv = jnp.linalg.pinv(A)
+        dc = deltas["Zb_lmn"]
+        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
+    if "Ra_n" in deltas.keys():
+        con = get_instance(constraints, AxisRSelfConsistency)
+        A = con.derivatives["jac_unscaled"]["R_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
+        )
+        Ainv = jnp.linalg.pinv(A)
+        dc = deltas["Ra_n"]
+        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
+    if "Za_n" in deltas.keys():
+        con = get_instance(constraints, AxisZSelfConsistency)
+        A = con.derivatives["jac_unscaled"]["Z_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
+        )
+        Ainv = jnp.linalg.pinv(A)
+        dc = deltas["Za_n"]
+        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
+    # all other perturbations besides the boundary
+    other_args = [
+        arg for arg in arg_order if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]
+    ]
+    if len([arg for arg in other_args if arg in deltas.keys()]):
+        dc = jnp.concatenate(
+            [
+                deltas[arg]
+                for arg in other_args
+                if arg in deltas.keys() and arg in objective.args
+            ]
+        )
+        x_idx = jnp.concatenate(
+            [
+                objective.x_idx[arg]
+                for arg in other_args
+                if arg in deltas.keys() and arg in objective.args
+            ]
+        )
+        x_idx = jnp.sort(x_idx)
+        tangents += jnp.eye(objective.dim_x)[:, x_idx] @ dc
+
+    # 1st order
+    if order > 0:
+
+        if (weight is None) or (weight == "auto"):
+            w = jnp.ones((objective.dim_x,))
+            if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
+                w = put(
+                    w,
+                    objective.x_idx["R_lmn"],
+                    (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),
+                )
+                w = put(
+                    w,
+                    objective.x_idx["Z_lmn"],
+                    (abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1),
+                )
+                w = put(
+                    w,
+                    objective.x_idx["L_lmn"],
+                    (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
+                )
+            weight = w
+        weight = jnp.atleast_1d(weight)
+        assert (
+            len(weight) == objective.dim_x
+        ), "Size of weight supplied to perturbation does not match objective.dim_x."
+        if weight.ndim == 1:
+            weight = weight[unfixed_idx]
+            weight = jnp.diag(weight)
+        else:
+            weight = weight[unfixed_idx, unfixed_idx]
+        W = Z.T @ weight @ Z
+        scale_inv = W
+        scale = jnp.linalg.inv(scale_inv)
+
+        # 1st partial derivatives wrt both state vector (x) and input parameters (c)
+        if verbose > 0:
+            print("Computing df")
+        timer.start("df computation")
+        Jx = objective.jac_scaled(x)
+        Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
+        RHS1 = objective.jvp_scaled(tangents, x)
+        if include_f:
+            f = objective.compute_scaled_error(x)
+            RHS1 += f
+        timer.stop("df computation")
+        if verbose > 1:
+            timer.disp("df computation")
+
+        if verbose > 0:
+            print("Factoring df")
+        timer.start("df/dx factorization")
+        u, s, vt = jnp.linalg.svd(Jx_reduced, full_matrices=False)
+        timer.stop("df/dx factorization")
+        if verbose > 1:
+            timer.disp("df/dx factorization")
+
+        dx1_h, hit, alpha = trust_region_step_exact_svd(
+            RHS1,
+            u,
+            s,
+            vt.T,
+            tr_ratio[0] * jnp.linalg.norm(scale_inv @ x_reduced),
+            initial_alpha=None,
+            rtol=0.01,
+            max_iter=10,
+        )
+        dx1_reduced = scale @ dx1_h
+        dx1 = recover(dx1_reduced) - xp
+
+    # 2nd order
+    if order > 1:
+
+        # 2nd partial derivatives wrt both state vector (x) and input parameters (c)
+        if verbose > 0:
+            print("Computing d^2f")
+        timer.start("d^2f computation")
+        tangents += dx1
+        RHS2 = 0.5 * objective.jvp_scaled((tangents, tangents), x)
+        timer.stop("d^2f computation")
+        if verbose > 1:
+            timer.disp("d^2f computation")
+
+        dx2_h, hit, alpha = trust_region_step_exact_svd(
+            RHS2,
+            u,
+            s,
+            vt.T,
+            tr_ratio[1] * jnp.linalg.norm(dx1_h),
+            initial_alpha=alpha / tr_ratio[1],
+            rtol=0.01,
+            max_iter=10,
+        )
+        dx2_reduced = scale @ dx2_h
+        dx2 = recover(dx2_reduced) - xp
+
+    # 3rd order
+    if order > 2:
+
+        # 3rd partial derivatives wrt both state vector (x) and input parameters (c)
+        if verbose > 0:
+            print("Computing d^3f")
+        timer.start("d^3f computation")
+        RHS3 = (1 / 6) * objective.jvp_scaled((tangents, tangents, tangents), x)
+        RHS3 += objective.jvp_scaled((dx2, tangents), x)
+        timer.stop("d^3f computation")
+        if verbose > 1:
+            timer.disp("d^3f computation")
+
+        dx3_h, hit, alpha = trust_region_step_exact_svd(
+            RHS3,
+            u,
+            s,
+            vt.T,
+            tr_ratio[2] * jnp.linalg.norm(dx2_h),
+            initial_alpha=alpha / tr_ratio[2],
+            rtol=0.01,
+            max_iter=10,
+        )
+        dx3_reduced = scale @ dx3_h
+
+    if order > 3:
+        raise ValueError(
+            "Higher-order perturbations not yet implemented: {}".format(order)
+        )
+
+    if copy:
+        eq_new = eq.copy()
+    else:
+        eq_new = eq
+
+    # update perturbation attributes
+    for key, value in deltas.items():
+        setattr(eq_new, key, getattr(eq_new, key) + value)
+    for constraint in constraints:
+        if hasattr(constraint, "update_target"):
+            constraint.update_target(eq_new)
+    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        constraints, objective.args
+    )
+
+    # update other attributes
+    dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
+    x_new = recover(x_reduced + dx_reduced)
+    args = objective.unpack_state(x_new)
+    for key, value in args.items():
+        if key not in deltas:
+            value = put(  # parameter values below threshold are set to 0
+                value, jnp.where(jnp.abs(value) < 10 * jnp.finfo(value.dtype).eps)[0], 0
+            )
+            # don't set nonexistent profile (values are empty ndarrays)
+            if value.size:
+                setattr(eq_new, key, value)
+
+    timer.stop("Total perturbation")
+    if verbose > 0:
+        print("||dx||/||x|| = {:10.3e}".format(jnp.linalg.norm(dx_reduced) / x_norm))
+    if verbose > 1:
+        timer.disp("Total perturbation")
+
+    return eq_new
+
+
+__all__ = ["get_deltas", "perturb", "optimal_perturb"]

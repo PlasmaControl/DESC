@@ -79,7 +79,7 @@ def _R_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="R_rrr",
-    label="\\partial_{\rho \\rho \\rho} R",
+    label="\\partial_{\\rho \\rho \\rho} R",
     units="m",
     units_long="meters",
     description="Major radius in lab frame, third radial derivative",
@@ -97,7 +97,7 @@ def _R_rrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="R_rrrr",
-    label="\\partial_{\rho \\rho \\rho \\rho} R",
+    label="\\partial_{\\rho \\rho \\rho \\rho} R",
     units="m",
     units_long="meters",
     description="Major radius in lab frame, fourth radial derivative",
@@ -115,7 +115,7 @@ def _R_rrrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="R_rrrt",
-    label="\\partial_{\rho \\rho \\rho \\theta} R",
+    label="\\partial_{\\rho \\rho \\rho \\theta} R",
     units="m",
     units_long="meters",
     description="Major radius in lab frame, fourth derivative wrt"
@@ -134,7 +134,7 @@ def _R_rrrt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="R_rrrz",
-    label="\\partial_{\rho \\rho \\rho \\zeta} R",
+    label="\\partial_{\\rho \\rho \\rho \\zeta} R",
     units="m",
     units_long="meters",
     description="Major radius in lab frame, fourth derivative wrt"
@@ -175,7 +175,7 @@ def _R_rrt(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho \\rho \\theta \\theta} R",
     units="m",
     units_long="meters",
-    description="Major radius in lab frame, fouth derivative, wrt radius twice "
+    description="Major radius in lab frame, fourth derivative, wrt radius twice "
     "and poloidal angle twice",
     dim=1,
     params=["R_lmn"],
@@ -800,7 +800,7 @@ def _Z_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Z_rrr",
-    label="\\partial_{\rho \\rho \\rho} Z",
+    label="\\partial_{\\rho \\rho \\rho} Z",
     units="m",
     units_long="meters",
     description="Vertical coordinate in lab frame, third radial derivative",
@@ -818,7 +818,7 @@ def _Z_rrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Z_rrrr",
-    label="\\partial_{\rho \\rho \\rho \\rho} Z",
+    label="\\partial_{\\rho \\rho \\rho \\rho} Z",
     units="m",
     units_long="meters",
     description="Vertical coordinate in lab frame, fourth radial derivative",
@@ -836,7 +836,7 @@ def _Z_rrrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Z_rrrt",
-    label="\\partial_{\rho \\rho \\rho \\theta} Z",
+    label="\\partial_{\\rho \\rho \\rho \\theta} Z",
     units="m",
     units_long="meters",
     description="Vertical coordinate in lab frame, fourth derivative wrt "
@@ -855,7 +855,7 @@ def _Z_rrrt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Z_rrrz",
-    label="\\partial_{\rho \\rho \\rho \\zeta} Z",
+    label="\\partial_{\\rho \\rho \\rho \\zeta} Z",
     units="m",
     units_long="meters",
     description="Vertical coordinate in lab frame, fourth derivative wrt "
@@ -1435,7 +1435,7 @@ def _lambda_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="lambda_rrr",
-    label="\\partial_{\rho \\rho \\rho} \\lambda",
+    label="\\partial_{\\rho \\rho \\rho} \\lambda",
     units="rad",
     units_long="radians",
     description="Poloidal stream function, third radial derivative",
@@ -1453,7 +1453,7 @@ def _lambda_rrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="lambda_rrrt",
-    label="\\partial_{\rho \\rho \\rho \\theta} \\lambda",
+    label="\\partial_{\\rho \\rho \\rho \\theta} \\lambda",
     units="rad",
     units_long="radians",
     description="Poloidal stream function, third radial derivative and"
@@ -1472,7 +1472,7 @@ def _lambda_rrrt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="lambda_rrrz",
-    label="\\partial_{\rho \\rho \\rho \\zeta} \\lambda",
+    label="\\partial_{\\rho \\rho \\rho \\zeta} \\lambda",
     units="rad",
     units_long="radians",
     description="Poloidal stream function, third radial derivative and"
@@ -1843,7 +1843,7 @@ def _omega_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="omega_rrr",
-    label="\\partial_{\rho \\rho \\rho} \\omega",
+    label="\\partial_{\\rho \\rho \\rho} \\omega",
     units="rad",
     units_long="radians",
     description="Toroidal stream function, third radial derivative",
@@ -1861,7 +1861,7 @@ def _omega_rrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="omega_rrrr",
-    label="\\partial_{\rho \\rho \\rho \\rho} \\omega",
+    label="\\partial_{\\rho \\rho \\rho \\rho} \\omega",
     units="rad",
     units_long="radians",
     description="Toroidal stream function, fourth radial derivative",
@@ -1879,7 +1879,7 @@ def _omega_rrrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="omega_rrrt",
-    label="\\partial_{\rho \\rho \\rho \\theta} \\omega",
+    label="\\partial_{\\rho \\rho \\rho \\theta} \\omega",
     units="rad",
     units_long="radians",
     description="Toroidal stream function, fourth derivative wrt radial coordinate"
@@ -1898,7 +1898,7 @@ def _omega_rrrt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="omega_rrrz",
-    label="\\partial_{\rho \\rho \\rho \\zeta} \\omega",
+    label="\\partial_{\\rho \\rho \\rho \\zeta} \\omega",
     units="rad",
     units_long="radians",
     description="Toroidal stream function, fourth derivative wrt radial coordinate"

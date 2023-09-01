@@ -175,7 +175,7 @@ def _R_rrt(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho \\rho \\theta \\theta} R",
     units="m",
     units_long="meters",
-    description="Major radius in lab frame, fouth derivative, wrt radius twice "
+    description="Major radius in lab frame, fourth derivative, wrt radius twice "
     "and poloidal angle twice",
     dim=1,
     params=["R_lmn"],

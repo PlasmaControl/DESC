@@ -1,9 +1,6 @@
 """Test fixtures for computing equilibria etc."""
 
 import os
-import sys
-import traceback
-import warnings
 
 import h5py
 import numpy as np
@@ -13,16 +10,6 @@ from netCDF4 import Dataset
 from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.vmec import VMECIO
-
-
-# print full tracebacks to help find sources of warnings
-def _warn_with_traceback(message, category, filename, lineno, file=None, line=None):
-    log = file if hasattr(file, "write") else sys.stderr
-    traceback.print_stack(file=log)
-    log.write(warnings.formatwarning(message, category, filename, lineno, line))
-
-
-warnings.showwarning = _warn_with_traceback
 
 
 @pytest.fixture(scope="session")

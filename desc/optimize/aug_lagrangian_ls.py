@@ -85,7 +85,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         If None, the termination by this condition is disabled.
     gtol : float or None, optional
         Absolute tolerance for termination by the norm of the gradient.
-        Optimizer teriminates when ``norm(g) < gtol``, where
+        Optimizer terminates when ``norm(g) < gtol``, where
         If None, the termination by this condition is disabled.
     ctol : float, optional
         Tolerance for stopping based on infinity norm of the constraint violation.

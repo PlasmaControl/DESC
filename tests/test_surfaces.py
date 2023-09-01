@@ -137,7 +137,7 @@ class TestFourierRZToroidalSurface:
 
 
 class TestZernikeRZToroidalSection:
-    """Tests for ZerinkeRZTorioidalSection class."""
+    """Tests for ZernikeRZToroidalSection class."""
 
     @pytest.mark.unit
     def test_area(self):

@@ -33,6 +33,7 @@ not_finite_limits = {
     "e^theta_r",
     "e^theta_t",
     "e^theta_z",
+    "e^theta_zz",
     "g^rt",
     "g^rt_r",
     "g^rt_t",
@@ -46,6 +47,16 @@ not_finite_limits = {
     "g^tz_t",
     "g^tz_z",
     "grad(alpha)",
+    "grad(alpha)_z",
+    "grad(alpha)_zz",
+    "g^aa",
+    "g^aa_z",
+    "g^aa_zz",
+    "g^ra",
+    "g^ra_z",
+    "g^ra_zz",
+    "gbdrift",
+    "cvdrift",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
@@ -242,6 +253,7 @@ class TestAxisLimits:
             "iota_r": {"atol": 1e-4},
             "iota_num_rr": {"atol": 5e-3},
             "alpha_r": {"rtol": 1e-3},
+            "cvdrift0": {"atol": 1e-5},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
         # same as 'weaker_tolerance | zero_limit', but works on Python 3.8 (PEP 584)

@@ -1954,7 +1954,7 @@ def _g_sup_ra_sub_zz(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "b", "sqrt(g)", "grad(alpha)", "grad(|B|)", "psi_r"],
+    data=["|B|", "b", "grad(alpha)", "grad(|B|)", "psi_r"],
 )
 def _gbdrift(params, transforms, profiles, data, **kwargs):
     data["gbdrift"] = (
@@ -1998,7 +1998,7 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "b", "e^rho", "iota", "iota_r", "sqrt(g)", "grad(alpha)", "grad(|B|)"],
+    data=["|B|", "b", "e^rho", "iota_r", "grad(|B|)"],
 )
 def _cvdrift0(params, transforms, profiles, data, **kwargs):
     data["cvdrift0"] = (

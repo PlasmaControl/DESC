@@ -177,10 +177,10 @@ def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=[
         "e_theta",
-        "e_zeta",
         "e_theta_z",
-        "e_zeta_z",
         "e_theta_zz",
+        "e_zeta",
+        "e_zeta_z",
         "e_zeta_zz",
         "sqrt(g)",
         "sqrt(g)_z",
@@ -190,9 +190,6 @@ def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
         "e_theta_r",
         "e_theta_rz",
         "e_theta_rzz",
-        "e_zeta",
-        "e_zeta_z",
-        "e_zeta_zz",
         "sqrt(g)_r",
         "sqrt(g)_rz",
         "sqrt(g)_rzz",
@@ -207,10 +204,13 @@ def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
                 + cross(data["e_theta"], data["e_zeta_zz"])
             ).T
             / data["sqrt(g)"]
-            + 2
-            * cross(data["e_theta"], data["e_zeta"]).T
+            - cross(data["e_theta"], data["e_zeta"]).T
             * data["sqrt(g)_zz"]
             / data["sqrt(g)"] ** 2
+            + 2
+            * cross(data["e_theta"], data["e_zeta"]).T
+            * data["sqrt(g)_z"] ** 2
+            / data["sqrt(g)"] ** 3
             - 2
             * (
                 cross(data["e_theta_z"], data["e_zeta"])
@@ -226,15 +226,19 @@ def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
                 + cross(data["e_theta_r"], data["e_zeta_zz"])
             ).T
             / data["sqrt(g)_r"]
-            + (
+            - cross(data["e_theta_r"], data["e_zeta"]).T
+            * data["sqrt(g)_rzz"]
+            / data["sqrt(g)_r"] ** 2
+            + 2
+            * cross(data["e_theta_r"], data["e_zeta"]).T
+            * data["sqrt(g)_rz"] ** 2
+            / data["sqrt(g)_r"] ** 3
+            - 2
+            * (
                 cross(data["e_theta_rz"], data["e_zeta"])
                 + cross(data["e_theta_r"], data["e_zeta_z"])
             ).T
             * data["sqrt(g)_rz"]
-            / data["sqrt(g)_r"] ** 2
-            + 2
-            * cross(data["e_theta_r"], data["e_zeta"]).T
-            * data["sqrt(g)_rzz"]
             / data["sqrt(g)_r"] ** 2
         ).T,
     )
@@ -379,8 +383,6 @@ def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "e^theta",
-        "e^theta_z",
         "e_zeta",
         "e_zeta_z",
         "e_zeta_zz",
@@ -400,8 +402,23 @@ def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
             + cross(data["e_zeta"], data["e_rho_zz"])
         ).T
         / data["sqrt(g)"]
-        - data["e^theta_z"].T * data["sqrt(g)_z"] / data["sqrt(g)"] ** 2
-        + 2 * data["e^theta"].T * data["sqrt(g)_zz"] / data["sqrt(g)"] ** 3
+        - 2
+        * (
+            cross(data["e_zeta_z"], data["e_rho"])
+            + cross(data["e_zeta"], data["e_rho_z"])
+        ).T
+        * data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+        - cross(data["e_zeta_z"], data["e_rho"]).T
+        * data["sqrt(g)_zz"]
+        / data["sqrt(g)"] ** 2
+        + 2
+        * (
+            cross(data["e_zeta_z"], data["e_rho"])
+            + cross(data["e_zeta"], data["e_rho_z"])
+        ).T
+        * data["sqrt(g)_z"] ** 2
+        / data["sqrt(g)"] ** 3
     ).T
     return data
 
@@ -561,22 +578,18 @@ def _e_sup_zeta_z(params, transforms, profiles, data, **kwargs):
         "e_rho_zz",
         "e_theta",
         "e_theta_z",
-        "e_theta_rzz",
-        "e_theta_rz",
+        "e_theta_zz",
         "sqrt(g)",
         "sqrt(g)_z",
-        "sqrt(g)_rzz",
+        "sqrt(g)_zz",
     ],
     axis_limit_data=[
         "e_theta_r",
         "e_theta_rz",
-        "e_theta_zz",
-        "e_rho_z",
-        "e_rho_zz",
+        "e_theta_rzz",
         "sqrt(g)_r",
-        "sqrt(g)_z",
         "sqrt(g)_rz",
-        "sqrt(g)_zz",
+        "sqrt(g)_rzz",
     ],
 )
 def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
@@ -588,34 +601,42 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
                 + cross(data["e_rho"], data["e_theta_zz"])
             ).T
             / data["sqrt(g)"]
-            - (
+            - 2
+            * (
                 cross(data["e_rho_z"], data["e_theta"])
                 + cross(data["e_rho"], data["e_theta_z"])
             ).T
             * data["sqrt(g)_z"]
             / data["sqrt(g)"] ** 2
-            + 2
+            - 1
             * cross(data["e_rho"], data["e_theta"]).T
             * data["sqrt(g)_zz"]
+            / data["sqrt(g)"] ** 2
+            + 2
+            * cross(data["e_rho"], data["e_theta"]).T
+            * data["sqrt(g)_z"] ** 2
             / data["sqrt(g)"] ** 3
         ).T,
         lambda: (
             (
                 cross(data["e_rho_zz"], data["e_theta_r"])
-                + cross(data["e_rho_z"], data["e_theta_rz"])
-                + cross(data["e_rho_z"], data["e_theta_rz"])
+                + 2 * cross(data["e_rho_z"], data["e_theta_rz"])
                 + cross(data["e_rho"], data["e_theta_rzz"])
             ).T
             / data["sqrt(g)_r"]
-            - (
+            - 2
+            * (
                 cross(data["e_rho_z"], data["e_theta_r"])
                 + cross(data["e_rho"], data["e_theta_rz"])
             ).T
             * data["sqrt(g)_rz"]
             / data["sqrt(g)_r"] ** 2
-            - 2
-            * cross(data["e_rho"], data["e_theta_r"]).T
+            - cross(data["e_rho"], data["e_theta_r"]).T
             * data["sqrt(g)_rzz"]
+            / data["sqrt(g)_r"] ** 2
+            + 2
+            * cross(data["e_rho"], data["e_theta_r"]).T
+            * data["sqrt(g)_rz"] ** 2
             / data["sqrt(g)_r"] ** 3
         ).T,
     )
@@ -3620,9 +3641,7 @@ def _grad_alpha(params, transforms, profiles, data, **kwargs):
     data=[
         "e^rho",
         "e^rho_z",
-        "e^theta",
         "e^theta_z",
-        "e^zeta",
         "e^zeta_z",
         "alpha_r",
         "alpha_z",
@@ -3654,9 +3673,7 @@ def _grad_alpha_z(params, transforms, profiles, data, **kwargs):
         "e^rho",
         "e^rho_z",
         "e^rho_zz",
-        "e^theta",
         "e^theta_zz",
-        "e^zeta",
         "e^zeta_zz",
         "alpha_z",
         "alpha_r",

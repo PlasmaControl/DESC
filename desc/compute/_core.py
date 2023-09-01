@@ -1361,7 +1361,6 @@ def _alpha_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# RG
 @register_compute_fun(
     name="alpha_z",
     label="\\partial_\\zeta \\alpha",
@@ -1380,7 +1379,6 @@ def _alpha_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# RG
 @register_compute_fun(
     name="alpha_zz",
     label="\\partial_{\\zeta \\zeta} \\alpha",
@@ -1399,7 +1397,6 @@ def _alpha_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# RG
 @register_compute_fun(
     name="alpha_rz",
     label="\\partial_{\\rho \\zeta} \\alpha",
@@ -1422,7 +1419,6 @@ def _alpha_rz(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# RG
 @register_compute_fun(
     name="alpha_rzz",
     label="\\partial_{\\rho \\zeta \\zeta} \\alpha",

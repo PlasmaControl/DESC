@@ -125,32 +125,32 @@ class QuasisymmetryBoozer(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(
             self._data_keys,
             obj=eq,
             grid=grid,
             M_booz=M_booz,
             N_booz=N_booz,
         )
-        self._matrix, self._modes, self._idx = ptolemy_linear_transform(
-            self._transforms["B"].basis.modes,
+        matrix, modes, idx = ptolemy_linear_transform(
+            transforms["B"].basis.modes,
             helicity=self.helicity,
-            NFP=self._transforms["B"].basis.NFP,
+            NFP=transforms["B"].basis.NFP,
         )
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
-            "matrix": self._matrix,
-            "idx": self._idx,
+            "transforms": transforms,
+            "profiles": profiles,
+            "matrix": matrix,
+            "idx": idx,
         }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._dim_f = self._idx.size
+        self._dim_f = idx.size
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -322,11 +322,11 @@ class QuasisymmetryTwoTerm(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
             "helicity": self.helicity,
         }
 
@@ -492,11 +492,11 @@ class QuasisymmetryTripleProduct(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -641,11 +641,11 @@ class Isodynamicity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")

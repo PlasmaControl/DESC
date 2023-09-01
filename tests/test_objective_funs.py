@@ -67,7 +67,8 @@ class TestObjectiveFunction:
                 "Psi": eq.Psi,
             }
             np.testing.assert_allclose(
-                obj.compute(**kwargs), eq.compute(f, grid=obj._transforms["grid"])[f]
+                obj.compute(**kwargs),
+                eq.compute(f, grid=obj.constants["transforms"]["grid"])[f],
             )
 
         test("sqrt(g)", Equilibrium())
@@ -339,7 +340,9 @@ class TestObjectiveFunction:
             obj = MercierStability(eq=eq)
             obj.build()
             DMerc = obj.compute_unscaled(*obj.xs(eq))
-            np.testing.assert_equal(len(DMerc), obj._transforms["grid"].num_rho)
+            np.testing.assert_equal(
+                len(DMerc), obj.constants["transforms"]["grid"].num_rho
+            )
             np.testing.assert_allclose(DMerc, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -353,7 +356,9 @@ class TestObjectiveFunction:
             obj = MagneticWell(eq=eq)
             obj.build()
             magnetic_well = obj.compute_unscaled(*obj.xs(eq))
-            np.testing.assert_equal(len(magnetic_well), obj._transforms["grid"].num_rho)
+            np.testing.assert_equal(
+                len(magnetic_well), obj.constants["transforms"]["grid"].num_rho
+            )
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -503,14 +508,20 @@ def test_target_profiles():
     obji.build()
     np.testing.assert_allclose(
         obji.target,
-        iota(obji._transforms["grid"].nodes[obji._transforms["grid"].unique_rho_idx]),
+        iota(
+            obji.constants["transforms"]["grid"].nodes[
+                obji.constants["transforms"]["grid"].unique_rho_idx
+            ]
+        ),
     )
     objc = ToroidalCurrent(target=current, eq=eqc)
     objc.build()
     np.testing.assert_allclose(
         objc.target,
         current(
-            objc._transforms["grid"].nodes[objc._transforms["grid"].unique_rho_idx]
+            objc.constants["transforms"]["grid"].nodes[
+                objc.constants["transforms"]["grid"].unique_rho_idx
+            ]
         ),
     )
 

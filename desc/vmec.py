@@ -64,7 +64,7 @@ class VMECIO:
 
         Notes
         -----
-        To ensure compatibiltiy with different profile representations in VMEC,
+        To ensure compatibility with different profile representations in VMEC,
         the resulting equilibrium will always have SplineProfile types for all profiles
 
         """
@@ -253,7 +253,7 @@ class VMECIO:
         file.createDimension("n_tor", N + 1)  # number of toroidal Fourier modes
         file.createDimension("preset", 21)  # dimension of profile inputs
         file.createDimension("ndfmax", 101)  # used for am_aux & ai_aux
-        file.createDimension("time", 100)  # used for fsqrt & wdot
+        file.createDimension("time", 100)  # used for fsq* & wdot
         file.createDimension("dim_00001", 1)
         file.createDimension("dim_00020", 20)
         file.createDimension("dim_00100", 100)
@@ -518,7 +518,7 @@ class VMECIO:
         betator[:] = eq.compute("<beta_tor>_vol")["<beta_tor>_vol"]
 
         ctor = file.createVariable("ctor", np.float64)
-        ctor.long_name = "total toroidal plamsa current"
+        ctor.long_name = "total toroidal plasma current"
         ctor.units = "A"
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=NFP)
         ctor[:] = eq.compute("I", grid=grid)["I"][0] * 2 * np.pi / mu_0
@@ -1408,7 +1408,8 @@ class VMECIO:
         s : array-like
             desired radial coordinates (normalized toroidal magnetic flux)
         theta_star : array-like
-            desired straigh field-line poloidal angles (PEST/VMEC-like flux coordinates)
+            desired straight field-line poloidal angles (PEST/VMEC-like flux
+            coordinates)
         zeta : array-like
             desired toroidal angles (toroidal coordinate phi)
         si : ndarray

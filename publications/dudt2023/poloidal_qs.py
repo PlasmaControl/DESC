@@ -1,11 +1,11 @@
 """Quasi-symmetry with poloidal contours."""
 
-import numpy as np
-from qic import Qic
-
 from desc import set_device
 
 set_device("gpu")
+
+import numpy as np
+from qic import Qic
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
@@ -116,6 +116,7 @@ eq, result = eq.solve(
     maxiter=200,
     verbose=3,
     copy=True,
+    options={"initial_trust_ratio": 0.9005010563364209},
 )
 fam.append(eq)
 fam.save(fname + ".h5")

@@ -1,11 +1,11 @@
 """Omnigenity with toroidal contours."""
 
-import numpy as np
-from qsc import Qsc
-
 from desc import set_device
 
 set_device("gpu")
+
+import numpy as np
+from qsc import Qsc
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
@@ -76,6 +76,7 @@ eq, result = eq.solve(
     maxiter=200,
     verbose=3,
     copy=True,
+    options={"initial_trust_ratio": 0.9204591976957165},
 )
 fam.append(eq)
 fam.save(fname + ".h5")

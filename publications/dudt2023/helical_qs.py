@@ -1,11 +1,11 @@
 """Quasi-symmetry with helical contours."""
 
-import numpy as np
-from qsc import Qsc
-
 from desc import set_device
 
 set_device("gpu")
+
+import numpy as np
+from qsc import Qsc
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
@@ -100,6 +100,7 @@ eq, result = eq.solve(
     maxiter=100,
     verbose=3,
     copy=True,
+    options={"initial_trust_ratio": 0.9223447865884191},
 )
 fam.append(eq)
 fam.save(fname + ".h5")

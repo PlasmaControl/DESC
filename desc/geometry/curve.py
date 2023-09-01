@@ -760,16 +760,17 @@ class SplineXYZCurve(Curve):
             If supplied, will be rescaled to lie in [0,2pi]
         method : str
             method of interpolation
+
             - `'nearest'`: nearest neighbor interpolation
             - `'linear'`: linear interpolation
             - `'cubic'`: C1 cubic splines (aka local splines)
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+
         name : str
             name for this curve
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
-
 
         Returns
         -------

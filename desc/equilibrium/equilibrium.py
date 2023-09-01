@@ -21,7 +21,7 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -761,7 +761,7 @@ class Equilibrium(IOAble, Optimizable):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-        elif not isinstance(grid, Grid):
+        elif not isinstance(grid, _Grid):
             raise TypeError(
                 "must pass in a Grid object for argument grid!"
                 f" instead got type {type(grid)}"
@@ -1669,7 +1669,6 @@ class Equilibrium(IOAble, Optimizable):
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
 
-
         """
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
@@ -2242,8 +2241,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )
         self._equilibria = list(equil)
-
-    # dunder methods required by MutableSequence
 
     def __getitem__(self, i):
         return self._equilibria[i]

@@ -14,13 +14,12 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.grid import Grid
-from desc.magnetic_fields import MagneticField, biot_savart
+from desc.magnetic_fields import _MagneticField, biot_savart
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.utils import flatten_list
 
 
-class Coil(MagneticField, Optimizable, ABC):
+class _Coil(_MagneticField, Optimizable, ABC):
     """Base class representing a magnetic field coil.
 
     Represents coils as a combination of a Curve and current
@@ -38,7 +37,7 @@ class Coil(MagneticField, Optimizable, ABC):
         current passing through the coil, in Amperes
     """
 
-    _io_attrs_ = MagneticField._io_attrs_ + ["_current"]
+    _io_attrs_ = _MagneticField._io_attrs_ + ["_current"]
 
     def __init__(self, current, *args, **kwargs):
         self._current = current
@@ -79,7 +78,7 @@ class Coil(MagneticField, Optimizable, ABC):
             magnetic field at specified points, in either rpz or xyz coordinates
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if isinstance(coords, Grid):
+        if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "rpz":
@@ -104,7 +103,7 @@ class Coil(MagneticField, Optimizable, ABC):
         )
 
 
-class FourierRZCoil(Coil, FourierRZCurve):
+class FourierRZCoil(_Coil, FourierRZCurve):
     """Coil parameterized by fourier series for R,Z in terms of toroidal angle phi.
 
     Parameters
@@ -156,7 +155,7 @@ class FourierRZCoil(Coil, FourierRZCurve):
 
     """
 
-    _io_attrs_ = Coil._io_attrs_ + FourierRZCurve._io_attrs_
+    _io_attrs_ = _Coil._io_attrs_ + FourierRZCurve._io_attrs_
 
     def __init__(
         self,
@@ -172,7 +171,7 @@ class FourierRZCoil(Coil, FourierRZCurve):
         super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
 
 
-class FourierXYZCoil(Coil, FourierXYZCurve):
+class FourierXYZCoil(_Coil, FourierXYZCurve):
     """Coil parameterized by fourier series for X,Y,Z in terms of arbitrary angle phi.
 
     Parameters
@@ -221,7 +220,7 @@ class FourierXYZCoil(Coil, FourierXYZCurve):
 
     """
 
-    _io_attrs_ = Coil._io_attrs_ + FourierXYZCurve._io_attrs_
+    _io_attrs_ = _Coil._io_attrs_ + FourierXYZCurve._io_attrs_
 
     def __init__(
         self,
@@ -235,7 +234,7 @@ class FourierXYZCoil(Coil, FourierXYZCurve):
         super().__init__(current, X_n, Y_n, Z_n, modes, name)
 
 
-class FourierPlanarCoil(Coil, FourierPlanarCurve):
+class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     """Coil that lines in a plane.
 
     Parameterized by a point (the center of the coil), a vector (normal to the plane),
@@ -292,7 +291,7 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
 
     """
 
-    _io_attrs_ = Coil._io_attrs_ + FourierPlanarCurve._io_attrs_
+    _io_attrs_ = _Coil._io_attrs_ + FourierPlanarCurve._io_attrs_
 
     def __init__(
         self,
@@ -306,7 +305,7 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
         super().__init__(current, center, normal, r_n, modes, name)
 
 
-class SplineXYZCoil(Coil, SplineXYZCurve):
+class SplineXYZCoil(_Coil, SplineXYZCurve):
     """Coil parameterized by spline points in X,Y,Z.
 
     Parameters
@@ -340,7 +339,7 @@ class SplineXYZCoil(Coil, SplineXYZCurve):
 
     """
 
-    _io_attrs_ = Coil._io_attrs_ + SplineXYZCurve._io_attrs_
+    _io_attrs_ = _Coil._io_attrs_ + SplineXYZCurve._io_attrs_
 
     def __init__(
         self,
@@ -355,7 +354,7 @@ class SplineXYZCoil(Coil, SplineXYZCurve):
         super().__init__(current, X, Y, Z, knots, method, name)
 
 
-class CoilSet(Coil, MutableSequence):
+class CoilSet(_Coil, MutableSequence):
     """Set of coils of different geometry.
 
     Parameters
@@ -369,11 +368,11 @@ class CoilSet(Coil, MutableSequence):
 
     """
 
-    _io_attrs_ = Coil._io_attrs_ + ["_coils"]
+    _io_attrs_ = _Coil._io_attrs_ + ["_coils"]
 
     def __init__(self, *coils, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
-        assert all([isinstance(coil, (Coil)) for coil in coils])
+        assert all([isinstance(coil, (_Coil)) for coil in coils])
         self._coils = list(coils)
         self._name = str(name)
 
@@ -527,7 +526,7 @@ class CoilSet(Coil, MutableSequence):
         endpoint : bool
             whether to include a coil at final angle
         """
-        assert isinstance(coil, Coil)
+        assert isinstance(coil, _Coil)
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
@@ -559,7 +558,7 @@ class CoilSet(Coil, MutableSequence):
         endpoint : bool
             whether to include a coil at final point
         """
-        assert isinstance(coil, Coil)
+        assert isinstance(coil, _Coil)
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
@@ -764,7 +763,7 @@ class CoilSet(Coil, MutableSequence):
         coil_end_inds = []  # indices where the coils end, need to track these
         # to place the coilgroup number and name later, which MAKEGRID expects
         # at the end of each individual coil
-        if isinstance(grid, Grid):
+        if hasattr(grid, "endpoint"):
             endpoint = grid.endpoint
         elif isinstance(grid, numbers.Integral):
             endpoint = True  # if int, will create a grid w/ endpoint=True in compute
@@ -832,7 +831,7 @@ class CoilSet(Coil, MutableSequence):
         return self.coils[i]
 
     def __setitem__(self, i, new_item):
-        if not isinstance(new_item, Coil):
+        if not isinstance(new_item, _Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
         self._coils[i] = new_item
 
@@ -844,7 +843,7 @@ class CoilSet(Coil, MutableSequence):
 
     def insert(self, i, new_item):
         """Insert a new coil into the coilset at position i."""
-        if not isinstance(new_item, Coil):
+        if not isinstance(new_item, _Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
         self._coils.insert(i, new_item)
 

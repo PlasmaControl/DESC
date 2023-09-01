@@ -496,7 +496,6 @@ def register_optimizer(
         Dictionary of optional keyword arguments to override default solver
         settings.
 
-
     Parameters
     ----------
     name : str or array-like of str

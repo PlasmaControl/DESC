@@ -18,6 +18,13 @@ import subprocess
 import sys
 
 
+def keyfun(d):
+    """By default _ gets sorted between Z and a, this makes _ get sorted first."""
+    if isinstance(d, tuple):
+        return d[0].replace("_", "&")
+    return d.replace("_", "&")
+
+
 def verify_same_lines(orig_lines, sort_lines, report=True):
     """Make sure we didn't accidentally delete or add extra lines.
 
@@ -76,29 +83,36 @@ def extract_functions(lines):
     names = []
     thisfunc = []
     temp = []
-    flag = False
+    funcflag = False  # are we reading a function
+    decflag = False  # are we reading a decorator
 
     for i, line in enumerate(lines):
+        # double blank line indicates end of function
         if (i == len(lines) - 1) or (
             (lines[i].isspace() or len(lines[i]) == 0)
             and (lines[i + 1].isspace() or len(lines[i + 1]) == 0)
         ):
-            if (i == len(lines) - 1) and flag:
+            # if we're at the end of the file be sure to include last line
+            if (i == len(lines) - 1) and funcflag:
                 thisfunc.append(line)
-            flag = False
+            funcflag = False
             temp = []
             if len(thisfunc):
                 functions.append("\n".join(thisfunc))
                 thisfunc = []
         if line.startswith("@"):
-            temp.append(line)
+            decflag = True
         if function_pattern.match(line):
-            flag = True
+            funcflag = True
+            decflag = False
             names.append(line)
+            # prepend any decorator we already read
             thisfunc.extend(temp)
             temp = []
-        if flag:
+        if funcflag:
             thisfunc.append(line)
+        if decflag:
+            temp.append(line)
 
     if len(thisfunc):
         functions.append("\n".join(thisfunc))
@@ -106,7 +120,7 @@ def extract_functions(lines):
     assert len(names) == len(functions)
 
     funcs = [(name, fun) for name, fun in zip(names, functions)]
-    funcs = sorted(funcs)
+    funcs = sorted(funcs, key=keyfun)
     funcs = [fun for name, fun in funcs]
     return funcs
 
@@ -132,7 +146,8 @@ def extract_classes(lines):
     names = []
     thisclass = []
     temp = []
-    flag = False
+    classflag = False  # are we reading a class
+    decflag = False  # are we reading a decorator
 
     for i, line in enumerate(lines):
         # look for double blank line between definitions
@@ -140,22 +155,26 @@ def extract_classes(lines):
             (lines[i].isspace() or len(lines[i]) == 0)
             and (lines[i + 1].isspace() or len(lines[i + 1]) == 0)
         ):
-            if (i == len(lines) - 1) and flag:
+            # be sure to include line at end of file
+            if (i == len(lines) - 1) and classflag:
                 thisclass.append(line)
-            flag = False
+            classflag = False
             temp = []
             if len(thisclass):
                 classes.append("\n".join(thisclass))
                 thisclass = []
         if line.startswith("@"):
-            temp.append(line)
+            decflag = True
         if class_pattern.match(line):
-            flag = True
+            classflag = True
+            decflag = False
             names.append(line)
             thisclass.extend(temp)
             temp = []
-        if flag:
+        if classflag:
             thisclass.append(line)
+        if decflag:
+            temp.append(line)
 
     if len(thisclass):
         classes.append("\n".join(thisclass))
@@ -163,7 +182,7 @@ def extract_classes(lines):
     assert len(names) == len(classes)
 
     classes = [(name, cls) for name, cls in zip(names, classes)]
-    classes = sorted(classes)
+    classes = sorted(classes, key=keyfun)
     classes = [cls for name, cls in classes]
     return classes
 
@@ -184,7 +203,7 @@ def sort_methods(klass):
     lines = klass.split("\n")
     method_pattern = re.compile(r"^    def\s+([a-zA-Z_]\w*)\s*\(", re.MULTILINE)
     decorator_pattern = re.compile("^    @", re.MULTILINE)
-    # first grab everything up to the first def of decorator, ie docstring and io_attrs
+    # first grab everything up to the first def or decorator, ie docstring and io_attrs
     for i in range(len(lines)):
         if method_pattern.match(lines[i]) or decorator_pattern.match(lines[i]):
             break
@@ -233,8 +252,8 @@ def sort_methods(klass):
         else:
             meths.append((name, method))
 
-    meths = sorted(meths)
-    props = sorted(props)
+    meths = sorted(meths, key=keyfun)
+    props = sorted(props, key=keyfun)
 
     out = "\n".join(preamble)
     out += "\n"
@@ -268,7 +287,7 @@ def extract_constants(lines):
     constants : list of str
         Sorted source code for any declared constants.
     """
-    constant_pattern = re.compile(r"^[a-zA-Z_0-9]\w* = ", re.MULTILINE)
+    constant_pattern = re.compile(r"^[a-zA-Z_0-9\.].* = ", re.MULTILINE)
     constants = []
     this_constant = []
     flag = False
@@ -292,7 +311,7 @@ def extract_constants(lines):
     if len(this_constant):
         constants.append("\n".join(this_constant))
 
-    return sorted(constants)
+    return sorted(constants, key=keyfun)
 
 
 def extract_preamble(lines):
@@ -321,7 +340,7 @@ def extract_preamble(lines):
 
 
 def cleanup(path):
-    """Apply black formatting and isort to a block of code."""
+    """Apply black formatting and isort to a file."""
     subprocess.run(["black", "-q", path])
     subprocess.run(["isort", "-q", path])
 

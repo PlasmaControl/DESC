@@ -138,13 +138,14 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     # = 1/2 f(x)^2 + 1/2 [-y/sqrt(mu) + sqrt(mu) c(x)]^2
 
     def lagfun(f, c, y, mu):
-        c = -y / jnp.sqrt(mu) + jnp.sqrt(mu) * c
+        sqrt_mu = jnp.sqrt(mu)
+        c = -y / sqrt_mu + sqrt_mu * c
         return jnp.concatenate((f, c))
 
     def lagjac(z, y, mu, *args):
         Jf = jac_wrapped(z, *args)
         Jc = constraint_wrapped.jac(z, *args)
-        Jc = jnp.sqrt(mu) * Jc
+        Jc = jnp.sqrt(mu)[:, None] * Jc
         return jnp.vstack((Jf, Jc))
 
     nfev = 0
@@ -163,7 +164,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     assert in_bounds(z, lb, ub), "x0 is infeasible"
     z = make_strictly_feasible(z, lb, ub)
 
-    mu = options.pop("initial_penalty_parameter", 10)
+    mu = options.pop("initial_penalty_parameter", 10 * jnp.ones_like(c))
     y = options.pop("initial_multipliers", jnp.zeros_like(c))
     if y == "least_squares":  # use least squares multiplier estimates
         _J = constraint_wrapped.jac(z, *args)
@@ -180,8 +181,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     beta_eta = options.pop("beta_eta", 0.9)
     tau = options.pop("tau", 10)
 
-    gtolk = omega / mu**alpha_omega
-    ctolk = eta / mu**alpha_eta
+    gtolk = omega / jnp.mean(mu) ** alpha_omega
+    ctolk = eta / jnp.mean(mu) ** alpha_eta
 
     L = lagfun(f, c, y, mu)
     J = lagjac(z, y, mu, *args)
@@ -267,7 +268,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             step_norm,
             g_norm,
             constr_violation,
-            mu,
+            jnp.max(mu),
             jnp.max(jnp.abs(y)),
         )
 
@@ -406,12 +407,12 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             if g_norm < gtolk:  # TODO: maybe also add ftolk, xtolk?
                 if constr_violation < ctolk:
                     y = y - mu * c
-                    ctolk = ctolk / (mu**beta_eta)
-                    gtolk = gtolk / (mu**beta_omega)
+                    ctolk = ctolk / (jnp.mean(mu) ** beta_eta)
+                    gtolk = gtolk / (jnp.mean(mu) ** beta_omega)
                 else:
                     mu = tau * mu
-                    ctolk = eta / (mu**alpha_eta)
-                    gtolk = omega / (mu**alpha_omega)
+                    ctolk = eta / (jnp.mean(mu) ** alpha_eta)
+                    gtolk = omega / (jnp.mean(mu) ** alpha_omega)
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
                 Lcost = 0.5 * jnp.dot(L, L)
@@ -450,7 +451,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 step_norm,
                 g_norm,
                 constr_violation,
-                mu,
+                jnp.max(mu),
                 jnp.max(jnp.abs(y)),
             )
 

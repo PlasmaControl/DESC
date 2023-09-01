@@ -136,7 +136,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     )
 
     def lagfun(f, c, y, mu, *args):
-        return f - jnp.dot(y, c) + mu / 2 * jnp.dot(c, c)
+        return f - jnp.dot(y, c) + jnp.sum(mu / 2 * c * c)
 
     def laggrad(z, y, mu, *args):
         c = constraint_wrapped.fun(z, *args)
@@ -170,8 +170,8 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
             Hf = hess_wrapped(z, *args)
             Jc = constraint_wrapped.jac(z, *args)
             Hc1 = constraint_wrapped.hess(z, y)
-            Hc2 = constraint_wrapped.hess(z, c)
-            return Hf - Hc1 + mu * (Hc2 + jnp.dot(Jc.T, Jc))
+            Hc2 = constraint_wrapped.hess(z, c * mu)
+            return Hf - Hc1 + Hc2 + jnp.dot(mu * Jc.T, Jc)
 
     elif callable(hess_wrapped):
         bfgs = False
@@ -180,7 +180,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
             H = hess_wrapped(z, *args)
             J = constraint_wrapped.jac(z, *args)
             # ignoring higher order derivatives of constraints for now
-            return H + mu * jnp.dot(J.T, J)
+            return H + jnp.dot(mu * J.T, J)
 
     else:
         raise ValueError("hess should either be a callable or 'bfgs'", "red")
@@ -201,7 +201,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     assert in_bounds(z, lb, ub), "x0 is infeasible"
     z = make_strictly_feasible(z, lb, ub)
 
-    mu = options.pop("initial_penalty_parameter", 10)
+    mu = options.pop("initial_penalty_parameter", 10 * jnp.ones_like(c))
     y = options.pop("initial_multipliers", jnp.zeros_like(c))
     if y == "least_squares":  # use least squares multiplier estimates
         _J = constraint_wrapped.jac(z, *args)
@@ -218,8 +218,8 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     beta_eta = options.pop("beta_eta", 0.9)
     tau = options.pop("tau", 10)
 
-    gtolk = omega / mu**alpha_omega
-    ctolk = eta / mu**alpha_eta
+    gtolk = omega / jnp.mean(mu) ** alpha_omega
+    ctolk = eta / jnp.mean(mu) ** alpha_eta
 
     L = lagfun(f, c, y, mu)
     g = laggrad(z, y, mu, *args)
@@ -320,7 +320,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
             step_norm,
             g_norm,
             constr_violation,
-            mu,
+            jnp.max(mu),
             jnp.max(jnp.abs(y)),
         )
 
@@ -449,12 +449,12 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
             if g_norm < gtolk:  # TODO: maybe also add ftolk, xtolk?
                 if constr_violation < ctolk:
                     y = y - mu * c
-                    ctolk = ctolk / (mu**beta_eta)
-                    gtolk = gtolk / (mu**beta_omega)
+                    ctolk = ctolk / (jnp.mean(mu) ** beta_eta)
+                    gtolk = gtolk / (jnp.mean(mu) ** beta_omega)
                 else:
                     mu = tau * mu
-                    ctolk = eta / (mu**alpha_eta)
-                    gtolk = omega / (mu**alpha_omega)
+                    ctolk = eta / (jnp.mean(mu) ** alpha_eta)
+                    gtolk = omega / (jnp.mean(mu) ** alpha_omega)
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
                 g = laggrad(z, y, mu, *args)
@@ -498,7 +498,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
                 step_norm,
                 g_norm,
                 constr_violation,
-                mu,
+                jnp.max(mu),
                 jnp.max(jnp.abs(y)),
             )
 

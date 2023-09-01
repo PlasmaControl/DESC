@@ -942,6 +942,22 @@ class _Objective(IOAble, ABC):
         self._check_dimensions()
         self._set_dimensions(eq)
         self._set_derivatives()
+
+        # set quadrature weights if they haven't been
+        if hasattr(self, "_constants") and ("quad_weights" not in self._constants):
+            if self._coordinates == "":
+                w = jnp.ones((self.dim_f,))
+            elif self._coordinates == "rtz":
+                w = self._constants["transforms"]["grid"].weights
+            elif self._coordinates == "r":
+                w = self._constants["transforms"]["grid"].compress(
+                    self._constants["transforms"]["grid"].spacing[:, 0],
+                    surface_label="rho",
+                )
+            if w.size:
+                w = jnp.tile(w, self.dim_f // w.size)
+            self._constants["quad_weights"] = jnp.sqrt(w)
+
         if use_jit is not None:
             self._use_jit = use_jit
         if self._use_jit:
@@ -959,12 +975,12 @@ class _Objective(IOAble, ABC):
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
         f = self.compute(*args, **kwargs)
-        return self._scale(f)
+        return self._scale(f, **kwargs)
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         f = self.compute(*args, **kwargs)
-        return self._scale(self._shift(f))
+        return self._scale(self._shift(f), **kwargs)
 
     def _shift(self, f):
         """Subtract target or clamp to bounds."""
@@ -992,21 +1008,11 @@ class _Objective(IOAble, ABC):
 
     def _scale(self, f, *args, **kwargs):
         """Apply weighting, normalization etc."""
-        constants = kwargs.get("constants", None)
+        constants = kwargs.get("constants", self.constants)
         if constants is None:
-            constants = self.constants
-        # collocation grid weights
-        if self._coordinates == "":
-            w = jnp.ones((self.dim_f,))
-        elif self._coordinates == "rtz":
-            w = jnp.sqrt(self._transforms["grid"].weights)
-        elif self._coordinates == "r":
-            w = jnp.sqrt(
-                constants["transforms"]["grid"].compress(
-                    constants["transforms"]["grid"].spacing[:, 0], surface_label="rho"
-                )
-            )
-        w = jnp.tile(w, self.dim_f // w.size)
+            w = jnp.ones_like(f)
+        else:
+            w = constants["quad_weights"]
         f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
         return f_norm * w * self.weight
 

@@ -13,6 +13,76 @@ from desc.profiles import PowerSeriesProfile
 from desc.utils import setdefault
 
 
+def random_pressure(L=8, p0=(1e3, 1e4), rng=None):
+    """Create a random monotonic pressure profile.
+
+    Profile will be a PowerSeriesProfile with even symmetry,
+    enforced to be monotonically decreasing from p0 at r=0 to 0 at r=1
+
+    Could also be used for other monotonically decreasing profiles
+    such as temperature or density.
+
+    Parameters
+    ----------
+    L : int
+        Order of polynomial.
+    p0 : float or tuple
+        Pressure on axis. If a tuple, treats as min/max for random value.
+    rng : numpy.random.Generator
+        Random number generator. If None, uses numpy's default_rng
+
+    Returns
+    -------
+    pressure : PowerSeriesProfile
+        Random pressure profile.
+    """
+    assert (L // 2) == (L / 2), "L should be even"
+    rng = setdefault(rng, default_rng())
+    if isinstance(p0, tuple):
+        p0 = rng.uniform(p0[0], p0[1])
+
+    # first create random even coeffs
+    p = 1 - 2 * rng.random(L // 2 + 1)
+    # make it sum to 0 -> p=0 at r=1
+    p[0] -= p.sum()
+    # make p(0) = 1
+    p = p / p[0]
+    # this inserts zeros for all the odd modes
+    p1 = jnp.vstack([p, jnp.zeros_like(p)]).flatten(order="F")[::-1]
+    r = jnp.linspace(0, 1, 40)
+    y = jnp.polyval(p1, r)
+
+    def fun(x):
+        x = jnp.vstack([x, jnp.zeros_like(x)]).flatten(order="F")[::-1]
+        y_ = jnp.polyval(x, r)
+        return jnp.sum((y - y_) ** 2)
+
+    # constrain it so that it is monotonically decreasing, goes through (0,1) and (1,0)
+    def con(x):
+        x = jnp.vstack([x, jnp.zeros_like(x)]).flatten(order="F")[::-1]
+        dx = jnp.polyder(x, 1)
+        dy = jnp.polyval(dx, r)
+        return jnp.concatenate([dy, jnp.atleast_1d(jnp.sum(x)), jnp.atleast_1d(x[-1])])
+
+    hess = Derivative(fun, mode="hess")
+    grad = Derivative(fun, mode="grad")
+    A = Derivative(con, mode="fwd")(0 * p)
+    l = np.concatenate([-np.inf * np.ones_like(r), jnp.array([0, 1])])
+    u = np.concatenate([np.zeros_like(r), jnp.array([0, 1])])
+
+    out = scipy.optimize.minimize(
+        fun,
+        p,
+        jac=grad,
+        hess=hess,
+        constraints=scipy.optimize.LinearConstraint(A, l, u),
+        method="trust-constr",
+    )
+
+    p = np.vstack([out.x, np.zeros_like(out.x)]).flatten(order="F")
+    return PowerSeriesProfile(p[::2] * p0, modes=np.arange(L + 1)[::2], sym=True)
+
+
 def random_surface(
     M=8,
     N=8,
@@ -125,73 +195,3 @@ def random_surface(
         surf._flip_orientation()
         assert surf._compute_orientation() == 1
     return surf
-
-
-def random_pressure(L=8, p0=(1e3, 1e4), rng=None):
-    """Create a random monotonic pressure profile.
-
-    Profile will be a PowerSeriesProfile with even symmetry,
-    enforced to be monotonically decreasing from p0 at r=0 to 0 at r=1
-
-    Could also be used for other monotonically decreasing profiles
-    such as temperature or density.
-
-    Parameters
-    ----------
-    L : int
-        Order of polynomial.
-    p0 : float or tuple
-        Pressure on axis. If a tuple, treats as min/max for random value.
-    rng : numpy.random.Generator
-        Random number generator. If None, uses numpy's default_rng
-
-    Returns
-    -------
-    pressure : PowerSeriesProfile
-        Random pressure profile.
-    """
-    assert (L // 2) == (L / 2), "L should be even"
-    rng = setdefault(rng, default_rng())
-    if isinstance(p0, tuple):
-        p0 = rng.uniform(p0[0], p0[1])
-
-    # first create random even coeffs
-    p = 1 - 2 * rng.random(L // 2 + 1)
-    # make it sum to 0 -> p=0 at r=1
-    p[0] -= p.sum()
-    # make p(0) = 1
-    p = p / p[0]
-    # this inserts zeros for all the odd modes
-    p1 = jnp.vstack([p, jnp.zeros_like(p)]).flatten(order="F")[::-1]
-    r = jnp.linspace(0, 1, 40)
-    y = jnp.polyval(p1, r)
-
-    def fun(x):
-        x = jnp.vstack([x, jnp.zeros_like(x)]).flatten(order="F")[::-1]
-        y_ = jnp.polyval(x, r)
-        return jnp.sum((y - y_) ** 2)
-
-    # constrain it so that it is monotonically decreasing, goes through (0,1) and (1,0)
-    def con(x):
-        x = jnp.vstack([x, jnp.zeros_like(x)]).flatten(order="F")[::-1]
-        dx = jnp.polyder(x, 1)
-        dy = jnp.polyval(dx, r)
-        return jnp.concatenate([dy, jnp.atleast_1d(jnp.sum(x)), jnp.atleast_1d(x[-1])])
-
-    hess = Derivative(fun, mode="hess")
-    grad = Derivative(fun, mode="grad")
-    A = Derivative(con, mode="fwd")(0 * p)
-    l = np.concatenate([-np.inf * np.ones_like(r), jnp.array([0, 1])])
-    u = np.concatenate([np.zeros_like(r), jnp.array([0, 1])])
-
-    out = scipy.optimize.minimize(
-        fun,
-        p,
-        jac=grad,
-        hess=hess,
-        constraints=scipy.optimize.LinearConstraint(A, l, u),
-        method="trust-constr",
-    )
-
-    p = np.vstack([out.x, np.zeros_like(out.x)]).flatten(order="F")
-    return PowerSeriesProfile(p[::2] * p0, modes=np.arange(L + 1)[::2], sym=True)

@@ -147,153 +147,6 @@ class AspectRatio(_Objective):
         return data["R0/a"]
 
 
-class BScaleLength(_Objective):
-    """Target a particular value for the magnetic field scale length.
-
-    The magnetic field scale length, defined as √2 ||B|| / ||∇ 𝐁||, is a length scale
-    over which the magnetic field varies. It can be a useful proxy for coil complexity,
-    as short length scales require complex coils that are close to the plasma surface.
-
-    Parameters
-    ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
-
-    """
-
-    _coordinates = "rtz"
-    _units = "(m)"
-    _print_value_fmt = "Magnetic field scale length: {:10.3e} "
-
-    def __init__(
-        self,
-        eq=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        grid=None,
-        name="B-scale-length",
-    ):
-        if target is None and bounds is None:
-            bounds = (1, np.inf)
-        self._grid = grid
-        super().__init__(
-            eq=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-        )
-
-    def build(self, eq=None, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = eq or self._eq
-        if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-        else:
-            grid = self._grid
-
-        self._dim_f = grid.num_nodes
-        self._data_keys = ["L_grad(B)"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
-        self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
-        }
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["R0"]
-
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, *args, **kwargs):
-        """Compute magnetic field scale length.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        Returns
-        -------
-        L : ndarray
-            Magnetic field scale length at each point (m).
-
-        """
-        params, constants = self._parse_args(*args, **kwargs)
-        if constants is None:
-            constants = self.constants
-        data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
-        )
-        return data["L_grad(B)"]
-
-
 class Elongation(_Objective):
     """Elongation = semi-major radius / semi-minor radius. Max of all toroidal angles.
 
@@ -426,14 +279,8 @@ class Elongation(_Objective):
         return data["a_major/a_minor"]
 
 
-class MeanCurvature(_Objective):
-    """Target a particular value for the mean curvature.
-
-    The mean curvature H of a surface is an extrinsic measure of curvature that locally
-    describes the curvature of an embedded surface in Euclidean space.
-
-    Positive mean curvature generally corresponds to "concave" regions of the plasma
-    boundary which may be difficult to create with coils or magnets.
+class Volume(_Objective):
+    """Plasma volume.
 
     Parameters
     ----------
@@ -451,8 +298,9 @@ class MeanCurvature(_Objective):
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
         be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
@@ -461,9 +309,9 @@ class MeanCurvature(_Objective):
 
     """
 
-    _coordinates = "rtz"
-    _units = "(m^-1)"
-    _print_value_fmt = "Mean curvature: {:10.3e} "
+    _scalar = True
+    _units = "(m^3)"
+    _print_value_fmt = "Plasma volume: {:10.3e} "
 
     def __init__(
         self,
@@ -474,10 +322,10 @@ class MeanCurvature(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
-        name="mean curvature",
+        name="volume",
     ):
         if target is None and bounds is None:
-            bounds = (-np.inf, 0)
+            target = 1
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -504,12 +352,12 @@ class MeanCurvature(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             grid = self._grid
 
-        self._dim_f = grid.num_nodes
-        self._data_keys = ["curvature_H_rho"]
+        self._dim_f = 1
+        self._data_keys = ["V"]
         self._args = get_params(
             self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
@@ -534,12 +382,12 @@ class MeanCurvature(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["a"]
+            self._normalization = scales["V"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        """Compute mean curvature.
+        """Compute plasma volume.
 
         Parameters
         ----------
@@ -550,8 +398,8 @@ class MeanCurvature(_Objective):
 
         Returns
         -------
-        H : ndarray
-            Mean curvature at each point (m^-1).
+        V : float
+            Plasma volume (m^3).
 
         """
         params, constants = self._parse_args(*args, **kwargs)
@@ -564,7 +412,7 @@ class MeanCurvature(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["curvature_H_rho"]
+        return data["V"]
 
 
 class PlasmaVesselDistance(_Objective):
@@ -790,6 +638,147 @@ class PlasmaVesselDistance(_Objective):
             )
 
 
+class MeanCurvature(_Objective):
+    """Target a particular value for the mean curvature.
+
+    The mean curvature H of a surface is an extrinsic measure of curvature that locally
+    describes the curvature of an embedded surface in Euclidean space.
+
+    Positive mean curvature generally corresponds to "concave" regions of the plasma
+    boundary which may be difficult to create with coils or magnets.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _coordinates = "rtz"
+    _units = "(m^-1)"
+    _print_value_fmt = "Mean curvature: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="mean curvature",
+    ):
+        if target is None and bounds is None:
+            bounds = (-np.inf, 0)
+        self._grid = grid
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq=None, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["curvature_H_rho"]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = 1 / scales["a"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute mean curvature.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+
+        Returns
+        -------
+        H : ndarray
+            Mean curvature at each point (m^-1).
+
+        """
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        return data["curvature_H_rho"]
+
+
 class PrincipalCurvature(_Objective):
     """Target a particular value for the (unsigned) principal curvature.
 
@@ -936,8 +925,12 @@ class PrincipalCurvature(_Objective):
         )
 
 
-class Volume(_Objective):
-    """Plasma volume.
+class BScaleLength(_Objective):
+    """Target a particular value for the magnetic field scale length.
+
+    The magnetic field scale length, defined as √2 ||B|| / ||∇ 𝐁||, is a length scale
+    over which the magnetic field varies. It can be a useful proxy for coil complexity,
+    as short length scales require complex coils that are close to the plasma surface.
 
     Parameters
     ----------
@@ -955,9 +948,8 @@ class Volume(_Objective):
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
@@ -966,9 +958,9 @@ class Volume(_Objective):
 
     """
 
-    _scalar = True
-    _units = "(m^3)"
-    _print_value_fmt = "Plasma volume: {:10.3e} "
+    _coordinates = "rtz"
+    _units = "(m)"
+    _print_value_fmt = "Magnetic field scale length: {:10.3e} "
 
     def __init__(
         self,
@@ -979,10 +971,10 @@ class Volume(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
-        name="volume",
+        name="B-scale-length",
     ):
         if target is None and bounds is None:
-            target = 1
+            bounds = (1, np.inf)
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -1009,12 +1001,12 @@ class Volume(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             grid = self._grid
 
-        self._dim_f = 1
-        self._data_keys = ["V"]
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["L_grad(B)"]
         self._args = get_params(
             self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
@@ -1039,12 +1031,12 @@ class Volume(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["V"]
+            self._normalization = scales["R0"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        """Compute plasma volume.
+        """Compute magnetic field scale length.
 
         Parameters
         ----------
@@ -1052,11 +1044,19 @@ class Volume(_Objective):
             Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
             Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
-        V : float
-            Plasma volume (m^3).
+        L : ndarray
+            Magnetic field scale length at each point (m).
 
         """
         params, constants = self._parse_args(*args, **kwargs)
@@ -1069,4 +1069,4 @@ class Volume(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["V"]
+        return data["L_grad(B)"]

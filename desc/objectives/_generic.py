@@ -7,7 +7,6 @@ from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.profiles import Profile
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
@@ -62,7 +61,7 @@ class ObjectiveFromUser(_Objective):
     --------
     .. code-block:: python
 
-        from desc.compute.utils import surface_averages, compress
+        from desc.compute.utils import surface_averages
         def myfun(grid, data):
             # This will compute the flux surface average of the function
             # R*B_T from the Grad-Shafranov equation
@@ -70,7 +69,7 @@ class ObjectiveFromUser(_Objective):
             f_fsa = surface_averages(grid, f, sqrt_g=data['sqrt_g'])
             # this has the FSA values on the full grid, but we just want
             # the unique values:
-            return compress(grid, f_fsa)
+            return grid.compress(f_fsa)
 
         myobj = ObjectiveFromUser(myfun)
 
@@ -124,14 +123,14 @@ class ObjectiveFromUser(_Objective):
         else:
             grid = self._grid
 
-        def getvars(fun):
+        def get_vars(fun):
             pattern = r"data\[(.*?)\]"
             src = inspect.getsource(fun)
             variables = re.findall(pattern, src)
-            variables = [s.replace("'", "").replace('"', "") for s in variables]
+            variables = list({s.strip().strip("'").strip('"') for s in variables})
             return variables
 
-        self._data_keys = getvars(self._fun)
+        self._data_keys = get_vars(self._fun)
         dummy_data = {}
         p = "desc.equilibrium.equilibrium.Equilibrium"
         for key in self._data_keys:
@@ -416,7 +415,7 @@ class ToroidalCurrent(_Objective):
         else:
             grid = self._grid
 
-        if isinstance(self._target, Profile):
+        if callable(self._target):
             self._target = self._target(grid.nodes[grid.unique_rho_idx])
 
         self._dim_f = grid.num_rho
@@ -483,9 +482,7 @@ class ToroidalCurrent(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return constants["transforms"]["grid"].compress(
-            data["current"], surface_label="rho"
-        )
+        return constants["transforms"]["grid"].compress(data["current"])
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -597,7 +594,7 @@ class RotationalTransform(_Objective):
         else:
             grid = self._grid
 
-        if isinstance(self._target, Profile):
+        if callable(self._target):
             self._target = self._target(grid.nodes[grid.unique_rho_idx])
 
         self._dim_f = grid.num_rho
@@ -660,9 +657,7 @@ class RotationalTransform(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return constants["transforms"]["grid"].compress(
-            data["iota"], surface_label="rho"
-        )
+        return constants["transforms"]["grid"].compress(data["iota"])
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

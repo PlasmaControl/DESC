@@ -7,7 +7,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -21,7 +20,7 @@ class BootstrapRedlConsistency(_Objective):
 
     This objective function penalizes the difference between the MHD
     and neoclassical profiles of parallel current, using the Redl
-    formula for the boostrap current. The scalar objective is defined as
+    formula for the bootstrap current. The scalar objective is defined as
 
     f = ½ ∫dρ [(⟨J⋅B⟩_MHD - ⟨J⋅B⟩_Redl) / (J_ref B_ref)]²
 
@@ -218,11 +217,8 @@ class BootstrapRedlConsistency(_Objective):
             profiles=constants["profiles"],
             helicity=constants["helicity"],
         )
-
-        return compress(
-            constants["transforms"]["grid"],
-            data["<J*B>"] - data["<J*B> Redl"],
-            surface_label="rho",
+        return constants["transforms"]["grid"].compress(
+            data["<J*B>"] - data["<J*B> Redl"]
         )
 
     def print_value(self, *args, **kwargs):

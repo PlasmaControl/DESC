@@ -26,6 +26,10 @@ objective         = vacuum
 spectral_indexing = ansi
 node_pattern      = jacobi
 
+# Note that the vacuum objective will optimize for current density = 0.
+# The rotational transform profile coefficients below will only be used
+# as an initial guess, as the rotational transform will not be constrained
+# throughout the optimization. See GitHub issue #278.
 # pressure and rotational transform/current profiles
 l:   0	p =   0    i = 0
 l:   2	p =   0    i = 0

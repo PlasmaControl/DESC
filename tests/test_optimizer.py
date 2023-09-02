@@ -439,7 +439,7 @@ def test_maxiter_1_and_0_solve():
 @pytest.mark.slow
 def test_scipy_fail_message():
     """Test that scipy fail message does not cause an error (see PR #434)."""
-    eq = Equilibrium()
+    eq = Equilibrium(M=3)
     constraints = (
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),
@@ -464,6 +464,7 @@ def test_scipy_fail_message():
         )
         assert "Maximum number of iterations has been exceeded" in result["message"]
     eq._node_pattern = "quad"
+    eq.set_initial_guess()
     objectives = Energy(eq=eq)
     obj = ObjectiveFunction(objectives)
     for opt in ["scipy-trust-exact"]:
@@ -477,7 +478,7 @@ def test_scipy_fail_message():
             xtol=1e-12,
             gtol=1e-12,
         )
-        assert "Maximum number of iterations has been exceeded" in result["message"]
+        assert "Maximum number of Jacobian/Hessian evaluations" in result["message"]
 
 
 @pytest.mark.unit

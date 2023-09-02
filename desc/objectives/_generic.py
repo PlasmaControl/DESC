@@ -279,12 +279,10 @@ class GenericObjective(_Objective):
         p = "desc.equilibrium.equilibrium.Equilibrium"
         if data_index[p][self.f]["dim"] == 0:
             self._dim_f = 1
-            self._scalar = True
         elif data_index[p][self.f]["coordinates"] == "r":
             self._dim_f = grid.num_rho
         else:
             self._dim_f = grid.num_nodes * data_index[p][self.f]["dim"]
-            self._scalar = False
         self._args = get_params(
             self.f,
             obj="desc.equilibrium.equilibrium.Equilibrium",
@@ -324,6 +322,4 @@ class GenericObjective(_Objective):
             profiles=constants["profiles"],
         )
         f = data[self.f]
-        if not self.scalar:
-            f = (f.T * constants["transforms"]["grid"].weights).flatten()
-        return f
+        return f.flatten()

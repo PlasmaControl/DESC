@@ -1035,11 +1035,10 @@ class _Objective(IOAble, ABC):
 
         elif self.scalar:
             # dont need min/max/mean of a scalar
-            f = f.squeeze()
-            print(self._print_value_fmt.format(f) + self._units)
+            print(self._print_value_fmt.format(f.squeeze()) + self._units)
             if self._normalize and self._units != "(dimensionless)":
                 print(
-                    self._print_value_fmt.format(self._scale(self._shift(f)))
+                    self._print_value_fmt.format(self._scale(self._shift(f)).squeeze())
                     + "(normalized error)"
                 )
 

@@ -76,7 +76,7 @@ class ObjectiveFromUser(_Objective):
     """
 
     _units = "(Unknown)"
-    _print_value_fmt = "Custom Objective Residual: {:10.3e} "
+    _print_value_fmt = "Custom Objective value: {:10.3e} "
 
     def __init__(
         self,
@@ -219,7 +219,7 @@ class GenericObjective(_Objective):
 
     """
 
-    _print_value_fmt = "Residual: {:10.3e} "
+    _print_value_fmt = "GenericObjective value: {:10.3e} "
 
     def __init__(
         self,

@@ -61,7 +61,7 @@ class BootstrapRedlConsistency(_Objective):
 
     _coordinates = "r"
     _units = "(T A m^-2)"
-    _print_value_fmt = "Bootstrap current self-consistency: {:10.3e} "
+    _print_value_fmt = "Bootstrap current self-consistency error: {:10.3e} "
 
     def __init__(
         self,
@@ -220,30 +220,6 @@ class BootstrapRedlConsistency(_Objective):
         return constants["transforms"]["grid"].compress(
             data["<J*B>"] - data["<J*B> Redl"]
         )
-
-    def print_value(self, *args, **kwargs):
-        """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
-
-        if self._normalize:
-            print(
-                "Maximum "
-                + self._print_value_fmt.format(jnp.max(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Minimum "
-                + self._print_value_fmt.format(jnp.min(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Average "
-                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
-                + "(normalized)"
-            )
 
     @property
     def helicity(self):

@@ -411,7 +411,7 @@ class ObjectiveFunction(IOAble):
         if self.compiled and self._compile_mode in {"scalar", "all"}:
             f = self.compute_scalar(x, constants=constants)
         else:
-            f = jnp.sum(self.compute_scaled(x, constants=constants) ** 2) / 2
+            f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         print("Total (sum of squares): {:10.3e}, ".format(f))
         kwargs = self.unpack_state(x)
         for obj, const in zip(self.objectives, constants):
@@ -1024,20 +1024,60 @@ class _Objective(IOAble, ABC):
             f = jnp.sum(self.compute_scaled_error(*args, **kwargs) ** 2) / 2
         return f.squeeze()
 
-    # TODO: update
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
+        # compute_unscaled is jitted so better to use than than bare compute
         f = self.compute_unscaled(*args, **kwargs)
-        print(
-            self._print_value_fmt.format(jnp.linalg.norm(self._shift(f))) + self._units
-        )
-        if self._normalize:
-            print(
-                self._print_value_fmt.format(
-                    jnp.linalg.norm(self._scale(self._shift(f)))
+        if self.linear:
+            # probably a Fixed* thing, just need to know norm
+            f = jnp.linalg.norm(self._shift(f))
+            print(self._print_value_fmt.format(f) + self._units)
+
+        elif self.scalar:
+            # dont need min/max/mean of a scalar
+            f = f.squeeze()
+            print(self._print_value_fmt.format(f) + self._units)
+            if self._normalize and self._units != "(dimensionless)":
+                print(
+                    self._print_value_fmt.format(self._scale(self._shift(f)))
+                    + "(normalized error)"
                 )
-                + "(normalized)"
-            )
+
+        else:
+            # try to do weighted mean if possible
+            constants = kwargs.get("constants", self.constants)
+            if constants is None:
+                w = jnp.ones_like(f)
+            else:
+                w = constants["quad_weights"]
+
+            # target == 0 means probably indicates f is some sort of error metric,
+            # mean abs makes more sense than mean
+            f = jnp.abs(f) if jnp.all(self.target == 0) else f
+            fmax = jnp.max(f)
+            fmin = jnp.min(f)
+            fmean = jnp.mean(f * w) / jnp.mean(w)
+
+            print("Maximum " + self._print_value_fmt.format(fmax) + self._units)
+            print("Minimum " + self._print_value_fmt.format(fmin) + self._units)
+            print("Average " + self._print_value_fmt.format(fmean) + self._units)
+
+            if self._normalize and self._units != "(dimensionless)":
+                print(
+                    "Maximum "
+                    + self._print_value_fmt.format(fmax / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Minimum "
+                    + self._print_value_fmt.format(fmin / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Average "
+                    + self._print_value_fmt.format(fmean / self.normalization)
+                    + "(normalized)"
+                )
 
     def xs(self, eq):
         """Return a tuple of args required by this objective from the Equilibrium eq."""

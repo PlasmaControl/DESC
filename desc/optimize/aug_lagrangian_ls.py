@@ -224,7 +224,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             * jnp.linalg.norm(z * scale_inv / v**0.5)
         ),
     }
-    trust_radius = options.pop("initial_trust_radius", "scipy")
+    trust_radius = options.pop("initial_trust_radius", "conngould")
     tr_ratio = options.pop("initial_trust_ratio", 1.0)
     trust_radius = init_tr.get(trust_radius, trust_radius)
     trust_radius *= tr_ratio
@@ -234,8 +234,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     max_trust_radius = options.pop("max_trust_radius", jnp.inf)
     min_trust_radius = options.pop("min_trust_radius", jnp.finfo(z.dtype).eps)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
-    tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
-    tr_increase_ratio = options.pop("tr_increase_ratio", 2)
+    tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.5)
+    tr_increase_ratio = options.pop("tr_increase_ratio", 4)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
     tr_method = options.pop("tr_method", "svd")
 

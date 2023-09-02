@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Adds ``'shear'`` as a compute quantity and ``Shear`` as an objective function.
 
 v0.10.0
 -------
@@ -91,8 +92,8 @@ v0.9.1
 
 Deprecations
 - Creating an ``Objective`` without specifying the ``Equilibrium`` or other object to be
- optimized is deprecated, and in the future will raise an error. 
- - Passing in an ``Equilibrium`` when creating an ``Objective`` no longer builds the 
+ optimized is deprecated, and in the future will raise an error.
+ - Passing in an ``Equilibrium`` when creating an ``Objective`` no longer builds the
  objective immediately.
  - ``Objective.build`` can now be called without arguments, assuming the object to be
  optimized was specified when the objective was created.
@@ -100,13 +101,13 @@ Deprecations
 caused issues when saving to VMEC format.
 
 New Features
-- Adds ``deriv_mode="looped"`` option to ``desc.objectives.ObjectiveFunction`` for 
-computing derivative matrices. This is slightly slower but much more memory efficient 
-than the default ``"batched"`` option. 
+- Adds ``deriv_mode="looped"`` option to ``desc.objectives.ObjectiveFunction`` for
+computing derivative matrices. This is slightly slower but much more memory efficient
+than the default ``"batched"`` option.
 - Adds BFGS option for augmented Lagrangian optimizers.
-- Adds utility functions for computing line integrals, vector valued integrals, and 
+- Adds utility functions for computing line integrals, vector valued integrals, and
 integral transforms in ``desc.compute.utils``.
-- Adds ``method="monotonic-0"`` to ``desc.interpolate.interp1d``, which enforces 
+- Adds ``method="monotonic-0"`` to ``desc.interpolate.interp1d``, which enforces
 monotonicity and zero slope at the endpoints.
 - Adds ``rho`` argument to ``desc.plotting.plot_boozer_surface`` to specify the desired
 surface, rather than having to create custom grids. Also adds a ``fieldlines`` argument
@@ -116,7 +117,7 @@ for overlaying magnetic field lines on the Boozer strength plot.
 Minor Changes
 - Augmented Lagrangian methods now use a default starting Lagrange multiplier of 0, rather
 than the least squares estimate which can be a bad approximation if the starting point
-is far from optimal. The old behavior can be recovered by passing 
+is far from optimal. The old behavior can be recovered by passing
 ``"initial_multipliers": "least_squares"`` as part of ``options`` when calling ``optimize``.
 - Enforces periodicity convention for ``alpha`` and ``theta_sfl`` - They are both now
 defined to be between 0 and 2pi.
@@ -137,10 +138,10 @@ v0.9.0
 
 
 New Features
-- Implements a new limit API to correctly evaluate a number of quantities at the 
+- Implements a new limit API to correctly evaluate a number of quantities at the
 coordinate singularity at $\rho=0$ rather than returning NaN. Currently only quantities
 related to rotational transform and magnetic field strength are implemented, though in
-the future all quantities should evaluate correctly at the magnetic axis. Note that 
+the future all quantities should evaluate correctly at the magnetic axis. Note that
 evaluating quantities at the axis generally requires higher order derivatives and so
 can be much more expensive than evaluating at nonsingular points, so during optimization
 it is not recommended to include a grid point at the axis. Generally a small finite value
@@ -184,8 +185,8 @@ most significant cost, so the iteration count is generally a better proxy for wa
 than number of function evaluations.
 
 Minor changes
-- Minor updates to work with newer versions of JAX. Minimum ``jax`` version  is now 
-``0.3.2``, as some functions used in the constrained optimizers aren't present in 
+- Minor updates to work with newer versions of JAX. Minimum ``jax`` version  is now
+``0.3.2``, as some functions used in the constrained optimizers aren't present in
 previous versions. Maximum ``jax`` version is now ``0.4.11``, the latest as of 6/13/23.
 - Adds new ``ObjectiveFunction`` attributes ``target_scaled`` and ``bounds_scaled``
 which return vectors of the scaled values from each sub-objective.
@@ -234,7 +235,7 @@ Minor changes
 Bug Fixes
 - Fixed minor bug with symmetric grids that caused end points to be double counted
 - Fixed bug causing `NFP` of curves to not be updated correctly when the equilibrium changed
-- Fixed issue when converting `pyQIC` solutions to `DESC` equilibria related to offset toroidal grid 
+- Fixed issue when converting `pyQIC` solutions to `DESC` equilibria related to offset toroidal grid
 
 
 v0.8.1
@@ -248,7 +249,7 @@ Minor Changes
 Bug Fixes
 * Fix read-the-docs build error
 * Add missing classes to API docs
-* fix error in fix axis util function 
+* fix error in fix axis util function
 * Add missing attributes to new classes added in `v0.8.0`
 
 
@@ -282,7 +283,7 @@ v0.7.2
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.1...v0.7.2)
 
 What's Changed
-* Fix bug in QS Boozer metric where non-symmetric modes were sometimes counted as 
+* Fix bug in QS Boozer metric where non-symmetric modes were sometimes counted as
 symmetric due to different Fourier series conventions.
 * Improve speed of functions for converting between VMEC and DESC Fourier representations.
 * Add objectives for penalizing strong shaping.
@@ -346,7 +347,7 @@ Major Changes
 - All objectives now have a `normalize` argument that when true will nondimensionalize
 the physics value and scale to be approximately ~O(1) in magnitude. This should make it
 easier to tune weights when doing multiobjective optimization.
-- New objective `RotationalTransform` for targeting a particular iota profile in real 
+- New objective `RotationalTransform` for targeting a particular iota profile in real
 space.
 - New function `plot_boundaries` to plot comparisons between boundary shapes.
 
@@ -356,7 +357,7 @@ version is still `0.2.11` but this will likely change in the future.
 
 Bug fixes
 - Fix indexing bug in biot-savart for coils that caused the output to have the wrong shape
-- Fix a bug occasionally preventing the optimizer from restarting correctly after 
+- Fix a bug occasionally preventing the optimizer from restarting correctly after
 trying a bad step
 
 
@@ -379,7 +380,7 @@ Bug Fixes
 - Fix bug preventing ``lsqtr`` from terminating when ``maxiter`` is zero.
 - Fix bug when converting profiles to ``FourierZernikeProfile``.
 - Fix bug where a ``FixBoundary`` constraint with only 1 mode constrained would throw an error during ``objective.build``
- 
+
 
 v0.6.2
 ------

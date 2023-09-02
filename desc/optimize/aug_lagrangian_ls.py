@@ -405,12 +405,12 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
 
             # updating augmented lagrangian params
             if g_norm < gtolk:  # TODO: maybe also add ftolk, xtolk?
+                y = jnp.where(jnp.abs(c) < ctolk, y - mu * c, y)
+                mu = jnp.where(jnp.abs(c) >= ctolk, tau * mu, mu)
                 if constr_violation < ctolk:
-                    y = y - mu * c
                     ctolk = ctolk / (jnp.mean(mu) ** beta_eta)
                     gtolk = gtolk / (jnp.mean(mu) ** beta_omega)
                 else:
-                    mu = tau * mu
                     ctolk = eta / (jnp.mean(mu) ** alpha_eta)
                     gtolk = omega / (jnp.mean(mu) ** alpha_omega)
                 # if we update lagrangian params, need to recompute L and J

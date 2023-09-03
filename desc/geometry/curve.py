@@ -6,17 +6,14 @@ import numpy as np
 
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
+from desc.compute import rpz2xyz
 from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.utils import copy_coeffs
 
 from .core import Curve
 
-__all__ = [
-    "FourierRZCurve",
-    "FourierXYZCurve",
-    "FourierPlanarCurve",
-]
+__all__ = ["FourierRZCurve", "FourierXYZCurve", "FourierPlanarCurve", "SplineXYZCurve"]
 
 
 class FourierRZCurve(Curve):
@@ -29,7 +26,7 @@ class FourierRZCurve(Curve):
     modes_R : array-like, optional
         Mode numbers associated with R_n. If not given defaults to [-n:n].
     modes_Z : array-like, optional
-        Mode numbers associated with Z_n, If not given defaults to modes_R.
+        Mode numbers associated with Z_n, If not given defaults to [-n:n]].
     NFP : int
         Number of field periods.
     sym : bool
@@ -63,7 +60,7 @@ class FourierRZCurve(Curve):
         if modes_R is None:
             modes_R = np.arange(-(R_n.size // 2), R_n.size // 2 + 1)
         if modes_Z is None:
-            modes_Z = modes_R
+            modes_Z = np.arange(-(Z_n.size // 2), Z_n.size // 2 + 1)
 
         if R_n.size == 0:
             raise ValueError("At least 1 coefficient for R must be supplied")
@@ -201,32 +198,6 @@ class FourierRZCurve(Curve):
                 f"Z_n should have the same size as the basis, got {len(new)} for "
                 + f"basis with {self.Z_basis.num_modes} modes"
             )
-
-    def to_FourierXYZCurve(self, N=None):
-        """Convert to FourierXYZCurve representation.
-
-        Parameters
-        ----------
-        N : int
-            Fourier resolution of the new X,Y,Z representation.
-            Default is the resolution of the old R,Z representation.
-
-        Returns
-        -------
-        curve : FourierXYZCurve
-            New representation of the curve parameterized by Fourier series for X,Y,Z.
-
-        """
-        if N is None:
-            N = max(self.R_basis.N, self.Z_basis.N)
-        grid = LinearGrid(N=4 * N, NFP=1, sym=False)
-        basis = FourierSeries(N=N, NFP=1, sym=False)
-        xyz = self.compute("x", grid=grid, basis="xyz")["x"]
-        transform = Transform(grid, basis, build_pinv=True)
-        X_n = transform.fit(xyz[:, 0])
-        Y_n = transform.fit(xyz[:, 1])
-        Z_n = transform.fit(xyz[:, 2])
-        return FourierXYZCurve(X_n=X_n, Y_n=Y_n, Z_n=Z_n)
 
 
 class FourierXYZCurve(Curve):
@@ -397,8 +368,63 @@ class FourierXYZCurve(Curve):
                 + f"basis with {self.Z_basis.num_modes} modes."
             )
 
-    # TODO: to_rz method for converting to FourierRZCurve representation
-    # (might be impossible to parameterize with toroidal angle phi)
+    @classmethod
+    def from_values(cls, coords, N=10, s=None, basis="xyz", name=""):
+        """Fit coordinates to FourierXYZCurve representation.
+
+        Parameters
+        ----------
+        coords: ndarray
+            coordinates to fit a FourierXYZCurve object with.
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+            default is 10
+        s : ndarray
+            arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords
+            if None, defaults to normalized arclength
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "xyz"
+        Returns
+        -------
+        curve : FourierXYZCurve
+            New representation of the curve parameterized by Fourier series for X,Y,Z.
+
+        """
+        if basis == "xyz":
+            coords_xyz = coords
+        else:
+            coords_xyz = rpz2xyz(coords, phi=coords[:, 1])
+        X = coords_xyz[:, 0]
+        Y = coords_xyz[:, 1]
+        Z = coords_xyz[:, 2]
+
+        assert np.allclose(X[-1], X[0], atol=1e-14), "Must pass in a closed curve!"
+        assert np.allclose(Y[-1], Y[0], atol=1e-14), "Must pass in a closed curve!"
+        assert np.allclose(Z[-1], Z[0], atol=1e-14), "Must pass in a closed curve!"
+
+        if s is None:
+            lengths = jnp.sqrt(
+                (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2
+            )
+            s = 2 * jnp.pi * np.cumsum(lengths) / jnp.sum(lengths)
+            s = np.insert(s, 0, 0)
+        else:
+            s = np.atleast_1d(s)
+            if not jnp.all(jnp.diff(s) > 0):
+                raise ValueError("supplied s values must be monotonically increasing!")
+            # rescale angle to lie in [0,2pi]
+            s = s - s[0]
+            s = (s / s[-1]) * 2 * np.pi
+
+        grid = LinearGrid(zeta=s, NFP=1, sym=False)
+        basis = FourierSeries(N=N, NFP=1, sym=False)
+        transform = Transform(grid, basis, build_pinv=True)
+        X_n = transform.fit(coords_xyz[:, 0])
+        Y_n = transform.fit(coords_xyz[:, 1])
+        Z_n = transform.fit(coords_xyz[:, 2])
+        return cls(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
 
 
 class FourierPlanarCurve(Curve):
@@ -533,3 +559,216 @@ class FourierPlanarCurve(Curve):
             idx = self.r_basis.get_idx(0, 0, nn)
             if rr is not None:
                 self.r_n = put(self.r_n, idx, rr)
+
+
+class SplineXYZCurve(Curve):
+    """Curve parameterized by spline knots in X,Y,Z.
+
+    Parameters
+    ----------
+    X, Y, Z: array-like
+        points for X, Y, Z describing a closed curve
+    knots : ndarray
+        arbitrary curve parameter values to use for spline knots,
+        should be a monotonic, 1D ndarray of same length as the input X,Y,Z.
+        If None, defaults to using an equal-arclength angle as the knots
+        If supplied, will be rescaled to lie in [0,2pi]
+    method : str
+        method of interpolation
+
+        - ``'nearest'``: nearest neighbor interpolation
+        - ``'linear'``: linear interpolation
+        - ``'cubic'``: C1 cubic splines (aka local splines)
+        - ``'cubic2'``: C2 cubic splines (aka natural splines)
+        - ``'catmull-rom'``: C1 cubic centripetal "tension" splines
+        - ``'cardinal'``: C1 cubic general tension splines. If used, default tension of
+          c = 0 will be used
+        - ``'monotonic'``: C1 cubic splines that attempt to preserve monotonicity in the
+          data, and will not introduce new extrema in the interpolated points
+        - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
+          endpoints
+
+    name : str
+        name for this curve
+
+    """
+
+    _io_attrs_ = Curve._io_attrs_ + ["_X", "_Y", "_Z", "_basis", "_transform"]
+
+    def __init__(
+        self,
+        X,
+        Y,
+        Z,
+        knots=None,
+        method="cubic",
+        name="",
+    ):
+        super().__init__(name)
+        X, Y, Z = np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)
+
+        assert np.allclose(X[-1], X[0], atol=1e-14), "Must pass in a closed curve!"
+        assert np.allclose(Y[-1], Y[0], atol=1e-14), "Must pass in a closed curve!"
+        assert np.allclose(Z[-1], Z[0], atol=1e-14), "Must pass in a closed curve!"
+        self._X = X
+        self._Y = Y
+        self._Z = Z
+
+        if knots is None:
+            # find equal arclength angle-like variable, and use that as theta
+            # L_along_curve / L = theta / 2pi
+            lengths = np.sqrt(np.diff(X) ** 2 + np.diff(Y) ** 2 + np.diff(Z) ** 2)
+            thetas = 2 * np.pi * np.cumsum(lengths) / np.sum(lengths)
+            thetas = np.insert(thetas, 0, 0)
+            knots = thetas
+
+        else:
+            knots = np.atleast_1d(knots)
+            if not np.all(np.diff(knots) > 0):
+                raise ValueError("supplied knots must be monotonically increasing!")
+            # rescale knots to lie in [0,2pi]
+            knots = knots - knots[0]
+            knots = (knots / knots[-1]) * 2 * np.pi
+
+        self._knots = knots
+        self.method = method
+
+    @property
+    def X(self):
+        """Coordinates for X."""
+        return self._X
+
+    @X.setter
+    def X(self, new):
+        assert np.allclose(
+            self._X[-1], self._X[0], atol=1e-14
+        ), "Must pass in a closed curve!"
+        if len(new) == len(self.knots):
+            self._X = jnp.asarray(new)
+        else:
+            raise ValueError(
+                "X should have the same size as the knots, "
+                + f"got {len(new)} X values for {len(self.knots)} knots"
+            )
+
+    @property
+    def Y(self):
+        """Coordinates for Y."""
+        return self._Y
+
+    @Y.setter
+    def Y(self, new):
+        assert np.allclose(
+            self._Y[-1], self._Y[0], atol=1e-14
+        ), "Must pass in a closed curve!"
+        if len(new) == len(self.knots):
+            self._Y = jnp.asarray(new)
+        else:
+            raise ValueError(
+                "Y should have the same size as the knots, "
+                + f"got {len(new)} Y values for {len(self.knots)} knots"
+            )
+
+    @property
+    def Z(self):
+        """Coordinates for Z."""
+        return self._Z
+
+    @Z.setter
+    def Z(self, new):
+        assert np.allclose(
+            self._Z[-1], self._Z[0], atol=1e-14
+        ), "Must pass in a closed curve!"
+        if len(new) == len(self.knots):
+            self._Z = jnp.asarray(new)
+        else:
+            raise ValueError(
+                "Z should have the same size as the knots, "
+                + f"got {len(new)} Z values for {len(self.knots)} knots"
+            )
+
+    @property
+    def knots(self):
+        """Knots for spline."""
+        return self._knots
+
+    @knots.setter
+    def knots(self, new):
+        if len(new) == len(self.knots):
+            knots = jnp.atleast_1d(new)
+            if not jnp.all(jnp.diff(knots) > 0):
+                raise ValueError("supplied knots must be monotonically increasing!")
+            # rescale knots to lie in [0,2pi]
+            knots = knots - knots[0]
+            knots = (knots / knots[-1]) * 2 * np.pi
+            self._knots = jnp.asarray(knots)
+        else:
+            raise ValueError(
+                "new knots should have the same size as the current knots, "
+                + f"got {len(new)} new knots, but expected {len(self.knots)} knots"
+            )
+
+    @property
+    def method(self):
+        """Method of interpolation to usee."""
+        return self._method
+
+    @method.setter
+    def method(self, new):
+        possible_methods = [
+            "nearest",
+            "linear",
+            "cubic",
+            "cubic2",
+            "catmull-rom",
+            "monotonic",
+            "monotonic-0",
+            "cardinal",
+        ]
+        if new in possible_methods:
+            self._method = new
+        else:
+            raise ValueError(
+                "Method must be one of {possible_methods}, "
+                + f"instead got unknown method {new} "
+            )
+
+    @classmethod
+    def from_values(cls, coords, knots=None, method="cubic", name="", basis="xyz"):
+        """Create SplineXYZCurve from coordinate values.
+
+        Parameters
+        ----------
+        coords: ndarray
+            coordinates to fit a SplineXYZCurve object with.
+        knots : ndarray
+            arbitrary curve parameter values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Curve.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        method : str
+            method of interpolation
+
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+
+        name : str
+            name for this curve
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "xyz"
+
+        Returns
+        -------
+        SplineXYZCurve: SplineXYZCurve
+            SplineXYZCurve object, the spline representation of the FourierXYZCurve.
+
+        """
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+        return cls(coords[:, 0], coords[:, 1], coords[:, 2], knots, method, name)

@@ -40,7 +40,7 @@ class _FixedObjective(_Objective):
 
 
 class BoundaryRSelfConsistency(_Objective):
-    """Ensure that the boundary and interior surfaces are self consistent.
+    """Ensure that the boundary and interior surfaces are self-consistent.
 
     Note: this constraint is automatically applied when needed, and does not need to be
     included by the user.
@@ -117,7 +117,7 @@ class BoundaryRSelfConsistency(_Objective):
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        """Compute boundary self consistency errror."""
+        """Compute boundary self consistency error."""
         params, _ = self._parse_args(*args, **kwargs)
         return jnp.dot(self._A, params["R_lmn"]) - params["Rb_lmn"]
 
@@ -200,7 +200,7 @@ class BoundaryZSelfConsistency(_Objective):
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        """Compute boundary self consistency errror."""
+        """Compute boundary self consistency error."""
         params, _ = self._parse_args(*args, **kwargs)
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 

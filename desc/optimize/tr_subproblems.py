@@ -19,7 +19,7 @@ def solve_trust_region_dogleg(g, H, trust_radius, initial_alpha=None, **kwargs):
     trust_radius : float
         We are allowed to wander only this far away from the origin.
     initial_alpha : float
-        initial guess for levenberg-marquadt parameter - unused by this method.
+        initial guess for Levenberg-Marquardt parameter - unused by this method.
 
     Returns
     -------
@@ -28,7 +28,7 @@ def solve_trust_region_dogleg(g, H, trust_radius, initial_alpha=None, **kwargs):
     hits_boundary : bool
         True if the proposed step is on the boundary of the trust region.
     alpha : float
-        "levenberg-marquadt" parameter - unused by this method.
+        "Levenberg-Marquardt" parameter - unused by this method.
 
     """
     L = chol(H)
@@ -79,7 +79,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
     trust_radius : float
         We are allowed to wander only this far away from the origin.
     initial_alpha : float
-        initial guess for levenberg-marquadt parameter - unused by this method
+        initial guess for Levenberg-Marquardt parameter - unused by this method
 
     Returns
     -------
@@ -88,7 +88,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
     hits_boundary : bool
         True if the proposed step is on the boundary of the trust region.
     alpha : float
-        "levenberg-marquadt" parameter - unused by this method
+        "Levenberg-Marquardt" parameter - unused by this method
 
     """
     L = chol(H)
@@ -352,7 +352,7 @@ def update_tr_radius(
     max_tr : float
         maximum allowed trust region radius
     increase_threshold, increase_ratio : float
-        if ratio > inrease_threshold, trust radius is increased by a factor
+        if ratio > increase_threshold, trust radius is increased by a factor
         of increase_ratio
     decrease_threshold, decrease_ratio : float
         if ratio < decrease_threshold, trust radius is decreased by a factor

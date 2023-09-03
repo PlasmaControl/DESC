@@ -59,7 +59,7 @@ class ForceBalance(_Objective):
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
     where_apply_loss : str
-        where to apply the user defined loss function. One of "nscaled"
+        where to apply the user defined loss function. One of "unscaled"
         or "scaled"
         If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
@@ -272,7 +272,7 @@ class RadialForceBalance(_Objective):
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
     where_apply_loss : str
-        where to apply the user defined loss function. One of "nscaled"
+        where to apply the user defined loss function. One of "unscaled"
         or "scaled"
         If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
@@ -475,7 +475,7 @@ class HelicalForceBalance(_Objective):
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
     where_apply_loss : str
-        where to apply the user defined loss function. One of "nscaled"
+        where to apply the user defined loss function. One of "unscaled"
         or "scaled"
         If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
@@ -646,7 +646,7 @@ class HelicalForceBalance(_Objective):
 class Energy(_Objective):
     """MHD energy.
 
-    W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV  (J)
+    W = integral( ||B||^2 / (2*mu0) + p / (gamma - 1) ) dV  (J)
 
     Parameters
     ----------
@@ -674,7 +674,7 @@ class Energy(_Objective):
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
     where_apply_loss : str
-        where to apply the user defined loss function. One of "nscaled"
+        where to apply the user defined loss function. One of "unscaled"
         or "scaled"
         If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
@@ -897,7 +897,7 @@ class CurrentDensity(_Objective):
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
     where_apply_loss : str
-        where to apply the user defined loss function. One of "nscaled"
+        where to apply the user defined loss function. One of "unscaled"
         or "scaled"
         If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.

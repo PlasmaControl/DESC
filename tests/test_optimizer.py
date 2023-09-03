@@ -874,7 +874,6 @@ def test_constrained_AL_lsq():
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
-        FixBoundaryZ(eq=eq),  # fix Z shape but not R
         FixPressure(eq=eq),  # fix pressure profile
         FixIota(eq=eq),  # fix rotational transform profile
         FixPsi(eq=eq),  # fix total toroidal magnetic flux

@@ -44,7 +44,7 @@ class QuasisymmetryBoozer(_Objective):
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
     where_apply_loss : str
-        where to apply the user defined loss function. One of "nscaled"
+        where to apply the user defined loss function. One of "unscaled"
         or "scaled"
         If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
@@ -160,6 +160,7 @@ class QuasisymmetryBoozer(_Objective):
             helicity=self.helicity,
             NFP=self._transforms["B"].basis.NFP,
         )
+
         self._constants = {
             "transforms": self._transforms,
             "profiles": self._profiles,
@@ -272,7 +273,7 @@ class QuasisymmetryTwoTerm(_Objective):
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
     where_apply_loss : str
-        where to apply the user defined loss function. One of "nscaled"
+        where to apply the user defined loss function. One of "unscaled"
         or "scaled"
         If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
@@ -471,7 +472,7 @@ class QuasisymmetryTripleProduct(_Objective):
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
     where_apply_loss : str
-        where to apply the user defined loss function. One of "nscaled"
+        where to apply the user defined loss function. One of "unscaled"
         or "scaled"
         If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
@@ -640,7 +641,7 @@ class Isodynamicity(_Objective):
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
     where_apply_loss : str
-        where to apply the user defined loss function. One of "nscaled"
+        where to apply the user defined loss function. One of "unscaled"
         or "scaled"
         If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.

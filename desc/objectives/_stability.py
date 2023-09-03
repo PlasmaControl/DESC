@@ -5,7 +5,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -50,7 +49,7 @@ class MercierStability(_Objective):
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
     where_apply_loss : str
-        where to apply the user defined loss function. One of "nscaled"
+        where to apply the user defined loss function. One of "unscaled"
         or "scaled"
         If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
@@ -112,11 +111,12 @@ class MercierStability(_Objective):
         eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
+                L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=np.linspace(1 / 5, 1, 5),
+                axis=False,
             )
         else:
             grid = self._grid
@@ -195,19 +195,15 @@ class MercierStability(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return compress(
-            constants["transforms"]["grid"], data["D_Mercier"], surface_label="rho"
-        )
+        return constants["transforms"]["grid"].compress(data["D_Mercier"])
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         constants = kwargs.get("constants", None)
         if constants is None:
             constants = self.constants
-        w = compress(
-            constants["transforms"]["grid"],
-            constants["transforms"]["grid"].spacing[:, 0],
-            surface_label="rho",
+        w = constants["transforms"]["grid"].compress(
+            constants["transforms"]["grid"].spacing[:, 0]
         )
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
@@ -274,7 +270,7 @@ class MagneticWell(_Objective):
         This loss function is called on the raw compute value, before any shifting,
         scaling, or normalization.
     where_apply_loss : str
-        where to apply the user defined loss function. One of "nscaled"
+        where to apply the user defined loss function. One of "unscaled"
         or "scaled"
         If "unscaled", the loss function will apply to
         the raw objective function values, before the target is applied.
@@ -335,11 +331,12 @@ class MagneticWell(_Objective):
         eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
+                L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=np.linspace(1 / 5, 1, 5),
+                axis=False,
             )
         else:
             grid = self._grid
@@ -414,19 +411,15 @@ class MagneticWell(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return compress(
-            constants["transforms"]["grid"], data["magnetic well"], surface_label="rho"
-        )
+        return constants["transforms"]["grid"].compress(data["magnetic well"])
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         constants = kwargs.get("constants", None)
         if constants is None:
             constants = self.constants
-        w = compress(
-            constants["transforms"]["grid"],
-            constants["transforms"]["grid"].spacing[:, 0],
-            surface_label="rho",
+        w = constants["transforms"]["grid"].compress(
+            constants["transforms"]["grid"].spacing[:, 0]
         )
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 

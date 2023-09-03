@@ -9,14 +9,14 @@ import scipy.optimize
 from desc.backend import jit, jnp, put, sign
 from desc.basis import FourierZernikeBasis, PowerSeries
 from desc.derivatives import Derivative
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, _Grid
 from desc.interpolate import interp1d
 from desc.io import IOAble
 from desc.transform import Transform
 from desc.utils import combination_permutation, copy_coeffs, multinomial_coefficients
 
 
-class Profile(IOAble, ABC):
+class _Profile(IOAble, ABC):
     """Abstract base class for profiles.
 
     All profile classes inherit from this, and must implement
@@ -32,7 +32,6 @@ class Profile(IOAble, ABC):
     _io_attrs_ = ["_name", "_grid", "_params"]
 
     def __init__(self, grid=None, name=""):
-
         self.name = name
         self.grid = grid if grid is not None else LinearGrid(L=20)
 
@@ -52,7 +51,7 @@ class Profile(IOAble, ABC):
 
     @grid.setter
     def grid(self, grid):
-        if isinstance(grid, Grid):
+        if isinstance(grid, _Grid):
             self._grid = grid
             return
         if np.isscalar(grid):
@@ -162,7 +161,7 @@ class Profile(IOAble, ABC):
             - `'linear'`: linear interpolation
             - `'cubic'`: C1 cubic splines (aka local splines)
             - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         Returns
         -------
@@ -236,7 +235,7 @@ class Profile(IOAble, ABC):
         """Multiply this profile by another or a constant."""
         if np.isscalar(x):
             return ScaledProfile(x, self)
-        elif isinstance(x, Profile):
+        elif isinstance(x, _Profile):
             return ProductProfile(self, x)
         else:
             raise NotImplementedError()
@@ -247,7 +246,7 @@ class Profile(IOAble, ABC):
 
     def __add__(self, x):
         """Add this profile with another."""
-        if isinstance(x, Profile):
+        if isinstance(x, _Profile):
             return SumProfile(self, x)
         else:
             raise NotImplementedError()
@@ -261,7 +260,7 @@ class Profile(IOAble, ABC):
         return self.__add__(-x)
 
 
-class ScaledProfile(Profile):
+class ScaledProfile(_Profile):
     """Profile times a constant value.
 
     f_1(x) = a*f(x)
@@ -275,11 +274,11 @@ class ScaledProfile(Profile):
 
     """
 
-    _io_attrs_ = Profile._io_attrs_ + ["_profile", "_scale"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_profile", "_scale"]
 
     def __init__(self, scale, profile, **kwargs):
         assert isinstance(
-            profile, Profile
+            profile, _Profile
         ), "profile in a ScaledProfile must be a Profile or subclass, got {}.".format(
             str(profile)
         )
@@ -299,7 +298,7 @@ class ScaledProfile(Profile):
 
     @grid.setter
     def grid(self, new):
-        Profile.grid.fset(self, new)
+        _Profile.grid.fset(self, new)
         self._profile.grid = new
 
     @property
@@ -362,7 +361,7 @@ class ScaledProfile(Profile):
         return s
 
 
-class SumProfile(Profile):
+class SumProfile(_Profile):
     """Sum of two or more Profiles.
 
     f(x) = f1(x) + f2(x) + f3(x) ...
@@ -374,12 +373,12 @@ class SumProfile(Profile):
 
     """
 
-    _io_attrs_ = Profile._io_attrs_ + ["_profiles"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_profiles"]
 
     def __init__(self, *profiles, **kwargs):
         self._profiles = []
         for profile in profiles:
-            assert isinstance(profile, Profile), (
+            assert isinstance(profile, _Profile), (
                 "Each profile in a SumProfile must be a Profile or "
                 + "subclass, got {}.".format(str(profile))
             )
@@ -396,7 +395,7 @@ class SumProfile(Profile):
 
     @grid.setter
     def grid(self, new):
-        Profile.grid.fset(self, new)
+        _Profile.grid.fset(self, new)
         for profile in self._profiles:
             profile.grid = new
 
@@ -460,7 +459,7 @@ class SumProfile(Profile):
         return s
 
 
-class ProductProfile(Profile):
+class ProductProfile(_Profile):
     """Product of two or more Profiles.
 
     f(x) = f1(x) * f2(x) * f3(x) ...
@@ -472,13 +471,12 @@ class ProductProfile(Profile):
 
     """
 
-    _io_attrs_ = Profile._io_attrs_ + ["_profiles"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_profiles"]
 
     def __init__(self, *profiles, **kwargs):
-
         self._profiles = []
         for profile in profiles:
-            assert isinstance(profile, Profile), (
+            assert isinstance(profile, _Profile), (
                 "Each profile in a ProductProfile must be a Profile or "
                 + "subclass, got {}.".format(str(profile))
             )
@@ -495,7 +493,7 @@ class ProductProfile(Profile):
 
     @grid.setter
     def grid(self, new):
-        Profile.grid.fset(self, new)
+        _Profile.grid.fset(self, new)
         for profile in self._profiles:
             profile.grid = new
 
@@ -569,7 +567,7 @@ class ProductProfile(Profile):
         return s
 
 
-class PowerSeriesProfile(Profile):
+class PowerSeriesProfile(_Profile):
     """Profile represented by a monic power series.
 
     f(x) = a[0] + a[1]*x + a[2]*x**2 + ...
@@ -577,9 +575,10 @@ class PowerSeriesProfile(Profile):
     Parameters
     ----------
     params: array-like
-        Coefficients of the series. If modes is not supplied, assumed to be in ascending
-        order with no missing values. If modes is given, coefficients can be in any
-        order or indexing.
+        Coefficients of the series. Assumed to be zero if not specified.
+        If modes is not supplied, assumed to be in ascending  order with no
+        missing values. If modes is given, coefficients can be in any order or
+        indexing.
     modes : array-like
         Mode numbers for the associated coefficients. eg a[modes[i]] = params[i]
     grid : Grid
@@ -590,11 +589,13 @@ class PowerSeriesProfile(Profile):
         Name of the profile.
     """
 
-    _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params=[0], modes=None, grid=None, sym="auto", name=""):
+    def __init__(self, params=None, modes=None, grid=None, sym="auto", name=""):
         super().__init__(grid, name)
 
+        if params is None:
+            params = [0]
         params = np.atleast_1d(params)
 
         if sym == "auto":  # sym = "even" if all odd modes are zero, else sym = False
@@ -621,7 +622,7 @@ class PowerSeriesProfile(Profile):
     def _get_transform(self, grid):
         if grid is None:
             return self._transform
-        if not isinstance(grid, Grid):
+        if not isinstance(grid, _Grid):
             if np.isscalar(grid):
                 grid = np.linspace(0, 1, grid)
             grid = np.atleast_1d(grid)
@@ -631,7 +632,7 @@ class PowerSeriesProfile(Profile):
         transform = Transform(
             grid,
             self.basis,
-            derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
+            derivs=np.array([[i, 0, 0] for i in range(5)]),
             build=True,
         )
         return transform
@@ -660,7 +661,7 @@ class PowerSeriesProfile(Profile):
 
     @grid.setter
     def grid(self, new):
-        Profile.grid.fset(self, new)
+        _Profile.grid.fset(self, new)
         if hasattr(self, "_transform"):
             self._transform.grid = self.grid
             self._transform.build()
@@ -768,11 +769,14 @@ class PowerSeriesProfile(Profile):
             profile in power series basis fit to given data.
 
         """
+        if sym and sym != "auto":
+            x = x**2
+            order = order // 2
         params = np.polyfit(x, y, order, rcond=rcond, w=w, full=False)[::-1]
         return cls(params, grid=grid, sym=sym, name=name)
 
 
-class SplineProfile(Profile):
+class SplineProfile(_Profile):
     """Profile represented by a piecewise cubic spline.
 
     Parameters
@@ -796,14 +800,13 @@ class SplineProfile(Profile):
 
     """
 
-    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_knots", "_method"]
 
-    def __init__(
-        self, values=[0, 0, 0], knots=None, grid=None, method="cubic2", name=""
-    ):
-
+    def __init__(self, values=None, knots=None, grid=None, method="cubic2", name=""):
         super().__init__(grid, name)
 
+        if values is None:
+            values = [0, 0, 0]
         values = np.atleast_1d(values)
         if knots is None:
             knots = np.linspace(0, 1, values.size)
@@ -827,7 +830,7 @@ class SplineProfile(Profile):
 
     @grid.setter
     def grid(self, new):
-        Profile.grid.fset(self, new)
+        _Profile.grid.fset(self, new)
 
     @property
     def params(self):
@@ -847,7 +850,7 @@ class SplineProfile(Profile):
     def _get_xq(self, grid):
         if grid is None:
             return self.grid.nodes[:, 0]
-        if isinstance(grid, Grid):
+        if hasattr(grid, "nodes"):
             return grid.nodes[:, 0]
         if np.isscalar(grid):
             return np.linspace(0, 1, grid)
@@ -887,7 +890,7 @@ class SplineProfile(Profile):
         return fq
 
 
-class MTanhProfile(Profile):
+class MTanhProfile(_Profile):
     r"""Profile represented by a modified hyperbolic tangent + polynomial.
 
     Profile is parameterized by pedestal height (ped, :math:`p`), SOL height
@@ -914,10 +917,11 @@ class MTanhProfile(Profile):
 
     """
 
-    def __init__(self, params=[0, 0, 1, 1, 0], grid=None, name=""):
-
+    def __init__(self, params=None, grid=None, name=""):
         super().__init__(grid, name)
 
+        if params is None:
+            params = [0, 0, 1, 1, 0]
         self._params = params
 
     def __repr__(self):
@@ -1005,7 +1009,7 @@ class MTanhProfile(Profile):
     def _get_xq(self, grid):
         if grid is None:
             return self.grid.nodes[:, 0]
-        if isinstance(grid, Grid):
+        if hasattr(grid, "nodes"):
             return grid.nodes[:, 0]
         if np.isscalar(grid):
             return np.linspace(0, 1, grid)
@@ -1143,7 +1147,7 @@ class MTanhProfile(Profile):
         return MTanhProfile(params, grid, name)
 
 
-class FourierZernikeProfile(Profile):
+class FourierZernikeProfile(_Profile):
     """Possibly anisotropic profile represented by Fourier-Zernike basis.
 
     Parameters
@@ -1164,11 +1168,13 @@ class FourierZernikeProfile(Profile):
 
     """
 
-    _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params=[0], modes=None, grid=None, sym="auto", NFP=1, name=""):
+    def __init__(self, params=None, modes=None, grid=None, sym="auto", NFP=1, name=""):
         super().__init__(grid, name)
 
+        if params is None:
+            params = [0]
         params = np.atleast_1d(params)
 
         if modes is None:
@@ -1202,7 +1208,7 @@ class FourierZernikeProfile(Profile):
     def _get_transform(self, grid):
         if grid is None:
             return self._transform
-        if not isinstance(grid, Grid):
+        if not isinstance(grid, _Grid):
             if np.isscalar(grid):
                 grid = np.linspace(0, 1, grid)
             grid = np.atleast_1d(grid)
@@ -1212,7 +1218,7 @@ class FourierZernikeProfile(Profile):
         transform = Transform(
             grid,
             self.basis,
-            derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
+            derivs=np.array([[i, 0, 0] for i in range(5)]),
             build=True,
         )
         return transform
@@ -1236,7 +1242,7 @@ class FourierZernikeProfile(Profile):
 
     @grid.setter
     def grid(self, new):
-        Profile.grid.fset(self, new)
+        _Profile.grid.fset(self, new)
         if hasattr(self, "_transform"):
             self._transform.grid = self.grid
             self._transform.build()

@@ -156,7 +156,7 @@ def gershgorin_bounds(H):
     """Upper and lower bounds for eigenvalues of a square matrix.
 
     Given a square matrix ``H`` compute upper
-    and lower bounds for its eigenvalues (Gregoshgorin Bounds).
+    and lower bounds for its eigenvalues (Gershgorin Bounds).
     Defined ref. [1].
 
     References
@@ -237,7 +237,7 @@ def _cholmod(A, maxiter=4):
         khigh = isnan * khigh + (1 - isnan) * kbest
         kbest = (klow + khigh) // 2
         # if it succeeded, mark it as the best so far
-        Lbest = cond(isnan, lambda _: Lbest, lambda _: L, 1)
+        Lbest = cond(isnan, lambda _: Lbest, lambda _: L, None)
     return Lbest
 
 

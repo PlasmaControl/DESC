@@ -322,4 +322,4 @@ class GenericObjective(_Objective):
             profiles=constants["profiles"],
         )
         f = data[self.f]
-        return f.flatten()
+        return f.flatten(order="F")  # so that default quad weights line up correctly.

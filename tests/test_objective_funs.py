@@ -536,7 +536,11 @@ def test_target_profiles():
     objs.build()
     np.testing.assert_allclose(
         objs.target,
-        shear(objs._transforms["grid"].nodes[objs._transforms["grid"].unique_rho_idx]),
+        shear(
+            objs.constants["transforms"]["grid"].nodes[
+                objs.constants["transforms"]["grid"].unique_rho_idx
+            ]
+        ),
     )
     objc = ToroidalCurrent(target=current, eq=eqc)
     objc.build()

@@ -1,6 +1,9 @@
 Changelog
 =========
 
+- Adds ability to compute equilibria with anisotropic pressure. This includes a new
+profile, ``Equilibrium.anisotropy``, new compute quantity ``F_anisotropic``, and a new
+objective ``ForceBalanceAnisotropic``.
 - Adds ``'shear'`` as a compute quantity and ``Shear`` as an objective function.
 
 v0.10.0

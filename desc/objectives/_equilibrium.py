@@ -225,9 +225,20 @@ class ForceBalance(_Objective):
 class ForceBalanceAnisotropic(_Objective):
     """Force balance for anisotropic pressure equilibria.
 
+    Solves for F = J × B − ∇ ⋅ Π = 0
+
+    Where Π is the anisotropic pressure tensor of the form Π = (p_∥ - p_⊥)𝐛𝐛 + p_⊥𝕀
+
+    Expanded out, this gives:
+
     F =  (1−βₐ)J × B − 1/μ₀ (B ⋅ ∇ βₐ)B − βₐ ∇(B²/2μ₀) − ∇(p_⊥)
 
     where βₐ is the anisotropy term: βₐ = μ₀ (p_∥ − p_⊥)/B²
+
+    For this objective, the standard ``Equilibrium.pressure`` profile is used for p_⊥,
+    and ``Equilibrium.anisotropy`` is used for βₐ. To get fully 3D anisotropy, these
+    should be ``FourierZernikeProfile``, not the standard ``PowerSeriesProfile`` (which
+    is only a function of rho).
 
     Parameters
     ----------

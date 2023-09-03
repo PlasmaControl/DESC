@@ -224,6 +224,7 @@ class FourierRZCurve(Curve):
             inputs["axis"][:, 1],
             inputs["axis"][:, 2],
             inputs["axis"][:, 0].astype(int),
+            inputs["axis"][:, 0].astype(int),
             inputs["NFP"],
             inputs["sym"],
         )

@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+from desc.equilibrium import Equilibrium
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -10,6 +11,7 @@ from desc.geometry import (
     SplineXYZCurve,
 )
 from desc.grid import Grid, LinearGrid
+from desc.io import InputReader
 
 
 class TestRZCurve:
@@ -204,6 +206,20 @@ class TestRZCurve:
             phi_xyz,
             atol=1e-1,
         )
+
+    @pytest.mark.unit
+    def test_from_input_file(self):
+        """Test getting a curve from axis guess in input file."""
+        path = "tests/inputs/input.QSC_r2_5.5_desc"
+
+        curve1 = FourierRZCurve.from_input_file(path)
+        curve2 = Equilibrium(**InputReader(path).inputs[0]).axis
+        curve1.change_resolution(curve2.N)
+
+        np.testing.assert_allclose(curve1.R_n, curve2.R_n)
+        np.testing.assert_allclose(curve1.Z_n, curve2.Z_n)
+        np.testing.assert_allclose(curve1.NFP, curve2.NFP)
+        np.testing.assert_allclose(curve1.sym, curve2.sym)
 
 
 class TestFourierXYZCurve:

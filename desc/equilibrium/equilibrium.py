@@ -21,7 +21,7 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -754,6 +754,11 @@ class Equilibrium(IOAble):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
 
         if params is None:
             params = get_params(names, obj=self, has_axis=grid.axis.size)
@@ -1656,7 +1661,6 @@ class Equilibrium(IOAble):
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
 
-
         """
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
@@ -2132,7 +2136,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         """Solve for an equilibrium by continuation method.
 
         Steps through an EquilibriaFamily, solving each equilibrium, and uses
-        pertubations to step between different profiles/boundaries.
+        perturbations to step between different profiles/boundaries.
 
         Uses the previous step as an initial guess for each solution.
 
@@ -2142,7 +2146,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             Equilibria to solve for at each step.
         objective : str or ObjectiveFunction (optional)
             function to solve for equilibrium solution
-        optimizer : str or Optimzer (optional)
+        optimizer : str or Optimizer (optional)
             optimizer to use
         pert_order : int or array of int
             order of perturbations to use. If array-like, should be same length as
@@ -2210,7 +2214,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             Unsolved Equilibrium with the final desired boundary, profiles, resolution.
         objective : str or ObjectiveFunction (optional)
             function to solve for equilibrium solution
-        optimizer : str or Optimzer (optional)
+        optimizer : str or Optimizer (optional)
             optimizer to use
         pert_order : int
             order of perturbations to use.
@@ -2275,8 +2279,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )
         self._equilibria = list(equil)
-
-    # dunder methods required by MutableSequence
 
     def __getitem__(self, i):
         return self._equilibria[i]

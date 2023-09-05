@@ -227,13 +227,15 @@ def equals(a, b):
     return a == b
 
 
-def flatten_list(x):
+def flatten_list(x, flatten_tuple=False):
     """Flatten a nested list.
 
     Parameters
     ----------
     x : list
         nested list of lists to flatten
+    flatten_tuple : bool
+        Whether to also flatten nested tuples.
 
     Returns
     -------
@@ -241,8 +243,11 @@ def flatten_list(x):
         flattened input
 
     """
-    if isinstance(x, list):
-        return [a for i in x for a in flatten_list(i)]
+    types = (list,)
+    if flatten_tuple:
+        types += (tuple,)
+    if isinstance(x, types):
+        return [a for i in x for a in flatten_list(i, flatten_tuple)]
     else:
         return [x]
 
@@ -265,7 +270,7 @@ def issorted(x, axis=None, tol=1e-12):
 
     Returns
     -------
-    issorted : bool
+    is_sorted : bool
         whether the array is sorted along specified axis
 
     """
@@ -289,7 +294,7 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
         relative tolerance for comparison.
     atol : float
         absolute tolerance for comparison.
-        If the following equation is element-wise True, then isalmostequal returns True.
+        If the following equation is element-wise True, then returns True.
             absolute(a - b) <= (atol + rtol * absolute(b))
         where a= x[0] and b is every other element of x, if flattened array,
         or if axis is not None, a = x[:,0,:] and b = x[:,i,:] for all i, and
@@ -297,7 +302,7 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
 
     Returns
     -------
-    isalmostequal : bool
+    is_almost_equal : bool
         whether the array is equal along specified axis
 
     """
@@ -342,13 +347,10 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
         relative tolerance for comparison.
     atol : float
         absolute tolerance for comparison.
-        If the following equation is element-wise True for,
-         then isalmostequal returns True.
-            absolute(a - b) <= (atol + rtol * absolute(b))
 
     Returns
     -------
-    islinspaced : bool
+    is_linspaced : bool
         whether the array is linearly spaced along specified axis
 
     """

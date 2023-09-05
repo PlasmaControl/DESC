@@ -122,10 +122,10 @@ def interp1d(
         - `'cubic'`: C1 cubic splines (aka local splines)
         - `'cubic2'`: C2 cubic splines (aka natural splines)
         - `'catmull-rom'`: C1 cubic centripetal "tension" splines
-        - `'cardinal'`: c1 cubic general tension splines. If used, can also pass keyword
+        - `'cardinal'`: C1 cubic general tension splines. If used, can also pass keyword
             parameter `c` in float[0,1] to specify tension
         - `'monotonic'`: C1 cubic splines that attempt to preserve monotonicity in the
-            data, and will not introduce new extrama in the interpolated points
+            data, and will not introduce new extrema in the interpolated points
         - `'monotonic-0'`: same as `'monotonic'` but with 0 first derivatives at both
             endpoints
     derivative : int

@@ -780,7 +780,7 @@ class InputReader:
         f.close()
 
     @staticmethod
-    def output_to_input(  # noqa: C901 - fxn too complex
+    def desc_output_to_input(  # noqa: C901 - fxn too complex
         outfile,
         infile,
         objective="force",

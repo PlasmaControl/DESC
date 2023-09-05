@@ -218,8 +218,7 @@ class TestProfiles:
 
         f = pp + sp - zp
         x = np.linspace(0, 1, 50)
-        f.grid = 50
-        np.testing.assert_allclose(f(), 3 * (pp(x)), atol=1e-3)
+        np.testing.assert_allclose(f(x), 3 * (pp(x)), atol=1e-3)
 
         params = f.params
         assert params.size == len(sp.params) + len(pp.params) + len(zp.params) + 1
@@ -231,8 +230,7 @@ class TestProfiles:
         assert params[2][0] == -1
 
         f.params = (pp.params, 2 * sp.params, zp.params)
-        f.grid = x
-        np.testing.assert_allclose(f(), 4 * (pp(x)), atol=1e-3)
+        np.testing.assert_allclose(f(x), 4 * (pp(x)), atol=1e-3)
 
     @pytest.mark.unit
     def test_product_profiles(self):
@@ -245,8 +243,7 @@ class TestProfiles:
 
         f = pp * sp * zp
         x = np.linspace(0, 1, 50)
-        f.grid = 50
-        np.testing.assert_allclose(f(), pp(x) ** 3, atol=1e-3)
+        np.testing.assert_allclose(f(x), pp(x) ** 3, atol=1e-3)
 
         params = f.params
         assert params.size == len(sp.params) + len(pp.params) + len(zp.params)
@@ -256,8 +253,7 @@ class TestProfiles:
         assert all(params[2] == zp.params)
 
         f.params = (pp.params, 2 * sp.params, zp.params)
-        f.grid = x
-        np.testing.assert_allclose(f(), 2 * pp(x) ** 3, atol=1e-3)
+        np.testing.assert_allclose(f(x), 2 * pp(x) ** 3, atol=1e-3)
 
     @pytest.mark.unit
     def test_product_profiles_derivative(self):
@@ -278,7 +274,6 @@ class TestProfiles:
 
         f = p1 * p2 * p3
         x = np.linspace(0, 1, 50)
-        f.grid = x
 
         # Below is a simpler method to compute first derivative of product series
         # than the more general combinatorics algorithm in implementation.
@@ -286,16 +281,16 @@ class TestProfiles:
         _sum = 0
         _sum_r = 0
         for profile in f._profiles:
-            result = profile.compute()
-            result_r = profile.compute(dr=1)
-            result_rr = profile.compute(dr=2)
+            result = profile(x)
+            result_r = profile(x, dr=1)
+            result_rr = profile(x, dr=2)
             _sum += result_r / result
             _sum_r += result_rr / result - (result_r / result) ** 2
-        f_r = f.compute() * _sum
-        f_rr = f_r * _sum + f.compute() * _sum_r
+        f_r = f(x) * _sum
+        f_rr = f_r * _sum + f(x) * _sum_r
 
-        np.testing.assert_allclose(f_r, f.compute(dr=1))
-        np.testing.assert_allclose(f_rr, f.compute(dr=2))
+        np.testing.assert_allclose(f_r, f(x, dr=1))
+        np.testing.assert_allclose(f_rr, f(x, dr=2))
 
     @pytest.mark.unit
     def test_scaled_profiles(self):
@@ -306,26 +301,23 @@ class TestProfiles:
 
         f = 3 * pp
         x = np.linspace(0, 1, 50)
-        f.grid = 50
-        np.testing.assert_allclose(f(), 3 * (pp(x)), atol=1e-3)
+        np.testing.assert_allclose(f(x), 3 * (pp(x)), atol=1e-3)
 
         params = f.params
         assert params[0] == 3
         assert all(params[1:] == pp.params)
 
         f.params = 2
-        f.grid = x
-        np.testing.assert_allclose(f(), 2 * (pp(x)), atol=1e-3)
+        np.testing.assert_allclose(f(x), 2 * (pp(x)), atol=1e-3)
 
         f.params = 4 * pp.params
-        f.grid = x
 
         params = f.params
         assert params.size == len(pp.params) + 1
         assert params[0] == 2
         np.testing.assert_allclose(params[1:], [4, -8, 4])
         np.testing.assert_allclose(pp.params, [1, -2, 1])
-        np.testing.assert_allclose(f(), 8 * (pp(x)), atol=1e-3)
+        np.testing.assert_allclose(f(x), 8 * (pp(x)), atol=1e-3)
 
     @pytest.mark.unit
     def test_profile_errors(self):
@@ -349,10 +341,6 @@ class TestProfiles:
             a = sp + 4
         with pytest.raises(NotImplementedError):
             a = sp * [1, 2, 3]
-        with pytest.raises(TypeError):
-            sp.grid = None
-        with pytest.raises(TypeError):
-            sp.grid = None
         with pytest.raises(ValueError):
             a = sp + pp
             a.params = pp.params

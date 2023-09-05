@@ -99,7 +99,7 @@ def register_compute_fun(
     return _decorator
 
 
-# This allows us to handle subclasses whos data_index stuff should inherit
+# This allows us to handle subclasses whose data_index stuff should inherit
 # from parent classes.
 # This is the least bad solution I've found, since everything else requires
 # crazy circular imports

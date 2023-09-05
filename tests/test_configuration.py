@@ -195,7 +195,7 @@ class TestConstructor:
             eq = Equilibrium(iota="def")
         with pytest.raises(TypeError):
             eq = Equilibrium(current="def")
-        with pytest.raises(ValueError):  # change to typeeror if allow both
+        with pytest.raises(ValueError):  # change to TypeError if allow both
             eq = Equilibrium(iota="def", current="def")
         with pytest.raises(ValueError):
             eq = Equilibrium(iota=None)

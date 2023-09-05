@@ -471,13 +471,13 @@ class ObjectiveFunction(IOAble):
         return jnp.atleast_2d(self._hess(x, constants).squeeze())
 
     def jac_scaled(self, x, constants=None):
-        """Compute Jacobian matrx of vector form of the objective wrt x."""
+        """Compute Jacobian matrix of vector form of the objective wrt x."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._jac_scaled(x, constants).squeeze())
 
     def jac_unscaled(self, x, constants=None):
-        """Compute Jacobian matrx of vector form of the objective wrt x, unweighted."""
+        """Compute Jacobian matrix of vector form of the objective wrt x, unweighted."""
         if constants is None:
             constants = self.constants
         return jnp.atleast_2d(self._jac_unscaled(x, constants).squeeze())

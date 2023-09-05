@@ -8,12 +8,7 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import (
-    GenericObjective,
-    ObjectiveFromUser,
-    RotationalTransform,
-    ToroidalCurrent,
-)
+from ._generic import GenericObjective, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
     BScaleLength,
@@ -23,6 +18,7 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
+from ._profiles import RotationalTransform, Shear, ToroidalCurrent
 from ._qs import (
     Isodynamicity,
     QuasisymmetryBoozer,

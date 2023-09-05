@@ -104,5 +104,7 @@ def _vpardot(params, transforms, profiles, data, **kwargs):
     m_q = kwargs.get("m_q", 1.673e-27/1.6e-19)
     mu = kwargs.get("mu")
     vpar = kwargs.get("vpar")
-    data["vpardot"] = -mu*jnp.sum(data["b"] + m_q*(mu/data["|B|"]**2) * jnp.cross(data["B"], data["grad(|B|)"], axis=-1)/vpar * data["grad(|B|)"], axis=-1)
+    # data["vpardot"] = -mu*jnp.sum(data["b"] + m_q*(mu/data["|B|"]**2) * ((1/vpar)*jnp.cross(data["B"], data["grad(|B|)"], axis=-1).T).T * data["grad(|B|)"], axis=-1)
+    
+    data["vpardot"] = -mu * jnp.sum((data["b"] + (((m_q*mu)/(vpar*data["|B|"]**2))*(jnp.cross(data["B"], data["grad(|B|)"], axis=-1)).T).T) * data["grad(|B|)"], axis=-1)
     return data

@@ -132,6 +132,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         None,
         constraint,
         bounds,
+        *args,
     )
 
     # L(x,y,mu) = 1/2 f(x)^2 - y*c(x) + mu/2 c(x)^2 + y^2/(2*mu)
@@ -155,7 +156,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     z = z0.copy()
     f = fun_wrapped(z, *args)
     cost = 1 / 2 * jnp.dot(f, f)
-    c = constraint_wrapped.fun(z)
+    c = constraint_wrapped.fun(z, *args)
     constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
     nfev += 1
 
@@ -329,7 +330,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             z_new = make_strictly_feasible(z + step, lb, ub, rstep=0)
             f_new = fun_wrapped(z_new, *args)
             cost_new = 0.5 * jnp.dot(f_new, f_new)
-            c_new = constraint_wrapped.fun(z_new)
+            c_new = constraint_wrapped.fun(z_new, *args)
             L_new = lagfun(f_new, c_new, y, mu)
             nfev += 1
 

@@ -75,28 +75,30 @@ def _optimize_desc_aug_lagrangian(
     options["max_nfev"] = stoptol["max_nfev"]
     options["max_ngev"] = stoptol["max_ngev"]
     options["max_nhev"] = stoptol["max_nhev"]
-    hess = objective.hess if "bfgs" not in method else "bfgs"
+    # local lambdas to handle constants from both objective and constraint
+    hess = lambda x, *c: objective.hess(x, c[0]) if "bfgs" not in method else "bfgs"
 
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
         constraint_wrapped = NonlinearConstraint(
-            constraint.compute_scaled,
+            lambda x, *c: constraint.compute_scaled(x, c[1]),
             lb,
             ub,
-            constraint.jac_scaled,
+            lambda x, *c: constraint.jac_scaled(x, c[1]),
         )
-        constraint_wrapped.vjp = constraint.vjp_scaled
+        # TODO: can't pass constants dict into vjp for now
+        constraint_wrapped.vjp = lambda v, x, *args: constraint.vjp_scaled(v, x)
     else:
         constraint_wrapped = None
 
     result = fmin_auglag(
-        objective.compute_scalar,
+        lambda x, *c: objective.compute_scalar(x, c[0]),
         x0=x0,
-        grad=objective.grad,
+        grad=lambda x, *c: objective.grad(x, c[0]),
         hess=hess,
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
-        args=(),
+        args=(objective.constants, constraint.constants if constraint else None),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -174,21 +176,21 @@ def _optimize_desc_aug_lagrangian_least_squares(
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
         constraint_wrapped = NonlinearConstraint(
-            constraint.compute_scaled,
+            lambda x, *c: constraint.compute_scaled(x, c[1]),
             lb,
             ub,
-            constraint.jac_scaled,
+            lambda x, *c: constraint.jac_scaled(x, c[1]),
         )
     else:
         constraint_wrapped = None
 
     result = lsq_auglag(
-        objective.compute_scaled_error,
+        lambda x, *c: objective.compute_scaled_error(x, c[0]),
         x0=x0,
-        jac=objective.jac_scaled,
+        jac=lambda x, *c: objective.jac_scaled(x, c[0]),
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
-        args=(),
+        args=(objective.constants, constraint.constants if constraint else None),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],

@@ -133,6 +133,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         hess,
         constraint,
         bounds,
+        *args,
     )
 
     def lagfun(f, c, y, mu, *args):
@@ -192,7 +193,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
 
     z = z0.copy()
     f = fun_wrapped(z, *args)
-    c = constraint_wrapped.fun(z)
+    c = constraint_wrapped.fun(z, *args)
     constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
     nfev += 1
 
@@ -367,7 +368,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
 
             z_new = make_strictly_feasible(z + step, lb, ub, rstep=0)
             f_new = fun_wrapped(z_new, *args)
-            c_new = constraint_wrapped.fun(z_new)
+            c_new = constraint_wrapped.fun(z_new, *args)
             L_new = lagfun(f_new, c_new, y, mu)
             nfev += 1
 

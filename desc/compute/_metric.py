@@ -1294,7 +1294,8 @@ def _g_sup_zz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="g^rt",
+    # name="g^rt"
+    name = ["g^" + i + j for i in ['r', 't', 'z'] for j in ['r', 't', 'z']],
     label="g^{\\rho\\theta}",
     units="m^{-2}",
     units_long="inverse square meters",
@@ -1307,7 +1308,12 @@ def _g_sup_zz(params, transforms, profiles, data, **kwargs):
     data=["e^rho", "e^theta"],
 )
 def _g_sup_rt(params, transforms, profiles, data, **kwargs):
-    data["g^rt"] = dot(data["e^rho"], data["e^theta"])
+    # data["g^rt"] = dot(data["e^rho"], data["e^theta"])
+    # reruns each time but looks cleaner this way i think
+    aliases = ["g^" + i + j for i in ['r', 't', 'z'] for j in ['r', 't', 'z']]
+    for alias in aliases:
+        data[alias] = dot(data["e^rho"], data["e^theta"])
+
     return data
 
 

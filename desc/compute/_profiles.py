@@ -1167,9 +1167,9 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=[],
     transforms={"grid": []},
-    profiles=["current"],
+    profiles=[],
     coordinates="r",
-    data=["0", "g_tt", "g_tz", "sqrt(g)", "omega_t", "omega_z"],
+    data=["g_tt", "g_tz", "sqrt(g)", "omega_t", "omega_z"],
 )
 def _iota_den(params, transforms, profiles, data, **kwargs):
     """Denominator of rotational transform formula.
@@ -1177,10 +1177,6 @@ def _iota_den(params, transforms, profiles, data, **kwargs):
     Computes 𝛾 as defined in the document attached to the description
     of GitHub pull request #556.
     """
-    if profiles["current"] is None:
-        data["iota_den"] = jnp.nan * data["0"]
-        return data
-
     gamma = (
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
     ) / data["sqrt(g)"]
@@ -1202,10 +1198,9 @@ def _iota_den(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=[],
     transforms={"grid": []},
-    profiles=["current"],
+    profiles=[],
     coordinates="r",
     data=[
-        "0",
         "g_tt",
         "g_tt_r",
         "g_tz",
@@ -1225,10 +1220,6 @@ def _iota_den_r(params, transforms, profiles, data, **kwargs):
     Computes d𝛾/d𝜌 as defined in the document attached to the description
     of GitHub pull request #556.
     """
-    if profiles["current"] is None:
-        data["iota_den_r"] = jnp.nan * data["0"]
-        return data
-
     gamma = (
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
     ) / data["sqrt(g)"]
@@ -1268,10 +1259,9 @@ def _iota_den_r(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=[],
     transforms={"grid": []},
-    profiles=["current"],
+    profiles=[],
     coordinates="r",
     data=[
-        "0",
         "g_tt",
         "g_tt_r",
         "g_tt_rr",
@@ -1296,10 +1286,6 @@ def _iota_den_rr(params, transforms, profiles, data, **kwargs):
     Computes d2𝛾/d𝜌2 as defined in the document attached to the description
     of GitHub pull request #556.
     """
-    if profiles["current"] is None:
-        data["iota_den_rr"] = jnp.nan * data["0"]
-        return data
-
     gamma = (
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
     ) / data["sqrt(g)"]
@@ -1361,10 +1347,9 @@ def _iota_den_rr(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=[],
     transforms={"grid": []},
-    profiles=["current"],
+    profiles=[],
     coordinates="r",
     data=[
-        "0",
         "g_tt",
         "g_tt_r",
         "g_tt_rr",
@@ -1393,10 +1378,6 @@ def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
     Computes d3𝛾/d𝜌3 as defined in the document attached to the description
     of GitHub pull request #556.
     """
-    if profiles["current"] is None:
-        data["iota_den_rrr"] = jnp.nan * data["0"]
-        return data
-
     gamma = (
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
     ) / data["sqrt(g)"]

@@ -374,16 +374,10 @@ class Transform(IOAble):
             self._built = True
             return
 
-        if self.method == "direct1":
+        if self.method in ["direct1", "jitable]"]:
             for d in self.derivatives:
                 self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
-                    self.grid.nodes, d, unique=True
-                )
-
-        if self.method == "jitable":
-            for d in self.derivatives:
-                self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
-                    self.grid.nodes, d, unique=False
+                    self.grid, d
                 )
 
         if self.method in ["fft", "direct2"]:
@@ -393,7 +387,7 @@ class Transform(IOAble):
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             for d in temp_d:
                 self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
-                    self.fft_nodes, d, modes=temp_modes, unique=True
+                    self.fft_nodes, d, modes=temp_modes
                 )
         if self.method == "direct2":
             temp_d = np.hstack(
@@ -404,7 +398,7 @@ class Transform(IOAble):
             )
             for d in temp_d:
                 self.matrices["direct2"][d[2]] = self.basis.evaluate(
-                    self.dft_nodes, d, modes=temp_modes, unique=True
+                    self.dft_nodes, d, modes=temp_modes
                 )
 
         self._built = True
@@ -422,13 +416,13 @@ class Transform(IOAble):
         elif self.method == "direct2":
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             A = self.basis.evaluate(
-                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes, unique=True
+                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes
             )
             temp_modes = np.hstack(
                 [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
             )
             B = self.basis.evaluate(
-                self.dft_nodes, np.array([0, 0, 0]), modes=temp_modes, unique=True
+                self.dft_nodes, np.array([0, 0, 0]), modes=temp_modes
             )
             self.matrices["pinvA"] = (
                 scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)
@@ -439,7 +433,7 @@ class Transform(IOAble):
         elif self.method == "fft":
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             A = self.basis.evaluate(
-                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes, unique=True
+                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes
             )
             self.matrices["pinvA"] = (
                 scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)

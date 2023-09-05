@@ -8,6 +8,7 @@ import mpmath
 import numpy as np
 
 from desc.backend import fori_loop, gammaln, jit, jnp, sign
+from desc.grid import Grid, _Grid
 from desc.io import IOAble
 from desc.utils import flatten_list
 
@@ -269,22 +270,17 @@ class PowerSeries(_Basis):
         z = np.zeros((L + 1, 2))
         return np.hstack([l, z])
 
-    def evaluate(
-        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
-    ):
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
-        nodes : ndarray of float, size(num_nodes,3)
+        grid : Grid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used)
-        unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -292,29 +288,25 @@ class PowerSeries(_Basis):
             basis functions evaluated at nodes
 
         """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
         if (derivatives[1] != 0) or (derivatives[2] != 0):
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+            return jnp.zeros((grid.num_nodes, modes.shape[0]))
         if not len(modes):
-            return np.array([]).reshape((len(nodes), 0))
+            return np.array([]).reshape((grid.num_nodes, 0))
 
-        r, t, z = nodes.T
-        l, m, n = modes.T
+        r = grid.nodes[:, 0][grid.unique_rho_idx]
+        l = modes[:, 0]
 
-        if unique:
-            _, ridx, routidx = np.unique(
-                r, return_index=True, return_inverse=True, axis=0
-            )
-            _, lidx, loutidx = np.unique(
-                l, return_index=True, return_inverse=True, axis=0
-            )
-            r = r[ridx]
-            l = l[lidx]
+        # TODO: something like grid.unique_rho_idx for this? but tricker for zernike
+        # since l,m coupled
+        _, lidx, loutidx = np.unique(l, return_index=True, return_inverse=True, axis=0)
+        l = l[lidx]
 
         radial = powers(r, l, dr=derivatives[0])
-        if unique:
-            radial = radial[routidx][:, loutidx]
+        radial = radial[grid.inverse_rho_idx][:, loutidx]
 
         return radial
 
@@ -383,22 +375,17 @@ class FourierSeries(_Basis):
         z = np.zeros((dim_tor, 2))
         return np.hstack([z, n])
 
-    def evaluate(
-        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
-    ):
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
-        nodes : ndarray of float, size(num_nodes,3)
+        grid : Grid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
-        unique : bool, optional
-            Whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff.
 
         Returns
         -------
@@ -406,29 +393,24 @@ class FourierSeries(_Basis):
             Basis functions evaluated at nodes.
 
         """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
+
         if (derivatives[0] != 0) or (derivatives[1] != 0):
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+            return jnp.zeros((grid.num_nodes, modes.shape[0]))
         if not len(modes):
-            return np.array([]).reshape((len(nodes), 0))
+            return np.array([]).reshape((grid.num_nodes, 0))
 
-        r, t, z = nodes.T
-        l, m, n = modes.T
+        z = grid.nodes[:, 2][grid.unique_zeta_idx]
+        n = modes[:, 2]
 
-        if unique:
-            _, zidx, zoutidx = np.unique(
-                z, return_index=True, return_inverse=True, axis=0
-            )
-            _, nidx, noutidx = np.unique(
-                n, return_index=True, return_inverse=True, axis=0
-            )
-            z = z[zidx]
-            n = n[nidx]
+        _, nidx, noutidx = np.unique(n, return_index=True, return_inverse=True, axis=0)
+        n = n[nidx]
 
         toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
-        if unique:
-            toroidal = toroidal[zoutidx][:, noutidx]
+        toroidal = toroidal[grid.inverse_zeta_idx][:, noutidx]
 
         return toroidal
 
@@ -513,22 +495,17 @@ class DoubleFourierSeries(_Basis):
         y = np.hstack([z, mm, nn])
         return y
 
-    def evaluate(
-        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
-    ):
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
-        nodes : ndarray of float, size(num_nodes,3)
+        grid : Grid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
-        unique : bool, optional
-            Whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff.
 
         Returns
         -------
@@ -536,39 +513,31 @@ class DoubleFourierSeries(_Basis):
             Basis functions evaluated at nodes.
 
         """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
+
         if derivatives[0] != 0:
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+            return jnp.zeros((grid.num_nodes, modes.shape[0]))
         if not len(modes):
-            return np.array([]).reshape((len(nodes), 0))
+            return np.array([]).reshape((grid.num_nodes, 0))
 
-        r, t, z = nodes.T
-        l, m, n = modes.T
+        _, t, z = grid.nodes.T
+        _, m, n = modes.T
 
-        if unique:
-            _, tidx, toutidx = np.unique(
-                t, return_index=True, return_inverse=True, axis=0
-            )
-            _, zidx, zoutidx = np.unique(
-                z, return_index=True, return_inverse=True, axis=0
-            )
-            _, midx, moutidx = np.unique(
-                m, return_index=True, return_inverse=True, axis=0
-            )
-            _, nidx, noutidx = np.unique(
-                n, return_index=True, return_inverse=True, axis=0
-            )
-            t = t[tidx]
-            z = z[zidx]
-            m = m[midx]
-            n = n[nidx]
+        t = t[grid.unique_theta_idx]
+        z = z[grid.unique_zeta_idx]
+
+        _, midx, moutidx = np.unique(m, return_index=True, return_inverse=True, axis=0)
+        _, nidx, noutidx = np.unique(n, return_index=True, return_inverse=True, axis=0)
+        m = m[midx]
+        n = n[nidx]
 
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
         toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
-        if unique:
-            poloidal = poloidal[toutidx][:, moutidx]
-            toroidal = toroidal[zoutidx][:, noutidx]
+        poloidal = poloidal[grid.inverse_theta_idx][:, moutidx]
+        toroidal = toroidal[grid.inverse_zeta_idx][:, noutidx]
 
         return poloidal * toroidal
 
@@ -722,22 +691,17 @@ class ZernikePolynomial(_Basis):
 
         return np.hstack([pol, tor])
 
-    def evaluate(
-        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
-    ):
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
-        nodes : ndarray of float, size(num_nodes,3)
+        grid : Grid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of int, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
-        unique : bool, optional
-            Whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff.
 
         Returns
         -------
@@ -745,41 +709,35 @@ class ZernikePolynomial(_Basis):
             Basis functions evaluated at nodes.
 
         """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
-        if derivatives[2] != 0:
-            return jnp.zeros((nodes.shape[0], modes.shape[0]))
-        if not len(modes):
-            return np.array([]).reshape((len(nodes), 0))
 
-        r, t, z = nodes.T
-        l, m, n = modes.T
+        if derivatives[2] != 0:
+            return jnp.zeros((grid.num_nodes, modes.shape[0]))
+        if not len(modes):
+            return np.array([]).reshape((grid.num_nodes, 0))
+
+        r, t, _ = grid.nodes.T
+        _, m, _ = modes.T
         lm = modes[:, :2]
 
-        if unique:
-            _, ridx, routidx = np.unique(
-                r, return_index=True, return_inverse=True, axis=0
-            )
-            _, tidx, toutidx = np.unique(
-                t, return_index=True, return_inverse=True, axis=0
-            )
-            _, lmidx, lmoutidx = np.unique(
-                lm, return_index=True, return_inverse=True, axis=0
-            )
-            _, midx, moutidx = np.unique(
-                m, return_index=True, return_inverse=True, axis=0
-            )
-            r = r[ridx]
-            t = t[tidx]
-            lm = lm[lmidx]
-            m = m[midx]
+        r = r[grid.unique_rho_idx]
+        t = t[grid.unique_theta_idx]
+
+        _, lmidx, lmoutidx = np.unique(
+            lm, return_index=True, return_inverse=True, axis=0
+        )
+        _, midx, moutidx = np.unique(m, return_index=True, return_inverse=True, axis=0)
+        lm = lm[lmidx]
+        m = m[midx]
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
 
-        if unique:
-            radial = radial[routidx][:, lmoutidx]
-            poloidal = poloidal[toutidx][:, moutidx]
+        radial = radial[grid.inverse_rho_idx][:, lmoutidx]
+        poloidal = poloidal[grid.inverse_theta_idx][:, moutidx]
 
         return radial * poloidal
 
@@ -875,22 +833,17 @@ class ChebyshevDoubleFourierBasis(_Basis):
         y = np.hstack([ll, mm, nn])
         return y
 
-    def evaluate(
-        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
-    ):
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
-        nodes : ndarray of float, size(num_nodes,3)
+        grid : Grid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
-        unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -898,17 +851,35 @@ class ChebyshevDoubleFourierBasis(_Basis):
             Basis functions evaluated at nodes.
 
         """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
-        if not len(modes):
-            return np.array([]).reshape((len(nodes), 0))
 
-        r, t, z = nodes.T
+        if not len(modes):
+            return np.array([]).reshape((grid.num_nodes, 0))
+
+        r, t, z = grid.nodes.T
         l, m, n = modes.T
+
+        r = r[grid.unique_rho_idx]
+        t = t[grid.unique_theta_idx]
+        z = z[grid.unique_zeta_idx]
+
+        _, lidx, loutidx = np.unique(l, return_index=True, return_inverse=True, axis=0)
+        _, midx, moutidx = np.unique(m, return_index=True, return_inverse=True, axis=0)
+        _, nidx, noutidx = np.unique(n, return_index=True, return_inverse=True, axis=0)
+        l = l[lidx]
+        m = m[midx]
+        n = n[nidx]
 
         radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
         toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
+
+        radial = radial[grid.inverse_rho_idx][:, loutidx]
+        poloidal = poloidal[grid.inverse_theta_idx][:, moutidx]
+        toroidal = toroidal[grid.inverse_zeta_idx][:, noutidx]
 
         return radial * poloidal * toroidal
 
@@ -1077,22 +1048,17 @@ class FourierZernikeBasis(_Basis):
         ).T
         return np.unique(np.hstack([pol, tor]), axis=0)
 
-    def evaluate(
-        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
-    ):
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
-        nodes : ndarray of float, size(num_nodes,3)
+        grid : Grid or ndarray of float, size(num_nodes,3)
             Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of int, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
-        unique : bool, optional
-            Whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff.
 
         Returns
         -------
@@ -1100,51 +1066,39 @@ class FourierZernikeBasis(_Basis):
             Basis functions evaluated at nodes.
 
         """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
         if not len(modes):
-            return np.array([]).reshape((len(nodes), 0))
+            return np.array([]).reshape((grid.num_nodes, 0))
 
         # TODO: avoid duplicate calculations when mixing derivatives
-        r, t, z = nodes.T
-        l, m, n = modes.T
+        r, t, z = grid.nodes.T
+        _, m, n = modes.T
         lm = modes[:, :2]
 
-        if unique:
-            # TODO: can avoid this here by using grid.unique_idx etc
-            # and adding unique_modes attributes to basis
-            _, ridx, routidx = np.unique(
-                r, return_index=True, return_inverse=True, axis=0
-            )
-            _, tidx, toutidx = np.unique(
-                t, return_index=True, return_inverse=True, axis=0
-            )
-            _, zidx, zoutidx = np.unique(
-                z, return_index=True, return_inverse=True, axis=0
-            )
-            _, lmidx, lmoutidx = np.unique(
-                lm, return_index=True, return_inverse=True, axis=0
-            )
-            _, midx, moutidx = np.unique(
-                m, return_index=True, return_inverse=True, axis=0
-            )
-            _, nidx, noutidx = np.unique(
-                n, return_index=True, return_inverse=True, axis=0
-            )
-            r = r[ridx]
-            t = t[tidx]
-            z = z[zidx]
-            lm = lm[lmidx]
-            m = m[midx]
-            n = n[nidx]
+        r = r[grid.unique_rho_idx]
+        t = t[grid.unique_theta_idx]
+        z = z[grid.unique_zeta_idx]
+
+        _, lmidx, lmoutidx = np.unique(
+            lm, return_index=True, return_inverse=True, axis=0
+        )
+        _, midx, moutidx = np.unique(m, return_index=True, return_inverse=True, axis=0)
+        _, nidx, noutidx = np.unique(n, return_index=True, return_inverse=True, axis=0)
+
+        lm = lm[lmidx]
+        m = m[midx]
+        n = n[nidx]
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
         toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
-        if unique:
-            radial = radial[routidx][:, lmoutidx]
-            poloidal = poloidal[toutidx][:, moutidx]
-            toroidal = toroidal[zoutidx][:, noutidx]
+
+        radial = radial[grid.inverse_rho_idx][:, lmoutidx]
+        poloidal = poloidal[grid.inverse_theta_idx][:, moutidx]
+        toroidal = toroidal[grid.inverse_zeta_idx][:, noutidx]
 
         return radial * poloidal * toroidal
 

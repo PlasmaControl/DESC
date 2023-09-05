@@ -10,6 +10,7 @@ from desc.coils import CoilSet
 from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
     compare_surfs_DESC_field_line_trace,
 )
+from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, _MagneticField, field_line_integrate
 
@@ -93,6 +94,8 @@ def field_trace_from_coilset(
         assert isinstance(coils, _MagneticField)
         dirname = dirname if dirname else eqname
 
+    N_grid = coils[0].X.size
+
     if external_TF:
         coils = SumMagneticField(coils, external_TF)
     else:
@@ -106,8 +109,13 @@ def field_trace_from_coilset(
     )  # initial R positions of field-lines to trace
     # set initial Z positions to zero
     print("Beginning Field Line Integration")
+
+    grid = LinearGrid(N=2 * N_grid + 5, NFP=1, endpoint=True)
+
     # integrate field lines
-    field_R, field_Z = field_line_integrate(rrr, np.zeros_like(rrr), phis, coils)
+    field_R, field_Z = field_line_integrate(
+        rrr, np.zeros_like(rrr), phis, coils, grid=grid
+    )
 
     t_elapse = time.time() - t0
 

@@ -11,7 +11,7 @@ from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
     compare_surfs_DESC_field_line_trace,
 )
 from desc.io import load
-from desc.magnetic_fields import MagneticField, SumMagneticField, field_line_integrate
+from desc.magnetic_fields import SumMagneticField, _MagneticField, field_line_integrate
 
 ################## Inputs ################
 # coil .txt file in MAKEGRID format
@@ -71,7 +71,7 @@ def field_trace_from_coilset(
     savename : str, optional
         Name of .png to save figure to (inside of dirname directory)
         by default None
-    external_TF : MagneticField, optional
+    external_TF : _MagneticField, optional
         external magnetic field to include to trace with, in addition to
         the coilset's magnetic field, by default None
     Returns
@@ -90,7 +90,7 @@ def field_trace_from_coilset(
         coils = CoilSet.from_makegrid_coilfile(coils)
 
     else:
-        assert isinstance(coils, MagneticField)
+        assert isinstance(coils, _MagneticField)
         dirname = dirname if dirname else eqname
 
     if external_TF:

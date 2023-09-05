@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import MagneticField, SumMagneticField, ToroidalMagneticField
+from desc.magnetic_fields import SumMagneticField, ToroidalMagneticField, _MagneticField
 
 
 def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None):
@@ -15,8 +15,8 @@ def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None):
 
     Parameters
     ----------
-    coils : MagneticField
-        A DESC MagneticField object (which can be a CoilSet) to find the Bnormal from
+    coils : _MagneticField
+        A DESC _MagneticField object (which can be a CoilSet) to find the Bnormal from
     eqname : str or Equilibrium
         The DESC equilibrum the surface current potential was found for
         If str, assumes it is the name of the equilibrium .h5 output and will
@@ -31,7 +31,7 @@ def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None):
         if higher, less points will be saved
         #TODO: can remove this and replace with something like
         basename to be used for every saved figure
-    B0 : MagneticField, optional
+    B0 : _MagneticField, optional
         Magnetic field external to the coils given, to
         include when field line tracing.
         for example, a simple TF field
@@ -48,8 +48,8 @@ def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None):
         eq = eq[-1]
     if B0:
         R0_ves = 0.7035
-        if not isinstance(B0, MagneticField):
-            assert float(B0) == B0, "B0 must be a float or a MagneticField!"
+        if not isinstance(B0, _MagneticField):
+            assert float(B0) == B0, "B0 must be a float or a _MagneticField!"
             TF_field = ToroidalMagneticField(R0=R0_ves, B0=B0)
 
         coils = SumMagneticField(coils, TF_field)

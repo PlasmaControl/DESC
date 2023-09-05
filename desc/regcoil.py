@@ -15,7 +15,7 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import MagneticField, ToroidalMagneticField
+from desc.magnetic_fields import ToroidalMagneticField, _MagneticField
 from desc.transform import Transform
 
 
@@ -119,8 +119,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
         lower bound of the alpha values to scan over
     scan_upper: int, default -1, power of 10 (i.e. 10^(-1)) that is the
         upper bound of the alpha values to scan over
-    external_field: MagneticField,
-        DESC MagneticField object giving the magnetic field
+    external_field: _MagneticField,
+        DESC _MagneticField object giving the magnetic field
         provided by any coils external to the winding surface.
         If given, will use this external field option over the
         external_TF_fraction option.
@@ -185,8 +185,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
     if hasattr(eq, "__len__"):
         eq = eq[-1]
 
-    if external_field:  # ensure given field is an instance of MagneticField
-        assert isinstance(external_field, MagneticField), (
+    if external_field:  # ensure given field is an instance of _MagneticField
+        assert isinstance(external_field, _MagneticField), (
             "Expected"
             + "MagneticField for argument external_field,"
             + f" got type {type(external_field)} "

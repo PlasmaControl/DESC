@@ -11,7 +11,7 @@ expensive computations.
 
 from scipy.constants import elementary_charge, mu_0
 
-from desc.backend import jnp
+from desc.backend import cond, jnp
 
 from .data_index import register_compute_fun
 from .utils import cumtrapz, dot, surface_averages, surface_integrals
@@ -1634,4 +1634,35 @@ def _current_r(params, transforms, profiles, data, **kwargs):
 )
 def _current_rr(params, transforms, profiles, data, **kwargs):
     data["current_rr"] = 2 * jnp.pi / mu_0 * data["I_rr"]
+    return data
+
+
+@register_compute_fun(
+    name="shear",
+    label="-\\rho \\frac{\\partial_{\\rho}\\iota}{\\iota}",
+    units="~",
+    units_long="None",
+    description="Global magnetic shear",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["0", "iota", "iota_r", "rho"],
+)
+def _shear(params, transforms, profiles, data, **kwargs):
+    """Global magnetic shear, as defined in the tokamak literature: -dι/dρ * (ρ/ι).
+
+    When ι=0 ∀ρ (such as in a vacuum tokamak) the shear is defined to be 0 everywhere.
+    This implementation is undefined whenever ι=0 otherwise, which is the correct value
+    in the case of a Reverse Field Configuration.
+    The case where both ι=0 and dι/dρ=0 is rare, and that limit is not implemented.
+    """
+    eps = 1e2 * jnp.finfo(data["iota"].dtype).eps
+    data["shear"] = cond(
+        jnp.all(jnp.abs(data["iota"]) < eps),
+        lambda _: data["0"],  # if iota is 0 everywhere, set shear to 0 everywhere
+        lambda _: -data["rho"] * data["iota_r"] / data["iota"],
+        None,
+    )
     return data

@@ -112,6 +112,8 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
         eq = desc.io.load(eqname)
     elif isinstance(eqname, EquilibriaFamily) or isinstance(eqname, Equilibrium):
         eq = eqname
+    elif eqname is None:
+        eq = None
     if hasattr(eq, "__len__"):
         eq = eq[-1]
 
@@ -299,6 +301,9 @@ def compare_surfs_DESC_field_line_trace(eqname, ax, R_list, savename_poin=None, 
     # plot the flux surfaces of a DESC equiilibrium at the rhos corr. to those surfaces
     # those are values should be at theta=zeta=0... which should corr.
     #  to the outboard plane
+
+    if eqname is None:
+        return  # dont do anything if no eq passed in
 
     if isinstance(eqname, str):
         eq = desc.io.load(eqname)

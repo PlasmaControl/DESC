@@ -785,7 +785,7 @@ class InputReader:
         infile,
         objective="force",
         optimizer="lsq-exact",
-        header="# DESC-generated input file",
+        header=None,
         ftol=1e-2,
         xtol=1e-6,
         gtol=1e-6,
@@ -826,12 +826,14 @@ class InputReader:
         except TypeError:
             eq = fam
 
+        if header is None:
+            header = "# DESC input file generated from the output file:\n# " + infile
         f.write(header + "\n")
 
-        f.write("# global parameters\n")
-        f.write("sym = {:1d} \n".format(eq.sym))
-        f.write("NFP = {:3d} \n".format(int(eq.NFP)))
-        f.write("Psi = {:.8f} \n".format(eq.Psi))
+        f.write("\n# global parameters\n")
+        f.write("sym = {:d}\n".format(eq.sym))
+        f.write("NFP = {:d}\n".format(int(eq.NFP)))
+        f.write("Psi = {:.8E}\n".format(eq.Psi))
 
         f.write("\n# spectral resolution\n")
         for key, val in {
@@ -844,13 +846,13 @@ class InputReader:
         }.items():
             f.write(f"{key} = {getattr(eq, val)}\n")
 
-        f.write("\n\n# solver tolerances\n")
-        f.write(f"ftol = {ftol}\n")
-        f.write(f"xtol = {xtol}\n")
-        f.write(f"gtol = {gtol}\n")
-        f.write(f"maxiter = {maxiter}\n")
+        f.write("\n# solver tolerances\n")
+        f.write("ftol = {:.3E}\n".format(ftol))
+        f.write("xtol = {:.3E}\n".format(xtol))
+        f.write("gtol = {:.3E}\n".format(gtol))
+        f.write("maxiter = {:d}\n".format(maxiter))
 
-        f.write("\n\n# solver methods\n")
+        f.write("\n# solver methods\n")
         f.write(f"optimizer = {optimizer}\n")
         f.write(f"objective = {objective}\n")
         f.write("spectral_indexing = {}\n".format(eq._spectral_indexing))
@@ -885,38 +887,34 @@ class InputReader:
         idxs = np.linspace(0, eq.L - 1, eq.L, dtype=int)
         for l in idxs:
             f.write(
-                "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
+                "l: {:3d}  p = {:15.8E}  {} = {:15.8E}\n".format(
                     int(l), pres_profile[l], char, profile[l]
                 )
             )
 
-        f.write("\n\n# fixed-boundary surface shape\n")
+        f.write("\n# fixed-boundary surface shape\n")
 
         # boundary parameters
         if eq.sym:
             for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
                 if abs(eq.Rb_lmn[k]) > 1e-8:
                     f.write(
-                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
-                            Z1 = {:16.8E}\n".format(
-                            int(0), m, n, eq.Rb_lmn[k], 0
-                        )
+                        "l: {:3d}  m: {:3d}  n: {:3d}  ".format(int(0), m, n)
+                        + "R1 = {:15.8E}  Z1 = {:15.8E}\n".format(eq.Rb_lmn[k], 0)
                     )
             for k, (l, m, n) in enumerate(eq.surface.Z_basis.modes):
                 if abs(eq.Zb_lmn[k]) > 1e-8:
                     f.write(
-                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
-                            Z1 = {:16.8E}\n".format(
-                            int(0), m, n, 0, eq.Zb_lmn[k]
-                        )
+                        "l: {:3d}  m: {:3d}  n: {:3d}  ".format(int(0), m, n)
+                        + "R1 = {:15.8E}  Z1 = {:15.8E}\n".format(0, eq.Zb_lmn[k])
                     )
         else:
             for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
                 if abs(eq.Rb_lmn[k]) > 1e-8 or abs(eq.Zb_lmn[k]) > 1e-8:
                     f.write(
-                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
-                            Z1 = {:16.8E}\n".format(
-                            int(0), m, n, eq.Rb_lmn[k], eq.Zb_lmn[k]
+                        "l: {:3d}  m: {:3d}  n: {:3d}  ".format(int(0), m, n)
+                        + "R1 = {:15.8E}  Z1 = {:15.8E}\n".format(
+                            eq.Rb_lmn[k], eq.Zb_lmn[k]
                         )
                     )
 

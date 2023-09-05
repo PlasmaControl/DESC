@@ -11,6 +11,7 @@ from qsc import Qsc
 from scipy.constants import mu_0
 
 import desc.examples
+from desc.calc_BNORM_from_coilset import calc_BNORM_from_coilset
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.field_line_tracing_DESC_from_coilset import field_trace_from_coilset
 from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
@@ -1004,3 +1005,6 @@ def test_regcoil_ellipse_helical():
 
     assert np.max(fieldZ) < 0.02
     assert np.min(fieldZ) > -0.02
+
+    B_ratio = calc_BNORM_from_coilset(coilset2, eqname, 0, 1, B0=None, save=False)
+    np.testing.assert_allclose(B_ratio, 1.0, atol=1e-3)

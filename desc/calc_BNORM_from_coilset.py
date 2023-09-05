@@ -10,7 +10,7 @@ from desc.io import load
 from desc.magnetic_fields import SumMagneticField, ToroidalMagneticField, _MagneticField
 
 
-def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None):
+def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None, save=True):
     """Find BNORMAL on surfac given a coilset and plot it, and save to a txt file.
 
     Parameters
@@ -38,6 +38,15 @@ def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None):
         should be same field as that used when calling
         run_regcoil to find the surface current that was
         discretized into the coilset
+    save : Bool
+        if True, saves figs and text file of info
+
+    Returns
+    -------
+    axis_B_ratio : float
+        ratio of B from eq to B from coilset.
+        Should be close to 1 for a good coilset
+
 
     """
     if isinstance(eqname, str):
@@ -74,6 +83,10 @@ def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None):
 
     Bnorm, _ = coils.compute_Bnormal(eq.surface, grid)
 
+    axis_B_ratio = np.mean(np.abs(data_ax["|B|"])) / np.mean(
+        np.linalg.norm(B_ax, axis=-1)
+    )
+
     print(f"Maximum |Bnormal| on surface: {np.max(np.abs(Bnorm))}")
     print(f"Minimum |Bnormal| on surface: {np.min(np.abs(Bnorm))}")
     print(f"average |Bnormal| on surface: {np.mean(np.abs(Bnorm))}")
@@ -81,10 +94,7 @@ def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None):
     print(f"average |B| on axis: {np.mean(np.abs(np.linalg.norm(B_ax,axis=-1)))}\n")
     print(f"eq average |B| on surface: {np.mean(np.abs(data_desc['|B|']))}\n")
     print(f"eq average |B| on axis: {np.mean(np.abs(data_ax['|B|']))}\n")
-    print(
-        "|B| on axis eq / |B| on axis coil :"
-        f"{np.mean(np.abs(data_ax['|B|'])) / np.mean(np.linalg.norm(B_ax,axis=-1))}\n"
-    )
+    print("|B| on axis eq / |B| on axis coil :" f"{axis_B_ratio}\n")
 
     plt.rcParams.update({"font.size": 22})
     plt.figure(figsize=(8, 8))
@@ -99,26 +109,30 @@ def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None):
 
     plt.title(f"Bnormal with N={len(coils)} coils")
 
-    plt.savefig(
-        f"{dirname}/Bnormal_ncoils_{len(coils)}"
-        f"_alpha_{alpha:1.4e}_step_{step}_{dirname}.png"
-    )
-
-    with open(
-        f"{dirname}/Bnormal_info_ncoils_{len(coils)}"
-        f"_alpha_{alpha:1.4e}_step_{step}_{dirname}.txt",
-        "w+",
-    ) as f:
-        f.write(f"Maximum |Bnormal| on surface: {np.max(np.abs(Bnorm))}\n")
-        f.write(f"Minimum |Bnormal| on surface: {np.min(np.abs(Bnorm))}\n")
-        f.write(f"average |Bnormal| on surface: {np.mean(np.abs(Bnorm))}\n")
-        f.write(
-            f"average |B| on surface: {np.mean(np.abs(np.linalg.norm(B,axis=-1)))}\n"
+    if save:
+        plt.savefig(
+            f"{dirname}/Bnormal_ncoils_{len(coils)}"
+            f"_alpha_{alpha:1.4e}_step_{step}_{dirname}.png"
         )
-        f.write(
-            f"average |B| on axis: {np.mean(np.abs(np.linalg.norm(B_ax,axis=-1)))}\n"
-        )
-        f.write(f"eq average |B| on surface: {np.mean(np.abs(data_desc['|B|']))}\n")
-        f.write(f"eq average |B| on axis: {np.mean(np.abs(data_ax['|B|']))}\n")
+        with open(
+            f"{dirname}/Bnormal_info_ncoils_{len(coils)}"
+            f"_alpha_{alpha:1.4e}_step_{step}_{dirname}.txt",
+            "w+",
+        ) as f:
+            f.write(f"Maximum |Bnormal| on surface: {np.max(np.abs(Bnorm))}\n")
+            f.write(f"Minimum |Bnormal| on surface: {np.min(np.abs(Bnorm))}\n")
+            f.write(f"average |Bnormal| on surface: {np.mean(np.abs(Bnorm))}\n")
+            f.write(
+                "average |B| on surface:"
+                f"{np.mean(np.abs(np.linalg.norm(B,axis=-1)))}\n"
+            )
+            f.write(
+                "average |B| on axis:"
+                f" {np.mean(np.abs(np.linalg.norm(B_ax,axis=-1)))}\n"
+            )
+            f.write(
+                "eq average |B| on surface: " f"{np.mean(np.abs(data_desc['|B|']))}\n"
+            )
+            f.write(f"eq average |B| on axis: {np.mean(np.abs(data_ax['|B|']))}\n")
 
-    return None
+    return axis_B_ratio

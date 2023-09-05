@@ -112,7 +112,7 @@ def test_write_desc_input_Nones(tmpdir_factory):
 
 
 @pytest.mark.unit
-def test_descout_to_input(tmpdir_factory):
+def test_desc_output_to_input(tmpdir_factory):
     """
     Test converting DESC output to a DESC input file.
 
@@ -128,7 +128,7 @@ def test_descout_to_input(tmpdir_factory):
     shutil.copyfile(outfile_path, tmpout_path)
 
     ir1 = InputReader()
-    ir1.descout_to_input(str(tmp_path), str(tmpout_path))
+    ir1.desc_output_to_input(str(tmp_path), str(tmpout_path))
     ir1 = InputReader(cl_args=[str(tmp_path)])
     arr1 = ir1.parse_inputs()[-1]["surface"]
     arr1 = arr1[arr1[:, 1].argsort()]
@@ -172,7 +172,7 @@ def test_descout_to_input(tmpdir_factory):
     shutil.copyfile(outfile_path, tmpout_path)
 
     ir1 = InputReader()
-    ir1.descout_to_input(str(tmp_path), str(tmpout_path))
+    ir1.desc_output_to_input(str(tmp_path), str(tmpout_path))
     ir1 = InputReader(cl_args=[str(tmp_path)])
     arr1 = ir1.parse_inputs()[-1]["surface"]
     arr1 = arr1[arr1[:, 1].argsort()]

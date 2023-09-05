@@ -221,6 +221,18 @@ class TestRZCurve:
         np.testing.assert_allclose(curve1.NFP, curve2.NFP)
         np.testing.assert_allclose(curve1.sym, curve2.sym)
 
+        path = "tests/inputs/input.QSC_r2_5.5_vmec"
+
+        with pytest.warns(UserWarning):
+            curve3 = FourierRZCurve.from_input_file(path)
+            curve4 = Equilibrium(**InputReader(path).inputs[0]).axis
+        curve3.change_resolution(curve4.N)
+
+        np.testing.assert_allclose(curve3.R_n, curve4.R_n)
+        np.testing.assert_allclose(curve3.Z_n, curve4.Z_n)
+        np.testing.assert_allclose(curve3.NFP, curve4.NFP)
+        np.testing.assert_allclose(curve3.sym, curve4.sym)
+
 
 class TestFourierXYZCurve:
     """Tests for FourierXYZCurve class."""

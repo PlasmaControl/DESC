@@ -624,7 +624,7 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
 def _iota_current(params, transforms, profiles, data, **kwargs):
     data["iota_current"] = transforms["grid"].replace_at_axis(
         data["iota_current_num"] / data["iota_den"],
-        data["iota_current_num_r"] / data["iota_den_r"],
+        lambda: data["iota_current_num_r"] / data["iota_den_r"],
     )
     return data
 
@@ -646,7 +646,7 @@ def _iota_current(params, transforms, profiles, data, **kwargs):
 def _iota_vacuum(params, transforms, profiles, data, **kwargs):
     data["iota_vacuum"] = transforms["grid"].replace_at_axis(
         data["iota_vacuum_num"] / data["iota_den"],
-        data["iota_vacuum_num_r"] / data["iota_den_r"],
+        lambda: data["iota_vacuum_num_r"] / data["iota_den_r"],
     )
     return data
 
@@ -667,9 +667,12 @@ def _iota_vacuum(params, transforms, profiles, data, **kwargs):
 )
 def _iota_current_num(params, transforms, profiles, data, **kwargs):
     """Current contribution to the numerator of rotational transform formula."""
-    data["iota_current_num"] = transforms["grid"].replace_at_axis(
-        4 * jnp.pi**2 * data["I"] / data["psi_r"],
-        4 * jnp.pi**2 * data["I_r"] / data["psi_rr"],
+    data["iota_current_num"] = (
+        4
+        * jnp.pi**2
+        * transforms["grid"].replace_at_axis(
+            data["I"] / data["psi_r"], lambda: data["I_r"] / data["psi_rr"]
+        )
     )
     return data
 
@@ -686,20 +689,14 @@ def _iota_current_num(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["lambda_z", "g_tt", "lambda_t", "g_tz", "sqrt(g)"],
-    axis_limit_data=["g_tt_r", "g_tz_r", "lambda_rt", "lambda_rz", "sqrt(g)_r"],
+    axis_limit_data=["g_tz_r", "sqrt(g)_r"],
 )
 def _iota_vacuum_num(params, transforms, profiles, data, **kwargs):
     """Vacuum contribution to the numerator of rotational transform formula."""
     iota_vacuum_num = transforms["grid"].replace_at_axis(
         (data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"])
         / data["sqrt(g)"],
-        (
-            data["lambda_rz"] * data["g_tt"]
-            + data["lambda_z"] * data["g_tt_r"]
-            - data["lambda_rt"] * data["g_tz"]
-            - (1 + data["lambda_t"]) * data["g_tz_r"]
-        )
-        / data["sqrt(g)_r"],
+        lambda: -(1 + data["lambda_t"]) * data["g_tz_r"] / data["sqrt(g)_r"],
     )
     data["iota_vacuum_num"] = surface_integrals(transforms["grid"], iota_vacuum_num)
     return data
@@ -727,7 +724,8 @@ def _iota_current_num_r(params, transforms, profiles, data, **kwargs):
         * transforms["grid"].replace_at_axis(
             (data["I_r"] * data["psi_r"] - data["I"] * data["psi_rr"])
             / data["psi_r"] ** 2,
-            data["I_rr"] / (2 * data["psi_rr"]),  # XXX: this factor of 2 not in Eq. 48
+            lambda: data["I_rr"]
+            / (2 * data["psi_rr"]),  # XXX: this factor of 2 not in Eq. 48
         )
     )
     return data
@@ -772,7 +770,7 @@ def _iota_vacuum_num_r(params, transforms, profiles, data, **kwargs):
             - iota_vacuum_num * data["sqrt(g)_r"]
         )
         / data["sqrt(g)"],
-        (
+        lambda: (
             (1 + data["lambda_t"])
             * data["g_tz_r"]
             * data["sqrt(g)_rr"]

@@ -23,7 +23,7 @@ def _psidot(params, transforms, profiles, data, **kwargs):
     m_q = kwargs.get("m_q", 1.673e-27/1.6e-19)
     mu = kwargs.get("mu")
     vpar = kwargs.get("vpar")
-    data["psidot"] = (((((m_q*(1/data["|B|"]**3).T).T)*(mu*data["|B|"] + vpar**2).T).T * jnp.sum(jnp.cross(data["B"], data["grad(|B|)"], axis = -1) * data["grad(psi)"], axis=-1).T).T * (1/params["Psi"]).T).T
+    data["psidot"] =  (jnp.sum(jnp.cross(data["B"], data["grad(|B|)"], axis=-1) * data["grad(psi)"], axis=-1) * ((m_q*(1/data["|B|"]**3)) * ((mu*data["|B|"].T).T + vpar**2)).T).T * (2*jnp.pi/params["Psi"])
     return data
 
 

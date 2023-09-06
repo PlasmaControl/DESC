@@ -522,11 +522,11 @@ class PlasmaVesselDistance(_Objective):
         """
         eq = eq or self._eq
         if self._surface_grid is None:
-            surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             surface_grid = self._surface_grid
         if self._plasma_grid is None:
-            plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             plasma_grid = self._plasma_grid
         if not np.allclose(surface_grid.nodes[:, 0], 1):

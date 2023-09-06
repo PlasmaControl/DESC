@@ -891,7 +891,8 @@ def test_constrained_AL_lsq():
         ForceBalance(eq=eq, bounds=(-1e-3, 1e-3), normalize_target=False),
     )
     H = eq.compute(
-        "curvature_H_rho", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        "curvature_H_rho",
+        grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
     )["curvature_H_rho"]
     obj = ObjectiveFunction(MeanCurvature(eq=eq, target=H))
     ctol = 1e-4

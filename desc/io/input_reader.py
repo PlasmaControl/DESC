@@ -566,7 +566,7 @@ class InputReader:
         if inputs["objective"] == "vacuum" and (pres_flag or iota_flag or curr_flag):
             warnings.warn(
                 "Vacuum objective does not use any profiles, "
-                + "ignoring presssure, iota, and current"
+                + "ignoring pressure, iota, and current"
             )
 
         # sort axis array
@@ -901,7 +901,7 @@ class InputReader:
         f.write("\n")
 
         f.write("\n# fixed-boundary surface shape\n")
-        # boundary paramters
+        # boundary parameters
         if eq0.sym:
             for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
                 if abs(eq0.Rb_lmn[k]) > 1e-8:
@@ -1615,9 +1615,6 @@ class InputReader:
         return inputs_arr
 
 
-# NOTE: this has to be outside the class to work with autodoc
-
-
 def get_parser():
     """Get parser for command line arguments.
 
@@ -1627,6 +1624,7 @@ def get_parser():
         argument parser
 
     """
+    # NOTE: this has to be outside the class to work with autodoc
     parser = argparse.ArgumentParser(
         prog="desc",
         allow_abbrev=True,

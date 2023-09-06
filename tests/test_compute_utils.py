@@ -57,9 +57,9 @@ class TestDataIndex:
     @pytest.mark.unit
     def test_data_index_deps(self):
         """Ensure developers do not add extra (or forget needed) dependencies."""
-        queried_deps = {}
+        queried_deps = {p: {} for p in _class_inheritance}
 
-        pattern_names = re.compile(r"(?<!_)data\[(.*?)] =")
+        pattern_names = re.compile(r"(?<!_)data\[(.*?)] = ")
         pattern_data = re.compile(r"(?<!_)data\[(.*?)]")
         pattern_profiles = re.compile(r"profiles\[(.*?)]")
         pattern_params = re.compile(r"params\[(.*?)]")
@@ -81,7 +81,7 @@ class TestDataIndex:
                         for p in parameterization:
                             for base_class, superclasses in _class_inheritance.items():
                                 if p in superclasses or p == base_class:
-                                    queried_deps.setdefault(base_class, {})[name] = deps
+                                    queried_deps[base_class][name] = deps
 
         for p in data_index:
             for name, val in data_index[p].items():

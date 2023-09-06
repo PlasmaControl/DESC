@@ -8,7 +8,7 @@ This module primarily tests the constructing/building/calling methods.
 
 import numpy as np
 import pytest
-from scipy.constants import mu_0
+from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
 from desc.backend import jnp
@@ -31,6 +31,7 @@ from desc.objectives import (
     ObjectiveFromUser,
     ObjectiveFunction,
     PlasmaVesselDistance,
+    Pressure,
     PrincipalCurvature,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
@@ -200,6 +201,26 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_pressure(self):
+        """Test calculation of pressure objective."""
+
+        def test(eq):
+            obj = Pressure(target=1, weight=2, eq=eq, normalize=False)
+            obj.build()
+            p = obj.compute_unscaled(*obj.xs(eq))
+            p_scaled = obj.compute_scaled_error(*obj.xs(eq))
+            np.testing.assert_allclose(p, 12)
+            np.testing.assert_allclose(p_scaled, (12 - 1) * 2 / np.sqrt(3))
+
+        test(Equilibrium(pressure=PowerSeriesProfile(12)))
+        test(
+            Equilibrium(
+                electron_temperature=PowerSeriesProfile(2),
+                electron_density=PowerSeriesProfile(3 / elementary_charge),
+            )
+        )
 
     @pytest.mark.unit
     def test_qa_boozer(self):
@@ -516,6 +537,7 @@ def test_target_profiles():
     current = PowerSeriesProfile([4, 0, 1, 0, -1])
     merc = PowerSeriesProfile([1, 0, -1])
     well = PowerSeriesProfile([2, 0, -2])
+    pres = PowerSeriesProfile([3, 0, -3])
     eqi = Equilibrium(L=5, N=3, M=3, iota=iota)
     eqc = Equilibrium(L=3, N=3, M=3, current=current)
     obji = RotationalTransform(target=iota, eq=eqi)
@@ -554,6 +576,12 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objw.bounds[1],
         well(objw._transforms["grid"].nodes[objw._transforms["grid"].unique_rho_idx]),
+    )
+    objp = Pressure(target=pres, eq=eqc)
+    objp.build()
+    np.testing.assert_allclose(
+        objp.target,
+        pres(objp._transforms["grid"].nodes[objp._transforms["grid"].unique_rho_idx]),
     )
 
 
@@ -698,7 +726,9 @@ def test_field_scale_length():
 @pytest.mark.unit
 def test_profile_objective_print(capsys):
     """Test that the profile objectives print correctly."""
-    eq = Equilibrium(iota=PowerSeriesProfile([1, 0, 0.5]))
+    eq = Equilibrium(
+        iota=PowerSeriesProfile([1, 0, 0.5]), pressure=PowerSeriesProfile([1, 0, -1])
+    )
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
     def test(obj, values, normalize=False):
@@ -750,6 +780,10 @@ def test_profile_objective_print(capsys):
     obj = ToroidalCurrent(eq=eq, grid=grid)
     obj.build()
     test(obj, curr, normalize=True)
+    pres = eq.compute("p", grid=grid)["p"]
+    obj = Pressure(eq=eq, grid=grid)
+    obj.build()
+    test(obj, pres, normalize=True)
 
 
 @pytest.mark.unit

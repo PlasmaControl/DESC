@@ -10,6 +10,7 @@ from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
+from .utils import _parse_callable_target_bounds
 
 
 class MercierStability(_Objective):
@@ -103,6 +104,10 @@ class MercierStability(_Objective):
             )
         else:
             grid = self._grid
+
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
+        )
 
         self._dim_f = grid.num_rho
         self._data_keys = ["D_Mercier"]
@@ -306,6 +311,10 @@ class MagneticWell(_Objective):
             )
         else:
             grid = self._grid
+
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
+        )
 
         self._dim_f = grid.num_rho
         self._data_keys = ["magnetic well"]

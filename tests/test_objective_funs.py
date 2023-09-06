@@ -514,6 +514,8 @@ def test_target_profiles():
     iota = PowerSeriesProfile([1, 0, -0.3])
     shear = PowerSeriesProfile([0, -0.6])
     current = PowerSeriesProfile([4, 0, 1, 0, -1])
+    merc = PowerSeriesProfile([1, 0, -1])
+    well = PowerSeriesProfile([2, 0, -2])
     eqi = Equilibrium(L=5, N=3, M=3, iota=iota)
     eqc = Equilibrium(L=3, N=3, M=3, current=current)
     obji = RotationalTransform(target=iota, eq=eqi)
@@ -535,6 +537,23 @@ def test_target_profiles():
         current(
             objc._transforms["grid"].nodes[objc._transforms["grid"].unique_rho_idx]
         ),
+    )
+    objm = MercierStability(bounds=(merc, np.inf), eq=eqi)
+    objm.build()
+    np.testing.assert_allclose(
+        objm.bounds[0],
+        merc(objm._transforms["grid"].nodes[objm._transforms["grid"].unique_rho_idx]),
+    )
+    np.testing.assert_allclose(objm.bounds[1], np.inf)
+    objw = MagneticWell(bounds=(merc, well), eq=eqi)
+    objw.build()
+    np.testing.assert_allclose(
+        objw.bounds[0],
+        merc(objw._transforms["grid"].nodes[objw._transforms["grid"].unique_rho_idx]),
+    )
+    np.testing.assert_allclose(
+        objw.bounds[1],
+        well(objw._transforms["grid"].nodes[objw._transforms["grid"].unique_rho_idx]),
     )
 
 

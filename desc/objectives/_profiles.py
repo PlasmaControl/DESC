@@ -10,6 +10,7 @@ from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
+from .utils import _parse_callable_target_bounds
 
 
 class RotationalTransform(_Objective):
@@ -98,8 +99,9 @@ class RotationalTransform(_Objective):
         else:
             grid = self._grid
 
-        if callable(self._target):
-            self._target = self._target(grid.nodes[grid.unique_rho_idx])
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
+        )
 
         self._dim_f = grid.num_rho
         self._data_keys = ["iota"]
@@ -269,8 +271,9 @@ class Shear(_Objective):
         else:
             grid = self._grid
 
-        if callable(self._target):
-            self._target = self._target(grid.nodes[grid.unique_rho_idx])
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
+        )
 
         self._dim_f = grid.num_rho
         self._data_keys = ["shear"]
@@ -436,8 +439,9 @@ class ToroidalCurrent(_Objective):
         else:
             grid = self._grid
 
-        if callable(self._target):
-            self._target = self._target(grid.nodes[grid.unique_rho_idx])
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
+        )
 
         self._dim_f = grid.num_rho
         self._data_keys = ["current"]

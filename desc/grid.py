@@ -396,20 +396,22 @@ class Grid(_Grid):
     Parameters
     ----------
     nodes : ndarray of float, size(num_nodes,3)
-        node coordinates, in (rho,theta,zeta)
+        Node coordinates, in (rho,theta,zeta)
+    NFP : int
+        Number of field periods (Default = 1).
     sort : bool
-        whether to sort the nodes for use with FFT method.
+        Whether to sort the nodes for use with FFT method.
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights, symmetry
         etc may be wrong if grid contains duplicate nodes.
     """
 
-    def __init__(self, nodes, sort=True, jitable=False):
+    def __init__(self, nodes, NFP=1, sort=True, jitable=False):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
-        self._NFP = 1
+        self._NFP = NFP
         self._sym = False
         self._node_pattern = "custom"
         self._nodes, self._spacing = self._create_nodes(nodes)

@@ -1563,7 +1563,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
           matplotlib)
         * ``xlabel_fontsize``: float, fontsize of the x label
         * ``ylabel_fontsize``: float, fontsize of the y label
-        * ``legend_fontsize``: float, fontsize of the legend
+        * ``legend_kw``: dict, any keyword arguments to be passed to ax.legend()
         * ``cmap``: colormap to use for plotting, discretized into len(phi) colors
         * ``color``: array of colors to use for each phi angle
         * ``ls``: array of line styles to use for each phi angle
@@ -1593,7 +1593,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     phi = parse_argname_change(phi, kwargs, "zeta", "phi")
 
     figsize = kwargs.pop("figsize", None)
-    cmap = kwargs.pop("cmap", "rainbow")
+    cmap = kwargs.pop("cmap", "hsv")
     colors = kwargs.pop("color", None)
     ls = kwargs.pop("ls", None)
     lw = kwargs.pop("lw", None)
@@ -1601,8 +1601,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     size = kwargs.pop("size", 36)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
-
-    legend_fontsize = kwargs.pop("legend_fontsize", None)
+    legend_kw = kwargs.pop("legend_kw", {})
 
     assert (
         len(kwargs) == 0
@@ -1627,11 +1626,12 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
             period=(np.inf, 2 * np.pi, 2 * np.pi),
             guess=grid.nodes,
         ),
+        NFP=eq.NFP,
         sort=False,
     )
 
     if colors is None:
-        colors = _get_cmap(cmap, nz - 1)(np.linspace(0, 1, nz - 1))
+        colors = _get_cmap(cmap, nz)(np.linspace(0, 1, nz))
     if lw is None:
         lw = 1
     if isinstance(lw, int):
@@ -1656,7 +1656,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
             color=colors[i],
             linestyle=ls[i],
             lw=lw[i],
-            label="$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
+            label="$\\phi \\cdot N_{{FP}}/2\\pi = {:.2f}$".format(
                 grid.NFP * phi[i] / (2 * np.pi)
             ),
         )
@@ -1667,7 +1667,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
     ax.tick_params(labelbottom=True, labelleft=True)
 
-    fig.legend(fontsize=legend_fontsize)
+    fig.legend(**legend_kw)
     _set_tight_layout(fig)
 
     plot_data = {}

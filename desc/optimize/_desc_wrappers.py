@@ -76,7 +76,7 @@ def _optimize_desc_aug_lagrangian(
     options["max_ngev"] = stoptol["max_ngev"]
     options["max_nhev"] = stoptol["max_nhev"]
     # local lambdas to handle constants from both objective and constraint
-    hess = lambda x, *c: objective.hess(x, c[0]) if "bfgs" not in method else "bfgs"
+    hess = (lambda x, *c: objective.hess(x, c[0])) if "bfgs" not in method else "bfgs"
 
     if constraint is not None:
         lb, ub = constraint.bounds_scaled

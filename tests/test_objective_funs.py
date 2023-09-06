@@ -904,12 +904,21 @@ def test_objective_target_bounds():
     assert bounds[1][0] == 3 / vol.normalization * vol.weight
     assert bounds[0][1] == 2 * asp.weight
     assert bounds[1][1] == 3 * asp.weight
-    assert np.all(bounds[0][2:] == -1 / fbl.normalization * fbl.weight)
-    assert np.all(bounds[1][2:] == 2 / fbl.normalization * fbl.weight)
+    np.testing.assert_allclose(
+        bounds[0][2:],
+        (-1 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+    )
+    np.testing.assert_allclose(
+        bounds[1][2:],
+        (2 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+    )
 
     assert target[0] == 3 / vol.normalization * vol.weight
     assert target[1] == 2.5 * asp.weight
-    assert np.all(target[2:] == 0.5 / fbl.normalization * fbl.weight)
+    np.testing.assert_allclose(
+        target[2:],
+        (0.5 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+    )
 
     assert weight[0] == 2
     assert weight[1] == 3
@@ -955,7 +964,7 @@ def test_softmax_and_softmin():
 def test_compute_scalar_resolution():  # noqa: C901
     """Test that compute_scalar values are roughly independent of grid resolution."""
     eq = get("HELIOTRON")
-    res_array = np.arange(8, 17, 4)
+    res_array = np.array([1.5, 2, 2.5])
 
     # BootstrapRedlConsistency
     # this is already covered in tests/test_bootstrap.py
@@ -964,71 +973,116 @@ def test_compute_scalar_resolution():  # noqa: C901
     # CurrentDensity
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
         obj = ObjectiveFunction(CurrentDensity(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+    np.testing.assert_allclose(f, f[-1], rtol=3e-2)
 
     # Energy
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
         obj = ObjectiveFunction(Energy(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
 
     # ForceBalance
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
         obj = ObjectiveFunction(ForceBalance(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], atol=1e-8)
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
 
     # HelicalForceBalance
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
         obj = ObjectiveFunction(HelicalForceBalance(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], atol=1e-8)
+    np.testing.assert_allclose(f, f[-1], rtol=1e-1)
 
     # RadialForceBalance
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
         obj = ObjectiveFunction(RadialForceBalance(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], atol=1e-8)
+    np.testing.assert_allclose(f, f[-1], rtol=1e-1)
 
     # GenericObjective
     # scalar
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = QuadratureGrid(L=res, M=res, N=res, NFP=eq.NFP)
+        grid = QuadratureGrid(
+            L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
+        )
         obj = ObjectiveFunction(
             GenericObjective("<beta>_vol", eq=eq, grid=grid), verbose=0
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
     # radial profile
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = LinearGrid(L=2 * res, M=res, N=res, NFP=eq.NFP, sym=eq.sym, axis=False)
+        grid = LinearGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+            axis=False,
+        )
         obj = ObjectiveFunction(GenericObjective("<J*B>", eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
     # volume quantity
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
         obj = ObjectiveFunction(
             GenericObjective("sqrt(g)", eq=eq, grid=grid), verbose=0
         )
@@ -1039,16 +1093,18 @@ def test_compute_scalar_resolution():  # noqa: C901
     # AspectRatio
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = QuadratureGrid(L=res, M=res, N=res, NFP=eq.NFP)
+        grid = QuadratureGrid(
+            L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
+        )
         obj = ObjectiveFunction(AspectRatio(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
 
     # BScaleLength
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = LinearGrid(M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
         obj = ObjectiveFunction(BScaleLength(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
@@ -1057,16 +1113,18 @@ def test_compute_scalar_resolution():  # noqa: C901
     # Elongation
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = QuadratureGrid(L=res, M=res, N=res, NFP=eq.NFP)
+        grid = QuadratureGrid(
+            L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
+        )
         obj = ObjectiveFunction(Elongation(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=1e-1)
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
 
     # MeanCurvature
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = LinearGrid(M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
         obj = ObjectiveFunction(MeanCurvature(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
@@ -1077,8 +1135,8 @@ def test_compute_scalar_resolution():  # noqa: C901
     surface = FourierRZToroidalSurface(
         R_lmn=[10, 1.5], Z_lmn=[-1.5], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
-    for i, res in enumerate(res_array * 2):
-        grid = LinearGrid(M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+    for i, res in enumerate(res_array):
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
         obj = ObjectiveFunction(
             PlasmaVesselDistance(
                 surface=surface, eq=eq, surface_grid=grid, plasma_grid=grid
@@ -1087,12 +1145,12 @@ def test_compute_scalar_resolution():  # noqa: C901
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=1.5e-1)
+    np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     # PrincipalCurvature
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = LinearGrid(M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
         obj = ObjectiveFunction(PrincipalCurvature(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
@@ -1101,34 +1159,56 @@ def test_compute_scalar_resolution():  # noqa: C901
     # Volume
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = QuadratureGrid(L=res, M=res, N=res, NFP=eq.NFP)
+        grid = QuadratureGrid(
+            L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
+        )
         obj = ObjectiveFunction(Volume(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
 
     # RotationalTransform
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = LinearGrid(L=2 * res, M=res, N=res, NFP=eq.NFP, sym=eq.sym, axis=False)
+        grid = LinearGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+            axis=False,
+        )
         obj = ObjectiveFunction(RotationalTransform(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
 
     # ToroidalCurrent
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = LinearGrid(L=2 * res, M=res, N=res, NFP=eq.NFP, sym=eq.sym, axis=False)
+        grid = LinearGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+            axis=False,
+        )
         obj = ObjectiveFunction(ToroidalCurrent(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=1e-1)
+    np.testing.assert_allclose(f, f[-1], rtol=4e-2)
 
     # Isodynamicity
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
         obj = ObjectiveFunction(Isodynamicity(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
@@ -1137,51 +1217,68 @@ def test_compute_scalar_resolution():  # noqa: C901
     # QuasisymmetryBoozer
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate((res_array + 4) * 2):
-        grid = LinearGrid(M=res, N=res, NFP=eq.NFP)
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
         obj = ObjectiveFunction(
             QuasisymmetryBoozer(eq=eq, helicity=(1, -eq.NFP), grid=grid),
             verbose=0,
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
 
     # QuasisymmetryTripleProduct
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
         obj = ObjectiveFunction(QuasisymmetryTripleProduct(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
 
     # QuasisymmetryTwoTerm
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
         obj = ObjectiveFunction(
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, -eq.NFP), grid=grid),
             verbose=0,
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
 
     # MagneticWell
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        grid = LinearGrid(L=4 * res, M=res, N=res, NFP=eq.NFP, sym=eq.sym, axis=False)
-        obj = ObjectiveFunction(MagneticWell(eq=eq, grid=grid), verbose=0)
+        rho = np.linspace(0.2, 1, int(eq.L * res))
+        grid = LinearGrid(
+            rho=rho, M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym
+        )
+        obj = ObjectiveFunction(MagneticWell(eq=eq, grid=grid, target=0), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=1.2e-1)
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
 
     # MercierStability
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
-        rho = np.linspace(0.2, 1, res)
-        grid = LinearGrid(rho=rho, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        rho = np.linspace(0.2, 1, int(eq.L * res))
+        grid = LinearGrid(
+            rho=rho, M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym
+        )
         obj = ObjectiveFunction(MercierStability(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
-    np.testing.assert_allclose(f, f[-1], rtol=1e-1)
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)

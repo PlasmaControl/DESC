@@ -949,14 +949,16 @@ class _Objective(IOAble, ABC):
                 w = jnp.ones((self.dim_f,))
             elif self._coordinates == "rtz":
                 w = self._constants["transforms"]["grid"].weights
+                w *= jnp.sqrt(self._constants["transforms"]["grid"].num_nodes)
             elif self._coordinates == "r":
                 w = self._constants["transforms"]["grid"].compress(
                     self._constants["transforms"]["grid"].spacing[:, 0],
                     surface_label="rho",
                 )
+                w = jnp.sqrt(w)
             if w.size:
                 w = jnp.tile(w, self.dim_f // w.size)
-            self._constants["quad_weights"] = jnp.sqrt(w)
+            self._constants["quad_weights"] = w
 
         if use_jit is not None:
             self._use_jit = use_jit

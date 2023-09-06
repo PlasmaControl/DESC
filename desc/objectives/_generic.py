@@ -322,4 +322,6 @@ class GenericObjective(_Objective):
             profiles=constants["profiles"],
         )
         f = data[self.f]
+        if self._coordinates == "r":
+            f = constants["transforms"]["grid"].compress(f, surface_label="rho")
         return f.flatten(order="F")  # so that default quad weights line up correctly.

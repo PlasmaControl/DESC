@@ -56,7 +56,7 @@ class TestObjectiveFunction:
     def test_generic(self):
         """Test GenericObjective for arbitrary quantities."""
 
-        def test(f, eq):
+        def test(f, eq, compress=False):
             obj = GenericObjective(f, eq=eq)
             obj.build()
             kwargs = {
@@ -67,14 +67,17 @@ class TestObjectiveFunction:
                 "c_l": eq.c_l,
                 "Psi": eq.Psi,
             }
+            val = eq.compute(f, grid=obj.constants["transforms"]["grid"])[f]
+            if compress:
+                val = obj.constants["transforms"]["grid"].compress(val)
             np.testing.assert_allclose(
                 obj.compute(**kwargs),
-                eq.compute(f, grid=obj.constants["transforms"]["grid"])[f],
+                val,
             )
 
         test("sqrt(g)", Equilibrium())
-        test("current", Equilibrium(iota=PowerSeriesProfile(0)))
-        test("iota", Equilibrium(current=PowerSeriesProfile(0)))
+        test("current", Equilibrium(iota=PowerSeriesProfile(0)), True)
+        test("iota", Equilibrium(current=PowerSeriesProfile(0)), True)
 
     @pytest.mark.unit
     def test_objective_from_user(self):

@@ -44,7 +44,7 @@ __all__ = [
 
 colorblind_colors = [
     (0.0000, 0.4500, 0.7000),  # blue
-    (0.8359, 0.3682, 0.0000),  # vermillion
+    (0.8359, 0.3682, 0.0000),  # vermilion
     (0.0000, 0.6000, 0.5000),  # bluish green
     (0.9500, 0.9000, 0.2500),  # yellow
     (0.3500, 0.7000, 0.9000),  # sky blue
@@ -123,7 +123,7 @@ def _get_cmap(name, n=None):
 
 
 def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
-    """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initalize one.
+    """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initialize one.
 
     Parameters
     ----------
@@ -572,7 +572,7 @@ def plot_2d(
         * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
-        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf
 
     Returns
@@ -740,7 +740,7 @@ def plot_3d(
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``zlabel_fontsize``: float, fontsize of the zlabel
-        * ``alpha``: float btwn [0,1.0], the transparency of the plotted surface
+        * ``alpha``: float in [0,1.0], the transparency of the plotted surface
         * ``elev``: float, elevation orientation angle of 3D plot (in the z plane)
         * ``azim``: float, azimuthal orientation angle of 3D plot (in the x,y plane)
         * ``dist``: float, distance from the camera to the center point of the plot
@@ -847,7 +847,7 @@ def plot_3d(
     ax.set_title(label, fontsize=title_fontsize)
     _set_tight_layout(fig)
 
-    # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
+    # need this stuff to make all the axes equal, ax.axis('equal') doesn't work for 3d
     x_limits = ax.get_xlim3d()
     y_limits = ax.get_ylim3d()
     z_limits = ax.get_zlim3d()
@@ -1132,7 +1132,7 @@ def plot_section(
         * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
-        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf
         * ``phi``: float, int or array-like. Toroidal angles to plot. If an integer,
           plot that number equally spaced in [0,2pi/NFP). Default 1 for axisymmetry and
@@ -1181,6 +1181,7 @@ def plot_section(
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
             period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=grid.nodes,
         )
         grid = Grid(coords, sort=False)
 
@@ -1193,6 +1194,7 @@ def plot_section(
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
             period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=grid.nodes,
         )
         grid = Grid(coords, sort=False)
     rows = np.floor(np.sqrt(nphi)).astype(int)
@@ -1433,6 +1435,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
             period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=r_grid.nodes,
         ),
         sort=False,
     )
@@ -1453,6 +1456,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
                 ["rho", "theta_PEST", "phi"],
                 ["rho", "theta", "zeta"],
                 period=(np.inf, 2 * np.pi, 2 * np.pi),
+                guess=t_grid.nodes,
             ),
             sort=False,
         )
@@ -1621,6 +1625,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
             period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=grid.nodes,
         ),
         sort=False,
     )
@@ -1704,7 +1709,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         * ``xlabel_fontsize``: float, fontsize of the x label
         * ``ylabel_fontsize``: float, fontsize of the y label
         * ``legend``: bool, whether to display legend or not
-        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
+        * ``legend_kw``: dict, any keyword arguments to be passed to ax.legend()
         * ``cmap``: colormap to use for plotting, discretized into len(eqs) colors
         * ``color``: list of colors to use for each Equilibrium
         * ``ls``: list of str, line styles to use for each Equilibrium
@@ -1776,6 +1781,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
                 ["rho", "theta", "phi"],
                 ["rho", "theta", "zeta"],
                 period=(np.inf, 2 * np.pi, 2 * np.pi),
+                guess=grid.nodes,
             ),
             sort=False,
         )
@@ -1868,7 +1874,7 @@ def plot_comparison(
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
         * ``legend``: bool, whether to display legend or not
-        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
+        * ``legend_kw``: dict, any keyword arguments to be passed to ax.legend()
         * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
@@ -1892,7 +1898,7 @@ def plot_comparison(
         fig, ax = plot_comparison(eqs=[eqf[0],eqf[1],eqf[2]],
                                   labels=['Axisymmetric w/o pressure',
                                           'Axisymmetric w/ pressure',
-                                          'Nonaxisymmetric w/ pressure',
+                                          'Non-axisymmetric w/ pressure',
                                          ],
                                  )
 
@@ -2143,10 +2149,9 @@ def plot_boozer_modes(
         * ``lw``: float, linewidth
         * ``ls``: str, linestyle
         * ``legend``: bool, whether to display legend or not
-        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
+        * ``legend_kw``: dict, any keyword arguments to be passed to ax.legend()
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
-
 
     Returns
     -------
@@ -2297,7 +2302,7 @@ def plot_boozer_surface(
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
-        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf
         * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
@@ -2479,7 +2484,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
           qs metrics
         * ``ylabel``: str, ylabel to use for plot
         * ``legend``: bool, whether to display legend or not
-        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
+        * ``legend_kw``: dict, any keyword arguments to be passed to ax.legend()
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``labels``: list of strs of length 3, labels to apply to each QS error metric
@@ -2522,7 +2527,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     lw = kwargs.pop("lw", [1, 1, 1])
     ylabel = kwargs.pop("ylabel", False)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
-    ylabel_fontsize = kwargs.pop("yxlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -2785,7 +2790,7 @@ def plot_basis(basis, return_data=False, **kwargs):
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
-        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``title_fontsize``: integer, font size of the title
 
     Returns
@@ -2814,8 +2819,6 @@ def plot_basis(basis, return_data=False, **kwargs):
     title_fontsize = kwargs.pop("title_fontsize", None)
 
     if basis.__class__.__name__ == "PowerSeries":
-        # fixme: lmax unused
-        lmax = abs(basis.modes[:, 0]).max()
         grid = LinearGrid(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
@@ -2842,8 +2845,6 @@ def plot_basis(basis, return_data=False, **kwargs):
         return fig, ax
 
     elif basis.__class__.__name__ == "FourierSeries":
-        # fixme nmax unused
-        nmax = abs(basis.modes[:, 2]).max()
         grid = LinearGrid(zeta=100, NFP=basis.NFP, endpoint=True)
         z = grid.nodes[:, 2]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
@@ -3007,18 +3008,18 @@ def plot_basis(basis, return_data=False, **kwargs):
         return fig, ax
 
 
-def plot_logo(savepath=None, **kwargs):
+def plot_logo(save_path=None, **kwargs):
     """Plot the DESC logo.
 
     Parameters
     ----------
-    savepath : str or path-like
+    save_path : str or path-like
         path to save the figure to.
         File format is inferred from the filename (Default value = None)
     **kwargs : dict, optional
         additional plot formatting parameters.
-        options include ``'Dcolor'``, ``'Dcolor_rho'``, ``'Dcolor_theta'``,
-        ``'Ecolor'``, ``'Scolor'``, ``'Ccolor'``, ``'BGcolor'``, ``'fig_width'``
+        options include ``'D_color'``, ``'D_color_rho'``, ``'D_color_theta'``,
+        ``'E_color'``, ``'Scolor'``, ``'C_color'``, ``'BGcolor'``, ``'fig_width'``
 
     Returns
     -------
@@ -3034,7 +3035,7 @@ def plot_logo(savepath=None, **kwargs):
     .. code-block:: python
 
         from desc.plotting import plot_logo
-        plot_logo(savepath='../_static/images/plotting/plot_logo.png')
+        plot_logo(save_path='../_static/images/plotting/plot_logo.png')
 
     """
     eq = np.array(
@@ -3088,12 +3089,12 @@ def plot_logo(savepath=None, **kwargs):
     )
 
     onlyD = kwargs.get("onlyD", False)
-    Dcolor = kwargs.get("Dcolor", "xkcd:neon purple")
-    Dcolor_rho = kwargs.get("Dcolor_rho", "xkcd:neon pink")
-    Dcolor_theta = kwargs.get("Dcolor_theta", "xkcd:neon pink")
-    Ecolor = kwargs.get("Ecolor", "deepskyblue")
+    D_color = kwargs.get("D_color", "xkcd:neon purple")
+    D_color_rho = kwargs.get("D_color_rho", "xkcd:neon pink")
+    D_color_theta = kwargs.get("D_color_theta", "xkcd:neon pink")
+    E_color = kwargs.get("E_color", "deepskyblue")
     Scolor = kwargs.get("Scolor", "deepskyblue")
-    Ccolor = kwargs.get("Ccolor", "deepskyblue")
+    C_color = kwargs.get("C_color", "deepskyblue")
     BGcolor = kwargs.get("BGcolor", "clear")
     fig_width = kwargs.get("fig_width", 3)
     fig_height = fig_width / 2
@@ -3185,7 +3186,7 @@ def plot_logo(savepath=None, **kwargs):
     ax.plot(
         R.T[:, ::rstep],
         Z.T[:, ::rstep],
-        color=Dcolor_rho,
+        color=D_color_rho,
         lw=lw * contour_lw_ratio,
         ls="-",
     )
@@ -3193,29 +3194,29 @@ def plot_logo(savepath=None, **kwargs):
     ax.plot(
         R[:, ::tstep],
         Z[:, ::tstep],
-        color=Dcolor_theta,
+        color=D_color_theta,
         lw=lw * contour_lw_ratio,
         ls="-",
     )
-    ax.plot(bdryR, bdryZ, color=Dcolor, lw=lw)
+    ax.plot(bdryR, bdryZ, color=D_color, lw=lw)
 
     if onlyD:
-        if savepath is not None:
-            fig.savefig(savepath, facecolor=fig.get_facecolor(), edgecolor="none")
+        if save_path is not None:
+            fig.savefig(save_path, facecolor=fig.get_facecolor(), edgecolor="none")
 
         return fig, ax
 
     # E
-    ax.plot([Eleft, Eleft + 1], [bottom, top], lw=lw, color=Ecolor, linestyle="-")
-    ax.plot([Eleft, Eright], [bottom, bottom], lw=lw, color=Ecolor, linestyle="-")
+    ax.plot([Eleft, Eleft + 1], [bottom, top], lw=lw, color=E_color, linestyle="-")
+    ax.plot([Eleft, Eright], [bottom, bottom], lw=lw, color=E_color, linestyle="-")
     ax.plot(
         [Eleft + 1 / 2, Eright],
         [bottom + (top + bottom) / 2, bottom + (top + bottom) / 2],
         lw=lw,
-        color=Ecolor,
+        color=E_color,
         linestyle="-",
     )
-    ax.plot([Eleft + 1, Eright], [top, top], lw=lw, color=Ecolor, linestyle="-")
+    ax.plot([Eleft + 1, Eright], [top, top], lw=lw, color=E_color, linestyle="-")
 
     # S
     Sy = np.linspace(bottom, top + Soffset, 1000)
@@ -3225,10 +3226,10 @@ def plot_logo(savepath=None, **kwargs):
     # C
     Cx = Cw / 2 * np.cos(Ctheta) + Cx0
     Cy = Ch / 2 * np.sin(Ctheta) + Cy0
-    ax.plot(Cx, Cy, lw=lw, color=Ccolor, linestyle="-")
+    ax.plot(Cx, Cy, lw=lw, color=C_color, linestyle="-")
 
-    if savepath is not None:
-        fig.savefig(savepath, facecolor=fig.get_facecolor(), edgecolor="none")
+    if save_path is not None:
+        fig.savefig(save_path, facecolor=fig.get_facecolor(), edgecolor="none")
 
     return fig, ax
 
@@ -3396,7 +3397,7 @@ def plot_field_lines_sfl(
     )
     _set_tight_layout(fig)
 
-    # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
+    # need this stuff to make all the axes equal, ax.axis('equal') doesn't work for 3d
     x_limits = ax.get_xlim3d()
     y_limits = ax.get_ylim3d()
     z_limits = ax.get_zlim3d()
@@ -3489,10 +3490,10 @@ def plot_field_lines_real_space(
         entries are lists corresponding to the field lines for each seed_theta given.
         Also contains the scipy IVP solutions for info on how each line was integrated.
     B_interp : dict, only returned if return_B_interp is True
-        dict of scipy.interpolate.rbf.Rbf or equivalent call signature interplators,
+        dict of scipy.interpolate.rbf.Rbf or equivalent call signature interpolators,
         which interpolate the cylindrical components of magnetic field in (R,phi,Z).
         Dict has the following keys: ['B_R'], ['B_Z'], and ['B_phi'], corresponding to
-        the interplating object for each cylindrical component of the magnetic field,
+        the interpolating object for each cylindrical component of the magnetic field,
         and the interpolators have call signature B(R,phi,Z) = interpolator(R,phi,Z)
 
     Notes
@@ -3587,7 +3588,7 @@ def plot_field_lines_real_space(
     )
     _set_tight_layout(fig)
 
-    # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
+    # need this stuff to make all the axes equal, ax.axis('equal') doesn't work for 3d
     x_limits = ax.get_xlim3d()
     y_limits = ax.get_ylim3d()
     z_limits = ax.get_zlim3d()

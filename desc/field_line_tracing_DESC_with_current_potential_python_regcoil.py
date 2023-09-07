@@ -294,7 +294,9 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
     return field_R, field_Z
 
 
-def compare_surfs_DESC_field_line_trace(eqname, ax, R_list, savename_poin=None, phi0=0):
+def compare_surfs_DESC_field_line_trace(
+    eq_name, ax, R_list, savename_poin=None, phi0=0
+):
     """Compare surfaces of an equilibrium to traced flux surfaces."""
     # given initial ax object which already has stuff plotted,
     #  and a list of R values of different surfaces
@@ -302,13 +304,13 @@ def compare_surfs_DESC_field_line_trace(eqname, ax, R_list, savename_poin=None, 
     # those are values should be at theta=zeta=0... which should corr.
     #  to the outboard plane
 
-    if eqname is None:
+    if eq_name is None:
         return  # dont do anything if no eq passed in
 
-    if isinstance(eqname, str):
-        eq = desc.io.load(eqname)
-    elif isinstance(eqname, EquilibriaFamily) or isinstance(eqname, Equilibrium):
-        eq = eqname
+    if isinstance(eq_name, str):
+        eq = desc.io.load(eq_name)
+    elif isinstance(eq_name, EquilibriaFamily) or isinstance(eq_name, Equilibrium):
+        eq = eq_name
     if hasattr(eq, "__len__"):
         eq = eq[-1]
 

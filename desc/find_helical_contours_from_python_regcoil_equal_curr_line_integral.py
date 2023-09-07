@@ -2,12 +2,10 @@
 import os
 
 import matplotlib.pyplot as plt
-import numpy as np
-from scipy.interpolate import interp1d
 from scipy.optimize import minimize
 
 import desc.io
-from desc.backend import jnp
+from desc.backend import jit, jnp
 from desc.coils import CoilSet
 from desc.compute.utils import cross, dot
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -111,10 +109,10 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         eq = eq[-1]
 
     nfp = eq.NFP
-    theta_coil = np.linspace(0, 2 * np.pi, ntheta)
-    zeta_coil = np.linspace(0, 2 * np.pi / nfp, ntheta)
+    theta_coil = jnp.linspace(0, 2 * jnp.pi, ntheta)
+    zeta_coil = jnp.linspace(0, 2 * jnp.pi / nfp, ntheta)
     dz = zeta_coil[1] - zeta_coil[0]
-    zetal_coil = np.arange(0, 2 * np.pi, dz)
+    zetal_coil = jnp.arange(0, 2 * jnp.pi, dz)
 
     if not os.path.isdir(dirname):
         os.mkdir(dirname)
@@ -131,10 +129,10 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         a_ves = 0.0365  # m
 
         winding_surf = FourierRZToroidalSurface(
-            R_lmn=np.array([R0_ves, -a_ves]),  # boundary coefficients in m
-            Z_lmn=np.array([a_ves]),
-            modes_R=np.array([[0, 0], [1, 0]]),  # [M, N] boundary Fourier modes
-            modes_Z=np.array([[-1, 0]]),
+            R_lmn=jnp.array([R0_ves, -a_ves]),  # boundary coefficients in m
+            Z_lmn=jnp.array([a_ves]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),  # [M, N] boundary Fourier modes
+            modes_Z=jnp.array([[-1, 0]]),
             NFP=1,  # number of (toroidal) field periods
         )
 
@@ -146,34 +144,34 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     # TODO:just use fxns imported from regcoil.py
 
     def phi_tot_fun_vec(theta, zeta):
-        nodes = np.vstack(
+        nodes = jnp.vstack(
             (
-                np.zeros_like(theta.flatten(order="F")),
+                jnp.zeros_like(theta.flatten(order="F")),
                 theta.flatten(order="F"),
                 zeta.flatten(order="F"),
             )
         ).T
         trans_temp = Transform(Grid(nodes, sort=False), basis)
         return (
-            np.asarray(trans_temp.transform(phi_mn_desc_basis))
-            + net_poloidal_current * zeta.flatten(order="F") / 2 / np.pi
-            + net_toroidal_current * theta.flatten(order="F") / 2 / np.pi
+            jnp.asarray(trans_temp.transform(phi_mn_desc_basis))
+            + net_poloidal_current * zeta.flatten(order="F") / 2 / jnp.pi
+            + net_toroidal_current * theta.flatten(order="F") / 2 / jnp.pi
         )
 
     def phi_tot_fun_theta_deriv_vec(theta, zeta):
-        nodes = np.vstack(
+        nodes = jnp.vstack(
             (
-                np.zeros_like(theta.flatten(order="F")),
+                jnp.zeros_like(theta.flatten(order="F")),
                 theta.flatten(order="F"),
                 zeta.flatten(order="F"),
             )
         ).T
         trans_temp = Transform(
-            Grid(nodes, sort=False), basis, derivs=np.array([[0, 1, 0]])
+            Grid(nodes, sort=False), basis, derivs=jnp.array([[0, 1, 0]])
         )
         return (
-            np.asarray(trans_temp.transform(phi_mn_desc_basis, dt=1))
-            + net_toroidal_current / 2 / np.pi
+            jnp.asarray(trans_temp.transform(phi_mn_desc_basis, dt=1))
+            + net_toroidal_current / 2 / jnp.pi
         )
 
     def surf_current_vec_contravariant_zeta_times_R_times_g_tt(sgrid):
@@ -181,7 +179,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         Rs = data["x"][:, 0]
         rs_t = data["e_theta"]
         rs_z = data["e_zeta"]
-        ns_mag = np.linalg.norm(cross(rs_t, rs_z), axis=1)
+        ns_mag = jnp.linalg.norm(cross(rs_t, rs_z), axis=1)
 
         phi_t = phi_tot_fun_theta_deriv_vec(sgrid.nodes[:, 1], sgrid.nodes[:, 2])
         g_tt = dot(rs_t, rs_t)
@@ -192,25 +190,25 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         return K_sup_zeta * Rs * jnp.sqrt(g_tt)
 
     def phi_tot_fun(theta, zeta):
-        if np.shape(theta):
+        if jnp.shape(theta):
             theta = theta[0]
-        trans_temp = Transform(Grid(np.array([[1, theta, zeta]])), basis)
+        trans_temp = Transform(Grid(jnp.array([[1, theta, zeta]])), basis)
         return (
-            np.asarray(trans_temp.transform(phi_mn_desc_basis))
-            + net_poloidal_current * zeta / 2 / np.pi
-            + net_toroidal_current * theta / 2 / np.pi
+            jnp.asarray(trans_temp.transform(phi_mn_desc_basis))
+            + net_poloidal_current * zeta / 2 / jnp.pi
+            + net_toroidal_current * theta / 2 / jnp.pi
         )
 
     ##### find helicity naively ######################################################
 
-    if np.isclose(net_toroidal_current, 0):
+    if jnp.isclose(net_toroidal_current, 0):
         raise ValueError(
             "this function only works for helical coils, not modular or window pane!"
         )
     # we know that I = -(G - G_ext) / (helicity * NFP)
 
     helicity = -net_poloidal_current / net_toroidal_current / eq.NFP
-    phi_slope = np.sign(helicity)
+    phi_slope = jnp.sign(helicity)
     ###############################################
 
     def get_integration_points_and_line_elems(
@@ -220,15 +218,13 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     ):
         # simply gets the theta pts btwn the halfway contours for each coil contour
         # and the dtheta for each given the ntheta
+        # assumes phi=0 for all contour initial points
         N_trial_contours = len(contour_theta_halfway)
         coil_nodes = []  # will be a list of lists
         coil_dthetas = []  # will be a list of lists of dtheta for each point
         for i in range(0, N_trial_contours):
-            phis = np.zeros(
-                (nthetas,)
-            )  # assumes we have contours which are intially at phi=0
             if i != 0:  # do as normal
-                thetas = np.linspace(
+                thetas = jnp.linspace(
                     contour_theta_halfway[i - 1],
                     contour_theta_halfway[i],
                     nthetas,
@@ -240,7 +236,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 # contour periodicity to find the integration domain
                 thetas = jnp.linspace(
                     contour_theta_halfway[i],
-                    contour_theta_halfway[-1] + 2 * np.pi * np.sign(phi_slope),
+                    contour_theta_halfway[-1] + 2 * jnp.pi * jnp.sign(phi_slope),
                     nthetas,
                     endpoint=False,
                 )
@@ -250,14 +246,14 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 # periodicity to find the integration domain
                 # here I assume this contour is on the bottom...
                 # when it could be on top too
-                thetas = np.linspace(
+                thetas = jnp.linspace(
                     contour_theta_halfway[i - 1],
                     contour_theta_halfway[i],
                     nthetas,
                     endpoint=False,
                 )
-            dthetas = np.abs(thetas[1] - thetas[0]) * np.ones_like(phis)
-            coil_nodes.append((np.asarray(thetas), np.asarray(phis)))
+            dthetas = jnp.abs(thetas[1] - thetas[0]) * jnp.ones_like(thetas)
+            coil_nodes.append((thetas, jnp.zeros_like(thetas)))
             coil_dthetas.append(dthetas)
         return coil_nodes, coil_dthetas
 
@@ -271,15 +267,20 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
     # grids of values to use to approximately find the thetas
     # corresponding to the contour Phi value halfway between two contours
-    theta_lookup_grid = np.linspace(
-        -2 * np.pi / eq.NFP, 2 * np.pi + 2 * np.pi / eq.NFP, 10000
+    theta_lookup_grid = jnp.linspace(
+        -2 * jnp.pi / eq.NFP, 2 * jnp.pi + 2 * jnp.pi / eq.NFP, 10000
     )
     contour_vals_on_theta_lookup_grid = phi_tot_fun_vec(
-        theta_lookup_grid, np.zeros_like(theta_lookup_grid)
+        theta_lookup_grid, jnp.zeros_like(theta_lookup_grid)
     )
-    theta_of_contour_val = interp1d(
-        x=contour_vals_on_theta_lookup_grid, y=theta_lookup_grid
+    conts_sorted_inds = jnp.argsort(contour_vals_on_theta_lookup_grid)
+
+    theta_of_contour_val_fun = lambda xx: jnp.interp(
+        xx,
+        xp=contour_vals_on_theta_lookup_grid[conts_sorted_inds],
+        fp=theta_lookup_grid[conts_sorted_inds],
     )
+    theta_of_contour_val = jit(theta_of_contour_val_fun)
 
     def find_contours_and_current_variance(
         contours, return_full_info=False, show_plots=False, nthetas=200
@@ -293,7 +294,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         # thetas is the decision variable
 
         if not contours[1] - contours[0] > 1:
-            contours = np.sort(contours)
+            contours = jnp.sort(contours)
             contours_were_sorted = True
         else:
             contours_were_sorted = False
@@ -323,7 +324,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         if show_plots:
             plt.figure(figsize=(10, 10))
 
-            for i in range(N_trial_contours):  # np.flip(np.arange(desirednumcoils)):
+            for i in range(N_trial_contours):  # jnp.flip(np.arange(desirednumcoils)):
                 plt.plot(
                     coil_nodes_line[i][1],
                     coil_nodes_line[i][0],
@@ -344,7 +345,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 elif not contours_were_sorted and i == 0:
                     plt.plot(
                         0,
-                        theta_halfways[-1] + 2 * np.pi * np.sign(phi_slope),
+                        theta_halfways[-1] + 2 * jnp.pi * jnp.sign(phi_slope),
                         "k+",
                         label="bounds for integration",
                     )
@@ -353,7 +354,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 elif contours_were_sorted and i == 0:
                     plt.plot(
                         0,
-                        theta_halfways[0] + 2 * np.pi * np.sign(phi_slope),
+                        theta_halfways[0] + 2 * jnp.pi * jnp.sign(phi_slope),
                         "m.",
                         label="bounding contours for integration",
                     )
@@ -367,28 +368,28 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         # to find the current for each coil
         ################################################################
 
-        coil_currents_line = []  # list of the coil currents
+        # how to do so in a way that is not appending to a list?
+
+        coil_currents_line = jnp.zeros(N_trial_contours)  # list of the coil currents
         for icoi, (coords, line_elems) in enumerate(
             zip(coil_nodes_line, coil_line_elements)
         ):
-            nodes_surf = np.vstack(
+            nodes_surf = jnp.vstack(
                 (
                     jnp.zeros_like(coords[0].flatten(order="F")),
                     coords[0].flatten(order="F"),
                     coords[1].flatten(order="F"),
                 )
             ).T
-            sgrid = Grid(nodes_surf, sort=False)
+            sgrid = Grid(nodes_surf, sort=False, jitable=True)
 
             K_sup_z_time_R = surf_current_vec_contravariant_zeta_times_R_times_g_tt(
                 sgrid
             )
             current = jnp.sum(K_sup_z_time_R * line_elems)
-            coil_currents_line.append(current)
+            coil_currents_line = coil_currents_line.at[icoi].set(current)
 
-        variance = np.var(coil_currents_line)
-        if not show_plots:
-            plt.close("all")
+        variance = jnp.var(coil_currents_line)
 
         ####### debug #######################
         # should just check that the net toroidal current is the same
@@ -416,16 +417,16 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         returns the theta,zeta points of each contour
 
         """
-        theta_full = theta_coil * np.sign(phi_slope)
+        theta_full = theta_coil * jnp.sign(phi_slope)
         for inn in range(1, int(2 * nfp)):
-            theta_full = np.concatenate(
-                (theta_full, (theta_coil + 2 * np.pi * inn) * np.sign(phi_slope))
+            theta_full = jnp.concatenate(
+                (theta_full, (theta_coil + 2 * jnp.pi * inn) * jnp.sign(phi_slope))
             )
-        theta_full = np.append(
+        theta_full = jnp.append(
             theta_full, theta_full[-1] + theta_full[1]
         )  # add the last point
-        zeta_full = np.append(zetal_coil, 2 * np.pi)
-        theta_full_2D, zeta_full_2D = np.meshgrid(theta_full, zeta_full, indexing="ij")
+        zeta_full = jnp.append(zetal_coil, 2 * jnp.pi)
+        theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
         my_tot_full = phi_tot_fun_vec(theta_full_2D, zeta_full_2D).reshape(
             theta_full.size, zeta_full.size, order="F"
         )
@@ -434,10 +435,10 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         contour_zeta = []
         contour_theta = []
         if not contours[1] - contours[0] > 1:
-            contours = np.sort(contours)
+            contours = jnp.sort(contours)
         plt.figure(figsize=(18, 10))
         cdata = plt.contour(
-            zeta_full_2D.T, theta_full_2D.T, np.transpose(my_tot_full), contours
+            zeta_full_2D.T, theta_full_2D.T, jnp.transpose(my_tot_full), contours
         )
 
         contour_zeta = []
@@ -460,8 +461,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             if show_plots:
                 plt.plot(contour_zeta[-1], contour_theta[-1], "-r", linewidth=1)
                 plt.plot(contour_zeta[-1][-1], contour_theta[-1][-1], "sk")
-        plt.xlim([0, 2 * np.pi / nfp])
-        plt.ylim([0, 2 * np.pi + 2 * np.pi / nfp / 4])
+        plt.xlim([0, 2 * jnp.pi / nfp])
+        plt.ylim([0, 2 * jnp.pi + 2 * jnp.pi / nfp / 4])
 
         return contour_theta, contour_zeta
 
@@ -471,10 +472,10 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     # adding extra contour above and below the ones we care about,
     #  so we can then find halfway point btwn them
 
-    theta0s = np.flip(
-        np.linspace(
+    theta0s = jnp.flip(
+        jnp.linspace(
             0,
-            (2 * np.pi + 2 * np.pi / N_trial_contours) * np.sign(phi_slope),
+            (2 * jnp.pi + 2 * jnp.pi / N_trial_contours) * jnp.sign(phi_slope),
             N_trial_contours + 1,
             endpoint=False,
         )
@@ -577,7 +578,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                         axis=-1,
                     )
                     # for whichPoint in range(len(contour_X[whichCoil1])):
-                    this_minSeparation2 = np.min(d)
+                    this_minSeparation2 = jnp.min(d)
                     if this_minSeparation2 < minSeparation2:
                         minSeparation2 = this_minSeparation2
 
@@ -622,7 +623,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             for j in range(desirednumcoils):
                 N = len(contour_X[j])
                 thisCurrent = (
-                    np.mean(coil_currents) if equal_current else coil_currents[j]
+                    jnp.mean(coil_currents) if equal_current else coil_currents[j]
                 )
                 for k in range(0, N, step):
                     f.write(
@@ -643,7 +644,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             f.write("end\n")
     final_coilset = CoilSet.from_makegrid_coilfile(coilsFilename)
     ###################
-    print(f"Coil current average is {np.mean(coil_currents):1.4e} A")
-    print(f"Coil current variance is {np.var(coil_currents):1.4e} A")
+    print(f"Coil current average is {jnp.mean(coil_currents):1.4e} A")
+    print(f"Coil current variance is {jnp.var(coil_currents):1.4e} A")
 
     return final_coilset

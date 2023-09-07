@@ -16,6 +16,7 @@ from jax import jit
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
+from diffrax import (AbstractSolver, DiscreteTerminatingEvent, ODETerm, PIDController, SaveAt, Tsit5, diffeqsolve)
 
 class ParticleTracer(_Objective):
     """Quasi-symmetry Boozer harmonics error.
@@ -70,7 +71,7 @@ class ParticleTracer(_Objective):
     ):
         self.output_time = output_time
         self.initial_conditions=jnp.asarray(initial_conditions) 
-        self.initial_parameters=jnp.asarray(initial_parameters)
+        self.initial_parameters=initial_parameters
         
         if target is None and bounds is None:
             target = 0
@@ -113,13 +114,13 @@ class ParticleTracer(_Objective):
         if constants is None:
             constants = self.constants
         
-        
-        def system(initial_conditions = self.initial_conditions, t = self.output_time, initial_parameters = self.initial_parameters):
+
+        def system(t, y, initial_parameters = self.initial_parameters):
             #initial conditions
-            psi = initial_conditions[0]
-            theta = initial_conditions[1]
-            zeta = initial_conditions[2]
-            vpar = initial_conditions[3]
+            psi = y[0]
+            theta = y[1]
+            zeta = y[2]
+            vpar = y[3]
             
             grid = Grid(jnp.array([jnp.sqrt(psi), theta, zeta]).T, jitable=True, sort=False)
             transforms = get_transforms(self._data_keys, self._eq, grid, jitable=True)
@@ -132,11 +133,29 @@ class ParticleTracer(_Objective):
             zetadot = data["zetadot"]
             vpardot = data["vpardot"]
 
-            return jnp.array([psidot, thetadot, zetadot, vpardot])
+            return jnp.array([psidot, thetadot, zetadot, vpardot]).squeeze()
         
-        initial_conditions_jax = jnp.array(self.initial_conditions, dtype=jnp.float64)
+        initial_conditions_jax = self.initial_conditions
         t_jax = self.output_time
         system_jit = jit(system)
-        solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax)
+        term = ODETerm(system_jit)
 
-        return jnp.mean(solution[:, 0])
+        stepsize_controller = PIDController(rtol=1e-8, atol=1e-8, dtmin=1e-8)
+
+        solution = diffeqsolve(
+            term,
+            solver=Tsit5(),
+            y0=initial_conditions_jax,
+            t0=self.output_time[0],
+            t1=self.output_time[-1],
+            saveat=SaveAt(ts=self.output_time),
+            max_steps=None,
+            dt0=1e-8,
+            stepsize_controller=stepsize_controller,
+            args=self.initial_parameters,
+            ).ys
+
+
+        # solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax)
+
+        return solution[:, 0]- solution[0,0]

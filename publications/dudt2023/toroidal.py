@@ -8,17 +8,17 @@ import numpy as np
 from qsc import Qsc
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives import (
     FixOmni,
     ForceBalance,
     ObjectiveFunction,
     Omnigenity,
     StraightBmaxContour,
-    get_fixed_boundary_constraints,
-    get_NAE_constraints,
 )
+from desc.objectives.utils import get_fixed_boundary_constraints, get_NAE_constraints
 from desc.vmec import VMECIO
+
 
 fname = "toroidal"
 sym = True
@@ -39,10 +39,18 @@ target_mode = [0, 1, -1]
 target_amplitude = np.pi / 6
 
 assert len(LM) == len(eq_weights)
+
+
+def eq_error(eq):
+    grid = QuadratureGrid(L=32, M=32, N=32, NFP=NFP)
+    data = eq.compute(["<|F|>_vol", "<|grad(p)|>_vol"], grid=grid)
+    return data["<|F|>_vol"] / data["<|grad(p)|>_vol"]
+
+
 fam = EquilibriaFamily()
 
 # initial NAE solution
-qsc = Qsc(
+qsc = Qsc(  # custom
     nfp=NFP, rc=[1, 0.3], zs=[0, -0.3], B0=1.0, etabar=1.0, I2=1.0, p2=-4e6, order="r1"
 )
 eq = Equilibrium.from_near_axis(
@@ -63,23 +71,23 @@ omni_lmn[idx] = target_amplitude
 eq._omni_lmn = omni_lmn
 fam.append(eq)
 fam.save(fname + ".h5")
+print("equlibrium error: {:.2e}".format(eq_error(eq)))
 
 # re-solve with NAE constraints
 constraints = get_NAE_constraints(eq, qsc, order=1)
 eq, result = eq.solve(
     objective="force",
     constraints=constraints,
-    optimizer="lsq-exact",
     ftol=1e-2,
     xtol=1e-6,
     gtol=1e-6,
     maxiter=200,
     verbose=3,
     copy=True,
-    options={"initial_trust_ratio": 0.9204591976957165},
 )
 fam.append(eq)
 fam.save(fname + ".h5")
+print("equlibrium error: {:.2e}".format(eq_error(eq)))
 
 # optimize with increasing resolution
 for i in range(len(LM)):
@@ -94,7 +102,6 @@ for i in range(len(LM)):
     for rho in surfaces:
         grids[rho] = LinearGrid(M=M_grid, N=N_grid, NFP=eq.NFP, sym=False, rho=rho)
         objs[rho] = Omnigenity(
-            eq=eq,
             grid=grids[rho],
             helicity=helicity,
             M_booz=M_booz,
@@ -103,11 +110,11 @@ for i in range(len(LM)):
         )
 
     objective = ObjectiveFunction(
-        (ForceBalance(eq=eq, weight=eq_weights[i]),) + tuple(objs.values())
+        (ForceBalance(weight=eq_weights[i]),) + tuple(objs.values())
     )
     constraints = get_NAE_constraints(eq, qsc, order=1) + (
-        FixOmni(eq=eq),
-        StraightBmaxContour(eq=eq),
+        FixOmni(),
+        StraightBmaxContour(),
     )
     eq, result = eq.solve(
         objective=objective,
@@ -122,13 +129,13 @@ for i in range(len(LM)):
     )
     fam.append(eq)
     fam.save(fname + ".h5")
+    print("equlibrium error: {:.2e}".format(eq_error(eq)))
 
 # re-solve with fixed boundary constraints
 constraints = get_fixed_boundary_constraints(iota=False)
 eq, result = eq.solve(
     objective="force",
     constraints=constraints,
-    optimizer="lsq-exact",
     ftol=1e-2,
     xtol=1e-6,
     gtol=1e-6,
@@ -138,6 +145,7 @@ eq, result = eq.solve(
 )
 fam.append(eq)
 fam.save(fname + ".h5")
+print("equlibrium error: {:.2e}".format(eq_error(eq)))
 
 # save wout file
 VMECIO.save(eq, "wout_" + fname + ".nc", surfs=256)

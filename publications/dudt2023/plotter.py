@@ -27,12 +27,12 @@ purple = "#7570b3"
 pink = "#e7298a"
 colormap = "plasma"
 
-eq_pol = desc.io.load("publications/dudt2023/OP.h5")[-1]
-eq_tor = desc.io.load("publications/dudt2023/OT.h5")[-1]
-eq_hel = desc.io.load("publications/dudt2023/OH.h5")[-1]
-eq_pol_qs = desc.io.load("publications/dudt2023/QP.h5")[-1]
-eq_tor_qs = desc.io.load("publications/dudt2023/QA.h5")[-1]
-eq_hel_qs = desc.io.load("publications/dudt2023/QH.h5")[-1]
+eq_pol = desc.io.load("publications/dudt2023/poloidal.h5")[-1]
+eq_tor = desc.io.load("publications/dudt2023/toroidal.h5")[-1]
+eq_hel = desc.io.load("publications/dudt2023/helical.h5")[-1]
+eq_pol_qs = desc.io.load("publications/dudt2023/poloidal_qs.h5")[-1]
+eq_tor_qs = desc.io.load("publications/dudt2023/toroidal_qs.h5")[-1]
+eq_hel_qs = desc.io.load("publications/dudt2023/helical_qs.h5")[-1]
 
 
 def interp_helper(y, threshold=0):
@@ -212,7 +212,7 @@ if fields:
     cbar.update_ticks()
     ax[0, 0].plot(zeta, theta, color="k", ls="--", lw=2)
     ax[0, 0].set_ylabel(r"$\theta_{Boozer}$")
-    ax[0, 0].set_title(r"$M=0,~N=1$")
+    ax[0, 0].set_title(r"$M=0,~N=N_{{FP}}$")
     ax[0, 0].set_xlim([0, 2 * np.pi / NFP])
     ax[0, 0].set_ylim([0, 2 * np.pi])
     ax[0, 0].text(
@@ -225,6 +225,23 @@ if fields:
         bbox=props,
     )
     # quasi-symmetric
+    NFP = 1
+    grid = LinearGrid(M=32, N=32, NFP=NFP, sym=False, rho=1.0)
+    grid_plot = LinearGrid(
+        theta=101, zeta=101, NFP=NFP, sym=False, endpoint=True, rho=1.0
+    )
+    zz = (
+        grid_plot.nodes[:, 2]
+        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+        .squeeze()
+    )
+    tt = (
+        grid_plot.nodes[:, 1]
+        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+        .squeeze()
+    )
+    basis = DoubleFourierSeries(M=16, N=16, sym="cos", NFP=NFP)
+    B_transform = Transform(grid_plot, basis)
     data = eq_pol_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
     iota = grid.compress(data["iota"])
     BB = B_transform.transform(data["|B|_mn"]).reshape(
@@ -293,7 +310,7 @@ if fields:
     cbar = fig.colorbar(im, cax=cax, format="%.2f")
     cbar.update_ticks()
     ax[0, 1].plot(zeta, theta, color="k", ls="--", lw=2)
-    ax[0, 1].set_title(r"$M=1,~N=5$")
+    ax[0, 1].set_title(r"$M=1,~N=N_{{FP}}$")
     ax[0, 1].set_xlim([0, 2 * np.pi / NFP])
     ax[0, 1].set_ylim([0, 2 * np.pi])
     ax[0, 1].text(

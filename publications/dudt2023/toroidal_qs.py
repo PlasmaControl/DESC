@@ -19,7 +19,6 @@ from desc.objectives import (
 from desc.objectives.utils import get_fixed_boundary_constraints, get_NAE_constraints
 from desc.vmec import VMECIO
 
-
 fname = "toroidal_qs"
 sym = True
 NFP = 1

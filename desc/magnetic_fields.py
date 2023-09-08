@@ -839,9 +839,10 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
 
         surface current K is assumed given by
          K = ∇ Φ x n
-        where n is the winding surface unit normal
-              Phi is the current potential function,
-              which is a function of theta and zeta
+        where:
+               n is the winding surface unit normal
+               Phi is the current potential function,
+               which is a function of theta and zeta
         this function then uses biot-savart to find the
         B field from this current density K on the surface
 
@@ -1161,10 +1162,11 @@ class FourierCurrentPotentialField(CurrentPotentialField):
         K = ∇ Φ x n
         Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
 
-        where n is the winding surface unit normal
+        where:
+              n is the winding surface unit normal
               Phi is the current potential function,
               which is a function of theta and zeta,
-              which is given as a secular linear term in theta/zeta
+              and is given as a secular linear term in theta/zeta
               and a double Fourier series in theta/zeta
         this function then uses biot-savart to find the
         B field from this current density K on the surface
@@ -1209,7 +1211,7 @@ class FourierCurrentPotentialField(CurrentPotentialField):
     _io_attrs_ = (
         MagneticField._io_attrs_
         + FourierRZToroidalSurface._io_attrs_
-        + ["_surface_grid", "Phi_mn"]
+        + ["_surface_grid", "Phi_mn", "I", "G"]
     )
 
     def __init__(

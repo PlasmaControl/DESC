@@ -1011,7 +1011,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         phi_t = self._potential_t(theta, zeta)
         phi_z = self._potential_z(theta, zeta)
 
-        # compute K = n x nabla(Phi)
+        # compute K = nabla(Phi) x n
         self._K = xyz2rpz_vec(
             -(phi_t * (1 / ns_mag) * data["e_zeta"].T).T
             + (phi_z * (1 / ns_mag) * data["e_theta"].T).T,

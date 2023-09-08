@@ -35,10 +35,11 @@ eq_tor_qs = desc.io.load("publications/dudt2023/toroidal_qs.h5")[-1]
 eq_hel_qs = desc.io.load("publications/dudt2023/helical_qs.h5")[-1]
 
 
-def interp_helper(y, threshold=0):
-    """Interpolate NaNs or values below threshold."""
+def interp_helper(y, idx=np.array([], dtype=int)):
+    """Interpolate NaNs or values at idx."""
     x = lambda z: z.nonzero()[0]
-    nans = np.logical_or(np.isnan(y), y < threshold)
+    nans = np.isnan(y)
+    nans[idx] = True
     y[nans] = np.interp(x(nans), x(~nans), y[~nans])
     return y
 
@@ -175,9 +176,10 @@ if fields:
     cax_kwargs = {"size": "5%", "pad": 0.05}
     props = dict(boxstyle="round", facecolor="w", alpha=1.0)
     # poloidal
-    grid = LinearGrid(M=32, N=32, NFP=1, sym=False, rho=1.0)
+    NFP = 2
+    grid = LinearGrid(M=32, N=32, NFP=NFP, sym=False, rho=1.0)
     grid_plot = LinearGrid(
-        theta=101, zeta=101, NFP=1, sym=False, endpoint=True, rho=1.0
+        theta=101, zeta=101, NFP=NFP, sym=False, endpoint=True, rho=1.0
     )
     zz = (
         grid_plot.nodes[:, 2]
@@ -189,7 +191,7 @@ if fields:
         .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
         .squeeze()
     )
-    basis = DoubleFourierSeries(M=16, N=16, sym="cos", NFP=1)
+    basis = DoubleFourierSeries(M=16, N=16, sym="cos", NFP=NFP)
     B_transform = Transform(grid_plot, basis)
     # omnigenous
     data = eq_pol.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
@@ -211,9 +213,13 @@ if fields:
     cbar.update_ticks()
     ax[0, 0].plot(zeta, theta, color="k", ls="--", lw=2)
     ax[0, 0].set_ylabel(r"$\theta_{Boozer}$")
-    ax[0, 0].set_title(r"$M=0,~N=1$")
-    ax[0, 0].set_xlim([0, 2 * np.pi])
+    ax[0, 0].set_title(r"$M=0,~N=N_{{FP}}$")
+    ax[0, 0].set_xlim([0, 2 * np.pi / NFP])
     ax[0, 0].set_ylim([0, 2 * np.pi])
+    ax[0, 0].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
+    ax[0, 0].set_yticks([0, np.pi, 2 * np.pi])
+    ax[0, 0].set_xticklabels([r"$0$", r"$\pi/2$", r"$\pi$"])
+    ax[0, 0].set_yticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
     ax[0, 0].text(
         0.05,
         0.95,
@@ -224,6 +230,23 @@ if fields:
         bbox=props,
     )
     # quasi-symmetric
+    NFP = 1
+    grid = LinearGrid(M=32, N=32, NFP=NFP, sym=False, rho=1.0)
+    grid_plot = LinearGrid(
+        theta=101, zeta=101, NFP=NFP, sym=False, endpoint=True, rho=1.0
+    )
+    zz = (
+        grid_plot.nodes[:, 2]
+        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+        .squeeze()
+    )
+    tt = (
+        grid_plot.nodes[:, 1]
+        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+        .squeeze()
+    )
+    basis = DoubleFourierSeries(M=16, N=16, sym="cos", NFP=NFP)
+    B_transform = Transform(grid_plot, basis)
     data = eq_pol_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
     iota = grid.compress(data["iota"])
     BB = B_transform.transform(data["|B|_mn"]).reshape(
@@ -244,8 +267,12 @@ if fields:
     ax[1, 0].plot(zeta, theta, color="k", ls="--", lw=2)
     ax[1, 0].set_xlabel(r"$\zeta_{Boozer}$")
     ax[1, 0].set_ylabel(r"$\theta_{Boozer}$")
-    ax[1, 0].set_xlim([0, 2 * np.pi])
+    ax[1, 0].set_xlim([0, 2 * np.pi / NFP])
     ax[1, 0].set_ylim([0, 2 * np.pi])
+    ax[1, 0].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
+    ax[1, 0].set_yticks([0, np.pi, 2 * np.pi])
+    ax[1, 0].set_xticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
+    ax[1, 0].set_yticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
     ax[1, 0].text(
         0.05,
         0.95,
@@ -256,9 +283,10 @@ if fields:
         bbox=props,
     )
     # helical
-    grid = LinearGrid(M=32, N=32, NFP=5, sym=False, rho=1.0)
+    NFP = 5
+    grid = LinearGrid(M=32, N=32, NFP=NFP, sym=False, rho=1.0)
     grid_plot = LinearGrid(
-        theta=101, zeta=101, NFP=5, sym=False, endpoint=True, rho=1.0
+        theta=101, zeta=101, NFP=NFP, sym=False, endpoint=True, rho=1.0
     )
     zz = (
         grid_plot.nodes[:, 2]
@@ -270,7 +298,7 @@ if fields:
         .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
         .squeeze()
     )
-    basis = DoubleFourierSeries(M=16, N=16, sym="cos", NFP=5)
+    basis = DoubleFourierSeries(M=16, N=16, sym="cos", NFP=NFP)
     B_transform = Transform(grid_plot, basis)
     # omnigenous
     data = eq_hel.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
@@ -291,9 +319,12 @@ if fields:
     cbar = fig.colorbar(im, cax=cax, format="%.2f")
     cbar.update_ticks()
     ax[0, 1].plot(zeta, theta, color="k", ls="--", lw=2)
-    ax[0, 1].set_title(r"$M=1,~N=5$")
-    ax[0, 1].set_xlim([0, 2 * np.pi / 5])
+    ax[0, 1].set_title(r"$M=1,~N=N_{{FP}}$")
+    ax[0, 1].set_xlim([0, 2 * np.pi / NFP])
     ax[0, 1].set_ylim([0, 2 * np.pi])
+    ax[0, 1].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
+    ax[0, 1].set_yticks([0, np.pi, 2 * np.pi])
+    ax[0, 1].set_xticklabels([r"$0$", r"$\pi/5$", r"$2\pi/5$"])
     ax[0, 1].text(
         0.05,
         0.95,
@@ -323,8 +354,11 @@ if fields:
     cbar.update_ticks()
     ax[1, 1].plot(zeta, theta, color="k", ls="--", lw=2)
     ax[1, 1].set_xlabel(r"$\zeta_{Boozer}$")
-    ax[1, 1].set_xlim([0, 2 * np.pi / 5])
+    ax[1, 1].set_xlim([0, 2 * np.pi / NFP])
     ax[1, 1].set_ylim([0, 2 * np.pi])
+    ax[1, 1].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
+    ax[1, 1].set_yticks([0, np.pi, 2 * np.pi])
+    ax[1, 1].set_xticklabels([r"$0$", r"$\pi/5$", r"$2\pi/5$"])
     ax[1, 1].text(
         0.05,
         0.95,
@@ -335,9 +369,10 @@ if fields:
         bbox=props,
     )
     # toroidal
-    grid = LinearGrid(M=32, N=32, NFP=1, sym=False, rho=1.0)
+    NFP = 1
+    grid = LinearGrid(M=32, N=32, NFP=NFP, sym=False, rho=1.0)
     grid_plot = LinearGrid(
-        theta=101, zeta=101, NFP=1, sym=False, endpoint=True, rho=1.0
+        theta=101, zeta=101, NFP=NFP, sym=False, endpoint=True, rho=1.0
     )
     zz = (
         grid_plot.nodes[:, 2]
@@ -349,7 +384,7 @@ if fields:
         .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
         .squeeze()
     )
-    basis = DoubleFourierSeries(M=16, N=16, sym="cos", NFP=1)
+    basis = DoubleFourierSeries(M=16, N=16, sym="cos", NFP=NFP)
     B_transform = Transform(grid_plot, basis)
     # omnigenous
     data = eq_tor.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
@@ -371,8 +406,11 @@ if fields:
     cbar.update_ticks()
     ax[0, 2].plot(zeta, theta, color="k", ls="--", lw=2)
     ax[0, 2].set_title(r"$M=1,~N=0$")
-    ax[0, 2].set_xlim([0, 2 * np.pi])
+    ax[0, 2].set_xlim([0, 2 * np.pi / NFP])
     ax[0, 2].set_ylim([0, 2 * np.pi])
+    ax[0, 2].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
+    ax[0, 2].set_yticks([0, np.pi, 2 * np.pi])
+    ax[0, 2].set_xticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
     ax[0, 2].text(
         0.05,
         0.95,
@@ -402,8 +440,11 @@ if fields:
     cbar.update_ticks()
     ax[1, 2].plot(zeta, theta, color="k", ls="--", lw=2)
     ax[1, 2].set_xlabel(r"$\zeta_{Boozer}$")
-    ax[1, 2].set_xlim([0, 2 * np.pi])
+    ax[1, 2].set_xlim([0, 2 * np.pi / NFP])
     ax[1, 2].set_ylim([0, 2 * np.pi])
+    ax[1, 2].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
+    ax[1, 2].set_yticks([0, np.pi, 2 * np.pi])
+    ax[1, 2].set_xticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
     ax[1, 2].text(
         0.05,
         0.95,
@@ -429,7 +470,7 @@ if confinement:
     eps_hel = interp_helper(np.loadtxt("publications/dudt2023/neo_out.helical")[:, 1])
     eps_tor = interp_helper(np.loadtxt("publications/dudt2023/neo_out.toroidal")[:, 1])
     eps_pol_qs = interp_helper(
-        np.loadtxt("publications/dudt2023/neo_out.poloidal_qs")[:, 1], threshold=1e-5
+        np.loadtxt("publications/dudt2023/neo_out.poloidal_qs")[:, 1], idx=248
     )
     eps_hel_qs = interp_helper(
         np.loadtxt("publications/dudt2023/neo_out.helical_qs")[:, 1]
@@ -440,14 +481,21 @@ if confinement:
     eps_w7x = interp_helper(np.loadtxt("publications/dudt2023/neo_out.w7x")[:, 1])
     s = np.linspace(0, 1, eps_pol.size + 1)[1:]
     ax0.semilogy(s, eps_pol, color=purple, linestyle="-", lw=4, label="OP")
-    ax0.semilogy(s, eps_pol_qs, color=purple, linestyle=":", lw=4, label="QP")
     ax0.semilogy(s, eps_hel, color=orange, linestyle="-", lw=4, label="OH")
-    ax0.semilogy(s, eps_hel_qs, color=orange, linestyle=":", lw=4, label="QH")
     ax0.semilogy(s, eps_tor, color=green, linestyle="-", lw=4, label="OT")
+    ax0.semilogy(s, eps_pol_qs, color=purple, linestyle=":", lw=4, label="QP")
+    ax0.semilogy(s, eps_hel_qs, color=orange, linestyle=":", lw=4, label="QH")
     ax0.semilogy(s, eps_tor_qs, color=green, linestyle=":", lw=4, label="QA")
     s = np.linspace(0, 1, eps_w7x.size + 1)[1:]
     ax0.semilogy(s, eps_w7x, color="k", linestyle="--", lw=4, label="W7-X")
-    ax0.legend(loc=(0.08, 0.25), ncol=4)
+    handles, labels = ax0.get_legend_handles_labels()
+    order = [0, 3, 1, 4, 2, 5, 6]
+    ax0.legend(
+        [handles[idx] for idx in order],
+        [labels[idx] for idx in order],
+        loc=(0.08, 0.25),
+        ncol=4,
+    )
     ax0.set_xlim([0, 1])
     ax0.set_ylim([1e-8, 1e-2])
     ax0.set_xlabel(r"Normalized toroidal flux = $\rho^2$")
@@ -602,7 +650,7 @@ if boundaries:
     ax[0].legend(loc="upper right", ncol=1)
     ax[0].set_xlabel(r"$R$ (m)")
     ax[0].set_ylabel(r"$Z$ (m)")
-    ax[0].set_title(r"$M=0,~N=1$")
+    ax[0].set_title(r"$M=0,~N=N_{{FP}}$")
     # helical
     labels = ["OH", "QH"]
     grid_ax = LinearGrid(theta=1, zeta=6, NFP=5, rho=0.0, endpoint=True)
@@ -631,7 +679,7 @@ if boundaries:
                 line.set_label(labels[i])
     ax[1].legend(loc="upper right", ncol=1)
     ax[1].set_xlabel(r"$R$ (m)")
-    ax[1].set_title(r"$M=1,~N=5$")
+    ax[1].set_title(r"$M=1,~N=N_{{FP}}$")
     # toroidal
     labels = ["OT", "QA"]
     grid_ax = LinearGrid(theta=1, zeta=6, NFP=1, rho=0.0, endpoint=True)

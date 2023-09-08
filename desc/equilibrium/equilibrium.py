@@ -10,6 +10,7 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
+from desc.backend import jnp
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
@@ -26,7 +27,7 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -812,6 +813,11 @@ class Equilibrium(IOAble):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
 
         if params is None:
             params = get_params(names, obj=self, has_axis=grid.axis.size)
@@ -1197,7 +1203,14 @@ class Equilibrium(IOAble):
 
     @R_lmn.setter
     def R_lmn(self, R_lmn):
-        self._R_lmn[:] = R_lmn
+        R_lmn = jnp.atleast_1d(R_lmn)
+        errorif(
+            R_lmn.size != self._R_lmn.size,
+            ValueError,
+            "R_lmn should have the same size as R_basis, "
+            + f"got {len(R_lmn)} for basis with {self.R_basis.num_modes} modes",
+        )
+        self._R_lmn = R_lmn
 
     @property
     def Z_lmn(self):
@@ -1206,7 +1219,14 @@ class Equilibrium(IOAble):
 
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
-        self._Z_lmn[:] = Z_lmn
+        Z_lmn = jnp.atleast_1d(Z_lmn)
+        errorif(
+            Z_lmn.size != self._Z_lmn.size,
+            ValueError,
+            "Z_lmn should have the same size as Z_basis, "
+            + f"got {len(Z_lmn)} for basis with {self.Z_basis.num_modes} modes",
+        )
+        self._Z_lmn = Z_lmn
 
     @property
     def L_lmn(self):
@@ -1215,7 +1235,14 @@ class Equilibrium(IOAble):
 
     @L_lmn.setter
     def L_lmn(self, L_lmn):
-        self._L_lmn[:] = L_lmn
+        L_lmn = jnp.atleast_1d(L_lmn)
+        errorif(
+            L_lmn.size != self._L_lmn.size,
+            ValueError,
+            "L_lmn should have the same size as L_basis, "
+            + f"got {len(L_lmn)} for basis with {self.L_basis.num_modes} modes",
+        )
+        self._L_lmn = L_lmn
 
     @property
     def Rb_lmn(self):
@@ -1696,7 +1723,6 @@ class Equilibrium(IOAble):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
-
 
         """
         if constraints is None:
@@ -2216,7 +2242,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         """Solve for an equilibrium by continuation method.
 
         Steps through an EquilibriaFamily, solving each equilibrium, and uses
-        pertubations to step between different profiles/boundaries.
+        perturbations to step between different profiles/boundaries.
 
         Uses the previous step as an initial guess for each solution.
 
@@ -2226,7 +2252,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             Equilibria to solve for at each step.
         objective : str or ObjectiveFunction (optional)
             function to solve for equilibrium solution
-        optimizer : str or Optimzer (optional)
+        optimizer : str or Optimizer (optional)
             optimizer to use
         pert_order : int or array of int
             order of perturbations to use. If array-like, should be same length as
@@ -2294,7 +2320,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             Unsolved Equilibrium with the final desired boundary, profiles, resolution.
         objective : str or ObjectiveFunction (optional)
             function to solve for equilibrium solution
-        optimizer : str or Optimzer (optional)
+        optimizer : str or Optimizer (optional)
             optimizer to use
         pert_order : int
             order of perturbations to use.
@@ -2359,8 +2385,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )
         self._equilibria = list(equil)
-
-    # dunder methods required by MutableSequence
 
     def __getitem__(self, i):
         return self._equilibria[i]

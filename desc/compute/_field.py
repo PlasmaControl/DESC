@@ -3245,7 +3245,7 @@ def _mirror_ratio(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="effective r/R0",
-    label="(r / R_0)_{effective}",
+    label="(r / R_0)_{\\mathrm{effective}}",
     units="~",
     units_long="None",
     description="Effective local inverse aspect ratio, based on max and min |B|",

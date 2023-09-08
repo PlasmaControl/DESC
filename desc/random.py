@@ -35,7 +35,6 @@ def random_surface(
     Where N(m,s) is a normal random variable on with mean m and stdev s, and
     X_norm = exp(-alpha*(|m| + |n|)) / exp(-alpha)
 
-
     Parameters
     ----------
     M, N : int

@@ -129,7 +129,7 @@ class MagneticField(IOAble, ABC):
         return self.__add__(-x)
 
     @abstractmethod
-    def compute_magnetic_field(self, coords, params={}, basis="rpz"):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -148,7 +148,7 @@ class MagneticField(IOAble, ABC):
 
         """
 
-    def __call__(self, coords, params={}, basis="rpz"):
+    def __call__(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points."""
         return self.compute_magnetic_field(coords, params, basis)
 
@@ -685,7 +685,7 @@ class SplineMagneticField(MagneticField):
 
     @classmethod
     def from_field(
-        cls, field, R, phi, Z, params={}, method="cubic", extrap=False, period=None
+        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, period=None
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -738,7 +738,7 @@ class ScalarPotentialField(MagneticField):
 
     """
 
-    def __init__(self, potential, params={}):
+    def __init__(self, potential, params=None):
         self._potential = potential
         self._params = params
 
@@ -768,7 +768,7 @@ class ScalarPotentialField(MagneticField):
             coords = xyz2rpz(coords)
         Rq, phiq, Zq = coords.T
 
-        if (params is None) or (len(params) == 0):
+        if params is None:
             params = self._params
         r, p, z = coords.T
         funR = lambda x: self._potential(x, p, z, **params)
@@ -784,7 +784,7 @@ class ScalarPotentialField(MagneticField):
 
 
 def field_line_integrate(
-    r0, z0, phis, field, params={}, rtol=1e-8, atol=1e-8, maxstep=1000
+    r0, z0, phis, field, params=None, rtol=1e-8, atol=1e-8, maxstep=1000
 ):
     """Trace field lines by integration.
 
@@ -948,6 +948,8 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
                     UserWarning,
                 )
             self._params = new
+            # reset derivatives if params has changed
+            self._set_derivatives()
 
     @property
     def potential(self):
@@ -957,6 +959,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     @potential.setter
     def potential(self, new):
         if new != self._potential:
+            assert callable(new), "Potential must be callable!"
             self._potential = new
             # reset derivatives if potential has changed, using AD
             self._set_derivatives()
@@ -986,7 +989,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     def _compute_surface_current(self, surface_grid=None, params=None):
         if surface_grid is None:
             surface_grid = self.surface_grid
-        if (params is None) or (len(params) == 0):
+        if params is None:
             params = self._params
 
         # surface is the source of current density for the magnetic field
@@ -1047,7 +1050,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         if basis == "rpz":
             coords = rpz2xyz(coords)
 
-        if (params is None) or (len(params) == 0):
+        if params is None:
             params = self._params
         # compute surface current, and store grid quantities
         # needed for integration in class

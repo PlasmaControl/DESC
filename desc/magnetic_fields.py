@@ -912,6 +912,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         name="",
         check_orientation=True,
     ):
+        assert callable(potential), "Potential must be callable!"
         self._potential = potential
         self._surface_grid = surface_grid
         self._params = params

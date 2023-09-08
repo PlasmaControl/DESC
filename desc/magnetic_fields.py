@@ -1051,8 +1051,6 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         if basis == "rpz":
             coords = rpz2xyz(coords)
 
-        if params is None:
-            params = self._params
         # compute surface current, and store grid quantities
         # needed for integration in class
         self._compute_surface_current(surface_grid=surface_grid, params=params)

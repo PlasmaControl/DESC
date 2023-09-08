@@ -623,7 +623,8 @@ def test_scipy_constrained_solve():
     AR = eq.compute("R0/a")["R0/a"]
     ARbounds = (0.95 * AR, 1.05 * AR)
     H = eq.compute(
-        "curvature_H_rho", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        "curvature_H_rho",
+        grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
     )["curvature_H_rho"]
     Hbounds = ((1 - 0.05 * np.sign(H)) * H, (1 + 0.05 * np.sign(H)) * abs(H))
     constraints += (
@@ -649,7 +650,8 @@ def test_scipy_constrained_solve():
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
     H2 = eq2.compute(
-        "curvature_H_rho", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        "curvature_H_rho",
+        grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
     )["curvature_H_rho"]
 
     assert ARbounds[0] < AR2 < ARbounds[1]

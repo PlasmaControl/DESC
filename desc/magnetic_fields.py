@@ -992,6 +992,9 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
             surface_grid = self.surface_grid
         if params is None:
             params = self._params
+        else:
+            # reset derivatives using new params
+            self.params = params
 
         # surface is the source of current density for the magnetic field
         # compute source positions rs, and their theta/zeta derivatives

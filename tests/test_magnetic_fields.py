@@ -152,6 +152,24 @@ class TestMagneticFields:
             err_msg="Current Potential Field failed with AD derivative",
         )
 
+        # change params
+        new_params = {"G": 2 * G}
+
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, 0, 0], params=new_params),
+            2 * correct_field(10.0, 0, 0),
+            atol=1e-16,
+            rtol=1e-8,
+            err_msg="Current Potential Field failed with AD derivative and param",
+        )
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, np.pi / 4, 0], params=new_params),
+            2 * correct_field(10.0, np.pi / 4, 0),
+            atol=1e-16,
+            rtol=1e-8,
+            err_msg="Current Potential Field failed with AD derivative and param",
+        )
+
     @pytest.mark.unit
     def test_fourier_current_potential_field(self):
         """Test Fourier current potential magnetic field against analytic result."""

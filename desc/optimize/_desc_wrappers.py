@@ -27,7 +27,7 @@ from .stochastic import sgd
 def _optimize_desc_aug_lagrangian(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
-    """Wrapper for desc.optimize.fmin_lag_ls_stel.
+    """Wrapper for desc.optimize.fmin_auglag.
 
     Parameters
     ----------
@@ -123,7 +123,7 @@ def _optimize_desc_aug_lagrangian(
 def _optimize_desc_aug_lagrangian_least_squares(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
-    """Wrapper for desc.optimize.fmin_lag_ls_stel.
+    """Wrapper for desc.optimize.lsq_auglag.
 
     Parameters
     ----------

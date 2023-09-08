@@ -216,16 +216,16 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     tr_ratio = options.pop("initial_trust_ratio", 1.0)
     trust_radius = init_tr.get(trust_radius, trust_radius)
     trust_radius *= tr_ratio
+    if trust_radius == 0:
+        trust_radius = 1.0
 
-    max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
+    max_trust_radius = options.pop("max_trust_radius", jnp.inf)
     min_trust_radius = options.pop("min_trust_radius", jnp.finfo(x0.dtype).eps)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
 
-    if trust_radius == 0:
-        trust_radius = 1.0
     if len(options) > 0:
         raise ValueError(
             colored("Unknown options: {}".format([key for key in options]), "red")

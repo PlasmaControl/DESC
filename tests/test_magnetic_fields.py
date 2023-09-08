@@ -128,7 +128,7 @@ class TestMagneticFields:
         params = {"G": G}
         correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
 
-        field = CurrentPotentialField(
+        field = CurrentPotentialField.from_surface(
             potential=potential,
             surface=surface,
             surface_grid=LinearGrid(M=120, N=120, NFP=1),
@@ -160,6 +160,7 @@ class TestMagneticFields:
             Z_lmn=jnp.array([0, -1]),
             modes_R=jnp.array([[0, 0], [1, 0]]),
             modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
         )
         basis = DoubleFourierSeries(M=2, N=2, sym="sin")
         phi_mn = np.zeros((basis.num_modes,))
@@ -178,6 +179,28 @@ class TestMagneticFields:
             modes_Z=surface._Z_basis.modes[:, 1:],
             surface_grid=LinearGrid(M=120, N=120, NFP=10),
             NFP=10,
+        )
+
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, 0, 0]),
+            correct_field(10.0, 0, 0),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            correct_field(10.0, np.pi / 4, 0),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+
+        field = FourierCurrentPotentialField.from_surface(
+            surface=surface,
+            Phi_mn=phi_mn,
+            basis=basis,
+            I=0,
+            G=G,
+            surface_grid=LinearGrid(M=120, N=120, NFP=10),
         )
 
         np.testing.assert_allclose(

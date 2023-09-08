@@ -877,15 +877,11 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     rho : float [0,1]
         flux surface label for the toroidal surface
     name : str
-        name for this surface
+        name for this field
     check_orientation : bool
         ensure that this surface has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
         (ie, e_theta x e_zeta points outward from the surface).
-    surface: FourierRZToroidalSurface, optional, default None
-        Existing FourierRZToroidalSurface object to create a
-        CurrentPotentialField with, if provided will use this
-        object's R_lmn, Z_lmn etc instead of any passed-in values
 
     """
 
@@ -902,7 +898,7 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         self,
         potential,
         surface_grid,
-        params={},
+        params=None,
         potential_dtheta=None,
         potential_dzeta=None,
         R_lmn=None,
@@ -914,25 +910,10 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
         rho=1,
         name="",
         check_orientation=True,
-        surface=None,
     ):
         self._potential = potential
         self._surface_grid = surface_grid
         self._params = params
-
-        if surface:
-            if not isinstance(surface, FourierRZToroidalSurface):
-                raise TypeError(
-                    "Expected type FourierRZToroidalSurface for argument surface, "
-                    f"instead got type {type(surface)}"
-                )
-            R_lmn = surface.R_lmn
-            Z_lmn = surface.Z_lmn
-            modes_R = surface._R_basis.modes[:, 1:]
-            modes_Z = surface._Z_basis.modes[:, 1:]
-            NFP = surface.NFP
-            sym = surface.sym
-            rho = surface.rho
 
         assert surface_grid.NFP == NFP, "NFP of surface must match NFP of surface_grid"
 
@@ -1091,6 +1072,79 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
             B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
         return B
 
+    @classmethod
+    def from_surface(
+        cls,
+        surface,
+        potential,
+        surface_grid,
+        params=None,
+        potential_dtheta=None,
+        potential_dzeta=None,
+        rho=1,
+        name="",
+        check_orientation=True,
+    ):
+        """Create CurrentPotentialField using geometry provided by given surface.
+
+        Parameters
+        ----------
+        surface: FourierRZToroidalSurface, optional, default None
+            Existing FourierRZToroidalSurface object to create a
+            CurrentPotentialField with, if provided will use this
+            object's R_lmn, Z_lmn etc instead of any passed-in values
+        potential : callable
+            function to compute the current potential. Should have a signature of
+            the form potential(theta,zeta,**params) -> ndarray.
+            theta,zeta are poloidal and toroidal angles on the surface
+        surface_grid : Grid,
+            grid upon which to evaluate the surface current density K
+        params : dict, optional
+            default parameters to pass to potential function (and its derivatives)
+        potential_dtheta: callable
+            function to compute the theta derivative of the current potential
+            if None, will use AD to calculate
+        potential_dzeta: callable
+            function to compute the theta derivative of the current potential
+            if None, will use AD to calculate
+        name : str
+            name for this field
+        check_orientation : bool
+            ensure that this surface has a right handed orientation. Do not set to False
+            unless you are sure the parameterization you have given is right handed
+            (ie, e_theta x e_zeta points outward from the surface).
+
+        """
+        if not isinstance(surface, FourierRZToroidalSurface):
+            raise TypeError(
+                "Expected type FourierRZToroidalSurface for argument surface, "
+                f"instead got type {type(surface)}"
+            )
+        R_lmn = surface.R_lmn
+        Z_lmn = surface.Z_lmn
+        modes_R = surface._R_basis.modes[:, 1:]
+        modes_Z = surface._Z_basis.modes[:, 1:]
+        NFP = surface.NFP
+        sym = surface.sym
+        rho = surface.rho
+
+        return cls(
+            potential,
+            surface_grid,
+            params,
+            potential_dtheta,
+            potential_dzeta,
+            R_lmn,
+            Z_lmn,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            rho,
+            name,
+            check_orientation,
+        )
+
 
 class FourierCurrentPotentialField(CurrentPotentialField):
     """Magnetic field due to a surface current potential on a toroidal surface.
@@ -1137,22 +1191,18 @@ class FourierCurrentPotentialField(CurrentPotentialField):
     rho : float [0,1]
         flux surface label for the toroidal surface
     name : str
-        name for this surface
+        name for this field
     check_orientation : bool
         ensure that this surface has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
         (ie, e_theta x e_zeta points outward from the surface).
-    surface: FourierRZToroidalSurface, optional, default None
-        Existing FourierRZToroidalSurface object to create a
-        CurrentPotentialField with, if provided will use this
-        object's R_lmn, Z_lmn etc instead of any passed-in values
 
     """
 
     _io_attrs_ = (
         MagneticField._io_attrs_
         + FourierRZToroidalSurface._io_attrs_
-        + ["_surface_grid", "Phi_mn", ""]
+        + ["_surface_grid", "Phi_mn"]
     )
 
     def __init__(
@@ -1171,7 +1221,6 @@ class FourierCurrentPotentialField(CurrentPotentialField):
         rho=1,
         name="",
         check_orientation=True,
-        surface=None,
     ):
         assert isinstance(
             basis, DoubleFourierSeries
@@ -1253,7 +1302,6 @@ class FourierCurrentPotentialField(CurrentPotentialField):
             rho=rho,
             name=name,
             check_orientation=check_orientation,
-            surface=surface,
         )
 
     @property
@@ -1292,3 +1340,74 @@ class FourierCurrentPotentialField(CurrentPotentialField):
         )
         self._Phi_mn = new
         self._params["Phi_mn"] = new
+
+    @classmethod
+    def from_surface(
+        cls,
+        surface,
+        Phi_mn,
+        basis,
+        I,
+        G,
+        surface_grid,
+        name="",
+        check_orientation=True,
+    ):
+        """Create CurrentPotentialField using geometry provided by given surface.
+
+        Parameters
+        ----------
+        surface: FourierRZToroidalSurface, optional, default None
+            Existing FourierRZToroidalSurface object to create a
+            CurrentPotentialField with, if provided will use this
+            object's R_lmn, Z_lmn etc instead of any passed-in values
+        Phi_mn : ndarray
+            Fourier coefficients of the double FourierSeries of the current potential.
+            Should correspond to the given DoubleFourierSeries basis object passed in.
+        basis : DoubleFourierSeries
+            DoubleFourierSeries corresponding to the Phi_mn coefficients passed in.
+        I : float
+            Net current linking the plasma and the coils toroidally
+            Denoted I in the algorithm
+        G : float
+            Net current linking the plasma and the coils poloidally
+            Denoted G in the algorithm
+        surface_grid : Grid
+            grid upon which to evaluate the surface current density K
+        name : str
+            name for this field
+        check_orientation : bool
+            ensure that this surface has a right handed orientation. Do not set to False
+            unless you are sure the parameterization you have given is right handed
+            (ie, e_theta x e_zeta points outward from the surface).
+
+        """
+        if not isinstance(surface, FourierRZToroidalSurface):
+            raise TypeError(
+                "Expected type FourierRZToroidalSurface for argument surface, "
+                f"instead got type {type(surface)}"
+            )
+        R_lmn = surface.R_lmn
+        Z_lmn = surface.Z_lmn
+        modes_R = surface._R_basis.modes[:, 1:]
+        modes_Z = surface._Z_basis.modes[:, 1:]
+        NFP = surface.NFP
+        sym = surface.sym
+        rho = surface.rho
+
+        return cls(
+            Phi_mn,
+            basis,
+            I,
+            G,
+            surface_grid,
+            R_lmn,
+            Z_lmn,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            rho,
+            name,
+            check_orientation,
+        )

@@ -36,6 +36,7 @@ from desc.objectives import (
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
     RotationalTransform,
+    Shear,
     ToroidalCurrent,
     Volume,
 )
@@ -170,6 +171,22 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_target_shear(self):
+        """Test calculation of shear profile."""
+
+        def test(eq, raw, scaled):
+            obj = Shear(target=-1, weight=2, eq=eq)
+            obj.build()
+            shear = obj.compute_unscaled(*obj.xs(eq))
+            shear_scaled = obj.compute_scaled_error(*obj.xs(eq))
+            np.testing.assert_allclose(shear, raw)
+            np.testing.assert_allclose(shear_scaled, scaled)
+
+        test(Equilibrium(iota=PowerSeriesProfile(0)), 0, 2 / np.sqrt(3))
+        test(Equilibrium(current=PowerSeriesProfile(0)), 0, 2 / np.sqrt(3))
+        test(Equilibrium(iota=PowerSeriesProfile([0, 0, 0.5])), -2, -2 / np.sqrt(3))
+
+    @pytest.mark.unit
     def test_toroidal_current(self):
         """Test calculation of toroidal current."""
 
@@ -200,9 +217,9 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_jax_compile_boozer(self):
         """Test compilation of Boozer QA metric in ObjectiveFunction."""
-        # making sure that compiles without any errors from JAX
-        # Related to issue #625
+
         def test(eq):
+            """Ensure compilation without any errors from JAX, related to issue #625."""
             obj = ObjectiveFunction(QuasisymmetryBoozer(eq=eq))
             obj.build()
             obj.compile()
@@ -495,6 +512,7 @@ def test_bounds_format():
 def test_target_profiles():
     """Tests for using Profile objects as targets for profile objectives."""
     iota = PowerSeriesProfile([1, 0, -0.3])
+    shear = PowerSeriesProfile([0, -0.6])
     current = PowerSeriesProfile([4, 0, 1, 0, -1])
     eqi = Equilibrium(L=5, N=3, M=3, iota=iota)
     eqc = Equilibrium(L=3, N=3, M=3, current=current)
@@ -503,6 +521,12 @@ def test_target_profiles():
     np.testing.assert_allclose(
         obji.target,
         iota(obji._transforms["grid"].nodes[obji._transforms["grid"].unique_rho_idx]),
+    )
+    objs = Shear(target=shear, eq=eqi)
+    objs.build()
+    np.testing.assert_allclose(
+        objs.target,
+        shear(objs._transforms["grid"].nodes[objs._transforms["grid"].unique_rho_idx]),
     )
     objc = ToroidalCurrent(target=current, eq=eqc)
     objc.build()
@@ -655,11 +679,10 @@ def test_field_scale_length():
 @pytest.mark.unit
 def test_profile_objective_print(capsys):
     """Test that the profile objectives print correctly."""
-    eq = Equilibrium()
+    eq = Equilibrium(iota=PowerSeriesProfile([1, 0, 0.5]))
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
     def test(obj, values, normalize=False):
-
         obj.print_value(*obj.xs(eq))
         out = capsys.readouterr()
 
@@ -700,6 +723,10 @@ def test_profile_objective_print(capsys):
     obj = RotationalTransform(eq=eq, grid=grid)
     obj.build()
     test(obj, iota)
+    shear = eq.compute("shear", grid=grid)["shear"]
+    obj = Shear(eq=eq, grid=grid)
+    obj.build()
+    test(obj, shear)
     curr = eq.compute("current", grid=grid)["current"]
     obj = ToroidalCurrent(eq=eq, grid=grid)
     obj.build()
@@ -846,8 +873,8 @@ def test_objective_target_bounds():
     """Test that the target_scaled and bounds_scaled etc. return the right things."""
     eq = Equilibrium()
 
-    vol = Volume(target=3, normalize=True, eq=eq)
-    asp = AspectRatio(bounds=(2, 3), normalize=False, eq=eq)
+    vol = Volume(target=3, normalize=True, weight=2, eq=eq)
+    asp = AspectRatio(bounds=(2, 3), normalize=False, weight=3, eq=eq)
     fbl = ForceBalance(normalize=True, bounds=(-1, 2), weight=5, eq=eq)
 
     objective = ObjectiveFunction((vol, asp, fbl))
@@ -857,20 +884,29 @@ def test_objective_target_bounds():
     bounds = objective.bounds_scaled
     weight = objective.weights
 
-    assert bounds[0][0] == 3 / vol.normalization
-    assert bounds[1][0] == 3 / vol.normalization
-    assert bounds[0][1] == 2
-    assert bounds[1][1] == 3
-    assert np.all(bounds[0][2:] == -1 / fbl.normalization)
-    assert np.all(bounds[1][2:] == 2 / fbl.normalization)
+    assert bounds[0][0] == 3 / vol.normalization * vol.weight
+    assert bounds[1][0] == 3 / vol.normalization * vol.weight
+    assert bounds[0][1] == 2 * asp.weight
+    assert bounds[1][1] == 3 * asp.weight
+    assert np.all(bounds[0][2:] == -1 / fbl.normalization * fbl.weight)
+    assert np.all(bounds[1][2:] == 2 / fbl.normalization * fbl.weight)
 
-    assert target[0] == 3 / vol.normalization
-    assert target[1] == 2.5
-    assert np.all(target[2:] == 0.5 / fbl.normalization)
+    assert target[0] == 3 / vol.normalization * vol.weight
+    assert target[1] == 2.5 * asp.weight
+    assert np.all(target[2:] == 0.5 / fbl.normalization * fbl.weight)
 
-    assert weight[0] == 1
-    assert weight[1] == 1
+    assert weight[0] == 2
+    assert weight[1] == 3
     assert np.all(weight[2:] == 5)
+
+    eq = Equilibrium(L=8, M=2, N=2, iota=PowerSeriesProfile(0.42))
+
+    con = ObjectiveFunction(RotationalTransform(eq=eq, bounds=(0.41, 0.43)))
+    con.build()
+
+    np.testing.assert_allclose(con.compute_scaled_error(con.x(eq)), 0)
+    np.testing.assert_array_less(con.bounds_scaled[0], con.compute_scaled(con.x(eq)))
+    np.testing.assert_array_less(con.compute_scaled(con.x(eq)), con.bounds_scaled[1])
 
 
 @pytest.mark.unit

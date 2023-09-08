@@ -1192,7 +1192,7 @@ class TestBootstrapObjectives:
         integrand = (data["<J*B>"] - data["<J*B> Redl"]) / (scales["B"] * scales["J"])
         expected = 0.5 * sum(grid.weights * integrand**2) / (4 * np.pi**2)
         print(
-            "boostrap objectives for scaled configs:", results, " expected:", expected
+            "bootstrap objectives for scaled configs:", results, " expected:", expected
         )
 
         # Results are not perfectly identical because ln(Lambda) is not quite invariant.

@@ -436,7 +436,6 @@ class FiniteDiffDerivative(_Derivative):
         kwargs : dict
             keyword arguments passed to fun
 
-
         Returns
         -------
         J : ndarray of float, shape(len(f),len(x))
@@ -702,7 +701,4 @@ class FiniteDiffDerivative(_Derivative):
         return self._compute(*args, **kwargs)
 
 
-if use_jax:
-    Derivative = AutoDiffDerivative
-else:
-    Derivative = FiniteDiffDerivative
+Derivative = AutoDiffDerivative if use_jax else FiniteDiffDerivative

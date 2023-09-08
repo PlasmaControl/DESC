@@ -1,5 +1,6 @@
 """Classes for magnetic fields."""
 
+import warnings
 from abc import ABC, abstractmethod
 from functools import partial
 
@@ -941,9 +942,10 @@ class CurrentPotentialField(MagneticField, FourierRZToroidalSurface):
     def params(self, new):
         if new != self._params:
             if len(new) != len(self._params):
-                raise UserWarning(
+                warnings.warn(
                     "Length of new params is different from length of current params! "
-                    "May cause errors unless potential function is also changed."
+                    "May cause errors unless potential function is also changed.",
+                    UserWarning,
                 )
             self._params = new
 

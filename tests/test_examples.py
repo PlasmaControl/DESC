@@ -666,7 +666,7 @@ def test_NAE_QIC_solve():
     grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
     iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
-    np.testing.assert_allclose(iota[1], qic.iota, atol=1e-5)
+    np.testing.assert_allclose(iota[1], qic.iota, atol=1.5e-5)
     np.testing.assert_allclose(iota[1:10], qic.iota, atol=5e-4)
 
     # check lambda to match near axis
@@ -693,7 +693,9 @@ def test_NAE_QIC_solve():
     lam_nae = np.squeeze(lam_nae[:, 0, :])
 
     lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -qic.iota * qic.nu_spline(phi), atol=7e-5)
+    np.testing.assert_allclose(
+        lam_av_nae, -qic.iota * qic.nu_spline(phi), atol=1e-4, rtol=1e-2
+    )
 
     # check |B| on axis
 

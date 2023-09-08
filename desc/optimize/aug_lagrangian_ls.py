@@ -1,4 +1,4 @@
-"""Augmented Langrangian for vector valued objectives."""
+"""Augmented Lagrangian for vector valued objectives."""
 
 from scipy.optimize import NonlinearConstraint, OptimizeResult
 
@@ -30,7 +30,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     maxiter=None,
     options={},
 ):
-    """Minimize a function with constraints using an augmented Langrangian method.
+    """Minimize a function with constraints using an augmented Lagrangian method.
 
     The objective function is assumed to be vector valued, and is minimized in the least
     squares sense.
@@ -73,7 +73,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         If None, the termination by this condition is disabled.
     gtol : float or None, optional
         Absolute tolerance for termination by the norm of the gradient.
-        Optimizer teriminates when ``norm(g) < gtol``, where
+        Optimizer terminates when ``norm(g) < gtol``, where
         If None, the termination by this condition is disabled.
     ctol : float, optional
         Tolerance for stopping based on infinity norm of the constraint violation.

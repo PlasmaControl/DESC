@@ -1,4 +1,4 @@
-"""Tests for reading/writing intput/output, both ascii and binary."""
+"""Tests for reading/writing input/output, both ascii and binary."""
 
 import os
 import pathlib
@@ -70,7 +70,7 @@ def test_write_desc_input_Nones(tmpdir_factory):
     # the written file will have ftol = 0.01,0.001
     # and the None will have not been written
 
-    # if only Nones are passed for just one of the tols, only that one will not
+    # if only Nones are passed for just one of the tolerances, only that one will not
     # be written. gtol is used here as that test
 
     input_path = "./tests/inputs/DSHAPE"
@@ -239,7 +239,7 @@ class TestInputReader:
     """Tests for the InputReader class."""
 
     argv0 = []
-    argv1 = ["nonexistant_input_file"]
+    argv1 = ["nonexistent_input_file"]
     argv2 = ["./tests/inputs/MIN_INPUT"]
 
     @pytest.mark.unit

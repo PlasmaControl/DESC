@@ -2745,7 +2745,7 @@ class FixSurfaceCurrent(_FixedObjective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, IGphi_mn, **kwargs):
+    def compute(self, IGPhi_mn, **kwargs):
         """Compute fixed-pressure profile errors.
 
         Parameters
@@ -2759,4 +2759,4 @@ class FixSurfaceCurrent(_FixedObjective):
             Surface current errors (A).
 
         """
-        return IGphi_mn[self._idx]
+        return IGPhi_mn[self._idx]

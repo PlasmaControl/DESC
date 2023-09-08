@@ -676,6 +676,7 @@ def test_solve_with_x_scale():
                 + eq.Za_n.size
                 + eq.Rb_lmn.size
                 + eq.Zb_lmn.size
+                + eq.IGPhi_mn.size
                 + 1
             ),
         ]

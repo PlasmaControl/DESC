@@ -1210,7 +1210,14 @@ class Equilibrium(IOAble):
 
     @IGPhi_mn.setter
     def IGPhi_mn(self, IGPhi_mn):
-        self._IGPhi_mn[:] = IGPhi_mn
+        IGPhi_mn = jnp.atleast_1d(IGPhi_mn)
+        errorif(
+            IGPhi_mn.size != self._IGPhi_mn.size,
+            ValueError,
+            "IGPhi_mn should have the same size as K_basis + 2, "
+            + f"got {len(IGPhi_mn)} for basis with {self.K_basis.num_modes} modes",
+        )
+        self._IGPhi_mn = IGPhi_mn
 
     @property
     def Ra_n(self):
@@ -2005,7 +2012,7 @@ class Equilibrium(IOAble):
         di=None,
         dc=None,
         dPsi=None,
-        dIGphi=None,
+        dIGPhi=None,
         order=2,
         tr_ratio=0.1,
         weight="auto",

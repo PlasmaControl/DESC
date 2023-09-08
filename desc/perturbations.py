@@ -436,7 +436,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dPsi=False,
     dRb=False,
     dZb=False,
-    dIGphi=False,
+    dIGPhi=False,
     subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25],
@@ -544,13 +544,13 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             deltas["Zb_lmn"] = jnp.ones((objective_f.dimensions["Zb_lmn"],), dtype=bool)
     elif jnp.any(dZb):
         deltas["Zb_lmn"] = dZb
-    if type(dIGphi) is bool or dIGphi is None:
-        if dIGphi is True:
-            deltas["IGphi_mn"] = jnp.ones(
-                (objective_f.dimensions["IGphi_mn"],), dtype=bool
+    if type(dIGPhi) is bool or dIGPhi is None:
+        if dIGPhi is True:
+            deltas["IGPhi_mn"] = jnp.ones(
+                (objective_f.dimensions["IGPhi_mn"],), dtype=bool
             )
-    elif jnp.any(dIGphi):
-        deltas["IGphi_mn"] = dIGphi
+    elif jnp.any(dIGPhi):
+        deltas["IGPhi_mn"] = dIGPhi
 
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
@@ -625,7 +625,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if len(
         [
             arg
-            for arg in ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "Psi", "IGphi_mn")
+            for arg in ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "Psi", "IGPhi_mn")
             if arg in deltas.keys()
         ]
     ):

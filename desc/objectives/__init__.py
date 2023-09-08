@@ -16,10 +16,10 @@ from ._generic import (
 )
 from ._geometry import (
     AspectRatio,
-    B_dmin,
     BScaleLength,
     Elongation,
     MeanCurvature,
+    PlasmaCoilFeasibilty,
     PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,

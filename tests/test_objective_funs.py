@@ -19,7 +19,6 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
-    B_dmin,
     BScaleLength,
     Elongation,
     Energy,
@@ -31,6 +30,7 @@ from desc.objectives import (
     MercierStability,
     ObjectiveFromUser,
     ObjectiveFunction,
+    PlasmaCoilFeasibilty,
     PlasmaVesselDistance,
     PrincipalCurvature,
     QuasisymmetryBoozer,
@@ -898,8 +898,8 @@ def test_bd_min_objective():
 
     grid = LinearGrid(rho=np.array(1.0), M=4, N=4, NFP=1)
 
-    obj1 = B_dmin(winding_surf1, eq=eq, normalize=False, plasma_grid=grid)
-    obj2 = B_dmin(winding_surf2, eq=eq, normalize=False, plasma_grid=grid)
+    obj1 = PlasmaCoilFeasibilty(winding_surf1, eq=eq, normalize=False, plasma_grid=grid)
+    obj2 = PlasmaCoilFeasibilty(winding_surf2, eq=eq, normalize=False, plasma_grid=grid)
     with pytest.warns(UserWarning):
         obj1.build()
     with pytest.warns(UserWarning):
@@ -912,7 +912,7 @@ def test_bd_min_objective():
     np.testing.assert_array_less(L1, L2)
 
     # test softmin, for large enough alpha, should be same as actual min
-    obj1 = B_dmin(
+    obj1 = PlasmaCoilFeasibilty(
         winding_surf1,
         eq=eq,
         normalize=False,
@@ -920,7 +920,7 @@ def test_bd_min_objective():
         use_softmin=True,
         alpha=1000,
     )
-    obj2 = B_dmin(
+    obj2 = PlasmaCoilFeasibilty(
         winding_surf2,
         eq=eq,
         normalize=False,
@@ -940,8 +940,8 @@ def test_bd_min_objective():
     np.testing.assert_array_less(L1, L2)
 
     # check for normalize=True
-    obj1 = B_dmin(winding_surf1, eq=eq, normalize=True, plasma_grid=grid)
-    obj2 = B_dmin(winding_surf2, eq=eq, normalize=True, plasma_grid=grid)
+    obj1 = PlasmaCoilFeasibilty(winding_surf1, eq=eq, normalize=True, plasma_grid=grid)
+    obj2 = PlasmaCoilFeasibilty(winding_surf2, eq=eq, normalize=True, plasma_grid=grid)
     with pytest.warns(UserWarning):
         obj1.build()
     with pytest.warns(UserWarning):
@@ -953,10 +953,10 @@ def test_bd_min_objective():
 
     # check for surface_grid
     surf_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    obj1 = B_dmin(
+    obj1 = PlasmaCoilFeasibilty(
         winding_surf1, eq=eq, normalize=False, plasma_grid=grid, surface_grid=surf_grid
     )
-    obj2 = B_dmin(
+    obj2 = PlasmaCoilFeasibilty(
         winding_surf2, eq=eq, normalize=False, plasma_grid=grid, surface_grid=surf_grid
     )
     with pytest.warns(UserWarning):

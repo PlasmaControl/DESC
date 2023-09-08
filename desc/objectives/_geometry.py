@@ -1080,12 +1080,16 @@ class BScaleLength(_Objective):
         return data["L_grad(B)"]
 
 
-class B_dmin(_Objective):
+class PlasmaCoilFeasibilty(_Objective):
     """Targets variance of |B| times min distance from a surrounding surface.
 
     Computes the minimum distance (d_min) from each point on the surface
     grid to a point on the plasma grid and the magnitude of the magnetic
-    field (|B|) at that point. Then minimizes the surface-variance of |B|*d_min.
+    field (|B|) at that point. Then minimizes the surface-variance of
+    |B|*d_min. Minimizing this surface-variance leads to a magnetic field that
+    is more feasible to create by the winding surface. This is achieved
+    by ensuring that the magnetic field further from the coils is not stronger
+    than the one closer to the coils.
 
     NOTE: When use_softmin=True, ensures that alpha*values passed in is
     at least >1, otherwise the softmin will return inaccurate approximations

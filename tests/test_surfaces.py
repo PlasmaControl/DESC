@@ -146,7 +146,9 @@ class TestFourierRZToroidalSurface:
             _,
             r_surf,
             r_offset_surf,
-        ) = FourierRZToroidalSurface.constant_offset_surface(s, offset, grid, M=1, N=1)
+        ) = FourierRZToroidalSurface.constant_offset_surface(
+            s, offset, grid, M=1, N=1, use_analytic_derivative=True
+        )
         dists = np.linalg.norm(r_surf - r_offset_surf, axis=1)
         np.testing.assert_allclose(dists, 1, atol=1e-16)
         R00_offset_ind = s_offset.R_basis.get_idx(M=0, N=0)

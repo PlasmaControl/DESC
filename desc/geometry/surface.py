@@ -407,13 +407,20 @@ class FourierRZToroidalSurface(Surface):
         return surf
 
     @classmethod
-    def constant_offset_surface(cls, base_surface, offset, grid, M=None, N=None):
+    def constant_offset_surface(
+        cls, base_surface, offset, grid, M=None, N=None, use_analytic_derivative=False
+    ):
         """Create a FourierRZSurface with constant offset from the given surface.
 
         Implementation of algorithm described in Appendix B of
         "An improved current potential method for fast computation of
         stellarator coil shapes", Landreman (2017)
         https://iopscience.iop.org/article/10.1088/1741-4326/aa57d4
+
+        NOTE: Must have the toroidal angle as the cylindrical toroidal angle
+        in order for this algorithm to work properly
+        TODO: add eq as optional argument, and modify algorithm to
+        account for toroidal stream function, if possible
 
         Parameters
         ----------
@@ -423,7 +430,7 @@ class FourierRZToroidalSurface(Surface):
             constant offset (in m) of the desired surface from the input surface
             offset will be in the normal direction to the surface.
         grid : Grid
-            Grid object of the points on the given surface to evaluate the corresponding
+            Grid object of the points on the given surface to evaluate the
             offset points at, from which the offset surface will be created by fitting
             offset points with the basis defined by the given M and N
         M : int, optional
@@ -434,11 +441,18 @@ class FourierRZToroidalSurface(Surface):
             Toroidal resolution of the basis used to fit the offset points
             to create the resulting constant offset surface, by default equal
             to base_surface.N
+        use_analytic_derivative: bool
+            use analytic derivative for the root-finding part of the constant
+            offset algorithm. This is a bit slower, and can result in different
+            surfaces than when relying on numerical derivative for the root finding.
+            By default False.
+
         Returns
         -------
         offset_surface : FourierRZToroidalSurface
             FourierRZToroidalSurface, created from fitting points offset from the input
             surface by the given constant offset.
+
         """
         M = base_surface.M if M is None else M
         N = base_surface.N if N is None else N
@@ -478,9 +492,10 @@ class FourierRZToroidalSurface(Surface):
             return deriv
 
         zetas = []
+        fp = fprime if use_analytic_derivative else None
         for node in grid.nodes:
             root = scipy.optimize.fsolve(
-                fun, node[2], args=(node[1], node[2]), fprime=fprime
+                fun, node[2], args=(node[1], node[2]), fprime=fp
             )
             zetas.append(root[0])
         zetas = np.asarray(zetas)

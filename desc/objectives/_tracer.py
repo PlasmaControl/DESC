@@ -104,7 +104,7 @@ class ParticleTracer(_Objective):
         self.Energy = 3.52e6*self.charge 
         eq = eq or self._eq    
         # self._dim_f = [len(self.output_time), 4]
-        self._dim_f = 1
+        self._dim_f = len(self.output_time)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

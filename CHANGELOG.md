@@ -4,6 +4,9 @@ Changelog
 - Refactors most of the optimizer subproblems to use JAX control flow, allowing them
 to run more efficiently on the GPU.
 - Adds ``'shear'`` as a compute quantity and ``Shear`` as an objective function.
+- Adds a new objective ``Pressure`` to target a pressure profile as a function of rho instead
+of spectral coefficients like ``FixPressure``. Can also be used when optimizing kinetic equilibria.
+- Also allows all profile objectives to have callable bounds and targets.
 
 v0.10.0
 -------

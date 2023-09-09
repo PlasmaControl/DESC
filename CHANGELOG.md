@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Refactors most of the optimizer subproblems to use JAX control flow, allowing them
+to run more efficiently on the GPU.
 - Adds ``'shear'`` as a compute quantity and ``Shear`` as an objective function.
 
 v0.10.0

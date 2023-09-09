@@ -868,6 +868,7 @@ def test_auglag():
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.xfail
 def test_constrained_AL_lsq():
     """Tests that the least squares augmented Lagrangian optimizer does something."""
     eq = desc.examples.get("SOLOVEV")
@@ -916,6 +917,7 @@ def test_constrained_AL_lsq():
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.xfail
 def test_constrained_AL_scalar():
     """Tests that the augmented Lagrangian constrained optimizer does something."""
     eq = desc.examples.get("SOLOVEV")

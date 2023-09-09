@@ -7,7 +7,7 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import fori_loop, gammaln, jit, jnp, sign
+from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
 from desc.utils import flatten_list
 
@@ -1619,6 +1619,7 @@ def _binom(n, k):
     return b
 
 
+@custom_jvp
 @jit
 @jnp.vectorize
 def _jacobi(n, alpha, beta, x, dx=0):
@@ -1683,6 +1684,19 @@ def _jacobi(n, alpha, beta, x, dx=0):
     out = jnp.where(n == 0, 1.0, out)
     out = jnp.where(n == 1, 0.5 * (2 * (alpha + 1) + (alpha + beta + 2) * (x - 1)), out)
     return c * out
+
+
+@_jacobi.defjvp
+def _jacobi_jvp(x, xdot):
+    (n, alpha, beta, x, dx) = x
+    (ndot, alphadot, betadot, xdot, dxdot) = xdot
+    f = _jacobi(n, alpha, beta, x, dx)
+    df = _jacobi(n, alpha, beta, x, dx + 1)
+    # in theory n, alpha, beta, dx aren't differentiable (they're integers)
+    # but marking them as non-diff argnums seems to cause escaped tracer values.
+    # probably a more elegant fix, but just setting those derivatives to zero seems
+    # to work fine.
+    return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
 
 
 def zernike_norm(l, m):

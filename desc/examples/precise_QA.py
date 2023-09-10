@@ -53,11 +53,13 @@ for k in range(1, eq.M + 1):
     objective = ObjectiveFunction(
         (
             # pass in the grid we defined, and don't forget the target helicity!
-            QuasisymmetryTwoTerm(helicity=(1, 0), grid=grid, normalize=False),
-            AspectRatio(target=6, weight=1e1, normalize=False),
+            QuasisymmetryTwoTerm(
+                eq=eqfam[-1], helicity=(1, 0), grid=grid, normalize=False
+            ),
+            AspectRatio(eq=eqfam[-1], target=6, weight=1e1, normalize=False),
             # this targets a profile pointwise, which is ok because we expect it to be
             # fairly flat
-            RotationalTransform(target=0.42, weight=10, normalize=False),
+            RotationalTransform(eq=eqfam[-1], target=0.42, weight=10, normalize=False),
             # we could optionally set normalize=True which would compute things in
             # normalized/dimensionless units, effectively changing the weights
         ),
@@ -80,12 +82,12 @@ for k in range(1, eq.M + 1):
     # next we create the constraints, using the mode number arrays just created
     # if we didn't pass those in, it would fix all the modes (like for the profiles)
     constraints = (
-        ForceBalance(),  # J x B - grad(p) = 0
-        FixBoundaryR(modes=R_modes),
-        FixBoundaryZ(modes=Z_modes),
-        FixPressure(),
-        FixCurrent(),
-        FixPsi(),
+        ForceBalance(eq=eqfam[-1]),  # J x B - grad(p) = 0
+        FixBoundaryR(eq=eqfam[-1], modes=R_modes),
+        FixBoundaryZ(eq=eqfam[-1], modes=Z_modes),
+        FixPressure(eq=eqfam[-1]),
+        FixCurrent(eq=eqfam[-1]),
+        FixPsi(eq=eqfam[-1]),
     )
     # this is the default optimizer, which re-solves the equilibrium at each step
     optimizer = Optimizer("proximal-lsq-exact")

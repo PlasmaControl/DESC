@@ -1,6 +1,7 @@
-"""Augmented Langrangian for scalar valued objectives."""
+"""Augmented Lagrangian for scalar valued objectives."""
 
-from scipy.optimize import NonlinearConstraint, OptimizeResult
+from scipy.optimize import BFGS, NonlinearConstraint, OptimizeResult
+from termcolor import colored
 
 from desc.backend import jnp
 from desc.optimize.fmin_scalar import fmintr
@@ -18,7 +19,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     grad,
-    hess,
+    hess="bfgs",
     bounds=(-jnp.inf, jnp.inf),
     constraint=None,
     args=(),
@@ -31,7 +32,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     maxiter=None,
     options={},
 ):
-    """Minimize a function with constraints using an augmented Langrangian method.
+    """Minimize a function with constraints using an augmented Lagrangian method.
 
     Parameters
     ----------
@@ -73,7 +74,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         If None, the termination by this condition is disabled.
     gtol : float or None, optional
         Absolute tolerance for termination by the norm of the gradient.
-        Optimizer teriminates when ``max(abs(g)) < gtol``.
+        Optimizer terminates when ``max(abs(g)) < gtol``.
         If None, the termination by this condition is disabled.
     ctol : float, optional
         Tolerance for stopping based on infinity norm of the constraint violation.
@@ -128,11 +129,27 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
 
     def laggrad(z, y, mu, *args):
         c = constraint_wrapped.fun(z, *args)
-        J = constraint_wrapped.jac(z, *args)
-        return grad_wrapped(z, *args) - jnp.dot(y, J) + mu * jnp.dot(c, J)
+        yJ = constraint_wrapped.vjp(y - mu * c, z, *args)
+        return grad_wrapped(z, *args) - yJ
 
-    assert callable(hess_wrapped)
-    if callable(constraint_wrapped.hess):
+    if isinstance(hess_wrapped, str) and hess_wrapped.lower() == "bfgs":
+        hess_init_scale = options.pop("hessian_init_scale", "auto")
+        hess_exception_strategy = options.pop(
+            "hessian_exception_strategy", "damp_update"
+        )
+        hess_min_curvature = options.pop("hessian_minimum_curvature", None)
+        hess_wrapped = BFGS(
+            hess_exception_strategy, hess_min_curvature, hess_init_scale
+        )
+    if isinstance(hess_wrapped, BFGS):
+        if hasattr(hess_wrapped, "n"):  # assume its already been initialized
+            assert hess_wrapped.approx_type == "hess"
+            assert hess.n == z0.size
+        else:
+            hess_wrapped.initialize(z0.size, "hess")
+        laghess = hess_wrapped
+
+    elif callable(constraint_wrapped.hess) and callable(hess_wrapped):
 
         def laghess(z, y, mu, *args):
             c = constraint_wrapped.fun(z, *args)
@@ -142,7 +159,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
             Hc2 = constraint_wrapped.hess(z, c)
             return Hf - Hc1 + mu * (Hc2 + jnp.dot(Jc.T, Jc))
 
-    else:
+    elif callable(hess_wrapped):
 
         def laghess(z, y, mu, *args):
             H = hess_wrapped(z, *args)
@@ -150,8 +167,8 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
             # ignoring higher order derivatives of constraints for now
             return H + mu * jnp.dot(J.T, J)
 
-    # TODO: figure out how to let BFGS maintain state between subproblems, otherwise
-    # it doesn't really converge
+    else:
+        raise ValueError(colored("hess should either be a callable or 'bfgs'", "red"))
 
     nfev = 0
     ngev = 0

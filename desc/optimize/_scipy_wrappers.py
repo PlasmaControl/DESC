@@ -44,7 +44,7 @@ from .utils import (
         + "optimize.minimize-trustexact.html",
         "Trust region method using conjugate gradient to solve subproblem. See "
         + "https://docs.scipy.org/doc/scipy/reference/optimize.minimize-trustncg.html",
-        "Trust region method using Kyrlov iterations to solve subproblem. See "
+        "Trust region method using Krylov iterations to solve subproblem. See "
         + "https://docs.scipy.org/doc/scipy/reference/"
         + "optimize.minimize-trustkrylov.html",
     ],
@@ -131,7 +131,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             f = np.array([])
         if not f.size:
             func_allx.append(x)
-            f = fun(x)
+            f = fun(x, objective.constants)
             func_allf.append(f)
         return f
 
@@ -144,7 +144,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             g = np.array([])
         if not g.size:
             grad_allx.append(x)
-            g = grad(x)
+            g = grad(x, objective.constants)
             grad_allf.append(g)
         return g * scale
 
@@ -157,7 +157,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             H = np.array([[]])
         if not H.size:
             hess_allx.append(x)
-            H = hess(x)
+            H = hess(x, objective.constants)
             hess_allf.append(H)
         return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
 
@@ -372,14 +372,14 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
     def fun_wrapped(x):
         # record all the xs and fs we see
         fun_allx.append(x)
-        f = jnp.atleast_1d(fun(x))
+        f = jnp.atleast_1d(fun(x, objective.constants))
         fun_allf.append(f)
         return f
 
     def jac_wrapped(x):
-        # record all the xs and jacs we see
+        # record all the xs and jacobians we see
         jac_allx.append(x)
-        J = jac(x)
+        J = jac(x, objective.constants)
         jac_allf.append(J)
         callback(x)
         return J
@@ -595,7 +595,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
                 f = np.array([])
             if not f.size:
                 cfun_allx.append(x)
-                f = constraint.compute_scaled(x)
+                f = constraint.compute_scaled(x, constraint.constants)
                 cfun_allf.append(f)
             return f
 
@@ -607,7 +607,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
                 J = np.array([[]])
             if not J.size:
                 cjac_allx.append(x)
-                J = constraint.jac_scaled(x)
+                J = constraint.jac_scaled(x, constraint.constants)
                 cjac_allf.append(J)
             return J * scale
 
@@ -624,7 +624,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
 
     def constraint_violation(xs):
         if constraint is not None:
-            f = constraint.compute_scaled_error(xs * scale)
+            f = constraint.compute_scaled_error(xs * scale, constraint.constants)
         else:
             f = 0.0
         return jnp.max(jnp.abs(f))
@@ -660,7 +660,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             f = np.array([])
         if not f.size:
             func_allx.append(x)
-            f = fun(x)
+            f = fun(x, objective.constants)
             func_allf.append(f)
         return f
 
@@ -673,7 +673,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             g = np.array([])
         if not g.size:
             grad_allx.append(x)
-            g = grad(x)
+            g = grad(x, objective.constants)
             grad_allf.append(g)
         return g * scale
 
@@ -686,7 +686,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             H = np.array([[]])
         if not H.size:
             hess_allx.append(x)
-            H = hess(x)
+            H = hess(x, objective.constants)
             hess_allf.append(H)
         return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
 

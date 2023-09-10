@@ -123,12 +123,30 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
     else:  # using BFGS
         conhess_wrapped = constraint.hess
 
+    if hasattr(constraint, "vjp"):
+
+        def vjp_wrapped(y, z, *args):
+            x, s = z2xs(z)
+            I = jnp.eye(nslack)
+            Js = jnp.zeros((ncon, nslack))
+            Js = put(Js, Index[ineq_mask, :], -I)
+            vjpx = constraint.vjp(y, x, *args)
+            vjps = jnp.dot(y, Js)
+            return jnp.concatenate([vjpx, vjps])
+
+    else:
+
+        def vjp_wrapped(y, z, *args):
+            J = conjac_wrapped(z, *args)
+            return jnp.dot(y, J)
+
     newcon = copy.copy(constraint)
     newcon.fun = confun_wrapped
     newcon.jac = conjac_wrapped
     newcon.hess = conhess_wrapped
     newcon.lb = target
     newcon.ub = target
+    newcon.vjp = vjp_wrapped
 
     return z0, fun_wrapped, grad_wrapped, hess_wrapped, newcon, zbounds, z2xs
 
@@ -138,7 +156,7 @@ def gershgorin_bounds(H):
     """Upper and lower bounds for eigenvalues of a square matrix.
 
     Given a square matrix ``H`` compute upper
-    and lower bounds for its eigenvalues (Gregoshgorin Bounds).
+    and lower bounds for its eigenvalues (Gershgorin Bounds).
     Defined ref. [1].
 
     References
@@ -219,7 +237,7 @@ def _cholmod(A, maxiter=4):
         khigh = isnan * khigh + (1 - isnan) * kbest
         kbest = (klow + khigh) // 2
         # if it succeeded, mark it as the best so far
-        Lbest = cond(isnan, lambda _: Lbest, lambda _: L, 1)
+        Lbest = cond(isnan, lambda _: Lbest, lambda _: L, None)
     return Lbest
 
 
@@ -247,6 +265,7 @@ def chol(A):
     return L
 
 
+@jit
 def evaluate_quadratic_form_hess(H, g, x, diag=None):
     """Compute values of a quadratic function arising in trust region subproblem.
 
@@ -277,6 +296,7 @@ def evaluate_quadratic_form_hess(H, g, x, diag=None):
     return l + 1 / 2 * q
 
 
+@jit
 def evaluate_quadratic_form_jac(J, g, s, diag=None):
     """Compute values of a quadratic function arising in least squares.
 
@@ -462,11 +482,12 @@ def check_termination(
     return success, message
 
 
+@jit
 def compute_jac_scale(A, prev_scale_inv=None):
     """Compute scaling factor based on column norm of Jacobian matrix."""
     scale_inv = jnp.sum(A**2, axis=0) ** 0.5
     scale_inv = jnp.where(
-        scale_inv < np.finfo(A.dtype).eps * max(A.shape), 1, scale_inv
+        scale_inv < jnp.finfo(A.dtype).eps * max(A.shape), 1, scale_inv
     )
 
     if prev_scale_inv is not None:
@@ -474,11 +495,12 @@ def compute_jac_scale(A, prev_scale_inv=None):
     return 1 / scale_inv, scale_inv
 
 
+@jit
 def compute_hess_scale(H, prev_scale_inv=None):
     """Compute scaling factors based on diagonal of Hessian matrix."""
     scale_inv = jnp.abs(jnp.diag(H))
     scale_inv = jnp.where(
-        scale_inv < np.finfo(H.dtype).eps * max(H.shape), 1, scale_inv
+        scale_inv < jnp.finfo(H.dtype).eps * max(H.shape), 1, scale_inv
     )
 
     if prev_scale_inv is not None:

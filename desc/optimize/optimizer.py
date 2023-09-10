@@ -6,8 +6,13 @@ import numpy as np
 from termcolor import colored
 
 from desc.io import IOAble
-from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
-from desc.objectives.utils import combine_args, maybe_add_self_consistency
+from desc.objectives import (
+    FixCurrent,
+    FixIota,
+    ObjectiveFunction,
+    maybe_add_self_consistency,
+)
+from desc.objectives.utils import combine_args
 from desc.utils import Timer
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
@@ -144,17 +149,17 @@ class Optimizer(IOAble):
 
         linear_constraints, nonlinear_constraint = _parse_constraints(constraints)
         objective, nonlinear_constraint = _maybe_wrap_nonlinear_constraints(
-            objective, nonlinear_constraint, self.method, options
+            eq, objective, nonlinear_constraint, self.method, options
         )
 
         if not isinstance(objective, ProximalProjection):
             # need to include self consistency constraints
-            linear_constraints = maybe_add_self_consistency(linear_constraints)
+            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
         if len(linear_constraints):
-            objective = LinearConstraintProjection(objective, linear_constraints)
+            objective = LinearConstraintProjection(objective, linear_constraints, eq=eq)
             if nonlinear_constraint is not None:
                 nonlinear_constraint = LinearConstraintProjection(
-                    nonlinear_constraint, linear_constraints
+                    nonlinear_constraint, linear_constraints, eq=eq
                 )
         if not objective.built:
             objective.build(eq, verbose=verbose)
@@ -327,7 +332,9 @@ def _parse_constraints(constraints):
     return linear_constraints, nonlinear_constraints
 
 
-def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, options):
+def _maybe_wrap_nonlinear_constraints(
+    eq, objective, nonlinear_constraint, method, options
+):
     """Use ProximalProjection to handle nonlinear constraints."""
     wrapper, method = _parse_method(method)
     if nonlinear_constraint is None:
@@ -342,7 +349,7 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
                 f"""
                 Nonlinear constraints detected but method {method} does not support
                 nonlinear constraints. Defaulting to method "proximal-{method}"
-                In the future this will raise an error. To ignore this warnging, specify
+                In the future this will raise an error. To ignore this warning, specify
                 a wrapper "proximal-" to convert the nonlinearly constrained problem
                 into an unconstrained one.
                 """
@@ -357,6 +364,7 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
             constraint=nonlinear_constraint,
             perturb_options=perturb_options,
             solve_options=solve_options,
+            eq=eq,
         )
         nonlinear_constraint = None
     return objective, nonlinear_constraint
@@ -397,7 +405,7 @@ def _get_default_tols(
     stoptol.setdefault("ctol", options.pop("ctol", 1e-4))
     stoptol.setdefault("maxiter", options.pop("maxiter", 100))
 
-    # if we define an "iteration" as a sucessful step, it can take a few function
+    # if we define an "iteration" as a successful step, it can take a few function
     # evaluations per iteration
     stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
     # pretty much all the methods only evaluate derivatives once per iteration
@@ -450,7 +458,6 @@ def register_optimizer(
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
         settings.
-
 
     Parameters
     ----------

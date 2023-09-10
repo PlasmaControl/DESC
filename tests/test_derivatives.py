@@ -107,7 +107,7 @@ class TestDerivative:
 
     @pytest.mark.unit
     def test_block_jacobian(self):
-        """Test calculation of jacoiban using blocked method."""
+        """Test calculation of jacobian using blocked method."""
         rando = default_rng(seed=0)
         A = rando.random((19, 17))
 
@@ -157,6 +157,7 @@ class TestJVP:
     dx = np.array([1, 2, 3]).astype(float)
     dc1 = np.array([3, 4, 5]).astype(float)
     dc2 = np.array([-3, 1, -2]).astype(float)
+    y = np.array([1, 2, 3, 4])
 
     @pytest.mark.unit
     def test_autodiff_jvp(self):
@@ -361,3 +362,15 @@ class TestJVP:
         np.testing.assert_allclose(
             df, np.array([-33858.0, -55584.0, -77310.0, -99036.0]), rtol=1e-4
         )
+
+    @pytest.mark.unit
+    def test_vjp(self):
+        """Tests using AD and FD for VJP calculation."""
+        df = AutoDiffDerivative.compute_vjp(
+            self.fun, 0, self.y, self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, np.array([180.0, 3360.0, 19440.0]))
+        df = FiniteDiffDerivative.compute_vjp(
+            self.fun, 0, self.y, self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, np.array([180.0, 3360.0, 19440.0]), rtol=1e-4)

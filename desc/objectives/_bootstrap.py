@@ -7,7 +7,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -21,7 +20,7 @@ class BootstrapRedlConsistency(_Objective):
 
     This objective function penalizes the difference between the MHD
     and neoclassical profiles of parallel current, using the Redl
-    formula for the boostrap current. The scalar objective is defined as
+    formula for the bootstrap current. The scalar objective is defined as
 
     f = ½ ∫dρ [(⟨J⋅B⟩_MHD - ⟨J⋅B⟩_Redl) / (J_ref B_ref)]²
 
@@ -77,7 +76,6 @@ class BootstrapRedlConsistency(_Objective):
         helicity=(1, 0),
         name="Bootstrap current self-consistency (Redl)",
     ):
-
         if target is None and bounds is None:
             target = 0
         assert (len(helicity) == 2) and (int(helicity[1]) == helicity[1])
@@ -94,7 +92,7 @@ class BootstrapRedlConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -107,13 +105,14 @@ class BootstrapRedlConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=np.linspace(1 / 5, 1, 5),
+                rho=np.linspace(1 / eq.L, 1, eq.L) - 1 / (2 * eq.L),
             )
         else:
             grid = self._grid
@@ -123,7 +122,11 @@ class BootstrapRedlConsistency(_Objective):
         ), "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)"
         self._dim_f = grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         if eq.electron_temperature is None:
             raise RuntimeError(
@@ -176,8 +179,14 @@ class BootstrapRedlConsistency(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+            "helicity": self._helicity,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -198,27 +207,28 @@ class BootstrapRedlConsistency(_Objective):
             Bootstrap current self-consistency residual on each rho grid point.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
-            helicity=self.helicity,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+            helicity=constants["helicity"],
         )
-
-        return compress(
-            self._transforms["grid"],
-            data["<J*B>"] - data["<J*B> Redl"],
-            surface_label="rho",
+        return constants["transforms"]["grid"].compress(
+            data["<J*B>"] - data["<J*B> Redl"]
         )
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = compress(
-            self._transforms["grid"],
-            self._transforms["grid"].spacing[:, 0],
-            surface_label="rho",
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
+        w = constants["transforms"]["grid"].compress(
+            constants["transforms"]["grid"].spacing[:, 0]
         )
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 

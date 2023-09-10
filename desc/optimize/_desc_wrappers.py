@@ -11,19 +11,23 @@ from .stochastic import sgd
 
 
 @register_optimizer(
-    name="fmin-auglag",
-    description="Augmented Lagrangian method with trust region subproblem.",
+    name=["fmin-auglag", "fmin-auglag-bfgs"],
+    description=[
+        "Augmented Lagrangian method with trust region subproblem.",
+        "Augmented Lagrangian method with trust region subproblem. Uses BFGS to"
+        + " approximate hessian",
+    ],
     scalar=True,
     equality_constraints=True,
     inequality_constraints=True,
     stochastic=False,
-    hessian=True,
+    hessian=[True, False],
     GPU=True,
 )
 def _optimize_desc_aug_lagrangian(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
-    """Wrapper for desc.optimize.fmin_lag_ls_stel.
+    """Wrapper for desc.optimize.fmin_auglag.
 
     Parameters
     ----------
@@ -71,6 +75,7 @@ def _optimize_desc_aug_lagrangian(
     options["max_nfev"] = stoptol["max_nfev"]
     options["max_ngev"] = stoptol["max_ngev"]
     options["max_nhev"] = stoptol["max_nhev"]
+    hess = objective.hess if "bfgs" not in method else "bfgs"
 
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
@@ -80,6 +85,7 @@ def _optimize_desc_aug_lagrangian(
             ub,
             constraint.jac_scaled,
         )
+        constraint_wrapped.vjp = constraint.vjp_scaled
     else:
         constraint_wrapped = None
 
@@ -87,7 +93,7 @@ def _optimize_desc_aug_lagrangian(
         objective.compute_scalar,
         x0=x0,
         grad=objective.grad,
-        hess=objective.hess,
+        hess=hess,
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
         args=(),
@@ -117,7 +123,7 @@ def _optimize_desc_aug_lagrangian(
 def _optimize_desc_aug_lagrangian_least_squares(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
-    """Wrapper for desc.optimize.fmin_lag_ls_stel.
+    """Wrapper for desc.optimize.lsq_auglag.
 
     Parameters
     ----------
@@ -264,7 +270,7 @@ def _optimize_desc_least_squares(
         objective.compute_scaled_error,
         x0=x0,
         jac=objective.jac_scaled,
-        args=(),
+        args=(objective.constants,),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -442,7 +448,7 @@ def _optimize_desc_stochastic(
         objective.compute_scalar,
         x0=x0,
         grad=objective.grad,
-        args=(),
+        args=(objective.constants,),
         method=method,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],

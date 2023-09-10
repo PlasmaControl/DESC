@@ -80,6 +80,13 @@ class TestProfiles:
         sp4 = mp.to_spline()
         np.testing.assert_allclose(sp3(x), sp4(x), rtol=1e-5, atol=1e-2)
 
+        np.testing.assert_allclose(pp(x, dt=1), 0)
+        np.testing.assert_allclose(pp(x, dz=1), 0)
+        np.testing.assert_allclose(sp(x, dt=1), 0)
+        np.testing.assert_allclose(sp(x, dz=1), 0)
+        np.testing.assert_allclose(mp(x, dt=1), 0)
+        np.testing.assert_allclose(mp(x, dz=1), 0)
+
     @pytest.mark.unit
     def test_PowerSeriesProfile_even_sym(self):
         """Test that even symmetry is enforced properly in PowerSeriesProfile."""

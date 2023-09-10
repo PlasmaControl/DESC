@@ -8,6 +8,7 @@ from desc.backend import jnp, put
 from desc.basis import FourierSeries
 from desc.compute import rpz2xyz
 from desc.grid import LinearGrid
+from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
 from desc.utils import copy_coeffs
@@ -201,6 +202,36 @@ class FourierRZCurve(Curve):
                 f"Z_n should have the same size as the basis, got {len(new)} for "
                 + f"basis with {self.Z_basis.num_modes} modes"
             )
+
+    @classmethod
+    def from_input_file(cls, path):
+        """Create a axis curve from Fourier coefficients in a DESC or VMEC input file.
+
+        Parameters
+        ----------
+        path : Path-like or str
+            Path to DESC or VMEC input file.
+
+        Returns
+        -------
+        curve : FourierRZToroidalCurve
+            Axis with given Fourier coefficients.
+
+        """
+        f = open(path)
+        if "&INDATA" in f.readlines()[0]:  # vmec input, convert to desc
+            inputs = InputReader.parse_vmec_inputs(f)[-1]
+        else:
+            inputs = InputReader().parse_inputs(f)[-1]
+        curve = cls(
+            inputs["axis"][:, 1],
+            inputs["axis"][:, 2],
+            inputs["axis"][:, 0].astype(int),
+            inputs["axis"][:, 0].astype(int),
+            inputs["NFP"],
+            inputs["sym"],
+        )
+        return curve
 
 
 class FourierXYZCurve(Curve):

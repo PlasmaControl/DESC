@@ -13,9 +13,12 @@ from .stochastic import sgd
 @register_optimizer(
     name=["fmin-auglag", "fmin-auglag-bfgs"],
     description=[
-        "Augmented Lagrangian method with trust region subproblem.",
-        "Augmented Lagrangian method with trust region subproblem. Uses BFGS to"
-        + " approximate hessian",
+        "Augmented Lagrangian trust region method for minimizing scalar valued "
+        + "multivariate function. "
+        + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.fmin_auglag.html",  # noqa: E501
+        "Augmented Lagrangian trust region method for minimizing scalar valued "
+        + "multivariate function. Uses BFGS to approximate Hessian. "
+        + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.fmin_auglag.html",  # noqa: E501
     ],
     scalar=True,
     equality_constraints=True,
@@ -37,8 +40,8 @@ def _optimize_desc_aug_lagrangian(
         Constraint to satisfy
     x0 : ndarray
         Starting point.
-    method : str
-        Name of the method to use. Any of the options in scipy.optimize.least_squares.
+    method : {"fmin-auglag", "fmin-auglag-bfgs"}
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. An alternative
@@ -113,8 +116,8 @@ def _optimize_desc_aug_lagrangian(
 
 @register_optimizer(
     name="lsq-auglag",
-    description="Least Squares Augmented Lagrangian approach "
-    + "to constrained optimization",
+    description="Least squares augmented Lagrangian for constrained optimization"
+    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.lsq_auglag.html",  # noqa: E501
     scalar=False,
     equality_constraints=True,
     inequality_constraints=True,
@@ -135,8 +138,8 @@ def _optimize_desc_aug_lagrangian_least_squares(
         Constraint to satisfy
     x0 : ndarray
         Starting point.
-    method : str
-        Name of the method to use. Any of the options in scipy.optimize.least_squares.
+    method : {"lsq-auglag"}
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. An alternative
@@ -205,8 +208,8 @@ def _optimize_desc_aug_lagrangian_least_squares(
 
 @register_optimizer(
     name="lsq-exact",
-    description="Trust region least squares method, "
-    + "similar to the `trf` method in scipy",
+    description="Trust region least squares, similar to the `trf` method in scipy"
+    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.lsqtr.html",  # noqa: E501
     scalar=False,
     equality_constraints=False,
     inequality_constraints=False,
@@ -227,8 +230,8 @@ def _optimize_desc_least_squares(
         Constraint to satisfy - not supported by this method
     x0 : ndarray
         Starting point.
-    method : str
-        Name of the method to use. Any of the options in scipy.optimize.least_squares.
+    method : {"lsq-exact"}
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. An alternative
@@ -329,7 +332,7 @@ def _optimize_desc_fmin_scalar(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use. Any of the options in scipy.optimize.least_squares.
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. An alternative
@@ -392,7 +395,8 @@ def _optimize_desc_fmin_scalar(
 
 @register_optimizer(
     name="sgd",
-    description="Stochastic gradient descent with Nesterov momentum",
+    description="Stochastic gradient descent with Nesterov momentum"
+    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
     scalar=True,
     equality_constraints=False,
     inequality_constraints=False,
@@ -414,7 +418,7 @@ def _optimize_desc_stochastic(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use. Any of the options in scipy.optimize.least_squares.
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. An alternative

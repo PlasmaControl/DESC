@@ -460,11 +460,11 @@ class PlasmaVesselDistance(_Objective):
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-    surface_grid : Grid, ndarray, optional
+    surface_grid : Grid
         Collocation grid containing the nodes to evaluate surface geometry at.
-    plasma_grid : Grid, ndarray, optional
+    plasma_grid : Grid
         Collocation grid containing the nodes to evaluate plasma geometry at.
-    use_softmin: Bool, use softmin or hard min.
+    use_softmin: bool, use softmin or hard min.
     alpha: float, parameter used for softmin. The larger alpha, the closer the softmin
         approximates the hardmin. softmin -> hardmin as alpha -> infinity.
         if alpha*array < 1, the underlying softmin will automatically multiply
@@ -1119,11 +1119,12 @@ class PlasmaCoilFeasibilty(_Objective):
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-    surface_grid : Grid, ndarray, optional
+    surface_grid : Grid
         Collocation grid containing the nodes to evaluate surface geometry at.
-    plasma_grid : Grid, ndarray, optional
+    plasma_grid : Grid
         Collocation grid containing the nodes to evaluate plasma geometry at.
-    use_softmin: Bool, use softmin or hard min.
+    use_softmin: bool,
+        use softmin or hard min.
     alpha: float, parameter used for softmin. The larger alpha, the closer the softmin
         approximates the hardmin. softmin -> hardmin as alpha -> infinity.
         if alpha*array < 1, the underlying softmin will automatically multiply

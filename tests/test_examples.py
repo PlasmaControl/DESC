@@ -499,8 +499,8 @@ def test_simsopt_QH_comparison():
     )
     # Cancel factor of 1/2 in desc objective which is not present in simsopt:
     aspect_weight = np.sqrt(2)
-    # Also scale QS weight so objective is approximately independent of grid resolution:
-    qs_weight = 1 / (8 * (np.pi**4))
+    # Also scale QS weight to match simsopt/VMEC
+    qs_weight = np.sqrt(1 / (8 * (np.pi**4)))
     objective = ObjectiveFunction(
         (
             AspectRatio(

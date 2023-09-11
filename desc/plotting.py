@@ -705,6 +705,7 @@ def plot_3d(
     all_field_periods=True,
     ax=None,
     return_data=False,
+    use_colorbar=True,
     **kwargs,
 ):
     """Plot 3D surfaces.
@@ -839,7 +840,8 @@ def plot_3d(
         cstride=1,
         alpha=alpha,
     )
-    fig.colorbar(m, ax=ax)
+    if use_colorbar:
+        fig.colorbar(m, ax=ax)
 
     ax.set_xlabel(_AXIS_LABELS_XYZ[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(_AXIS_LABELS_XYZ[1], fontsize=ylabel_fontsize)

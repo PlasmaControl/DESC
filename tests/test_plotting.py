@@ -778,11 +778,49 @@ def test_plot_boozer_modes():
     """Test plotting boozer spectrum."""
     eq = get("WISTELL-A")
     fig, ax, data = plot_boozer_modes(
-        eq, M_booz=eq.M, N_booz=eq.N, num_modes=7, return_data=True
+        eq, M_booz=eq.M, N_booz=eq.N, num_modes=7, return_data=True, norm=True
     )
     ax.set_ylim([1e-6, 5e0])
     for string in ["|B|_mn", "B modes", "rho"]:
         assert string in data.keys()
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_boozer_modes_breaking_only():
+    """Test plotting symmetry breaking boozer spectrum."""
+    eq = get("WISTELL-A")
+    fig, ax = plot_boozer_modes(
+        eq,
+        M_booz=eq.M,
+        N_booz=eq.N,
+        helicity=(1, -eq.NFP),
+        norm=True,
+        num_modes=7,
+    )
+    ax.set_ylim([1e-6, 5e0])
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_boozer_modes_max():
+    """Test plotting symmetry breaking boozer spectrum."""
+    eq = get("WISTELL-A")
+    fig, ax = plot_boozer_modes(
+        eq,
+        M_booz=eq.M,
+        N_booz=eq.N,
+        helicity=(1, -eq.NFP),
+        max_only=True,
+        label="WISTELL-A",
+        color="r",
+        norm=True,
+    )
+    ax.set_ylim([1e-6, 5e0])
     return fig
 
 

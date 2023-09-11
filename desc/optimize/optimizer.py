@@ -152,15 +152,6 @@ class Optimizer(IOAble):
             eq, objective, nonlinear_constraint, self.method, options
         )
 
-        if not isinstance(objective, ProximalProjection):
-            # need to include self consistency constraints
-            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
-        if len(linear_constraints):
-            objective = LinearConstraintProjection(objective, linear_constraints, eq=eq)
-            if nonlinear_constraint is not None:
-                nonlinear_constraint = LinearConstraintProjection(
-                    nonlinear_constraint, linear_constraints, eq=eq
-                )
         if not objective.built:
             objective.build(eq, verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
@@ -169,6 +160,18 @@ class Optimizer(IOAble):
             objective, nonlinear_constraint = combine_args(
                 objective, nonlinear_constraint
             )
+        if not isinstance(objective, ProximalProjection):
+            # need to include self consistency constraints
+            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
+        if len(linear_constraints):
+            objective = LinearConstraintProjection(objective, linear_constraints, eq=eq)
+            objective.build()
+            if nonlinear_constraint is not None:
+                nonlinear_constraint = LinearConstraintProjection(
+                    nonlinear_constraint, linear_constraints, eq=eq
+                )
+                nonlinear_constraint.build()
+
         if len(linear_constraints) and not isinstance(x_scale, str):
             # need to project x_scale down to correct size
             Z = objective._Z

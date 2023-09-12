@@ -44,7 +44,7 @@ objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond,
 ObjFunction = ObjectiveFunction([objective])
 ObjFunction.build()
 
-ObjFunction.compile()
+ObjFunction.compile(mode="bfgs")
 
 gradient = ObjFunction.grad(ObjFunction.x(eq))
 print(gradient)

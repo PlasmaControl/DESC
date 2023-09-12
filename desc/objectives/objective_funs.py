@@ -1052,30 +1052,49 @@ class _Objective(IOAble, ABC):
             else:
                 w = constants["quad_weights"]
 
-            # target == 0 means probably indicates f is some sort of error metric,
+            # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean
-            f = jnp.abs(f) if jnp.all(self.target == 0) else f
+            abserr = jnp.all(self.target == 0)
+            f = jnp.abs(f) if abserr else f
             fmax = jnp.max(f)
             fmin = jnp.min(f)
             fmean = jnp.mean(f * w) / jnp.mean(w)
 
-            print("Maximum " + self._print_value_fmt.format(fmax) + self._units)
-            print("Minimum " + self._print_value_fmt.format(fmin) + self._units)
-            print("Average " + self._print_value_fmt.format(fmean) + self._units)
+            print(
+                "Maximum "
+                + ("absolute " if abserr else "")
+                + self._print_value_fmt.format(fmax)
+                + self._units
+            )
+            print(
+                "Minimum "
+                + ("absolute " if abserr else "")
+                + self._print_value_fmt.format(fmin)
+                + self._units
+            )
+            print(
+                "Average "
+                + ("absolute " if abserr else "")
+                + self._print_value_fmt.format(fmean)
+                + self._units
+            )
 
             if self._normalize and self._units != "(dimensionless)":
                 print(
                     "Maximum "
+                    + ("absolute " if abserr else "")
                     + self._print_value_fmt.format(fmax / self.normalization)
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
+                    + ("absolute " if abserr else "")
                     + self._print_value_fmt.format(fmin / self.normalization)
                     + "(normalized)"
                 )
                 print(
                     "Average "
+                    + ("absolute " if abserr else "")
                     + self._print_value_fmt.format(fmean / self.normalization)
                     + "(normalized)"
                 )

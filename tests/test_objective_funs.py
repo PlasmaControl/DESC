@@ -739,15 +739,15 @@ def test_profile_objective_print(capsys):
         assert out.out == corr_out
 
     iota = eq.compute("iota", grid=grid)["iota"]
-    obj = RotationalTransform(eq=eq, grid=grid)
+    obj = RotationalTransform(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, iota)
     shear = eq.compute("shear", grid=grid)["shear"]
-    obj = Shear(eq=eq, grid=grid)
+    obj = Shear(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, shear)
     curr = eq.compute("current", grid=grid)["current"]
-    obj = ToroidalCurrent(eq=eq, grid=grid)
+    obj = ToroidalCurrent(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, curr, normalize=True)
 

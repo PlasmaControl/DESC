@@ -182,6 +182,3 @@ eq, result = eq.solve(
 fam.append(eq)
 fam.save(fname + ".h5")
 print("equlibrium error: {:.2e}".format(eq_error(eq)))
-
-# save wout file
-VMECIO.save(eq, "wout_" + fname + ".nc", surfs=256)

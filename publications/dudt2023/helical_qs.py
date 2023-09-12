@@ -17,7 +17,7 @@ from desc.objectives import (
     StraightBmaxContour,
 )
 from desc.objectives.utils import get_fixed_boundary_constraints, get_NAE_constraints
-from desc.vmec import VMECIO
+
 
 fname = "helical_qs"
 sym = True

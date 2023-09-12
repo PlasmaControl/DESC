@@ -6,6 +6,12 @@ in when calling ``Profile.compute``.
 - Refactors most of the optimizer subproblems to use JAX control flow, allowing them
 to run more efficiently on the GPU.
 - Adds ``'shear'`` as a compute quantity and ``Shear`` as an objective function.
+- All objective function values should now be approximately independent of the grid
+resolution. Previously this was only true when objectives had `normalize=True`
+- `Objective.print_value` Now prints max/min/avg for most objectives, and it should be
+clear whether it is printing the actual value of the quantity or the error between
+the objective and its target.
+
 
 v0.10.0
 -------

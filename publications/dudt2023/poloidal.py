@@ -17,7 +17,6 @@ from desc.objectives import (
 )
 from desc.objectives.utils import get_fixed_boundary_constraints, get_NAE_constraints
 
-
 fname = "poloidal"
 sym = True
 NFP = 2

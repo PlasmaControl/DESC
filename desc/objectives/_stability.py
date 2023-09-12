@@ -2,7 +2,6 @@
 
 import numpy as np
 
-from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid
@@ -54,8 +53,7 @@ class MercierStability(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
+    _coordinates = "r"
     _units = "(Wb^-2)"
     _print_value_fmt = "Mercier Stability: {:10.3e} "
 
@@ -126,11 +124,11 @@ class MercierStability(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -189,40 +187,6 @@ class MercierStability(_Objective):
         )
         return constants["transforms"]["grid"].compress(data["D_Mercier"])
 
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = constants["transforms"]["grid"].compress(
-            constants["transforms"]["grid"].spacing[:, 0]
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
-
-    def print_value(self, *args, **kwargs):
-        """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
-
-        if self._normalize:
-            print(
-                "Maximum "
-                + self._print_value_fmt.format(jnp.max(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Minimum "
-                + self._print_value_fmt.format(jnp.min(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Average "
-                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
-                + "(normalized)"
-            )
-
 
 class MagneticWell(_Objective):
     """The magnetic well is a fast proxy for MHD stability.
@@ -265,8 +229,7 @@ class MagneticWell(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
+    _coordinates = "r"
     _units = "(dimensionless)"
     _print_value_fmt = "Magnetic Well: {:10.3e} "
 
@@ -336,11 +299,11 @@ class MagneticWell(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -394,20 +357,3 @@ class MagneticWell(_Objective):
             profiles=constants["profiles"],
         )
         return constants["transforms"]["grid"].compress(data["magnetic well"])
-
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = constants["transforms"]["grid"].compress(
-            constants["transforms"]["grid"].spacing[:, 0]
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
-
-    def print_value(self, *args, **kwargs):
-        """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)

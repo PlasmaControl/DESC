@@ -46,7 +46,6 @@ class AspectRatio(_Objective):
     """
 
     _scalar = True
-    _linear = False
     _units = "(dimensionless)"
     _print_value_fmt = "Aspect ratio: {:10.3e} "
 
@@ -106,11 +105,11 @@ class AspectRatio(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -179,7 +178,6 @@ class Elongation(_Objective):
     """
 
     _scalar = True
-    _linear = False
     _units = "(dimensionless)"
     _print_value_fmt = "Elongation: {:10.3e} "
 
@@ -239,11 +237,11 @@ class Elongation(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -311,7 +309,6 @@ class Volume(_Objective):
     """
 
     _scalar = True
-    _linear = False
     _units = "(m^3)"
     _print_value_fmt = "Plasma volume: {:10.3e} "
 
@@ -371,11 +368,11 @@ class Volume(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -477,8 +474,7 @@ class PlasmaVesselDistance(_Objective):
         Name of the objective function.
     """
 
-    _scalar = False
-    _linear = False
+    _coordinates = "rtz"
     _units = "(m)"
     _print_value_fmt = "Plasma-vessel distance: {:10.3e} "
 
@@ -495,7 +491,7 @@ class PlasmaVesselDistance(_Objective):
         plasma_grid=None,
         use_softmin=False,
         alpha=1.0,
-        name="plasma vessel distance",
+        name="plasma-vessel distance",
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -557,21 +553,21 @@ class PlasmaVesselDistance(_Objective):
         self._surface_coords = self._surface.compute(
             "x", grid=surface_grid, basis="xyz"
         )["x"]
-        self._profiles = get_profiles(
+        profiles = get_profiles(
             self._data_keys,
             obj=eq,
             grid=plasma_grid,
             has_axis=plasma_grid.axis.size or surface_grid.axis.size,
         )
-        self._transforms = get_transforms(
+        transforms = get_transforms(
             self._data_keys,
             obj=eq,
             grid=plasma_grid,
             has_axis=plasma_grid.axis.size or surface_grid.axis.size,
         )
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
             "surface_coords": self._surface_coords,
         }
 
@@ -581,7 +577,7 @@ class PlasmaVesselDistance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["a"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -620,30 +616,6 @@ class PlasmaVesselDistance(_Objective):
         else:  # do hardmin
             return d.min(axis=0)
 
-    def print_value(self, *args, **kwargs):
-        """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
-
-        if self._normalize:
-            print(
-                "Maximum "
-                + self._print_value_fmt.format(jnp.max(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Minimum "
-                + self._print_value_fmt.format(jnp.min(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Average "
-                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
-                + "(normalized)"
-            )
-
 
 class MeanCurvature(_Objective):
     """Target a particular value for the mean curvature.
@@ -680,8 +652,7 @@ class MeanCurvature(_Objective):
 
     """
 
-    _scalar = True
-    _linear = False
+    _coordinates = "rtz"
     _units = "(m^-1)"
     _print_value_fmt = "Mean curvature: {:10.3e} "
 
@@ -694,7 +665,7 @@ class MeanCurvature(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
-        name="mean-curvature",
+        name="mean curvature",
     ):
         if target is None and bounds is None:
             bounds = (-np.inf, 0)
@@ -724,7 +695,7 @@ class MeanCurvature(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
 
@@ -741,11 +712,11 @@ class MeanCurvature(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -754,7 +725,7 @@ class MeanCurvature(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["a"] / jnp.sqrt(self._dim_f)
+            self._normalization = 1 / scales["a"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -825,8 +796,7 @@ class PrincipalCurvature(_Objective):
 
     """
 
-    _scalar = True
-    _linear = False
+    _coordinates = "rtz"
     _units = "(m^-1)"
     _print_value_fmt = "Principal curvature: {:10.3e} "
 
@@ -869,7 +839,7 @@ class PrincipalCurvature(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
 
@@ -886,11 +856,11 @@ class PrincipalCurvature(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -899,7 +869,7 @@ class PrincipalCurvature(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["a"] / jnp.sqrt(self._dim_f)
+            self._normalization = 1 / scales["a"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -967,8 +937,7 @@ class BScaleLength(_Objective):
 
     """
 
-    _scalar = True
-    _linear = False
+    _coordinates = "rtz"
     _units = "(m)"
     _print_value_fmt = "Magnetic field scale length: {:10.3e} "
 
@@ -1028,11 +997,11 @@ class BScaleLength(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -1041,7 +1010,7 @@ class BScaleLength(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["R0"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["R0"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

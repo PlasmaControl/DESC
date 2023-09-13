@@ -826,6 +826,18 @@ def test_plot_boozer_modes_max():
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_boozer_modes_no_norm():
+    """Test plotting boozer spectrum without B0 and norm."""
+    eq = get("ESTELL")
+    fig, ax = plot_boozer_modes(
+        eq, M_booz=eq.M, N_booz=eq.N, num_modes=7, B0=False, log=False
+    )
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_boozer_surface():
     """Test plotting B in boozer coordinates."""

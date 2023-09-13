@@ -59,11 +59,10 @@ class ForceBalance(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Total force: {:10.3e} "
+    _print_value_fmt = "Force error: {:10.3e} "
 
     def __init__(
         self,
@@ -149,12 +148,12 @@ class ForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -163,8 +162,7 @@ class ForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -212,12 +210,8 @@ class ForceBalance(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-
-        fr = data["F_rho"] * data["|grad(rho)|"]
-        fr = fr * data["sqrt(g)"] * constants["transforms"]["grid"].weights
-
-        fb = data["F_helical"] * data["|e^helical|"]
-        fb = fb * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+        fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
+        fb = data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
 
         return jnp.concatenate([fr, fb])
 
@@ -351,12 +345,12 @@ class ForceBalanceAnisotropic(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -365,8 +359,7 @@ class ForceBalanceAnisotropic(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -415,7 +408,7 @@ class ForceBalanceAnisotropic(_Objective):
             * data["F_anisotropic"].T
         ).T
 
-        return f.flatten()
+        return f.flatten(order="F")  # to line up with quad weights
 
 
 class RadialForceBalance(_Objective):
@@ -451,11 +444,10 @@ class RadialForceBalance(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Radial force: {:10.3e} "
+    _print_value_fmt = "Radial force error: {:10.3e} "
 
     def __init__(
         self,
@@ -535,12 +527,12 @@ class RadialForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -549,8 +541,7 @@ class RadialForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -598,8 +589,7 @@ class RadialForceBalance(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        f = data["F_rho"] * data["|grad(rho)|"]
-        return f * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+        return data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
 
 
 class HelicalForceBalance(_Objective):
@@ -637,11 +627,10 @@ class HelicalForceBalance(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Helical force: {:10.3e}, "
+    _print_value_fmt = "Helical force error: {:10.3e}, "
 
     def __init__(
         self,
@@ -721,12 +710,12 @@ class HelicalForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -735,8 +724,7 @@ class HelicalForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -784,8 +772,7 @@ class HelicalForceBalance(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        f = data["F_helical"] * data["|e^helical|"]
-        return f * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+        return data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
 
 
 class Energy(_Objective):
@@ -822,12 +809,12 @@ class Energy(_Objective):
 
     """
 
-    _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
     _scalar = True
-    _linear = False
+    _coordinates = ""
     _equilibrium = True
     _units = "(J)"
     _print_value_fmt = "Total MHD energy: {:10.3e} "
+    _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
 
     def __init__(
         self,
@@ -918,12 +905,12 @@ class Energy(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
             "gamma": self._gamma,
         }
 
@@ -1025,11 +1012,10 @@ class CurrentDensity(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(A*m)"
-    _print_value_fmt = "Total current density: {:10.3e} "
+    _print_value_fmt = "Current density: {:10.3e} "
 
     def __init__(
         self,
@@ -1109,12 +1095,12 @@ class CurrentDensity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -1123,8 +1109,7 @@ class CurrentDensity(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["J"] * scales["V"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["J"] * scales["V"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -1162,8 +1147,8 @@ class CurrentDensity(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        jr = data["J^rho"] * data["sqrt(g)"] * constants["transforms"]["grid"].weights
-        jt = data["J^theta"] * data["sqrt(g)"] * constants["transforms"]["grid"].weights
-        jz = data["J^zeta"] * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+        jr = data["J^rho"] * data["sqrt(g)"]
+        jt = data["J^theta"] * data["sqrt(g)"]
+        jz = data["J^zeta"] * data["sqrt(g)"]
 
         return jnp.concatenate([jr, jt, jz])

@@ -255,13 +255,6 @@ def get_profiles(keys, obj, grid=None, has_axis=False, jitable=False, **kwargs):
         return profs
     # need to use copy here because profile may be None
     profiles = {name: copy.deepcopy(getattr(obj, name)) for name in profs}
-    if grid is None:
-        return profiles
-    for val in profiles.values():
-        if val is not None:
-            if jitable and hasattr(val, "_transform"):
-                val._transform.method = "jitable"
-            val.grid = grid
     return profiles
 
 

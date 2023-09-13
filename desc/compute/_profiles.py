@@ -154,14 +154,16 @@ def _chi(params, transforms, profiles, data, **kwargs):
     description="Electron temperature",
     dim=1,
     params=["Te_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["electron_temperature"],
     coordinates="r",
     data=["0"],
 )
 def _Te(params, transforms, profiles, data, **kwargs):
     if profiles["electron_temperature"] is not None:
-        data["Te"] = profiles["electron_temperature"].compute(params["Te_l"], dr=0)
+        data["Te"] = profiles["electron_temperature"].compute(
+            transforms["grid"], params["Te_l"], dr=0
+        )
     else:
         data["Te"] = jnp.nan * data["0"]
     return data
@@ -175,14 +177,16 @@ def _Te(params, transforms, profiles, data, **kwargs):
     description="Electron temperature, first radial derivative",
     dim=1,
     params=["Te_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["electron_temperature"],
     coordinates="r",
     data=["0"],
 )
 def _Te_r(params, transforms, profiles, data, **kwargs):
     if profiles["electron_temperature"] is not None:
-        data["Te_r"] = profiles["electron_temperature"].compute(params["Te_l"], dr=1)
+        data["Te_r"] = profiles["electron_temperature"].compute(
+            transforms["grid"], params["Te_l"], dr=1
+        )
     else:
         data["Te_r"] = jnp.nan * data["0"]
     return data
@@ -196,14 +200,16 @@ def _Te_r(params, transforms, profiles, data, **kwargs):
     description="Electron temperature, second radial derivative",
     dim=1,
     params=["Te_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["electron_temperature"],
     coordinates="r",
     data=["0"],
 )
 def _Te_rr(params, transforms, profiles, data, **kwargs):
     if profiles["electron_temperature"] is not None:
-        data["Te_rr"] = profiles["electron_temperature"].compute(params["Te_l"], dr=2)
+        data["Te_rr"] = profiles["electron_temperature"].compute(
+            transforms["grid"], params["Te_l"], dr=2
+        )
     else:
         data["Te_rr"] = jnp.nan * data["0"]
     return data
@@ -217,14 +223,16 @@ def _Te_rr(params, transforms, profiles, data, **kwargs):
     description="Electron density",
     dim=1,
     params=["ne_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["electron_density"],
     coordinates="r",
     data=["0"],
 )
 def _ne(params, transforms, profiles, data, **kwargs):
     if profiles["electron_density"] is not None:
-        data["ne"] = profiles["electron_density"].compute(params["ne_l"], dr=0)
+        data["ne"] = profiles["electron_density"].compute(
+            transforms["grid"], params["ne_l"], dr=0
+        )
     else:
         data["ne"] = jnp.nan * data["0"]
     return data
@@ -238,14 +246,16 @@ def _ne(params, transforms, profiles, data, **kwargs):
     description="Electron density, first radial derivative",
     dim=1,
     params=["ne_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["electron_density"],
     coordinates="r",
     data=["0"],
 )
 def _ne_r(params, transforms, profiles, data, **kwargs):
     if profiles["electron_density"] is not None:
-        data["ne_r"] = profiles["electron_density"].compute(params["ne_l"], dr=1)
+        data["ne_r"] = profiles["electron_density"].compute(
+            transforms["grid"], params["ne_l"], dr=1
+        )
     else:
         data["ne_r"] = jnp.nan * data["0"]
     return data
@@ -259,14 +269,16 @@ def _ne_r(params, transforms, profiles, data, **kwargs):
     description="Electron density, second radial derivative",
     dim=1,
     params=["ne_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["electron_density"],
     coordinates="r",
     data=["0"],
 )
 def _ne_rr(params, transforms, profiles, data, **kwargs):
     if profiles["electron_density"] is not None:
-        data["ne_rr"] = profiles["electron_density"].compute(params["ne_l"], dr=2)
+        data["ne_rr"] = profiles["electron_density"].compute(
+            transforms["grid"], params["ne_l"], dr=2
+        )
     else:
         data["ne_rr"] = jnp.nan * data["0"]
     return data
@@ -280,14 +292,16 @@ def _ne_rr(params, transforms, profiles, data, **kwargs):
     description="Ion temperature",
     dim=1,
     params=["Ti_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["ion_temperature"],
     coordinates="r",
     data=["0"],
 )
 def _Ti(params, transforms, profiles, data, **kwargs):
     if profiles["ion_temperature"] is not None:
-        data["Ti"] = profiles["ion_temperature"].compute(params["Ti_l"], dr=0)
+        data["Ti"] = profiles["ion_temperature"].compute(
+            transforms["grid"], params["Ti_l"], dr=0
+        )
     else:
         data["Ti"] = jnp.nan * data["0"]
     return data
@@ -301,14 +315,16 @@ def _Ti(params, transforms, profiles, data, **kwargs):
     description="Ion temperature, first radial derivative",
     dim=1,
     params=["Ti_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["ion_temperature"],
     coordinates="r",
     data=["0"],
 )
 def _Ti_r(params, transforms, profiles, data, **kwargs):
     if profiles["ion_temperature"] is not None:
-        data["Ti_r"] = profiles["ion_temperature"].compute(params["Ti_l"], dr=1)
+        data["Ti_r"] = profiles["ion_temperature"].compute(
+            transforms["grid"], params["Ti_l"], dr=1
+        )
     else:
         data["Ti_r"] = jnp.nan * data["0"]
     return data
@@ -322,14 +338,16 @@ def _Ti_r(params, transforms, profiles, data, **kwargs):
     description="Ion temperature, second radial derivative",
     dim=1,
     params=["Ti_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["ion_temperature"],
     coordinates="r",
     data=["0"],
 )
 def _Ti_rr(params, transforms, profiles, data, **kwargs):
     if profiles["ion_temperature"] is not None:
-        data["Ti_rr"] = profiles["ion_temperature"].compute(params["Ti_l"], dr=2)
+        data["Ti_rr"] = profiles["ion_temperature"].compute(
+            transforms["grid"], params["Ti_l"], dr=2
+        )
     else:
         data["Ti_rr"] = jnp.nan * data["0"]
     return data
@@ -343,14 +361,16 @@ def _Ti_rr(params, transforms, profiles, data, **kwargs):
     description="Effective atomic number",
     dim=1,
     params=["Zeff_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["atomic_number"],
     coordinates="r",
     data=["0"],
 )
 def _Zeff(params, transforms, profiles, data, **kwargs):
     if profiles["atomic_number"] is not None:
-        data["Zeff"] = profiles["atomic_number"].compute(params["Zeff_l"], dr=0)
+        data["Zeff"] = profiles["atomic_number"].compute(
+            transforms["grid"], params["Zeff_l"], dr=0
+        )
     else:
         data["Zeff"] = jnp.nan * data["0"]
     return data
@@ -364,14 +384,16 @@ def _Zeff(params, transforms, profiles, data, **kwargs):
     description="Effective atomic number, first radial derivative",
     dim=1,
     params=["Zeff_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["atomic_number"],
     coordinates="r",
     data=["0"],
 )
 def _Zeff_r(params, transforms, profiles, data, **kwargs):
     if profiles["atomic_number"] is not None:
-        data["Zeff_r"] = profiles["atomic_number"].compute(params["Zeff_l"], dr=1)
+        data["Zeff_r"] = profiles["atomic_number"].compute(
+            transforms["grid"], params["Zeff_l"], dr=1
+        )
     else:
         data["Zeff_r"] = jnp.nan * data["0"]
     return data
@@ -385,14 +407,16 @@ def _Zeff_r(params, transforms, profiles, data, **kwargs):
     description="Pressure",
     dim=1,
     params=["p_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["pressure"],
     coordinates="r",
     data=["Te", "ne", "Ti", "Zeff"],
 )
 def _p(params, transforms, profiles, data, **kwargs):
     if profiles["pressure"] is not None:
-        data["p"] = profiles["pressure"].compute(params["p_l"], dr=0)
+        data["p"] = profiles["pressure"].compute(
+            transforms["grid"], params["p_l"], dr=0
+        )
     else:
         data["p"] = elementary_charge * (
             data["ne"] * data["Te"] + data["Ti"] * data["ne"] / data["Zeff"]
@@ -408,14 +432,16 @@ def _p(params, transforms, profiles, data, **kwargs):
     description="Pressure, first radial derivative",
     dim=1,
     params=["p_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["pressure"],
     coordinates="r",
     data=["Te", "Te_r", "ne", "ne_r", "Ti", "Ti_r", "Zeff", "Zeff_r"],
 )
 def _p_r(params, transforms, profiles, data, **kwargs):
     if profiles["pressure"] is not None:
-        data["p_r"] = profiles["pressure"].compute(params["p_l"], dr=1)
+        data["p_r"] = profiles["pressure"].compute(
+            transforms["grid"], params["p_l"], dr=1
+        )
     else:
         data["p_r"] = elementary_charge * (
             data["ne_r"] * data["Te"]
@@ -435,13 +461,13 @@ def _p_r(params, transforms, profiles, data, **kwargs):
     description="Pressure, first poloidal derivative",
     dim=1,
     params=["p_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["pressure"],
     coordinates="rtz",
     data=[],
 )
 def _p_t(params, transforms, profiles, data, **kwargs):
-    data["p_t"] = profiles["pressure"].compute(params["p_l"], dt=1)
+    data["p_t"] = profiles["pressure"].compute(transforms["grid"], params["p_l"], dt=1)
     return data
 
 
@@ -453,13 +479,13 @@ def _p_t(params, transforms, profiles, data, **kwargs):
     description="Pressure, first toroidal derivative",
     dim=1,
     params=["p_l"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["pressure"],
     coordinates="rtz",
     data=[],
 )
 def _p_z(params, transforms, profiles, data, **kwargs):
-    data["p_z"] = profiles["pressure"].compute(params["p_l"], dz=1)
+    data["p_z"] = profiles["pressure"].compute(transforms["grid"], params["p_l"], dz=1)
     return data
 
 
@@ -550,14 +576,16 @@ def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
     description="Pressure anisotropy",
     dim=1,
     params=["a_lmn"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["anisotropy"],
     coordinates="rtz",
     data=["0"],
 )
 def _beta_a(params, transforms, profiles, data, **kwargs):
     if profiles["anisotropy"] is not None:
-        data["beta_a"] = profiles["anisotropy"].compute(params["a_lmn"], dr=0)
+        data["beta_a"] = profiles["anisotropy"].compute(
+            transforms["grid"], params["a_lmn"], dr=0
+        )
     else:
         data["beta_a"] = jnp.nan * data["0"]
     return data
@@ -571,14 +599,16 @@ def _beta_a(params, transforms, profiles, data, **kwargs):
     description="Pressure anisotropy, first radial derivative",
     dim=1,
     params=["a_lmn"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["anisotropy"],
     coordinates="rtz",
     data=["0"],
 )
 def _beta_a_r(params, transforms, profiles, data, **kwargs):
     if profiles["anisotropy"] is not None:
-        data["beta_a_r"] = profiles["anisotropy"].compute(params["a_lmn"], dr=1)
+        data["beta_a_r"] = profiles["anisotropy"].compute(
+            transforms["grid"], params["a_lmn"], dr=1
+        )
     else:
         data["beta_a_r"] = jnp.nan * data["0"]
     return data
@@ -592,14 +622,16 @@ def _beta_a_r(params, transforms, profiles, data, **kwargs):
     description="Pressure anisotropy, first poloidal derivative",
     dim=1,
     params=["a_lmn"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["anisotropy"],
     coordinates="rtz",
     data=["0"],
 )
 def _beta_a_t(params, transforms, profiles, data, **kwargs):
     if profiles["anisotropy"] is not None:
-        data["beta_a_t"] = profiles["anisotropy"].compute(params["a_lmn"], dt=1)
+        data["beta_a_t"] = profiles["anisotropy"].compute(
+            transforms["grid"], params["a_lmn"], dt=1
+        )
     else:
         data["beta_a_t"] = jnp.nan * data["0"]
     return data
@@ -613,14 +645,16 @@ def _beta_a_t(params, transforms, profiles, data, **kwargs):
     description="Pressure anisotropy, first toroidal derivative",
     dim=1,
     params=["a_lmn"],
-    transforms={},
+    transforms={"grid": []},
     profiles=["anisotropy"],
     coordinates="rtz",
     data=["0"],
 )
 def _beta_a_z(params, transforms, profiles, data, **kwargs):
     if profiles["anisotropy"] is not None:
-        data["beta_a_z"] = profiles["anisotropy"].compute(params["a_lmn"], dz=1)
+        data["beta_a_z"] = profiles["anisotropy"].compute(
+            transforms["grid"], params["a_lmn"], dz=1
+        )
     else:
         data["beta_a_z"] = jnp.nan * data["0"]
     return data
@@ -634,7 +668,7 @@ def _beta_a_z(params, transforms, profiles, data, **kwargs):
     description="Pressure anisotropy gradient",
     dim=3,
     params=[],
-    transforms={},
+    transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
     data=["beta_a_r", "beta_a_t", "beta_a_z", "e^rho", "e^theta", "e^zeta"],
@@ -664,7 +698,7 @@ def _gradbeta_a(params, transforms, profiles, data, **kwargs):
 )
 def _iota(params, transforms, profiles, data, **kwargs):
     if profiles["iota"] is not None:
-        data["iota"] = profiles["iota"].compute(params["i_l"], dr=0)
+        data["iota"] = profiles["iota"].compute(transforms["grid"], params["i_l"], dr=0)
     elif profiles["current"] is not None:
         # See the document attached to GitHub pull request #556 for the math.
         data["iota"] = transforms["grid"].replace_at_axis(
@@ -690,7 +724,9 @@ def _iota(params, transforms, profiles, data, **kwargs):
 )
 def _iota_r(params, transforms, profiles, data, **kwargs):
     if profiles["iota"] is not None:
-        data["iota_r"] = profiles["iota"].compute(params["i_l"], dr=1)
+        data["iota_r"] = profiles["iota"].compute(
+            transforms["grid"], params["i_l"], dr=1
+        )
     elif profiles["current"] is not None:
         # See the document attached to GitHub pull request #556 for the math.
         data["iota_r"] = transforms["grid"].replace_at_axis(
@@ -731,7 +767,9 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
 )
 def _iota_rr(params, transforms, profiles, data, **kwargs):
     if profiles["iota"] is not None:
-        data["iota_rr"] = profiles["iota"].compute(params["i_l"], dr=2)
+        data["iota_rr"] = profiles["iota"].compute(
+            transforms["grid"], params["i_l"], dr=2
+        )
     elif profiles["current"] is not None:
         # See the document attached to GitHub pull request #556 for the math.
         data["iota_rr"] = transforms["grid"].replace_at_axis(
@@ -782,7 +820,7 @@ def _iota_num(params, transforms, profiles, data, **kwargs):
         2
         * jnp.pi
         * mu_0
-        * profiles["current"].compute(params["c_l"], dr=0)
+        * profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
         / data["psi_r"]
     )
     beta = surface_integrals(
@@ -833,7 +871,7 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
         data["iota_num_r"] = jnp.nan * data["0"]
         return data
 
-    current_r = profiles["current"].compute(params["c_l"], dr=1)
+    current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
     alpha_r = (
         jnp.pi
@@ -842,11 +880,13 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
             2
             * (
                 current_r * data["psi_r"]
-                - profiles["current"].compute(params["c_l"], dr=0) * data["psi_rr"]
+                - profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
+                * data["psi_rr"]
             )
             / data["psi_r"] ** 2,
             lambda: (
-                profiles["current"].compute(params["c_l"], dr=2) * data["psi_rr"]
+                profiles["current"].compute(transforms["grid"], params["c_l"], dr=2)
+                * data["psi_rr"]
                 - current_r * data["psi_rrr"]
             )
             / data["psi_rr"] ** 2,
@@ -927,8 +967,8 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
         data["iota_num_rr"] = jnp.nan * data["0"]
         return data
 
-    current_r = profiles["current"].compute(params["c_l"], dr=1)
-    current_rr = profiles["current"].compute(params["c_l"], dr=2)
+    current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
+    current_rr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=2)
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
     alpha_rr = (
         jnp.pi
@@ -937,11 +977,11 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
             2 * current_rr / data["psi_r"]
             - 4 * current_r * data["psi_rr"] / data["psi_r"] ** 2
             + 2
-            * profiles["current"].compute(params["c_l"], dr=0)
+            * profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
             * (2 * data["psi_rr"] ** 2 - data["psi_rrr"] * data["psi_r"])
             / data["psi_r"] ** 3,
             lambda: 2
-            * profiles["current"].compute(params["c_l"], dr=3)
+            * profiles["current"].compute(transforms["grid"], params["c_l"], dr=3)
             / (3 * data["psi_rr"])
             - current_rr * data["psi_rrr"] / data["psi_rr"] ** 2
             + current_r * data["psi_rrr"] ** 2 / data["psi_rr"] ** 3,
@@ -1048,9 +1088,9 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
         data["iota_num_rrr"] = jnp.nan * data["0"]
         return data
 
-    current_r = profiles["current"].compute(params["c_l"], dr=1)
-    current_rr = profiles["current"].compute(params["c_l"], dr=2)
-    current_rrr = profiles["current"].compute(params["c_l"], dr=3)
+    current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
+    current_rr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=2)
+    current_rrr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=3)
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
     alpha_rrr = (
         jnp.pi
@@ -1066,10 +1106,10 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
             )
             / data["psi_r"] ** 4
             + 12
-            * profiles["current"].compute(params["c_l"], dr=0)
+            * profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
             * (data["psi_rrr"] * data["psi_rr"] * data["psi_r"] - data["psi_rr"] ** 3)
             / data["psi_r"] ** 4,
-            lambda: profiles["current"].compute(params["c_l"], dr=4)
+            lambda: profiles["current"].compute(transforms["grid"], params["c_l"], dr=4)
             / (2 * data["psi_rr"])
             - current_rrr * data["psi_rrr"] / data["psi_rr"] ** 2
             + 3 * current_rr * data["psi_rrr"] ** 2 / (2 * data["psi_rr"] ** 3)

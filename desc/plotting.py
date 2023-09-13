@@ -2234,20 +2234,14 @@ def plot_boozer_modes(  # noqa: C901
         modes = None
     else:
         idx = np.argsort(np.mean(np.abs(B_mn), axis=0))
-        if num_modes == -1:
-            idx = idx[-1::-1]
-        else:
-            idx = idx[-1 : -num_modes - 1 : -1]
+        idx = idx[-1::-1] if (num_modes == -1) else idx[-1 : -num_modes - 1 : -1]
         B_mn = B_mn[:, idx]
         modes = modes[idx, :]
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
-    if log:
-        plot_op = ax.semilogy
-        B_mn = np.abs(B_mn)
-    else:
-        plot_op = ax.plot
+    plot_op = ax.semilogy if log else ax.plot
+    B_mn = np.abs(B_mn) if log else B_mn
 
     if max_only:
         plot_op(
@@ -2288,7 +2282,7 @@ def plot_boozer_modes(  # noqa: C901
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
 
     if kwargs.pop("legend", True):
-        fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
+        fig.legend(**kwargs.pop("legend_kw", {"loc": "lower right"}))
 
     assert (
         len(kwargs) == 0

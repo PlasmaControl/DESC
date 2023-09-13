@@ -125,7 +125,7 @@ Della and Stellar Clusters (Princeton)
 ++++++++++++++++++++++++++++++++++++++
 These instructions were tested and confirmed to work on the Della and Stellar clusters at Princeton as of 8-26-2023.
 
-First, install JAX (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ):
+First, install JAX (check `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters):
 
 .. code-block:: sh
 
@@ -133,7 +133,7 @@ First, install JAX (commands taken from `this tutorial <https://github.com/Princ
     CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.10=cuda112*" -c conda-forge
     conda activate desc-env
 
-Then, we install DESC:
+Then, install DESC:
 
 .. code-block:: sh
 

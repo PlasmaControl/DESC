@@ -72,6 +72,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     while_loop = jax.lax.while_loop
     vmap = jax.vmap
     bincount = jnp.bincount
+    from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln, logsumexp
@@ -307,3 +308,9 @@ else:
     def bincount(x, weights=None, minlength=None, length=None):
         """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""
         return np.bincount(x, weights, minlength)
+
+    def custom_jvp(fun, *args, **kwargs):
+        """Dummy function for custom_jvp without JAX."""
+        fun.defjvp = lambda *args, **kwargs: None
+        fun.defjvps = lambda *args, **kwargs: None
+        return fun

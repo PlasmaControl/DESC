@@ -12,8 +12,6 @@ import numpy as np
 from termcolor import colored
 
 from desc import set_device
-from desc.grid import LinearGrid
-from desc.profiles import PowerSeriesProfile
 
 from .equilibrium_io import load
 
@@ -816,6 +814,9 @@ class InputReader:
         maxiter : int
             maximum number of optimizer iterations per continuation step
         """
+        from desc.grid import LinearGrid
+        from desc.profiles import PowerSeriesProfile
+
         f = open(outfile, "w+")
 
         f.seek(0)

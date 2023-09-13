@@ -75,10 +75,8 @@ class ObjectiveFromUser(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
     _units = "(Unknown)"
-    _print_value_fmt = "Custom Objective Residual: {:10.3e} "
+    _print_value_fmt = "Custom Objective value: {:10.3e} "
 
     def __init__(
         self,
@@ -148,11 +146,11 @@ class ObjectiveFromUser(_Objective):
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         super().build(things=eq, use_jit=use_jit, verbose=verbose)
@@ -219,10 +217,7 @@ class GenericObjective(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
-    _units = "(Unknown)"
-    _print_value_fmt = "Residual: {:10.3e} "
+    _print_value_fmt = "GenericObjective value: {:10.3e} "
 
     def __init__(
         self,
@@ -249,6 +244,12 @@ class GenericObjective(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
+        self._scalar = not bool(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["dim"]
+        )
+        self._coordinates = data_index["desc.equilibrium.equilibrium.Equilibrium"][
+            self.f
+        ]["coordinates"]
         self._units = (
             "("
             + data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["units"]
@@ -278,15 +279,15 @@ class GenericObjective(_Objective):
         p = "desc.equilibrium.equilibrium.Equilibrium"
         if data_index[p][self.f]["dim"] == 0:
             self._dim_f = 1
-            self._scalar = True
+        elif data_index[p][self.f]["coordinates"] == "r":
+            self._dim_f = grid.num_rho
         else:
             self._dim_f = grid.num_nodes * data_index[p][self.f]["dim"]
-            self._scalar = False
-        self._profiles = get_profiles(self.f, obj=eq, grid=grid)
-        self._transforms = get_transforms(self.f, obj=eq, grid=grid)
+        profiles = get_profiles(self.f, obj=eq, grid=grid)
+        transforms = get_transforms(self.f, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         super().build(things=eq, use_jit=use_jit, verbose=verbose)
@@ -318,6 +319,6 @@ class GenericObjective(_Objective):
             profiles=constants["profiles"],
         )
         f = data[self.f]
-        if not self.scalar:
-            f = (f.T * constants["transforms"]["grid"].weights).flatten()
-        return f
+        if self._coordinates == "r":
+            f = constants["transforms"]["grid"].compress(f, surface_label="rho")
+        return f.flatten(order="F")  # so that default quad weights line up correctly.

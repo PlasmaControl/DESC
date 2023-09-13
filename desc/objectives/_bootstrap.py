@@ -59,10 +59,9 @@ class BootstrapRedlConsistency(_Objective):
         Name of the objective function.
     """
 
-    _scalar = False
-    _linear = False
-    _units = "(T A m^{-2})"
-    _print_value_fmt = "Bootstrap current self-consistency: {:10.3e} "
+    _coordinates = "r"
+    _units = "(T A m^-2)"
+    _print_value_fmt = "Bootstrap current self-consistency error: {:10.3e} "
 
     def __init__(
         self,
@@ -175,12 +174,12 @@ class BootstrapRedlConsistency(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
             "helicity": self._helicity,
         }
 
@@ -224,40 +223,6 @@ class BootstrapRedlConsistency(_Objective):
         return constants["transforms"]["grid"].compress(
             data["<J*B>"] - data["<J*B> Redl"]
         )
-
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = constants["transforms"]["grid"].compress(
-            constants["transforms"]["grid"].spacing[:, 0]
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
-
-    def print_value(self, *args, **kwargs):
-        """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
-
-        if self._normalize:
-            print(
-                "Maximum "
-                + self._print_value_fmt.format(jnp.max(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Minimum "
-                + self._print_value_fmt.format(jnp.min(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Average "
-                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
-                + "(normalized)"
-            )
 
     @property
     def helicity(self):

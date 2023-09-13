@@ -2,9 +2,6 @@
 
 import warnings
 
-import numpy as np
-
-from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
@@ -51,8 +48,6 @@ class QuasisymmetryBoozer(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
     _units = "(T)"
     _print_value_fmt = "Quasi-symmetry Boozer error: {:10.3e} "
 
@@ -126,32 +121,32 @@ class QuasisymmetryBoozer(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(
             self._data_keys,
             obj=eq,
             grid=grid,
             M_booz=M_booz,
             N_booz=N_booz,
         )
-        self._matrix, self._modes, self._idx = ptolemy_linear_transform(
-            self._transforms["B"].basis.modes,
+        matrix, modes, idx = ptolemy_linear_transform(
+            transforms["B"].basis.modes,
             helicity=self.helicity,
-            NFP=self._transforms["B"].basis.NFP,
+            NFP=transforms["B"].basis.NFP,
         )
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
-            "matrix": self._matrix,
-            "idx": self._idx,
+            "transforms": transforms,
+            "profiles": profiles,
+            "matrix": matrix,
+            "idx": idx,
         }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._dim_f = np.sum(self._idx)
+        self._dim_f = idx.size
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -246,8 +241,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
+    _coordinates = "rtz"
     _units = "(T^3)"
     _print_value_fmt = "Quasi-symmetry two-term error: {:10.3e} "
 
@@ -312,11 +306,11 @@ class QuasisymmetryTwoTerm(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
             "helicity": self.helicity,
         }
 
@@ -326,7 +320,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] ** 3 / jnp.sqrt(self._dim_f)
+            self._normalization = scales["B"] ** 3
 
         super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
@@ -357,7 +351,7 @@ class QuasisymmetryTwoTerm(_Objective):
             profiles=constants["profiles"],
             helicity=constants["helicity"],
         )
-        return data["f_C"] * constants["transforms"]["grid"].weights
+        return data["f_C"]
 
     @property
     def helicity(self):
@@ -414,8 +408,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
+    _coordinates = "rtz"
     _units = "(T^4/m^2)"
     _print_value_fmt = "Quasi-symmetry error: {:10.3e} "
 
@@ -471,11 +464,11 @@ class QuasisymmetryTripleProduct(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -484,9 +477,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = (
-                scales["B"] ** 4 / scales["a"] ** 2 / jnp.sqrt(self._dim_f)
-            )
+            self._normalization = scales["B"] ** 4 / scales["a"] ** 2
 
         super().build(things=eq, use_jit=use_jit, verbose=verbose)
 
@@ -516,7 +507,7 @@ class QuasisymmetryTripleProduct(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["f_T"] * constants["transforms"]["grid"].weights
+        return data["f_T"]
 
 
 class Isodynamicity(_Objective):
@@ -554,8 +545,7 @@ class Isodynamicity(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
+    _coordinates = "rtz"
     _units = "(dimensionless)"
     _print_value_fmt = "Isodynamicity error: {:10.3e} "
 
@@ -611,11 +601,11 @@ class Isodynamicity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -650,4 +640,4 @@ class Isodynamicity(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["isodynamicity"] * constants["transforms"]["grid"].weights
+        return data["isodynamicity"]

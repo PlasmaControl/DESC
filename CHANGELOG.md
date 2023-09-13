@@ -1,6 +1,6 @@
 Changelog
 =========
-
+- Adds second derivatives of contravariant basis vectors to the data index.
 - Removes ``grid`` attribute from ``Profile`` classes, ``grid`` should now be passed
 in when calling ``Profile.compute``.
 - Refactors most of the optimizer subproblems to use JAX control flow, allowing them

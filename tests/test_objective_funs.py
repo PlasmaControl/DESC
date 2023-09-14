@@ -8,7 +8,7 @@ This module primarily tests the constructing/building/calling methods.
 
 import numpy as np
 import pytest
-from scipy.constants import mu_0
+from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
 from desc.backend import jnp
@@ -16,14 +16,16 @@ from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
+from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.objectives import (
     AspectRatio,
     BScaleLength,
+    CurrentDensity,
     Elongation,
     Energy,
     ForceBalance,
     GenericObjective,
+    HelicalForceBalance,
     Isodynamicity,
     MagneticWell,
     MeanCurvature,
@@ -31,10 +33,12 @@ from desc.objectives import (
     ObjectiveFromUser,
     ObjectiveFunction,
     PlasmaVesselDistance,
+    Pressure,
     PrincipalCurvature,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
+    RadialForceBalance,
     RotationalTransform,
     Shear,
     ToroidalCurrent,
@@ -53,7 +57,7 @@ class TestObjectiveFunction:
     def test_generic(self):
         """Test GenericObjective for arbitrary quantities."""
 
-        def test(f, eq):
+        def test(f, eq, compress=False):
             obj = GenericObjective(f, eq=eq)
             obj.build()
             kwargs = {
@@ -64,15 +68,17 @@ class TestObjectiveFunction:
                 "c_l": eq.c_l,
                 "Psi": eq.Psi,
             }
+            val = eq.compute(f, grid=obj.constants["transforms"]["grid"])[f]
+            if compress:
+                val = obj.constants["transforms"]["grid"].compress(val)
             np.testing.assert_allclose(
-                obj.compute_unscaled(**kwargs),
-                eq.compute(f, grid=obj._transforms["grid"])[f]
-                * obj._transforms["grid"].weights,
+                obj.compute(**kwargs),
+                val,
             )
 
         test("sqrt(g)", Equilibrium())
-        test("current", Equilibrium(iota=PowerSeriesProfile(0)))
-        test("iota", Equilibrium(current=PowerSeriesProfile(0)))
+        test("current", Equilibrium(iota=PowerSeriesProfile(0)), True)
+        test("iota", Equilibrium(current=PowerSeriesProfile(0)), True)
 
     @pytest.mark.unit
     def test_objective_from_user(self):
@@ -202,6 +208,28 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_pressure(self):
+        """Test calculation of pressure objective."""
+
+        def test(eq):
+            obj = Pressure(target=1, weight=2, eq=eq, normalize=False)
+            obj.build()
+            p = obj.compute_unscaled(*obj.xs(eq))
+            p_scaled = obj.compute_scaled_error(*obj.xs(eq))
+            np.testing.assert_allclose(p, 12)
+            # (value - target) * objective weight * quadrature weights
+            # in this case, both value and target are constant wrt rho
+            np.testing.assert_allclose(p_scaled, (12 - 1) * 2 / np.sqrt(3))
+
+        test(Equilibrium(pressure=PowerSeriesProfile(12)))
+        test(
+            Equilibrium(
+                electron_temperature=PowerSeriesProfile(2),
+                electron_density=PowerSeriesProfile(3 / elementary_charge),
+            )
+        )
+
+    @pytest.mark.unit
     def test_qa_boozer(self):
         """Test calculation of Boozer QA metric."""
 
@@ -223,7 +251,7 @@ class TestObjectiveFunction:
             obj = ObjectiveFunction(QuasisymmetryBoozer(eq=eq))
             obj.build()
             obj.compile()
-            fb = obj.compute_unscaled(obj.x(eq))
+            fb = obj.compute_scaled_error(obj.x(eq))
             np.testing.assert_allclose(fb, 0, atol=1e-12)
 
         test(Equilibrium(L=2, M=2, N=1, current=PowerSeriesProfile(0)))
@@ -355,7 +383,9 @@ class TestObjectiveFunction:
             obj = MercierStability(eq=eq)
             obj.build()
             DMerc = obj.compute_unscaled(*obj.xs(eq))
-            np.testing.assert_equal(len(DMerc), obj._transforms["grid"].num_rho)
+            np.testing.assert_equal(
+                len(DMerc), obj.constants["transforms"]["grid"].num_rho
+            )
             np.testing.assert_allclose(DMerc, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -369,7 +399,9 @@ class TestObjectiveFunction:
             obj = MagneticWell(eq=eq)
             obj.build()
             magnetic_well = obj.compute_unscaled(*obj.xs(eq))
-            np.testing.assert_equal(len(magnetic_well), obj._transforms["grid"].num_rho)
+            np.testing.assert_equal(
+                len(magnetic_well), obj.constants["transforms"]["grid"].num_rho
+            )
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -514,26 +546,78 @@ def test_target_profiles():
     iota = PowerSeriesProfile([1, 0, -0.3])
     shear = PowerSeriesProfile([0, -0.6])
     current = PowerSeriesProfile([4, 0, 1, 0, -1])
+    merc = PowerSeriesProfile([1, 0, -1])
+    well = PowerSeriesProfile([2, 0, -2])
+    pres = PowerSeriesProfile([3, 0, -3])
     eqi = Equilibrium(L=5, N=3, M=3, iota=iota)
     eqc = Equilibrium(L=3, N=3, M=3, current=current)
     obji = RotationalTransform(target=iota, eq=eqi)
     obji.build()
     np.testing.assert_allclose(
         obji.target,
-        iota(obji._transforms["grid"].nodes[obji._transforms["grid"].unique_rho_idx]),
+        iota(
+            obji.constants["transforms"]["grid"].nodes[
+                obji.constants["transforms"]["grid"].unique_rho_idx
+            ]
+        ),
     )
     objs = Shear(target=shear, eq=eqi)
     objs.build()
     np.testing.assert_allclose(
         objs.target,
-        shear(objs._transforms["grid"].nodes[objs._transforms["grid"].unique_rho_idx]),
+        shear(
+            objs.constants["transforms"]["grid"].nodes[
+                objs.constants["transforms"]["grid"].unique_rho_idx
+            ]
+        ),
     )
     objc = ToroidalCurrent(target=current, eq=eqc)
     objc.build()
     np.testing.assert_allclose(
         objc.target,
         current(
-            objc._transforms["grid"].nodes[objc._transforms["grid"].unique_rho_idx]
+            objc.constants["transforms"]["grid"].nodes[
+                objc.constants["transforms"]["grid"].unique_rho_idx
+            ]
+        ),
+    )
+    objm = MercierStability(bounds=(merc, np.inf), eq=eqi)
+    objm.build()
+    np.testing.assert_allclose(
+        objm.bounds[0],
+        merc(
+            objm.constants["transforms"]["grid"].nodes[
+                objm.constants["transforms"]["grid"].unique_rho_idx
+            ]
+        ),
+    )
+    np.testing.assert_allclose(objm.bounds[1], np.inf)
+    objw = MagneticWell(bounds=(merc, well), eq=eqi)
+    objw.build()
+    np.testing.assert_allclose(
+        objw.bounds[0],
+        merc(
+            objw.constants["transforms"]["grid"].nodes[
+                objw.constants["transforms"]["grid"].unique_rho_idx
+            ]
+        ),
+    )
+    np.testing.assert_allclose(
+        objw.bounds[1],
+        well(
+            objw.constants["transforms"]["grid"].nodes[
+                objw.constants["transforms"]["grid"].unique_rho_idx
+            ]
+        ),
+    )
+    objp = Pressure(target=pres, eq=eqc)
+    objp.build()
+    np.testing.assert_allclose(
+        objp.target,
+        pres(
+            objp.constants["transforms"]["grid"].nodes[
+                objp.constants["transforms"]["grid"].unique_rho_idx
+            ]
         ),
     )
 
@@ -679,7 +763,9 @@ def test_field_scale_length():
 @pytest.mark.unit
 def test_profile_objective_print(capsys):
     """Test that the profile objectives print correctly."""
-    eq = Equilibrium(iota=PowerSeriesProfile([1, 0, 0.5]))
+    eq = Equilibrium(
+        iota=PowerSeriesProfile([1, 0, 0.5]), pressure=PowerSeriesProfile([1, 0, -1])
+    )
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
     def test(obj, values, normalize=False):
@@ -720,17 +806,21 @@ def test_profile_objective_print(capsys):
         assert out.out == corr_out
 
     iota = eq.compute("iota", grid=grid)["iota"]
-    obj = RotationalTransform(eq=eq, grid=grid)
+    obj = RotationalTransform(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, iota)
     shear = eq.compute("shear", grid=grid)["shear"]
-    obj = Shear(eq=eq, grid=grid)
+    obj = Shear(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, shear)
     curr = eq.compute("current", grid=grid)["current"]
-    obj = ToroidalCurrent(eq=eq, grid=grid)
+    obj = ToroidalCurrent(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, curr, normalize=True)
+    pres = eq.compute("p", grid=grid)["p"]
+    obj = Pressure(eq=eq, target=1, grid=grid)
+    obj.build()
+    test(obj, pres, normalize=True)
 
 
 @pytest.mark.unit
@@ -888,12 +978,21 @@ def test_objective_target_bounds():
     assert bounds[1][0] == 3 / vol.normalization * vol.weight
     assert bounds[0][1] == 2 * asp.weight
     assert bounds[1][1] == 3 * asp.weight
-    assert np.all(bounds[0][2:] == -1 / fbl.normalization * fbl.weight)
-    assert np.all(bounds[1][2:] == 2 / fbl.normalization * fbl.weight)
+    np.testing.assert_allclose(
+        bounds[0][2:],
+        (-1 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+    )
+    np.testing.assert_allclose(
+        bounds[1][2:],
+        (2 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+    )
 
     assert target[0] == 3 / vol.normalization * vol.weight
     assert target[1] == 2.5 * asp.weight
-    assert np.all(target[2:] == 0.5 / fbl.normalization * fbl.weight)
+    np.testing.assert_allclose(
+        target[2:],
+        (0.5 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+    )
 
     assert weight[0] == 2
     assert weight[1] == 3
@@ -932,3 +1031,328 @@ def test_softmax_and_softmin():
     # as alpha -> infinity, softmin -> min
     sftmin = softmin(arr, alpha=100)
     np.testing.assert_almost_equal(sftmin, np.min(arr))
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_compute_scalar_resolution():  # noqa: C901
+    """Test that compute_scalar values are roughly independent of grid resolution."""
+    eq = get("HELIOTRON")
+    res_array = np.array([1.5, 2, 2.5])
+
+    # BootstrapRedlConsistency
+    # this is already covered in tests/test_bootstrap.py
+    # by TestBootstrapObjectives.test_BootstrapRedlConsistency_resolution
+
+    # CurrentDensity
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        obj = ObjectiveFunction(CurrentDensity(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=3e-2)
+
+    # Energy
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        obj = ObjectiveFunction(Energy(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+
+    # ForceBalance
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        obj = ObjectiveFunction(ForceBalance(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
+
+    # HelicalForceBalance
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        obj = ObjectiveFunction(HelicalForceBalance(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-1)
+
+    # RadialForceBalance
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        obj = ObjectiveFunction(RadialForceBalance(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-1)
+
+    # GenericObjective
+    # scalar
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = QuadratureGrid(
+            L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
+        )
+        obj = ObjectiveFunction(
+            GenericObjective("<beta>_vol", eq=eq, grid=grid), verbose=0
+        )
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+    # radial profile
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = LinearGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+            axis=False,
+        )
+        obj = ObjectiveFunction(GenericObjective("<J*B>", eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
+    # volume quantity
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        obj = ObjectiveFunction(
+            GenericObjective("sqrt(g)", eq=eq, grid=grid), verbose=0
+        )
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
+
+    # AspectRatio
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = QuadratureGrid(
+            L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
+        )
+        obj = ObjectiveFunction(AspectRatio(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+
+    # BScaleLength
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
+        obj = ObjectiveFunction(BScaleLength(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+
+    # Elongation
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = QuadratureGrid(
+            L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
+        )
+        obj = ObjectiveFunction(Elongation(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+
+    # MeanCurvature
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
+        obj = ObjectiveFunction(MeanCurvature(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+
+    # PlasmaVesselDistance
+    f = np.zeros_like(res_array, dtype=float)
+    surface = FourierRZToroidalSurface(
+        R_lmn=[10, 1.5], Z_lmn=[-1.5], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    for i, res in enumerate(res_array):
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
+        obj = ObjectiveFunction(
+            PlasmaVesselDistance(
+                surface=surface, eq=eq, surface_grid=grid, plasma_grid=grid
+            ),
+            verbose=0,
+        )
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    # PrincipalCurvature
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
+        obj = ObjectiveFunction(PrincipalCurvature(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+
+    # Volume
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = QuadratureGrid(
+            L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
+        )
+        obj = ObjectiveFunction(Volume(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+
+    # RotationalTransform
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = LinearGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+            axis=False,
+        )
+        obj = ObjectiveFunction(RotationalTransform(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
+
+    # ToroidalCurrent
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = LinearGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+            axis=False,
+        )
+        obj = ObjectiveFunction(ToroidalCurrent(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=4e-2)
+
+    # Isodynamicity
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        obj = ObjectiveFunction(Isodynamicity(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
+
+    # QuasisymmetryBoozer
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate((res_array + 4) * 2):
+        grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
+        obj = ObjectiveFunction(
+            QuasisymmetryBoozer(eq=eq, helicity=(1, -eq.NFP), grid=grid),
+            verbose=0,
+        )
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+
+    # QuasisymmetryTripleProduct
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        obj = ObjectiveFunction(QuasisymmetryTripleProduct(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
+
+    # QuasisymmetryTwoTerm
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        obj = ObjectiveFunction(
+            QuasisymmetryTwoTerm(eq=eq, helicity=(1, -eq.NFP), grid=grid),
+            verbose=0,
+        )
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
+
+    # MagneticWell
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        rho = np.linspace(0.2, 1, int(eq.L * res))
+        grid = LinearGrid(
+            rho=rho, M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym
+        )
+        obj = ObjectiveFunction(MagneticWell(eq=eq, grid=grid, target=0), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+
+    # MercierStability
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        rho = np.linspace(0.2, 1, int(eq.L * res))
+        grid = LinearGrid(
+            rho=rho, M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym
+        )
+        obj = ObjectiveFunction(MercierStability(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=1e-2)

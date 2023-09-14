@@ -14,6 +14,8 @@ resolution. Previously this was only true when objectives had `normalize=True`
 - `Objective.print_value` Now prints max/min/avg for most objectives, and it should be
 clear whether it is printing the actual value of the quantity or the error between
 the objective and its target.
+- Adds new options to `plot_boozer_modes` to plot only symmetry breaking modes (when
+helicity is supplied) or only the pointwise maximum of the symmetry breaking modes.
 
 
 v0.10.0

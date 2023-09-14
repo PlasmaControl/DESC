@@ -75,7 +75,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
+def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
 
     Compute 〈𝐉 ⋅ 𝐁〉 using the formulae in
@@ -339,7 +339,7 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     ],
     helicity="helicity",
 )
-def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
+def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
 
     Compute 〈𝐉 ⋅ 𝐁〉 using the formulae in
@@ -381,8 +381,8 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
 
     helicity = kwargs.get("helicity", (1, 0))
     helicity_N = helicity[1]
-    j_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
-    data["<J*B> Redl"] = grid.expand(j_dot_B_data["<J*B>"])
+    J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
+    data["<J*B> Redl"] = grid.expand(J_dot_B_data["<J*B>"])
     return data
 
 
@@ -400,7 +400,7 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["rho", "e^zeta", "sqrt(g)", "b", "|B|", "J", "J_parallel", "<J*B> Redl"],
 )
-def _compute_current_Redl(params, transforms, profiles, data, **kwargs):
+def _current_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the current profile consistent with the Redl bootstrap current."""
     # perpendicular current density from MHD equilibrium
     J_ll = (data["J_parallel"] * data["b"].T).T

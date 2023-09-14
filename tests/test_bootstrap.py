@@ -7,7 +7,7 @@ from scipy.constants import elementary_charge
 from scipy.integrate import quad
 
 import desc.io
-from desc.compute._bootstrap import _trapped_fraction, j_dot_B_Redl
+from desc.compute._bootstrap import _trapped_fraction, compute_J_dot_B_Redl
 from desc.compute._field import (
     _1_over_B_fsa,
     _B2_fsa,
@@ -421,7 +421,7 @@ class TestBootstrapCompute:
             "Te_r": Te(rho, dr=1),
             "Ti_r": Ti(rho, dr=1),
         }
-        J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+        J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
         atol = 1e-13
         rtol = 1e-13
@@ -527,7 +527,7 @@ class TestBootstrapCompute:
                 "Te_r": Te(rho, dr=1),
                 "Ti_r": Ti(rho, dr=1),
             }
-            J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+            J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
             # Make sure L31, L32, and alpha are within the right range:
             np.testing.assert_array_less(J_dot_B_data["L31"], 1.05)
@@ -664,7 +664,7 @@ class TestBootstrapCompute:
                     "Te_r": Te(rho, dr=1),
                     "Ti_r": Ti(rho, dr=1),
                 }
-                J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+                J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
                 L31s[j_nu_star, :] = J_dot_B_data["L31"]
                 L32s[j_nu_star, :] = J_dot_B_data["L32"]

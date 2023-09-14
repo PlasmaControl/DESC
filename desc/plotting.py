@@ -1626,7 +1626,6 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
             period=(np.inf, 2 * np.pi, 2 * np.pi),
             guess=grid.nodes,
         ),
-        NFP=eq.NFP,
         sort=False,
     )
 
@@ -1657,7 +1656,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
             linestyle=ls[i],
             lw=lw[i],
             label="$\\phi \\cdot N_{{FP}}/2\\pi = {:.2f}$".format(
-                grid.NFP * phi[i] / (2 * np.pi)
+                eq.NFP * phi[i] / (2 * np.pi)
             ),
         )
         if rho[0] == 0:

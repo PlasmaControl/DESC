@@ -672,13 +672,15 @@ def _iota_num_current(params, transforms, profiles, data, **kwargs):
         return data
 
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+    current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
+    current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
     data["iota_num current"] = (
         2
         * jnp.pi
         * mu_0
         * transforms["grid"].replace_at_axis(
-            profiles["current"].compute(params["c_l"], dr=0) / data["psi_r"],
-            lambda: profiles["current"].compute(params["c_l"], dr=1) / data["psi_rr"],
+            current / data["psi_r"],
+            lambda: current_r / data["psi_rr"],
         )
     )
     return data
@@ -729,18 +731,16 @@ def _iota_num_r_current(params, transforms, profiles, data, **kwargs):
         return data
 
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+    current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
+    current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
+    current_rr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=2)
     data["iota_num_r current"] = (
         2
         * jnp.pi
         * mu_0
         * transforms["grid"].replace_at_axis(
-            (
-                profiles["current"].compute(params["c_l"], dr=1) * data["psi_r"]
-                - profiles["current"].compute(params["c_l"], dr=0) * data["psi_rr"]
-            )
-            / data["psi_r"] ** 2,
-            lambda: profiles["current"].compute(params["c_l"], dr=2)
-            / (2 * data["psi_rr"]),
+            (current_r * data["psi_r"] - current * data["psi_rr"]) / data["psi_r"] ** 2,
+            lambda: current_rr / (2 * data["psi_rr"]),
         )
     )
     return data
@@ -903,9 +903,11 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
         data["iota_num_rr"] = jnp.nan * data["0"]
         return data
 
-    current_r = profiles["current"].compute(params["c_l"], dr=1)
-    current_rr = profiles["current"].compute(params["c_l"], dr=2)
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+    current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
+    current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
+    current_rr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=2)
+    current_rrr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=3)
     alpha_rr = (
         jnp.pi
         * mu_0
@@ -913,12 +915,10 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
             2 * current_rr / data["psi_r"]
             - 4 * current_r * data["psi_rr"] / data["psi_r"] ** 2
             + 2
-            * profiles["current"].compute(params["c_l"], dr=0)
+            * current
             * (2 * data["psi_rr"] ** 2 - data["psi_rrr"] * data["psi_r"])
             / data["psi_r"] ** 3,
-            lambda: 2
-            * profiles["current"].compute(params["c_l"], dr=3)
-            / (3 * data["psi_rr"])
+            lambda: 2 * current_rrr / (3 * data["psi_rr"])
             - current_rr * data["psi_rrr"] / data["psi_rr"] ** 2
             + current_r * data["psi_rrr"] ** 2 / data["psi_rr"] ** 3,
         )
@@ -1024,9 +1024,11 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
         data["iota_num_rrr"] = jnp.nan * data["0"]
         return data
 
-    current_r = profiles["current"].compute(params["c_l"], dr=1)
-    current_rr = profiles["current"].compute(params["c_l"], dr=2)
-    current_rrr = profiles["current"].compute(params["c_l"], dr=3)
+    current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
+    current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
+    current_rr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=2)
+    current_rrr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=3)
+    current_rrrr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=4)
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
     alpha_rrr = (
         jnp.pi
@@ -1042,11 +1044,10 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
             )
             / data["psi_r"] ** 4
             + 12
-            * profiles["current"].compute(params["c_l"], dr=0)
+            * current
             * (data["psi_rrr"] * data["psi_rr"] * data["psi_r"] - data["psi_rr"] ** 3)
             / data["psi_r"] ** 4,
-            lambda: profiles["current"].compute(params["c_l"], dr=4)
-            / (2 * data["psi_rr"])
+            lambda: current_rrrr / (2 * data["psi_rr"])
             - current_rrr * data["psi_rrr"] / data["psi_rr"] ** 2
             + 3 * current_rr * data["psi_rrr"] ** 2 / (2 * data["psi_rr"] ** 3)
             - 3 * current_r * data["psi_rrr"] ** 3 / (2 * data["psi_rr"] ** 4),

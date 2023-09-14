@@ -2,7 +2,7 @@
 
 import sys
 
-from desc.io import InputReader
+from desc.input_reader import InputReader
 
 
 def main(cl_args=sys.argv[1:]):

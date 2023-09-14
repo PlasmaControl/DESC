@@ -13,7 +13,9 @@ from termcolor import colored
 
 from desc import set_device
 
-from .equilibrium_io import load
+# shouldn't import anything else from DESC here, since that will initialize JAX
+# before we have a chance to parse user inputs to see if they want to use GPU
+# instead, do local imports where needed.
 
 
 class InputReader:
@@ -818,6 +820,8 @@ class InputReader:
         f = open(outfile, "w+")
 
         f.seek(0)
+
+        from desc.io.equilibrium_io import load
 
         eq = load(infile)
         try:

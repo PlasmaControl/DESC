@@ -620,6 +620,15 @@ def test_target_profiles():
             ]
         ),
     )
+    objp = Pressure(target=lambda x: 2 * x, eq=eqc)
+    objp.build()
+    np.testing.assert_allclose(
+        objp.target,
+        2
+        * objp.constants["transforms"]["grid"].nodes[
+            objp.constants["transforms"]["grid"].unique_rho_idx, 0
+        ],
+    )
 
 
 @pytest.mark.unit

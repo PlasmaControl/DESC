@@ -262,6 +262,8 @@ def combine_args(*objectives):
 
 
 def _parse_callable_target_bounds(target, bounds, x):
+    if x.ndim > 1:
+        x = x[:, 0]
     if callable(target):
         target = target(x)
     if bounds is not None and callable(bounds[0]):

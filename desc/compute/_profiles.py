@@ -608,8 +608,8 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="iota_current",
-    label="\\iota_{\\mathrm{current}}",
+    name="iota current",
+    label="\\iota~\\mathrm{from~current}",
     units="~",
     units_long="None",
     description="Rotational transform (normalized by 2pi), current contribution",
@@ -618,20 +618,20 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["iota_current_num", "iota_den"],
-    axis_limit_data=["iota_current_num_r", "iota_den_r"],
+    data=["iota_den", "iota_num current"],
+    axis_limit_data=["iota_den_r", "iota_num_r current"],
 )
 def _iota_current(params, transforms, profiles, data, **kwargs):
-    data["iota_current"] = transforms["grid"].replace_at_axis(
-        data["iota_current_num"] / data["iota_den"],
-        lambda: data["iota_current_num_r"] / data["iota_den_r"],
+    data["iota current"] = transforms["grid"].replace_at_axis(
+        data["iota_num current"] / data["iota_den"],
+        lambda: data["iota_num_r current"] / data["iota_den_r"],
     )
     return data
 
 
 @register_compute_fun(
-    name="iota_vacuum",
-    label="\\iota_{\\mathrm{vacuum}}",
+    name="iota vacuum",
+    label="\\iota~\\mathrm{in~vacuum}",
     units="~",
     units_long="None",
     description="Rotational transform (normalized by 2pi), vacuum contribution",
@@ -640,46 +640,53 @@ def _iota_current(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["iota_den", "iota_vacuum_num"],
-    axis_limit_data=["iota_den_r", "iota_vacuum_num_r"],
+    data=["iota_den", "iota_num vacuum"],
+    axis_limit_data=["iota_den_r", "iota_num_r vacuum"],
 )
 def _iota_vacuum(params, transforms, profiles, data, **kwargs):
-    data["iota_vacuum"] = transforms["grid"].replace_at_axis(
-        data["iota_vacuum_num"] / data["iota_den"],
-        lambda: data["iota_vacuum_num_r"] / data["iota_den_r"],
+    data["iota vacuum"] = transforms["grid"].replace_at_axis(
+        data["iota_num vacuum"] / data["iota_den"],
+        lambda: data["iota_num_r vacuum"] / data["iota_den_r"],
     )
     return data
 
 
 @register_compute_fun(
-    name="iota_current_num",
-    label="\\iota_{\\mathrm{current, numerator}}",
+    name="iota_num current",
+    label="\\iota_{\\mathrm{numerator}}~\\mathrm{from~current}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Numerator of rotational transform formula, current contribution",
     dim=1,
-    params=[],
+    params=["c_l"],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["current"],
     coordinates="r",
-    data=["I", "psi_r"],
-    axis_limit_data=["I_r", "psi_rr"],
+    data=["0", "psi_r"],
+    axis_limit_data=["psi_rr"],
 )
-def _iota_current_num(params, transforms, profiles, data, **kwargs):
+def _iota_num_current(params, transforms, profiles, data, **kwargs):
     """Current contribution to the numerator of rotational transform formula."""
-    data["iota_current_num"] = (
-        4
-        * jnp.pi**2
+    if profiles["current"] is None:
+        data["iota_num current"] = jnp.nan * data["0"]
+        return data
+
+    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+    data["iota_num current"] = (
+        2
+        * jnp.pi
+        * mu_0
         * transforms["grid"].replace_at_axis(
-            data["I"] / data["psi_r"], lambda: data["I_r"] / data["psi_rr"]
+            profiles["current"].compute(params["c_l"], dr=0) / data["psi_r"],
+            lambda: profiles["current"].compute(params["c_l"], dr=1) / data["psi_rr"],
         )
     )
     return data
 
 
 @register_compute_fun(
-    name="iota_vacuum_num",
-    label="\\iota_{\\mathrm{vacuum, numerator}}",
+    name="iota_num vacuum",
+    label="\\iota_{\\mathrm{numerator}}~\\mathrm{in~vacuum}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Numerator of rotational transform formula, vacuum contribution",
@@ -691,49 +698,57 @@ def _iota_current_num(params, transforms, profiles, data, **kwargs):
     data=["lambda_z", "g_tt", "lambda_t", "g_tz", "sqrt(g)"],
     axis_limit_data=["g_tz_r", "sqrt(g)_r"],
 )
-def _iota_vacuum_num(params, transforms, profiles, data, **kwargs):
+def _iota_num_vacuum(params, transforms, profiles, data, **kwargs):
     """Vacuum contribution to the numerator of rotational transform formula."""
-    iota_vacuum_num = transforms["grid"].replace_at_axis(
+    iota_num_vacuum = transforms["grid"].replace_at_axis(
         (data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"])
         / data["sqrt(g)"],
         lambda: -(1 + data["lambda_t"]) * data["g_tz_r"] / data["sqrt(g)_r"],
     )
-    data["iota_vacuum_num"] = surface_integrals(transforms["grid"], iota_vacuum_num)
+    data["iota_num vacuum"] = surface_integrals(transforms["grid"], iota_num_vacuum)
     return data
 
 
 @register_compute_fun(
-    name="iota_current_num_r",
-    label="\\partial_{\\rho} \\iota_{\\mathrm{current, numerator}}",
+    name="iota_num_r current",
+    label="\\partial_{\\rho} \\iota_{\\mathrm{numerator}}~\\mathrm{from~current}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Numerator of rotational transform formula, current contribution, "
     + "first radial derivative",
     dim=1,
-    params=[],
+    params=["c_l"],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["current"],
     coordinates="r",
-    data=["I", "I_r", "psi_r", "psi_rr"],
-    axis_limit_data=["I_rr"],
+    data=["0", "psi_r", "psi_rr"],
 )
-def _iota_current_num_r(params, transforms, profiles, data, **kwargs):
-    data["iota_current_num_r"] = (
-        4
-        * jnp.pi**2
+def _iota_num_r_current(params, transforms, profiles, data, **kwargs):
+    if profiles["current"] is None:
+        data["iota_num_r current"] = jnp.nan * data["0"]
+        return data
+
+    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+    data["iota_num_r current"] = (
+        2
+        * jnp.pi
+        * mu_0
         * transforms["grid"].replace_at_axis(
-            (data["I_r"] * data["psi_r"] - data["I"] * data["psi_rr"])
+            (
+                profiles["current"].compute(params["c_l"], dr=1) * data["psi_r"]
+                - profiles["current"].compute(params["c_l"], dr=0) * data["psi_rr"]
+            )
             / data["psi_r"] ** 2,
-            lambda: data["I_rr"]
-            / (2 * data["psi_rr"]),  # XXX: this factor of 2 not in Eq. 48
+            lambda: profiles["current"].compute(params["c_l"], dr=2)
+            / (2 * data["psi_rr"]),
         )
     )
     return data
 
 
 @register_compute_fun(
-    name="iota_vacuum_num_r",
-    label="\\partial_{\\rho} \\iota_{\\mathrm{vacuum, numerator}}",
+    name="iota_num_r vacuum",
+    label="\\partial_{\\rho} \\iota_{\\mathrm{numerator}}~\\mathrm{in~vacuum}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Numerator of rotational transform formula, vacuum contribution, "
@@ -757,145 +772,17 @@ def _iota_current_num_r(params, transforms, profiles, data, **kwargs):
     ],
     axis_limit_data=["g_tt_rr", "g_tz_rr", "sqrt(g)_rr"],
 )
-def _iota_vacuum_num_r(params, transforms, profiles, data, **kwargs):
-    iota_vacuum_num = (
+def _iota_num_r_vacuum(params, transforms, profiles, data, **kwargs):
+    iota_num_vacuum = (
         data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
     ) / data["sqrt(g)"]
-    iota_vacuum_num_r = transforms["grid"].replace_at_axis(
+    iota_num_r_vacuum = transforms["grid"].replace_at_axis(
         (
             data["lambda_rz"] * data["g_tt"]
             + data["lambda_z"] * data["g_tt_r"]
             - data["lambda_rt"] * data["g_tz"]
             - (1 + data["lambda_t"]) * data["g_tz_r"]
-            - iota_vacuum_num * data["sqrt(g)_r"]
-        )
-        / data["sqrt(g)"],
-        lambda: (
-            (1 + data["lambda_t"])
-            * data["g_tz_r"]
-            * data["sqrt(g)_rr"]
-            / (2 * data["sqrt(g)_r"] ** 2)  # XXX: this factor of 2 not in Eq. 48
-            + (
-                data["lambda_z"] * data["g_tt_rr"]
-                - 2 * data["lambda_rt"] * data["g_tz_r"]
-                - (1 + data["lambda_t"]) * data["g_tz_rr"]
-            )
-            / (2 * data["sqrt(g)_r"])  # XXX: this factor of 2 not in Eq. 48
-        ),
-    )
-    data["iota_vacuum_num_r"] = surface_integrals(transforms["grid"], iota_vacuum_num_r)
-    return data
-
-
-@register_compute_fun(
-    name="iota_num",
-    label="\\iota_{\\mathrm{numerator}}",
-    units="m^{-1}",
-    units_long="inverse meters",
-    description="Numerator of rotational transform formula",
-    dim=1,
-    params=["c_l"],
-    transforms={"grid": []},
-    profiles=["current"],
-    coordinates="r",
-    data=["0", "lambda_z", "g_tt", "lambda_t", "g_tz", "sqrt(g)", "psi_r"],
-)
-def _iota_num(params, transforms, profiles, data, **kwargs):
-    """Numerator of rotational transform formula.
-
-    Computes 𝛼 + 𝛽 as defined in the document attached to the description
-    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
-    additional term to account for the enclosed net toroidal current.
-    """
-    if profiles["current"] is None:
-        data["iota_num"] = jnp.nan * data["0"]
-        return data
-
-    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
-    alpha = (
-        2
-        * jnp.pi
-        * mu_0
-        * profiles["current"].compute(params["c_l"], dr=0)
-        / data["psi_r"]
-    )
-    beta = surface_integrals(
-        transforms["grid"],
-        (data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"])
-        / data["sqrt(g)"],
-    )
-    data["iota_num"] = transforms["grid"].replace_at_axis(alpha + beta, 0)
-    return data
-
-
-@register_compute_fun(
-    name="iota_num_r",
-    label="\\partial_{\\rho} \\iota_{\\mathrm{numerator}}",
-    units="m^{-1}",
-    units_long="inverse meters",
-    description="Numerator of rotational transform formula, first radial derivative",
-    dim=1,
-    params=["c_l"],
-    transforms={"grid": []},
-    profiles=["current"],
-    coordinates="r",
-    data=[
-        "0",
-        "lambda_t",
-        "lambda_rt",
-        "lambda_z",
-        "lambda_rz",
-        "g_tt",
-        "g_tt_r",
-        "g_tz",
-        "g_tz_r",
-        "sqrt(g)",
-        "sqrt(g)_r",
-        "psi_r",
-        "psi_rr",
-    ],
-    axis_limit_data=["g_tt_rr", "g_tz_rr", "sqrt(g)_rr", "psi_rrr"],
-)
-def _iota_num_r(params, transforms, profiles, data, **kwargs):
-    """Numerator of rotational transform formula, first radial derivative.
-
-    Computes d(𝛼+𝛽)/d𝜌 as defined in the document attached to the description
-    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
-    additional term to account for the enclosed net toroidal current.
-    """
-    if profiles["current"] is None:
-        data["iota_num_r"] = jnp.nan * data["0"]
-        return data
-
-    current_r = profiles["current"].compute(params["c_l"], dr=1)
-    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
-    alpha_r = (
-        jnp.pi
-        * mu_0
-        * transforms["grid"].replace_at_axis(
-            2
-            * (
-                current_r * data["psi_r"]
-                - profiles["current"].compute(params["c_l"], dr=0) * data["psi_rr"]
-            )
-            / data["psi_r"] ** 2,
-            lambda: (
-                profiles["current"].compute(params["c_l"], dr=2) * data["psi_rr"]
-                - current_r * data["psi_rrr"]  # FIXME: psi_rrr=0
-            )
-            / data["psi_rr"] ** 2,
-        )
-    )
-    beta = (
-        data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
-    ) / data["sqrt(g)"]
-    beta_r = transforms["grid"].replace_at_axis(
-        (
-            data["lambda_rz"] * data["g_tt"]
-            + data["lambda_z"] * data["g_tt_r"]
-            - data["lambda_rt"] * data["g_tz"]
-            - (1 + data["lambda_t"]) * data["g_tz_r"]
-            - beta * data["sqrt(g)_r"]
+            - iota_num_vacuum * data["sqrt(g)_r"]
         )
         / data["sqrt(g)"],
         lambda: (
@@ -911,8 +798,63 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
             / (2 * data["sqrt(g)_r"])
         ),
     )
-    beta_r = surface_integrals(transforms["grid"], beta_r)
-    data["iota_num_r"] = alpha_r + beta_r
+    data["iota_num_r vacuum"] = surface_integrals(transforms["grid"], iota_num_r_vacuum)
+    return data
+
+
+@register_compute_fun(
+    name="iota_num",
+    label="\\iota_{\\mathrm{numerator}}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Numerator of rotational transform formula",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=["current"],
+    coordinates="r",
+    data=["0", "iota_num current", "iota_num vacuum"],
+)
+def _iota_num(params, transforms, profiles, data, **kwargs):
+    """Numerator of rotational transform formula.
+
+    Computes 𝛼 + 𝛽 as defined in the document attached to the description
+    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
+    additional term to account for the enclosed net toroidal current.
+    """
+    if profiles["current"] is None:
+        data["iota_num"] = jnp.nan * data["0"]
+        return data
+
+    data["iota_num"] = data["iota_num current"] + data["iota_num vacuum"]
+    return data
+
+
+@register_compute_fun(
+    name="iota_num_r",
+    label="\\partial_{\\rho} \\iota_{\\mathrm{numerator}}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Numerator of rotational transform formula, first radial derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=["current"],
+    coordinates="r",
+    data=["0", "iota_num_r current", "iota_num_r vacuum"],
+)
+def _iota_num_r(params, transforms, profiles, data, **kwargs):
+    """Numerator of rotational transform formula, first radial derivative.
+
+    Computes d(𝛼+𝛽)/d𝜌 as defined in the document attached to the description
+    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
+    additional term to account for the enclosed net toroidal current.
+    """
+    if profiles["current"] is None:
+        data["iota_num_r"] = jnp.nan * data["0"]
+        return data
+
+    data["iota_num_r"] = data["iota_num_r current"] + data["iota_num_r vacuum"]
     return data
 
 
@@ -1236,13 +1178,13 @@ def _iota_den_r(params, transforms, profiles, data, **kwargs):
             data["omega_t"]
             * data["g_tz_r"]
             * data["sqrt(g)_rr"]
-            / (2 * data["sqrt(g)_r"] ** 2)  # XXX: this factor of 2 not in Eq. 48
+            / (2 * data["sqrt(g)_r"] ** 2)
             + (
                 (1 + data["omega_z"]) * data["g_tt_rr"]
                 - 2 * data["omega_rt"] * data["g_tz_r"]
                 - data["omega_t"] * data["g_tz_rr"]
             )
-            / (2 * data["sqrt(g)_r"])  # XXX: this factor of 2 not in Eq. 48
+            / (2 * data["sqrt(g)_r"])
         ),
     )
     gamma_r = surface_integrals(transforms["grid"], gamma_r)

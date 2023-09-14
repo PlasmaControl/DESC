@@ -2104,13 +2104,15 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     return fig, ax
 
 
-def plot_boozer_modes(
+def plot_boozer_modes(  # noqa: C901
     eq,
     log=True,
     B0=True,
     norm=False,
     num_modes=10,
     rho=None,
+    helicity=None,
+    max_only=False,
     ax=None,
     return_data=False,
     **kwargs,
@@ -2132,6 +2134,12 @@ def plot_boozer_modes(
     rho : int or ndarray, optional
         Radial coordinates of the flux surfaces to evaluate at,
         or number of surfaces in (0,1]
+    helicity : None or tuple of int
+        If a tuple, the (M,N) helicity of the field, only symmetry breaking modes are
+        plotted. If None, plot all modes.
+    max_only : bool
+        If True, only plot the maximum of the symmetry breaking modes. Helicity must
+        be specified.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -2151,6 +2159,10 @@ def plot_boozer_modes(
         * ``legend_kw``: dict, any keyword arguments to be passed to ax.legend()
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``label`` : str, label to apply. Only used if ``max_only`` is True.
+        * ``color`` : str, color for plotted line. Only used if ``max_only`` is True.
+        * ``M_booz`` : int, poloidal resolution to use for Boozer transform.
+        * ``N_booz`` : int, toroidal resolution to use for Boozer transform.
 
     Returns
     -------
@@ -2184,6 +2196,16 @@ def plot_boozer_modes(
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
+    basis = get_transforms(
+        "|B|_mn", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
+    )["B"].basis
+    if helicity:
+        matrix, modes, symidx = ptolemy_linear_transform(
+            basis.modes, helicity=helicity, NFP=eq.NFP
+        )
+    else:
+        matrix, modes = ptolemy_linear_transform(basis.modes)
+
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(
@@ -2192,60 +2214,74 @@ def plot_boozer_modes(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
-        if i == 0:
-            matrix, modes = ptolemy_linear_transform(transforms["B"].basis.modes)
         b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
 
-    idx = np.argsort(np.abs(B_mn[0, :]))
-    if num_modes == -1:
-        idx = idx[-1::-1]
-    else:
-        idx = idx[-1 : -num_modes - 1 : -1]
-    B_mn = B_mn[:, idx]
+    zidx = np.where((modes[:, 1:] == np.array([[0, 0]])).all(axis=1))[0]
     if norm:
-        B_mn = B_mn / np.max(B_mn)
-    modes = modes[idx, :]
+        B_mn = B_mn / B_mn[:, zidx]
+    if helicity:
+        B_mn = B_mn[:, symidx]
+        modes = modes[symidx, :]
+    elif not B0:
+        B_mn = np.delete(B_mn, zidx, axis=-1)
+        modes = np.delete(modes, zidx, axis=0)
+
+    if max_only:
+        assert helicity is not None
+        B_mn = np.max(np.abs(B_mn), axis=1)
+        modes = None
+    else:
+        idx = np.argsort(np.mean(np.abs(B_mn), axis=0))
+        idx = idx[-1::-1] if (num_modes == -1) else idx[-1 : -num_modes - 1 : -1]
+        B_mn = B_mn[:, idx]
+        modes = modes[idx, :]
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
-    plot_data = {}
-    for i in range(modes.shape[0]):
-        L = modes[i, 0]
-        M = modes[i, 1]
-        N = modes[i, 2] * int(eq.NFP)
-        if (M, N) == (0, 0) and B0 is False:
-            continue
-        if log is True:
-            ax.semilogy(
-                rho,
-                np.abs(B_mn[:, i]),
-                label="M={}, N={}{}".format(
-                    M, N, "" if eq.sym else (" (cos)" if L > 0 else " (sin)")
-                ),
-                linestyle=linestyle,
-                linewidth=linewidth,
-            )
-        else:
-            ax.plot(
+    plot_op = ax.semilogy if log else ax.plot
+    B_mn = np.abs(B_mn) if log else B_mn
+
+    if max_only:
+        plot_op(
+            rho,
+            B_mn,
+            label=kwargs.pop("label", ""),
+            color=kwargs.pop("color", "k"),
+            linestyle=linestyle,
+            linewidth=linewidth,
+        )
+    else:
+        for i, (L, M, N) in enumerate(modes):
+            N *= int(eq.NFP)
+            plot_op(
                 rho,
                 B_mn[:, i],
-                "-",
                 label="M={}, N={}{}".format(
                     M, N, "" if eq.sym else (" (cos)" if L > 0 else " (sin)")
                 ),
                 linestyle=linestyle,
                 linewidth=linewidth,
             )
-    plot_data["|B|_mn"] = B_mn
-    plot_data["B modes"] = modes
-    plot_data["rho"] = rho
+
+    plot_data = {
+        "|B|_mn": B_mn,
+        "B modes": modes,
+        "rho": rho,
+    }
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
-    ax.set_ylabel(r"$B_{M,N}$ in Boozer coordinates $(T)$", fontsize=ylabel_fontsize)
+    if max_only:
+        ylabel = r"Max symmetry breaking Boozer $B_{M,N}$"
+    elif helicity:
+        ylabel = r"Symmetry breaking Boozer $B_{M,N}$"
+    else:
+        ylabel = r"$B_{M,N}$ in Boozer coordinates"
+    ylabel += r" (normalized)" if norm else r" $(T)$"
+    ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
 
     if kwargs.pop("legend", True):
-        fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
+        fig.legend(**kwargs.pop("legend_kw", {"loc": "lower right"}))
 
     assert (
         len(kwargs) == 0

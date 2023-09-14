@@ -24,6 +24,7 @@ from desc.objectives import (
     Elongation,
     Energy,
     ForceBalance,
+    ForceBalanceAnisotropic,
     GenericObjective,
     HelicalForceBalance,
     Isodynamicity,
@@ -1014,6 +1015,21 @@ def test_compute_scalar_resolution():  # noqa: C901
             sym=eq.sym,
         )
         obj = ObjectiveFunction(ForceBalance(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
+
+    # ForceBalanceAnisotropic
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)

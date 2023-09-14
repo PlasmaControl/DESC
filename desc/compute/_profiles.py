@@ -505,8 +505,10 @@ def _p_z(params, transforms, profiles, data, **kwargs):
 def _gradp(params, transforms, profiles, data, **kwargs):
     data["grad(p)"] = (
         data["p_r"] * data["e^rho"].T
+        # e^theta is blows up at the axis but the limit should go to zero
+        # if pressure is analytic
         + jnp.where(data["p_t"] == 0, 0, data["p_t"] * data["e^theta"].T)
-        + jnp.where(data["p_z"] == 0, 0, data["p_z"] * data["e^zeta"].T)
+        + data["p_z"] * data["e^zeta"].T
     ).T
     return data
 

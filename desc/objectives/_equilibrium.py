@@ -261,11 +261,10 @@ class ForceBalanceAnisotropic(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
     _units = "(N)"
+    _coordinates = "rtz"
     _equilibrium = True
-    _print_value_fmt = "Total force: {:10.3e} "
+    _print_value_fmt = "Anisotropic force error: {:10.3e} "
 
     def __init__(
         self,
@@ -402,11 +401,7 @@ class ForceBalanceAnisotropic(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        f = (
-            data["sqrt(g)"]
-            * constants["transforms"]["grid"].weights
-            * data["F_anisotropic"].T
-        ).T
+        f = (data["sqrt(g)"] * data["F_anisotropic"].T).T
 
         return f.flatten(order="F")  # to line up with quad weights
 

@@ -14,7 +14,7 @@ from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
 from .data_index import register_compute_fun
-from .utils import surface_averages_map
+from .utils import cumtrapz, dot, surface_averages_map, surface_integrals
 
 
 @register_compute_fun(
@@ -383,4 +383,40 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     helicity_N = helicity[1]
     j_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
     data["<J*B> Redl"] = grid.expand(j_dot_B_data["<J*B>"])
+    return data
+
+
+@register_compute_fun(
+    name="current Redl",
+    label="\\frac{2\\pi}{\\mu_0} I",
+    units="A",
+    units_long="Amperes",
+    description="Net toroidal current enclosed by flux surfaces, "
+    + "consistent with bootstrap current from Redl formula",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["rho", "e^zeta", "sqrt(g)", "b", "|B|", "J", "J_parallel", "<J*B> Redl"],
+)
+def _compute_current_Redl(params, transforms, profiles, data, **kwargs):
+    """Compute the current profile consistent with the Redl bootstrap current."""
+    # perpendicular current density from MHD equilibrium
+    J_ll = (data["J_parallel"] * data["b"].T).T
+    J_perp = data["J"] - J_ll
+
+    # J assuming parallel current density from Redl formula
+    J_ll_Redl = (data["<J*B> Redl"] / data["|B|"] * data["b"].T).T
+    J_Redl = J_ll_Redl + J_perp
+
+    # integrate current density to get net toroidal current
+    J_tor = dot(J_Redl, data["e^zeta"])  # TODO: this should really be e^phi
+    current_r = surface_integrals(
+        transforms["grid"], data["sqrt(g)"] * J_tor, expand_out=False
+    ) / (2 * jnp.pi)
+    rho = transforms["grid"].compress(data["rho"])
+    current = cumtrapz(current_r, rho, initial=0)
+
+    data["current Redl"] = transforms["grid"].expand(current)
     return data

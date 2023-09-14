@@ -129,11 +129,12 @@ def _e_sup_rho_rr(params, transforms, profiles, data, **kwargs):
         temp_rr.T / data["sqrt(g)"]
         - (
             temp_r.T * data["sqrt(g)_r"]
-            - (temp_r.T * data["sqrt(g)_r"] + temp.T * data["sqrt(g)_rr"])
+            + temp_r.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rr"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -183,11 +184,12 @@ def _e_sup_rho_rt(params, transforms, profiles, data, **kwargs):
         temp_rt.T / data["sqrt(g)"]
         - (
             temp_r.T * data["sqrt(g)_t"]
-            - (temp_t.T * data["sqrt(g)_r"] + temp.T * data["sqrt(g)_rt"])
+            + temp_t.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rt"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -237,11 +239,12 @@ def _e_sup_rho_rz(params, transforms, profiles, data, **kwargs):
         temp_rz.T / data["sqrt(g)"]
         - (
             temp_r.T * data["sqrt(g)_z"]
-            - (temp_z.T * data["sqrt(g)_r"] + temp.T * data["sqrt(g)_rz"])
+            + temp_z.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rz"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -322,11 +325,12 @@ def _e_sup_rho_tt(params, transforms, profiles, data, **kwargs):
         temp_tt.T / data["sqrt(g)"]
         - (
             temp_t.T * data["sqrt(g)_t"]
-            - (temp_t.T * data["sqrt(g)_t"] + temp.T * data["sqrt(g)_tt"])
+            + temp_t.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tt"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -376,11 +380,12 @@ def _e_sup_rho_tz(params, transforms, profiles, data, **kwargs):
         temp_tz.T / data["sqrt(g)"]
         - (
             temp_t.T * data["sqrt(g)_z"]
-            - (temp_z.T * data["sqrt(g)_t"] + temp.T * data["sqrt(g)_tz"])
+            + temp_z.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tz"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -465,11 +470,12 @@ def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
         temp_zz.T / data["sqrt(g)"]
         - (
             temp_z.T * data["sqrt(g)_z"]
-            - (temp_z.T * data["sqrt(g)_z"] + temp.T * data["sqrt(g)_zz"])
+            + temp_z.T * data["sqrt(g)_z"]
+            + temp.T * data["sqrt(g)_zz"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -583,11 +589,13 @@ def _e_sup_theta_rr(params, transforms, profiles, data, **kwargs):
         temp_rr.T / data["sqrt(g)"]
         - (
             temp_r.T * data["sqrt(g)_r"]
-            - (temp_r.T * data["sqrt(g)_r"] + temp.T * data["sqrt(g)_rr"])
+            + temp_r.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rr"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
-    )
+    ).T
+
     return data
 
 
@@ -637,11 +645,12 @@ def _e_sup_theta_rt(params, transforms, profiles, data, **kwargs):
         temp_rt.T / data["sqrt(g)"]
         - (
             temp_r.T * data["sqrt(g)_t"]
-            - (temp_t.T * data["sqrt(g)_r"] + temp.T * data["sqrt(g)_rt"])
+            + temp_t.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rt"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -691,11 +700,12 @@ def _e_sup_theta_rz(params, transforms, profiles, data, **kwargs):
         temp_rz.T / data["sqrt(g)"]
         - (
             temp_r.T * data["sqrt(g)_z"]
-            - (temp_z.T * data["sqrt(g)_r"] + temp.T * data["sqrt(g)_rz"])
+            + temp_z.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rz"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -768,11 +778,12 @@ def _e_sup_theta_tt(params, transforms, profiles, data, **kwargs):
         temp_tt.T / data["sqrt(g)"]
         - (
             temp_t.T * data["sqrt(g)_t"]
-            - (temp_t.T * data["sqrt(g)_t"] + temp.T * data["sqrt(g)_tt"])
+            + temp_t.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tt"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -822,11 +833,12 @@ def _e_sup_theta_tz(params, transforms, profiles, data, **kwargs):
         temp_tz.T / data["sqrt(g)"]
         - (
             temp_t.T * data["sqrt(g)_z"]
-            - (temp_z.T * data["sqrt(g)_t"] + temp.T * data["sqrt(g)_tz"])
+            + temp_z.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tz"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -899,11 +911,12 @@ def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
         temp_zz.T / data["sqrt(g)"]
         - (
             temp_z.T * data["sqrt(g)_z"]
-            - (temp_z.T * data["sqrt(g)_z"] + temp.T * data["sqrt(g)_zz"])
+            + temp_z.T * data["sqrt(g)_z"]
+            + temp.T * data["sqrt(g)_zz"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -1003,11 +1016,12 @@ def _e_sup_zeta_rr(params, transforms, profiles, data, **kwargs):
         temp_rr.T / data["sqrt(g)"]
         - (
             temp_r.T * data["sqrt(g)_r"]
-            - (temp_r.T * data["sqrt(g)_r"] + temp.T * data["sqrt(g)_rr"])
+            + temp_r.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rr"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -1057,11 +1071,12 @@ def _e_sup_zeta_rt(params, transforms, profiles, data, **kwargs):
         temp_rt.T / data["sqrt(g)"]
         - (
             temp_r.T * data["sqrt(g)_t"]
-            - (temp_t.T * data["sqrt(g)_r"] + temp.T * data["sqrt(g)_rt"])
+            + temp_t.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rt"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -1111,11 +1126,12 @@ def _e_sup_zeta_rz(params, transforms, profiles, data, **kwargs):
         temp_rz.T / data["sqrt(g)"]
         - (
             temp_r.T * data["sqrt(g)_z"]
-            - (temp_z.T * data["sqrt(g)_r"] + temp.T * data["sqrt(g)_rz"])
+            + temp_z.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rz"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -1201,11 +1217,12 @@ def _e_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
         temp_tt.T / data["sqrt(g)"]
         - (
             temp_t.T * data["sqrt(g)_t"]
-            - (temp_t.T * data["sqrt(g)_t"] + temp.T * data["sqrt(g)_tt"])
+            + temp_t.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tt"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -1255,11 +1272,12 @@ def _e_sup_zeta_tz(params, transforms, profiles, data, **kwargs):
         temp_tz.T / data["sqrt(g)"]
         - (
             temp_t.T * data["sqrt(g)_z"]
-            - (temp_z.T * data["sqrt(g)_t"] + temp.T * data["sqrt(g)_tz"])
+            + temp_z.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tz"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
-    )
+    ).T
     return data
 
 
@@ -1345,11 +1363,12 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
         temp_zz.T / data["sqrt(g)"]
         - (
             temp_z.T * data["sqrt(g)_z"]
-            - (temp_z.T * data["sqrt(g)_z"] + temp.T * data["sqrt(g)_zz"])
+            + temp_z.T * data["sqrt(g)_z"]
+            + temp.T * data["sqrt(g)_zz"]
         )
         / data["sqrt(g)"] ** 2
         + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
-    )
+    ).T
 
     return data
 

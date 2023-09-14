@@ -3,6 +3,7 @@
 from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
+from desc.utils import errorif, setdefault
 
 from .utils import (
     STATUS_MESSAGES,
@@ -42,7 +43,7 @@ def sgd(
     grad : callable
         function to compute gradient, df/dx. Should take the same arguments as fun
     args : tuple
-        additional arguments passed to fun, grad, and hess
+        additional arguments passed to fun and grad
     method : str
         Step size update rule. Currently only the default "sgd" is available. Future
         updates may include RMSProp, Adam, etc.
@@ -67,11 +68,10 @@ def sgd(
         Called after each iteration. Should be a callable with
         the signature:
 
-            ``callback(xk, OptimizeResult state) -> bool``
+            ``callback(xk, *args) -> bool``
 
-        where ``xk`` is the current parameter vector. and ``state``
-        is an ``OptimizeResult`` object, with the same fields
-        as the ones from the return. If callback returns True
+        where ``xk`` is the current parameter vector. and ``args``
+        are the same arguments passed to fun and grad. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
@@ -98,8 +98,7 @@ def sgd(
     g = grad(x, *args)
     ngev += 1
 
-    if maxiter is None:
-        maxiter = N * 1000
+    maxiter = setdefault(maxiter, N * 100)
     gnorm_ord = options.pop("gnorm_ord", jnp.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
     g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
@@ -107,7 +106,14 @@ def sgd(
     return_all = options.pop("return_all", True)
     alpha = options.pop("alpha", 1e-2 * x_norm / g_norm)
     beta = options.pop("beta", 0.9)
-    assert len(options) == 0, "sgd got an unexpected option {}".format(options.keys())
+
+    errorif(
+        len(options) > 0,
+        ValueError,
+        "Unknown options: {}".format([key for key in options]),
+    )
+
+    callback = setdefault(callback, lambda *args: False)
 
     success = None
     message = None
@@ -159,11 +165,8 @@ def sgd(
         if verbose > 1:
             print_iteration_nonlinear(iteration, nfev, f, df, step_norm, g_norm)
 
-        if callback is not None:
-            stop = callback(jnp.copy(x), *args)
-            if stop:
-                success = False
-                message = STATUS_MESSAGES["callback"]
+        if callback(jnp.copy(x), *args):
+            success, message = False, STATUS_MESSAGES["callback"]
 
         iteration += 1
 

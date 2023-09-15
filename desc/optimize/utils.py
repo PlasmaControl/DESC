@@ -8,7 +8,7 @@ from desc.backend import cond, jit, jnp, put
 from desc.utils import Index
 
 
-def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
+def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds, *args):
     """Convert inequality constraints to bounds using slack variables.
 
     We do this by introducing slack variables s
@@ -45,7 +45,7 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
         and slack variables x and s
 
     """
-    c0 = constraint.fun(x0)
+    c0 = constraint.fun(x0, *args)
     ncon = c0.size
     bounds = tuple(jnp.broadcast_to(bi, x0.shape) for bi in bounds)
     cbounds = (constraint.lb, constraint.ub)
@@ -443,7 +443,7 @@ def check_termination(
     **kwargs,
 ):
     """Check termination condition and get message."""
-    ftol_satisfied = dF < abs(ftol * F) and reduction_ratio > 0.25
+    ftol_satisfied = 0 < dF < abs(ftol * F) and reduction_ratio > 0.25
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
     gtol_satisfied = g_norm < gtol
     ctol_satisfied = kwargs.get("constr_violation", 0) < kwargs.get("ctol", np.inf)

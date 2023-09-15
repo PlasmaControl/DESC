@@ -396,9 +396,9 @@ class Grid(_Grid):
     Parameters
     ----------
     nodes : ndarray of float, size(num_nodes,3)
-        node coordinates, in (rho,theta,zeta)
+        Node coordinates, in (rho,theta,zeta)
     sort : bool
-        whether to sort the nodes for use with FFT method.
+        Whether to sort the nodes for use with FFT method.
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights, symmetry

@@ -1211,7 +1211,9 @@ class PlasmaCoilFeasibilty(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._surface_coords = self._surface.compute("x", basis="xyz")["x"]
+        self._surface_coords = self._surface.compute(
+            "x", basis="xyz", grid=surface_grid
+        )["x"]
         self._profiles = get_profiles(
             self._data_keys,
             eq=eq,
@@ -1275,8 +1277,8 @@ class PlasmaCoilFeasibilty(_Objective):
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
 
         d = jnp.linalg.norm(
@@ -1290,8 +1292,7 @@ class PlasmaCoilFeasibilty(_Objective):
         else:  # do hardmin
             dmin_data = d.min(axis=-1)
 
-        B_dmin_data = jnp.array([d_min * B for d_min, B in zip(dmin_data, data["|B|"])])
-
+        B_dmin_data = data["|B|"] * dmin_data
         B_dmin_variance = surface_variance(
             grid=self._plasma_grid,
             q=B_dmin_data,

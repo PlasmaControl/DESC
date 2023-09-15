@@ -56,10 +56,10 @@ def _optimize_desc_aug_lagrangian(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``desc.optimize.fmin_auglag`` for details.
 
     Returns
     -------
@@ -76,8 +76,6 @@ def _optimize_desc_aug_lagrangian(
         options.setdefault("initial_trust_ratio", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
     options["max_nfev"] = stoptol["max_nfev"]
-    options["max_ngev"] = stoptol["max_ngev"]
-    options["max_nhev"] = stoptol["max_nhev"]
     # local lambdas to handle constants from both objective and constraint
     hess = (lambda x, *c: objective.hess(x, c[0])) if "bfgs" not in method else "bfgs"
 
@@ -154,10 +152,10 @@ def _optimize_desc_aug_lagrangian_least_squares(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``desc.optimize.lsq_auglag`` for details.
 
     Returns
     -------
@@ -174,7 +172,6 @@ def _optimize_desc_aug_lagrangian_least_squares(
         options.setdefault("initial_trust_radius", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
     options["max_nfev"] = stoptol["max_nfev"]
-    options["max_njev"] = stoptol["max_njev"]
 
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
@@ -249,7 +246,7 @@ def _optimize_desc_least_squares(
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``desc.optimize.lsqtr`` for details.
 
     Returns
     -------
@@ -269,7 +266,6 @@ def _optimize_desc_least_squares(
     elif options.get("initial_trust_radius", "scipy") == "scipy":
         options.setdefault("initial_trust_ratio", 0.1)
     options["max_nfev"] = stoptol["max_nfev"]
-    options["max_njev"] = stoptol["max_njev"]
 
     result = lsqtr(
         objective.compute_scaled_error,
@@ -290,26 +286,15 @@ def _optimize_desc_least_squares(
 
 @register_optimizer(
     name=[
-        "fmin-exact",
-        "fmin-dogleg",
-        "fmin-subspace",
-        "fmin-exact-bfgs",
-        "fmin-dogleg-bfgs",
-        "fmin-subspace-bfgs",
+        "fmintr",
+        "fmintr-bfgs",
     ],
     description=[
-        "Trust region method using iterative cholesky method to exactly solve the "
-        + "trust region subproblem.",
-        "Trust region method using Powell's dogleg method to approximately solve the "
-        + "trust region subproblem.",
-        "Trust region method solving the subproblem over the 2d subspace spanned by "
-        + "the gradient and newton direction.",
-        "Trust region method using iterative cholesky method to exactly solve the "
-        + "trust region subproblem. Uses BFGS to approximate hessian",
-        "Trust region method using Powell's dogleg method to approximately solve the "
-        + "trust region subproblem. Uses BFGS to approximate hessian",
-        "Trust region method solving the subproblem over the 2d subspace spanned by "
-        + "the gradient and newton direction. Uses BFGS to approximate hessian",
+        "Trust region method for minimizing scalar valued multivariate function. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.fmintr.html",  # noqa: E501
+        "Trust region method for minimizing scalar valued multivariate function. Uses "
+        + "BFGS to approximate the Hessian. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.fmintr.html",  # noqa: E501
     ],
     scalar=True,
     equality_constraints=False,
@@ -347,7 +332,7 @@ def _optimize_desc_fmin_scalar(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
         settings. See the code for more details.
@@ -371,8 +356,6 @@ def _optimize_desc_fmin_scalar(
     elif options.get("initial_trust_radius", "scipy") == "scipy":
         options.setdefault("initial_trust_ratio", 0.1)
     options["max_nfev"] = stoptol["max_nfev"]
-    options["max_ngev"] = stoptol["max_ngev"]
-    options["max_nhev"] = stoptol["max_nhev"]
 
     result = fmintr(
         objective.compute_scalar,
@@ -433,10 +416,10 @@ def _optimize_desc_stochastic(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``desc.optimize.sgd`` for details.
 
     Returns
     -------

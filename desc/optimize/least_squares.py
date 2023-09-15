@@ -38,7 +38,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     gtol=1e-6,
     verbose=1,
     maxiter=None,
-    tr_method="svd",
     callback=None,
     options=None,
 ):
@@ -88,11 +87,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
-    tr_method : {'cho', 'svd'}
-        method to use for solving the trust region subproblem. 'cho' uses a sequence of
-        cholesky factorizations (generally 2-3), while 'svd' uses one singular value
-        decomposition. 'cho' is generally faster for large systems, especially on GPU,
-        but may be less accurate in some cases.
     callback : callable, optional
         Called after each iteration. Should be a callable with
         the signature:
@@ -104,7 +98,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
-        See the code for more details.
+        See Other Parameters for more details.
 
     Returns
     -------
@@ -115,13 +109,52 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         ``message`` which describes the cause of the termination. See
         ``OptimizeResult`` for a description of other attributes.
 
+    Other Parameters
+    ----------------
+    max_nfev : int > 0
+        Maximum number of function evaluations (each iteration may take more than one
+        function evaluation). Default is ``5*maxiter+1``
+    max_dx : float > 0
+        Maximum allowed change in the norm of x from its starting point. Default np.inf.
+    initial_trust_radius : {"scipy", "conngould", "mix"} or float > 0
+        Initial trust region radius. ``"scipy"`` uses the scaled norm of x0, which is
+        the default behavior in ``scipy.optimize.least_squares``. ``"conngould"`` uses
+        the norm of the Cauchy point, as recommended in ch17 of Conn & Gould. ``"mix"``
+        uses the geometric mean of the previous two options. A float can also be passed
+        to specify the trust radius directly. Default is ``"scipy"``.
+    initial_trust_ratio : float > 0
+        A extra scaling factor that is applied after one of the previous heuristics to
+        determine the initial trust radius. Default 1.
+    max_trust_radius : float > 0
+        Maximum allowable trust region radius. Default ``np.inf``.
+    min_trust_radius : float >= 0
+        Minimum allowable trust region radius. Optimization is terminated if the trust
+        region falls below this value. Default ``np.finfo(x0.dtype).eps``.
+    tr_increase_threshold : 0 < float < 1
+        Increase the trust region radius when the ratio of actual to predicted reduction
+        exceeds this threshold. Default 0.75.
+    tr_decrease_threshold : 0 < float < 1
+        Decrease the trust region radius when the ratio of actual to predicted reduction
+        is less than this threshold. Default 0.25.
+    tr_increase_ratio : float > 1
+        Factor to increase the trust region radius by when  the ratio of actual to
+        predicted reduction exceeds threshold. Default 2
+    tr_decrease_ratio : 0 < float < 1
+        Factor to decrease the trust region radius by when  the ratio of actual to
+        predicted reduction falls below threshold. Default 0.25
+    tr_method : {'svd', 'cho'}
+        method to use for solving the trust region subproblem. ``'cho'`` uses a sequence
+        of cholesky factorizations (generally 2-3), while ``'svd'`` uses one singular
+        value decomposition. ``'cho'`` is generally faster for large systems, especially
+        on GPU, but may be less accurate for badly scaled systems. Default ``'svd'``
+
+    References
+    ----------
+    .. [1] Conn, Andrew, and Gould, Nicholas, and Toint, Philippe. "Trust-region
+           methods" (2000).
+
     """
     options = {} if options is None else options
-    errorif(
-        tr_method not in ["cho", "svd"],
-        ValueError,
-        "tr_method should be one of 'cho', 'svd', got {}".format(tr_method),
-    )
     errorif(
         isinstance(x_scale, str) and x_scale not in ["jac", "auto"],
         ValueError,
@@ -148,13 +181,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     maxiter = setdefault(maxiter, n * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
-    max_njev = options.pop("max_njev", maxiter + 1)
-    gnorm_ord = options.pop("gnorm_ord", jnp.inf)
-    xnorm_ord = options.pop("xnorm_ord", 2)
     max_dx = options.pop("max_dx", jnp.inf)
-
-    return_all = options.pop("return_all", True)
-    return_tr = options.pop("return_tr", True)
 
     jac_scale = isinstance(x_scale, str) and x_scale in ["jac", "auto"]
     if jac_scale:
@@ -170,7 +197,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     g_h = g * d
     J_h = J * d
-    g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
+    g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
 
     # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # scipy : norm of the scaled x, as used in scipy
@@ -196,16 +223,22 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
+    tr_method = options.pop("tr_method", "svd")
 
     errorif(
         len(options) > 0,
         ValueError,
         "Unknown options: {}".format([key for key in options]),
     )
+    errorif(
+        tr_method not in ["cho", "svd"],
+        ValueError,
+        "tr_method should be one of 'cho', 'svd', got {}".format(tr_method),
+    )
 
     callback = setdefault(callback, lambda *args: False)
 
-    x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
+    x_norm = jnp.linalg.norm(x, ord=2)
     success = None
     message = None
     step_norm = jnp.inf
@@ -218,10 +251,8 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             iteration, nfev, cost, actual_reduction, step_norm, g_norm
         )
 
-    if return_all:
-        allx = [x]
-    if return_tr:
-        alltr = [trust_radius]
+    allx = [x]
+    alltr = [trust_radius]
     if g_norm < gtol:
         success, message = True, STATUS_MESSAGES["gtol"]
 
@@ -273,8 +304,8 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 mode="jac",
             )
 
-            step_h_norm = jnp.linalg.norm(step_h, ord=xnorm_ord)
-            step_norm = jnp.linalg.norm(step, ord=xnorm_ord)
+            step_h_norm = jnp.linalg.norm(step_h, ord=2)
+            step_norm = jnp.linalg.norm(step, ord=2)
 
             x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
             f_new = fun(x_new, *args)
@@ -297,10 +328,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 tr_decrease_threshold,
                 tr_decrease_ratio,
             )
-            if return_tr:
-                alltr.append(trust_radius)
+            alltr.append(trust_radius)
             alpha *= tr_old / trust_radius
-
+            # TODO: does this need to move to the outer loop?
             success, message = check_termination(
                 actual_reduction,
                 cost,
@@ -315,10 +345,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 maxiter,
                 nfev,
                 max_nfev,
-                0,
-                jnp.inf,
-                njev,
-                max_njev,
                 min_trust_radius=min_trust_radius,
                 dx_total=jnp.linalg.norm(x - x0),
                 max_dx=max_dx,
@@ -329,8 +355,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         # if reduction was enough, accept the step
         if actual_reduction > 0:
             x = x_new
-            if return_all:
-                allx.append(x)
+            allx.append(x)
             f = f_new
             cost = cost_new
             J = jac(x, *args)
@@ -347,8 +372,8 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
             g_h = g * d
             J_h = J * d
-            x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
-            g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
+            x_norm = jnp.linalg.norm(x, ord=2)
+            g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
 
             if g_norm < gtol:
                 success, message = True, STATUS_MESSAGES["gtol"]
@@ -384,6 +409,8 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         nit=iteration,
         message=message,
         active_mask=active_mask,
+        allx=allx,
+        alltr=alltr,
     )
     if verbose > 0:
         if result["success"]:
@@ -398,8 +425,4 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Jacobian evaluations: {:d}".format(result["njev"]))
 
-    if return_all:
-        result["allx"] = allx
-    if return_tr:
-        result["alltr"] = alltr
     return result

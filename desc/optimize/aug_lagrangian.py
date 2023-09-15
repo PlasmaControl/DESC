@@ -111,7 +111,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
-        See the code for more details.
+        See Other Parameters for more details.
 
     Returns
     -------
@@ -119,6 +119,102 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         The optimization result represented as a ``OptimizeResult`` object.
         Important attributes are: ``x`` the solution array, ``success`` a
         Boolean flag indicating if the optimizer exited successfully.
+
+    Other Parameters
+    ----------------
+    initial_penalty_parameter : float or array-like of float
+        Initial value for the quadratic penalty parameter. May be array like, in which
+        case it should be the same length as the number of constraint residuals.
+        Default 10.
+    initial_multipliers : float or array-like of float or "least_squares"
+        Initial Lagrange multipliers. May be array like, in which
+        case it should be the same length as the number of constraint residuals.
+        If "least_squares", uses an estimate based on the least squares solution of the
+        optimality conditions, see ch 14 of [1]_. Default 0.
+    omega : float
+        Hyperparameter for determining initial gradient tolerance. See algorithm 14.4.2
+        from [1]_ for details. Default 1.0
+    eta : float
+        Hyperparameter for determining initial constraint tolerance. See algorithm
+        14.4.2 from [1]_ for details. Default 1.0
+    alpha_omega : float
+        Hyperparameter for updating gradient tolerance. See algorithm 14.4.2
+        from [1]_ for details. Default 1.0
+    beta_omega : float
+        Hyperparameter for updating gradient tolerance. See algorithm 14.4.2
+        from [1]_ for details. Default 1.0
+    alpha_eta : float
+        Hyperparameter for updating constraint tolerance. See algorithm 14.4.2
+        from [1]_ for details. Default 0.1
+    beta_eta : float
+        Hyperparameter for updating constraint tolerance. See algorithm 14.4.2
+        from [1]_ for details. Default 0.9
+    tau : float
+        Factor to increase penalty parameter by when constraint violation doesn't
+        decrease sufficiently. Default 10
+    max_nfev : int > 0
+        Maximum number of function evaluations (each iteration may take more than one
+        function evaluation). Default is ``5*maxiter+1``
+    max_dx : float > 0
+        Maximum allowed change in the norm of x from its starting point. Default np.inf.
+    initial_trust_radius : {"scipy", "conngould", "mix"} or float > 0
+        Initial trust region radius. ``"scipy"`` uses the scaled norm of x0, which is
+        the default behavior in ``scipy.optimize.least_squares``. ``"conngould"`` uses
+        the norm of the Cauchy point, as recommended in ch17 of Conn & Gould. ``"mix"``
+        uses the geometric mean of the previous two options. A float can also be passed
+        to specify the trust radius directly. Default is ``"conngould"``.
+    initial_trust_ratio : float > 0
+        A extra scaling factor that is applied after one of the previous heuristics to
+        determine the initial trust radius. Default 1.
+    max_trust_radius : float > 0
+        Maximum allowable trust region radius. Default ``np.inf``.
+    min_trust_radius : float >= 0
+        Minimum allowable trust region radius. Optimization is terminated if the trust
+        region falls below this value. Default ``np.finfo(x0.dtype).eps``.
+    tr_increase_threshold : 0 < float < 1
+        Increase the trust region radius when the ratio of actual to predicted reduction
+        exceeds this threshold. Default 0.75.
+    tr_decrease_threshold : 0 < float < 1
+        Decrease the trust region radius when the ratio of actual to predicted reduction
+        is less than this threshold. Default 0.5.
+    tr_increase_ratio : float > 1
+        Factor to increase the trust region radius by when  the ratio of actual to
+        predicted reduction exceeds threshold. Default 4
+    tr_decrease_ratio : 0 < float < 1
+        Factor to decrease the trust region radius by when  the ratio of actual to
+        predicted reduction falls below threshold. Default 0.25
+    tr_method : {'exact', 'dogleg', 'subspace'}
+        method to use for trust region subproblem. ``'exact'`` uses a series of cholesky
+        factorizations (usually 2-3) to find the optimal step. ```dogleg``` approximates
+        the optimal step using Powell's dogleg method. ``'subspace'`` solves a reduced
+        subproblem over the space spanned by the gradient and newton direction.
+        Default ``'exact'``
+    hessian_exception_strategy : {'skip_update', 'damp_update'}, optional
+        If BFGS is used, defines how to proceed when the curvature condition is
+        violated. Set it to 'skip_update' to just skip the update. Or, alternatively,
+        set it to 'damp_update' to interpolate between the actual BFGS
+        result and the unmodified matrix. Both exceptions strategies
+        are explained  in [2]_, p.536-537.
+    hessian_min_curvature : float
+        If BFGS is used, this number, scaled by a normalization factor, defines the
+        minimum curvature ``dot(delta_grad, delta_x)`` allowed to go
+        unaffected by the exception strategy. By default is equal to
+        1e-8 when ``exception_strategy = 'skip_update'`` and equal
+        to 0.2 when ``exception_strategy = 'damp_update'``.
+    hessian_init_scale : {float, 'auto'}
+        If BFGS is used, the matrix scale at first iteration. At the first
+        iteration the Hessian matrix or its inverse will be initialized
+        with ``init_scale*np.eye(n)``, where ``n`` is the problem dimension.
+        Set it to 'auto' in order to use an automatic heuristic for choosing
+        the initial scale. The heuristic is described in [2]_, p.143.
+        By default uses 'auto'.
+
+    References
+    ----------
+    .. [1] Conn, Andrew, and Gould, Nicholas, and Toint, Philippe. "Trust-region
+           methods" (2000).
+    .. [2] Nocedal, Jorge, and Stephen J. Wright. "Numerical optimization"
+           Second Edition (2006).
 
     """
     constraint = setdefault(
@@ -248,13 +344,9 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         nhev += 1
 
     allx = []
-    return_all = options.pop("return_all", True)
-    return_tr = options.pop("return_tr", True)
 
     maxiter = setdefault(maxiter, z.size * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
-    max_ngev = options.pop("max_ngev", maxiter + 1)
-    max_nhev = options.pop("max_nhev", maxiter + 1)
     max_dx = options.pop("max_dx", jnp.inf)
 
     hess_scale = isinstance(x_scale, str) and x_scale in ["hess", "auto"]
@@ -312,6 +404,11 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         "subspace": solve_trust_region_2d_subspace,
         "exact": trust_region_step_exact_cho,
     }
+    errorif(
+        tr_method not in methods,
+        ValueError,
+        f"tr_method should be one of {methods.keys()}, got {tr_method}",
+    )
     subproblem = methods[tr_method]
 
     z_norm = jnp.linalg.norm(z, ord=2)
@@ -322,10 +419,8 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     Lactual_reduction = jnp.inf
     alpha = 0  # "Levenberg-Marquardt" parameter
 
-    if return_all:
-        allx = [z]
-    if return_tr:
-        alltr = [trust_radius]
+    allx = [z]
+    alltr = [trust_radius]
     if g_norm < gtol and constr_violation < ctol:
         success, message = True, STATUS_MESSAGES["gtol"]
 
@@ -404,8 +499,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
                 tr_decrease_threshold,
                 tr_decrease_ratio,
             )
-            if return_tr:
-                alltr.append(trust_radius)
+            alltr.append(trust_radius)
             alpha *= tr_old / trust_radius
 
             success, message = check_termination(
@@ -422,10 +516,6 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
                 maxiter,
                 nfev,
                 max_nfev,
-                ngev,
-                max_ngev,
-                nhev,
-                max_nhev,
                 min_trust_radius=min_trust_radius,
                 dx_total=jnp.linalg.norm(z - z0),
                 max_dx=max_dx,
@@ -439,8 +529,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         if Lactual_reduction > 0:
             z_old = z
             z = z_new
-            if return_all:
-                allx.append(z)
+            allx.append(z)
             f = f_new
             c = c_new
             constr_violation = jnp.linalg.norm(c, ord=jnp.inf)

@@ -300,7 +300,7 @@ def _optimize_desc_least_squares(
     equality_constraints=False,
     inequality_constraints=False,
     stochastic=False,
-    hessian=[True, True, True, False, False, False],
+    hessian=[True, False],
     GPU=True,
 )
 def _optimize_desc_fmin_scalar(

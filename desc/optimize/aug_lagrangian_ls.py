@@ -259,6 +259,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         _g = f @ jac_wrapped(z, *args)
         y = jnp.linalg.lstsq(_J.T, _g)[0]
         y = jnp.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+    mu = jnp.atleast_1d(mu)
+    y = jnp.atleast_1d(y)
 
     # notation following Conn & Gould, algorithm 14.4.2, but with our mu = their mu^-1
     omega = options.pop("omega", 1.0)

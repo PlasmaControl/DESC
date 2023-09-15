@@ -1270,7 +1270,7 @@ def plot_section(
             + "$ ($"
             + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
             + "$)"
-            + ", $\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
+            + ", $\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
                 eq.NFP * phi[i] / (2 * np.pi)
             )
         )
@@ -1288,7 +1288,7 @@ def plot_section(
                         "label"
                     ]
                     + "$",
-                    "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
+                    "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
                         eq.NFP * phi[i] / (2 * np.pi)
                     ),
                 ),
@@ -1522,7 +1522,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         ax[i].set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
-            "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
+            "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_fontsize,
         )
     _set_tight_layout(fig)
@@ -2895,10 +2895,12 @@ def plot_basis(basis, return_data=False, **kwargs):
         ax.set_ylabel("$f_n(\\zeta)$")
         ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
         ax.set_xticks([0, np.pi / basis.NFP, 2 * np.pi / basis.NFP])
-        ax.set_xticklabels(["$0$", "$\\pi/NFP$", "$2\\pi/NFP$"])
+        ax.set_xticklabels(["$0$", "$\\pi/N_{{FP}}$", "$2\\pi/N_{{FP}}$"])
         ax.set_yticks([-1, -0.5, 0, 0.5, 1])
         ax.set_title(
-            "{}, $N={}$, $NFP={}$".format(basis.__class__.__name__, basis.N, basis.NFP),
+            "{}, $N={}$, $N_{{FP}}={}$".format(
+                basis.__class__.__name__, basis.N, basis.NFP
+            ),
             fontsize=title_fontsize,
         )
         _set_tight_layout(fig)
@@ -2963,7 +2965,8 @@ def plot_basis(basis, return_data=False, **kwargs):
                     "$\\zeta$ \n $n={}$".format(n), fontsize=10
                 )
                 ax[mmax + m, nmax + n].set_xticklabels(
-                    ["$0$", None, "$\\pi/NFP$", None, "$2\\pi/NFP$"], fontsize=8
+                    ["$0$", None, "$\\pi/N_{{FP}}$", None, "$2\\pi/N_{{FP}}$"],
+                    fontsize=8,
                 )
             if n + nmax == 0:
                 ax[mmax + m, 0].set_ylabel("$m={}$ \n $\\theta$".format(m), fontsize=10)
@@ -2974,7 +2977,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         cbar = fig.colorbar(im, cax=cb_ax)
         cbar.set_ticks([-1, -0.5, 0, 0.5, 1])
         fig.suptitle(
-            "{}, $M={}$, $N={}$, $NFP={}$".format(
+            "{}, $M={}$, $N={}$, $N_{{FP}}={}$".format(
                 basis.__class__.__name__, basis.M, basis.N, basis.NFP
             ),
             y=0.98,

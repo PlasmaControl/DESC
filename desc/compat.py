@@ -6,19 +6,19 @@ from desc.grid import Grid
 
 
 def ensure_positive_jacobian(eq):
-    """Convert an Equilibrium to have a positive coordinate jacobian.
+    """Convert an Equilibrium to have a positive coordinate Jacobian.
 
     Parameters
     ----------
     eq : Equilibrium or iterable of Equilibrium
-        Equilibria to convert to right handed coordinate system.
+        Equilibria to convert to right-handed coordinate system.
 
     Returns
     -------
     eq : Equilibrium or iterable of Equilibrium
-        Same as input, but with coefficients adjusted to give right handed coordinates.
+        Same as input, but with coefficients adjusted to give right-handed coordinates.
     """
-    # maybe its iterable:
+    # maybe it's iterable:
     if hasattr(eq, "__len__"):
         for e in eq:
             ensure_positive_jacobian(e)
@@ -40,6 +40,8 @@ def ensure_positive_jacobian(eq):
 
         if eq.iota is not None:
             eq.i_l *= -1
+        else:
+            eq.c_l *= -1
         eq.surface = eq.get_surface_at(rho=1)
 
     signgs = np.sign(eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"])

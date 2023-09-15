@@ -1,6 +1,236 @@
 Changelog
 =========
 
+- Removes ``grid`` attribute from ``Profile`` classes, ``grid`` should now be passed
+in when calling ``Profile.compute``.
+- Refactors most of the optimizer subproblems to use JAX control flow, allowing them
+to run more efficiently on the GPU.
+- Adds ``'shear'`` as a compute quantity and ``Shear`` as an objective function.
+- Adds a new objective ``Pressure`` to target a pressure profile as a function of rho instead
+of spectral coefficients like ``FixPressure``. Can also be used when optimizing kinetic equilibria.
+- Also allows all profile objectives to have callable bounds and targets.
+- All objective function values should now be approximately independent of the grid
+resolution. Previously this was only true when objectives had `normalize=True`
+- `Objective.print_value` Now prints max/min/avg for most objectives, and it should be
+clear whether it is printing the actual value of the quantity or the error between
+the objective and its target.
+- Adds new options to `plot_boozer_modes` to plot only symmetry breaking modes (when
+helicity is supplied) or only the pointwise maximum of the symmetry breaking modes.
+
+
+v0.10.0
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.9.2...v0.10.0)
+
+
+Major Changes
+- Removes the various ``compute_*`` methods from ``Surface`` and ``Curve`` classes in
+favor of a unified ``compute`` method, similar to ``Equilibrium.compute``. The method
+takes as arguments strings containing the desired data. A full list of available options
+is at https://desc-docs.readthedocs.io/en/stable/variables.html
+- Analytic limits at the magnetic axis of all quantities have now been implemented.
+- New functions ``desc.random.random_surface`` and ``desc.random.random_pressure`` for
+generating pseudo-random toroidal surfaces and monotonic profiles.
+- Adds new curve parameterization `` desc.geometry.SplineXYZCurve`` and corresponding
+coil ``desc.coils.SplineXYZCoil`` that use a local spline of points in real space.
+- New methods ``CoilSet.from_makegrid_coilfile`` and ``CoilSet.save_in_makegrid_format``
+for creating a ``CoilSet`` of ``SplineXYZCoil`` from a MAKEGRID style text file or saving
+coil data in the format expected by MAKEGRID.
+- New function ``desc.magnetic_fields.read_BNORM_file`` for reading the Bnormal distribution
+on a surface from a BNORM code output file.
+- New methods ``compute_Bnormal`` and ``save_BNORM_file`` for all magnetic field classes
+to compute the normal component of the field on a given surface and save the data in the
+same format as the BNORM code.
+
+Minor Changes
+- Increases default radial resolution for stability objectives to be consistent with
+other objectives.
+- Creating ``Equilibrium`` objects or calling ``change_resolution`` on objects that have
+it should now be significantly faster.
+- ``Grid`` and ``Transform`` objects can now be created within the context of ``jit``,
+by passing ``jitable=True`` to the constructor.
+- Added support for newer JAX versions, up to v0.4.14. Newer versions likely work as well
+but are not automatically tested.
+- Adds ability to compute curvatures of constant theta and constant zeta surfaces.
+- Fixes definition of derivatives of co- and contra-variant basis vectors to properly
+account for the chain rule derivatives of the cylindrical basis vectors as well.
+- Adds calculation of ``A(r)``, the approximate cross sectional area as a function of rho.
+- Adds method ``desc.io.InputReader.descout_to_input`` to create a text input file for
+DESC from a saved hdf5 output.
+
+Bug Fixes
+* Fixes bug in saving nested dicts/lists.
+* Removes default node at rho=1 for ``BootstrapRedlConsistency`` objective to avoid
+dividing by zero where profiles may be zero.
+- Fixes bug causing ``QuasisymmetryBoozer`` to fail when compiling due to JAX issues.
+- Fixes incorrect implementation of derivatives of contravariant metric tensor elements
+(these were unused at present so shouldn't have caused any issues.)
+* Fixes bug where bounds for profile objectives were not scaled correctly when used
+as an inequality constraint.
+- Fixes a bug where calculating elongation would return NaN for near-circular cross sections.
+
+
+v0.9.2
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.9.1...v0.9.2)
+
+Improvements
+- Improves robustness and speed of ``map_coordinates``.
+- Adds axis parameters ``Ra_n`` and ``Za_n`` as optimizable DoF when using standard
+constrained optimization methods (ie, not ``ProximalProjection``).
+- Adds method to convert ``FourierRZCurve`` to ``FourierXYZCurve``.
+- Makes DESC classes compatible with JAX pytrees.
+- Adds Chebyshev polynomials as basis function (for future use).
+
+Breaking changes
+- Renames ``theta_sfl`` to ``theta_PEST`` in compute functions to avoid confusion with
+other straight field line coordinate systems.
+- Makes plotting kwargs a bit more uniform. ``zeta``, ``nzeta``, ``nphi`` have all been
+superceded by ``phi`` which can be an integer for equally spaced angles or a float or
+array of float to specify angles manually.
+
+Bug fixes
+- Avoids accidentally overwriting equilibria during automatic continuation method.
+
+New Contributors
+
+- \@rahulgaur104 made their first contribution in https://github.com/PlasmaControl/DESC/pull/576
+
+
+v0.9.1
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.9.0...v0.9.1)
+
+
+Deprecations
+- Creating an ``Objective`` without specifying the ``Equilibrium`` or other object to be
+ optimized is deprecated, and in the future will raise an error.
+ - Passing in an ``Equilibrium`` when creating an ``Objective`` no longer builds the
+ objective immediately.
+ - ``Objective.build`` can now be called without arguments, assuming the object to be
+ optimized was specified when the objective was created.
+- Removes ``Equilibrium.solved`` attribute as it was generally unused and occasionally
+caused issues when saving to VMEC format.
+
+New Features
+- Adds ``deriv_mode="looped"`` option to ``desc.objectives.ObjectiveFunction`` for
+computing derivative matrices. This is slightly slower but much more memory efficient
+than the default ``"batched"`` option.
+- Adds BFGS option for augmented Lagrangian optimizers.
+- Adds utility functions for computing line integrals, vector valued integrals, and
+integral transforms in ``desc.compute.utils``.
+- Adds ``method="monotonic-0"`` to ``desc.interpolate.interp1d``, which enforces
+monotonicity and zero slope at the endpoints.
+- Adds ``rho`` argument to ``desc.plotting.plot_boozer_surface`` to specify the desired
+surface, rather than having to create custom grids. Also adds a ``fieldlines`` argument
+for overlaying magnetic field lines on the Boozer strength plot.
+- DESC objects with a ``change_resolution`` method now allow changing symmetry type.
+
+Minor Changes
+- Augmented Lagrangian methods now use a default starting Lagrange multiplier of 0, rather
+than the least squares estimate which can be a bad approximation if the starting point
+is far from optimal. The old behavior can be recovered by passing
+``"initial_multipliers": "least_squares"`` as part of ``options`` when calling ``optimize``.
+- Enforces periodicity convention for ``alpha`` and ``theta_sfl`` - They are both now
+defined to be between 0 and 2pi.
+
+Bug Fixes
+- Flips sign of current loading/saving VMEC data to account for negative Jacobian.
+- Increases default resolution for computing magnetic field harmonics in ``desc.plotting.plot_qs_error``
+to avoid aliasing.
+- Ensures that ``Basis.L`` , ``Basis.M``, ``Basis.N`` are all integers.
+- Removes duplicated entries in the ``data_index``
+- Fixes a bug in the normalization of the radial unit vector.
+
+
+v0.9.0
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.8.2...v0.9.0)
+
+
+New Features
+- Implements a new limit API to correctly evaluate a number of quantities at the
+coordinate singularity at $\rho=0$ rather than returning NaN. Currently only quantities
+related to rotational transform and magnetic field strength are implemented, though in
+the future all quantities should evaluate correctly at the magnetic axis. Note that
+evaluating quantities at the axis generally requires higher order derivatives and so
+can be much more expensive than evaluating at nonsingular points, so during optimization
+it is not recommended to include a grid point at the axis. Generally a small finite value
+such as ``rho = 1e-6`` will avoid the singuarlity with a negligible loss in accuracy for
+analytic quantities.
+- Adds new optimizers ``fmin-auglag`` and ``lsq-auglag`` for performing constrained
+optimization using the augmented Lagrangian method. These generally perform much better
+than constrained algorithms from scipy.
+- Adds interfaces to ``trust-constr`` and ``SLSQP`` methods of ``scipy.optimize.minimize``.
+These methods can handle general nonlinear constraints, though their performance on
+badly scaled problems like those encountered in stellarator optimization isn't great.
+- Adds calculation of the PEST straight field line coordinate jacobian, which is now
+used to check for nestedness in ``Equilibrium.is_nested``. Previously the non-straight
+field line jacobian was used, which would not detect if SFL theta contours overlapped.
+- Introduces a new function/method ``Equilibrium.map_coordinates`` which generalizes
+the existing methods ``compute_theta_coordinates`` and ``compute_flux_coordinates``,
+but allows mapping between arbitrary coordinates.
+- Adds calculation of $\nabla \mathbf{B}$ tensor and corresponding $L_{\nabla B}$ metric
+- Adds objective ``BScaleLength`` for penalizing strong magnetic field curvature.
+- Adds objective ``ObjectiveFromUser`` for wrapping an arbitary user defined function.
+- Adds utilities ``desc.grid.find_least_rational_surfaces`` and
+``desc.grid.find_most_rational_surfaces`` for finding the least/most rational surfaces
+for a given rotational transform profile.
+
+Breaking changes
+- ``Objective`` and ``ObjectiveFunction`` compute methods have now been separated into
+``compute_unscaled`` which returns the raw physics value of the objective,
+``compute_scaled``, which returns the normalized value, and ``compute_scaled_error``
+which returns the normalized difference between the physics value and the target/bounds.
+Similarly, ``jac_scaled`` and ``jac_unscaled`` are the relevant derivatives (note that
+``jac_scaled`` is equivalent to ``jac_scaled_error`` as the constant target drops out).
+``grad`` and ``hess`` methods still correspond to ``compute_scalar`` which returns the
+ sum of squares of ``compute_scaled_error``
+- renames ``zeta`` -> ``phi`` in many places in ``desc.plotting`` to be consistent with
+when we mean the computational coordinate $\zeta$ vs the physical coordinate $\phi$
+- Replaces ``nfev`` with ``maxiter`` in many places in the code. For most optimizers
+in scipy and all DESC optimizers, one iteration means one accepted step, which may
+require more than 1 function evaluation due to line searches or trust region subproblems.
+However, derivatives are generally only evaluated once per iteration, and are usually the
+most significant cost, so the iteration count is generally a better proxy for wall time
+than number of function evaluations.
+
+Minor changes
+- Minor updates to work with newer versions of JAX. Minimum ``jax`` version  is now
+``0.3.2``, as some functions used in the constrained optimizers aren't present in
+previous versions. Maximum ``jax`` version is now ``0.4.11``, the latest as of 6/13/23.
+- Adds new ``ObjectiveFunction`` attributes ``target_scaled`` and ``bounds_scaled``
+which return vectors of the scaled values from each sub-objective.
+- Adds automatic scaling of variables for ``scipy.optimize.minimize`` methods, using
+the hessian at the initial point.
+- Ensures objectives don't have both bounds and target set at the same time. This
+occasionally caused issues if one of them had a default value without the user realizing.
+- Adds documentation on how to interface with new optimizers.
+- Adds a documentation notebook with a simple example of using constrained optimizers
+- Adds a table of optimizer info to docs
+- Adds capability of ``InputReader`` to read VMEC files that have inputs spanning
+multiple lines
+- Reduces default initial trust region radius for most optimizers to be more conservative.
+- Adds a "softmin" option to ``PlasmaVesselDistance`` objective which is smoother and
+usually provides a better optimization landscape compared to the standard hard min.
+
+Bug Fixes
+- Fixes orientation of theta in VMEC output. (Previously we flipped theta for the base
+quantities such as $R$, $Z$, and $\lambda$, but not derived quantities such as $B$ and $J$).
+- Fixes VMEC utility bug that would cause ``xn``, ``xm`` to be empty if the Fourier
+modes given had only sine symmetry.
+- Fixes bug when VMEC input file has duplicated lines, DESC now will just use the
+last duplicated line (which is what VMEC does)
+
+New Contributors
+
+- \@pkim1818 made their first contribution in https://github.com/PlasmaControl/DESC/pull/503
+
+
 v0.8.2
 ------
 
@@ -20,7 +250,7 @@ Minor changes
 Bug Fixes
 - Fixed minor bug with symmetric grids that caused end points to be double counted
 - Fixed bug causing `NFP` of curves to not be updated correctly when the equilibrium changed
-- Fixed issue when converting `pyQIC` solutions to `DESC` equilibria related to offset toroidal grid 
+- Fixed issue when converting `pyQIC` solutions to `DESC` equilibria related to offset toroidal grid
 
 
 v0.8.1
@@ -34,7 +264,7 @@ Minor Changes
 Bug Fixes
 * Fix read-the-docs build error
 * Add missing classes to API docs
-* fix error in fix axis util function 
+* fix error in fix axis util function
 * Add missing attributes to new classes added in `v0.8.0`
 
 
@@ -68,7 +298,7 @@ v0.7.2
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.1...v0.7.2)
 
 What's Changed
-* Fix bug in QS Boozer metric where non-symmetric modes were sometimes counted as 
+* Fix bug in QS Boozer metric where non-symmetric modes were sometimes counted as
 symmetric due to different Fourier series conventions.
 * Improve speed of functions for converting between VMEC and DESC Fourier representations.
 * Add objectives for penalizing strong shaping.
@@ -132,7 +362,7 @@ Major Changes
 - All objectives now have a `normalize` argument that when true will nondimensionalize
 the physics value and scale to be approximately ~O(1) in magnitude. This should make it
 easier to tune weights when doing multiobjective optimization.
-- New objective `RotationalTransform` for targeting a particular iota profile in real 
+- New objective `RotationalTransform` for targeting a particular iota profile in real
 space.
 - New function `plot_boundaries` to plot comparisons between boundary shapes.
 
@@ -142,7 +372,7 @@ version is still `0.2.11` but this will likely change in the future.
 
 Bug fixes
 - Fix indexing bug in biot-savart for coils that caused the output to have the wrong shape
-- Fix a bug occasionally preventing the optimizer from restarting correctly after 
+- Fix a bug occasionally preventing the optimizer from restarting correctly after
 trying a bad step
 
 
@@ -165,7 +395,7 @@ Bug Fixes
 - Fix bug preventing ``lsqtr`` from terminating when ``maxiter`` is zero.
 - Fix bug when converting profiles to ``FourierZernikeProfile``.
 - Fix bug where a ``FixBoundary`` constraint with only 1 mode constrained would throw an error during ``objective.build``
- 
+
 
 v0.6.2
 ------

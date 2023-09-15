@@ -1,11 +1,14 @@
 """Utility functions, independent of the rest of DESC."""
 
+import numbers
 import warnings
 from itertools import combinations_with_replacement, permutations
 
 import numpy as np
 from scipy.special import factorial
 from termcolor import colored
+
+from desc.backend import fori_loop, jit, jnp
 
 
 class Timer:
@@ -224,13 +227,15 @@ def equals(a, b):
     return a == b
 
 
-def flatten_list(x):
+def flatten_list(x, flatten_tuple=False):
     """Flatten a nested list.
 
     Parameters
     ----------
     x : list
         nested list of lists to flatten
+    flatten_tuple : bool
+        Whether to also flatten nested tuples.
 
     Returns
     -------
@@ -238,8 +243,11 @@ def flatten_list(x):
         flattened input
 
     """
-    if isinstance(x, list):
-        return [a for i in x for a in flatten_list(i)]
+    types = (list,)
+    if flatten_tuple:
+        types += (tuple,)
+    if isinstance(x, types):
+        return [a for i in x for a in flatten_list(i, flatten_tuple)]
     else:
         return [x]
 
@@ -262,7 +270,7 @@ def issorted(x, axis=None, tol=1e-12):
 
     Returns
     -------
-    issorted : bool
+    is_sorted : bool
         whether the array is sorted along specified axis
 
     """
@@ -286,7 +294,7 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
         relative tolerance for comparison.
     atol : float
         absolute tolerance for comparison.
-        If the following equation is element-wise True, then isalmostequal returns True.
+        If the following equation is element-wise True, then returns True.
             absolute(a - b) <= (atol + rtol * absolute(b))
         where a= x[0] and b is every other element of x, if flattened array,
         or if axis is not None, a = x[:,0,:] and b = x[:,i,:] for all i, and
@@ -294,7 +302,7 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
 
     Returns
     -------
-    isalmostequal : bool
+    is_almost_equal : bool
         whether the array is equal along specified axis
 
     """
@@ -339,13 +347,10 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
         relative tolerance for comparison.
     atol : float
         absolute tolerance for comparison.
-        If the following equation is element-wise True for,
-         then isalmostequal returns True.
-            absolute(a - b) <= (atol + rtol * absolute(b))
 
     Returns
     -------
-    islinspaced : bool
+    is_linspaced : bool
         whether the array is linearly spaced along specified axis
 
     """
@@ -360,22 +365,27 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
     return isalmostequal(np.diff(x, axis=axis), rtol=rtol, atol=atol, axis=axis)
 
 
+@jit
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
     """Copy coefficients from one resolution to another."""
-    modes_old, modes_new = np.atleast_1d(modes_old), np.atleast_1d(modes_new)
+    modes_old, modes_new = jnp.atleast_1d(modes_old), jnp.atleast_1d(modes_new)
+
     if modes_old.ndim == 1:
         modes_old = modes_old.reshape((-1, 1))
     if modes_new.ndim == 1:
         modes_new = modes_new.reshape((-1, 1))
 
-    num_modes = modes_new.shape[0]
     if c_new is None:
-        c_new = np.zeros((num_modes,))
+        c_new = jnp.zeros((modes_new.shape[0],))
+    c_old, c_new = jnp.asarray(c_old), jnp.asarray(c_new)
 
-    for i in range(num_modes):
-        idx = np.where((modes_old == modes_new[i, :]).all(axis=1))[0]
-        if len(idx):
-            c_new[i] = c_old[idx]
+    def body(i, c_new):
+        mask = (modes_old[i, :] == modes_new).all(axis=1)
+        c_new = jnp.where(mask, c_old[i], c_new)
+        return c_new
+
+    if c_old.size:
+        c_new = fori_loop(0, modes_old.shape[0], body, c_new)
     return c_new
 
 
@@ -421,7 +431,7 @@ def combination_permutation(m, n, equals=True):
     n : int
         Maximum sum
     equals : bool
-        If True, return only where sum == n, else retun where sum <= n
+        If True, return only where sum == n, else return where sum <= n
 
     Returns
     -------
@@ -474,3 +484,52 @@ def is_broadcastable(shp1, shp2):
 def get_instance(things, cls):
     """Get thing from a collection of things that is the instance of a given class."""
     return [t for t in things if isinstance(t, cls)][0]
+
+
+def parse_argname_change(arg, kwargs, oldname, newname):
+    """Warn and parse arguments whose names have changed."""
+    if oldname in kwargs:
+        warnings.warn(
+            FutureWarning(
+                f"argument {oldname} has been renamed to {newname}, "
+                + f"{oldname} will be removed in a future release"
+            )
+        )
+        arg = kwargs.pop(oldname)
+    return arg
+
+
+def setdefault(val, default, cond=None):
+    """Return val if condition is met, otherwise default.
+
+    If cond is None, then it checks if val is not None, returning val
+    or default accordingly.
+    """
+    return val if cond or (cond is None and val is not None) else default
+
+
+def isnonnegint(x):
+    """Determine if x is a non-negative integer."""
+    return isinstance(x, numbers.Real) and (x == int(x)) and (x >= 0)
+
+
+def isposint(x):
+    """Determine if x is a strictly positive integer."""
+    return isinstance(x, numbers.Real) and (x == int(x)) and (x > 0)
+
+
+def errorif(cond, err=ValueError, msg=""):
+    """Raise an error if condition is met.
+
+    Similar to assert but allows wider range of Error types, rather than
+    just AssertionError.
+    """
+    if cond:
+        raise err(msg)
+
+
+def only1(*args):
+    """Return True if 1 and only 1 of args evaluates to True."""
+    # copied from https://stackoverflow.com/questions/16801322/
+    i = iter(args)
+    return any(i) and not any(i)

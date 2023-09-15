@@ -1,11 +1,11 @@
 colorama
 h5py >= 3.0.0
-jax[cpu] >= 0.2.11, <= 0.4.1
-matplotlib >= 3.3.0, <= 3.6.0, != 3.4.3
+jax[cpu] >= 0.3.2, <= 0.4.14
+matplotlib >= 3.5.0, <= 3.7.2
 mpmath >= 1.0.0
 netcdf4 >= 1.5.4
-numpy >= 1.20.0
+numpy >= 1.20.0, < 1.25.0
 nvgpu
 psutil
-scipy >= 1.5.0
+scipy >= 1.5.0, < 1.11.0
 termcolor

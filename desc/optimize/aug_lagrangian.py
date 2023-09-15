@@ -339,7 +339,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
             step_norm,
             g_norm,
             constr_violation,
-            jnp.max(mu),
+            jnp.mean(mu),
             jnp.max(jnp.abs(y)),
         )
 
@@ -515,7 +515,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
                 step_norm,
                 g_norm,
                 constr_violation,
-                jnp.max(mu),
+                jnp.mean(mu),
                 jnp.max(jnp.abs(y)),
             )
 
@@ -529,6 +529,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         x=x,
         s=s,
         y=y,
+        penalty_param=mu,
         success=success,
         fun=f,
         grad=g,

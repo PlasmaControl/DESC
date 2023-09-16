@@ -82,8 +82,8 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         Optimizer terminates when ``max(abs(g)) < gtol``.
         If None, the termination by this condition is disabled.
     verbose : {0, 1, 2}, optional
-        * 0 (default) : work silently.
-        * 1 : display a termination report.
+        * 0 : work silently.
+        * 1 (default) : display a termination report.
         * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
@@ -98,7 +98,44 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
-        See Other Parameters for more details.
+
+        - ``"max_nfev"`` : (int > 0) Maximum number of function evaluations (each
+          iteration may take more than one function evaluation). Default is
+          ``5*maxiter+1``
+        - ``"max_dx"`` : (float > 0) Maximum allowed change in the norm of x from its
+          starting point. Default np.inf.
+        - ``"initial_trust_radius"`` : (``"scipy"``, ``"conngould"``, ``"mix"`` or
+          float > 0) Initial trust region radius. ``"scipy"`` uses the scaled norm of
+          x0, which is the default behavior in ``scipy.optimize.least_squares``.
+          ``"conngould"`` uses the norm of the Cauchy point, as recommended in ch17
+          of [1]_. ``"mix"`` uses the geometric mean of the previous two options. A
+          float can also be passed to specify the trust radius directly.
+          Default is ``"scipy"``.
+        - ``"initial_trust_ratio"`` : (float > 0) A extra scaling factor that is
+          applied after one of the previous heuristics to determine the initial trust
+          radius. Default 1.
+        - ``"max_trust_radius"`` : (float > 0) Maximum allowable trust region radius.
+          Default ``np.inf``.
+        - ``"min_trust_radius"`` : (float >= 0) Minimum allowable trust region radius.
+          Optimization is terminated if the trust region falls below this value.
+          Default ``np.finfo(x0.dtype).eps``.
+        - ``"tr_increase_threshold"`` : (0 < float < 1) Increase the trust region
+          radius when the ratio of actual to predicted reduction exceeds this threshold.
+          Default 0.75.
+        - ``"tr_decrease_threshold"`` : (0 < float < 1) Decrease the trust region
+          radius when the ratio of actual to predicted reduction is less than this
+          threshold. Default 0.25.
+        - ``"tr_increase_ratio"`` : (float > 1) Factor to increase the trust region
+          radius by when  the ratio of actual to predicted reduction exceeds threshold.
+          Default 2.
+        - ``"tr_decrease_ratio"`` : (0 < float < 1) Factor to decrease the trust region
+          radius by when  the ratio of actual to predicted reduction falls below
+          threshold. Default 0.25.
+        - ``"tr_method"`` : ``"svd"``, ``"cho"``) Method to use for solving the trust
+          region subproblem. ``"cho"`` uses a sequence of cholesky factorizations
+          (generally 2-3), while ``"svd"`` uses one singular value decomposition.
+          ``"cho"`` is generally faster for large systems, especially on GPU, but may
+          be less accurate for badly scaled systems. Default ``"svd"``
 
     Returns
     -------
@@ -108,45 +145,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         Boolean flag indicating if the optimizer exited successfully and
         ``message`` which describes the cause of the termination. See
         ``OptimizeResult`` for a description of other attributes.
-
-    Other Parameters
-    ----------------
-    max_nfev : int > 0
-        Maximum number of function evaluations (each iteration may take more than one
-        function evaluation). Default is ``5*maxiter+1``
-    max_dx : float > 0
-        Maximum allowed change in the norm of x from its starting point. Default np.inf.
-    initial_trust_radius : {"scipy", "conngould", "mix"} or float > 0
-        Initial trust region radius. ``"scipy"`` uses the scaled norm of x0, which is
-        the default behavior in ``scipy.optimize.least_squares``. ``"conngould"`` uses
-        the norm of the Cauchy point, as recommended in ch17 of Conn & Gould. ``"mix"``
-        uses the geometric mean of the previous two options. A float can also be passed
-        to specify the trust radius directly. Default is ``"scipy"``.
-    initial_trust_ratio : float > 0
-        A extra scaling factor that is applied after one of the previous heuristics to
-        determine the initial trust radius. Default 1.
-    max_trust_radius : float > 0
-        Maximum allowable trust region radius. Default ``np.inf``.
-    min_trust_radius : float >= 0
-        Minimum allowable trust region radius. Optimization is terminated if the trust
-        region falls below this value. Default ``np.finfo(x0.dtype).eps``.
-    tr_increase_threshold : 0 < float < 1
-        Increase the trust region radius when the ratio of actual to predicted reduction
-        exceeds this threshold. Default 0.75.
-    tr_decrease_threshold : 0 < float < 1
-        Decrease the trust region radius when the ratio of actual to predicted reduction
-        is less than this threshold. Default 0.25.
-    tr_increase_ratio : float > 1
-        Factor to increase the trust region radius by when  the ratio of actual to
-        predicted reduction exceeds threshold. Default 2
-    tr_decrease_ratio : 0 < float < 1
-        Factor to decrease the trust region radius by when  the ratio of actual to
-        predicted reduction falls below threshold. Default 0.25
-    tr_method : {'svd', 'cho'}
-        method to use for solving the trust region subproblem. ``'cho'`` uses a sequence
-        of cholesky factorizations (generally 2-3), while ``'svd'`` uses one singular
-        value decomposition. ``'cho'`` is generally faster for large systems, especially
-        on GPU, but may be less accurate for badly scaled systems. Default ``'svd'``
 
     References
     ----------

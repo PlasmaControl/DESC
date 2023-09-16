@@ -363,7 +363,6 @@ def _optimize_desc_fmin_scalar(
         grad=objective.grad,
         hess=hess,
         args=(),
-        method=method.replace("-bfgs", "").replace("fmin-", ""),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],

@@ -59,8 +59,8 @@ def sgd(
         Optimizer terminates when ``max(abs(g)) < gtol``.
         If None, the termination by this condition is disabled.
     verbose : {0, 1, 2}, optional
-        * 0 (default) : work silently.
-        * 1 : display a termination report.
+        * 0 : work silently.
+        * 1 (default) : display a termination report.
         * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
@@ -75,7 +75,10 @@ def sgd(
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
-        See Other Parameters for more details.
+
+        - ``"alpha"`` : (float > 0) Step size parameter. Default
+          ``1e-2 * norm(x)/norm(grad(x))``
+        - ``"beta"`` : (float > 0) Momentum parameter. Default 0.9
 
     Returns
     -------
@@ -83,13 +86,6 @@ def sgd(
         The optimization result represented as a ``OptimizeResult`` object.
         Important attributes are: ``x`` the solution array, ``success`` a
         Boolean flag indicating if the optimizer exited successfully.
-
-    Other Parameters
-    ----------------
-    alpha : float > 0
-        Step size parameter. Default 1e-2 * |x|/|grad(x)|
-    beta : float > 0
-        Momentum parameter. Default 0.9
 
     """
     options = {} if options is None else options
@@ -143,10 +139,6 @@ def sgd(
             iteration,
             maxiter,
             nfev,
-            jnp.inf,
-            0,
-            jnp.inf,
-            0,
             jnp.inf,
         )
         if success is not None:

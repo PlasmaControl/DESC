@@ -87,15 +87,15 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         If None, the termination by this condition is disabled.
     gtol : float or None, optional
         Absolute tolerance for termination by the norm of the gradient.
-        Optimizer terminates when ``norm(g) < gtol``, where
+        Optimizer terminates when ``max(abs(g)) < gtol``., where
         If None, the termination by this condition is disabled.
     ctol : float, optional
         Tolerance for stopping based on infinity norm of the constraint violation.
         Optimizer terminates when ``max(abs(constr_violation)) < ctol`` AND one or more
         of the other tolerances are met (``ftol``, ``xtol``, ``gtol``)
     verbose : {0, 1, 2}, optional
-        * 0 (default) : work silently.
-        * 1 : display a termination report.
+        * 0 : work silently.
+        * 1 (default) : display a termination report.
         * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
@@ -110,7 +110,66 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
-        See Other Parameters for more details.
+
+        - ``"initial_penalty_parameter"`` : (float or array-like) Initial value for the
+          quadratic penalty parameter. May be array like, in which case it should be the
+          same length as the number of constraint residuals. Default 10.
+        - ``"initial_multipliers"`` : (float or array-like or ``"least_squares"``)
+          Initial Lagrange multipliers. May be array like, in which case it should be
+          the same length as the number of constraint residuals. If ``"least_squares"``,
+          uses an estimate based on the least squares solution of the optimality
+          conditions, see ch 14 of [1]_. Default 0.
+        - ``"omega"`` : (float) Hyperparameter for determining initial gradient
+          tolerance. See algorithm 14.4.2 from [1]_ for details. Default 1.0
+        - ``"eta"`` : (float) Hyperparameter for determining initial constraint
+          tolerance. See algorithm 14.4.2 from [1]_ for details. Default 1.0
+        - ``"alpha_omega"`` : (float) Hyperparameter for updating gradient tolerance.
+          See algorithm 14.4.2 from [1]_ for details. Default 1.0
+        - ``"beta_omega"`` : (float) Hyperparameter for updating gradient tolerance.
+          See algorithm 14.4.2 from [1]_ for details. Default 1.0
+        - ``"alpha_eta"`` : (float) Hyperparameter for updating constraint tolerance.
+          See algorithm 14.4.2 from [1]_ for details. Default 0.1
+        - ``"beta_eta"`` : (float) Hyperparameter for updating constraint tolerance.
+          See algorithm 14.4.2 from [1]_ for details. Default 0.9
+        - ``"tau"`` : (float) Factor to increase penalty parameter by when constraint
+          violation doesn't decrease sufficiently. Default 10
+        - ``"max_nfev"`` : (int > 0) Maximum number of function evaluations (each
+          iteration may take more than one function evaluation). Default is
+          ``5*maxiter+1``
+        - ``"max_dx"`` : (float > 0) Maximum allowed change in the norm of x from its
+          starting point. Default np.inf.
+        - ``"initial_trust_radius"`` : (``"scipy"``, ``"conngould"``, ``"mix"`` or
+          float > 0) Initial trust region radius. ``"scipy"`` uses the scaled norm of
+          x0, which is the default behavior in ``scipy.optimize.least_squares``.
+          ``"conngould"`` uses the norm of the Cauchy point, as recommended in ch17
+          of [1]_. ``"mix"`` uses the geometric mean of the previous two options. A
+          float can also be passed to specify the trust radius directly.
+          Default is ``"scipy"``.
+        - ``"initial_trust_ratio"`` : (float > 0) A extra scaling factor that is
+          applied after one of the previous heuristics to determine the initial trust
+          radius. Default 1.
+        - ``"max_trust_radius"`` : (float > 0) Maximum allowable trust region radius.
+          Default ``np.inf``.
+        - ``"min_trust_radius"`` : (float >= 0) Minimum allowable trust region radius.
+          Optimization is terminated if the trust region falls below this value.
+          Default ``np.finfo(x0.dtype).eps``.
+        - ``"tr_increase_threshold"`` : (0 < float < 1) Increase the trust region
+          radius when the ratio of actual to predicted reduction exceeds this threshold.
+          Default 0.75.
+        - ``"tr_decrease_threshold"`` : (0 < float < 1) Decrease the trust region
+          radius when the ratio of actual to predicted reduction is less than this
+          threshold. Default 0.25.
+        - ``"tr_increase_ratio"`` : (float > 1) Factor to increase the trust region
+          radius by when  the ratio of actual to predicted reduction exceeds threshold.
+          Default 2.
+        - ``"tr_decrease_ratio"`` : (0 < float < 1) Factor to decrease the trust region
+          radius by when  the ratio of actual to predicted reduction falls below
+          threshold. Default 0.25.
+        - ``"tr_method"`` : ``"svd"``, ``"cho"``) Method to use for solving the trust
+          region subproblem. ``"cho"`` uses a sequence of cholesky factorizations
+          (generally 2-3), while ``"svd"`` uses one singular value decomposition.
+          ``"cho"`` is generally faster for large systems, especially on GPU, but may
+          be less accurate for badly scaled systems. Default ``"svd"``
 
     Returns
     -------
@@ -118,75 +177,6 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         The optimization result represented as a ``OptimizeResult`` object.
         Important attributes are: ``x`` the solution array, ``success`` a
         Boolean flag indicating if the optimizer exited successfully.
-
-    Other Parameters
-    ----------------
-    initial_penalty_parameter : float or array-like of float
-        Initial value for the quadratic penalty parameter. May be array like, in which
-        case it should be the same length as the number of constraint residuals.
-        Default 10.
-    initial_multipliers : float or array-like of float or "least_squares"
-        Initial Lagrange multipliers. May be array like, in which
-        case it should be the same length as the number of constraint residuals.
-        If "least_squares", uses an estimate based on the least squares solution of the
-        optimality conditions, see ch 14 of [1]_. Default 0.
-    omega : float
-        Hyperparameter for determining initial gradient tolerance. See algorithm 14.4.2
-        from [1]_ for details. Default 1.0
-    eta : float
-        Hyperparameter for determining initial constraint tolerance. See algorithm
-        14.4.2 from [1]_ for details. Default 1.0
-    alpha_omega : float
-        Hyperparameter for updating gradient tolerance. See algorithm 14.4.2
-        from [1]_ for details. Default 1.0
-    beta_omega : float
-        Hyperparameter for updating gradient tolerance. See algorithm 14.4.2
-        from [1]_ for details. Default 1.0
-    alpha_eta : float
-        Hyperparameter for updating constraint tolerance. See algorithm 14.4.2
-        from [1]_ for details. Default 0.1
-    beta_eta : float
-        Hyperparameter for updating constraint tolerance. See algorithm 14.4.2
-        from [1]_ for details. Default 0.9
-    tau : float
-        Factor to increase penalty parameter by when constraint violation doesn't
-        decrease sufficiently. Default 10
-    max_nfev : int > 0
-        Maximum number of function evaluations (each iteration may take more than one
-        function evaluation). Default is ``5*maxiter+1``
-    max_dx : float > 0
-        Maximum allowed change in the norm of x from its starting point. Default np.inf.
-    initial_trust_radius : {"scipy", "conngould", "mix"} or float > 0
-        Initial trust region radius. ``"scipy"`` uses the scaled norm of x0, which is
-        the default behavior in ``scipy.optimize.least_squares``. ``"conngould"`` uses
-        the norm of the Cauchy point, as recommended in ch17 of Conn & Gould. ``"mix"``
-        uses the geometric mean of the previous two options. A float can also be passed
-        to specify the trust radius directly. Default is ``"conngould"``.
-    initial_trust_ratio : float > 0
-        A extra scaling factor that is applied after one of the previous heuristics to
-        determine the initial trust radius. Default 1.
-    max_trust_radius : float > 0
-        Maximum allowable trust region radius. Default ``np.inf``.
-    min_trust_radius : float >= 0
-        Minimum allowable trust region radius. Optimization is terminated if the trust
-        region falls below this value. Default ``np.finfo(x0.dtype).eps``.
-    tr_increase_threshold : 0 < float < 1
-        Increase the trust region radius when the ratio of actual to predicted reduction
-        exceeds this threshold. Default 0.75.
-    tr_decrease_threshold : 0 < float < 1
-        Decrease the trust region radius when the ratio of actual to predicted reduction
-        is less than this threshold. Default 0.5.
-    tr_increase_ratio : float > 1
-        Factor to increase the trust region radius by when  the ratio of actual to
-        predicted reduction exceeds threshold. Default 4
-    tr_decrease_ratio : 0 < float < 1
-        Factor to decrease the trust region radius by when  the ratio of actual to
-        predicted reduction falls below threshold. Default 0.25
-    tr_method : {'svd', 'cho'}
-        method to use for solving the trust region subproblem. ``'cho'`` uses a sequence
-        of cholesky factorizations (generally 2-3), while ``'svd'`` uses one singular
-        value decomposition. ``'cho'`` is generally faster for large systems, especially
-        on GPU, but may be less accurate for badly scaled systems. Default ``'svd'``
 
     References
     ----------
@@ -454,8 +444,6 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 maxiter,
                 nfev,
                 max_nfev,
-                0,
-                jnp.inf,
                 min_trust_radius=min_trust_radius,
                 dx_total=jnp.linalg.norm(z - z0),
                 max_dx=max_dx,

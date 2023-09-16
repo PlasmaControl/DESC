@@ -4,6 +4,7 @@ Changelog
 - Adds ability to compute equilibria with anisotropic pressure. This includes a new
 profile, ``Equilibrium.anisotropy``, new compute quantity ``F_anisotropic``, and a new
 objective ``ForceBalanceAnisotropic``.
+- Adds second derivatives of contravariant basis vectors to the list of quantities we can compute.
 - Removes ``grid`` attribute from ``Profile`` classes, ``grid`` should now be passed
 in when calling ``Profile.compute``.
 - Refactors most of the optimizer subproblems to use JAX control flow, allowing them

@@ -1080,7 +1080,7 @@ class BScaleLength(_Objective):
         return data["L_grad(B)"]
 
 
-class PlasmaCoilFeasibilty(_Objective):
+class BDistanceVariance(_Objective):
     """Targets variance of |B| times min distance from a surrounding surface.
 
     Computes the minimum distance (d_min) from each point on the surface
@@ -1125,7 +1125,8 @@ class PlasmaCoilFeasibilty(_Objective):
         Collocation grid containing the nodes to evaluate plasma geometry at.
     use_softmin: bool,
         use softmin or hard min.
-    alpha: float, parameter used for softmin. The larger alpha, the closer the softmin
+    alpha : float,
+        parameter used for softmin. The larger alpha, the closer the softmin
         approximates the hardmin. softmin -> hardmin as alpha -> infinity.
         if alpha*array < 1, the underlying softmin will automatically multiply
         the array by 2/min_val to ensure that alpha*array>1. Making alpha larger

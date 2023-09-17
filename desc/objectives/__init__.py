@@ -11,10 +11,10 @@ from ._equilibrium import (
 from ._generic import GenericObjective, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
+    BDistanceVariance,
     BScaleLength,
     Elongation,
     MeanCurvature,
-    PlasmaCoilFeasibilty,
     PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,

@@ -118,9 +118,9 @@ needed using these dependencies and then add the output to the ``data`` dictiona
 return it. The key in the ``data`` dictionary should match the ``name`` of the quantity.
 
 Once a new quantity is added to the ``desc.compute`` module, there is a final two steps involving the testing suite which must be checked.
-The first is relating to axis limits: if the added quantity is comprised of quantities which already have finite axis limits implemented in DESC,
-then the added quantity also has a finite axis limit. This can be checked by computing the quantity on a grid
-with a node at the axis and checking that its value is not ``nan``:
+The first is relating to axis limits: if the new quantity is comprised of quantities which have finite axis limits already implemented in DESC,
+then the limit of the new quantity should automatically evaluate to the correct axis limit.
+This can be checked by computing the quantity on a grid with a node at the axis and checking that its value is not ``nan``:
 ::
 
     from desc.examples import get
@@ -128,22 +128,24 @@ with a node at the axis and checking that its value is not ``nan``:
     import numpy as np
 
     eq = get("DSHAPE")
-    grid = LinearGrid(L=1,M=1,N=1,axis=True)
-    new_quantity=eq.compute(name="new_quantity_name",grid=grid)["new_quantity_name"]
-    # if this is False, then the new quantity is finite at axis
-    # if True, quantity may not be finite at axis
-    print(np.any(Np.isnan(new_quantity)))
+    grid = LinearGrid(L=1, M=1, N=1, axis=True)
+    new_quantity = eq.compute(name="new_quantity_name", grid=grid)["new_quantity_name"]
+    print(np.isfinite(new_quantity[grid.axis]).all())
 
-if ``False`` is printed, then the quantity is already determined to be finite at axis and this step is finished
-if ``True`` is printed, then the quantity may not be finite at axis.
-if the axis limit was derived and known, add it to the definition of that quantity's compute function according to the instructions above
-if the axis limit is not known or is known to not exist, then add the name of the new quantity to the file ``tests/test_axis_limits.py``
-If the limit is simply not derived/known, add it to the ``not_implemented_limits`` dictionary.
-If the limit is known to be not finite or indeterminate at the axis, add it to the ``not_finite_limits`` dictionary.
+If ``True`` is printed, then the correct limit of the quantity can already be computed at the axis.
+if ``False`` is printed, then the limit of the quantity does not evaluate as finite which can be due to 3 reasons:
 
-The second step is to run the "compute_everything" test located in the ``tests/test_compute_funs.py`` file.
+
+* The limit is actually not finite, in which case please add the new quantity to the ``not_finite_limits`` set in ``tests/test_axis_limits.py``.
+* The new quantity has an indeterminate expression at the magnetic axis, in which case you should try to implement the correct limit as done in the example for ``J^rho`` above.
+  If you wish to skip implementing the limit at the magnetic axis, please add the new quantity to the ``not_implemented_limits`` set in ``tests/test_axis_limits.py``.
+* The new quantity includes a dependency whose limit has not been implemented at the magnetic axis.
+  The tests automatically detect this, so no further action is needed from developers in this case.
+
+
+The second step is to run the ``test_compute_everything`` test located in the ``tests/test_compute_funs.py`` file.
+This can be done with the command :console:`pytest -k test_compute_everything tests/test_compute_funs.py`.
 This test is a regression test to ensure that compute quantities in each new update of DESC do not differ significantly
 from previous versions of DESC.
-Since the new quantity being added did not exist in previous versions of DESC, one must run this test
-and commit the ``master_compute_data.pkl`` file which is updated automatically when a new quantity is detected.
-Run this test from the DESC folder with the command :console:`pytest tests -k "compute_everything"`
+Since the new quantity did not exist in previous versions of DESC, one must run this test
+and commit the outputted ``tests/inputs/master_compute_data.pkl`` file which is updated automatically when a new quantity is detected.

@@ -4,6 +4,7 @@ from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored
 
 from desc.backend import jnp
+from desc.utils import errorif, setdefault
 
 from .bound_utils import (
     cl_scaling_vector,
@@ -102,11 +103,10 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         Called after each iteration. Should be a callable with
         the signature:
 
-            ``callback(xk, OptimizeResult state) -> bool``
+            ``callback(xk, *args) -> bool``
 
-        where ``xk`` is the current parameter vector. and ``state``
-        is an ``OptimizeResult`` object, with the same fields
-        as the ones from the return. If callback returns True
+        where ``xk`` is the current parameter vector, and ``args``
+        are the same arguments passed to fun and grad. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
@@ -157,8 +157,11 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             hess.initialize(N, "hess")
         bfgs = True
         H = hess.get_matrix()
-    else:
-        raise ValueError(colored("hess should either be a callable or 'bfgs'", "red"))
+    errorif(
+        not (isinstance(hess, BFGS) or callable(hess)),
+        ValueError,
+        "hess should either be a callable or 'bfgs'",
+    )
 
     if method == "dogleg":
         subproblem = solve_trust_region_dogleg
@@ -171,8 +174,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             colored("method should be one of 'exact', 'dogleg' or 'subspace'", "red")
         )
 
-    if maxiter is None:
-        maxiter = N * 100
+    maxiter = setdefault(maxiter, N * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
     max_ngev = options.pop("max_ngev", maxiter + 1)
     max_nhev = options.pop("max_nhev", maxiter + 1)
@@ -198,11 +200,9 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     H_h = d * H * d[:, None]
     g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
 
-    # initial trust region radius is based on the geometric mean of 2 possible rules:
-    # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
-    # second is the norm of the scaled x, as used in scipy
-    # in practice for our problems the C&G one is too small, while scipy is too big,
-    # but the geometric mean seems to work well
+    # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
+    # scipy : norm of the scaled x, as used in scipy
+    # mix : geometric mean of conngould and scipy
     init_tr = {
         "scipy": jnp.linalg.norm(x * scale_inv / v**0.5),
         "conngould": (g_h @ g_h) / abs(g_h @ H_h @ g_h),
@@ -216,20 +216,22 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     tr_ratio = options.pop("initial_trust_ratio", 1.0)
     trust_radius = init_tr.get(trust_radius, trust_radius)
     trust_radius *= tr_ratio
+    trust_radius = trust_radius if (trust_radius > 0) else 1.0
 
-    max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
+    max_trust_radius = options.pop("max_trust_radius", jnp.inf)
     min_trust_radius = options.pop("min_trust_radius", jnp.finfo(x0.dtype).eps)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
 
-    if trust_radius == 0:
-        trust_radius = 1.0
-    if len(options) > 0:
-        raise ValueError(
-            colored("Unknown options: {}".format([key for key in options]), "red")
-        )
+    errorif(
+        len(options) > 0,
+        ValueError,
+        "Unknown options: {}".format([key for key in options]),
+    )
+
+    callback = setdefault(callback, lambda *args: False)
 
     x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
     success = None
@@ -252,15 +254,11 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     alpha = 0  # "Levenberg-Marquardt" parameter
 
     if g_norm < gtol:
-        success = True
-        message = STATUS_MESSAGES["gtol"]
+        success, message = True, STATUS_MESSAGES["gtol"]
 
     while iteration < maxiter and success is None:
 
-        if bounded:
-            H_a = H_h + jnp.diag(diag_h)
-        else:
-            H_a = H_h
+        H_a = H_h + jnp.diag(diag_h) if bounded else H_h
 
         actual_reduction = -1
 
@@ -371,21 +369,17 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
             x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
             g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
-            if g_norm < gtol:
-                success = True
-                message = STATUS_MESSAGES["gtol"]
 
-            if callback is not None:
-                stop = callback(jnp.copy(x), *args)
-                if stop:
-                    success = False
-                    message = STATUS_MESSAGES["callback"]
+            if g_norm < gtol:
+                success, message = True, STATUS_MESSAGES["gtol"]
+
+            if callback(jnp.copy(x), *args):
+                success, message = False, STATUS_MESSAGES["callback"]
 
             if return_all:
                 allx.append(x)
         else:
-            step_norm = 0
-            actual_reduction = 0
+            step_norm = actual_reduction = 0
 
         iteration += 1
         if verbose > 1:
@@ -394,11 +388,9 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             )
 
     if g_norm < gtol:
-        success = True
-        message = STATUS_MESSAGES["gtol"]
+        success, message = True, STATUS_MESSAGES["gtol"]
     if (iteration == maxiter) and success is None:
-        success = False
-        message = STATUS_MESSAGES["maxiter"]
+        success, message = False, STATUS_MESSAGES["maxiter"]
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
     result = OptimizeResult(
         x=x,

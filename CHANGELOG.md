@@ -1,11 +1,22 @@
 Changelog
 =========
-
+- Adds second derivatives of contravariant basis vectors to the list of quantities we can compute.
 - Removes ``grid`` attribute from ``Profile`` classes, ``grid`` should now be passed
 in when calling ``Profile.compute``.
 - Refactors most of the optimizer subproblems to use JAX control flow, allowing them
 to run more efficiently on the GPU.
 - Adds ``'shear'`` as a compute quantity and ``Shear`` as an objective function.
+- Adds a new objective ``Pressure`` to target a pressure profile as a function of rho instead
+of spectral coefficients like ``FixPressure``. Can also be used when optimizing kinetic equilibria.
+- Also allows all profile objectives to have callable bounds and targets.
+- All objective function values should now be approximately independent of the grid
+resolution. Previously this was only true when objectives had `normalize=True`
+- `Objective.print_value` Now prints max/min/avg for most objectives, and it should be
+clear whether it is printing the actual value of the quantity or the error between
+the objective and its target.
+- Adds new options to `plot_boozer_modes` to plot only symmetry breaking modes (when
+helicity is supplied) or only the pointwise maximum of the symmetry breaking modes.
+
 
 v0.10.0
 -------

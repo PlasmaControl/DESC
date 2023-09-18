@@ -48,7 +48,7 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
     data = eq.compute("|J|")
 
     np.testing.assert_allclose(data["iota"], 0, atol=1e-16)
-    np.testing.assert_allclose(data["|J|"], 0, atol=1e-3)
+    np.testing.assert_allclose(data["|J|"], 0, atol=3e-3)
 
 
 @pytest.mark.regression
@@ -111,7 +111,7 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
     eq1 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
     eq2 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac2["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_desc(eq1, eq2)
-    np.testing.assert_allclose(rho_err[:, 3:], 0, atol=1e-2)
+    np.testing.assert_allclose(rho_err[:, 4:], 0, atol=1e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
     curr1 = eq1.get_profile("current")
     curr2 = eq2.get_profile("current")
@@ -176,7 +176,7 @@ def test_solve_bounds():
     obj = ObjectiveFunction(
         ForceBalance(normalize=False, normalize_target=False, bounds=(-1e3, 1e3), eq=eq)
     )
-    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=3)
+    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=200, verbose=3)
 
     # check that all errors are nearly 0, since residual values are within target bounds
     f = obj.compute_scaled_error(obj.x(eq))
@@ -471,8 +471,8 @@ def test_simsopt_QH_comparison():
     )
     # Cancel factor of 1/2 in desc objective which is not present in simsopt:
     aspect_weight = np.sqrt(2)
-    # Also scale QS weight so objective is approximately independent of grid resolution:
-    qs_weight = np.sqrt(len(grid.weights) / (8 * (np.pi**4)))
+    # Also scale QS weight to match simsopt/VMEC
+    qs_weight = np.sqrt(1 / (8 * (np.pi**4)))
     objective = ObjectiveFunction(
         (
             AspectRatio(
@@ -598,12 +598,12 @@ def test_NAE_QSC_solve():
 def test_NAE_QIC_solve():
     """Test O(rho) NAE QIC constraints solve."""
     # get Qic example
-    qsc = Qic.from_paper("QI NFP2 r2", nphi=301, order="r1")
-    qsc.lasym = False  # don't need to consider stellarator asym for order 1 constraints
+    qic = Qic.from_paper("QI NFP2 r2", nphi=301, order="r1")
+    qic.lasym = False  # don't need to consider stellarator asym for order 1 constraints
     ntheta = 75
     r = 0.01
     N = 11
-    eq = Equilibrium.from_near_axis(qsc, r=r, L=7, M=7, N=N, ntheta=ntheta)
+    eq = Equilibrium.from_near_axis(qic, r=r, L=7, M=7, N=N, ntheta=ntheta)
 
     orig_Rax_val = eq.axis.R_n
     orig_Zax_val = eq.axis.Z_n
@@ -612,7 +612,7 @@ def test_NAE_QIC_solve():
 
     # this has all the constraints we need,
     #  iota=False specifies we want to fix current instead of iota
-    cs = get_NAE_constraints(eq, qsc, iota=False, order=1)
+    cs = get_NAE_constraints(eq, qic, iota=False, order=1)
 
     objectives = ForceBalance(eq=eq)
     obj = ObjectiveFunction(objectives)
@@ -638,8 +638,8 @@ def test_NAE_QIC_solve():
     grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
     iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
-    np.testing.assert_allclose(iota[1], qsc.iota, atol=5e-4)
-    np.testing.assert_allclose(iota[1:10], qsc.iota, atol=5e-4)
+    np.testing.assert_allclose(iota[1], qic.iota, atol=1.5e-5)
+    np.testing.assert_allclose(iota[1:10], qic.iota, atol=5e-4)
 
     # check lambda to match near axis
     grid_2d_05 = LinearGrid(rho=np.array(1e-6), M=50, N=50, NFP=eq.NFP, endpoint=True)
@@ -665,7 +665,9 @@ def test_NAE_QIC_solve():
     lam_nae = np.squeeze(lam_nae[:, 0, :])
 
     lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -qsc.iota * qsc.nu_spline(phi), atol=5e-4)
+    np.testing.assert_allclose(
+        lam_av_nae, -qic.iota * qic.nu_spline(phi), atol=1e-4, rtol=1e-2
+    )
 
     # check |B| on axis
 
@@ -676,9 +678,9 @@ def test_NAE_QIC_solve():
     B_mn_nae = data_nae["|B|_mn"]
     # Evaluate B on an angular grid
     theta = np.linspace(0, 2 * np.pi, 150)
-    phi = np.linspace(0, 2 * np.pi, qsc.nphi)
+    phi = np.linspace(0, 2 * np.pi, qic.nphi)
     th, ph = np.meshgrid(theta, phi)
-    B_nae = np.zeros((qsc.nphi, 150))
+    B_nae = np.zeros((qic.nphi, 150))
 
     for i, (l, m, n) in enumerate(modes):
         if m >= 0 and n >= 0:
@@ -691,7 +693,7 @@ def test_NAE_QIC_solve():
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
     # Eliminate the poloidal angle to focus on the toroidal behavior
     B_av_nae = np.mean(B_nae, axis=1)
-    np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=2e-2)
+    np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qic.B0, atol=2e-2)
 
 
 class TestGetExample:

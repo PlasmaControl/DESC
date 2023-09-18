@@ -402,11 +402,16 @@ def _get_default_tols(
     )
     stoptol.setdefault(
         "ftol",
-        options.pop("ftol", 1e-6 if optimizers[method]["stochastic"] else 1e-2),
+        options.pop(
+            "ftol",
+            1e-6 if optimizers[method]["stochastic"] or "auglag" in method else 1e-2,
+        ),
     )
     stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
     stoptol.setdefault("ctol", options.pop("ctol", 1e-4))
-    stoptol.setdefault("maxiter", options.pop("maxiter", 100))
+    stoptol.setdefault(
+        "maxiter", options.pop("maxiter", 500 if "auglag" in method else 100)
+    )
 
     # if we define an "iteration" as a successful step, it can take a few function
     # evaluations per iteration
@@ -448,7 +453,7 @@ def register_optimizer(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the sub-method to use.
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable.
     verbose : int

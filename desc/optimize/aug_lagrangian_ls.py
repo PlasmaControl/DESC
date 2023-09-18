@@ -3,6 +3,7 @@
 from scipy.optimize import NonlinearConstraint, OptimizeResult
 
 from desc.backend import jnp
+from desc.utils import errorif, setdefault
 
 from .bound_utils import (
     cl_scaling_vector,
@@ -40,6 +41,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     ctol=1e-6,
     verbose=1,
     maxiter=None,
+    callback=None,
     options={},
 ):
     """Minimize a function with constraints using an augmented Lagrangian method.
@@ -97,6 +99,15 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
+    callback : callable, optional
+        Called after each iteration. Should be a callable with
+        the signature:
+
+            ``callback(xk, *args) -> bool``
+
+        where ``xk`` is the current parameter vector, and ``args``
+        are the same arguments passed to fun and jac. If callback returns True
+        the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
         See the code for more details.
@@ -109,14 +120,16 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         Boolean flag indicating if the optimizer exited successfully.
 
     """
-    if constraint is None:
-        # create a dummy constraint
-        constraint = NonlinearConstraint(
+    constraint = setdefault(
+        constraint,
+        NonlinearConstraint(  # create a dummy constraint
             fun=lambda x, *args: jnp.array([0.0]),
             lb=0.0,
             ub=0.0,
             jac=lambda x, *args: jnp.zeros((1, x.size)),
-        )
+        ),
+    )
+
     (
         z0,
         fun_wrapped,
@@ -132,6 +145,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         None,
         constraint,
         bounds,
+        *args,
     )
 
     # L(x,y,mu) = 1/2 f(x)^2 - y*c(x) + mu/2 c(x)^2 + y^2/(2*mu)
@@ -155,7 +169,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     z = z0.copy()
     f = fun_wrapped(z, *args)
     cost = 1 / 2 * jnp.dot(f, f)
-    c = constraint_wrapped.fun(z)
+    c = constraint_wrapped.fun(z, *args)
     constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
     nfev += 1
 
@@ -193,8 +207,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     return_all = options.pop("return_all", True)
     return_tr = options.pop("return_tr", True)
 
-    if maxiter is None:
-        maxiter = z.size * 100
+    maxiter = setdefault(maxiter, z.size * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
     max_njev = options.pop("max_njev", maxiter + 1)
     max_dx = options.pop("max_dx", jnp.inf)
@@ -215,6 +228,9 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     J_h = J * d
     g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
 
+    # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
+    # scipy : norm of the scaled x, as used in scipy
+    # mix : geometric mean of conngould and scipy
     init_tr = {
         "scipy": jnp.linalg.norm(z * scale_inv / v**0.5),
         "conngould": jnp.sum(g_h**2) / jnp.sum((J_h @ g_h) ** 2),
@@ -228,8 +244,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     tr_ratio = options.pop("initial_trust_ratio", 1.0)
     trust_radius = init_tr.get(trust_radius, trust_radius)
     trust_radius *= tr_ratio
-    if trust_radius == 0:
-        trust_radius = 1.0
+    trust_radius = trust_radius if (trust_radius > 0) else 1.0
 
     max_trust_radius = options.pop("max_trust_radius", jnp.inf)
     min_trust_radius = options.pop("min_trust_radius", jnp.finfo(z.dtype).eps)
@@ -239,8 +254,13 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
     tr_method = options.pop("tr_method", "svd")
 
-    if len(options) > 0:
-        raise ValueError("Unknown options: {}".format([key for key in options]))
+    errorif(
+        len(options) > 0,
+        ValueError,
+        "Unknown options: {}".format([key for key in options]),
+    )
+
+    callback = setdefault(callback, lambda *args: False)
 
     z_norm = jnp.linalg.norm(z, ord=2)
     success = None
@@ -255,8 +275,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     if return_tr:
         alltr = [trust_radius]
     if g_norm < gtol and constr_violation < ctol:
-        success = True
-        message = STATUS_MESSAGES["gtol"]
+        success, message = True, STATUS_MESSAGES["gtol"]
 
     if verbose > 1:
         print_header_nonlinear(True, "Penalty param", "max(|mltplr|)")
@@ -275,12 +294,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     while iteration < maxiter and success is None:
 
         # we don't want to factorize the extra stuff if we don't need to
-        if bounded:
-            J_a = jnp.vstack([J_h, jnp.diag(diag_h**0.5)])
-            L_a = jnp.concatenate([L, jnp.zeros(diag_h.size)])
-        else:
-            J_a = J_h
-            L_a = L
+        J_a = jnp.vstack([J_h, jnp.diag(diag_h**0.5)]) if bounded else J_h
+        L_a = jnp.concatenate([L, jnp.zeros(diag_h.size)]) if bounded else L
 
         if tr_method == "svd":
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
@@ -329,7 +344,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             z_new = make_strictly_feasible(z + step, lb, ub, rstep=0)
             f_new = fun_wrapped(z_new, *args)
             cost_new = 0.5 * jnp.dot(f_new, f_new)
-            c_new = constraint_wrapped.fun(z_new)
+            c_new = constraint_wrapped.fun(z_new, *args)
             L_new = lagfun(f_new, c_new, y, mu)
             nfev += 1
 
@@ -434,12 +449,13 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             J_h = J * d
 
             if g_norm < gtol and constr_violation < ctol:
-                success = True
-                message = STATUS_MESSAGES["gtol"]
+                success, message = True, STATUS_MESSAGES["gtol"]
+
+            if callback(jnp.copy(z2xs(z)[0]), *args):
+                success, message = False, STATUS_MESSAGES["callback"]
 
         else:
-            step_norm = 0
-            actual_reduction = 0
+            step_norm = actual_reduction = 0
 
         iteration += 1
         if verbose > 1:
@@ -456,11 +472,9 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             )
 
     if g_norm < gtol and constr_violation < ctol:
-        success = True
-        message = STATUS_MESSAGES["gtol"]
+        success, message = True, STATUS_MESSAGES["gtol"]
     if (iteration == maxiter) and success is None:
-        success = False
-        message = STATUS_MESSAGES["maxiter"]
+        success, message = False, STATUS_MESSAGES["maxiter"]
     x, s = z2xs(z)
     active_mask = find_active_constraints(z, zbounds[0], zbounds[1], rtol=xtol)
     result = OptimizeResult(

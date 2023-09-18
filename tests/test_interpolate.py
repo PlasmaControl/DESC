@@ -140,6 +140,7 @@ class TestInterp3D:
 
         fq = interp3d(x, y, z, xp, yp, zp, fp, method="linear")
         np.testing.assert_allclose(fq, f(x, y, z), rtol=1e-3, atol=1e-1)
+
         atol = 5.5e-3
         rtol = 1e-5
         fq = interp3d(x, y, z, xp, yp, zp, fp, method="cubic")

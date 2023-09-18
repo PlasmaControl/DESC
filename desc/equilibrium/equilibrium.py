@@ -677,9 +677,7 @@ class Equilibrium(IOAble):
         data = self.compute(name, grid=grid, **kwargs)
         x = data[name]
         x = grid.compress(x, surface_label="rho")
-        return SplineProfile(
-            x, grid.nodes[grid.unique_rho_idx, 0], grid=grid, name=name
-        )
+        return SplineProfile(x, grid.nodes[grid.unique_rho_idx, 0], name=name)
 
     def get_axis(self):
         """Return a representation for the magnetic axis.

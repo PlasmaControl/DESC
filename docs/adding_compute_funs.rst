@@ -117,10 +117,8 @@ dependencies specified by the decorator. The function itself should do any calcu
 needed using these dependencies and then add the output to the ``data`` dictionary and
 return it. The key in the ``data`` dictionary should match the ``name`` of the quantity.
 
-Once a new quantity is added to the ``desc.compute`` module, there is a final two steps involving
-the testing suite which must be checked.
-- The first is relating to axis limits:
-- if the added quantity is comprised of quantities which already have finite axis limits implemented in DESC,
+Once a new quantity is added to the ``desc.compute`` module, there is a final two steps involving the testing suite which must be checked.
+The first is relating to axis limits: if the added quantity is comprised of quantities which already have finite axis limits implemented in DESC,
 then the added quantity also has a finite axis limit. This can be checked by computing the quantity on a grid
 with a node at the axis and checking that its value is not ``nan``:
 ::
@@ -136,15 +134,16 @@ with a node at the axis and checking that its value is not ``nan``:
     # if True, quantity may not be finite at axis
     print(np.any(Np.isnan(new_quantity)))
 
-- if ``False`` is printed, then the quantity is already determined to be finite at axis and this step is finished
-- if ``True`` is printed, then the quantity may not be finite at axis.
-- if the axis limit was derived and known, add it to the definition of that quantity's compute function according to the instructions above
-- if the axis limit is not known or is known to not exist, then add the name of the new quantity to the file ``tests/test_axis_limits.py``
-  - If the limit is simply not derived/known, add it to the ``not_implemented_limits`` dictionary.
-  - If the limit is known to be not finite or indeterminate at the axis, add it to the ``not_finite_limits`` dictionary.
-- The second step is to run the "compute_everything" test located in the ``tests/test_compute_funs.py`` file.
+if ``False`` is printed, then the quantity is already determined to be finite at axis and this step is finished
+if ``True`` is printed, then the quantity may not be finite at axis.
+if the axis limit was derived and known, add it to the definition of that quantity's compute function according to the instructions above
+if the axis limit is not known or is known to not exist, then add the name of the new quantity to the file ``tests/test_axis_limits.py``
+If the limit is simply not derived/known, add it to the ``not_implemented_limits`` dictionary.
+If the limit is known to be not finite or indeterminate at the axis, add it to the ``not_finite_limits`` dictionary.
+
+The second step is to run the "compute_everything" test located in the ``tests/test_compute_funs.py`` file.
 This test is a regression test to ensure that compute quantities in each new update of DESC do not differ significantly
 from previous versions of DESC.
-- Since the new quantity being added did not exist in previous versions of DESC, one must run this test
+Since the new quantity being added did not exist in previous versions of DESC, one must run this test
 and commit the ``master_compute_data.pkl`` file which is updated automatically when a new quantity is detected.
 Run this test from the DESC folder with the command :console:`pytest tests -k "compute_everything"`

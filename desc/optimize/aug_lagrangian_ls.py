@@ -261,8 +261,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     beta_eta = options.pop("beta_eta", 0.9)
     tau = options.pop("tau", 10)
 
-    gtolk = omega / jnp.mean(mu) ** alpha_omega
-    ctolk = eta / jnp.mean(mu) ** alpha_eta
+    gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
+    ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)
 
     L = lagfun(f, c, y, mu)
     J = lagjac(z, y, mu, *args)
@@ -478,11 +478,11 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 y = jnp.where(jnp.abs(c) < ctolk, y - mu * c, y)
                 mu = jnp.where(jnp.abs(c) >= ctolk, tau * mu, mu)
                 if constr_violation < ctolk:
-                    ctolk = ctolk / (jnp.mean(mu) ** beta_eta)
-                    gtolk = gtolk / (jnp.mean(mu) ** beta_omega)
+                    ctolk = max(ctolk / (jnp.mean(mu) ** beta_eta), ctol)
+                    gtolk = max(gtolk / (jnp.mean(mu) ** beta_omega), gtol)
                 else:
-                    ctolk = eta / (jnp.mean(mu) ** alpha_eta)
-                    gtolk = omega / (jnp.mean(mu) ** alpha_omega)
+                    ctolk = max(eta / (jnp.mean(mu) ** alpha_eta), ctol)
+                    gtolk = max(omega / (jnp.mean(mu) ** alpha_omega), gtol)
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
                 Lcost = 0.5 * jnp.dot(L, L)

@@ -118,28 +118,26 @@ needed using these dependencies and then add the output to the ``data`` dictiona
 return it. The key in the ``data`` dictionary should match the ``name`` of the quantity.
 
 Once a new quantity is added to the ``desc.compute`` module, there is a final two steps involving the testing suite which must be checked.
-The first is relating to axis limits: if the new quantity is comprised of quantities which have finite axis limits already implemented in DESC,
-then the limit of the new quantity should automatically evaluate to the correct axis limit.
-This can be checked by computing the quantity on a grid with a node at the axis and checking that its value is finite:
+The first step is implementing the correct axis limit, or marking it as not finite or not implemented.
+We can check whether the axis limit currently evalutates as finite by computing the quantity on a grid with a node at the axis.
 ::
 
     from desc.examples import get
     from desc.grid import LinearGrid
     import numpy as np
 
-    eq = get("DSHAPE")
+    eq = get("HELIOTRON")
     grid = LinearGrid(L=1, M=1, N=1, axis=True)
     new_quantity = eq.compute(name="new_quantity_name", grid=grid)["new_quantity_name"]
     print(np.isfinite(new_quantity).all())
 
-If ``True`` is printed, then the correct limit of the quantity can already be computed at the axis.
 if ``False`` is printed, then the limit of the quantity does not evaluate as finite which can be due to 3 reasons:
 
 
 * The limit is actually not finite, in which case please add the new quantity to the ``not_finite_limits`` set in ``tests/test_axis_limits.py``.
 * The new quantity has an indeterminate expression at the magnetic axis, in which case you should try to implement the correct limit as done in the example for ``J^rho`` above.
   If you wish to skip implementing the limit at the magnetic axis, please add the new quantity to the ``not_implemented_limits`` set in ``tests/test_axis_limits.py``.
-* The new quantity includes a dependency whose limit has not been implemented at the magnetic axis.
+* The new quantity includes a dependency whose limit at the magnetic axis has not been implemented.
   The tests automatically detect this, so no further action is needed from developers in this case.
 
 

@@ -37,17 +37,26 @@ objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond,
 
 objective.build()
 solution = objective.compute(*objective.xs(eq))
+
+print("*************** SOLUTION .compute() ***************")
 print(solution)
+print("***************************************************")
 
 
 objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param)
 ObjFunction = ObjectiveFunction([objective])
 ObjFunction.build()
 
+print("*************** ObjFunction.compile() ***************")
 ObjFunction.compile(mode="bfgs")
+print("*****************************************************")
 
 gradient = ObjFunction.grad(ObjFunction.x(eq))
+print("*************** GRADIENT ***************")
 print(gradient)
+print("****************************************")
 #print(ObjFunction.x(eq))
 xs = objective.xs(eq)
+print("*************** xs **************")
 print(xs)
+print("*********************************")

@@ -390,7 +390,7 @@ class ProximalProjection(ObjectiveFunction):
     to an unconstrained optimizer.
 
     At each iteration, after a step is taken to reduce the objective, the equilibrium
-    is perturbed and re-solved to bring it back into force balance. This is analagous
+    is perturbed and re-solved to bring it back into force balance. This is analogous
     to a proximal method where each iterate is projected back onto the feasible set.
 
     Parameters

@@ -55,7 +55,7 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_theta x e_zeta|",
-    label="|e_{\\theta} \\times e_{\\zeta}|",
+    label="|\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant rho surface",
@@ -79,7 +79,7 @@ def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_theta x e_zeta|_r",
-    label="\\partial_{\\rho} |e_{\\theta} \\times e_{\\zeta}|",
+    label="\\partial_{\\rho} |\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant rho surface"
@@ -113,7 +113,7 @@ def _e_theta_x_e_zeta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_theta x e_zeta|_rr",
-    label="\\partial_{\\rho \\rho} |e_{\\theta} \\times e_{\\zeta}|",
+    label="\\partial_{\\rho\\rho} |\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant rho surface"
@@ -152,7 +152,7 @@ def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_zeta x e_rho|",
-    label="|e_{\\zeta} \\times e_{\\rho}|",
+    label="|\\mathbf{e}_{\\zeta} \\times \\mathbf{e}_{\\rho}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant theta surface",
@@ -174,7 +174,7 @@ def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_rho x e_theta|",
-    label="|e_{\\rho} \\times e_{\\theta}|",
+    label="|\\mathbf{e}_{\\rho} \\times \\mathbf{e}_{\\theta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant zeta surface",
@@ -198,7 +198,7 @@ def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_rho x e_theta|_r",
-    label="\\partial_{\\rho} |e_{\\rho} \\times e_{\\theta}|",
+    label="\\partial_{\\rho} |\\mathbf{e}_{\\rho} \\times \\mathbf{e}_{\\theta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant zeta surface"
@@ -232,7 +232,7 @@ def _e_rho_x_e_theta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_rho x e_theta|_rr",
-    label="\\partial_{\\rho \\rho} |e_{\\rho} \\times e_{\\theta}|",
+    label="\\partial_{\\rho \\rho} |\\mathbf{e}_{\\rho} \\times \\mathbf{e}_{\\theta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant zeta surface"
@@ -1349,7 +1349,7 @@ def _g_sup_tz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rr_r",
-    label="g^{\\rho}{\\rho}_{\\rho}",
+    label="\\partial_{\\rho} g^{\\rho \\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
@@ -1368,7 +1368,7 @@ def _g_sup_rr_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rt_r",
-    label="g^{\\rho}{\\theta}_{\\rho}",
+    label="\\partial_{\\rho} g^{\\rho \\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
@@ -1389,7 +1389,7 @@ def _g_sup_rt_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rz_r",
-    label="g^{\\rho}{\\zeta}_{\\rho}",
+    label="\\partial_{\\rho} g^{\\rho \\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
@@ -1410,7 +1410,7 @@ def _g_sup_rz_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tt_r",
-    label="g^{\\theta}{\\theta}_{\\rho}",
+    label="\\partial_{\\rho} g^{\\theta \\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
@@ -1429,7 +1429,7 @@ def _g_sup_tt_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tz_r",
-    label="g^{\\theta}{\\zeta}_{\\rho}",
+    label="\\partial_{\\rho} g^{\\theta \\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
@@ -1450,7 +1450,7 @@ def _g_sup_tz_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^zz_r",
-    label="g^{\\zeta}{\\zeta}_{\\rho}",
+    label="\\partial_{\\rho} g^{\\zeta \\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "
@@ -1469,7 +1469,7 @@ def _g_sup_zz_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rr_t",
-    label="g^{\\rho}{\\rho}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\rho \\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
@@ -1488,7 +1488,7 @@ def _g_sup_rr_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rt_t",
-    label="g^{\\rho}{\\theta}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\rho \\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
@@ -1509,7 +1509,7 @@ def _g_sup_rt_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rz_t",
-    label="g^{\\rho}{\\zeta}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\rho \\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
@@ -1530,7 +1530,7 @@ def _g_sup_rz_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tt_t",
-    label="g^{\\theta}{\\theta}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\theta \\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
@@ -1549,7 +1549,7 @@ def _g_sup_tt_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tz_t",
-    label="g^{\\theta}{\\zeta}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\theta \\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
@@ -1570,7 +1570,7 @@ def _g_sup_tz_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^zz_t",
-    label="g^{\\zeta}{\\zeta}_{\\theta}",
+    label="\\partial_{\\theta} g^{\\zeta \\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "
@@ -1589,7 +1589,7 @@ def _g_sup_zz_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rr_z",
-    label="g^{\\rho}{\\rho}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\rho \\rho}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
@@ -1608,7 +1608,7 @@ def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rt_z",
-    label="g^{\\rho}{\\theta}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\rho \\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
@@ -1629,7 +1629,7 @@ def _g_sup_rt_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^rz_z",
-    label="g^{\\rho}{\\zeta}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\rho \\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
@@ -1650,7 +1650,7 @@ def _g_sup_rz_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tt_z",
-    label="g^{\\theta}{\\theta}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\theta \\theta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
@@ -1669,7 +1669,7 @@ def _g_sup_tt_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^tz_z",
-    label="g^{\\theta}{\\zeta}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\theta \\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
@@ -1690,7 +1690,7 @@ def _g_sup_tz_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="g^zz_z",
-    label="g^{\\zeta}{\\zeta}_{\\zeta}",
+    label="\\partial_{\\zeta} g^{\\zeta \\zeta}",
     units="m^-2",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "

@@ -12,35 +12,6 @@ from desc.grid import ConcentricGrid, LinearGrid
 
 from .data_index import data_index
 
-# defines the order in which objective arguments get concatenated into the state vector
-arg_order = (
-    "R_lmn",
-    "Z_lmn",
-    "L_lmn",
-    "p_l",
-    "i_l",
-    "c_l",
-    "Psi",
-    "Te_l",
-    "ne_l",
-    "Ti_l",
-    "Zeff_l",
-    "Ra_n",
-    "Za_n",
-    "Rb_lmn",
-    "Zb_lmn",
-)
-# map from profile name to equilibrium parameter name
-profile_names = {
-    "pressure": "p_l",
-    "iota": "i_l",
-    "current": "c_l",
-    "electron_temperature": "Te_l",
-    "electron_density": "ne_l",
-    "ion_temperature": "Ti_l",
-    "atomic_number": "Zeff_l",
-}
-
 
 def _parse_parameterization(p):
     if isinstance(p, str):
@@ -284,13 +255,6 @@ def get_profiles(keys, obj, grid=None, has_axis=False, jitable=False, **kwargs):
         return profs
     # need to use copy here because profile may be None
     profiles = {name: copy.deepcopy(getattr(obj, name)) for name in profs}
-    if grid is None:
-        return profiles
-    for val in profiles.values():
-        if val is not None:
-            if jitable and hasattr(val, "_transform"):
-                val._transform.method = "jitable"
-            val.grid = grid
     return profiles
 
 
@@ -1309,3 +1273,34 @@ def surface_min(grid, x, surface_label="rho"):
     # The above implementation was benchmarked to be more efficient than
     # alternatives without explicit loops in GitHub pull request #501.
     return grid.expand(mins, surface_label)
+
+
+# defines the order in which objective arguments get concatenated into the state vector
+arg_order = (
+    "R_lmn",
+    "Z_lmn",
+    "L_lmn",
+    "p_l",
+    "i_l",
+    "c_l",
+    "Psi",
+    "Te_l",
+    "ne_l",
+    "Ti_l",
+    "Zeff_l",
+    "Ra_n",
+    "Za_n",
+    "Rb_lmn",
+    "Zb_lmn",
+)
+
+# map from profile name to equilibrium parameter name
+profile_names = {
+    "pressure": "p_l",
+    "iota": "i_l",
+    "current": "c_l",
+    "electron_temperature": "Te_l",
+    "electron_density": "ne_l",
+    "ion_temperature": "Ti_l",
+    "atomic_number": "Zeff_l",
+}

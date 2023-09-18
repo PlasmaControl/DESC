@@ -1,9 +1,9 @@
 """Function for solving nonlinear least squares problems."""
 
 from scipy.optimize import OptimizeResult
-from termcolor import colored
 
 from desc.backend import jnp
+from desc.utils import errorif, setdefault
 
 from .bound_utils import (
     cl_scaling_vector,
@@ -99,7 +99,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
             ``callback(xk, *args) -> bool``
 
-        where ``xk`` is the current parameter vector. and ``args``
+        where ``xk`` is the current parameter vector, and ``args``
         are the same arguments passed to fun and jac. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
@@ -117,16 +117,16 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     """
     options = {} if options is None else options
-    if tr_method not in ["cho", "svd"]:
-        raise ValueError(
-            "tr_method should be one of 'cho', 'svd', got {}".format(tr_method)
-        )
-    if isinstance(x_scale, str) and x_scale not in ["jac", "auto"]:
-        raise ValueError(
-            "x_scale should be one of 'jac', 'auto' or array-like, got {}".format(
-                x_scale
-            )
-        )
+    errorif(
+        tr_method not in ["cho", "svd"],
+        ValueError,
+        "tr_method should be one of 'cho', 'svd', got {}".format(tr_method),
+    )
+    errorif(
+        isinstance(x_scale, str) and x_scale not in ["jac", "auto"],
+        ValueError,
+        "x_scale should be one of 'jac', 'auto' or array-like, got {}".format(x_scale),
+    )
 
     nfev = 0
     njev = 0
@@ -146,8 +146,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     njev += 1
     g = jnp.dot(J.T, f)
 
-    if maxiter is None:
-        maxiter = n * 100
+    maxiter = setdefault(maxiter, n * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
     max_njev = options.pop("max_njev", maxiter + 1)
     gnorm_ord = options.pop("gnorm_ord", jnp.inf)
@@ -173,11 +172,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     J_h = J * d
     g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
 
-    # initial trust region radius is based on the geometric mean of 2 possible rules:
-    # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
-    # second is the norm of the scaled x, as used in scipy
-    # in practice for our problems the C&G one is too small, while scipy is too big,
-    # but the geometric mean seems to work well
+    # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
+    # scipy : norm of the scaled x, as used in scipy
+    # mix : geometric mean of conngould and scipy
     init_tr = {
         "scipy": jnp.linalg.norm(x * scale_inv / v**0.5),
         "conngould": jnp.sum(g_h**2) / jnp.sum((J_h @ g_h) ** 2),
@@ -191,20 +188,22 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     tr_ratio = options.pop("initial_trust_ratio", 1.0)
     trust_radius = init_tr.get(trust_radius, trust_radius)
     trust_radius *= tr_ratio
+    trust_radius = trust_radius if (trust_radius > 0) else 1.0
 
-    max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
+    max_trust_radius = options.pop("max_trust_radius", jnp.inf)
     min_trust_radius = options.pop("min_trust_radius", jnp.finfo(x0.dtype).eps)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
 
-    if trust_radius == 0:
-        trust_radius = 1.0
-    if len(options) > 0:
-        raise ValueError(
-            colored("Unknown options: {}".format([key for key in options]), "red")
-        )
+    errorif(
+        len(options) > 0,
+        ValueError,
+        "Unknown options: {}".format([key for key in options]),
+    )
+
+    callback = setdefault(callback, lambda *args: False)
 
     x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
     success = None
@@ -224,20 +223,15 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     if return_tr:
         alltr = [trust_radius]
     if g_norm < gtol:
-        success = True
-        message = STATUS_MESSAGES["gtol"]
+        success, message = True, STATUS_MESSAGES["gtol"]
 
     alpha = 0  # "Levenberg-Marquardt" parameter
 
     while iteration < maxiter and success is None:
 
         # we don't want to factorize the extra stuff if we don't need to
-        if bounded:
-            J_a = jnp.vstack([J_h, jnp.diag(diag_h**0.5)])
-            f_a = jnp.concatenate([f, jnp.zeros(diag_h.size)])
-        else:
-            J_a = J_h
-            f_a = f
+        J_a = jnp.vstack([J_h, jnp.diag(diag_h**0.5)]) if bounded else J_h
+        f_a = jnp.concatenate([f, jnp.zeros(diag_h.size)]) if bounded else f
 
         if tr_method == "svd":
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
@@ -355,19 +349,15 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             J_h = J * d
             x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
             g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
-            if g_norm < gtol:
-                success = True
-                message = STATUS_MESSAGES["gtol"]
 
-            if callback is not None:
-                stop = callback(jnp.copy(x), *args)
-                if stop:
-                    success = False
-                    message = STATUS_MESSAGES["callback"]
+            if g_norm < gtol:
+                success, message = True, STATUS_MESSAGES["gtol"]
+
+            if callback(jnp.copy(x), *args):
+                success, message = False, STATUS_MESSAGES["callback"]
 
         else:
-            step_norm = 0
-            actual_reduction = 0
+            step_norm = actual_reduction = 0
 
         iteration += 1
         if verbose > 1:
@@ -376,11 +366,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             )
 
     if g_norm < gtol:
-        success = True
-        message = STATUS_MESSAGES["gtol"]
+        success, message = True, STATUS_MESSAGES["gtol"]
     if (iteration == maxiter) and success is None:
-        success = False
-        message = STATUS_MESSAGES["maxiter"]
+        success, message = False, STATUS_MESSAGES["maxiter"]
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
     result = OptimizeResult(
         x=x,

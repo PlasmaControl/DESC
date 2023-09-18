@@ -130,7 +130,7 @@ This can be checked by computing the quantity on a grid with a node at the axis 
     eq = get("DSHAPE")
     grid = LinearGrid(L=1, M=1, N=1, axis=True)
     new_quantity = eq.compute(name="new_quantity_name", grid=grid)["new_quantity_name"]
-    print(np.isfinite(new_quantity[grid.axis]).all())
+    print(np.isfinite(new_quantity).all())
 
 If ``True`` is printed, then the correct limit of the quantity can already be computed at the axis.
 if ``False`` is printed, then the limit of the quantity does not evaluate as finite which can be due to 3 reasons:

@@ -120,7 +120,7 @@ return it. The key in the ``data`` dictionary should match the ``name`` of the q
 Once a new quantity is added to the ``desc.compute`` module, there is a final two steps involving the testing suite which must be checked.
 The first is relating to axis limits: if the new quantity is comprised of quantities which have finite axis limits already implemented in DESC,
 then the limit of the new quantity should automatically evaluate to the correct axis limit.
-This can be checked by computing the quantity on a grid with a node at the axis and checking that its value is not ``nan``:
+This can be checked by computing the quantity on a grid with a node at the axis and checking that its value is finite:
 ::
 
     from desc.examples import get

@@ -7,6 +7,7 @@ import pytest
 from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
+from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
 from desc.compute import data_index, rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -1223,12 +1224,28 @@ def test_compute_everything():
         "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
             **elliptic_cross_section_with_torsion
         ),
+        # coils
+        "desc.coils.FourierRZCoil": FourierRZCoil(
+            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
+        ),
+        "desc.coils.FourierXYZCoil": FourierXYZCoil(
+            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
+        ),
+        "desc.coils.FourierPlanarCoil": FourierPlanarCoil(
+            current=5,
+            center=[10, 1, 3],
+            normal=[1, 2, 3],
+            r_n=[1, 2, 3],
+            modes=[0, 1, 2],
+        ),
+        "desc.coils.SplineXYZCoil": SplineXYZCoil(
+            current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
+        ),
     }
-    things_keys = list(things.keys()).sort()
-    data_keys = list(data_index.keys()).sort()
-    assert (
-        things_keys == data_keys
-    ), "Missing a parameterization to test against master."
+    assert things.keys() == data_index.keys(), (
+        f"Missing the parameterizations {data_index.keys() - things.keys()}"
+        f" to test against master."
+    )
     # use this low resolution grid for equilibria to reduce file size
     grid = LinearGrid(
         # include magnetic axis
@@ -1251,7 +1268,10 @@ def test_compute_everything():
             list(data_index[p].keys()), **grid.get(p, {})
         )
         # make sure we can compute everything
-        assert this_branch_data[p].keys() == data_index[p].keys(), p
+        assert this_branch_data[p].keys() == data_index[p].keys(), (
+            f"Parameterization: {p}."
+            f" Can't compute {data_index[p].keys() - this_branch_data[p].keys()}."
+        )
         # compare against master branch
         for name in this_branch_data[p]:
             if p in master_data and name in master_data[p]:
@@ -1266,10 +1286,14 @@ def test_compute_everything():
                     error = True
                     print(e)
             else:
+                # We can compute a new quantity now, so we should update the
+                # master compute data.
                 update_master_data = True
 
     if not error and update_master_data:
+        # then update the master compute data
         with open("tests/inputs/master_compute_data.pkl", "wb") as file:
+            # remember to git commit this file
             pickle.dump(this_branch_data, file)
     assert not error
 

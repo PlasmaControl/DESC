@@ -122,7 +122,7 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
     return coeffs, bases
 
 
-def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
+def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, N_cutoff=None):
     """Create the linear constraints for constraining an eq with O(rho) NAE behavior.
 
     Parameters
@@ -169,7 +169,11 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_1_1_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        if n > N_cutoff:
+            fudge_factor = 2
+        else:
+            fudge_factor = 1
+        target = NAEcoeff * r * fudge_factor
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
             sum_weights.append([(-1) ** k * k])
@@ -183,7 +187,11 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_1_neg1_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        if n > N_cutoff:
+            fudge_factor = 2
+        else:
+            fudge_factor = 1
+        target = NAEcoeff * r * fudge_factor
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
             sum_weights.append([(-1) ** k * k])
@@ -198,7 +206,11 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_1_neg1_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        if n > N_cutoff:
+            fudge_factor = 2
+        else:
+            fudge_factor = 1
+        target = NAEcoeff * r * fudge_factor
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
             sum_weights.append([(-1) ** k * k])
@@ -212,7 +224,11 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_1_1_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        if n > N_cutoff:
+            fudge_factor = 2
+        else:
+            fudge_factor = 1
+        target = NAEcoeff * r * fudge_factor
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
             sum_weights.append([(-1) ** k * k])
@@ -226,7 +242,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
     return Rconstraints, Zconstraints
 
 
-def make_RZ_cons_1st_order(qsc, desc_eq, N=None):
+def make_RZ_cons_1st_order(qsc, desc_eq, N=None, N_cutoff=None):
     """Make the first order NAE constraints for a DESC equilibrium.
 
     Parameters
@@ -252,6 +268,8 @@ def make_RZ_cons_1st_order(qsc, desc_eq, N=None):
     Zconstraints = ()
 
     coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=N)
-    Rconstraints, Zconstraints = _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases)
+    Rconstraints, Zconstraints = _make_RZ_cons_order_rho(
+        qsc, desc_eq, coeffs, bases, N_cutoff=N_cutoff
+    )
 
     return Rconstraints + Zconstraints

@@ -15,8 +15,6 @@ save = False
 model = True
 fields = True
 confinement = True
-OPinvarinat = True
-boundaries = False
 
 plt.rcParams["font.family"] = "DejaVu Sans"
 plt.rcParams["mathtext.fontset"] = "dejavusans"
@@ -103,6 +101,7 @@ if model:
             r"$\pi/2$",
         ]
     )
+    ax0.set_yticks([0.8, 0.9, 1.0, 1.1, 1.2])
     ax0.set_xlabel(r"$\eta$")
     ax0.set_ylabel(r"$|\mathbf{B}|$")
     ax0.legend(loc="upper center")
@@ -114,6 +113,7 @@ if model:
     ax1.set_xlim([0, 2 * np.pi])
     ax1.set_xticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
     ax1.set_xticklabels([r"$0$", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
+    ax1.set_yticks([0.8, 0.9, 1.0, 1.1, 1.2])
     ax1.set_xlabel(r"$h$")
     ax1.set_ylabel(r"$|\mathbf{B}|$")
     ax1.legend(loc="upper center")
@@ -124,7 +124,7 @@ if model:
     div = make_axes_locatable(ax2)
     im2 = ax2.contour(zeta3, theta3, B3, norm=Normalize(), levels=20, cmap=colormap)
     cax = div.append_axes("right", size="5%", pad=0.05)
-    cbar = fig.colorbar(im2, cax=cax, ticks=[1.0, 1.2, 1.4, 1.6, 1.8, 2.0])
+    cbar = fig.colorbar(im2, cax=cax, ticks=[0.8, 0.9, 1.0, 1.1, 1.2])
     cbar.update_ticks()
     arr = np.linspace(0, 2 * np.pi)
     ax2.plot(arr, iota * arr + 0, color=green, linestyle=":", lw=6, label=r"$\alpha=0$")
@@ -574,145 +574,6 @@ if confinement:
     if save:
         plt.savefig("publications/dudt2023/confinement.png")
         plt.savefig("publications/dudt2023/confinement.eps")
-    else:
-        plt.show()
-
-# OP 2nd adiabatic invariant ==========================================================
-
-if OPinvarinat:
-    fig, (ax0, ax1) = plt.subplots(nrows=2, ncols=1, figsize=(7, 7), sharex=True)
-    Bnorm = np.load("publications/dudt2023/Bnorm.npy")
-    # Delta J
-    DeltaJ_Goodman = np.load("publications/dudt2023/DeltaJ_Goodman.npy")
-    DeltaJ_Dudt = np.load("publications/dudt2023/DeltaJ_Dudt.npy")
-    ax0.semilogy(
-        Bnorm, DeltaJ_Goodman, color=purple, linestyle="-", lw=4, label="Goodman et al."
-    )
-    ax0.semilogy(
-        Bnorm, DeltaJ_Dudt, color=orange, linestyle="-", lw=4, label="Dudt et al."
-    )
-    ax0.set_ylabel(r"$\langle \Delta J \rangle / \langle J \rangle$")
-    ax0.legend(loc="upper right")
-    ax0.set_xlim([0, 1])
-    ax0.set_ylim([1e-4, 1e0])
-    # dJ/drho
-    dJds_Goodman = np.load("publications/dudt2023/dJds_Goodman.npy")
-    dJds_Dudt = np.load("publications/dudt2023/dJds_Dudt.npy")
-    ax1.semilogy(
-        Bnorm, dJds_Goodman, color=purple, linestyle="-", lw=4, label="Goodman et al."
-    )
-    ax1.semilogy(
-        Bnorm, dJds_Dudt, color=orange, linestyle="-", lw=4, label="Dudt et al."
-    )
-    ax1.set_ylabel(r"$\langle dJ/ds \rangle / \langle J \rangle$")
-    ax1.set_xlabel(r"$(B - B_{min}) / (B_{max} - B_{min})$")
-    ax1.set_xlim([0, 1])
-    ax1.set_ylim([1e-3, 1e1])
-    fig.tight_layout()
-    if save:
-        plt.savefig("publications/dudt2023/OPinvarinat.png")
-        plt.savefig("publications/dudt2023/OPinvarinat.eps")
-    else:
-        plt.show()
-
-# boundaries ==========================================================================
-
-if boundaries:
-    colors = [purple, orange]
-    styles = ["-", "-"]
-    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(21, 7), sharex=True, sharey=True)
-    # poloidal
-    labels = ["OP", "QP"]
-    grid_ax = LinearGrid(theta=1, zeta=6, NFP=1, rho=0.0, endpoint=True)
-    grid = LinearGrid(theta=100, zeta=6, NFP=1, rho=1.0, endpoint=True)
-    for i, eq in enumerate((eq_pol, eq_pol_qs)):
-        coords_ax = eq.compute(["R", "Z"], grid=grid_ax)
-        coords = eq.compute(["R", "Z"], grid=grid)
-        R0 = coords_ax["R"]
-        Z0 = coords_ax["Z"]
-        R = coords["R"].reshape(
-            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
-        )
-        Z = coords["Z"].reshape(
-            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
-        )
-        ax[0].plot(R0, Z0, "ko", ms=6)
-        for j in range(grid.num_zeta - 1):
-            (line,) = ax[0].plot(
-                R[:, -1, j],
-                Z[:, -1, j],
-                color=colors[i],
-                linestyle=styles[i],
-                lw=3,
-            )
-            if j == 0:
-                line.set_label(labels[i])
-    ax[0].legend(loc="upper right", ncol=1)
-    ax[0].set_xlabel(r"$R$ (m)")
-    ax[0].set_ylabel(r"$Z$ (m)")
-    ax[0].set_title(r"$M=0,~N=N_{{FP}}$")
-    # helical
-    labels = ["OH", "QH"]
-    grid_ax = LinearGrid(theta=1, zeta=6, NFP=5, rho=0.0, endpoint=True)
-    grid = LinearGrid(theta=100, zeta=6, NFP=5, rho=1.0, endpoint=True)
-    for i, eq in enumerate((eq_hel, eq_hel_qs)):
-        coords_ax = eq.compute(["R", "Z"], grid=grid_ax)
-        coords = eq.compute(["R", "Z"], grid=grid)
-        R0 = coords_ax["R"]
-        Z0 = coords_ax["Z"]
-        R = coords["R"].reshape(
-            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
-        )
-        Z = coords["Z"].reshape(
-            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
-        )
-        ax[1].plot(R0, Z0, "ko", ms=6)
-        for j in range(grid.num_zeta - 1):
-            (line,) = ax[1].plot(
-                R[:, -1, j],
-                Z[:, -1, j],
-                color=colors[i],
-                linestyle=styles[i],
-                lw=3,
-            )
-            if j == 0:
-                line.set_label(labels[i])
-    ax[1].legend(loc="upper right", ncol=1)
-    ax[1].set_xlabel(r"$R$ (m)")
-    ax[1].set_title(r"$M=1,~N=N_{{FP}}$")
-    # toroidal
-    labels = ["OT", "QA"]
-    grid_ax = LinearGrid(theta=1, zeta=6, NFP=1, rho=0.0, endpoint=True)
-    grid = LinearGrid(theta=100, zeta=6, NFP=1, rho=1.0, endpoint=True)
-    for i, eq in enumerate((eq_tor, eq_tor_qs)):
-        coords_ax = eq.compute(["R", "Z"], grid=grid_ax)
-        coords = eq.compute(["R", "Z"], grid=grid)
-        R0 = coords_ax["R"]
-        Z0 = coords_ax["Z"]
-        R = coords["R"].reshape(
-            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
-        )
-        Z = coords["Z"].reshape(
-            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
-        )
-        ax[2].plot(R0, Z0, "ko", ms=6)
-        for j in range(grid.num_zeta - 1):
-            (line,) = ax[2].plot(
-                R[:, -1, j],
-                Z[:, -1, j],
-                color=colors[i],
-                linestyle=styles[i],
-                lw=3,
-            )
-            if j == 0:
-                line.set_label(labels[i])
-    ax[2].legend(loc="upper right", ncol=1)
-    ax[2].set_xlabel(r"$R$ (m)")
-    ax[2].set_title(r"$M=1,~N=0$")
-    fig.tight_layout()
-    if save:
-        plt.savefig("publications/dudt2023/boundaries.png")
-        plt.savefig("publications/dudt2023/boundaries.eps")
     else:
         plt.show()
 

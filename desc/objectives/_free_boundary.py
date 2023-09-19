@@ -62,6 +62,7 @@ class BoundaryErrorBIESTSC(_Objective):
     _linear = False
     _print_value_fmt = "Boundary Error: {:10.3e} "
     _units = "(T)"
+    _coordinates = "rtz"
 
     def __init__(
         self,
@@ -136,13 +137,13 @@ class BoundaryErrorBIESTSC(_Objective):
             self._q = k // 2 + int(np.sqrt(k))
 
         try:
-            self._interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
         except AssertionError as e:
             warnings.warn(
                 "Could not built fft interpolator, switching to dft method which is"
                 " much slower. Reason: " + str(e)
             )
-            self._interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
 
         self._data_keys = [
             "K_vc",
@@ -169,30 +170,30 @@ class BoundaryErrorBIESTSC(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
-        self._src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
-        self._eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
-        self._eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+        src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
+        src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
 
         self._constants = {
-            "eval_transforms": self._eval_transforms,
-            "eval_profiles": self._eval_profiles,
-            "src_transforms": self._src_transforms,
-            "src_profiles": self._src_profiles,
-            "interpolator": self._interpolator,
+            "eval_transforms": eval_transforms,
+            "eval_profiles": eval_profiles,
+            "src_transforms": src_transforms,
+            "src_profiles": src_profiles,
+            "interpolator": interpolator,
             "ext_field": self._ext_field,
+            "quad_weights": np.tile(eval_transforms["grid"].weights, 3),
         }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._dim_f = eval_grid.num_nodes
+        self._dim_f = 3 * eval_grid.num_nodes
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["B"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["B"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -269,13 +270,13 @@ class BoundaryErrorBIESTSC(_Objective):
 
         bsq_out = jnp.sum(Bex_total * Bex_total, axis=-1)
         bsq_in = jnp.sum(Bin_total * Bin_total, axis=-1)
-        w = constants["eval_transforms"]["grid"].weights
+
         g = eval_data["|e_theta x e_zeta|"]
-        Bn_err = Bn * w * g
-        Bsq_err = (bsq_in + eval_data["p"] * (2 * mu_0) - bsq_out) * w * g
+        Bn_err = Bn * g
+        Bsq_err = (bsq_in + eval_data["p"] * (2 * mu_0) - bsq_out) * g
         Bjump = Bex_total - Bin_total
         Kerr = eval_data["K_sc"] - jnp.cross(eval_data["n_rho"], Bjump)
-        Kerr = jnp.sum(Kerr * Kerr, axis=-1) * w * g
+        Kerr = jnp.sum(Kerr * Kerr, axis=-1) * g
         return jnp.concatenate([Bn_err, Bsq_err, Kerr])
 
 
@@ -322,6 +323,7 @@ class BoundaryErrorBIEST(_Objective):
     _linear = False
     _print_value_fmt = "Boundary Error: {:10.3e} "
     _units = "(T)"
+    _coordinates = "rtz"
 
     def __init__(
         self,
@@ -396,13 +398,13 @@ class BoundaryErrorBIEST(_Objective):
             self._q = k // 2 + int(np.sqrt(k))
 
         try:
-            self._interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
         except AssertionError as e:
             warnings.warn(
                 "Could not built fft interpolator, switching to dft method which is"
                 " much slower. Reason: " + str(e)
             )
-            self._interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
 
         self._data_keys = [
             "K_vc",
@@ -427,30 +429,30 @@ class BoundaryErrorBIEST(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
-        self._src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
-        self._eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
-        self._eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+        src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
+        src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
 
         self._constants = {
-            "eval_transforms": self._eval_transforms,
-            "eval_profiles": self._eval_profiles,
-            "src_transforms": self._src_transforms,
-            "src_profiles": self._src_profiles,
-            "interpolator": self._interpolator,
+            "eval_transforms": eval_transforms,
+            "eval_profiles": eval_profiles,
+            "src_transforms": src_transforms,
+            "src_profiles": src_profiles,
+            "interpolator": interpolator,
             "ext_field": self._ext_field,
+            "quad_weights": np.tile(eval_transforms["grid"].weights, 2),
         }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._dim_f = eval_grid.num_nodes
+        self._dim_f = 2 * eval_grid.num_nodes
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["B"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["B"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -525,10 +527,9 @@ class BoundaryErrorBIEST(_Objective):
 
         bsq_out = jnp.sum(Bex_total * Bex_total, axis=-1)
         bsq_in = eval_data["|B|^2"]
-        w = constants["eval_transforms"]["grid"].weights
         g = eval_data["|e_theta x e_zeta|"]
-        Bn_err = Bn * w * g
-        Bsq_err = (bsq_in + eval_data["p"] * (2 * mu_0) - bsq_out) * w * g
+        Bn_err = Bn * g
+        Bsq_err = (bsq_in + eval_data["p"] * (2 * mu_0) - bsq_out) * g
         return jnp.concatenate([Bn_err, Bsq_err])
 
 
@@ -575,6 +576,7 @@ class QuadraticFlux(_Objective):
     _linear = False
     _print_value_fmt = "Boundary normal field Error: {:10.3e} "
     _units = "(T)"
+    _coordinates = "rtz"
 
     def __init__(
         self,
@@ -649,13 +651,13 @@ class QuadraticFlux(_Objective):
             self._q = k // 2 + int(np.sqrt(k))
 
         try:
-            self._interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
         except AssertionError as e:
             warnings.warn(
                 "Could not built fft interpolator, switching to dft method which is"
                 " much slower. Reason: " + str(e)
             )
-            self._interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
 
         self._data_keys = [
             "K_vc",
@@ -677,18 +679,19 @@ class QuadraticFlux(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
-        self._src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
-        self._eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
-        self._eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+        src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
+        src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
 
         self._constants = {
-            "eval_transforms": self._eval_transforms,
-            "eval_profiles": self._eval_profiles,
-            "src_transforms": self._src_transforms,
-            "src_profiles": self._src_profiles,
-            "interpolator": self._interpolator,
+            "eval_transforms": eval_transforms,
+            "eval_profiles": eval_profiles,
+            "src_transforms": src_transforms,
+            "src_profiles": src_profiles,
+            "interpolator": interpolator,
             "ext_field": self._ext_field,
+            "quad_weights": eval_transforms["grid"].weights,
         }
 
         timer.stop("Precomputing transforms")
@@ -699,8 +702,7 @@ class QuadraticFlux(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["B"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["B"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -808,6 +810,7 @@ class ToroidalFlux(_Objective):
     _linear = False
     _print_value_fmt = "Toroidal flux Error: {:10.3e} "
     _units = "(Wb)"
+    _coordinates = ""
 
     def __init__(
         self,
@@ -864,12 +867,12 @@ class ToroidalFlux(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "profiles": self._profiles,
-            "transforms": self._transforms,
+            "profiles": profiles,
+            "transforms": transforms,
             "ext_field": self._ext_field,
         }
 
@@ -883,8 +886,7 @@ class ToroidalFlux(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["B"] * scales["A"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["B"] * scales["A"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -988,6 +990,7 @@ class BoundaryErrorNESTOR(_Objective):
     _linear = False
     _print_value_fmt = "Boundary Force Error: {:10.3e} "
     _units = "(N)"
+    _coordinates = "rtz"
 
     def __init__(
         self,
@@ -1039,9 +1042,7 @@ class BoundaryErrorNESTOR(_Objective):
         self.nzeta = 4 * eq.N + 1 if self.nzeta is None else self.nzeta
 
         eq._sym = False
-        self.nest = Nestor(
-            eq, self.ext_field, self.mf, self.nf, self.ntheta, self.nzeta
-        )
+        nest = Nestor(eq, self.ext_field, self.mf, self.nf, self.ntheta, self.nzeta)
         eq._sym = True
         self.grid = LinearGrid(rho=1, theta=self.ntheta, zeta=self.nzeta, NFP=eq.NFP)
         self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
@@ -1056,14 +1057,15 @@ class BoundaryErrorNESTOR(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=self.grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=self.grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=self.grid)
 
         self._constants = {
-            "profiles": self._profiles,
-            "transforms": self._transforms,
+            "profiles": profiles,
+            "transforms": transforms,
             "ext_field": self.ext_field,
-            "nestor": self.nest,
+            "nestor": nest,
+            "quad_weights": transforms["grid"].weights,
         }
 
         timer.stop("Precomputing transforms")
@@ -1074,8 +1076,7 @@ class BoundaryErrorNESTOR(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["p"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["p"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -1131,6 +1132,5 @@ class BoundaryErrorNESTOR(_Objective):
         bv = bsq / (2 * mu_0)
 
         bp = data["|B|^2"] / (2 * mu_0)
-        w = self.grid.weights
         g = data["|e_theta x e_zeta|"]
-        return (bv - bp - data["p"]) * w * g
+        return (bv - bp - data["p"]) * g

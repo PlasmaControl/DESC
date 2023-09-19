@@ -166,6 +166,30 @@ def _nu(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="nu_mn",
+    label="\\nu_{mn} = (\\zeta_{B} - \\zeta)_{mn}",
+    units="rad",
+    units_long="radians",
+    description="Boozer harmonics of Boozer toroidal stream function",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["nu", "G", "I", "iota", "lambda"],
+)
+def _nu_mn(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
+    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    data["nu_mn"] = (
+        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+        * (transforms["B"].basis.evaluate(nodes).T @ (data["nu"] ** 2))
+        / transforms["B"].grid.num_nodes
+    )
+    return data
+
+
+@register_compute_fun(
     name="nu_t",
     label="\\partial_{\\theta} \\nu",
     units="rad",
@@ -260,6 +284,30 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="sqrt(g)_B_mn",
+    label="\\sqrt{g}_{B}",
+    units="~",
+    units_long="None",
+    description="Jacobian determinant of Boozer coordinates",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)_B", "lambda_t", "lambda_z", "nu_t", "nu_z", "iota"],
+)
+def _sqrt_g_B_mn(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
+    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    data["sqrt(g)_B_mn"] = (
+        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+        * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] ** 2))
+        / transforms["B"].grid.num_nodes
+    )
+    return data
+
+
+@register_compute_fun(
     name="|B|_mn",
     label="B_{mn}^{\\mathrm{Boozer}}",
     units="T",
@@ -278,6 +326,54 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     data["|B|_mn"] = (
         norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
         * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] * data["|B|"]))
+        / transforms["B"].grid.num_nodes
+    )
+    return data
+
+
+@register_compute_fun(
+    name="R_mn",
+    label="R_{mn}^{\\mathrm{Boozer}}",
+    units="m",
+    units_long="meters",
+    description="Boozer harmonics of radial toroidal coordinate of a flux surface",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)_B", "R", "rho", "theta_B", "zeta_B"],
+)
+def _R_mn(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
+    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    data["R_mn"] = (
+        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+        * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] * data["R"]))
+        / transforms["B"].grid.num_nodes
+    )
+    return data
+
+
+@register_compute_fun(
+    name="Z_mn",
+    label="Z_{mn}^{\\mathrm{Boozer}}",
+    units="m",
+    units_long="meters",
+    description="Boozer harmonics of vertical toroidal coordinate of a flux surface",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)_B", "Z", "rho", "theta_B", "zeta_B"],
+)
+def _Z_mn(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
+    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    data["Z_mn"] = (
+        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+        * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] * data["Z"]))
         / transforms["B"].grid.num_nodes
     )
     return data

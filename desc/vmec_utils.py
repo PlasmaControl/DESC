@@ -1,10 +1,16 @@
 """Utility functions needed for converting VMEC inputs/outputs."""
 
+import warnings
+
 import numpy as np
+from netCDF4 import Dataset, stringtochar
 from scipy.linalg import block_diag, null_space
 
 from desc.backend import sign
 from desc.basis import zernike_radial
+from desc.compute import get_transforms
+from desc.grid import Grid, LinearGrid
+from desc.utils import Timer
 
 
 def ptolemy_identity_fwd(m_0, n_0, s, c):
@@ -469,3 +475,363 @@ def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa:
     boundary_subspace = block_diag(Rb_subspace, Zb_subspace)
     opt_subspace = null_space(boundary_subspace)
     return opt_subspace
+
+
+def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0):
+    """Create a booz_xform-style .nc output file.
+
+    based strongly off of https://github.com/hiddenSymmetries/booz_xform/tree/main
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to save.
+    path : str
+        File path of output data.
+    surfs: int
+        Number of flux surfaces to calculate Boozer transform at (Default = 128).
+    M_booz : int, optional
+        poloidal resolution to use for Boozer transform.
+    N_booz : int, optional
+        toroidal resolution to use for Boozer transform.
+    verbose: int
+        Level of output (Default = 1).
+        * 0: no output
+        * 1: status of quantities computed
+        * 2: as above plus timing information
+
+    Returns
+    -------
+    None
+
+    """
+    timer = Timer()
+    timer.start("Total time")
+
+    Psi = eq.Psi
+    NFP = eq.NFP
+    actual_sym = eq.sym
+    if M_booz is None:
+        M_booz = 2 * eq.M
+    if N_booz is None:
+        N_booz = 2 * eq.N
+
+    # VMEC radial coordinate: s = rho^2 = Psi / Psi(LCFS)
+    s_full = np.linspace(0, 1, surfs + 1)
+    s_half = s_full[0:-1] + 0.5 / (surfs)
+    r_full = np.sqrt(s_full)
+    r_half = np.sqrt(s_half)
+
+    basis = get_transforms(
+        "|B|_mn",
+        obj=eq,
+        grid=Grid(np.array([])),
+        M_booz=M_booz - 1,
+        N_booz=N_booz,
+        sym=False,
+    )["B"].basis
+
+    matrix, modes = ptolemy_linear_transform(basis.modes)
+
+    # FIXME: do we do transform on half grid, or on first surface after the axis
+    # on full grid?
+
+    timer.start("Boozer Transform")
+
+    B_mn = np.array([[]])
+    R_mn = np.array([[]])
+    Z_mn = np.array([[]])
+    Nu_mn = np.array([[]])
+    Sqrt_g_B_mn = np.array([[]])
+
+    for i, r in enumerate(r_half):
+        grid = LinearGrid(
+            M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r), sym=False
+        )
+        transforms = get_transforms(
+            ["|B|_mn", "R_mn", "Z_mn", "nu_mn", "sqrt(g)_B_mn"],
+            obj=eq,
+            grid=grid,
+            M_booz=M_booz - 1,
+            N_booz=N_booz,
+            sym=False,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data = eq.compute(
+                ["|B|_mn", "R_mn", "Z_mn", "nu_mn", "sqrt(g)_B_mn"],
+                grid=grid,
+                transforms=transforms,
+            )
+        b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
+        B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
+
+        r_mn = np.atleast_2d(matrix @ data["R_mn"])
+        R_mn = np.vstack((R_mn, r_mn)) if R_mn.size else r_mn
+
+        z_mn = np.atleast_2d(matrix @ data["Z_mn"])
+        Z_mn = np.vstack((Z_mn, z_mn)) if Z_mn.size else z_mn
+
+        sqrt_g_B_mn = np.atleast_2d(matrix @ data["sqrt(g)_B_mn"])
+        Sqrt_g_B_mn = (
+            np.vstack((Sqrt_g_B_mn, sqrt_g_B_mn)) if Sqrt_g_B_mn.size else sqrt_g_B_mn
+        )
+        # nu_mn
+        nu_mn = np.atleast_2d(matrix @ data["nu_mn"])
+        Nu_mn = np.vstack((Nu_mn, nu_mn)) if Nu_mn.size else nu_mn
+
+    timer.stop("Boozer Transform")
+    if verbose > 1:
+        timer.disp("Boozer Transform")
+
+    file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
+
+    # dimensions
+    file.createDimension("radius", s_full.size)  # number of flux surfaces plus 1
+    file.createDimension("comput_surfs", surfs)  # number of flux surfaces
+    file.createDimension("pack_rad", surfs)  # number of flux surfaces
+
+    file.createDimension("mn_mode", basis.num_modes)  # number of Fourier modes
+    file.createDimension("mn_modes", basis.num_modes)  # number of Fourier modes
+    file.createDimension("preset", 21)  # dimension of profile inputs
+    file.createDimension("ndfmax", 101)  # used for am_aux & ai_aux
+    file.createDimension("time", 100)  # used for fsq* & wdot
+    file.createDimension("dim_00001", 1)
+    file.createDimension("dim_00020", 20)
+    file.createDimension("dim_00100", 100)
+    file.createDimension("dim_00200", 200)
+
+    version_ = file.createVariable("version", "S1", ("dim_00100",))
+    version_str = "DESC Python implementation of booz_xform"
+    version_[:] = stringtochar(
+        np.array(
+            [" " * (100 - len(version_str))],
+            "S" + str(file.dimensions["dim_00100"].size),
+        )
+    )
+
+    nfp = file.createVariable("nfp_b", np.int32)
+    nfp.long_name = "number of field periods"
+    nfp[:] = NFP
+
+    # FIXME: ns?
+
+    ns = file.createVariable("ns_b", np.int32)
+    ns.long_name = "Number of radial surfaces at which data is outputted minus 1"
+    ns[:] = surfs
+
+    aspect = file.createVariable("aspect_b", np.int32)
+    aspect.long_name = "Aspect Ratio"
+    aspect[:] = eq.compute("R0/a")["R0/a"]
+
+    Rs = eq.compute("R")["R"]
+    Rmax = file.createVariable("rmax_b", np.int32)
+    Rmax.long_name = "Maximum Radius"
+    Rmax[:] = np.max(Rs)
+
+    Rmin = file.createVariable("rmin_b", np.int32)
+    Rmin.long_name = "Minimum Radius"
+    Rmin[:] = np.min(Rs)
+
+    # betaxis = beta_vol at the axis?
+    betaxis = file.createVariable("betaxis_b", np.float64)
+    betaxis[:] = 0
+    betaxis.long_name = "Not Implemented: This output is hard-coded to 0!"
+
+    mboz = file.createVariable("mboz_b", np.int32)
+    mboz.long_name = (
+        "Maximum poloidal mode number m for which the Fourier"
+        "amplitudes rmnc, bmnc etc are stored"
+    )
+    mboz[:] = M_booz
+
+    nboz = file.createVariable("nboz_b", np.int32)
+    nboz.long_name = (
+        "Maximum toloidal mode number m for which"
+        "the Fourier amplitudes rmnc, bmnc etc are stored"
+    )
+    nboz[:] = N_booz
+
+    mnboz = file.createVariable("mnboz_b", np.int32)
+    mnboz.long_name = (
+        "The total number of (m,n) pairs for which Fourier amplitudes"
+        "rmnc, bmnc etc are stored."
+    )
+    mnboz[:] = basis.num_modes
+
+    ## 1D Arrays
+
+    jlist = file.createVariable("jlist", np.int32, ("comput_surfs",))
+    jlist.long_name = (
+        "1-based radial indices of the surfaces for which the "
+        "transformation to Boozer coordinates was computed. 2 corresponds to the "
+        "first half-grid point."
+    )
+    jlist.units = "None"
+    jlist[:] = np.arange(0, s_half.size) + 2
+
+    ixm_b = file.createVariable("ixm_b", np.int32, ("mn_modes",))
+    ixm_b.long_name = (
+        "Poloidal mode numbers m for which the Fourier amplitudes rmnc,"
+        "bmnc etc are stored"
+    )
+    ixm_b.units = "None"
+    ixm_b[:] = modes[:, 1]
+
+    ixn_b = file.createVariable("ixn_b", np.int32, ("mn_modes",))
+    ixn_b.long_name = (
+        "Toroidal mode numbers n for which the Fourier amplitudes"
+        "rmnc, bmnc etc are stored"
+    )
+    ixn_b.units = "None"
+    ixn_b[:] = modes[:, 2]
+
+    iotas = file.createVariable("iota_b", np.float64, ("comput_surfs",))
+    iotas.long_name = "rotational transform on half mesh"
+    iotas.units = "None"
+    if eq.iota is not None:
+        iotas[0:] = -eq.iota(r_half)  # negative sign for negative Jacobian in VMEC
+    else:
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
+        iotas[0:] = -grid.compress(eq.compute("iota", grid=grid)["iota"])
+
+    buco_b = file.createVariable("buco_b", np.float64, ("radius",))
+    buco_b.long_name = (
+        "Coefficient multiplying grad theta_Boozer in the covariant"
+        "representation of the magnetic field vector, often denoted I(psi)."
+    )
+    buco_b.units = "None"
+    buco_b[0] = 0
+
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
+    buco_b[1:] = -grid.compress(eq.compute("I", grid=grid)["I"])
+
+    bvco_b = file.createVariable("bvco_b", np.float64, ("radius",))
+    bvco_b.long_name = (
+        "Coefficient multiplying grad zeta_Boozer in the covariant"
+        "representation of the magnetic field vector, often denoted G(psi)."
+    )
+    bvco_b.units = "None"
+    bvco_b[0] = 0
+
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
+    bvco_b[1:] = -grid.compress(eq.compute("G", grid=grid)["G"])
+
+    # TODO: assuming this is on full mesh
+    presf = file.createVariable("pres_b", np.float64, ("radius",))
+    presf.long_name = "pressure on full mesh"
+    presf.units = "Pa"
+    presf[:] = eq.pressure(r_full)
+
+    beta = file.createVariable("beta_b", np.float64, ("radius",))
+    beta.long_name = "Blank, only included for compatibility reasons"
+    beta.units = "None"
+    beta[:] = np.zeros_like(r_full)
+
+    phipf = file.createVariable("phip_b", np.float64, ("radius",))
+    phipf.long_name = "d(phi)/ds: toroidal flux derivative, not normalized by 2pi"
+    phipf[:] = Psi * np.ones((surfs + 1,))
+
+    phi = file.createVariable("phi_b", np.float64, ("radius",))
+    phi.long_name = "toroidal flux"
+    phi.units = "Wb"
+    phi[:] = np.linspace(0, Psi, surfs + 1)
+
+    # multi-dim arrays
+
+    # |B|
+
+    bmnc = file.createVariable("bmnc_b", np.float64, ("comput_surfs", "mn_mode"))
+    bmnc.long_name = "cos(m*t_Boozer-n*p_Boozer) component of |B|, on half mesh"
+    bmnc.units = "T"
+
+    bmnc[0:, :] = B_mn[:, np.where(modes[:, 0] == 1)]
+
+    if not actual_sym:
+        bmns = file.createVariable("bmns_b", np.float64, ("comput_surfs", "mn_mode"))
+        bmns.long_name = "sin(m*t_Boozer-n*p_Boozer) component of |B|, on half mesh"
+        bmns.units = "T"
+
+        bmns[0:, :] = B_mn[:, np.where(modes[:, 0] == -1)]
+
+    # R
+    rmnc = file.createVariable("rmnc_b", np.float64, ("comput_surfs", "mn_mode"))
+    rmnc.long_name = (
+        "cos(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes of the"
+        "major radius R"
+    )
+    rmnc.units = "m"
+    rmnc[0:, :] = R_mn[:, np.where(modes[:, 0] == 1)]
+    if not actual_sym:
+        rmns = file.createVariable("rmns_b", np.float64, ("comput_surfs", "mn_mode"))
+        rmns.long_name = (
+            "sin(m * theta_Boozer - n * zeta_Boozer) Fourier"
+            "amplitudes of the major radius R"
+        )
+        rmns.units = "m"
+        rmns[0:, :] = R_mn[:, np.where(modes[:, 0] == -1)]
+
+    # Z
+    zmns = file.createVariable("zmns_b", np.float64, ("comput_surfs", "mn_mode"))
+    zmns.long_name = (
+        "sin(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes"
+        "of the major radius Z"
+    )
+    zmns.units = "m"
+    zmns[0:, :] = Z_mn[:, np.where(modes[:, 0] == -1)]
+    if not actual_sym:
+        zmnc = file.createVariable("zmnc_b", np.float64, ("comput_surfs", "mn_mode"))
+        zmnc.long_name = (
+            "cos(m * theta_Boozer - n * zeta_Boozer) Fourier"
+            "amplitudes of the major radius Z"
+        )
+        zmnc.units = "m"
+        zmnc[0:, :] = Z_mn[:, np.where(modes[:, 0] == 1)]
+
+    # TODO: should this be negated?
+    # if nu = zeta_VMEC - zeta_B
+    # but our nu is zeta_B - zeta_VMEC
+
+    # nu
+    if verbose > 0:
+        print("Saving nu")
+    nums = file.createVariable("pmns_b", np.float64, ("comput_surfs", "mn_mode"))
+    nums.long_name = (
+        "sin(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes"
+        "of the angle difference zeta_VMEC - zeta_Boozer"
+    )
+    nums.units = "m"
+    nums[0:, :] = Nu_mn[:, np.where(modes[:, 0] == -1)]
+    if not actual_sym:
+        numc = file.createVariable("pmnc_b", np.float64, ("comput_surfs", "mn_mode"))
+        numc.long_name = (
+            "cos(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes"
+            "of the major radius Z"
+        )
+        numc.units = "None"
+        numc[0:, :] = Nu_mn[:, np.where(modes[:, 0] == 1)]
+
+    # calculate sqrt(g)
+    if verbose > 0:
+        print("Saving nu")
+    gmn = file.createVariable("gmn_b", np.float64, ("comput_surfs", "mn_mode"))
+    gmn.long_name = (
+        "cos(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes of"
+        "the Boozer coordinate Jacobian (G + iota * I) / B^2"
+    )
+    gmn.units = "m/T"
+    gmn[0:, :] = Sqrt_g_B_mn[:, np.where(modes[:, 0] == 1)]
+    if not actual_sym:
+        gmns = file.createVariable("gmns_b", np.float64, ("comput_surfs", "mn_mode"))
+        gmns.long_name = (
+            "sin(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes"
+            "of the Boozer coordinate Jacobian (G + iota * I) / B^2"
+        )
+        gmns.units = "m"
+        gmns[0:, :] = Sqrt_g_B_mn[:, np.where(modes[:, 0] == -1)]
+
+    timer.stop("Total time")
+    if verbose > 1:
+        timer.disp("Total time")
+
+    return None

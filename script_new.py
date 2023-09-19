@@ -33,7 +33,7 @@ mu = Energy/(mass*data["|B|"]) - (ini_vpar**2)/(2*data["|B|"])
 
 ini_param = [float(mu), mass_charge]
 
-objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param)
+objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer")
 
 objective.build()
 solution = objective.compute(*objective.xs(eq))
@@ -41,9 +41,11 @@ solution = objective.compute(*objective.xs(eq))
 print("*************** SOLUTION .compute() ***************")
 print(solution)
 print("***************************************************")
+"""
 
 
 objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param)
+objective.compute()
 ObjFunction = ObjectiveFunction([objective])
 ObjFunction.build()
 
@@ -60,3 +62,4 @@ xs = objective.xs(eq)
 print("*************** xs **************")
 print(xs)
 print("*********************************")
+"""

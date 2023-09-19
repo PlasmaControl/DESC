@@ -66,11 +66,13 @@ class ParticleTracer(_Objective):
         output_time=None,
         initial_conditions=None,
         initial_parameters=None,
-        name="Particle Tracer"      
+        compute_option=None,
+        name="Particle Tracer"
     ):
         self.output_time = output_time
         self.initial_conditions=jnp.asarray(initial_conditions) 
         self.initial_parameters=jnp.asarray(initial_parameters)
+        self.compute_option=compute_option
         
         if target is None and bounds is None:
             target = 0
@@ -101,9 +103,20 @@ class ParticleTracer(_Objective):
         self.charge = 1.6e-19
         self.mass = 1.673e-27 # CHECK VALUES
         self.Energy = 3.52e6*self.charge 
-        eq = eq or self._eq    
-        # self._dim_f = [len(self.output_time), 4]
-        self._dim_f = 1
+        eq = eq or self._eq
+
+        if self.compute_option == "optimization":
+            self._dim_f = len(self.output_time)
+        elif self.compute_option == "tracer":
+            self._dim_f = [len(self.output_time), 4]
+        elif self.compute_option == "average psi":
+            self._dim_f = len(self.output_time)
+        elif self.compute_option == "average theta":
+            self._dim_f = len(self.output_time)
+        elif self.compute_option == "average zeta":
+            self._dim_f = len(self.output_time)
+        elif self.compute_option == "average vpar":
+           self._dim_f = len(self.output_time)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -139,4 +152,15 @@ class ParticleTracer(_Objective):
         system_jit = jit(system)
         solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax)
 
-        return jnp.mean(solution[:, 0])
+        if self.compute_option == "optimization":
+            return jnp.mean(solution[:, 0])
+        elif self.compute_option == "tracer":
+            return solution
+        elif self.compute_option == "average psi":
+            return jnp.mean(solution[:, 0])
+        elif self.compute_option == "average theta":
+            return jnp.mean(solution[:, 1])
+        elif self.compute_option == "average zeta":
+            return jnp.mean(solution[:, 2])
+        elif self.compute_option == "average vpar":
+            return jnp.mean(solution[:, 3])

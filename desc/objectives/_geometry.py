@@ -20,27 +20,27 @@ class AspectRatio(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: Has no effect for this objective.
-    normalize_target : bool
+        Has no effect for this objective.
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect for this objective.
-    grid : Grid, ndarray, optional
+        this should also be set to True. Has no effect for this objective.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -148,27 +148,27 @@ class Elongation(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: Has no effect for this objective.
-    normalize_target : bool
+        Has no effect for this objective.
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect for this objective.
-    grid : Grid, ndarray, optional
+        this should also be set to True. Has no effect for this objective.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -276,27 +276,26 @@ class Volume(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-        be set to True.
-    grid : Grid, ndarray, optional
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -429,33 +428,37 @@ class PlasmaVesselDistance(_Objective):
         Bounding surface to penalize distance to.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    surface_grid : Grid, ndarray, optional
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    surface_grid : Grid, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
-    plasma_grid : Grid, ndarray, optional
+    plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
-    use_softmin: Bool, use softmin or hard min.
-    alpha: float, parameter used for softmin. The larger alpha, the closer the softmin
+    use_softmin: bool, optional
+        Use softmin or hard min.
+    alpha: float, optional
+        Parameter used for softmin. The larger alpha, the closer the softmin
         approximates the hardmin. softmin -> hardmin as alpha -> infinity.
         if alpha*array < 1, the underlying softmin will automatically multiply
         the array by 2/min_val to ensure that alpha*array>1. Making alpha larger
         than this minimum value will make the softmin a more accurate approximation
         of the true min.
-    name : str
+    name : str, optional
         Name of the objective function.
     """
 
@@ -624,26 +627,26 @@ class MeanCurvature(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    grid : Grid, ndarray, optional
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -764,26 +767,26 @@ class PrincipalCurvature(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    grid : Grid, ndarray, optional
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -901,26 +904,26 @@ class BScaleLength(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    grid : Grid, ndarray, optional
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """

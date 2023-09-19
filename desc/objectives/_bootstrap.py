@@ -31,31 +31,31 @@ class BootstrapRedlConsistency(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    grid : Grid, ndarray, optional
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
         First entry must be M=1. Second entry is the toroidal mode number N,
         used for evaluating the Redl bootstrap current formula. Set to 0 for axisymmetry
         or quasi-axisymmetry; set to +/-NFP for quasi-helical symmetry.
-    name : str
+    name : str, optional
         Name of the objective function.
     """
 

@@ -1270,7 +1270,7 @@ def plot_section(
             + "$ ($"
             + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
             + "$)"
-            + ", $\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
+            + ", $\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
                 eq.NFP * phi[i] / (2 * np.pi)
             )
         )
@@ -1288,7 +1288,7 @@ def plot_section(
                         "label"
                     ]
                     + "$",
-                    "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
+                    "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
                         eq.NFP * phi[i] / (2 * np.pi)
                     ),
                 ),
@@ -1522,7 +1522,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         ax[i].set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
-            "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
+            "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_fontsize,
         )
     _set_tight_layout(fig)
@@ -1563,7 +1563,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
           matplotlib)
         * ``xlabel_fontsize``: float, fontsize of the x label
         * ``ylabel_fontsize``: float, fontsize of the y label
-        * ``legend_fontsize``: float, fontsize of the legend
+        * ``legend_kw``: dict, any keyword arguments to be passed to ax.legend()
         * ``cmap``: colormap to use for plotting, discretized into len(phi) colors
         * ``color``: array of colors to use for each phi angle
         * ``ls``: array of line styles to use for each phi angle
@@ -1593,7 +1593,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     phi = parse_argname_change(phi, kwargs, "zeta", "phi")
 
     figsize = kwargs.pop("figsize", None)
-    cmap = kwargs.pop("cmap", "rainbow")
+    cmap = kwargs.pop("cmap", "hsv")
     colors = kwargs.pop("color", None)
     ls = kwargs.pop("ls", None)
     lw = kwargs.pop("lw", None)
@@ -1601,8 +1601,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     size = kwargs.pop("size", 36)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
-
-    legend_fontsize = kwargs.pop("legend_fontsize", None)
+    legend_kw = kwargs.pop("legend_kw", {})
 
     assert (
         len(kwargs) == 0
@@ -1631,7 +1630,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     )
 
     if colors is None:
-        colors = _get_cmap(cmap, nz - 1)(np.linspace(0, 1, nz - 1))
+        colors = _get_cmap(cmap, nz)(np.linspace(0, 1, nz))
     if lw is None:
         lw = 1
     if isinstance(lw, int):
@@ -1656,8 +1655,8 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
             color=colors[i],
             linestyle=ls[i],
             lw=lw[i],
-            label="$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
-                grid.NFP * phi[i] / (2 * np.pi)
+            label="$\\phi \\cdot N_{{FP}}/2\\pi = {:.2f}$".format(
+                eq.NFP * phi[i] / (2 * np.pi)
             ),
         )
         if rho[0] == 0:
@@ -1667,7 +1666,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
     ax.tick_params(labelbottom=True, labelleft=True)
 
-    fig.legend(fontsize=legend_fontsize)
+    fig.legend(**legend_kw)
     _set_tight_layout(fig)
 
     plot_data = {}
@@ -2105,13 +2104,15 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     return fig, ax
 
 
-def plot_boozer_modes(
+def plot_boozer_modes(  # noqa: C901
     eq,
     log=True,
     B0=True,
     norm=False,
     num_modes=10,
     rho=None,
+    helicity=None,
+    max_only=False,
     ax=None,
     return_data=False,
     **kwargs,
@@ -2133,6 +2134,12 @@ def plot_boozer_modes(
     rho : int or ndarray, optional
         Radial coordinates of the flux surfaces to evaluate at,
         or number of surfaces in (0,1]
+    helicity : None or tuple of int
+        If a tuple, the (M,N) helicity of the field, only symmetry breaking modes are
+        plotted. If None, plot all modes.
+    max_only : bool
+        If True, only plot the maximum of the symmetry breaking modes. Helicity must
+        be specified.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -2152,6 +2159,10 @@ def plot_boozer_modes(
         * ``legend_kw``: dict, any keyword arguments to be passed to ax.legend()
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``label`` : str, label to apply. Only used if ``max_only`` is True.
+        * ``color`` : str, color for plotted line. Only used if ``max_only`` is True.
+        * ``M_booz`` : int, poloidal resolution to use for Boozer transform.
+        * ``N_booz`` : int, toroidal resolution to use for Boozer transform.
 
     Returns
     -------
@@ -2185,6 +2196,16 @@ def plot_boozer_modes(
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
+    basis = get_transforms(
+        "|B|_mn", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
+    )["B"].basis
+    if helicity:
+        matrix, modes, symidx = ptolemy_linear_transform(
+            basis.modes, helicity=helicity, NFP=eq.NFP
+        )
+    else:
+        matrix, modes = ptolemy_linear_transform(basis.modes)
+
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(
@@ -2193,60 +2214,74 @@ def plot_boozer_modes(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
-        if i == 0:
-            matrix, modes = ptolemy_linear_transform(transforms["B"].basis.modes)
         b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
 
-    idx = np.argsort(np.abs(B_mn[0, :]))
-    if num_modes == -1:
-        idx = idx[-1::-1]
-    else:
-        idx = idx[-1 : -num_modes - 1 : -1]
-    B_mn = B_mn[:, idx]
+    zidx = np.where((modes[:, 1:] == np.array([[0, 0]])).all(axis=1))[0]
     if norm:
-        B_mn = B_mn / np.max(B_mn)
-    modes = modes[idx, :]
+        B_mn = B_mn / B_mn[:, zidx]
+    if helicity:
+        B_mn = B_mn[:, symidx]
+        modes = modes[symidx, :]
+    elif not B0:
+        B_mn = np.delete(B_mn, zidx, axis=-1)
+        modes = np.delete(modes, zidx, axis=0)
+
+    if max_only:
+        assert helicity is not None
+        B_mn = np.max(np.abs(B_mn), axis=1)
+        modes = None
+    else:
+        idx = np.argsort(np.mean(np.abs(B_mn), axis=0))
+        idx = idx[-1::-1] if (num_modes == -1) else idx[-1 : -num_modes - 1 : -1]
+        B_mn = B_mn[:, idx]
+        modes = modes[idx, :]
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
-    plot_data = {}
-    for i in range(modes.shape[0]):
-        L = modes[i, 0]
-        M = modes[i, 1]
-        N = modes[i, 2] * int(eq.NFP)
-        if (M, N) == (0, 0) and B0 is False:
-            continue
-        if log is True:
-            ax.semilogy(
-                rho,
-                np.abs(B_mn[:, i]),
-                label="M={}, N={}{}".format(
-                    M, N, "" if eq.sym else (" (cos)" if L > 0 else " (sin)")
-                ),
-                linestyle=linestyle,
-                linewidth=linewidth,
-            )
-        else:
-            ax.plot(
+    plot_op = ax.semilogy if log else ax.plot
+    B_mn = np.abs(B_mn) if log else B_mn
+
+    if max_only:
+        plot_op(
+            rho,
+            B_mn,
+            label=kwargs.pop("label", ""),
+            color=kwargs.pop("color", "k"),
+            linestyle=linestyle,
+            linewidth=linewidth,
+        )
+    else:
+        for i, (L, M, N) in enumerate(modes):
+            N *= int(eq.NFP)
+            plot_op(
                 rho,
                 B_mn[:, i],
-                "-",
                 label="M={}, N={}{}".format(
                     M, N, "" if eq.sym else (" (cos)" if L > 0 else " (sin)")
                 ),
                 linestyle=linestyle,
                 linewidth=linewidth,
             )
-    plot_data["|B|_mn"] = B_mn
-    plot_data["B modes"] = modes
-    plot_data["rho"] = rho
+
+    plot_data = {
+        "|B|_mn": B_mn,
+        "B modes": modes,
+        "rho": rho,
+    }
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
-    ax.set_ylabel(r"$B_{M,N}$ in Boozer coordinates $(T)$", fontsize=ylabel_fontsize)
+    if max_only:
+        ylabel = r"Max symmetry breaking Boozer $B_{M,N}$"
+    elif helicity:
+        ylabel = r"Symmetry breaking Boozer $B_{M,N}$"
+    else:
+        ylabel = r"$B_{M,N}$ in Boozer coordinates"
+    ylabel += r" (normalized)" if norm else r" $(T)$"
+    ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
 
     if kwargs.pop("legend", True):
-        fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
+        fig.legend(**kwargs.pop("legend_kw", {"loc": "lower right"}))
 
     assert (
         len(kwargs) == 0
@@ -2860,10 +2895,12 @@ def plot_basis(basis, return_data=False, **kwargs):
         ax.set_ylabel("$f_n(\\zeta)$")
         ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
         ax.set_xticks([0, np.pi / basis.NFP, 2 * np.pi / basis.NFP])
-        ax.set_xticklabels(["$0$", "$\\pi/NFP$", "$2\\pi/NFP$"])
+        ax.set_xticklabels(["$0$", "$\\pi/N_{{FP}}$", "$2\\pi/N_{{FP}}$"])
         ax.set_yticks([-1, -0.5, 0, 0.5, 1])
         ax.set_title(
-            "{}, $N={}$, $NFP={}$".format(basis.__class__.__name__, basis.N, basis.NFP),
+            "{}, $N={}$, $N_{{FP}}={}$".format(
+                basis.__class__.__name__, basis.N, basis.NFP
+            ),
             fontsize=title_fontsize,
         )
         _set_tight_layout(fig)
@@ -2928,7 +2965,8 @@ def plot_basis(basis, return_data=False, **kwargs):
                     "$\\zeta$ \n $n={}$".format(n), fontsize=10
                 )
                 ax[mmax + m, nmax + n].set_xticklabels(
-                    ["$0$", None, "$\\pi/NFP$", None, "$2\\pi/NFP$"], fontsize=8
+                    ["$0$", None, "$\\pi/N_{{FP}}$", None, "$2\\pi/N_{{FP}}$"],
+                    fontsize=8,
                 )
             if n + nmax == 0:
                 ax[mmax + m, 0].set_ylabel("$m={}$ \n $\\theta$".format(m), fontsize=10)
@@ -2939,7 +2977,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         cbar = fig.colorbar(im, cax=cb_ax)
         cbar.set_ticks([-1, -0.5, 0, 0.5, 1])
         fig.suptitle(
-            "{}, $M={}$, $N={}$, $NFP={}$".format(
+            "{}, $M={}$, $N={}$, $N_{{FP}}={}$".format(
                 basis.__class__.__name__, basis.M, basis.N, basis.NFP
             ),
             y=0.98,

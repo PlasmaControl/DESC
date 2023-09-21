@@ -193,6 +193,8 @@ def get_NAE_constraints(
     normalize=True,
     N=None,
     fix_lambda=False,
+    N_cutoff=None,
+    offset_ratio=None,
 ):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem.
 
@@ -269,7 +271,12 @@ def get_NAE_constraints(
         constraints += L_axis_constraints
     if order >= 1:  # first order constraints
         constraints += make_RZ_cons_1st_order(
-            qsc=qsc_eq, desc_eq=desc_eq, N=N, fix_lambda=fix_lambda and fix_lambda > 0
+            qsc=qsc_eq,
+            desc_eq=desc_eq,
+            N=N,
+            fix_lambda=fix_lambda and fix_lambda > 0,
+            N_cutoff=N_cutoff,
+            offset_ratio=offset_ratio,
         )
     if order >= 2:  # 2nd order constraints
         raise NotImplementedError("NAE constraints only implemented up to O(rho) ")

@@ -220,7 +220,7 @@ def test_fixed_modes_solve():
         eq=eq, modes=modes_Z, sum_weights=np.array([1, 2])
     )  # no target supplied, so defaults to the eq's current sum
     fixLambda = FixSumModesLambda(
-        modes=modes_Z, sum_weights=np.array([1, 2])
+        eq=eq, modes=modes_Z, sum_weights=np.array([1, 2])
     )  # no target supplied, so defaults to the eq's current sum
 
     orig_R_val = (

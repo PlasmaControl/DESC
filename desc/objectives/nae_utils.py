@@ -209,7 +209,7 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
 
 
 def _make_RZ_cons_order_rho(  # NOQA
-    qsc, desc_eq, coeffs, bases, N_cutoff=None, fix_lambda=False
+    qsc, desc_eq, coeffs, bases, N_cutoff=None, fix_lambda=False, offset_ratio=1.0
 ):
     """Create the linear constraints for constraining an eq with O(rho) NAE behavior.
 
@@ -236,6 +236,14 @@ def _make_RZ_cons_order_rho(  # NOQA
     fix_lambda : bool, default False
         whether to include first order constraints to fix the O(rho) behavior
         of lambda. Defaults to False.
+    N_cutoff : int,
+        this toroidal modenumber will be offset by a ratio given by offset_ratio.
+    offset_ratio : float
+        number to multiply target by to make the N_cutoff coefficient incorrect
+        i.e. it will try to make the DESC behavior go like R_n * offset_ratio instead
+        of R_n
+
+
 
     Returns
     -------
@@ -270,8 +278,8 @@ def _make_RZ_cons_order_rho(  # NOQA
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_1_1_n"]):
         sum_weights = []
         modes = []
-        if n > N_cutoff:
-            fudge_factor = 2
+        if n == N_cutoff:
+            fudge_factor = offset_ratio
         else:
             fudge_factor = 1
         target = NAEcoeff * r * fudge_factor
@@ -288,8 +296,8 @@ def _make_RZ_cons_order_rho(  # NOQA
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_1_neg1_n"]):
         sum_weights = []
         modes = []
-        if n > N_cutoff:
-            fudge_factor = 2
+        if n == N_cutoff:
+            fudge_factor = offset_ratio
         else:
             fudge_factor = 1
         target = NAEcoeff * r * fudge_factor
@@ -321,8 +329,8 @@ def _make_RZ_cons_order_rho(  # NOQA
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_1_neg1_n"]):
         sum_weights = []
         modes = []
-        if n > N_cutoff:
-            fudge_factor = 2
+        if n == N_cutoff:
+            fudge_factor = offset_ratio
         else:
             fudge_factor = 1
         target = NAEcoeff * r * fudge_factor
@@ -339,8 +347,8 @@ def _make_RZ_cons_order_rho(  # NOQA
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_1_1_n"]):
         sum_weights = []
         modes = []
-        if n > N_cutoff:
-            fudge_factor = 2
+        if n == N_cutoff:
+            fudge_factor = offset_ratio
         else:
             fudge_factor = 1
         target = NAEcoeff * r * fudge_factor
@@ -371,7 +379,9 @@ def _make_RZ_cons_order_rho(  # NOQA
     return Rconstraints, Zconstraints, Lconstraints
 
 
-def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None, N_cutoff=None):
+def make_RZ_cons_1st_order(
+    qsc, desc_eq, fix_lambda=False, N=None, N_cutoff=None, offset_ratio=1.0
+):
     """Make the first order NAE constraints for a DESC equilibrium.
 
     Parameters
@@ -386,6 +396,13 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None, N_cutoff=None
     N : int,
         max toroidal resolution to constrain.
         If None, defaults to equilibrium's toroidal resolution
+    N_cutoff : int,
+        this toroidal modenumber will be offset by a ratio given by offset_ratio.
+    offset_ratio : float
+        number to multiply target by to make the N_cutoff coefficient incorrect
+        i.e. it will try to make the DESC behavior go like R_n * offset_ratio instead
+        of R_n
+
 
     Returns
     -------
@@ -402,7 +419,13 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None, N_cutoff=None
 
     coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=N)
     Rconstraints, Zconstraints, Lconstraints = _make_RZ_cons_order_rho(
-        qsc, desc_eq, coeffs, bases, fix_lambda=fix_lambda, N_cutoff=N_cutoff
+        qsc,
+        desc_eq,
+        coeffs,
+        bases,
+        fix_lambda=fix_lambda,
+        N_cutoff=N_cutoff,
+        offset_ratio=offset_ratio,
     )
 
     return Rconstraints + Zconstraints + Lconstraints

@@ -50,13 +50,13 @@ plt.plot(np.sqrt(solution[:, 0]) * np.cos(solution[:, 1]), np.sqrt(solution[:, 0
 plt.savefig("trajectory.png")
 
 fig, axs = plt.subplots(2, 2)
-axs[0, 1].plot(t, solution[:, 0], 'tab:orange')
+axs[0, 1].plot(time, solution[:, 0], 'tab:orange')
 axs[0, 1].set_title(r'$\psi$ (t)')
-axs[1, 0].plot(t, solution[:, 1], 'tab:green')
+axs[1, 0].plot(time, solution[:, 1], 'tab:green')
 axs[1, 0].set_title(r'$\theta$ (t)')
-axs[1, 1].plot(t, solution[:, 2], 'tab:red')
+axs[1, 1].plot(time, solution[:, 2], 'tab:red')
 axs[1, 1].set_title(r'$\zeta$ (t)')
-axs[0, 0].plot(t, solution[:, 3], 'tab:blue')
+axs[0, 0].plot(time, solution[:, 3], 'tab:blue')
 axs[0, 0].set_title(r"$v_{\parallel}$ (t)")
 
 fig = plt.gcf()

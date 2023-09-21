@@ -3598,7 +3598,6 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
     data=["e^rho", "e^theta", "e^zeta", "alpha_r", "alpha_t", "alpha_z"],
 )
 def _grad_alpha(params, transforms, profiles, data, **kwargs):
-    # alpha = theta + lambda - iota * zeta
     data["grad(alpha)"] = (
         data["alpha_r"] * data["e^rho"].T
         + data["alpha_t"] * data["e^theta"].T

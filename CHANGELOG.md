@@ -1,5 +1,7 @@
 Changelog
 =========
+- Adds zeroth and first order NAE constraints on the poloidal stream function lambda,
+accessible by passing in ``fix_lambda=True`` to the ``get_NAE_constraint`` getter function.
 - Adds second derivatives of contravariant basis vectors to the list of quantities we can compute.
 - Removes ``grid`` attribute from ``Profile`` classes, ``grid`` should now be passed
 in when calling ``Profile.compute``.

@@ -20,7 +20,6 @@ from .objective_funs import _Objective
 
 
 class _FixedObjective(_Objective):
-
     _fixed = True
     _linear = True
     _scalar = False
@@ -68,7 +67,6 @@ class BoundaryRSelfConsistency(_Objective):
         surface_label=None,
         name="self_consistency R",
     ):
-
         self._surface_label = surface_label
         self._args = ["R_lmn", "Rb_lmn"]
         super().__init__(
@@ -151,7 +149,6 @@ class BoundaryZSelfConsistency(_Objective):
         surface_label=None,
         name="self_consistency Z",
     ):
-
         self._surface_label = surface_label
         self._args = ["Z_lmn", "Zb_lmn"]
         super().__init__(
@@ -230,7 +227,6 @@ class AxisRSelfConsistency(_Objective):
         eq=None,
         name="axis R self consistency",
     ):
-
         self._args = ["R_lmn", "Ra_n"]
         super().__init__(
             eq=eq,
@@ -303,7 +299,6 @@ class AxisZSelfConsistency(_Objective):
         eq=None,
         name="axis Z self consistency",
     ):
-
         self._args = ["Z_lmn", "Za_n"]
         super().__init__(
             eq=eq,
@@ -406,7 +401,6 @@ class FixBoundaryR(_FixedObjective):
         surface_label=None,
         name="lcfs R",
     ):
-
         self._modes = modes
         self._target_from_user = target
         self._surface_label = surface_label
@@ -552,7 +546,6 @@ class FixBoundaryZ(_FixedObjective):
         surface_label=None,
         name="lcfs Z",
     ):
-
         self._modes = modes
         self._target_from_user = target
         self._surface_label = surface_label
@@ -669,7 +662,6 @@ class FixLambdaGauge(_Objective):
         eq=None,
         name="lambda gauge",
     ):
-
         super().__init__(
             eq=eq,
             target=0,
@@ -759,7 +751,6 @@ class FixThetaSFL(_Objective):
     _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
     def __init__(self, eq=None, name="Theta SFL"):
-
         super().__init__(eq=eq, target=0, weight=1, name=name)
 
     def build(self, eq=None, use_jit=False, verbose=1):
@@ -850,7 +841,6 @@ class FixAxisR(_FixedObjective):
         modes=True,
         name="axis R",
     ):
-
         self._modes = modes
         self._target_from_user = target
         super().__init__(
@@ -998,7 +988,6 @@ class FixAxisZ(_FixedObjective):
         modes=True,
         name="axis Z",
     ):
-
         self._modes = modes
         self._target_from_user = target
         super().__init__(
@@ -1147,7 +1136,6 @@ class FixModeR(_FixedObjective):
         modes=True,
         name="Fix Mode R",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1285,7 +1273,6 @@ class FixModeZ(_FixedObjective):
         modes=True,
         name="Fix Mode Z",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1376,6 +1363,150 @@ class FixModeZ(_FixedObjective):
         return fixed_params
 
 
+class FixModeLambda(_FixedObjective):
+    """Fixes Fourier-Zernike lambda coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Fourier-Zernike lambda coefficient target values. If None,
+         uses Equilibrium's lambda coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True uses all of the Equilibrium's modes.
+        Must be either True or specified as an array
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(m)"
+    _print_value_fmt = "Fixed-lambda modes error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        name="Fix Mode lambda",
+    ):
+        self._modes = modes
+        if modes is None or modes is False:
+            raise ValueError(
+                "modes kwarg must be specified"
+                + f" or True with FixModeLambda! got {modes}"
+            )
+        self._target_from_user = target
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._modes is True:  # all modes
+            modes = eq.L_basis.modes
+            idx = np.arange(eq.L_basis.num_modes)
+            modes_idx = idx
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.L_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            self._idx = idx
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the basis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = modes_idx.size
+
+        # use current eq's coefficients as target if needed
+        if self._target_from_user is None:
+            self.target = eq.L_lmn[self._idx]
+        else:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for lambda fixed modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target modes"
+                )
+            self.target = self._target_from_user[modes_idx]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, L_lmn, **kwargs):
+        """Compute Fixed mode lambda errors.
+
+        Parameters
+        ----------
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) .
+
+        Returns
+        -------
+        f : ndarray
+            Fixed mode lambda errors.
+
+        """
+        fixed_params = L_lmn[self._idx]
+        return fixed_params
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "L_lmn"
+
+
 class FixSumModesR(_FixedObjective):
     """Fixes a linear sum of Fourier-Zernike R coefficients.
 
@@ -1428,7 +1559,6 @@ class FixSumModesR(_FixedObjective):
         modes=True,
         name="Fix Sum Modes R",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1584,7 +1714,6 @@ class FixSumModesZ(_FixedObjective):
         modes=True,
         name="Fix Sum Modes Z",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1689,6 +1818,172 @@ class FixSumModesZ(_FixedObjective):
         return f
 
 
+class FixSumModesLambda(_FixedObjective):
+    """Fixes a linear sum of Fourier-Zernike lambda coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Fourier-Zernike Lambda coefficient target sum. If None,
+        uses current sum of Equilibrium's lambda coefficients.
+        len(target)=1
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    sum_weight : float, ndarray, optional
+        Weights on the coefficients in the sum, should be same length as modes.
+        Defaults to 1 i.e. target = 1*L_111 + 1*L_222...
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
+        len(weight) = len(modes).
+        If True uses all of the Equilibrium's modes.
+        Must be either True or specified as an array
+    surface_label : float
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Fixed-lambda sum modes error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        sum_weights=None,
+        modes=True,
+        name="Fix Sum Modes lambda",
+    ):
+        self._modes = modes
+        if modes is None or modes is False:
+            raise ValueError(
+                "modes kwarg must be specified or True with"
+                + f" FixSumModesLambda! got {modes}"
+            )
+        self._sum_weights = sum_weights
+        if target is not None:
+            if target.size > 1:
+                raise ValueError(
+                    "FixSumModesLambda only accepts 1 target value, please use"
+                    + " multiple FixSumModesLambda objectives if you wish"
+                    + " to have multiple sets of"
+                    + " constrained mode sums!"
+                )
+        self._target_from_user = target
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._modes is True:  # all modes
+            modes = eq.L_basis.modes
+            idx = np.arange(eq.L_basis.num_modes)
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.L_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            self._idx = idx
+            # rearrange modes and weights to match order of eq.L_basis.modes
+            # and eq.L_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.L_basis.modes[idx, :])
+            if self._sum_weights is not None:
+                self._sum_weights = np.atleast_1d(self._sum_weights)
+                self._sum_weights = self._sum_weights[modes_idx]
+
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the basis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+        if self._sum_weights is None:
+            sum_weights = np.ones(modes.shape[0])
+        else:
+            sum_weights = np.atleast_1d(self._sum_weights)
+        self._dim_f = 1
+
+        self._A = np.zeros((1, eq.L_basis.num_modes))
+        for i, (l, m, n) in enumerate(modes):
+            j = eq.L_basis.get_idx(L=l, M=m, N=n)
+            self._A[0, j] = sum_weights[i]
+
+        # use current sum as target if needed
+        if self._target_from_user is None:
+            self.target = np.dot(sum_weights.T, eq.L_lmn[self._idx])
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, L_lmn, **kwargs):
+        """Compute Sum mode lambda errors.
+
+        Parameters
+        ----------
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) .
+
+        Returns
+        -------
+        f : ndarray
+            Fixed sum mode lambda errors.
+
+        """
+        f = jnp.dot(self._A, L_lmn)
+        return f
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "L_lmn"
+
+
 class _FixProfile(_FixedObjective, ABC):
     """Fixes profile coefficients (or values, for SplineProfile).
 
@@ -1738,7 +2033,6 @@ class _FixProfile(_FixedObjective, ABC):
         indices=True,
         name="",
     ):
-
         self._profile = profile
         self._indices = indices
         self._target_from_user = target
@@ -1838,7 +2132,6 @@ class FixPressure(_FixProfile):
         indices=True,
         name="fixed-pressure",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -1945,7 +2238,6 @@ class FixIota(_FixProfile):
         indices=True,
         name="fixed-iota",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2048,7 +2340,6 @@ class FixCurrent(_FixProfile):
         indices=True,
         name="fixed-current",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2154,7 +2445,6 @@ class FixElectronTemperature(_FixProfile):
         indices=True,
         name="fixed-electron-temperature",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2260,7 +2550,6 @@ class FixElectronDensity(_FixProfile):
         indices=True,
         name="fixed-electron-density",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2366,7 +2655,6 @@ class FixIonTemperature(_FixProfile):
         indices=True,
         name="fixed-ion-temperature",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2473,7 +2761,6 @@ class FixAtomicNumber(_FixProfile):
         indices=True,
         name="fixed-atomic-number",
     ):
-
         super().__init__(
             eq=eq,
             target=target,

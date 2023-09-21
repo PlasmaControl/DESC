@@ -46,6 +46,10 @@ class ParticleTracer(_Objective):
         Starting state of the system.
     initial_parameters : tuple, array
         Parameters needed in the system, such as the magnetic momentum, mu, and the mass-charge ratio, m_q.
+    compute_option: str
+        Select the compute() output. Can be "optimization" for the optimization metric; "tracer" for the full 
+        solution of the system; "average psi/theta/zeta/vpar" for the mean value of psi/theta/zeta/vpar in the 
+        computed time.
     name : str
         Name of the objective function.
     """

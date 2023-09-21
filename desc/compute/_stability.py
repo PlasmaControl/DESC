@@ -9,7 +9,10 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+import numpy as np
+import scipy
 from scipy.constants import mu_0
+from scipy.integrate import simpson as simps
 
 from desc.backend import jnp
 from desc.grid import Grid
@@ -231,7 +234,118 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _gamma_ideal_ballooning_spectral(eq, N=1000):
+def _gamma_ideal_ballooning_FD1(eq):
+    """
+    Ideal-ballooning growth rate finder.
+
+    This function uses a pseudospectral Fourier technique to
+    calculate the maximum growth rate against the infinite-n
+    ideal ballooning mode
+
+    Parameters
+    ----------
+    eq :  Input equilibrium object
+    N : resolution
+    """
+    s = 0.81
+    alpha = 0.0
+    iota = 0.5
+    nperiod = 5
+    ntor = 2 * nperiod - 1
+    N = (2 * eq.Mgrid * eq.Ngrid + 1) * ntor
+    coords = np.ones((N, 3))
+    coords = coords.at[:, 0].set(coords[:, 0] * jnp.sqrt(s))
+    coords = coords.at[:, 2].set(np.linspace(-ntor * np.pi, ntor * np.pi, N))
+    guess = coords.copy()
+
+    coords = coords.at[:, 1].set(coords[:, 1] * alpha)  # set which field line we want
+
+    guess = guess.at[:, 1].set((alpha - guess[:, 2]) / iota)
+
+    coords1 = eq.map_coordinates(
+        coords=coords,
+        inbasis=["rho", "alpha", "zeta"],
+        outbasis=["rho", "theta", "zeta"],
+        period=[-np.inf, 2 * np.pi, np.inf],
+        guess=guess,
+    )
+
+    coords1 = coords1.at[:, 2].set(coords[:, 2])
+
+    zeta_0 = 0
+    print("mapped coords")
+    grid2 = Grid(coords1)
+
+    data_names = [
+        "g^aa",
+        "g^ra",
+        "g^rr",
+        "cvdrift",
+        "cvdrift0",
+        "|B|",
+        "sqrt(g)_PEST",
+        "p_r",
+        "psi_r",
+    ]
+
+    data = eq.compute(data_names, grid2)
+
+    # sqrt(g)_PEST = B dot grad zeta
+    gradpar = data["sqrt(g)_PEST"] / data["|B|"]
+
+    gds2 = data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
+
+    dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
+
+    f = gds2 / data["|B|"] ** 2
+
+    g = f * data["sqrt(g)_PEST"]
+
+    g_half = (g[1:] + g[:-1]) / 2
+
+    c = 1 / gradpar * dpdpsi * data["cvdrift"] + zeta_0 * data["cvdrift0"]
+
+    # Equation: d/dz (g dX/ dz) + c * X - lam * f * X = 0, f > 0
+
+    # grid spacing
+    h = 2 * ntor * np.pi / N
+
+    A = (
+        np.diag(g_half[1:-1] / f[2:-1] * 1 / h**2, -1)
+        + np.diag(
+            -(g_half[1:] + g_half[:-1]) / f[1:-1] * 1 / h**2 + c[1:-1] / f[1:-1],
+            0,
+        )
+        + np.diag(g_half[1:-1] / f[1:-2] * 1 / h**2, 1)
+    )
+
+    w, v = scipy.sparse.linalg.eigs(A, k=1)
+
+    # variational refinement here
+    X = np.zeros((N,))
+    dX = np.zeros((N,))
+
+    X[1:-1] = np.reshape(v[:, 0].real, (-1,)) / np.max(np.abs(v[:, 0].real))
+
+    X[0] = 0.0
+    X[-1] = 0.0
+
+    dX[0] = (-1.5 * X[0] + 2 * X[1] - 0.5 * X[2]) / h
+    dX[1] = (X[2] - X[0]) / (2 * h)
+
+    dX[-2] = (X[-1] - X[-3]) / (2 * h)
+    dX[-1] = (0.5 * X[-3] - 2 * X[-2] + 1.5 * 0.0) / (h)
+
+    dX[2:-2] = 2 / (3 * h) * (X[3:-1] - X[1:-3]) - (X[4:] - X[0:-4]) / (12 * h)
+
+    Y0 = -g * dX**2 + c * X**2
+    Y1 = f * X**2
+    gam = simps(Y0) / simps(Y1)
+
+    return gam
+
+
+def _gamma_ideal_ballooning_FD(eq):
     """
     Ideal-ballooning growth rate finder.
 
@@ -250,9 +364,9 @@ def _gamma_ideal_ballooning_spectral(eq, N=1000):
     nperiod = 5
     ntor = 2 * nperiod - 1
     N = (2 * eq.Mpol * eq.Ntor + 1) * ntor
-    coords = jnp.ones((N, 3))
+    coords = np.ones((N, 3))
     coords = coords.at[:, 0].set(coords[:, 0] * jnp.sqrt(s))
-    coords = coords.at[:, 2].set(jnp.linspace(-ntor * jnp.pi, ntor * jnp.pi, N))
+    coords = coords.at[:, 2].set(np.linspace(-ntor * np.pi, ntor * np.pi, N))
     guess = coords.copy()
 
     coords = coords.at[:, 1].set(coords[:, 1] * alpha)  # set which field line we want
@@ -263,50 +377,214 @@ def _gamma_ideal_ballooning_spectral(eq, N=1000):
         coords=coords,
         inbasis=["rho", "alpha", "zeta"],
         outbasis=["rho", "theta", "zeta"],
-        period=[jnp.inf, 2 * jnp.pi, jnp.inf],
+        period=[-np.inf, 2 * np.pi, np.inf],
         guess=guess,
     )
 
     coords1 = coords1.at[:, 2].set(coords[:, 2])
 
+    zeta_0 = 0
     print("mapped coords")
     grid2 = Grid(coords1)
 
-    data_names = ["g^aa"]
+    data_names = [
+        "g^aa",
+        "g^ra",
+        "g^rr",
+        "cvdrift",
+        "cvdrift0",
+        "|B|",
+        "sqrt(g)_PEST",
+        "p_r",
+        "psi_r",
+    ]
 
     data = eq.compute(data_names, grid2)
 
-    g = data["g^aa"]
+    # sqrt(g)_PEST = B dot grad zeta
+    gradpar = data["sqrt(g)_PEST"] / data["|B|"]
+
+    gds2 = data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
+    gds2_z = data["g^aa_z"] + zeta_0 * data["g^ra_z"] + zeta_0**2 * data["g^rr_z"]
+    gds2_zz = data["g^aa_zz"] + zeta_0 * data["g^ra_zz"] + zeta_0**2 * data["g^rr_zz"]
+
+    dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
+
+    f = gds2 / data["|B|"] ** 2
+    f_z = gds2_z / data["|B|"] ** 2 - 2 * data["B_z"] * gds2
+    f_zz = (
+        gds2_zz / data["|B|"] ** 2
+        - 4 * data["|B|_z"] * gds2_z
+        - 2 * data["|B|_zz"] * gds2
+    )
+
+    g = f * data["sqrt(g)_PEST"]
+    g_z = f_z * data["sqrt(g)_PEST"] + f * data["sqrt(g)_PEST_z"]
+    g_zz = (
+        f_zz * data["sqrt(g)_PEST"]
+        + 2 * f_z * data["sqrt(g)_PEST_z"]
+        + f * data["sqrt(g)_PEST_zz"]
+    )
+
+    c = 1 / gradpar * dpdpsi * data["cvdrift"] + zeta_0 * data["cvdrift0"]
+
+    V = (c + 1 / 4 * g_z**2 - 1 / 2 * g_zz) / g
+
+    b = f / g
+
+    # Equation: d^2 X / d z^2 + V * X - lam * b * X = 0, b > 0
+
     # grid spacing
-    h = 2 * ntor * jnp.pi / N
-    kk = jnp.linspace(1, N - 1, N - 1)
-    n1 = jnp.floor((N - 1) / 2)
-    n2 = jnp.ceil((N - 1) / 2)
+    h = 2 * ntor * np.pi / N
+
+    D2 = np.diag(1 / h**2, -1) + np.diag(-2 / h**2 + V, 0) + np.diag(1 / h**2, 1)
+
+    b = f / g * np.eye(N)
+
+    w, v = scipy.sparse.linalg.eigs(D2, b, k=1)
+
+    # variational refinement here
+    X = np.zeros((N,))
+    dX = np.zeros((N,))
+
+    X[1:-1] = np.reshape(v[:, 0].real, (-1,)) / np.max(np.abs(v[:, 0].real))
+
+    X[0] = 0.0
+    X[-1] = 0.0
+
+    dX[0] = (-1.5 * X[0] + 2 * X[1] - 0.5 * X[2]) / h
+    dX[1] = (X[2] - X[0]) / (2 * h)
+
+    dX[-2] = (X[-1] - X[-3]) / (2 * h)
+    dX[-1] = (0.5 * X[-3] - 2 * X[-2] + 1.5 * 0.0) / (h)
+
+    dX[2:-2] = 2 / (3 * h) * (X[3:-1] - X[1:-3]) - (X[4:] - X[0:-4]) / (12 * h)
+
+    Y0 = -g * dX**2 + c * X**2
+    Y1 = f * X**2
+    gam = simps(Y0) / simps(Y1)
+
+    return gam
+
+
+def _gamma_ideal_ballooning_spectral(eq):
+    """
+    Ideal-ballooning growth rate finder.
+
+    This function uses a pseudospectral Fourier technique to
+    calculate the maximum growth rate against the infinite-n
+    ideal ballooning mode
+
+    Parameters
+    ----------
+    eq :  Input equilibrium object
+    x = jax.scipy.linalg.eikh(D2, b * np.eye(N))
+    Equation: d^2 X / d z^2 + V * X - lam * b * X = 0, b > 0
+    Psedospectral representation D^2 X + V * X - lam * b * X = 0
+    grid spacing
+    obtain g, c, and f using eq and other classes
+    """
+    s = 0.81
+    alpha = 0.0
+    iota = 0.5
+    nperiod = 5
+    ntor = 2 * nperiod - 1
+    N = (2 * eq.Mpol * eq.Ntor + 1) * ntor
+    coords = np.ones((N, 3))
+    coords = coords.at[:, 0].set(coords[:, 0] * jnp.sqrt(s))
+    coords = coords.at[:, 2].set(np.linspace(-ntor * np.pi, ntor * np.pi, N))
+    guess = coords.copy()
+
+    coords = coords.at[:, 1].set(coords[:, 1] * alpha)  # set which field line we want
+
+    guess = guess.at[:, 1].set((alpha - guess[:, 2]) / iota)
+
+    coords1 = eq.map_coordinates(
+        coords=coords,
+        inbasis=["rho", "alpha", "zeta"],
+        outbasis=["rho", "theta", "zeta"],
+        period=[-np.inf, 2 * np.pi, np.inf],
+        guess=guess,
+    )
+
+    coords1 = coords1.at[:, 2].set(coords[:, 2])
+
+    zeta_0 = 0
+    print("mapped coords")
+    grid2 = Grid(coords1)
+
+    data_names = [
+        "g^aa",
+        "g^ra",
+        "g^rr",
+        "cvdrift",
+        "cvdrift0",
+        "|B|",
+        "sqrt(g)_PEST",
+        "p_r",
+        "psi_r",
+    ]
+
+    data = eq.compute(data_names, grid2)
+
+    # sqrt(g)_PEST = B dot grad zeta
+    gradpar = data["sqrt(g)_PEST"] / data["|B|"]
+
+    gds2 = data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
+    gds2_z = data["g^aa_z"] + zeta_0 * data["g^ra_z"] + zeta_0**2 * data["g^rr_z"]
+    gds2_zz = data["g^aa_zz"] + zeta_0 * data["g^ra_zz"] + zeta_0**2 * data["g^rr_zz"]
+
+    dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
+
+    f = gds2 / data["|B|"] ** 2
+    f_z = gds2_z / data["|B|"] ** 2 - 2 * data["B_z"] * gds2
+    f_zz = (
+        gds2_zz / data["|B|"] ** 2
+        - 4 * data["|B|_z"] * gds2_z
+        - 2 * data["|B|_zz"] * gds2
+    )
+
+    g = f * data["sqrt(g)_PEST"]
+    g_z = f_z * data["sqrt(g)_PEST"] + f * data["sqrt(g)_PEST_z"]
+    g_zz = (
+        f_zz * data["sqrt(g)_PEST"]
+        + 2 * f_z * data["sqrt(g)_PEST_z"]
+        + f * data["sqrt(g)_PEST_zz"]
+    )
+
+    c = 1 / gradpar * dpdpsi * data["cvdrift"] + zeta_0 * data["cvdrift0"]
+
+    V = (c + 1 / 4 * g_z**2 - 1 / 2 * g_zz) / g
+
+    b = f / g
+
+    h = 2 * ntor * np.pi / N
+    kk = np.linspace(1, N - 1, N - 1)
+    n1 = np.floor((N - 1) / 2)
+    n2 = np.ceil((N - 1) / 2)
 
     if jnp.mod(N, 2) == 0:  # of 2nd derivative matrix
-        topc = 1 / (jnp.sin(jnp.linspace(1, n2, n2) * h / 2)) ** 2
+        topc = 1 / (np.sin(jnp.linspace(1, n2, n2) * h / 2)) ** 2
         col1 = [
-            -(jnp.pi**2 / 3) / h**2 - (1 / 6),
-            -0.5 * ((-1) ** kk) * [topc, jnp.flipud(topc[1:n1])],
+            -(np.pi**2 / 3) / h**2 - (1 / 6),
+            -0.5 * ((-1) ** kk) * [topc, np.flipud(topc[1:n1])],
         ]
     else:
         topc = (
             1
-            / (jnp.sin(jnp.linspace(1, n2, n2) * h / 2))
+            / (np.sin(jnp.linspace(1, n2, n2) * h / 2))
             * 1
-            / (jnp.tan(jnp.linspace(1, n2, n2) * h / 2))
+            / (np.tan(jnp.linspace(1, n2, n2) * h / 2))
         )
         col1 = [
-            -jnp.pi**2 / 3 / h**2 + 1 / 12,
-            -0.5 * ((-1) ** kk) * [topc, -jnp.flipud(topc[1:n1])],
+            -np.pi**2 / 3 / h**2 + 1 / 12,
+            -0.5 * ((-1) ** kk) * [topc, -np.flipud(topc[1:n1])],
         ]
 
     row1 = col1  # first row
 
-    D2 = jnp.toeplitz(col1, row1) + g * jnp.eye(N)
+    D2 = np.toeplitz(col1, row1) + V * np.eye(N)
 
-    ## obtain g, c, and f using eq and other classes
-
-    x = jnp.linalg.eik(D2)
+    x = scipy.linalg.eik(D2, b * np.eye(N))
 
     return x

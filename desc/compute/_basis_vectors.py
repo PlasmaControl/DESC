@@ -1574,6 +1574,51 @@ def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e_theta_PEST_z",
+    label="\\mathbf{e}_{\\theta_{PEST} \\zeta}",
+    units="m",
+    units_long="meters",
+    description="Zeta derivative of the covariant PEST poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_z", "theta_PEST_t", "theta_PEST_tz"],
+)
+def _e_sub_theta_pest_z(params, transforms, profiles, data, **kwargs):
+    # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
+    data["e_theta_PEST_z"] = (data["e_theta_z"].T / data["theta_PEST_t"]).T + (
+        data["e_theta"].T * data["theta_PEST_tz"] / data["theta_PEST_t"] ** 2
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e_theta_PEST_zz",
+    label="\\mathbf{e}_{\\theta_{PEST} \\zeta \\zeta}",
+    units="m",
+    units_long="meters",
+    description="Zeta derivative of the covariant PEST poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_z", "theta_PEST_t", "theta_PEST_tz"],
+)
+def _e_sub_theta_pest_zz(params, transforms, profiles, data, **kwargs):
+    # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
+    data["e_theta_PEST_zz"] = (
+        (data["e_theta_zz"].T / data["theta_PEST_t"]).T
+        - (data["e_theta_z"].T * data["theta_PEST_tz"] / data["theta_PEST_t"] ** 2).T
+        + (data["e_theta_zz"].T * data["theta_PEST_tz"] / data["theta_PEST_t"] ** 2).T
+        + (data["e_theta_z"].T * data["theta_PEST_tz"] / data["theta_PEST_t"] ** 2).T
+    )
+    return data
+
+
+@register_compute_fun(
     name="e_theta_r",
     label="\\partial_{\\rho} \\mathbf{e}_{\\theta}",
     units="m",

@@ -72,7 +72,7 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
         "e_phi",
         "e_rho_z",
         "e_theta_PEST_z",
-        "e_zeta_z",
+        "e_phi_z",
         "lambda_t",
         "lambda_z",
     ],
@@ -285,9 +285,9 @@ def _sqrtg_pest2_zz(params, transforms, profiles, data, **kwargs):
         2
         / dot(data["e^rho_z"], cross(data["e^theta"], data["e^phi"])) ** 2
         * (
-            dot(e_sup_rho_zz_PEST, cross(data["e^theta"], data["e^phi"]))
-            + dot(data["e^rho"], cross(e_sup_theta_zz_PEST, data["e^phi"]))
-            + dot(data["e^rho"], cross(data["e^theta"], e_sup_zeta_zz_PEST))
+            dot(e_sup_rho_z_PEST, cross(data["e^theta"], data["e^phi"]))
+            + dot(data["e^rho"], cross(e_sup_theta_z_PEST, data["e^phi"]))
+            + dot(data["e^rho"], cross(data["e^theta"], e_sup_theta_z_PEST))
         )
         * 1
         / (1 - data["lambda_t"])
@@ -299,6 +299,37 @@ def _sqrtg_pest2_zz(params, transforms, profiles, data, **kwargs):
     )
 
     return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_PEST_zz",
+    label="\\sqrt{g}_{PEST}_zz",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Derivative of the Jacobian determinant of PEST flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_theta_PEST",
+        "e_phi",
+        "e_rho_z",
+        "e_theta_PEST_z",
+        "e_phi_z",
+        "e_rho_zz",
+        "e_theta_PEST_zz",
+        "e_phi_zz",
+    ],
+)
+def _sqrtg_pest_zz(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST_z"] = (
+        dot(data["e_rho_zz"], cross(data["e_theta_PEST"], data["e_phi"]))
+        + dot(data["e_rho"], cross(data["e_theta_PEST_zz"], data["e_phi"]))
+        + dot(data["e_rho"], cross(data["e_theta_PEST"], data["e_phi_zz"]))
+    )
 
 
 @register_compute_fun(
@@ -2253,4 +2284,4 @@ def _cvdrift0(params, transforms, profiles, data, **kwargs):
         * data["iota_r"]
         * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
     )
-    return data
+    r

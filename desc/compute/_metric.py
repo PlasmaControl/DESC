@@ -138,12 +138,12 @@ def _sqrtg_pest_zz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^rho", "e^theta", "e^phi", "lambda_t"],
+    data=["e^rho", "e^theta", "e^zeta", "lambda_t"],
 )
 def _sqrtg_pest2(params, transforms, profiles, data, **kwargs):
     data["sqrt(g)_PEST2"] = (
         1
-        / dot(data["e^rho"], cross(data["e^theta"], data["e^phi"]))
+        / dot(data["e^rho"], cross(data["e^theta"], data["e^zeta"]))
         * 1
         / (1 - data["lambda_t"])
     )
@@ -164,13 +164,13 @@ def _sqrtg_pest2(params, transforms, profiles, data, **kwargs):
     data=[
         "e^rho",
         "e^theta",
-        "e^phi",
+        "e^zeta",
         "e^rho_t",
         "e^theta_t",
-        "e^phi_t",
+        "e^zeta_t",
         "e^rho_z",
         "e^theta_z",
-        "e^phi_z",
+        "e^zeta_z",
         "lambda_t",
         "lambda_tz",
     ],
@@ -185,16 +185,16 @@ def _sqrtg_pest2_z(params, transforms, profiles, data, **kwargs):
 
     data["sqrt(g)_PEST2_z"] = (
         -1
-        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^phi"])) ** 2
+        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^zeta"])) ** 2
         * (
-            dot(e_sup_rho_z_PEST, cross(data["e^theta"], data["e^phi"]))
-            + dot(data["e^rho"], cross(e_sup_theta_z_PEST, data["e^phi"]))
+            dot(e_sup_rho_z_PEST, cross(data["e^theta"], data["e^zeta"]))
+            + dot(data["e^rho"], cross(e_sup_theta_z_PEST, data["e^zeta"]))
             + dot(data["e^rho"], cross(data["e^theta"], e_sup_theta_z_PEST))
         )
         * 1
         / (1 - data["lambda_t"])
         - 1
-        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^phi"]))
+        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^zeta"]))
         * 1
         / (1 - data["lambda_t"]) ** 2
         * data["lambda_tz"]
@@ -220,10 +220,10 @@ def _sqrtg_pest2_z(params, transforms, profiles, data, **kwargs):
         "e^zeta",
         "e^rho_t",
         "e^theta_t",
-        "e^phi_t",
+        "e^zeta_t",
         "e^rho_z",
         "e^theta_z",
-        "e^phi_z",
+        "e^zeta_z",
         "lambda_t",
         "lambda_tz",
     ],
@@ -283,16 +283,16 @@ def _sqrtg_pest2_zz(params, transforms, profiles, data, **kwargs):
 
     data["sqrt(g)_PEST2_zz"] = (
         2
-        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^phi"])) ** 2
+        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^zeta"])) ** 2
         * (
-            dot(e_sup_rho_zz_PEST, cross(data["e^theta"], data["e^phi"]))
-            + dot(data["e^rho"], cross(e_sup_theta_zz_PEST, data["e^phi"]))
+            dot(e_sup_rho_zz_PEST, cross(data["e^theta"], data["e^zeta"]))
+            + dot(data["e^rho"], cross(e_sup_theta_zz_PEST, data["e^zeta"]))
             + dot(data["e^rho"], cross(data["e^theta"], e_sup_zeta_zz_PEST))
         )
         * 1
         / (1 - data["lambda_t"])
         - 1
-        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^phi"]))
+        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^zeta"]))
         * 1
         / (1 - data["lambda_t"]) ** 2
         * data["lambda_tz"]

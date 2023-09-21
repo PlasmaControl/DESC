@@ -43,8 +43,26 @@ print(solution)
 print("***************************************************")
 
 f = open("output_file.txt", "w")
-f.write(solution)
+f.write(f"{solution[:, 0]}, {solution[:, 1]}, {solution[:, 2]}, {solution[:, 3]}, {mu}")
 f.close()
+
+plt.plot(np.sqrt(solution[:, 0]) * np.cos(solution[:, 1]), np.sqrt(solution[:, 0]) * np.sin(solution[:, 1]))
+plt.savefig("trajectory.png")
+
+fig, axs = plt.subplots(2, 2)
+axs[0, 1].plot(t, solution[:, 0], 'tab:orange')
+axs[0, 1].set_title(r'$\psi$ (t)')
+axs[1, 0].plot(t, solution[:, 1], 'tab:green')
+axs[1, 0].set_title(r'$\theta$ (t)')
+axs[1, 1].plot(t, solution[:, 2], 'tab:red')
+axs[1, 1].set_title(r'$\zeta$ (t)')
+axs[0, 0].plot(t, solution[:, 3], 'tab:blue')
+axs[0, 0].set_title(r"$v_{\parallel}$ (t)")
+
+fig = plt.gcf()
+fig.set_size_inches(10.5, 10.5)
+
+fig.savefig("quantities.png", dpi = 300)
 
 
 """

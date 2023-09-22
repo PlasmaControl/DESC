@@ -39,7 +39,7 @@ for initial_conditions in init:
     mass = 1.673e-27
     Energy = 3.52e6*1.6e-19
     ini_vpar = 0.2*jnp.sqrt(2*Energy/mass)
-    ini_cond = [psi_i, theta_i, zeta_i, float(ini_vpar)]
+    ini_cond = initial_conditions
 
     mass_charge = mass/1.6e-19
 

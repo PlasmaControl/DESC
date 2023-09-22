@@ -69,7 +69,7 @@ class GX(_Objective):
     _units = "Q"
     _print_value_fmt = "Total heat flux: {:10.3e} "
  
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="GX", npol=1, nzgrid=32, alpha=0, psi=0.5, path='/home/pk2354/src/gx_latest',path_in='/scratch/gpfs/pk2354/DESC_GX_2/GX/gx_nl',path_geo='/scratch/gpfs/pk2354/DESC_GX_2/GX/gxinput_wrap',t=0,bounds=None,normalize=False,normalize_target=False):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="GX", npol=1, nzgrid=32, alpha=0, psi=0.5, path='/global/homes/p/pkim18/gx/',path_in='/pscratch/sd/p/pkim18/DESC/GX/gx_nl',path_geo='/pscratch/sd/p/pkim18/DESC/GX/gxinput_wrap',t=0,bounds=None,normalize=False,normalize_target=False):
         
         if target is None and bounds is None:
             target = 0
@@ -559,9 +559,8 @@ class GX(_Objective):
 
     def run_gx(self,t):
         fs = open('stdout.out_' + str(t),'w')
-        path = '/home/pk2354/gx_latest/'
         path_in = self.path_in + "_" + str(t) + '.in'
-        cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', '--exact','--overcommit',path+'./gx',path_in]
+        cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', '--exact','--overcommit',self.path+'./gx',path_in]
         subprocess.run(cmd,stdout=fs)
         fs.close()
 

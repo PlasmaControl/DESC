@@ -24,9 +24,10 @@ def starting_ensamble(size):
     ini_cond = [[float(psi_init[i]), theta_init, zeta_init, float(v_init[i])] for i in range(0, size)]
     return ini_cond
 
-init = starting_ensamble(5)
-
+init = starting_ensamble(25)
+i = 0
 for initial_conditions in init:
+    
     tmin = 0
     tmax = 0.0007
     nt = 500
@@ -58,6 +59,10 @@ for initial_conditions in init:
     print(solution)
     print("***************************************************")
     plt.plot(np.sqrt(solution[:, 0]) * np.cos(solution[:, 1]), np.sqrt(solution[:, 0]) * np.sin(solution[:, 1]))
+    f = open("output_file" + i + ".txt", "w")
+    f.write(f"{i}\n{solution[:, 0]},\n{solution[:, 1]},\n{solution[:, 2]},\n{solution[:, 3]},\n{mu},\n{initial_conditions}")
+    f.close()
+    i = i + 1
 
 plt.savefig("all_traj.png")
 

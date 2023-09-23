@@ -67,32 +67,16 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "e_rho",
-        "e_theta_PEST",
-        "e_phi",
-        "e_rho_z",
-        "e_theta_PEST_z",
-        "e_zeta_z",
-        "lambda_t",
+        "sqrt(g)_z",
+        "sqrt(g)_t",
         "lambda_z",
+        "lambda_t",
     ],
 )
 def _sqrtg_pest_z(params, transforms, profiles, data, **kwargs):
-    e_rho_z_PEST = data["e_rho_z"] + data["e_rho_t"] * (
-        data["lambda_z"] / (1 - data["lambda_t"])
-    )
-    e_theta_PEST_z_PEST = data["e_theta_PEST_z"] + data["e_theta_PEST_t"] * (
-        data["lambda_z"] / (1 - data["lambda_t"])
-    )
-    e_zeta_z_PEST = data["e_zeta_z"] + data["e_zeta_t"] * (
-        data["lambda_z"] / (1 - data["lambda_t"])
-    )
-    data["sqrt(g)_PEST"] = (
-        dot(e_rho_z_PEST, cross(data["e_theta_PEST"], data["e_phi"]))
-        + dot(data["e_rho"], cross(e_theta_PEST_z_PEST, data["e_phi"]))
-        + dot(data["e_rho"], cross(data["e_theta_PEST"], e_zeta_z_PEST))
-    )
-
+    data["sqrt(g)_PEST_z"] = data["sqrt(g)_z"] - data["sqrt(g)_t"] * data[
+        "lambda_z"
+    ] / (1 + data["lambda_t"])
     return data
 
 
@@ -107,197 +91,32 @@ def _sqrtg_pest_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_theta_PEST", "e_phi"],
+    data=[
+        "sqrt(g)_z",
+        "sqrt(g)_t",
+        "sqrt(g)_zz",
+        "sqrt(g)_tt",
+        "sqrt(g)_tz",
+        "lambda_z",
+        "lambda_t",
+        "lambda_tt",
+        "lambda_zz",
+        "lambda_tz",
+    ],
 )
 def _sqrtg_pest_zz(params, transforms, profiles, data, **kwargs):
-    e_rho_z_PEST = data["e_rho_z"] + data["e_rho_t"] * (
-        data["lambda_z"] / (1 - data["lambda_t"])
-    )
-    e_theta_PEST_z_PEST = data["e_theta_PEST_z"] + data["e_theta_PEST_t"] * (
-        data["lambda_z"] / (1 - data["lambda_t"])
-    )
-    e_zeta_z_PEST = data["e_zeta_z"] + data["e_zeta_t"] * (
-        data["lambda_z"] / (1 - data["lambda_t"])
-    )
+    comn_fac = data["lambda_z"] / (1 + data["lambda_t"])
     data["sqrt(g)_PEST_zz"] = (
-        dot(e_rho_z_PEST, cross(data["e_theta_PEST"], data["e_phi"]))
-        + dot(data["e_rho"], cross(e_theta_PEST_z_PEST, data["e_phi"]))
-        + dot(data["e_rho"], cross(data["e_theta_PEST"], e_zeta_z_PEST))
+        data["sqrt(g)_zz"]
+        - data["sqrt(g)_tz"] * data["lambda_z"] / (1 + data["lambda_t"])
+        - (data["sqrt(g)_tz"] - data["sqrt(g)_tt"] * comn_fac) * comn_fac
+        - data["sqrt(g)_t"]
+        * (data["lambda_zz"] - data["lambda_tz"] * comn_fac)
+        * comn_fac
+        + data["sqrt(g)_t"]
+        * (data["lambda_tz"] - data["lambda_tt"] * comn_fac)
+        * comn_fac
     )
-    return data
-
-
-@register_compute_fun(
-    name="sqrt(g)_PEST2",
-    label="\\sqrt{g}_{PEST2}",
-    units="m^{3}",
-    units_long="cubic meters",
-    description="Jacobian determinant of PEST flux coordinate system (alternate)",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^rho", "e^theta", "e^zeta", "lambda_t"],
-)
-def _sqrtg_pest2(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_PEST2"] = (
-        1
-        / dot(data["e^rho"], cross(data["e^theta"], data["e^zeta"]))
-        * 1
-        / (1 - data["lambda_t"])
-    )
-    return data
-
-
-@register_compute_fun(
-    name="sqrt(g)_PEST2_z",
-    label="\\sqrt{g}_{PEST2}_z",
-    units="m^{3}",
-    units_long="cubic meters",
-    description="Zeta derivative of the  PEST Jacobian flux coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=[
-        "e^rho",
-        "e^theta",
-        "e^zeta",
-        "e^rho_t",
-        "e^theta_t",
-        "e^zeta_t",
-        "e^rho_z",
-        "e^theta_z",
-        "e^zeta_z",
-        "lambda_t",
-        "lambda_tz",
-    ],
-)
-def _sqrtg_pest2_z(params, transforms, profiles, data, **kwargs):
-    e_sup_rho_z_PEST = data["e^rho_z"] + data["e^rho_t"] * (
-        data["lambda_z"] / (1 - data["lambda_t"])
-    )
-    e_sup_theta_z_PEST = data["e^theta_z"] + data["e^theta_t"] * (
-        data["lambda_z"] / (1 - data["lambda_t"])
-    )
-
-    data["sqrt(g)_PEST2_z"] = (
-        -1
-        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^zeta"])) ** 2
-        * (
-            dot(e_sup_rho_z_PEST, cross(data["e^theta"], data["e^zeta"]))
-            + dot(data["e^rho"], cross(e_sup_theta_z_PEST, data["e^zeta"]))
-            + dot(data["e^rho"], cross(data["e^theta"], e_sup_theta_z_PEST))
-        )
-        * 1
-        / (1 - data["lambda_t"])
-        - 1
-        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^zeta"]))
-        * 1
-        / (1 - data["lambda_t"]) ** 2
-        * data["lambda_tz"]
-    )
-
-    return data
-
-
-@register_compute_fun(
-    name="sqrt(g)_PEST2_zz",
-    label="\\sqrt{g}_{PEST2}_z",
-    units="m^{3}",
-    units_long="cubic meters",
-    description="Toroidal derivative of the PEST Jacobian coordinate system",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=[
-        "e^rho",
-        "e^theta",
-        "e^zeta",
-        "e^rho_t",
-        "e^theta_t",
-        "e^zeta_t",
-        "e^rho_z",
-        "e^theta_z",
-        "e^zeta_z",
-        "lambda_t",
-        "lambda_tz",
-    ],
-)
-def _sqrtg_pest2_zz(params, transforms, profiles, data, **kwargs):
-
-    e_sup_rho_zz_PEST = (
-        data["e^rho_zz"]
-        + data["e^rho_tz"] * (data["lambda_z"] / (1 - data["lambda_t"]))
-        + data["e^rho_t"]
-        * (
-            data["lambda_zz"] / (1 - data["lambda_t"])
-            + data["lambda_z"] * data["lambda_tz"] / (1 - data["lambda_t"]) ** 2
-        )
-        + data["e^rho_zt"]
-        + data["e^rho_tt"] * (data["lambda_z"] / (1 - data["lambda_t"]))
-        + data["e^rho_t"]
-        * (
-            data["lambda_tz"] / (1 - data["lambda_t"])
-            + data["lambda_z"] * data["lambda_tt"] / (1 - data["lambda_t"]) ** 2
-        )
-    )
-
-    e_sup_theta_zz_PEST = (
-        data["e^theta_zz"]
-        + data["e^theta_tz"] * (data["lambda_z"] / (1 - data["lambda_t"]))
-        + data["e^theta_t"]
-        * (
-            data["lambda_zz"] / (1 - data["lambda_t"])
-            + data["lambda_z"] * data["lambda_tz"] / (1 - data["lambda_t"]) ** 2
-        )
-        + data["e^theta_zt"]
-        + data["e^rho_tt"] * (data["lambda_z"] / (1 - data["lambda_t"]))
-        + data["e^theta_t"]
-        * (
-            data["lambda_tz"] / (1 - data["lambda_t"])
-            + data["lambda_z"] * data["lambda_tt"] / (1 - data["lambda_t"]) ** 2
-        )
-    )
-
-    e_sup_zeta_zz_PEST = (
-        data["e^zeta_zz"]
-        + data["e^zeta_tz"] * (data["lambda_z"] / (1 - data["lambda_t"]))
-        + data["e^zeta_t"]
-        * (
-            data["lambda_zz"] / (1 - data["lambda_t"])
-            + data["lambda_z"] * data["lambda_tz"] / (1 - data["lambda_t"]) ** 2
-        )
-        + data["e^zeta_zt"]
-        + data["e^zeta_tt"] * (data["lambda_z"] / (1 - data["lambda_t"]))
-        + data["e^zeta_t"]
-        * (
-            data["lambda_tz"] / (1 - data["lambda_t"])
-            + data["lambda_z"] * data["lambda_tt"] / (1 - data["lambda_t"]) ** 2
-        )
-    )
-
-    data["sqrt(g)_PEST2_zz"] = (
-        2
-        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^zeta"])) ** 2
-        * (
-            dot(e_sup_rho_zz_PEST, cross(data["e^theta"], data["e^zeta"]))
-            + dot(data["e^rho"], cross(e_sup_theta_zz_PEST, data["e^zeta"]))
-            + dot(data["e^rho"], cross(data["e^theta"], e_sup_zeta_zz_PEST))
-        )
-        * 1
-        / (1 - data["lambda_t"])
-        - 1
-        / dot(data["e^rho_z"], cross(data["e^theta"], data["e^zeta"]))
-        * 1
-        / (1 - data["lambda_t"]) ** 2
-        * data["lambda_tz"]
-    )
-
     return data
 
 

@@ -395,6 +395,8 @@ def _gamma_ideal_ballooning_FD(eq):
         "cvdrift0",
         "|B|",
         "sqrt(g)_PEST",
+        "sqrt(g)_PEST_z",
+        "sqrt(g)_PEST_zz",
         "p_r",
         "psi_r",
     ]
@@ -521,6 +523,8 @@ def _gamma_ideal_ballooning_spectral(eq):
         "cvdrift0",
         "|B|",
         "sqrt(g)_PEST",
+        "sqrt(g)_PEST_z",
+        "sqrt(g)_PEST_zz",
         "p_r",
         "psi_r",
     ]

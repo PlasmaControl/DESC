@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import pytest
 
+from desc.backend import put
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.initial_guess import _initial_guess_surface
 from desc.geometry import (
@@ -194,7 +195,7 @@ class TestConstructor:
             eq = Equilibrium(iota="def")
         with pytest.raises(TypeError):
             eq = Equilibrium(current="def")
-        with pytest.raises(ValueError):  # change to typeeror if allow both
+        with pytest.raises(ValueError):  # change to TypeError if allow both
             eq = Equilibrium(iota="def", current="def")
         with pytest.raises(ValueError):
             eq = Equilibrium(iota=None)
@@ -470,9 +471,9 @@ def test_is_nested():
     assert eq.is_nested(grid=grid)
 
     eq.change_resolution(L=2, M=2)
-    eq.R_lmn[eq.R_basis.get_idx(L=1, M=1, N=0)] = 1
+    eq.R_lmn = put(eq.R_lmn, eq.R_basis.get_idx(L=1, M=1, N=0), 1)
     # make unnested by setting higher order mode to same amplitude as lower order mode
-    eq.R_lmn[eq.R_basis.get_idx(L=2, M=2, N=0)] = 1
+    eq.R_lmn = put(eq.R_lmn, eq.R_basis.get_idx(L=2, M=2, N=0), 1)
 
     assert not eq.is_nested(grid=grid)
     with pytest.warns(Warning) as record:

@@ -260,3 +260,15 @@ def combine_args(*objectives):
         obj.set_args(*args)
 
     return objectives
+
+
+def _parse_callable_target_bounds(target, bounds, x):
+    if x.ndim > 1:
+        x = x[:, 0]
+    if callable(target):
+        target = target(x)
+    if bounds is not None and callable(bounds[0]):
+        bounds = (bounds[0](x), bounds[1])
+    if bounds is not None and callable(bounds[1]):
+        bounds = (bounds[0], bounds[1](x))
+    return target, bounds

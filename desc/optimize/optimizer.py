@@ -349,7 +349,7 @@ def _maybe_wrap_nonlinear_constraints(
                 f"""
                 Nonlinear constraints detected but method {method} does not support
                 nonlinear constraints. Defaulting to method "proximal-{method}"
-                In the future this will raise an error. To ignore this warnging, specify
+                In the future this will raise an error. To ignore this warning, specify
                 a wrapper "proximal-" to convert the nonlinearly constrained problem
                 into an unconstrained one.
                 """
@@ -399,13 +399,18 @@ def _get_default_tols(
     )
     stoptol.setdefault(
         "ftol",
-        options.pop("ftol", 1e-6 if optimizers[method]["stochastic"] else 1e-2),
+        options.pop(
+            "ftol",
+            1e-6 if optimizers[method]["stochastic"] or "auglag" in method else 1e-2,
+        ),
     )
     stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
     stoptol.setdefault("ctol", options.pop("ctol", 1e-4))
-    stoptol.setdefault("maxiter", options.pop("maxiter", 100))
+    stoptol.setdefault(
+        "maxiter", options.pop("maxiter", 500 if "auglag" in method else 100)
+    )
 
-    # if we define an "iteration" as a sucessful step, it can take a few function
+    # if we define an "iteration" as a successful step, it can take a few function
     # evaluations per iteration
     stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
     # pretty much all the methods only evaluate derivatives once per iteration
@@ -445,7 +450,7 @@ def register_optimizer(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the sub-method to use.
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable.
     verbose : int
@@ -458,7 +463,6 @@ def register_optimizer(
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
         settings.
-
 
     Parameters
     ----------

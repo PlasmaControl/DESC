@@ -46,11 +46,11 @@ class BoundaryRSelfConsistency(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    surface_label : float
+    surface_label : float, optional
         Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -115,7 +115,7 @@ class BoundaryRSelfConsistency(_Objective):
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        """Compute boundary self consistency errror."""
+        """Compute boundary self consistency error."""
         params, _ = self._parse_args(*args, **kwargs)
         return jnp.dot(self._A, params["R_lmn"]) - params["Rb_lmn"]
 
@@ -128,11 +128,11 @@ class BoundaryZSelfConsistency(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    surface_label : float
+    surface_label : float, optional
         Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -197,7 +197,7 @@ class BoundaryZSelfConsistency(_Objective):
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        """Compute boundary self consistency errror."""
+        """Compute boundary self consistency error."""
         params, _ = self._parse_args(*args, **kwargs)
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 
@@ -210,9 +210,9 @@ class AxisRSelfConsistency(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -282,9 +282,9 @@ class AxisZSelfConsistency(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -351,29 +351,30 @@ class FixBoundaryR(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Boundary surface coefficients to fix. If None, uses surface coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the profile modes.
-    surface_label : float
+    surface_label : float, optional
         Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
-    name : str
+    name : str, optional
         Name of the objective function.
 
 
@@ -495,29 +496,30 @@ class FixBoundaryZ(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Boundary surface coefficients to fix. If None, uses surface coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the surface modes.
-    surface_label : float
+    surface_label : float, optional
         Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
-    name : str
+    name : str, optional
         Name of the objective function.
 
 
@@ -642,9 +644,9 @@ class FixLambdaGauge(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -735,9 +737,9 @@ class FixThetaSFL(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -798,27 +800,28 @@ class FixAxisR(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Magnetic axis coefficients to fix. If None, uses Equilibrium axis coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of axis modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the axis modes.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -943,27 +946,28 @@ class FixAxisZ(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Magnetic axis coefficients to fix. If None, uses Equilibrium axis coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of axis modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the axis modes.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -1088,29 +1092,29 @@ class FixModeR(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Fourier-Zernike R coefficient target values. If None,
-         uses Equilibrium's R coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
         If True uses all of the Equilibrium's modes.
         Must be either True or specified as an array
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -1225,29 +1229,29 @@ class FixModeZ(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Fourier-Zernike Z coefficient target values. If None,
-         uses Equilibrium's Z coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
         If True uses all of the Equilibrium's modes.
         Must be either True or specified as an array
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -1362,24 +1366,23 @@ class FixSumModesR(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, size-1 ndarray, optional
-        Fourier-Zernike R coefficient target sum. If None,
-        uses current sum of Equilibrium's R coefficients.
-        len(target)=1
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
@@ -1388,9 +1391,7 @@ class FixSumModesR(_FixedObjective):
         len(weight) = len(modes).
         If True uses all of the Equilibrium's modes.
         Must be either True or specified as an array
-    surface_label : float
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -1519,24 +1520,23 @@ class FixSumModesZ(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Fourier-Zernike Z coefficient target sum. If None,
-        uses current sum of Equilibrium's Z coefficients.
-        len(target)=1
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
@@ -1545,9 +1545,7 @@ class FixSumModesZ(_FixedObjective):
         len(weight) = len(modes).
         If True uses all of the Equilibrium's modes.
         Must be either True or specified as an array
-    surface_label : float
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -1677,25 +1675,23 @@ class _FixProfile(_FixedObjective, ABC):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses Profile.params.
-        e.g. for PowerSeriesProfile these are profile coefficients, and for
-        SplineProfile they are values at knots.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or Bool, optional
@@ -1704,7 +1700,7 @@ class _FixProfile(_FixedObjective, ABC):
         corresponding to knots for a SplineProfile).
         Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -1776,23 +1772,23 @@ class FixPressure(_FixProfile):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -1801,7 +1797,7 @@ class FixPressure(_FixProfile):
         corresponding to knots for a SplineProfile).
         Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -1881,25 +1877,24 @@ class FixIota(_FixProfile):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Has no effect for this objective.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -1908,7 +1903,7 @@ class FixIota(_FixProfile):
         corresponding to knots for a SplineProfile).
         Must len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -1985,23 +1980,23 @@ class FixCurrent(_FixProfile):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2010,7 +2005,7 @@ class FixCurrent(_FixProfile):
         corresponding to knots for a SplineProfile).
         Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -2090,23 +2085,23 @@ class FixElectronTemperature(_FixProfile):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2115,7 +2110,7 @@ class FixElectronTemperature(_FixProfile):
         corresponding to knots for a SplineProfile).
         Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -2195,23 +2190,23 @@ class FixElectronDensity(_FixProfile):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2220,7 +2215,7 @@ class FixElectronDensity(_FixProfile):
         corresponding to knots for a SplineProfile).
         Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -2300,23 +2295,23 @@ class FixIonTemperature(_FixProfile):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2325,7 +2320,7 @@ class FixIonTemperature(_FixProfile):
         corresponding to knots for a SplineProfile).
         Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -2405,25 +2400,24 @@ class FixAtomicNumber(_FixProfile):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Has no effect for this objective.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2432,7 +2426,7 @@ class FixAtomicNumber(_FixProfile):
         corresponding to knots for a SplineProfile).
         Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -2509,21 +2503,24 @@ class FixPsi(_FixedObjective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-    weight : float, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    name : str
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    name : str, optional
         Name of the objective function.
 
     """

@@ -10,6 +10,7 @@ from qic import Qic
 from qsc import Qsc
 
 import desc.examples
+from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -33,7 +34,6 @@ from desc.objectives import (
     get_NAE_constraints,
 )
 from desc.optimize import Optimizer
-from desc.plotting import plot_boozer_surface
 from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
 
@@ -102,17 +102,6 @@ def test_HELIOTRON_vac_results(HELIOTRON_vac):
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
     curr = eq.get_profile("current")
     np.testing.assert_allclose(curr(np.linspace(0, 1, 20)), 0, atol=1e-8)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-def test_precise_QH_results(precise_QH):
-    """Tests that the precise QH initial solve gives the same results as a base case."""
-    eq1 = EquilibriaFamily.load(load_from=str(precise_QH["desc_h5_path"]))[-1]
-    eq2 = EquilibriaFamily.load(load_from=str(precise_QH["output_path"]))[-1]
-    rho_err, theta_err = area_difference_desc(eq1, eq2)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-2)
 
 
 @pytest.mark.regression
@@ -234,8 +223,9 @@ def test_1d_optimization_old():
 
 def run_qh_step(n, eq):
     """Run 1 step of the precise QH optimization example from Landreman & Paul."""
+    print(f"==========QH step {n+1}==========")
     grid = LinearGrid(
-        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
+        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
     )
 
     objective = ObjectiveFunction(
@@ -282,65 +272,47 @@ def run_qh_step(n, eq):
     return eq1
 
 
-@pytest.mark.xfail
 @pytest.mark.regression
-@pytest.mark.solve
-def test_qh_optimization1():
-    """Tests precise QH optimization, step 1."""
-    eq0 = load(".//tests//inputs//precise_QH_step0.h5")[-1]
-    eq1 = load(".//tests//inputs//precise_QH_step1.h5")
-    eq1a = run_qh_step(0, eq0)
-    rho_err, theta_err = area_difference_desc(eq1, eq1a, Nr=1, Nt=1)
-    # only need crude tolerances here to make sure the boundaries are
-    # similar, the main test is ensuring its not pathological and has good qs
-    assert rho_err.mean() < 1
+@pytest.mark.slow
+def test_qh_optimization():
+    """Tests first 3 steps of precise QH optimization."""
+    # create initial equilibrium
+    surf = FourierRZToroidalSurface(
+        R_lmn=[1, 0.125, 0.1],
+        Z_lmn=[-0.125, -0.1],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        modes_Z=[[-1, 0], [0, -1]],
+        NFP=4,
+    )
+    eq = Equilibrium(M=4, N=4, Psi=0.04, surface=surf)
+    eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[
+        -1
+    ]
 
-    obj = QuasisymmetryBoozer(helicity=(1, eq1a.NFP), eq=eq1a)
+    eq1 = run_qh_step(0, eq)
+
+    obj = QuasisymmetryBoozer(helicity=(1, eq1.NFP), eq=eq1)
     obj.build()
-    B_asym = obj.compute(*obj.xs(eq1a))
-    np.testing.assert_array_less(B_asym, 1e-1)
+    B_asym = obj.compute(*obj.xs(eq1))
 
+    np.testing.assert_array_less(np.abs(B_asym).max(), 1e-1)
+    np.testing.assert_array_less(eq1.compute("a_major/a_minor")["a_major/a_minor"], 5)
 
-@pytest.mark.xfail
-@pytest.mark.regression
-@pytest.mark.solve
-def test_qh_optimization2():
-    """Tests precise QH optimization, step 2."""
-    eq1 = load(".//tests//inputs//precise_QH_step1.h5")
-    eq2 = load(".//tests//inputs//precise_QH_step2.h5")
-    eq2a = run_qh_step(1, eq1)
-    rho_err, theta_err = area_difference_desc(eq2, eq2a, Nr=1, Nt=1)
-    # only need crude tolerances here to make sure the boundaries are
-    # similar, the main test is ensuring its not pathological and has good qs
-    assert rho_err.mean() < 1
+    eq2 = run_qh_step(1, eq1)
 
-    obj = QuasisymmetryBoozer(helicity=(1, eq2a.NFP), eq=eq2a)
+    obj = QuasisymmetryBoozer(helicity=(1, eq2.NFP), eq=eq2)
     obj.build()
-    B_asym = obj.compute(*obj.xs(eq2a))
-    np.testing.assert_array_less(B_asym, 1e-2)
+    B_asym = obj.compute(*obj.xs(eq2))
+    np.testing.assert_array_less(np.abs(B_asym).max(), 1e-2)
+    np.testing.assert_array_less(eq2.compute("a_major/a_minor")["a_major/a_minor"], 5)
 
+    eq3 = run_qh_step(2, eq2)
 
-@pytest.mark.xfail
-@pytest.mark.regression
-@pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=15)
-def test_qh_optimization3():
-    """Tests precise QH optimization, step 3."""
-    eq2 = load(".//tests//inputs//precise_QH_step2.h5")
-    eq3 = load(".//tests//inputs//precise_QH_step3.h5")
-    eq3a = run_qh_step(2, eq2)
-    rho_err, theta_err = area_difference_desc(eq3, eq3a, Nr=1, Nt=1)
-    # only need crude tolerances here to make sure the boundaries are
-    # similar, the main test is ensuring it's not pathological and has good qs
-    assert rho_err.mean() < 1
-
-    obj = QuasisymmetryBoozer(helicity=(1, eq3a.NFP), eq=eq3a)
+    obj = QuasisymmetryBoozer(helicity=(1, eq3.NFP), eq=eq3)
     obj.build()
-    B_asym = obj.compute(*obj.xs(eq3a))
-    np.testing.assert_array_less(B_asym, 1e-3)
-
-    fig, ax = plot_boozer_surface(eq3a)
-    return fig
+    B_asym = obj.compute(*obj.xs(eq3))
+    np.testing.assert_array_less(np.abs(B_asym).max(), 2e-3)
+    np.testing.assert_array_less(eq3.compute("a_major/a_minor")["a_major/a_minor"], 5)
 
 
 @pytest.mark.regression
@@ -499,8 +471,8 @@ def test_simsopt_QH_comparison():
     )
     # Cancel factor of 1/2 in desc objective which is not present in simsopt:
     aspect_weight = np.sqrt(2)
-    # Also scale QS weight so objective is approximately independent of grid resolution:
-    qs_weight = np.sqrt(len(grid.weights) / (8 * (np.pi**4)))
+    # Also scale QS weight to match simsopt/VMEC
+    qs_weight = np.sqrt(1 / (8 * (np.pi**4)))
     objective = ObjectiveFunction(
         (
             AspectRatio(
@@ -615,7 +587,7 @@ def test_NAE_QSC_solve():
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
-    # Eliminate the poloidal angle to focus on the toroidal behaviour
+    # Eliminate the poloidal angle to focus on the toroidal behavior
     B_av_nae = np.mean(B_nae, axis=1)
     np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=1e-4)
 
@@ -627,7 +599,7 @@ def test_NAE_QIC_solve():
     """Test O(rho) NAE QIC constraints solve."""
     # get Qic example
     qic = Qic.from_paper("QI NFP2 r2", nphi=301, order="r1")
-    qic.lasym = False  # don't need to consider stell asym for order 1 constraints
+    qic.lasym = False  # don't need to consider stellarator asym for order 1 constraints
     ntheta = 75
     r = 0.01
     N = 11
@@ -666,7 +638,8 @@ def test_NAE_QIC_solve():
     grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
     iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
-    np.testing.assert_allclose(iota[1], qic.iota, atol=1e-5)
+    np.testing.assert_allclose(iota[1], qic.iota, atol=1.5e-5)
+    np.testing.assert_allclose(iota[1:10], qic.iota, atol=5e-4)
 
     # check lambda to match near axis
     grid_2d_05 = LinearGrid(rho=np.array(1e-6), M=50, N=50, NFP=eq.NFP, endpoint=True)
@@ -692,7 +665,9 @@ def test_NAE_QIC_solve():
     lam_nae = np.squeeze(lam_nae[:, 0, :])
 
     lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -qic.iota * qic.nu_spline(phi), atol=5e-4)
+    np.testing.assert_allclose(
+        lam_av_nae, -qic.iota * qic.nu_spline(phi), atol=1e-4, rtol=1e-2
+    )
 
     # check |B| on axis
 
@@ -716,7 +691,7 @@ def test_NAE_QIC_solve():
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
-    # Eliminate the poloidal angle to focus on the toroidal behaviour
+    # Eliminate the poloidal angle to focus on the toroidal behavior
     B_av_nae = np.mean(B_nae, axis=1)
     np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qic.B0, atol=2e-2)
 

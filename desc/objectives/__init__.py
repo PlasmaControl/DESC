@@ -8,12 +8,7 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import (
-    GenericObjective,
-    ObjectiveFromUser,
-    RotationalTransform,
-    ToroidalCurrent,
-)
+from ._generic import GenericObjective, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
     BScaleLength,
@@ -30,6 +25,7 @@ from ._omnigenity import (
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
 )
+from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._stability import MagneticWell, MercierStability
 from .getters import (
     get_equilibrium_objective,

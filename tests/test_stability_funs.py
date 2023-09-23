@@ -304,7 +304,7 @@ def test_ballooning_geo(tmpdir_factory):
 
     try:
         eq = desc.examples.get("W7-X")[-1]
-    except AssertionError:
+    except TypeError:
         eq = desc.examples.get("W7-X")
 
     eq_keys = ["iota", "iota_r", "a", "rho", "psi"]

@@ -274,7 +274,7 @@ def _gamma_ideal_ballooning_FD1(eq):
 
     zeta_0 = 0
     print("mapped coords")
-    grid2 = Grid(coords1)
+    grid2 = Grid(coords1, sort=False)
 
     data_names = [
         "g^aa",
@@ -385,7 +385,7 @@ def _gamma_ideal_ballooning_FD(eq):
 
     zeta_0 = 0
     print("mapped coords")
-    grid2 = Grid(coords1)
+    grid2 = Grid(coords1, sort=False)
 
     data_names = [
         "g^aa",
@@ -511,7 +511,7 @@ def _gamma_ideal_ballooning_spectral(eq):
 
     zeta_0 = 0
     print("mapped coords")
-    grid2 = Grid(coords1)
+    grid2 = Grid(coords1, sort=False)
 
     data_names = [
         "g^aa",

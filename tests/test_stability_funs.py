@@ -3,11 +3,13 @@
 import numpy as np
 import pytest
 from netCDF4 import Dataset
+from scipy.interpolate import interp1d
 
 import desc.examples
 import desc.io
+from desc.compute.utils import cross, dot
 from desc.equilibrium import Equilibrium
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.objectives import MagneticWell, MercierStability
 
 DEFAULT_RANGE = (0.05, 1)
@@ -291,3 +293,93 @@ def test_magwell_print(capsys):
         + "\n"
     )
     assert out.out == corr_out
+
+
+@pytest.mark.unit
+def test_ballooning_geo(tmpdir_factory):
+    """Test the geometry coefficients used for the adjoint-ballooning solver."""
+    psi = 0.5
+    alpha = 0
+    ntor = 3.0
+
+    try:
+        eq = desc.examples.get("W7-X")[-1]
+    except AssertionError:
+        eq = desc.examples.get("W7-X")
+
+    eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
+
+    data_eq = eq.compute(eq_keys)
+
+    fi = interp1d(data_eq["rho"], data_eq["iota"])
+    fs = interp1d(data_eq["rho"], data_eq["iota_r"])
+
+    iotas = fi(np.sqrt(psi))
+    shears = fs(np.sqrt(psi))
+
+    N = int((2 * eq.M_grid * eq.N_grid + 1) * ntor)
+    coords1 = np.zeros((N, 3))
+    coords1[:, 0] = np.sqrt(psi) * np.ones(N, dtype=int)
+    coords1[:, 1] = alpha * np.ones(N, dtype=int) + iotas * np.linspace(
+        -ntor * np.pi, ntor * np.pi, N
+    )
+    coords1[:, 2] = np.linspace(-ntor * np.pi, ntor * np.pi, N)
+
+    c1 = eq.compute_theta_coords(coords1)
+    grid = Grid(c1, sort=False)
+
+    data_keys = [
+        "|grad(psi)|^2",
+        "grad(|B|)",
+        "grad(alpha)",
+        "grad(psi)",
+        "B",
+        "grad(|B|)",
+        "kappa",
+        "lambda_t",
+        "lambda_z",
+        "p_r",
+        "g^aa",
+        "g^ra",
+        "g^rr",
+        "psi_r",
+        "gbdrift",
+        "cvdrift",
+    ]
+
+    data = eq.compute(data_keys, grid=grid)
+
+    psib = data_eq["psi"][-1]
+    sign_psi = psib / np.abs(psib)
+    sign_iota = iotas / np.abs(iotas)
+    # normalizations
+    Lref = data_eq["a"]
+    Bref = 2 * np.abs(psib) / Lref**2
+
+    modB = data["|B|"]
+    x = Lref * np.sqrt(psi)
+    shat = -x / iotas * shears / Lref
+
+    psi_r = data["psi_r"]
+
+    grad_psi = data["grad(psi)"]
+    grad_psi_sq = data["|grad(psi)|^2"]
+    grad_alpha = data["grad(alpha)"]
+
+    gds2 = np.array(dot(grad_alpha, grad_alpha)) * Lref**2 * psi
+    gds2_alt = data["g^aa"] * Lref**2 * psi
+
+    gds21 = -sign_iota * np.array(dot(grad_psi, grad_alpha)) * shat / Bref
+    gds21_alt = -sign_iota * data["g^ra"] * shat / Bref * (psi_r)
+
+    gds22 = grad_psi_sq * psi * (shat / (Lref * Bref)) ** 2
+    gds22_alt = data["g^rr"] * (psi_r) ** 2 * psi * (shat / (Lref * Bref)) ** 2
+
+    gbdrift = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_alpha))
+    gbdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**3 * np.sqrt(psi)
+    gbdrift_alt = data["gbdrift"] / psi_r * np.sqrt(psi) * Bref * Lref**2
+
+    np.testing.assert_allclose(gds2, gds2_alt)
+    np.testing.assert_allclose(gds22, gds22_alt)
+    np.testing.assert_allclose(gds21, gds21_alt)
+    np.testing.assert_allclose(gbdrift, gbdrift_alt)

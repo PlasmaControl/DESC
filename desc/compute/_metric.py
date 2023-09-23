@@ -2068,7 +2068,7 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^aa",
     label="g^{\\alpha \\alpha}",
-    units="T^2 m^2",
+    units="m^{-2}",
     units_long="None",
     description="Fieldline bending term1",
     dim=1,

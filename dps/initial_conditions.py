@@ -22,3 +22,6 @@ def starting_ensamble(size):
 
 a = starting_ensamble(10)
 print(a)
+i=10
+
+print(f"output_{i}.png")

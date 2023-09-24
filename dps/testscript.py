@@ -13,9 +13,11 @@ eq._current = None
 # eq.solve()
 
 def starting_ensamble(size):
+    mass = 1.673e-27
+    Energy = 3.52e6*1.6e-19
     key = jax.random.PRNGKey(int(4120))
 
-    v_init = jax.random.maxwell(key, (size,))
+    v_init = jax.random.maxwell(key, (size,))*jnp.sqrt(2*Energy/mass)
 
     psi_init = jax.random.uniform(key, (size,), minval=1e-4, maxval=1-1e-4)
     zeta_init = 0.2
@@ -32,14 +34,14 @@ def output_to_file(solution, i):
 
     combined_lists = zip(list1, list2, list3, list4)
     
-    file_name = f'outputs/output_{i}.txt'
+    file_name = f'output_{i}.txt'
 
     with open(file_name, 'w') as file:        
         for row in combined_lists:
             row_str = '\t'.join(map(str, row))
             file.write(row_str + '\n')
     
-init = starting_ensamble(1)
+init = starting_ensamble(25)
 i = 0
 for initial_conditions in init:
     
@@ -47,13 +49,13 @@ for initial_conditions in init:
     tmax = 0.0007
     nt = 500
     time = jnp.linspace(tmin, tmax, nt)
-    psi_i = 0.7
-    theta_i = 0.2
-    zeta_i = 0.2
+    psi_i = initial_conditions[0]
+    theta_i = initial_conditions[1]
+    zeta_i = initial_conditions[2]
+    ini_vpar = initial_conditions[3]
 
     mass = 1.673e-27
     Energy = 3.52e6*1.6e-19
-    ini_vpar = 0.2*jnp.sqrt(2*Energy/mass)
     ini_cond = initial_conditions
 
     mass_charge = mass/1.6e-19
@@ -79,7 +81,7 @@ for initial_conditions in init:
 
     i = i + 1
 
-f = open("outputs/output_mu" + ".txt", "w")
+f = open("output_mu" + ".txt", "w")
 f.write(f"{mu}")
 f.close()
 

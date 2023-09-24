@@ -1,6 +1,5 @@
 from desc.objectives import ParticleTracer, ObjectiveFunction
-from desc.examples import get
-from desc.grid import Grid
+from desc.grid import Grid, LinearGrid
 import desc.io
 from desc.backend import jnp
 import matplotlib.pyplot as plt
@@ -11,20 +10,6 @@ eq = desc.io.load("test_run.h5")
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 # eq.solve()
-
-def starting_ensamble(size):
-    mass = 1.673e-27
-    Energy = 3.52e6*1.6e-19
-    key = jax.random.PRNGKey(int(4120))
-
-    v_init = jax.random.maxwell(key, (size,))*jnp.sqrt(2*Energy/mass)
-
-    psi_init = jax.random.uniform(key, (size,), minval=1e-4, maxval=1-1e-4)
-    zeta_init = 0.2
-    theta_init = 0.2
-
-    ini_cond = [[float(psi_init[i]), theta_init, zeta_init, float(v_init[i])] for i in range(0, size)]
-    return ini_cond
 
 def output_to_file(solution, i):
     list1 = solution[:, 0]
@@ -40,9 +25,25 @@ def output_to_file(solution, i):
         for row in combined_lists:
             row_str = '\t'.join(map(str, row))
             file.write(row_str + '\n')
+
+def starting_ensamble(size):
+    mass = 1.673e-27
+    Energy = 3.52e6*1.6e-19
+    key = jax.random.PRNGKey(int(4120))
+
+    # v_init = jax.random.maxwell(key, (size,))*jnp.sqrt(2*Energy/mass)
     
+    psi_init = jax.random.uniform(key, (size,), minval=1e-4, maxval=1-1e-4)
+    zeta_init = 0.2
+    theta_init = 0.2
+    v_init = (0.3 + jax.random.uniform(key, (size,), minval=-1e-2, maxval=1e-2)) * jnp.sqrt(2*Energy/mass) 
+
+    ini_cond = [[float(psi_init[i]), theta_init, zeta_init, float(v_init[i])] for i in range(0, size)]
+    return ini_cond
+
 init = starting_ensamble(25)
 i = 0
+
 for initial_conditions in init:
     
     tmin = 0

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import jax.random
 
-eq = desc.io.load("test_run.h5")
+eq = desc.io.load("ct32NFP4_init.h5")
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 # eq.solve()

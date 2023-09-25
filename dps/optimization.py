@@ -85,7 +85,6 @@ gradient = ObjFunction.grad(ObjFunction.x(eq))
 print("*************** GRADIENT ***************")
 print(gradient)
 print("****************************************")
-output_to_file(gradient, "gradient.txt")
 
 # print(ObjFunction.x(eq))
 # xs = objective.xs(eq)

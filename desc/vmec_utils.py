@@ -587,6 +587,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
             # but remove the incorrectly calculated Z_mn,nu_mn from the
             # dictionary first
             data.pop("nu_mn")
+            data.pop("nu")
             data.pop("Z_mn")
             data_sin = data
 
@@ -626,7 +627,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
         Sqrt_g_B_mn = (
             np.vstack((Sqrt_g_B_mn, sqrt_g_B_mn)) if Sqrt_g_B_mn.size else sqrt_g_B_mn
         )
-        # nu_mn
+
         nu_mn = np.atleast_2d(matrix_sin @ data_sin["nu_mn"])
         Nu_mn = np.vstack((Nu_mn, nu_mn)) if Nu_mn.size else nu_mn
 

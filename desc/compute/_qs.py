@@ -176,14 +176,27 @@ def _nu(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["nu", "G", "I", "iota", "lambda", "rho", "theta_B", "zeta_B"],
+    data=[
+        "nu",
+        "G",
+        "I",
+        "iota",
+        "lambda",
+        "rho",
+        "theta_B",
+        "zeta_B",
+        "jac_Boozer_DESC",
+    ],
 )
 def _nu_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
     norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
     data["nu_mn"] = (
         norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (transforms["B"].basis.evaluate(nodes).T @ (data["nu"] ** 2))
+        * (
+            transforms["B"].basis.evaluate(nodes).T
+            @ (data["jac_Boozer_DESC"] * data["nu"])
+        )
         / transforms["B"].grid.num_nodes
     )
     return data
@@ -264,11 +277,11 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="sqrt(g)_B",
-    label="\\sqrt{g}_{B}",
+    name="jac_Boozer_DESC",
+    label="\\frac{\\partial(\\theta_B,\\zeta_B)}{\\theta_{DESC},\\zeta_{DESC}}",
     units="~",
     units_long="None",
-    description="Jacobian determinant of Boozer coordinates",
+    description="Jacobian determinant from Boozer coordinates to DESC coordinates.",
     dim=1,
     params=[],
     transforms={},
@@ -276,32 +289,59 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["lambda_t", "lambda_z", "nu_t", "nu_z", "iota"],
 )
-def _sqrtg_B(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_B"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
+def _jac_Boozer_DESC(params, transforms, profiles, data, **kwargs):
+    data["jac_Boozer_DESC"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
         data["iota"] - data["lambda_z"]
     ) * data["nu_t"]
     return data
 
 
 @register_compute_fun(
-    name="sqrt(g)_B_mn",
-    label="\\sqrt{g}_{B}",
+    name="sqrt(g)_B",
+    label="\\sqrt{g}_B",
     units="~",
     units_long="None",
-    description="Jacobian determinant of Boozer coordinates",
+    description="Jacobian determinant from Boozer coordinates to lab frame.",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)_B", "lambda_t", "lambda_z", "nu_t", "nu_z", "iota"],
+    data=["jac_Boozer_DESC", "sqrt(g)"],
 )
-def _sqrt_g_B_mn(params, transforms, profiles, data, **kwargs):
+def _sqrtg_B(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_B"] = data["sqrt(g)"] / data["jac_Boozer_DESC"]
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_B_mn",
+    label="\\sqrt{g}_{B,mn}",
+    units="~",
+    units_long="None",
+    description="Boozer harmonics of Jacobian determinant from Boozer"
+    " coordinates to lab frame.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "sqrt(g)_B",
+        "jac_Boozer_DESC",
+        "theta_B",
+        "zeta_B",
+    ],
+)
+def _sqrtg_B_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
     norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
     data["sqrt(g)_B_mn"] = (
         norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] ** 2))
+        * (
+            transforms["B"].basis.evaluate(nodes).T
+            @ (data["jac_Boozer_DESC"] * data["sqrt(g)_B"])
+        )
         / transforms["B"].grid.num_nodes
     )
     return data
@@ -318,14 +358,17 @@ def _sqrt_g_B_mn(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)_B", "|B|", "rho", "theta_B", "zeta_B"],
+    data=["jac_Boozer_DESC", "|B|", "rho", "theta_B", "zeta_B"],
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
     norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
     data["|B|_mn"] = (
         norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] * data["|B|"]))
+        * (
+            transforms["B"].basis.evaluate(nodes).T
+            @ (data["jac_Boozer_DESC"] * data["|B|"])
+        )
         / transforms["B"].grid.num_nodes
     )
     return data
@@ -342,14 +385,17 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)_B", "R", "rho", "theta_B", "zeta_B"],
+    data=["jac_Boozer_DESC", "R", "rho", "theta_B", "zeta_B"],
 )
 def _R_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
     norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
     data["R_mn"] = (
         norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] * data["R"]))
+        * (
+            transforms["B"].basis.evaluate(nodes).T
+            @ (data["jac_Boozer_DESC"] * data["R"])
+        )
         / transforms["B"].grid.num_nodes
     )
     return data
@@ -366,14 +412,17 @@ def _R_mn(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)_B", "Z", "rho", "theta_B", "zeta_B"],
+    data=["jac_Boozer_DESC", "Z", "rho", "theta_B", "zeta_B"],
 )
 def _Z_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
     norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
     data["Z_mn"] = (
         norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] * data["Z"]))
+        * (
+            transforms["B"].basis.evaluate(nodes).T
+            @ (data["jac_Boozer_DESC"] * data["Z"])
+        )
         / transforms["B"].grid.num_nodes
     )
     return data

@@ -18,7 +18,7 @@ from .utils import cross, dot
     units="~",
     units_long="None",
     description="Curve parameter, on [0, 2pi)",
-    dim=3,
+    dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
@@ -28,6 +28,25 @@ from .utils import cross, dot
 )
 def _s(params, transforms, profiles, data, **kwargs):
     data["s"] = transforms["grid"].nodes[:, 2]
+    return data
+
+
+@register_compute_fun(
+    name="ds",
+    label="ds",
+    units="~",
+    units_long="None",
+    description="Spacing of curve parameter",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.core.Curve",
+)
+def _ds(params, transforms, profiles, data, **kwargs):
+    data["ds"] = transforms["grid"].spacing[:, 2]
     return data
 
 
@@ -923,7 +942,7 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="",
-    data=["s", "x_s"],
+    data=["ds", "x_s"],
     parameterization=[
         "desc.geometry.curve.FourierRZCurve",
         "desc.geometry.curve.FourierXYZCurve",
@@ -932,7 +951,9 @@ def _torsion(params, transforms, profiles, data, **kwargs):
 )
 def _length(params, transforms, profiles, data, **kwargs):
     T = jnp.linalg.norm(data["x_s"], axis=-1)
-    data["length"] = jnp.trapz(T, data["s"])
+    # this is equivalent to jnp.trapz(T, s) for a closed curve, but also works
+    # if grid.endpoint is False
+    data["length"] = jnp.sum(T * data["ds"])
     return data
 
 
@@ -947,7 +968,7 @@ def _length(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="",
-    data=["s", "x", "x_s"],
+    data=["ds", "x", "x_s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
 )
 def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
@@ -955,6 +976,9 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         coords = data["x"]
         if kwargs.get("basis", "rpz").lower() == "rpz":
             coords = rpz2xyz(coords)
+        # ensure curve is closed. If it's already closed this doesn't add any length
+        # since ds will be zero
+        coords = jnp.concatenate([coords, coords[:1]])
         X = coords[:, 0]
         Y = coords[:, 1]
         Z = coords[:, 2]
@@ -962,5 +986,7 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         data["length"] = jnp.sum(lengths)
     else:
         T = jnp.linalg.norm(data["x_s"], axis=-1)
-        data["length"] = jnp.trapz(T, data["s"])
+        # this is equivalent to jnp.trapz(T, s) for a closed curve, but also works
+        # if grid.endpoint is False
+        data["length"] = jnp.sum(T * data["ds"])
     return data

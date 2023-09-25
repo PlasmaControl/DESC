@@ -136,7 +136,7 @@ class TestRZCurve:
     def test_to_FourierXYZCurve(self):
         """Test conversion to FourierXYZCurve."""
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
-        grid = LinearGrid(N=20, endpoint=True)
+        grid = LinearGrid(N=20, endpoint=False)
         xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=grid.nodes[:, 2])
 
         np.testing.assert_allclose(

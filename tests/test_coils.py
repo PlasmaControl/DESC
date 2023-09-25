@@ -25,13 +25,13 @@ class TestCoil:
         """Test biot-savart implementation against analytic formula."""
         R = 2
         y = 1
-        I = 1
+        I = 1e7
         By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 0])
 
         # FourierXYZCoil
         coil = FourierXYZCoil(I)
-        grid = LinearGrid(zeta=100, endpoint=True)
+        grid = LinearGrid(zeta=100, endpoint=False)
         B_approx = coil.compute_magnetic_field(
             Grid([[10, y, 0], [10, -y, 0]]), basis="xyz", grid=grid
         )[0]
@@ -51,7 +51,7 @@ class TestCoil:
 
         # FourierPlanarCoil
         coil = FourierPlanarCoil(I)
-        grid = LinearGrid(zeta=100, endpoint=True)
+        grid = LinearGrid(zeta=100, endpoint=False)
         B_approx = coil.compute_magnetic_field(
             Grid([[10, y, 0], [10, -y, 0]]), basis="xyz", grid=grid
         )[0]
@@ -85,7 +85,7 @@ class TestCoil:
         """Test SumMagneticField working with Coil and MagneticField objects."""
         R = 2
         y = 1
-        I = 1
+        I = 1e7
         B_Z = 2  # add constant vertical field of 2T
         By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 2])
@@ -106,12 +106,13 @@ class TestCoilSet:
         """Field from straight solenoid."""
         R = 10
         z = np.linspace(0, 10, 10)
-        I = 1
+        I = 1e7
+        n = 10
         Bz_true = np.sum(1e-7 * 2 * np.pi * R**2 * I / (z**2 + R**2) ** (3 / 2))
         B_true = np.array([0, 0, Bz_true])
         coil = FourierRZCoil(0.1)
         coils = CoilSet.linspaced_linear(
-            coil, displacement=[0, 0, 10], n=10, endpoint=True
+            coil, displacement=[0, 0, 10], n=n, endpoint=True
         )
         coils.current = I
         np.testing.assert_allclose(coils.current, I)
@@ -123,7 +124,7 @@ class TestCoilSet:
         """Field from uniform toroidal solenoid."""
         R = 10
         N = 50
-        I = 1
+        I = 1e7
         Bp_true = np.sum(1e-7 * 4 * np.pi * N * I / 2 / np.pi / R)
         B_true = np.array([0, Bp_true, 0])
         coil = FourierPlanarCoil()
@@ -147,10 +148,10 @@ class TestCoilSet:
         """Same toroidal solenoid field, but different construction."""
         R = 10
         N = 48
-        I = 1
+        I = 1e7
         Bp_true = np.sum(1e-7 * 4 * np.pi * N * I / 2 / np.pi / R)
         B_true = np.array([0, Bp_true, 0])
-        coil = FourierPlanarCoil()
+        coil = FourierPlanarCoil(I)
         coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=N // 4)
         coils = CoilSet.from_symmetry(coils, NFP=4)
         B_approx = coils.compute_magnetic_field([10, 0, 0], basis="rpz", grid=32)[0]
@@ -344,7 +345,7 @@ def test_load_and_save_makegrid_coils(tmpdir_factory):
 
     coilset2 = CoilSet.from_makegrid_coilfile(str(path))
 
-    grid = LinearGrid(N=200, endpoint=True)
+    grid = LinearGrid(N=200, endpoint=False)
 
     # check values at saved points, ensure they match
     for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
@@ -368,7 +369,7 @@ def test_load_and_save_makegrid_coils(tmpdir_factory):
         np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check magnetic field from both, check that matches
-    grid = LinearGrid(N=200, endpoint=True)
+    grid = LinearGrid(N=200, endpoint=False)
     B1 = coilset.compute_magnetic_field(np.array([[0.7, 0, 0]]), basis="xyz", grid=grid)
     B2 = coilset2.compute_magnetic_field(
         np.array([[0.7, 0, 0]]), basis="xyz", grid=grid
@@ -413,7 +414,7 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
         np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check values at interpolated points, ensure they match closely
-    grid = LinearGrid(N=51, endpoint=True)
+    grid = LinearGrid(N=51, endpoint=False)
     for c1, c2 in zip(coilset, coilset2):
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
@@ -444,10 +445,12 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
     np.testing.assert_allclose(B_normal2, 0, atol=1e-16)
 
     # check B btwn the two coilsets
-    B1 = coilset.compute_magnetic_field(np.array([[10, 0, 0]]), basis="xyz", grid=grid)
-    B2 = coilset2.compute_magnetic_field(np.array([[10, 0, 0]]), basis="xyz", grid=grid)
+    B1 = coilset.compute_magnetic_field(np.array([[10, 0, 0]]), basis="xyz", grid=32)
+    B2 = coilset2.compute_magnetic_field(np.array([[10, 0, 0]]), basis="xyz", grid=1000)
 
-    np.testing.assert_allclose(B1, B2, atol=1e-16)
+    # coilset uses fourier discretization so biot savart is more accurate
+    # coilset2 uses hanson hirshman which is only 2nd order
+    np.testing.assert_allclose(B1, B2, atol=1e-16, rtol=1e-6)
 
 
 @pytest.mark.unit
@@ -486,7 +489,7 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
         np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check values at interpolated points, ensure they match closely
-    grid = LinearGrid(N=51, endpoint=True)
+    grid = LinearGrid(N=51, endpoint=False)
     for c1, c2 in zip(coilset, coilset2):
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]

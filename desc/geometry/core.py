@@ -75,10 +75,10 @@ class Curve(IOAble, ABC):
             names = [names]
         if grid is None:
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=True)
+            grid = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=False)
         elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=grid, NFP=NFP, endpoint=True)
+            grid = LinearGrid(N=grid, NFP=NFP, endpoint=False)
         elif hasattr(grid, "NFP"):
             NFP = grid.NFP
         else:

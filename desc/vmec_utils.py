@@ -510,7 +510,6 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
 
     Psi = eq.Psi
     NFP = eq.NFP
-    actual_sym = eq.sym
     if M_booz is None:
         M_booz = 2 * eq.M
     if N_booz is None:
@@ -528,10 +527,31 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
         grid=Grid(np.array([])),
         M_booz=M_booz - 1,
         N_booz=N_booz,
-        sym=False,
     )["B"].basis
 
     matrix, modes = ptolemy_linear_transform(basis.modes)
+    num_modes = modes.shape[0]
+
+    if eq.sym:  # need a separate sin basis for Z (maybe nu)
+        basis_sin = get_transforms(
+            "|B|_mn",
+            obj=eq,
+            grid=Grid(np.array([])),
+            M_booz=M_booz - 1,
+            N_booz=N_booz,
+            sym="sin",
+        )["B"].basis
+        matrix_sin, modes_sin = ptolemy_linear_transform(
+            np.insert(basis_sin.modes, 0, np.array([0, 0, 0]), axis=0)
+        )
+        modes_sin[
+            0, 0
+        ] = -1  # make the first mode a "sin" mode, even though it is m=n=0
+        # because in the VMEC style outputs it includes this mode
+
+    else:
+        matrix_sin = matrix
+        modes_sin = modes
 
     # FIXME: do we do transform on half grid, or on first surface after the axis
     # on full grid?
@@ -545,16 +565,13 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
     Sqrt_g_B_mn = np.array([[]])
 
     for i, r in enumerate(r_half):
-        grid = LinearGrid(
-            M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r), sym=False
-        )
+        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(
-            ["|B|_mn", "R_mn", "Z_mn", "nu_mn", "sqrt(g)_B_mn"],
+            ["|B|_mn", "sqrt(g)_B_mn"],
             obj=eq,
             grid=grid,
             M_booz=M_booz - 1,
             N_booz=N_booz,
-            sym=False,
         )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -563,13 +580,36 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
                 grid=grid,
                 transforms=transforms,
             )
+        if eq.sym:
+            transforms_sin = get_transforms(
+                ["Z_mn", "nu_mn"],
+                obj=eq,
+                grid=grid,
+                M_booz=M_booz - 1,
+                N_booz=N_booz,
+                sym="sin",
+            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                data_sin = eq.compute(
+                    ["Z_mn", "nu_mn"],
+                    grid=grid,
+                    transforms=transforms_sin,
+                )
+            # insert the 0,0 mode so it matches the ptolemy matrix for
+            # the sin
+            data_sin["Z_mn"] = np.insert(data_sin["Z_mn"], 0, 0)
+            data_sin["nu_mn"] = np.insert(data_sin["nu_mn"], 0, 0)
+
+        else:
+            data_sin = data
         b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
 
         r_mn = np.atleast_2d(matrix @ data["R_mn"])
         R_mn = np.vstack((R_mn, r_mn)) if R_mn.size else r_mn
 
-        z_mn = np.atleast_2d(matrix @ data["Z_mn"])
+        z_mn = np.atleast_2d(matrix_sin @ data_sin["Z_mn"])
         Z_mn = np.vstack((Z_mn, z_mn)) if Z_mn.size else z_mn
 
         sqrt_g_B_mn = np.atleast_2d(matrix @ data["sqrt(g)_B_mn"])
@@ -577,7 +617,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
             np.vstack((Sqrt_g_B_mn, sqrt_g_B_mn)) if Sqrt_g_B_mn.size else sqrt_g_B_mn
         )
         # nu_mn
-        nu_mn = np.atleast_2d(matrix @ data["nu_mn"])
+        nu_mn = np.atleast_2d(matrix_sin @ data_sin["nu_mn"])
         Nu_mn = np.vstack((Nu_mn, nu_mn)) if Nu_mn.size else nu_mn
 
     timer.stop("Boozer Transform")
@@ -591,8 +631,8 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
     file.createDimension("comput_surfs", surfs)  # number of flux surfaces
     file.createDimension("pack_rad", surfs)  # number of flux surfaces
 
-    file.createDimension("mn_mode", basis.num_modes)  # number of Fourier modes
-    file.createDimension("mn_modes", basis.num_modes)  # number of Fourier modes
+    file.createDimension("mn_mode", num_modes)  # number of Fourier modes
+    file.createDimension("mn_modes", num_modes)  # number of Fourier modes
     file.createDimension("preset", 21)  # dimension of profile inputs
     file.createDimension("ndfmax", 101)  # used for am_aux & ai_aux
     file.createDimension("time", 100)  # used for fsq* & wdot
@@ -684,7 +724,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
         "rmnc, bmnc etc are stored"
     )
     ixn_b.units = "None"
-    ixn_b[:] = modes[:, 2]
+    ixn_b[:] = modes[:, 2] * eq.NFP
 
     iotas = file.createVariable("iota_b", np.float64, ("comput_surfs",))
     iotas.long_name = "rotational transform on half mesh"
@@ -747,7 +787,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
 
     bmnc[0:, :] = B_mn[:, np.where(modes[:, 0] == 1)]
 
-    if not actual_sym:
+    if not eq.sym:
         bmns = file.createVariable("bmns_b", np.float64, ("comput_surfs", "mn_mode"))
         bmns.long_name = "sin(m*t_Boozer-n*p_Boozer) component of |B|, on half mesh"
         bmns.units = "T"
@@ -762,7 +802,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
     )
     rmnc.units = "m"
     rmnc[0:, :] = R_mn[:, np.where(modes[:, 0] == 1)]
-    if not actual_sym:
+    if not eq.sym:
         rmns = file.createVariable("rmns_b", np.float64, ("comput_surfs", "mn_mode"))
         rmns.long_name = (
             "sin(m * theta_Boozer - n * zeta_Boozer) Fourier"
@@ -778,8 +818,8 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
         "of the major radius Z"
     )
     zmns.units = "m"
-    zmns[0:, :] = Z_mn[:, np.where(modes[:, 0] == -1)]
-    if not actual_sym:
+    zmns[0:, :] = Z_mn[:, np.where(modes_sin[:, 0] == -1)]
+    if not eq.sym:
         zmnc = file.createVariable("zmnc_b", np.float64, ("comput_surfs", "mn_mode"))
         zmnc.long_name = (
             "cos(m * theta_Boozer - n * zeta_Boozer) Fourier"
@@ -792,28 +832,27 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
     # if nu = zeta_VMEC - zeta_B
     # but our nu is zeta_B - zeta_VMEC
 
+    # p should be zeta - zeta_B,
+    # so technically we must negate our nu
+
     # nu
-    if verbose > 0:
-        print("Saving nu")
     nums = file.createVariable("pmns_b", np.float64, ("comput_surfs", "mn_mode"))
     nums.long_name = (
         "sin(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes"
         "of the angle difference zeta_VMEC - zeta_Boozer"
     )
     nums.units = "m"
-    nums[0:, :] = Nu_mn[:, np.where(modes[:, 0] == -1)]
-    if not actual_sym:
+    nums[0:, :] = -Nu_mn[:, np.where(modes_sin[:, 0] == -1)]
+    if not eq.sym:
         numc = file.createVariable("pmnc_b", np.float64, ("comput_surfs", "mn_mode"))
         numc.long_name = (
             "cos(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes"
             "of the major radius Z"
         )
         numc.units = "None"
-        numc[0:, :] = Nu_mn[:, np.where(modes[:, 0] == 1)]
+        numc[0:, :] = -Nu_mn[:, np.where(modes[:, 0] == 1)]
 
     # calculate sqrt(g)
-    if verbose > 0:
-        print("Saving nu")
     gmn = file.createVariable("gmn_b", np.float64, ("comput_surfs", "mn_mode"))
     gmn.long_name = (
         "cos(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes of"
@@ -821,7 +860,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
     )
     gmn.units = "m/T"
     gmn[0:, :] = Sqrt_g_B_mn[:, np.where(modes[:, 0] == 1)]
-    if not actual_sym:
+    if not eq.sym:
         gmns = file.createVariable("gmns_b", np.float64, ("comput_surfs", "mn_mode"))
         gmns.long_name = (
             "sin(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes"

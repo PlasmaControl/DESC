@@ -176,7 +176,7 @@ def _nu(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["nu", "G", "I", "iota", "lambda"],
+    data=["nu", "G", "I", "iota", "lambda", "rho", "theta_B", "zeta_B"],
 )
 def _nu_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T

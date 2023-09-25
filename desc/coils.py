@@ -14,8 +14,98 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.magnetic_fields import _MagneticField, biot_savart
+from desc.magnetic_fields import _MagneticField
 from desc.utils import flatten_list
+
+
+def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
+    """Biot-Savart law for filamentary coils following [1].
+
+    The coil is approximated by a series of straight line segments
+    and an analytic expression is used to evaluate the field from each
+    segment.
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(n,3)
+        Evaluation points in cartesian coordinates
+    coil_pts_start, coil_pts_end : array-like shape(m,3)
+        Points in cartesian space defining the start and end of each segment.
+        Should be a closed curve, such that coil_pts_start[0] == coil_pts_end[-1]
+        though this is not checked.
+    current : float
+        Current through the coil (in Amps).
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+
+    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart
+    fields of a filamentary segment" (2002)
+    """
+    d_vec = coil_pts_end - coil_pts_start
+    L = jnp.linalg.norm(d_vec, axis=-1)
+
+    Ri_vec = eval_pts[jnp.newaxis, :] - coil_pts_start[:, jnp.newaxis, :]
+    Ri = jnp.linalg.norm(Ri_vec, axis=-1)
+    Rf = jnp.linalg.norm(
+        eval_pts[jnp.newaxis, :] - coil_pts_end[:, jnp.newaxis, :], axis=-1
+    )
+    Ri_p_Rf = Ri + Rf
+
+    # 1.0e-7 == mu_0/(4 pi)
+    B_mag = (
+        1.0e-7
+        * current
+        * 2.0
+        * Ri_p_Rf
+        / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - (L * L)[:, jnp.newaxis]))
+    )
+
+    # cross product of L*hat(eps)==d_vec with Ri_vec, scaled by B_mag
+    vec = jnp.cross(d_vec[:, jnp.newaxis, :], Ri_vec, axis=-1)
+    B = jnp.sum(B_mag[:, :, jnp.newaxis] * vec, axis=0)
+    return B
+
+
+def biot_savart_quad(eval_pts, coil_pts, tangents, current):
+    """Biot-Savart law for filamentary coil using numerical quadrature.
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(n,3)
+        Evaluation points in cartesian coordinates
+    coil_pts : array-like shape(m,3)
+        Points in cartesian space defining coil
+    tangents : array-like, shape(m,3)
+        Tangent vectors to the coil at coil_pts. If the curve is given
+        by x(s) with curve parameter s, coil_pts = x, tangents = dx/ds*ds where
+        ds is the spacing between points.
+    current : float
+        Current through the coil (in Amps).
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+
+    Notes
+    -----
+    This method does not give curl(B) == 0 exactly. The error in the curl
+    scales the same as the error in B itself, so will only be zero when fully
+    converged. However in practice, for smooth curves described by Fourier series,
+    this method converges exponentially in the number of coil points.
+    """
+    dl = tangents
+    R_vec = eval_pts[jnp.newaxis, :] - coil_pts[:, jnp.newaxis, :]
+    R_mag = jnp.linalg.norm(R_vec, axis=-1)
+
+    vec = jnp.cross(dl[:, jnp.newaxis, :], R_vec, axis=-1)
+    denom = R_mag * R_mag * R_mag
+
+    B = jnp.sum(1.0e-7 * current * vec / denom[:, :, None], axis=0)
+    return B
 
 
 class _Coil(_MagneticField, ABC):
@@ -68,12 +158,19 @@ class _Coil(_MagneticField, ABC):
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None
             Grid used to discretize coil. If an integer, uses that many equally spaced
-            points.
+            points. Should NOT include endpoint at 2pi.
 
         Returns
         -------
         field : ndarray, shape(n,3)
             magnetic field at specified points, in either rpz or xyz coordinates
+
+        Notes
+        -----
+        Uses direct quadrature of the Biot-Savart integral for filamentary coils with
+        tangents provided by the underlying curve class. Convergence should be
+        exponential in the number of points used to discretize the curve, though curl(B)
+        may not be zero if not fully converged.
         """
         assert basis.lower() in ["rpz", "xyz"]
         if hasattr(coords, "nodes"):
@@ -85,8 +182,12 @@ class _Coil(_MagneticField, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
-        coil_coords = self.compute("x", params=params, grid=grid, basis="xyz")["x"]
-        B = biot_savart(coords, coil_coords, current)
+
+        data = self.compute(["x", "x_s", "ds"], grid=grid, basis="xyz")
+        B = biot_savart_quad(
+            coords, data["x"], data["x_s"] * data["ds"][:, None], current
+        )
+
         if basis == "rpz":
             B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
         return B
@@ -350,6 +451,63 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         name="",
     ):
         super().__init__(current, X, Y, Z, knots, method, name)
+
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+        """Compute magnetic field at a set of points.
+
+        The coil current may be overridden by including `current`
+        in the `params` dictionary.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3) or Grid
+            coordinates to evaluate field at [R,phi,Z] or [x,y,z]
+        params : dict, optional
+            parameters to pass to curve
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points, in either rpz or xyz coordinates
+
+        Notes
+        -----
+        Discretizes the coil into straight segments between grid points, and uses the
+        Hanson-Hirshman expression for exact field from a straight segment. Convergence
+        is approximately quadratic in the number of coil points.
+        """
+        assert basis.lower() in ["rpz", "xyz"]
+        if hasattr(coords, "nodes"):
+            coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+        if params is None:
+            current = self.current
+        else:
+            current = params.pop("current", self.current)
+
+        data = self.compute(["x"], grid=grid, basis="xyz")
+        # need to make sure the curve is closed. If it's already closed, this doesn't
+        # do anything (effectively just adds a segment of zero length which has no
+        # effect on the overall result)
+        coil_pts_start = data["x"]
+        coil_pts_end = np.concatenate([data["x"][1:], data["x"][:1]])
+        # could get up to 4th order accuracy by shifting points outward as in
+        # (McGreivy, Zhu, Gunderson, Hudson 2021), however that requires knowing the
+        # coils curvature which is a 2nd derivative of the position, and doing that
+        # with only possibly c1 cubic splines is inaccurate, so we don't do it
+        # (for now, maybe in the future?)
+        B = biot_savart_hh(coords, coil_pts_start, coil_pts_end, current)
+
+        if basis == "rpz":
+            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+        return B
 
 
 class CoilSet(_Coil, MutableSequence):

@@ -40,32 +40,32 @@ theta_init = 0.2
 v_init = (0.3 + jax.random.uniform(key, (1,), minval=-
           1e-2, maxval=1e-2)) * jnp.sqrt(2*Energy/mass)
 
-ini_cond = [[float(psi_init[i]), theta_init, zeta_init, float(v_init[i])]
-                   for i in range(0, 1)]
+ini_cond = [float(psi_init[0]), theta_init, zeta_init, float(v_init[0])]
 
 
 tmin = 0
-tmax = 0.0007
+tmax = 0.00021
 nt = 500
 time = jnp.linspace(tmin, tmax, nt)
 
-
 mass = 1.673e-27
 Energy = 3.52e6*1.6e-19
-initial_conditions = ini_cond
+psi_i = ini_cond[0]
+theta_i = ini_cond[1]
+zeta_i = ini_cond[2]
+vpar = ini_cond[3]
 
+initial_conditions = ini_cond
 mass_charge = mass/1.6e-19
 
-grid = Grid(jnp.array([jnp.sqrt(ini_cond[0]), ini_cond[1],
-            ini_cond[2]]).T, jitable=True, sort=False)
+grid = Grid(jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=True, sort=False)
 data = eq.compute("|B|", grid=grid)
 
-mu = Energy/(mass*data["|B|"]) - (ini_cond[3]**2)/(2*data["|B|"])
+mu = Energy/(mass*data["|B|"]) - (vpar**2)/(2*data["|B|"])
 
 ini_param = [float(mu), mass_charge]
 
-objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond,
-                           initial_parameters=ini_param, compute_option="optimization")
+objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization")
 
 objective.build()
 solution = objective.compute(*objective.xs(eq))

@@ -565,7 +565,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
     Sqrt_g_B_mn = np.array([[]])
 
     for i, r in enumerate(r_half):
-        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
+        grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(
             ["|B|_mn", "sqrt(g)_B_mn"],
             obj=eq,
@@ -581,6 +581,15 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
                 transforms=transforms,
             )
         if eq.sym:
+            # Z and nu are sin-symmetric, but the transforms used
+            # before are cos symmetric.
+            # We want to use the data that needed cos sym transforms,
+            # but remove the incorrectly calculated Z_mn,nu_mn from the
+            # dictionary first
+            data.pop("nu_mn")
+            data.pop("Z_mn")
+            data_sin = data
+
             transforms_sin = get_transforms(
                 ["Z_mn", "nu_mn"],
                 obj=eq,
@@ -595,9 +604,10 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
                     ["Z_mn", "nu_mn"],
                     grid=grid,
                     transforms=transforms_sin,
+                    data=data_sin,
                 )
             # insert the 0,0 mode so it matches the ptolemy matrix for
-            # the sin
+            # the sin basis
             data_sin["Z_mn"] = np.insert(data_sin["Z_mn"], 0, 0)
             data_sin["nu_mn"] = np.insert(data_sin["nu_mn"], 0, 0)
 

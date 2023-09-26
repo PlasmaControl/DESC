@@ -25,7 +25,7 @@ from jax.interpreters import ad, batching
 from desc.derivatives import FiniteDiffDerivative
 import netCDF4 as nc
 from shutil import copyfile
-
+from desc.compute.utils import cross, dot
 class GX(_Objective):
     r"""Calls the gyrokinetc code GX to compute the nonlinear
     turbulent heat flux.
@@ -98,6 +98,11 @@ class GX(_Objective):
         self.path_geo = path_geo
         self.t = t
 
+        self.gx_compute = core.Primitive("gx")
+        self.gx_compute.def_impl(self.compute_impl)
+        ad.primitive_jvps[self.gx_compute] = self.compute_gx_jvp
+        batching.primitive_batchers[self.gx_compute] = self.compute_gx_batch
+
 
     def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -153,9 +158,8 @@ class GX(_Objective):
         "B", "grad(|B|)", "kappa", "B^theta", "B^zeta", "lambda_t", "lambda_z",'p_r'
         ]
 
-#        self._args = get_params(self._data_keys,obj="desc.equilibrium.equilibrium.Equilibrium")
         self._args = get_params(
-            self._data_keys,
+            self._field_line_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
             has_axis=self.grid_eq.axis.size,
         )
@@ -166,10 +170,10 @@ class GX(_Objective):
         
         #Need separate transforms and profiles for the equilibrium and flux-tube
         self.eq = eq
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=self.grid)
-        self._profiles_eq = get_profiles(self._data_eq_keys, obj=eq, grid=self.grid_eq)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=self.grid)
-        self._transforms_eq = get_transforms(self._data_eq_keys, obj=eq, grid=self.grid_eq)
+        self._profiles = get_profiles(self._field_line_keys, obj=eq, grid=self.grid)
+        self._profiles_eq = get_profiles(self._eq_keys, obj=eq, grid=self.grid_eq)
+        self._transforms = get_transforms(self._field_line_keys, obj=eq, grid=self.grid)
+        self._transforms_eq = get_transforms(self._eq_keys, obj=eq, grid=self.grid_eq)
 
         self._constants = {
             "transforms": self._transforms_eq,
@@ -180,11 +184,6 @@ class GX(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
-
-        self.gx_compute = core.Primitive("gx")
-        self.gx_compute.def_impl(self.compute_impl)
-        ad.primitive_jvps[self.gx_compute] = self.compute_gx_jvp
-        batching.primitive_batchers[self.gx_compute] = self.compute_gx_batch
 
 #        self._check_dimensions()
 #        self._set_dimensions(eq)
@@ -226,6 +225,24 @@ class GX(_Objective):
 
         if constants is None:
             constants = self.constants
+
+        zeta, bmag, grho, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0 = self.compute_geometry(params,constants)
+        self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0)
+        self.write_gx_io()
+        self.run_gx(t)
+
+        out_file = self.path_in + '_' + t + '.nc'
+        ds = nc.Dataset(out_file)
+        
+        qflux = ds['Fluxes/qflux']
+        qflux = qflux[int(len(qflux)/2):]
+        qflux_avg = self.weighted_birkhoff_average(qflux) 
+        print(qflux_avg)
+        ds.close() 
+
+        return jnp.atleast_1d(qflux_avg)
+
+    def compute_geometry(self,params,constants):
         rho = np.sqrt(self.psi)       
         data_eq = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
@@ -255,8 +272,8 @@ class GX(_Objective):
 
         if self._profiles_eq["iota"] is None:
             self.grid = Grid(coords)
-            self._transforms = get_transforms(self._data_keys, obj=self.eq, grid=self.grid)
-            self._profiles = get_profiles(self._data_keys, obj=self.eq, grid=self.grid)
+            self._transforms = get_transforms(self._field_line_keys, obj=self.eq, grid=self.grid)
+            self._profiles = get_profiles(self._field_line_keys, obj=self.eq, grid=self.grid)
             data = {}
         
         data = compute_fun(
@@ -267,23 +284,8 @@ class GX(_Objective):
             profiles=self._profiles,
         )
 
-        bmag, grho, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0 = self.compute_geometry(data_eq, data)
-        self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0)
-        self.write_gx_io()
-        self.run_gx(t)
 
-        out_file = self.path_in + '_' + t + '.nc'
-        ds = nc.Dataset(out_file)
-        
-        qflux = ds['Fluxes/qflux']
-        qflux = qflux[int(len(qflux)/2):]
-        qflux_avg = self.weighted_birkhoff_average(qflux) 
-        print(qflux_avg)
-        ds.close() 
 
-        return jnp.atleast_1d(qflux_avg)
-
-    def compute_geometry(self,data_eq,data):
         psib = data_eq['psi'][-1]
         sign_psi = psib/np.abs(psib)
         sign_iota = iotas/np.abs(iotas)
@@ -306,20 +308,20 @@ class GX(_Objective):
         grad_psi = data['grad(psi)']
         grad_psi_sq = data['|grad(psi)|^2']
         grad_alpha = data['grad(alpha)']
-        grho = np.sqrt(grad_psi_sq / (Lref**2 * Bref**2 * psi))
+        grho = np.sqrt(grad_psi_sq / (Lref**2 * Bref**2 * self.psi))
 
-        gds2 = np.array(dot(grad_alpha,grad_alpha)) * Lref**2 * psi
+        gds2 = np.array(dot(grad_alpha,grad_alpha)) * Lref**2 * self.psi
         gds21 = -sign_iota * np.array(dot(grad_psi,grad_alpha)) * shat/Bref
-        gds22 = grad_psi_sq * psi * (shat/(Lref * Bref))**2
+        gds22 = grad_psi_sq * self.psi * (shat/(Lref * Bref))**2
 
 
         gbdrift = np.array(dot(cross(data['B'],data['grad(|B|)']),grad_alpha))
-        gbdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**3 * np.sqrt(psi)
+        gbdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**3 * np.sqrt(self.psi)
         cvdrift = np.array(dot(cross(data['B'],data['kappa']),grad_alpha))
-        cvdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**2 * np.sqrt(psi)
+        cvdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**2 * np.sqrt(self.psi)
 
         gbdrift0 = np.array(dot(cross(data['B'],data['grad(|B|)']),grad_psi))
-        gbdrift0 *= sign_iota * sign_psi * shat * 2 / modB**3 / np.sqrt(psi)
+        gbdrift0 *= sign_iota * sign_psi * shat * 2 / modB**3 / np.sqrt(self.psi)
         cvdrift0 = gbdrift0
        
 
@@ -327,7 +329,7 @@ class GX(_Objective):
         self.shat = shat
         self.iota = iota
 
-        return bmag, grho, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0 
+        return zeta, bmag, grho, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0 
 
     def write_gx_io(self):
         t = str(self.t)

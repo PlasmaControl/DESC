@@ -43,6 +43,15 @@ def myconvolve_2d(arr_1d, stencil, shape):
     return conv
 
 
+def test_aliases():
+    eq = Equilibrium()  # torus
+    rho = np.linspace(0, 1, 64)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    coeffs = [eq.compute("g^" + i + j, grid=grid)
+              for i in ['r', 't', 'z'] for j in ['r', 't', 'z']]
+    np.testing.assert_allclose(coeffs)
+
+    
 @pytest.mark.unit
 def test_total_volume(DummyStellarator):
     """Test that the volume enclosed by the LCFS is equal to the total volume."""

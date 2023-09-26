@@ -1295,7 +1295,7 @@ def _g_sup_zz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     # name="g^rt"
-    name = ["g^" + i + j for i in ['r', 't', 'z'] for j in ['r', 't', 'z']],
+    name=["g^" + i + j for i in ['r', 't', 'z'] for j in ['r', 't', 'z']],
     label="g^{\\rho\\theta}",
     units="m^{-2}",
     units_long="inverse square meters",

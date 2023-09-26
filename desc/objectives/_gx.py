@@ -264,6 +264,23 @@ class GX(_Objective):
             profiles=self._profiles,
         )
 
+        bmag, grho, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0 = self.compute_geometry(data_eq, data)
+        self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0)
+        self.write_gx_io()
+        self.run_gx(t)
+
+        out_file = self.path_in + '_' + t + '.nc'
+        ds = nc.Dataset(out_file)
+        
+        qflux = ds['Fluxes/qflux']
+        qflux = qflux[int(len(qflux)/2):]
+        qflux_avg = self.weighted_birkhoff_average(qflux) 
+        print(qflux_avg)
+        ds.close() 
+
+        return jnp.atleast_1d(qflux_avg)
+
+    def compute_geometry(self,data_eq,data):
         psib = data_eq['psi'][-1]
         sign_psi = psib/np.abs(psib)
         sign_iota = iotas/np.abs(iotas)
@@ -301,25 +318,13 @@ class GX(_Objective):
         gbdrift0 = np.array(dot(cross(data['B'],data['grad(|B|)']),grad_psi))
         gbdrift0 *= sign_iota * sign_psi * shat * 2 / modB**3 / np.sqrt(psi)
         cvdrift0 = gbdrift0
+       
 
         self.Lref = Lref
         self.shat = shat
         self.iota = iota
 
-
-        self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0)
-        self.run_gx(t)
-
-        out_file = self.path_in + '_' + t + '.nc'
-        ds = nc.Dataset(out_file)
-        
-        qflux = ds['Fluxes/qflux']
-        qflux = qflux[int(len(qflux)/2):]
-        qflux_avg = self.weighted_birkhoff_average(qflux) 
-        print(qflux_avg)
-        ds.close() 
-
-        return jnp.atleast_1d(qflux_avg)
+        return bmag, grho, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0 
 
     def write_gx_io(self):
         t = str(self.t)

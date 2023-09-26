@@ -178,10 +178,6 @@ def _nu(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=[
         "nu",
-        "G",
-        "I",
-        "iota",
-        "lambda",
         "rho",
         "theta_B",
         "zeta_B",
@@ -327,6 +323,7 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
+        "rho",
         "sqrt(g)_B",
         "jac_Boozer_DESC",
         "theta_B",

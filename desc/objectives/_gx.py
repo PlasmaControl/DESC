@@ -130,34 +130,27 @@ class GX(_Objective):
             rho = np.sqrt(self.psi)
             iota = fi(rho)
             zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iota),(np.pi*self.npol-self.alpha)/np.abs(iota),2*self.nzgrid+1)
-            thetas = iota/np.abs(iota)*self.alpha*np.ones(len(zeta)) + iota*zeta
+            theta_sfl = iota/np.abs(iota)*self.alpha*np.ones(len(zeta)) + iota*zeta
             
             zeta_center = zeta[self.nzgrid]
             rhoa = rho*np.ones(len(zeta))
-            c = np.vstack([rhoa,thetas,zeta]).T
+            c = np.vstack([rhoa,theta_sfl,zeta]).T
             coords = eq.compute_theta_coords(c,tol=1e-10,maxiter=50)
-            self.grid = Grid(coords)
+            self.grid = Grid(coords,sort=False)
 
         self._dim_f = 1
         timer = Timer()
 
-        self._data_eq_keys = [
+        self._eq_keys = [
             "iota",
             "iota_r",
             "a",
             "rho",
             "psi",
         ]
-        self._data_keys = [
-            "B", "|B|",
-            "lambda", "lambda_r", "lambda_t", "lambda_z",
-            "|grad(rho)|",
-            "g^rr", "g^tt", "g^zz", "g^rt", "g^rz", "g^tz",
-            "g_tz", "g_tt", "g_zz",
-            "B_theta", "B_zeta", "B_rho", "|B|_t", "|B|_z",
-            "B^theta", "B^zeta_r", "B^theta_r", "B^zeta",
-            "e_theta", "e_theta_r", "e_zeta_r", "e_zeta",
-            "p_r","grad(psi)",
+        self._field_line_keys = [
+        "|B|", "|grad(psi)|^2", "grad(|B|)", "grad(alpha)", "grad(psi)",
+        "B", "grad(|B|)", "kappa", "B^theta", "B^zeta", "lambda_t", "lambda_z",'p_r'
         ]
 
 #        self._args = get_params(self._data_keys,obj="desc.equilibrium.equilibrium.Equilibrium")
@@ -233,14 +226,12 @@ class GX(_Objective):
         rho = np.sqrt(self.psi)       
         data_eq = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_eq_keys,
+            self._eq_keys,
             params=params,
             transforms=self._transforms_eq,
             profiles=self._profiles_eq,
         )
-        #if data_eq['iota'][0] < 0:
-        #    data_eq['iota'] = -data_eq['iota']
-        #    data_eq['iota_r'] = -data_eq['iota_r']
+        
         fi = interp1d(data_eq['rho'],data_eq['iota'])
         fs = interp1d(data_eq['rho'],data_eq['iota_r'])
 
@@ -251,11 +242,11 @@ class GX(_Objective):
         zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iotas),(np.pi*self.npol-self.alpha)/np.abs(iotas),2*self.nzgrid+1)
         iota = iotas * np.ones(len(zeta))
         shear = shears * np.ones(len(zeta))
-        thetas = iotas/np.abs(iotas)*self.alpha*np.ones(len(zeta)) + iota*zeta
+        theta_sfl = iotas/np.abs(iotas)*self.alpha*np.ones(len(zeta)) + iota*zeta
         zeta_center = zeta[self.nzgrid]
 
         rhoa = rho*np.ones(len(zeta))
-        c = np.vstack([rhoa,thetas,zeta]).T
+        c = np.vstack([rhoa,theta_sfl,zeta]).T
         coords = self.eq.compute_theta_coords(c,tol=1e-10,maxiter=50)
         th = coords[:,1]
 
@@ -267,94 +258,49 @@ class GX(_Objective):
         
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
+            self._field_line_keys,
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,
         )
 
         psib = data_eq['psi'][-1]
-        
+        sign_psi = psib/np.abs(psib)
+        sign_iota = iotas/np.abs(iotas)
+
         #normalizations       
         Lref = data_eq['a']
         Bref = 2*np.abs(psib)/Lref**2
         #calculate bmag
         modB = data['|B|']
         bmag = modB/Bref
+        #calculate shear
+        x = Lref * rho
+        shat = -x/iotas * shear[0]/Lref
 
         #calculate gradpar and grho
         gradpar = Lref*data['B^zeta']/modB
-        grho = data['|grad(rho)|']*Lref
+
 
         #calculate grad_psi and grad_alpha
-        grad_psi = 2*psib*rho
-        lmbda = data['lambda']
-        lmbda_r = data['lambda_r']
-        lmbda_t = data['lambda_t']
-        lmbda_z = data['lambda_z']
-      
-        
+        grad_psi = data['grad(psi)']
+        grad_psi_sq = data['|grad(psi)|^2']
+        grad_alpha = data['grad(alpha)']
+        grho = np.sqrt(grad_psi_sq / (Lref**2 * Bref**2 * psi))
 
-        grad_alpha_r = (lmbda_r - (zeta-zeta_center)*shear)
-        grad_alpha_t = (1 + lmbda_t)
-        grad_alpha_z = (-iota+lmbda_z)
+        gds2 = np.array(dot(grad_alpha,grad_alpha)) * Lref**2 * psi
+        gds21 = -sign_iota * np.array(dot(grad_psi,grad_alpha)) * shat/Bref
+        gds22 = grad_psi_sq * psi * (shat/(Lref * Bref))**2
 
-        grad_alpha = np.sqrt(grad_alpha_r**2 * data['g^rr'] + grad_alpha_t**2 * data['g^tt'] + grad_alpha_z**2 * data['g^zz'] + 2*grad_alpha_r*grad_alpha_t*data['g^rt'] + 2*grad_alpha_r*grad_alpha_z*data['g^rz']
-                         + 2*grad_alpha_t*grad_alpha_z*data['g^tz'])
 
-        grad_psi_dot_grad_alpha = grad_psi * grad_alpha_r * data['g^rr'] + grad_psi * grad_alpha_t * data['g^rt'] + grad_psi * grad_alpha_z * data['g^rz']
+        gbdrift = np.array(dot(cross(data['B'],data['grad(|B|)']),grad_alpha))
+        gbdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**3 * np.sqrt(psi)
+        cvdrift = np.array(dot(cross(data['B'],data['kappa']),grad_alpha))
+        cvdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**2 * np.sqrt(psi)
 
-        #calculate gds*
-        x = Lref * rho
-        shat = -x/iotas * shear[0]/Lref
-        gds2 = grad_alpha**2 * Lref**2 *self.psi
-        #gds21 with negative sign?
-
-        gds21 = -iotas/np.abs(iotas) * shat/Bref * grad_psi_dot_grad_alpha
-        gds22 = (shat/(Lref*Bref))**2 /self.psi * grad_psi**2*data['g^rr']
-
-        #calculate gbdrift0 and cvdrift0
-        B_t = data['B_theta']
-        B_z = data['B_zeta']
-        dB_t = data['|B|_t']
-        dB_z = data['|B|_z']
-        jac = data['sqrt(g)']
-        #gbdrift0 = (B_t*dB_z - B_z*dB_t)*2*rho*psib/jac
-        #gbdrift0 with negative sign?
-        gbdrift0 = -iotas/np.abs(iotas) * -psib/np.abs(psib)*shat * 2 / modB**3 / rho*(B_t*dB_z - B_z*dB_t)*psib/jac * 2 * rho
+        gbdrift0 = np.array(dot(cross(data['B'],data['grad(|B|)']),grad_psi))
+        gbdrift0 *= sign_iota * sign_psi * shat * 2 / modB**3 / np.sqrt(psi)
         cvdrift0 = gbdrift0
-
-        #calculate gbdrift and cvdrift
-        B_r = data['B_rho'] 
-        data["|B|_r"] = (
-        data["B^theta"]
-        * (
-            data["B^zeta_r"] * data["g_tz"]
-            + data["B^theta_r"] * data["g_tt"]
-            + data["B^theta"] * dot(data["e_theta_r"], data["e_theta"])
-        )
-        + data["B^zeta"]
-        * (
-            data["B^theta_r"] * data["g_tz"]
-            + data["B^zeta_r"] * data["g_zz"]
-            + data["B^zeta"] * dot(data["e_zeta_r"], data["e_zeta"])
-        )
-        + data["B^theta"]
-        * data["B^zeta"]
-        * (
-            dot(data["e_theta_r"], data["e_zeta"])
-            + dot(data["e_zeta_r"], data["e_theta"])
-        )
-        ) / data["|B|"]
-
-        dB_r = data['|B|_r']
-
-        #iota = iota_data['iota'][0]
-        gbdrift_norm = 2*Bref*Lref**2/modB**3*rho
-        gbdrift = -psib/np.abs(psib) * gbdrift_norm/jac*(B_r*dB_t*(lmbda_z - iota) + B_t*dB_z*(lmbda_r - (zeta - zeta_center)*shear[0]) + B_z*dB_r*(1+lmbda_t) - B_z*dB_t*(lmbda_r - (zeta - zeta_center)*shear[0]) - B_t*dB_r*(lmbda_z - iota) - B_r*dB_z*(1+lmbda_t))
-        Bsa = 1/jac * (B_z*(1+lmbda_t) - B_t*(lmbda_z - iota))
-        p_r = data['p_r']
-        cvdrift = gbdrift + 2*Bref*Lref**2/modB**2 * rho*mu_0/modB**2*p_r*Bsa
 
         self.Lref = Lref
         self.shat = shat
@@ -362,6 +308,20 @@ class GX(_Objective):
 
 
         self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0)
+        self.run_gx(t)
+
+        out_file = self.path_in + '_' + t + '.nc'
+        ds = nc.Dataset(out_file)
+        
+        qflux = ds['Fluxes/qflux']
+        qflux = qflux[int(len(qflux)/2):]
+        qflux_avg = self.weighted_birkhoff_average(qflux) 
+        print(qflux_avg)
+        ds.close() 
+
+        return jnp.atleast_1d(qflux_avg)
+
+    def write_gx_io(self):
         t = str(self.t)
         path_geo_old = self.path_geo + '.out'
         path_in_old = self.path_in + '.in'
@@ -369,64 +329,20 @@ class GX(_Objective):
         path_in_new = self.path_in + '_' + t + '.in'
         self.write_geo(path_geo_new)
         self.write_input(path_in_old,path_geo_old,path_in_new,path_geo_new)
-        #self.write_nc(t) 
-                
-        stdout = 'stdout.out_' + t
-        stderr = 'stderr.out_' + t
-        self.run_gx(t)
+        self.write_nc(t) 
 
-        out_file = self.path_in + '_' + t + '.nc'
-        ds = nc.Dataset(out_file)
 
-        
-        qflux = ds['Fluxes/qflux']
-        qflux = qflux[int(len(qflux)/2):]
-        
-        weighted_birkhoff = np.zeros(len(qflux))
+    def weighted_birkhoff_average(self,data):
+        weighted_birkhoff = np.zeros(len(data))
         N = len(weighted_birkhoff)
         for i in range(1,N-1):
             weighted_birkhoff[i] = np.exp(-1/(i/N*(1-i/N)))
         norm = np.sum(weighted_birkhoff)
         
-        weighted_birkhoff = weighted_birkhoff.reshape((len(qflux),1))
-        qflux_avg = np.sum(weighted_birkhoff*qflux/norm)
-        print(qflux_avg)
-        ds.close() 
+        weighted_birkhoff = weighted_birkhoff.reshape((len(data),1))
+        weighted_avg = np.sum(weighted_birkhoff*data/norm)
 
-        
-        return jnp.atleast_1d(qflux_avg)
-
-    def compute_gx_jvp(self,values,tangents):
-        
-        R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi = values
-        primal_out = jnp.atleast_1d(0.0)
-
-        n = len(values) 
-        argnum = np.arange(0,n,1)
-        
-        jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values,rel_step=1e-2)
-        
-        return (primal_out, jvp)
-
-    def compute_gx_batch(self, values, axis):
-        numdiff = len(values[0])
-        res = jnp.array([0.0])
-
-        for i in range(numdiff):
-            R_lmn = values[0][i]
-            Z_lmn = values[1][i]
-            L_lmn = values[2][i]
-            i_l = values[3][i]
-            p_l = values[4][i]
-            Psi = values[5][i]
-            
-            res = jnp.vstack([res,self.compute(R_lmn,Z_lmn,L_lmn,i_l,p_l,Psi)])
-
-        res = res[1:]
-
-
-        return res, axis[0]
-
+        return weighted_avg
 
     def interp_to_new_grid(self,geo_array,zgrid,uniform_grid):
         geo_array_gx = np.zeros(len(geo_array))
@@ -557,10 +473,44 @@ class GX(_Objective):
 
     
 
-    def run_gx(self,t):
-        fs = open('stdout.out_' + str(t),'w')
-        path_in = self.path_in + "_" + str(t) + '.in'
+    def run_gx(self):
+        stdout = 'stdout.out_' + str(self.t)
+        stderr = 'stderr.out_' + str(self.t)
+        fs = open('stdout.out_' + str(self.t),'w')
+        path_in = self.path_in + "_" + str(self.t) + '.in'
         cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', '--exact','--overcommit',self.path+'./gx',path_in]
         subprocess.run(cmd,stdout=fs)
         fs.close()
+
+
+    def compute_gx_jvp(self,values,tangents):
+        
+        R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi = values
+        primal_out = jnp.atleast_1d(0.0)
+
+        n = len(values) 
+        argnum = np.arange(0,n,1)
+        
+        jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values,rel_step=1e-2)
+        
+        return (primal_out, jvp)
+
+    def compute_gx_batch(self, values, axis):
+        numdiff = len(values[0])
+        res = jnp.array([0.0])
+
+        for i in range(numdiff):
+            R_lmn = values[0][i]
+            Z_lmn = values[1][i]
+            L_lmn = values[2][i]
+            i_l = values[3][i]
+            p_l = values[4][i]
+            Psi = values[5][i]
+            
+            res = jnp.vstack([res,self.compute(R_lmn,Z_lmn,L_lmn,i_l,p_l,Psi)])
+
+        res = res[1:]
+
+
+        return res, axis[0]
 

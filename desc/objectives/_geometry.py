@@ -144,6 +144,7 @@ class AspectRatio(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
+        print("aspect ratio is " + str(data["R0/a"]))
         return data["R0/a"]
 
 

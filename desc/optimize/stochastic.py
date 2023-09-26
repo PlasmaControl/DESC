@@ -104,6 +104,7 @@ def sgd(
     nfev += 1
     grad_args = (fx, fd_step, num_grad)
     g = grad(x, *grad_args)
+    print("g is " + str(g))
     ngev += 1
 
     maxiter = setdefault(maxiter, N * 100)
@@ -170,6 +171,7 @@ def sgd(
         grad_args = (fx, fd_step, num_grad)
 
         g = grad(x, *grad_args)
+        print("g is " + str(g))
         v = beta * v + (1 - beta) * g
         x = x - alpha * v
         obj._objective._update_equilibrium(obj.recover(x),store=True)

@@ -481,11 +481,7 @@ def _optimize_desc_stochastic(
         for j in range(num_grad):
             djac = np.zeros((len(fx),len(h)))
             dx = (np.random.binomial(1,0.5,x.shape)*2-1)*h
-            print("dx is " + str(dx))
-            
-            print("x + dx is " + str(x + dx))
             ob = objective.compute_scaled_error(x + dx)
-            print("ob is " + str(ob))
             obm = objective.compute_scaled_error(x - dx)
             df = ob - obm
             for i in range(len(x)):

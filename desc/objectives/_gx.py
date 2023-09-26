@@ -221,6 +221,9 @@ class GX(_Objective):
     def compute_impl(self, *args, **kwargs):
 
         params, constants = self._parse_args(*args, **kwargs)
+        if not np.any(params["R_lmn"]):
+            return 0
+
         if constants is None:
             constants = self.constants
         rho = np.sqrt(self.psi)       

@@ -43,13 +43,14 @@ def myconvolve_2d(arr_1d, stencil, shape):
     return conv
 
 
+@pytest.mark.unit
 def test_aliases():
     eq = Equilibrium()  # torus
     rho = np.linspace(0, 1, 64)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-    coeffs = [eq.compute("g^" + i + j, grid=grid)
-              for i in ['r', 't', 'z'] for j in ['r', 't', 'z']]
-    np.testing.assert_allclose(coeffs)
+    aliases = ["g^" + i + j for i in ['r', 't', 'z'] for j in ['r', 't', 'z']]
+    data = eq.compute(aliases, grid=grid)              
+    np.testing.assert_allclose([data[alias] for alias in aliases])
 
     
 @pytest.mark.unit

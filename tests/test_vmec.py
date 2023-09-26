@@ -6,6 +6,7 @@ from netCDF4 import Dataset
 
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
 from desc.vmec import VMECIO
@@ -897,12 +898,10 @@ def test_vmec_boundary_subspace(DummyStellarator):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-@pytest.mark.slow
-def test_make_boozmn_output(HELIOTRON, TmpDir):
+def test_make_boozmn_output(TmpDir):
     """Test that booz_xform-style outputs accurately reconstruct quantities."""
     # load in HELIOTRON equilibrium
-    eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
+    eq = get("HELIOTRON")
     output_path = str(TmpDir.join("boozmn_out.nc"))
 
     boozer_res = 35

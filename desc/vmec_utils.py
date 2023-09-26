@@ -879,6 +879,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
         )
         gmns.units = "m"
         gmns[0:, :] = Sqrt_g_B_mn[:, np.where(modes[:, 0] == -1)]
+    file.close()
 
     timer.stop("Total time")
     if verbose > 1:

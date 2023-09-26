@@ -1,5 +1,8 @@
+from desc import set_device
+set_device("gpu")
 from desc.objectives import ParticleTracer, ObjectiveFunction
 from desc.grid import Grid, LinearGrid
+from desc.objectives import ForceBalance, FixBoundaryR, FixBoundaryZ, FixPressure, FixIota, FixPsi
 import desc.io
 from desc.backend import jnp
 import matplotlib.pyplot as plt
@@ -91,3 +94,8 @@ print("****************************************")
 # print("*************** xs **************")
 # print(xs)
 # print("*********************************")
+
+R_modes = np.array([[0, 0, 0]])
+constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
+eq.optimize(objective=ObjFunction, constraints=constraints, verbose=3)
+eq.save("test_run_optimized")

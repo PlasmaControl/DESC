@@ -1,9 +1,9 @@
 from desc import set_device
 set_device("gpu")
 from desc.objectives import ParticleTracer, ObjectiveFunction
-from desc.grid import Grid, LinearGrid
-from desc.objectives import ForceBalance, FixBoundaryR, FixBoundaryZ, FixPressure, FixIota, FixPsi
+from desc.grid import Grid
 import desc.io
+from desc.objectives import ForceBalance, FixBoundaryR, FixBoundaryZ, FixPressure, FixIota, FixPsi
 from desc.backend import jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -37,18 +37,19 @@ key = jax.random.PRNGKey(int(4120))
 
 # v_init = jax.random.maxwell(key, (size,))*jnp.sqrt(2*Energy/mass)
 
-psi_init = jax.random.uniform(key, (1,), minval=1e-4, maxval=1-1e-4)
-zeta_init = 0.2
+#psi_init = jax.random.uniform(key, (1,), minval=1e-4, maxval=1-1e-4)
+psi_init = 0.8
+zeta_init = 0.1
 theta_init = 0.2
-v_init = (0.3 + jax.random.uniform(key, (1,), minval=-
-          1e-2, maxval=1e-2)) * jnp.sqrt(2*Energy/mass)
+v_init = 0.7*jnp.sqrt(2*Energy/mass)
+#v_init = (0.2 + jax.random.uniform(key, (1,), minval=-1e-2, maxval=1e-2)) * jnp.sqrt(2*Energy/mass)
 
-ini_cond = [float(psi_init[0]), theta_init, zeta_init, float(v_init[0])]
-
+ini_cond = [float(psi_init), theta_init, zeta_init, float(v_init)]
+print(ini_cond)
 
 tmin = 0
-tmax = 0.00021
-nt = 500
+tmax = 0.00007
+nt = 200
 time = jnp.linspace(tmin, tmax, nt)
 
 mass = 1.673e-27
@@ -89,13 +90,13 @@ print("*************** GRADIENT ***************")
 print(gradient)
 print("****************************************")
 
-# print(ObjFunction.x(eq))
-# xs = objective.xs(eq)
-# print("*************** xs **************")
-# print(xs)
-# print("*********************************")
+#print(ObjFunction.x(eq))
+#xs = objective.xs(eq)
+#print("*************** xs **************")
+#print(xs)
+#print("*********************************")
 
 R_modes = np.array([[0, 0, 0]])
 constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
-eq.optimize(objective=ObjFunction, constraints=constraints, verbose=3)
+eq.optimize(objective=ObjFunction, optimizer="bfgs", constraints=constraints, verbose=3)
 eq.save("test_run_optimized")

@@ -312,7 +312,7 @@ class GX(_Objective):
 
         gds2 = np.array(dot(grad_alpha,grad_alpha)) * Lref**2 * self.psi
         gds21 = -sign_iota * np.array(dot(grad_psi,grad_alpha)) * shat/Bref
-        gds22 = grad_psi_sq * self.psi * (shat/(Lref * Bref))**2
+        gds22 = grad_psi_sq / self.psi * (shat/(Lref * Bref))**2
 
 
         gbdrift = np.array(dot(cross(data['B'],data['grad(|B|)']),grad_alpha))

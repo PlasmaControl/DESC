@@ -171,7 +171,7 @@ if model:
 
 if fields:
     fig, ax = plt.subplots(
-        nrows=2, ncols=3, figsize=(18, 10), sharex=False, sharey=True
+        nrows=3, ncols=2, figsize=(18, 24), sharex=False, sharey=True
     )
     cax_kwargs = {"size": "5%", "pad": 0.05}
     props = dict(boxstyle="round", facecolor="w", alpha=1.0)
@@ -212,8 +212,8 @@ if fields:
     cbar = fig.colorbar(im, cax=cax, format="%.2f")
     cbar.update_ticks()
     ax[0, 0].plot(zeta, theta, color="k", ls="--", lw=2)
+    ax[0, 0].set_title(r"Omnigenity")
     ax[0, 0].set_ylabel(r"$\theta_{Boozer}$")
-    ax[0, 0].set_title(r"$M=0,~N=N_{{FP}}$")
     ax[0, 0].set_xlim([0, 2 * np.pi / NFP])
     ax[0, 0].set_ylim([0, 2 * np.pi])
     ax[0, 0].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
@@ -259,25 +259,23 @@ if fields:
     contour_kwargs["levels"] = np.linspace(np.nanmin(BB), np.nanmax(BB), 20)
     contour_kwargs["cmap"] = colormap
     contour_kwargs["extend"] = "both"
-    div = make_axes_locatable(ax[1, 0])
-    im = ax[1, 0].contour(zz, tt, BB, **contour_kwargs)
+    div = make_axes_locatable(ax[0, 1])
+    im = ax[0, 1].contour(zz, tt, BB, **contour_kwargs)
     cax = div.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax, format="%.2f")
     cbar.update_ticks()
-    ax[1, 0].plot(zeta, theta, color="k", ls="--", lw=2)
-    ax[1, 0].set_xlabel(r"$\zeta_{Boozer}$")
-    ax[1, 0].set_ylabel(r"$\theta_{Boozer}$")
-    ax[1, 0].set_xlim([0, 2 * np.pi / NFP])
-    ax[1, 0].set_ylim([0, 2 * np.pi])
-    ax[1, 0].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
-    ax[1, 0].set_yticks([0, np.pi, 2 * np.pi])
-    ax[1, 0].set_xticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
-    ax[1, 0].set_yticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
-    ax[1, 0].text(
+    ax[0, 1].plot(zeta, theta, color="k", ls="--", lw=2)
+    ax[0, 1].set_title(r"Quasi-Symmetry")
+    ax[0, 1].set_xlim([0, 2 * np.pi / NFP])
+    ax[0, 1].set_ylim([0, 2 * np.pi])
+    ax[0, 1].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
+    ax[0, 1].set_yticks([0, np.pi, 2 * np.pi])
+    ax[0, 1].set_xticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
+    ax[0, 1].text(
         0.05,
         0.95,
         r"QP",
-        transform=ax[1, 0].transAxes,
+        transform=ax[0, 1].transAxes,
         fontsize=14,
         verticalalignment="top",
         bbox=props,
@@ -313,23 +311,23 @@ if fields:
     contour_kwargs["levels"] = np.linspace(np.nanmin(BB), np.nanmax(BB), 20)
     contour_kwargs["cmap"] = colormap
     contour_kwargs["extend"] = "both"
-    div = make_axes_locatable(ax[0, 1])
-    im = ax[0, 1].contour(zz, tt, BB, **contour_kwargs)
+    div = make_axes_locatable(ax[1, 0])
+    im = ax[1, 0].contour(zz, tt, BB, **contour_kwargs)
     cax = div.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax, format="%.2f")
     cbar.update_ticks()
-    ax[0, 1].plot(zeta, theta, color="k", ls="--", lw=2)
-    ax[0, 1].set_title(r"$M=1,~N=N_{{FP}}$")
-    ax[0, 1].set_xlim([0, 2 * np.pi / NFP])
-    ax[0, 1].set_ylim([0, 2 * np.pi])
-    ax[0, 1].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
-    ax[0, 1].set_yticks([0, np.pi, 2 * np.pi])
-    ax[0, 1].set_xticklabels([r"$0$", r"$\pi/5$", r"$2\pi/5$"])
-    ax[0, 1].text(
+    ax[1, 0].plot(zeta, theta, color="k", ls="--", lw=2)
+    ax[1, 0].set_ylabel(r"$\theta_{Boozer}$")
+    ax[1, 0].set_xlim([0, 2 * np.pi / NFP])
+    ax[1, 0].set_ylim([0, 2 * np.pi])
+    ax[1, 0].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
+    ax[1, 0].set_yticks([0, np.pi, 2 * np.pi])
+    ax[1, 0].set_xticklabels([r"$0$", r"$\pi/5$", r"$2\pi/5$"])
+    ax[1, 0].text(
         0.05,
         0.95,
         r"OH",
-        transform=ax[0, 1].transAxes,
+        transform=ax[1, 0].transAxes,
         fontsize=14,
         verticalalignment="top",
         bbox=props,
@@ -353,7 +351,6 @@ if fields:
     cbar = fig.colorbar(im, cax=cax, format="%.2f")
     cbar.update_ticks()
     ax[1, 1].plot(zeta, theta, color="k", ls="--", lw=2)
-    ax[1, 1].set_xlabel(r"$\zeta_{Boozer}$")
     ax[1, 1].set_xlim([0, 2 * np.pi / NFP])
     ax[1, 1].set_ylim([0, 2 * np.pi])
     ax[1, 1].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
@@ -399,23 +396,24 @@ if fields:
     contour_kwargs["levels"] = np.linspace(np.nanmin(BB), np.nanmax(BB), 20)
     contour_kwargs["cmap"] = colormap
     contour_kwargs["extend"] = "both"
-    div = make_axes_locatable(ax[0, 2])
-    im = ax[0, 2].contour(zz, tt, BB, **contour_kwargs)
+    div = make_axes_locatable(ax[2, 0])
+    im = ax[2, 0].contour(zz, tt, BB, **contour_kwargs)
     cax = div.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax, format="%.2f")
     cbar.update_ticks()
-    ax[0, 2].plot(zeta, theta, color="k", ls="--", lw=2)
-    ax[0, 2].set_title(r"$M=1,~N=0$")
-    ax[0, 2].set_xlim([0, 2 * np.pi / NFP])
-    ax[0, 2].set_ylim([0, 2 * np.pi])
-    ax[0, 2].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
-    ax[0, 2].set_yticks([0, np.pi, 2 * np.pi])
-    ax[0, 2].set_xticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
-    ax[0, 2].text(
+    ax[2, 0].plot(zeta, theta, color="k", ls="--", lw=2)
+    ax[2, 0].set_xlabel(r"$\zeta_{Boozer}$")
+    ax[2, 0].set_ylabel(r"$\theta_{Boozer}$")
+    ax[2, 0].set_xlim([0, 2 * np.pi / NFP])
+    ax[2, 0].set_ylim([0, 2 * np.pi])
+    ax[2, 0].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
+    ax[2, 0].set_yticks([0, np.pi, 2 * np.pi])
+    ax[2, 0].set_xticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
+    ax[2, 0].text(
         0.05,
         0.95,
         r"OT",
-        transform=ax[0, 2].transAxes,
+        transform=ax[2, 0].transAxes,
         fontsize=14,
         verticalalignment="top",
         bbox=props,
@@ -433,23 +431,23 @@ if fields:
     contour_kwargs["levels"] = np.linspace(np.nanmin(BB), np.nanmax(BB), 20)
     contour_kwargs["cmap"] = colormap
     contour_kwargs["extend"] = "both"
-    div = make_axes_locatable(ax[1, 2])
-    im = ax[1, 2].contour(zz, tt, BB, **contour_kwargs)
+    div = make_axes_locatable(ax[2, 1])
+    im = ax[2, 1].contour(zz, tt, BB, **contour_kwargs)
     cax = div.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax, format="%.2f")
     cbar.update_ticks()
-    ax[1, 2].plot(zeta, theta, color="k", ls="--", lw=2)
-    ax[1, 2].set_xlabel(r"$\zeta_{Boozer}$")
-    ax[1, 2].set_xlim([0, 2 * np.pi / NFP])
-    ax[1, 2].set_ylim([0, 2 * np.pi])
-    ax[1, 2].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
-    ax[1, 2].set_yticks([0, np.pi, 2 * np.pi])
-    ax[1, 2].set_xticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
-    ax[1, 2].text(
+    ax[2, 1].plot(zeta, theta, color="k", ls="--", lw=2)
+    ax[2, 1].set_xlabel(r"$\zeta_{Boozer}$")
+    ax[2, 1].set_xlim([0, 2 * np.pi / NFP])
+    ax[2, 1].set_ylim([0, 2 * np.pi])
+    ax[2, 1].set_xticks([0, np.pi / NFP, 2 * np.pi / NFP])
+    ax[2, 1].set_yticks([0, np.pi, 2 * np.pi])
+    ax[2, 1].set_xticklabels([r"$0$", r"$\pi$", r"$2\pi$"])
+    ax[2, 1].text(
         0.05,
         0.95,
         r"QA",
-        transform=ax[1, 2].transAxes,
+        transform=ax[2, 1].transAxes,
         fontsize=14,
         verticalalignment="top",
         bbox=props,
@@ -464,7 +462,7 @@ if fields:
 # confinement ====================================================================
 
 if confinement:
-    fig, (ax0, ax1) = plt.subplots(nrows=2, ncols=1, figsize=(7, 13))
+    fig, (ax0, ax1) = plt.subplots(nrows=2, ncols=1, figsize=(8, 14))
     # effective ripple
     eps_pol = interp_helper(np.loadtxt("publications/dudt2023/neo_out.poloidal")[:, 1])
     eps_hel = interp_helper(np.loadtxt("publications/dudt2023/neo_out.helical")[:, 1])
@@ -493,7 +491,7 @@ if confinement:
     ax0.legend(
         [handles[idx] for idx in order],
         [labels[idx] for idx in order],
-        loc=(0.08, 0.25),
+        loc=(0.12, 0.25),
         ncol=4,
     )
     ax0.set_xlim([0, 1])
@@ -558,7 +556,7 @@ if confinement:
     ax1.loglog(t, lost_tor_qs, color=green, linestyle=":", lw=4, label="QA")
     t = np.loadtxt("publications/dudt2023/confined_fraction_w7x.dat")[:, 0]
     ax1.loglog(t, lost_w7x, color="k", linestyle="--", lw=4, label="W7-X")
-    ax1.legend(loc=(0.08, 0.85), ncol=4)
+    ax1.legend(loc=(0.12, 0.85), ncol=4)
     ax1.set_xlim([1e-4, 2e-1])
     ax1.set_ylim([1e-3, 1e0])
     ax1.set_xlabel(r"Time (s)")

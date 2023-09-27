@@ -644,18 +644,22 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Rotational transform (normalized by 2pi), current contribution",
     dim=1,
-    params=[],
+    params=["i_l"],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["iota", "current"],
     coordinates="r",
-    data=["iota_den", "iota_num current"],
+    data=["iota vacuum", "iota_den", "iota_num current"],
     axis_limit_data=["iota_den_r", "iota_num_r current"],
 )
 def _iota_current(params, transforms, profiles, data, **kwargs):
-    data["iota current"] = transforms["grid"].replace_at_axis(
-        data["iota_num current"] / data["iota_den"],
-        lambda: data["iota_num_r current"] / data["iota_den_r"],
-    )
+    if profiles["iota"] is not None:
+        iota = profiles["iota"].compute(transforms["grid"], params["i_l"], dr=0)
+        data["iota current"] = iota - data["iota vacuum"]
+    elif profiles["current"] is not None:
+        data["iota current"] = transforms["grid"].replace_at_axis(
+            data["iota_num current"] / data["iota_den"],
+            lambda: data["iota_num_r current"] / data["iota_den_r"],
+        )
     return data
 
 

@@ -64,7 +64,7 @@ mu = Energy/(mass*data["|B|"]) - (vpar**2)/(2*data["|B|"])
 
 ini_param = [float(mu), mass_charge]
 
-objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization")
+objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer")
 
 objective.build()
 solution = objective.compute(*objective.xs(eq))
@@ -96,4 +96,4 @@ output_to_file(solution, "output_comparison.txt")
 # R_modes = np.array([[0, 0, 0]])
 # constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
 # eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3)
-eq.save("test_run_optimized.h5")
+#eq.save("test_run_optimized.h5")

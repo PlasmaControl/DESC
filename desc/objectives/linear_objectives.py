@@ -1429,7 +1429,7 @@ class FixModeLambda(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1442,6 +1442,7 @@ class FixModeLambda(_FixedObjective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.L_basis.modes
             idx = np.arange(eq.L_basis.num_modes)
@@ -1900,7 +1901,7 @@ class FixSumModesLambda(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1913,6 +1914,7 @@ class FixSumModesLambda(_FixedObjective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.L_basis.modes
             idx = np.arange(eq.L_basis.num_modes)

@@ -98,5 +98,5 @@ print("****************************************")
 
 R_modes = np.array([[0, 0, 0]])
 constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
-eq.optimize(objective=ObjFunction, optimizer="bfgs", constraints=constraints, verbose=3)
+eq.optimize(objective=ObjFunction, optimizer="spicy-bfgs", constraints=constraints, verbose=3)
 eq.save("test_run_optimized")

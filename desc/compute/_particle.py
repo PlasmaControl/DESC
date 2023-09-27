@@ -70,7 +70,7 @@ def _zetadot(params, transforms, profiles, data, **kwargs):
     m_q = kwargs.get("m_q", 1.673e-27/1.6e-19)
     mu = kwargs.get("mu")
     vpar = kwargs.get("vpar")
-    data["zetadot"] = ((vpar * (1/data["|B|"]).T).T * jnp.sum(data["B"] * data["e^zeta"], axis=-1).T).T
+    data["zetadot"] = (vpar/data["|B|"]) * jnp.sum(data["B"] * data["e^zeta"], axis=-1) + (m_q/(data["|B|"]**3))*(mu*data["|B|"] + vpar**2)*jnp.sum(jnp.cross(data["B"], data["grad(|B|)"], axis=-1) * data["e^zeta"], axis=-1)
     return data
 
 @register_compute_fun(

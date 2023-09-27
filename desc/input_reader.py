@@ -211,9 +211,8 @@ class InputReader:
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
 
         for line in lines:
-
             # check if VMEC input file format
-            isVMEC = re.search(r"&INDATA", line)
+            isVMEC = re.search(r"&INDATA", line, re.IGNORECASE)
             if isVMEC:
                 print("Converting VMEC input to DESC input")
                 path = self.input_path + "_desc"
@@ -767,7 +766,7 @@ class InputReader:
             )
 
         f.write("\n# fixed-boundary surface shape\n")
-        for (l, m, n, R1, Z1) in inputs[-1]["surface"]:
+        for l, m, n, R1, Z1 in inputs[-1]["surface"]:
             f.write(
                 "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
                     int(l), int(m), int(n), R1, Z1
@@ -775,7 +774,7 @@ class InputReader:
             )
 
         f.write("\n# magnetic axis initial guess\n")
-        for (n, R0, Z0) in inputs[0]["axis"]:
+        for n, R0, Z0 in inputs[0]["axis"]:
             f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
 
         f.close()
@@ -1022,7 +1021,7 @@ class InputReader:
         # find start of namelist (&INDATA)
         vmeclines = vmec_file.readlines()
         for i, line in enumerate(vmeclines):
-            if line.find("&INDATA") != -1:
+            if line.upper().find("&INDATA") != -1:
                 start_ind = i
                 continue
             elif line.find("&") != -1:  # only care about the INDATA section

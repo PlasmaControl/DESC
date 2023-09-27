@@ -9,10 +9,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import jax.random
 
-eq = desc.io.load("test_run.h5")
+eq = desc.io.load("input.final_freeb_output.h5")
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
-# eq.solve()
+eq.solve()
 
 
 def output_to_file(solution, filename):
@@ -33,16 +33,11 @@ def output_to_file(solution, filename):
 
 mass = 1.673e-27
 Energy = 3.52e6*1.6e-19
-key = jax.random.PRNGKey(int(4120))
 
-# v_init = jax.random.maxwell(key, (size,))*jnp.sqrt(2*Energy/mass)
-
-#psi_init = jax.random.uniform(key, (1,), minval=1e-4, maxval=1-1e-4)
 psi_init = 0.8
 zeta_init = 0.1
 theta_init = 0.2
 v_init = 0.7*jnp.sqrt(2*Energy/mass)
-#v_init = (0.2 + jax.random.uniform(key, (1,), minval=-1e-2, maxval=1e-2)) * jnp.sqrt(2*Energy/mass)
 
 ini_cond = [float(psi_init), theta_init, zeta_init, float(v_init)]
 print(ini_cond)
@@ -52,7 +47,7 @@ tmax = 0.00007
 nt = 200
 time = jnp.linspace(tmin, tmax, nt)
 
-mass = 1.673e-27
+mass = 4*1.673e-27
 Energy = 3.52e6*1.6e-19
 psi_i = ini_cond[0]
 theta_i = ini_cond[1]
@@ -98,5 +93,5 @@ print("****************************************")
 
 R_modes = np.array([[0, 0, 0]])
 constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
-eq.optimize(objective=ObjFunction, optimizer="spicy-bfgs", constraints=constraints, verbose=3)
+eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3)
 eq.save("test_run_optimized")

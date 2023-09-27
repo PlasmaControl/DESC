@@ -117,9 +117,9 @@ dependencies specified by the decorator. The function itself should do any calcu
 needed using these dependencies and then add the output to the ``data`` dictionary and
 return it. The key in the ``data`` dictionary should match the ``name`` of the quantity.
 
-Once a new quantity is added to the ``desc.compute`` module, there is a final two steps involving the testing suite which must be checked.
+Once a new quantity is added to the ``desc.compute`` module, there are two final steps involving the testing suite which must be checked.
 The first step is implementing the correct axis limit, or marking it as not finite or not implemented.
-We can check whether the axis limit currently evalutates as finite by computing the quantity on a grid with a node at the axis.
+We can check whether the axis limit currently evalutates as finite by computing the quantity on a grid with nodes at the axis.
 ::
 
     from desc.examples import get
@@ -127,7 +127,7 @@ We can check whether the axis limit currently evalutates as finite by computing 
     import numpy as np
 
     eq = get("HELIOTRON")
-    grid = LinearGrid(L=1, M=1, N=1, axis=True)
+    grid = LinearGrid(rho=np.array([0.0]), M=4, N=8, axis=True)
     new_quantity = eq.compute(name="new_quantity_name", grid=grid)["new_quantity_name"]
     print(np.isfinite(new_quantity).all())
 

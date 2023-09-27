@@ -45,9 +45,8 @@ def ensure_positive_iota(eq):
         lone[eq.L_basis.modes[:, 2] < 0] *= -1
         eq.L_lmn *= lone
 
+        eq.axis = eq.get_axis()
         eq.surface = eq.get_surface_at(rho=1)
-
-        # TODO: flip axis coefficients (how to handle types other than FourierRZCurve?)
 
     sign = np.sign(eq.compute("iota", grid=Grid(np.array([[1, 0, 0]])))["iota"])
     assert sign == 1
@@ -93,6 +92,7 @@ def ensure_positive_jacobian(eq):
         lone[eq.L_basis.modes[:, 1] >= 0] *= -1
         eq.L_lmn *= lone
 
+        eq.axis = eq.get_axis()
         eq.surface = eq.get_surface_at(rho=1)
 
     sign = np.sign(eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"])

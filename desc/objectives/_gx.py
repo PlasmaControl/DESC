@@ -229,9 +229,9 @@ class GX(_Objective):
         zeta, bmag, grho, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0 = self.compute_geometry(params,constants)
         self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0)
         self.write_gx_io()
-        self.run_gx(t)
+        self.run_gx()
 
-        out_file = self.path_in + '_' + t + '.nc'
+        out_file = self.path_in + '_' + str(self.t) + '.nc'
         ds = nc.Dataset(out_file)
         
         qflux = ds['Fluxes/qflux']

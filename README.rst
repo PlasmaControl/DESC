@@ -30,7 +30,6 @@ The easiest way to install DESC is from pypi: :console:`pip install desc-opt`
 
 For more detailed instructions on installing DESC and its dependencies, see Installation_.
 The code is run using the syntax :console:`desc <path/to/inputfile>` and the full list of command line options are given in `Command Line Interface`_. (Note that you may have to prepend the command with :console:`python -m`)
-
 DESC can be ran in two ways:
 The first is through an input file specifying the equilibrium and solver options, this way can also can also accept VMEC input files.
 The second is through a python script, where the equilibrium and solver options are specified programmatically, this method offers much more flexibility over what types of equilibrium solution, optimization and analysis can be performed.

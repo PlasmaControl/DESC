@@ -1014,7 +1014,9 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
+        Rcon = FixSumModesR(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         desc_eq.R_lmn
         Rconstraints += (Rcon,)
     # R_2_2n
@@ -1027,7 +1029,9 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
-        Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
+        Rcon = FixSumModesR(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Rconstraints += (Rcon,)
     # R_2_neg2n
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_2_neg2_n"]):
@@ -1039,7 +1043,9 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
-        Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
+        Rcon = FixSumModesR(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Rconstraints += (Rcon,)
     # Z_2_0n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_0_n"]):
@@ -1051,7 +1057,9 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
+        Zcon = FixSumModesZ(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Zconstraints += (Zcon,)
     # Z_2_neg2n
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_2_neg2_n"]):
@@ -1063,7 +1071,9 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
-        Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
+        Zcon = FixSumModesZ(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Zconstraints += (Zcon,)
     # Z_2_2n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_2_n"]):
@@ -1075,13 +1085,15 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
-        Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
+        Zcon = FixSumModesZ(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Zconstraints += (Zcon,)
 
     return Rconstraints, Zconstraints
 
 
-def make_RZ_cons_2nd_order(qsc, desc_eq):
+def make_RZ_cons_2nd_order(qsc, desc_eq, N=None):
     """Make the second order NAE constraints for a DESC equilibrium.
 
     Parameters
@@ -1101,7 +1113,7 @@ def make_RZ_cons_2nd_order(qsc, desc_eq):
     Rconstraints = ()
     Zconstraints = ()
 
-    coeffs, bases = _calc_2nd_order_NAE_coeffs(qsc, desc_eq)
+    coeffs, bases = _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=N)
     Rconstraints, Zconstraints = _calc_2nd_order_constraints(
         qsc, desc_eq, coeffs, bases
     )

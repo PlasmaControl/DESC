@@ -7,7 +7,7 @@ from desc.backend import jnp
 import matplotlib.pyplot as plt
 
 # Load Equilibrium
-eq = desc.io.load("input.final_freeb_output.h5")
+eq = desc.io.load("input.final_freeb_output.h5")[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 eq.solve()

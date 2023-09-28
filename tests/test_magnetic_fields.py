@@ -190,7 +190,7 @@ class TestMagneticFields:
 
         field = FourierCurrentPotentialField(
             Phi_mn=phi_mn,
-            basis=basis,
+            modes_Phi=basis.modes[:, 1:],
             I=0,
             G=G,
             R_lmn=surface.R_lmn,
@@ -200,6 +200,8 @@ class TestMagneticFields:
             surface_grid=LinearGrid(M=120, N=120, NFP=10),
             NFP=10,
         )
+
+        field.change_resolution(3, 3)
 
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, 0, 0]),
@@ -217,7 +219,7 @@ class TestMagneticFields:
         field = FourierCurrentPotentialField.from_surface(
             surface=surface,
             Phi_mn=phi_mn,
-            basis=basis,
+            modes_Phi=basis.modes[:, 1:],
             I=0,
             G=G,
             surface_grid=LinearGrid(M=120, N=120, NFP=10),

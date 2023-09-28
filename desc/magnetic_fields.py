@@ -7,7 +7,7 @@ from functools import partial
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.backend import fori_loop, jit, jnp, odeint, vmap
+from desc.backend import fori_loop, jit, jnp, odeint, sign, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
@@ -1472,9 +1472,8 @@ class FourierCurrentPotentialField(CurrentPotentialField):
     ----------
     Phi_mn : ndarray
         Fourier coefficients of the double FourierSeries part of the current potential.
-        Should correspond to the given DoubleFourierSeries basis object passed in.
-    basis : DoubleFourierSeries
-        DoubleFourierSeries corresponding to the Phi_mn coefficients passed in.
+    modes_Phi : array-like, shape(k,2)
+        Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn coefficients
     I : float
         Net current linking the plasma and the coils toroidally
         Denoted I in the algorithm
@@ -1483,6 +1482,10 @@ class FourierCurrentPotentialField(CurrentPotentialField):
         Denoted G in the algorithm
     surface_grid : Grid
         grid upon which to evaluate the surface current density K
+    sym_Phi : str or False, one of {"auto","cos","sin",False}
+        whether to enforce a given symmetry for the DoubleFourierSeries part of the
+        current potential. Default is "auto" which enforces if modes are symmetric.
+        If True, non-symmetric modes will be truncated.
     R_lmn, Z_lmn : array-like, shape(k,)
         Fourier coefficients for winding surface R and Z in cylindrical coordinates
     modes_R : array-like, shape(k,2)
@@ -1492,8 +1495,9 @@ class FourierCurrentPotentialField(CurrentPotentialField):
     NFP : int
         number of field periods
     sym : bool
-        whether to enforce stellarator symmetry. Default is "auto" which enforces if
-        modes are symmetric. If True, non-symmetric modes will be truncated.
+        whether to enforce stellarator symmetry for the toroidal surface.
+        Default is "auto" which enforces if modes are symmetric.
+        If True, non-symmetric modes will be truncated.
     rho : float [0,1]
         flux surface label for the toroidal surface
     name : str
@@ -1513,11 +1517,12 @@ class FourierCurrentPotentialField(CurrentPotentialField):
 
     def __init__(
         self,
-        Phi_mn,
-        basis,
-        I,
-        G,
-        surface_grid,
+        Phi_mn=np.array([0.0]),
+        modes_Phi=np.array([[0, 0]]),
+        I=0,
+        G=0,
+        surface_grid=None,
+        sym_Phi="auto",
         R_lmn=None,
         Z_lmn=None,
         modes_R=None,
@@ -1528,20 +1533,41 @@ class FourierCurrentPotentialField(CurrentPotentialField):
         name="",
         check_orientation=True,
     ):
-        assert isinstance(
-            basis, DoubleFourierSeries
-        ), "Must pass in a DoubleFourierSeries object for basis"
-        assert Phi_mn.size == basis.num_modes, (
-            "Basis size must match Phi_mn size!"
-            f"Expected Phi_mn size {basis.num_modes.size}, instead got {Phi_mn.size}"
-        )
         self._Phi_mn = Phi_mn
+
+        Phi_mn, modes_Phi = map(np.asarray, (Phi_mn, modes_Phi))
+
+        assert issubclass(modes_Phi.dtype.type, np.integer)
+
+        M_Phi = np.max(abs(modes_Phi[:, 0]))
+        N_Phi = np.max(abs(modes_Phi[:, 1]))
+
+        self._M_Phi = M_Phi
+        self._N_Phi = N_Phi
+
+        if sym_Phi == "auto":
+            if np.all(
+                Phi_mn[np.where(sign(modes_Phi[:, 0]) == sign(modes_Phi[:, 1]))] == 0
+            ):
+                sym_Phi = "sin"
+            elif np.all(
+                Phi_mn[np.where(sign(modes_Phi[:, 0]) != sign(modes_Phi[:, 1]))] == 0
+            ):
+                sym_Phi = "cos"
+            else:
+                sym_Phi = False
+        self._sym_Phi = sym_Phi
+        self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
 
         assert np.isscalar(I), "I must be a scalar"
         assert np.isscalar(G), "G must be a scalar"
         self._I = I
         self._G = G
 
+        surface_grid = surface_grid or LinearGrid(M=M_Phi * 2, N=N_Phi * 2, NFP=NFP)
+
+        # TODO: make these methods/attributes of this class, so when they are called,
+        # if basis resolution has changed, they will correctly also be changed
         def _fourier_potential(theta, zeta, I, G, Phi_mn):
             # theta, zeta are eval points on the winding surface
             nodes = jnp.vstack(
@@ -1553,7 +1579,7 @@ class FourierCurrentPotentialField(CurrentPotentialField):
             ).T
             trans_temp = Transform(
                 Grid(nodes, sort=False, jitable=True),
-                basis,
+                self._Phi_basis,
             )
             return (
                 trans_temp.transform(Phi_mn, jitable=True)
@@ -1572,7 +1598,7 @@ class FourierCurrentPotentialField(CurrentPotentialField):
             ).T
             trans_temp = Transform(
                 Grid(nodes, sort=False, jitable=True),
-                basis,
+                self._Phi_basis,
                 derivs=jnp.array([[0, 1, 0]]),
             )
             return trans_temp.transform(Phi_mn, dt=1) + I / 2 / jnp.pi
@@ -1588,7 +1614,7 @@ class FourierCurrentPotentialField(CurrentPotentialField):
             ).T
             trans_temp = Transform(
                 Grid(nodes, sort=False, jitable=True),
-                basis,
+                self._Phi_basis,
                 derivs=jnp.array([[0, 0, 1]]),
             )
             return trans_temp.transform(Phi_mn, dz=1) + G / 2 / jnp.pi
@@ -1639,23 +1665,74 @@ class FourierCurrentPotentialField(CurrentPotentialField):
 
     @Phi_mn.setter
     def Phi_mn(self, new):
-        assert new.size == self._Phi_mn.size, (
-            "New Phi_mn must be same size as old!"
-            f"Expected size {self._Phi_mn.size},"
-            f" instead got {new.size}"
+        if len(new) == self.Phi_basis.num_modes:
+            self._Phi_mn = jnp.asarray(new)
+            self._params["Phi_mn"] = new
+        else:
+            raise ValueError(
+                f"Phi_mn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.Phi_basis.num_modes} modes."
+            )
+
+    @property
+    def Phi_basis(self):
+        """DoubleFourierSeries: Spectral basis for Phi."""
+        return self._Phi_basis
+
+    @property
+    def sym_Phi(self):
+        """str: Type of symmetry of periodic part of Phi (no symmetry if False)."""
+        return self._sym_Phi
+
+    def change_Phi_resolution(self, *args, **kwargs):
+        """Change the maximum poloidal and toroidal resolution for Phi."""
+        assert (
+            ((len(args) in [2, 3]) and len(kwargs) == 0)
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
+            or (len(args) == 0)
+        ), (
+            "change_Phi_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+            + "positional arguments or only keyword arguments."
         )
-        self._Phi_mn = new
-        self._params["Phi_mn"] = new
+        L = kwargs.pop("L", None)
+        M = kwargs.pop("M", None)
+        N = kwargs.pop("N", None)
+        NFP = kwargs.pop("NFP", None)
+        sym_Phi = kwargs.pop("sym_Phi", None)
+        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
+        self._NFP = NFP if NFP is not None else self.NFP
+        self._sym_Phi = sym_Phi if sym_Phi is not None else self.sym_Phi
+        if L is not None:
+            warnings.warn("Phi basis does not have radial resolution, ignoring L")
+        if len(args) == 2:
+            M, N = args
+        elif len(args) == 3:
+            L, M, N = args
+
+        if (
+            ((N is not None) and (N != self.N))
+            or ((M is not None) and (M != self.M))
+            or (NFP is not None)
+        ):
+            M = M if M is not None else self.M
+            N = N if N is not None else self.N
+            Phi_modes_old = self.Phi_basis.modes
+            self.Phi_basis.change_resolution(M=M, N=N, NFP=self.NFP, sym=self.sym_Phi)
+
+            self._Phi_mn = copy_coeffs(self.Phi_mn, Phi_modes_old, self.Phi_basis.modes)
+            self._M_Phi = M
+            self._N_Phi = N
 
     @classmethod
     def from_surface(
         cls,
         surface,
-        Phi_mn,
-        basis,
-        I,
-        G,
-        surface_grid,
+        Phi_mn=np.array([0.0]),
+        modes_Phi=np.array([[0, 0]]),
+        I=0,
+        G=0,
+        surface_grid=None,
+        sym_Phi="auto",
         name="",
         check_orientation=True,
     ):
@@ -1670,8 +1747,9 @@ class FourierCurrentPotentialField(CurrentPotentialField):
         Phi_mn : ndarray
             Fourier coefficients of the double FourierSeries of the current potential.
             Should correspond to the given DoubleFourierSeries basis object passed in.
-        basis : DoubleFourierSeries
-            DoubleFourierSeries corresponding to the Phi_mn coefficients passed in.
+        modes_Phi : array-like, shape(k,2)
+            Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn
+            coefficients
         I : float
             Net current linking the plasma and the coils toroidally
             Denoted I in the algorithm
@@ -1703,10 +1781,11 @@ class FourierCurrentPotentialField(CurrentPotentialField):
 
         return cls(
             Phi_mn,
-            basis,
+            modes_Phi,
             I,
             G,
             surface_grid,
+            sym_Phi,
             R_lmn,
             Z_lmn,
             modes_R,

@@ -47,6 +47,10 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
     phi = qsc.phi
     dphi = phi[1] - phi[0]
     nfp = qsc.nfp
+    if N is None:
+        N = desc_eq.N
+    else:
+        N = np.min([desc_eq.N, N])
     if desc_eq.sym:
         Lbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
     else:
@@ -76,13 +80,15 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
                 sum_weights.append(-1)
 
         modes = np.atleast_2d(modes)
-        Lcon = FixSumModesLambda(target=target, sum_weights=sum_weights, modes=modes)
+        Lcon = FixSumModesLambda(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Lconstraints += (Lcon,)
 
     return Lconstraints, L_0_n, Lbasis_sin
 
 
-def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False, N=None):
+def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
     """Calculate 1st order NAE coefficients' toroidal Fourier representations.
 
     Uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
@@ -93,9 +99,6 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False, N=None):
         Qsc object to use as the NAE constraints on the DESC equilibrium.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
-    fix_lambda : bool, default False
-        whether to include first order constraints to fix the O(rho) behavior
-        of lambda. Defaults to False.
     N : int,
         max toroidal resolution to constrain.
         If None, defaults to equilibrium's toroidal resolution
@@ -308,7 +311,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             modes = np.atleast_2d(modes)
             sum_weights = -np.atleast_1d(sum_weights)
             Lcon = FixSumModesLambda(
-                target=target, sum_weights=sum_weights, modes=modes
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
             )
             Lconstraints += (Lcon,)
     # R_1_neg1_n
@@ -351,7 +354,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             modes = np.atleast_2d(modes)
             sum_weights = -np.atleast_1d(sum_weights)
             Lcon = FixSumModesLambda(
-                target=target, sum_weights=sum_weights, modes=modes
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
             )
             Lconstraints += (Lcon,)
     return Rconstraints, Zconstraints, Lconstraints
@@ -386,7 +389,7 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None):
     Zconstraints = ()
     Lconstraints = ()
 
-    coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda, N=N)
+    coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=N)
     Rconstraints, Zconstraints, Lconstraints = _make_RZ_cons_order_rho(
         qsc, desc_eq, coeffs, bases, fix_lambda
     )

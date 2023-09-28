@@ -195,8 +195,8 @@ def get_NAE_constraints(
     iota=False,
     kinetic=False,
     normalize=True,
-    fix_lambda=False,
     N=None,
+    fix_lambda=False,
 ):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem.
 
@@ -217,11 +217,13 @@ def get_NAE_constraints(
         Whether to also fix kinetic profiles.
     normalize : bool
         Whether to apply constraints in normalized units.
-    fix_lambda: bool
-        Whether to fix lambda behavior as well or not
-    N : int,
+    N : int
         max toroidal resolution to constrain.
         If None, defaults to equilibrium's toroidal resolution
+    fix_lambda : bool
+        Whether to constrain lambda to match that of the NAE near-axis
+        if an int, fixes lambda up to that order in rho {0,1}
+        if True, fixes lambda up to the specified order given by order
 
     Returns
     -------
@@ -264,14 +266,14 @@ def get_NAE_constraints(
             constraints += (
                 FixCurrent(eq=desc_eq, normalize=normalize, normalize_target=normalize),
             )
-    if fix_lambda:
+    if fix_lambda or fix_lambda >= 0:
         L_axis_constraints, _, _ = calc_zeroth_order_lambda(
             qsc=qsc_eq, desc_eq=desc_eq, N=N
         )
         constraints += L_axis_constraints
     if order >= 1:  # first order constraints
         constraints += make_RZ_cons_1st_order(
-            qsc=qsc_eq, desc_eq=desc_eq, fix_lambda=fix_lambda, N=N
+            qsc=qsc_eq, desc_eq=desc_eq, N=N, fix_lambda=fix_lambda and fix_lambda > 0
         )
     if order == 2:  # 2nd order constraints
         constraints += make_RZ_cons_2nd_order(qsc=qsc_eq, desc_eq=desc_eq, N=N)

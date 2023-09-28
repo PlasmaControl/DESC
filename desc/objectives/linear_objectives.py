@@ -20,7 +20,6 @@ from .objective_funs import _Objective
 
 
 class _FixedObjective(_Objective):
-
     _fixed = True
     _linear = True
     _scalar = False
@@ -68,7 +67,6 @@ class BoundaryRSelfConsistency(_Objective):
         surface_label=None,
         name="self_consistency R",
     ):
-
         self._surface_label = surface_label
         self._args = ["R_lmn", "Rb_lmn"]
         super().__init__(
@@ -151,7 +149,6 @@ class BoundaryZSelfConsistency(_Objective):
         surface_label=None,
         name="self_consistency Z",
     ):
-
         self._surface_label = surface_label
         self._args = ["Z_lmn", "Zb_lmn"]
         super().__init__(
@@ -230,7 +227,6 @@ class AxisRSelfConsistency(_Objective):
         eq=None,
         name="axis R self consistency",
     ):
-
         self._args = ["R_lmn", "Ra_n"]
         super().__init__(
             eq=eq,
@@ -303,7 +299,6 @@ class AxisZSelfConsistency(_Objective):
         eq=None,
         name="axis Z self consistency",
     ):
-
         self._args = ["Z_lmn", "Za_n"]
         super().__init__(
             eq=eq,
@@ -406,7 +401,6 @@ class FixBoundaryR(_FixedObjective):
         surface_label=None,
         name="lcfs R",
     ):
-
         self._modes = modes
         self._target_from_user = target
         self._surface_label = surface_label
@@ -552,7 +546,6 @@ class FixBoundaryZ(_FixedObjective):
         surface_label=None,
         name="lcfs Z",
     ):
-
         self._modes = modes
         self._target_from_user = target
         self._surface_label = surface_label
@@ -669,7 +662,6 @@ class FixLambdaGauge(_Objective):
         eq=None,
         name="lambda gauge",
     ):
-
         super().__init__(
             eq=eq,
             target=0,
@@ -759,7 +751,6 @@ class FixThetaSFL(_Objective):
     _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
     def __init__(self, eq=None, name="Theta SFL"):
-
         super().__init__(eq=eq, target=0, weight=1, name=name)
 
     def build(self, eq=None, use_jit=False, verbose=1):
@@ -850,7 +841,6 @@ class FixAxisR(_FixedObjective):
         modes=True,
         name="axis R",
     ):
-
         self._modes = modes
         self._target_from_user = target
         super().__init__(
@@ -998,7 +988,6 @@ class FixAxisZ(_FixedObjective):
         modes=True,
         name="axis Z",
     ):
-
         self._modes = modes
         self._target_from_user = target
         super().__init__(
@@ -1147,7 +1136,6 @@ class FixModeR(_FixedObjective):
         modes=True,
         name="Fix Mode R",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1285,7 +1273,6 @@ class FixModeZ(_FixedObjective):
         modes=True,
         name="Fix Mode Z",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1376,7 +1363,7 @@ class FixModeZ(_FixedObjective):
         return fixed_params
 
 
-class FixModeLambda(_Objective):
+class FixModeLambda(_FixedObjective):
     """Fixes Fourier-Zernike lambda coefficients.
 
     Parameters
@@ -1425,7 +1412,6 @@ class FixModeLambda(_Objective):
         modes=True,
         name="Fix Mode lambda",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1443,7 +1429,7 @@ class FixModeLambda(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1456,6 +1442,7 @@ class FixModeLambda(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.L_basis.modes
             idx = np.arange(eq.L_basis.num_modes)
@@ -1521,7 +1508,7 @@ class FixModeLambda(_Objective):
         return "L_lmn"
 
 
-class FixSumModesR(_Objective):
+class FixSumModesR(_FixedObjective):
     """Fixes a linear sum of Fourier-Zernike R coefficients.
 
     Parameters
@@ -1573,7 +1560,6 @@ class FixSumModesR(_Objective):
         modes=True,
         name="Fix Sum Modes R",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1729,7 +1715,6 @@ class FixSumModesZ(_FixedObjective):
         modes=True,
         name="Fix Sum Modes Z",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1834,7 +1819,7 @@ class FixSumModesZ(_FixedObjective):
         return f
 
 
-class FixSumModesLambda(_Objective):
+class FixSumModesLambda(_FixedObjective):
     """Fixes a linear sum of Fourier-Zernike lambda coefficients.
 
     Parameters
@@ -1890,7 +1875,6 @@ class FixSumModesLambda(_Objective):
         modes=True,
         name="Fix Sum Modes lambda",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1917,7 +1901,7 @@ class FixSumModesLambda(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1930,6 +1914,7 @@ class FixSumModesLambda(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.L_basis.modes
             idx = np.arange(eq.L_basis.num_modes)
@@ -2001,7 +1986,7 @@ class FixSumModesLambda(_Objective):
         return "L_lmn"
 
 
-class _FixProfile(_Objective, ABC):
+class _FixProfile(_FixedObjective, ABC):
     """Fixes profile coefficients (or values, for SplineProfile).
 
     Parameters
@@ -2050,7 +2035,6 @@ class _FixProfile(_Objective, ABC):
         indices=True,
         name="",
     ):
-
         self._profile = profile
         self._indices = indices
         self._target_from_user = target
@@ -2150,7 +2134,6 @@ class FixPressure(_FixProfile):
         indices=True,
         name="fixed-pressure",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2257,7 +2240,6 @@ class FixIota(_FixProfile):
         indices=True,
         name="fixed-iota",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2360,7 +2342,6 @@ class FixCurrent(_FixProfile):
         indices=True,
         name="fixed-current",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2466,7 +2447,6 @@ class FixElectronTemperature(_FixProfile):
         indices=True,
         name="fixed-electron-temperature",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2572,7 +2552,6 @@ class FixElectronDensity(_FixProfile):
         indices=True,
         name="fixed-electron-density",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2678,7 +2657,6 @@ class FixIonTemperature(_FixProfile):
         indices=True,
         name="fixed-ion-temperature",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2785,7 +2763,6 @@ class FixAtomicNumber(_FixProfile):
         indices=True,
         name="fixed-atomic-number",
     ):
-
         super().__init__(
             eq=eq,
             target=target,

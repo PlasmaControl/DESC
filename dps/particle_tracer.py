@@ -48,8 +48,8 @@ ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
-tmax = 0.00007
-nt = 200
+tmax = 0.1
+nt = 2000
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond

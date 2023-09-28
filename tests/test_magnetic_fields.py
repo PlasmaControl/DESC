@@ -216,6 +216,21 @@ class TestMagneticFields:
             rtol=1e-8,
         )
 
+        field.G = 2 * G
+
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, 0, 0]),
+            correct_field(10.0, 0, 0) * 2,
+            atol=1e-16,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            correct_field(10.0, np.pi / 4, 0) * 2,
+            atol=1e-16,
+            rtol=1e-8,
+        )
+
         field = FourierCurrentPotentialField.from_surface(
             surface=surface,
             Phi_mn=phi_mn,

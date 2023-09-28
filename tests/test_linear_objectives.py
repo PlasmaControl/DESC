@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 import scipy.linalg
+from qsc import Qsc
 
 import desc.examples
 from desc.compute import arg_order
@@ -10,6 +11,8 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    AxisRSelfConsistency,
+    AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixAtomicNumber,
@@ -36,6 +39,7 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
+    get_NAE_constraints,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -74,11 +78,11 @@ def test_LambdaGauge_asym():
             [
                 [0, 0, 0, 3, 0],
                 [0, 1, 0, 1, 0],
-                [0, -1, 0, 0, 1],
+                [0, -1, 0, 0, -1],
                 [0, 1, 1, 0.3, 0],
-                [0, -1, -1, -0.3, 0],
+                [0, -1, -1, 0.3, 0],
                 [0, 1, -1, 0, -0.3],
-                [0, -1, 1, 0, -0.3],
+                [0, -1, 1, 0, 0.3],
             ],
         ),
         "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
@@ -542,6 +546,8 @@ def test_correct_indexing_passed_modes_axis():
     constraints = (
         FixAxisR(eq=eq, modes=R_modes, normalize=False),
         FixAxisZ(eq=eq, modes=Z_modes, normalize=False),
+        AxisRSelfConsistency(eq=eq),
+        AxisZSelfConsistency(eq=eq),
         FixModeR(eq=eq, modes=np.array([[1, 1, 1], [2, 2, 2]]), normalize=False),
         FixModeZ(eq=eq, modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
         FixSumModesR(
@@ -555,6 +561,7 @@ def test_correct_indexing_passed_modes_axis():
     for con in constraints:
         con.build(verbose=0)
     objective.build()
+    objective.set_args("Ra_n", "Za_n")
     from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -611,6 +618,8 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     target_Z = eq.axis.Z_n[idxs]
 
     constraints = (
+        AxisRSelfConsistency(eq=eq),
+        AxisZSelfConsistency(eq=eq),
         FixAxisR(eq=eq, modes=R_modes, normalize=False, target=target_R),
         FixAxisZ(eq=eq, modes=Z_modes, normalize=False, target=target_Z),
         FixModeR(
@@ -681,6 +690,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     for con in constraints:
         con.build(verbose=0)
     objective.build()
+    objective.set_args("Ra_n", "Za_n")
     from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -814,17 +824,55 @@ def test_FixSumModes_False_or_None_modes():
         FixSumModesLambda(modes=None, target=np.array([[0, 1]]))
 
 
+def _is_any_instance(things, cls):
+    return any([isinstance(t, cls) for t in things])
+
+
 @pytest.mark.unit
 def test_FixAxis_util_correct_objectives():
     """Test util for fix axis constraints."""
-    cs = get_fixed_axis_constraints(iota=False)
-    correct_cs = (
-        FixAxisR(),
-        FixAxisZ(),
-        FixLambdaGauge(),
-        FixPsi(),
-        FixPressure(),
-        FixCurrent(),
-    )
-    for c, cc in zip(cs, correct_cs):
-        assert type(c) == type(cc)
+    with pytest.warns(FutureWarning):
+        cs = get_fixed_axis_constraints(iota=False)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixPressure)
+    assert _is_any_instance(cs, FixCurrent)
+
+    with pytest.warns(FutureWarning):
+        cs = get_fixed_axis_constraints(iota=True, kinetic=True)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixElectronDensity)
+    assert _is_any_instance(cs, FixElectronTemperature)
+    assert _is_any_instance(cs, FixIonTemperature)
+    assert _is_any_instance(cs, FixAtomicNumber)
+    assert _is_any_instance(cs, FixIota)
+
+
+@pytest.mark.unit
+def test_FixNAE_util_correct_objectives():
+    """Test util for fix NAE constraints."""
+    eq = Equilibrium()
+    qsc = Qsc.from_paper("precise QA")
+    cs = get_NAE_constraints(eq, qsc, iota=False)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixSumModesR)
+    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixPressure)
+    assert _is_any_instance(cs, FixCurrent)
+
+    cs = get_NAE_constraints(eq, qsc, iota=True, kinetic=True)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixSumModesR)
+    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixElectronDensity)
+    assert _is_any_instance(cs, FixElectronTemperature)
+    assert _is_any_instance(cs, FixIonTemperature)
+    assert _is_any_instance(cs, FixAtomicNumber)
+    assert _is_any_instance(cs, FixIota)

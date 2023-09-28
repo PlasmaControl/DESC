@@ -6,6 +6,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
+from desc.compute import arg_order
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.optimize import Optimizer
@@ -166,7 +167,7 @@ def _solve_axisym(
         if mres_step == MIN_MRES_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with mres_step=1, "
-                + "something is probaby very wrong with your desired equilibrium."
+                + "something is probably very wrong with your desired equilibrium."
             )
         else:
             warnings.warn(
@@ -281,6 +282,7 @@ def _add_pressure(
             )
         stop = stop or not eqi.is_nested()
         eqfam.append(eqi)
+        eqi = eqi.copy()
 
         if checkpoint_path is not None:
             if verbose > 0:
@@ -295,7 +297,7 @@ def _add_pressure(
         if pres_step <= MIN_PRES_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with "
-                + f"pres_step={pres_step}, something is probaby very wrong with your "
+                + f"pres_step={pres_step}, something is probably very wrong with your "
                 + "desired equilibrium."
             )
         else:
@@ -413,6 +415,7 @@ def _add_shaping(
             )
         stop = stop or not eqi.is_nested()
         eqfam.append(eqi)
+        eqi = eqi.copy()
 
         if checkpoint_path is not None:
             if verbose > 0:
@@ -427,7 +430,7 @@ def _add_shaping(
         if bdry_step <= MIN_BDRY_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with "
-                + f"bdry_step={bdry_step}, something is probaby very wrong with your "
+                + f"bdry_step={bdry_step}, something is probably very wrong with your "
                 + "desired equilibrium."
             )
         else:
@@ -482,7 +485,7 @@ def solve_continuation_automatic(  # noqa: C901
         Unsolved Equilibrium with the final desired boundary, profiles, resolution.
     objective : {"force", "energy", "vacuum"}
         function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
+    optimizer : str or Optimizer (optional)
         optimizer to use
     pert_order : int
         order of perturbations to use.
@@ -571,10 +574,10 @@ def solve_continuation_automatic(  # noqa: C901
         verbose,
         checkpoint_path,
     )
-
-    eq.R_lmn = eqfam[-1].R_lmn
-    eq.Z_lmn = eqfam[-1].Z_lmn
-    eq.L_lmn = eqfam[-1].L_lmn
+    for arg in arg_order:
+        val = np.asarray(getattr(eqfam[-1], arg))
+        if val.size:
+            setattr(eq, arg, val)
     eqfam[-1] = eq
     timer.stop("Total time")
     if verbose > 0:
@@ -606,7 +609,7 @@ def solve_continuation(  # noqa: C901
 ):
     """Solve for an equilibrium by continuation method.
 
-    Steps through an EquilibriaFamily, solving each equilibrium, and uses pertubations
+    Steps through an EquilibriaFamily, solving each equilibrium, and uses perturbations
     to step between different profiles/boundaries.
 
     Uses the previous step as an initial guess for each solution.
@@ -617,7 +620,7 @@ def solve_continuation(  # noqa: C901
         Equilibria to solve for at each step.
     objective : {"force", "energy", "vacuum"}
         function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
+    optimizer : str or Optimizer (optional)
         optimizer to use
     pert_order : int or array of int
         order of perturbations to use. If array-like, should be same length as eqfam
@@ -726,9 +729,10 @@ def solve_continuation(  # noqa: C901
                 verbose=verbose,
                 copy=False,
             )
-            eqi.R_lmn = eqp.R_lmn
-            eqi.Z_lmn = eqp.Z_lmn
-            eqi.L_lmn = eqp.L_lmn
+            for arg in arg_order:
+                val = np.asarray(getattr(eqp, arg))
+                if val.size:
+                    setattr(eqi, arg, val)
             deltas = {}
             del eqp
 

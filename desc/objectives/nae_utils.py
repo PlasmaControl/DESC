@@ -125,7 +125,7 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False, N=None):
     if N is None:
         N = desc_eq.N
     else:
-        N = np.max([desc_eq.N, N])
+        N = np.min([desc_eq.N, N])
     assert N == int(N), "Toroidal Resolution must be an integer!"
     N = int(N)
     # normal and binormal vector components
@@ -243,7 +243,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
     -------
     Rconstraints : tuple of Objective
         tuple of constraints of type FixSumModesR, which enforce
-        the O(rho) behavior of the equilibrium R coefficents to match the NAE.
+        the O(rho) behavior of the equilibrium R coefficients to match the NAE.
     Zconstraints : tuple of Objective
         tuple of constraints of type FixSumModesZ, which enforce
         the O(rho) behavior of the equilibrium Z coefficents to match the NAE.

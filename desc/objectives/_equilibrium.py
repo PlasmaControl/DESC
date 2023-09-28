@@ -35,35 +35,34 @@ class ForceBalance(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    grid : Grid, ndarray, optional
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Total force: {:10.3e} "
+    _print_value_fmt = "Force error: {:10.3e} "
 
     def __init__(
         self,
@@ -138,15 +137,24 @@ class ForceBalance(_Objective):
             "F_helical",
             "|e^helical|",
         ]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -154,8 +162,7 @@ class ForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -193,18 +200,18 @@ class ForceBalance(_Objective):
             MHD force balance error at each node (N).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        fr = data["F_rho"] * data["|grad(rho)|"]
-        fr = fr * data["sqrt(g)"] * self._transforms["grid"].weights
-
-        fb = data["F_helical"] * data["|e^helical|"]
-        fb = fb * data["sqrt(g)"] * self._transforms["grid"].weights
+        fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
+        fb = data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
 
         return jnp.concatenate([fr, fb])
 
@@ -218,35 +225,34 @@ class RadialForceBalance(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-       Whether target and bounds should be normalized before comparing to computed
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    grid : Grid, ndarray, optional
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Radial force: {:10.3e} "
+    _print_value_fmt = "Radial force error: {:10.3e} "
 
     def __init__(
         self,
@@ -315,15 +321,24 @@ class RadialForceBalance(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -331,8 +346,7 @@ class RadialForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -370,15 +384,17 @@ class RadialForceBalance(_Objective):
             Radial MHD force balance error at each node (N).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        f = data["F_rho"] * data["|grad(rho)|"]
-        return f * data["sqrt(g)"] * self._transforms["grid"].weights
+        return data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
 
 
 class HelicalForceBalance(_Objective):
@@ -392,35 +408,34 @@ class HelicalForceBalance(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    grid : Grid, ndarray, optional
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Helical force: {:10.3e}, "
+    _print_value_fmt = "Helical force error: {:10.3e}, "
 
     def __init__(
         self,
@@ -489,15 +504,24 @@ class HelicalForceBalance(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -505,8 +529,7 @@ class HelicalForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -544,57 +567,58 @@ class HelicalForceBalance(_Objective):
             Helical MHD force balance error at each node (N).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        f = data["F_helical"] * data["|e^helical|"]
-        return f * data["sqrt(g)"] * self._transforms["grid"].weights
+        return data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
 
 
 class Energy(_Objective):
     """MHD energy.
 
-    W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV  (J)
+    W = integral( ||B||^2 / (2*mu0) + p / (gamma - 1) ) dV  (J)
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    grid : Grid, ndarray, optional
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        This will default to a QuadratureGrid
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
 
-    _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
     _scalar = True
-    _linear = False
+    _coordinates = ""
     _equilibrium = True
     _units = "(J)"
     _print_value_fmt = "Total MHD energy: {:10.3e} "
+    _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
 
     def __init__(
         self,
@@ -674,15 +698,25 @@ class Energy(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["W"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "gamma": self._gamma,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -728,13 +762,16 @@ class Energy(_Objective):
             Total MHD energy in the plasma volume (J).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
-            gamma=self._gamma,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+            gamma=constants["gamma"],
         )
         return data["W"]
 
@@ -755,35 +792,34 @@ class CurrentDensity(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    grid : Grid, ndarray, optional
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(A*m)"
-    _print_value_fmt = "Total current density: {:10.3e} "
+    _print_value_fmt = "Current density: {:10.3e} "
 
     def __init__(
         self,
@@ -852,15 +888,24 @@ class CurrentDensity(_Objective):
 
         self._dim_f = 3 * grid.num_nodes
         self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -868,8 +913,7 @@ class CurrentDensity(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["J"] * scales["V"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["J"] * scales["V"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -897,15 +941,18 @@ class CurrentDensity(_Objective):
             Toroidal current at each node (A*m).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        jr = data["J^rho"] * data["sqrt(g)"] * self._transforms["grid"].weights
-        jt = data["J^theta"] * data["sqrt(g)"] * self._transforms["grid"].weights
-        jz = data["J^zeta"] * data["sqrt(g)"] * self._transforms["grid"].weights
+        jr = data["J^rho"] * data["sqrt(g)"]
+        jt = data["J^theta"] * data["sqrt(g)"]
+        jz = data["J^zeta"] * data["sqrt(g)"]
 
         return jnp.concatenate([jr, jt, jz])

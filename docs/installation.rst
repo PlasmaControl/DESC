@@ -24,8 +24,6 @@ On Your Local Machine
 
 **Or from GitHub (for development builds)**
 
-`Option 1 tested to work on M1 Macbook on 5-3-23`
-
 First download the repository from GitHub.
 
 .. code-block:: sh
@@ -36,6 +34,8 @@ First download the repository from GitHub.
 Now pick one of the installation options below.
 
 Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+
+`Option 1 tested to work on M1 Macbook on 5-3-23`
 
 .. code-block:: sh
 
@@ -121,52 +121,19 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 **Note that DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet), and thus older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.**
 
-Della Cluster (Princeton)
-+++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Della cluster at Princeton as of 5-3-2023.
+Della and Stellar Clusters (Princeton)
+++++++++++++++++++++++++++++++++++++++
+These instructions were tested and confirmed to work on the Della and Stellar clusters at Princeton as of 8-26-2023.
 
-First, install JAX (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ):
-
-.. code-block:: sh
-
-    module load anaconda3/2022.5
-    conda create --name desc-env python=3.9
-    conda activate desc-env
-    pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-
-Then, we install DESC:
+First, install JAX (check `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters):
 
 .. code-block:: sh
 
-    git clone https://github.com/PlasmaControl/DESC.git
-    cd DESC
-    # remove the jax lines from requirements.txt, as we already have installed them above
-    sed -i '/jax/d' ./requirements.txt
-    # then install as usual
-    pip install --editable .
-    # optionally install developer requirements (if you want to run tests)
-    pip install -r devtools/dev-requirements.txt
-
-**Note: To run DESC on GPU on Della, it was found to be necessary to load the following modules before running DESC on a node on which you've requested a GPU:**
-
-.. code-block:: sh
-
-    module load cudatoolkit/11.7 cudnn/cuda-11.x/8.2.0
-
-Stellar Cluster (Princeton)
-+++++++++++++++++++++++++++
-Using pip install and including GPU capabilities.
-These instructions were tested and confirmed to work on the Stellar cluster at Princeton as of 5-2-2023.
-
-First, install JAX with GPU support (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ):
-
-.. code-block:: sh
-
-    module load anaconda3/2022.5
-    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.1=cuda112*" -c conda-forge
+    module load anaconda3/2023.3
+    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.10=cuda112*" -c conda-forge
     conda activate desc-env
 
-Then, we install DESC:
+Then, install DESC:
 
 .. code-block:: sh
 
@@ -185,7 +152,7 @@ On Clusters with IBM Power Architecture
 If pre-built JAX binaries are not available, you will first need to build JAX from source.
 More info can be found here: https://jax.readthedocs.io/en/latest/developer.html
 
-The following are instructions tested to work on the Traverse supercomputer at Princeton:
+These instructions were tested and confirmed to work on the Traverse supercomputer at Princeton as of 7-10-2023.
 
 .. code-block:: sh
 
@@ -197,7 +164,7 @@ The following are instructions tested to work on the Traverse supercomputer at P
     conda create --name desc-env python=3.8
     conda activate desc-env
     # install what you can of the requirements with conda, ends up being all but jax, jaxlib and nvgpu
-    conda install colorama "h5py>=3.0.0" "matplotlib>=3.3.0,<=3.6.0,!=3.4.3" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.20.0" psutil "scipy>=1.5.0" termcolor
+    conda install colorama "h5py>=3.0.0" "matplotlib>=3.3.0,<=3.6.0,!=3.4.3" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.20.0,<1.25.0" psutil "scipy>=1.5.0,<1.11.0" termcolor
     pip install nvgpu
 
 Build and install JAX with GPU support:

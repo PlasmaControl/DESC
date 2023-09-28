@@ -1,5 +1,6 @@
 """Functions for mapping between flux, sfl, and real space coordinates."""
 
+import functools
 import warnings
 
 import numpy as np
@@ -7,17 +8,30 @@ from termcolor import colored
 
 from desc.backend import fori_loop, jit, jnp, put, while_loop
 from desc.compute import compute as compute_fun
-from desc.compute import data_index, get_transforms
+from desc.compute import data_index, get_params, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Index
 
 
-def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=1e-6):
+def map_coordinates(  # noqa: C901
+    eq,
+    coords,
+    inbasis,
+    outbasis=("rho", "theta", "zeta"),
+    guess=None,
+    period=(np.inf, np.inf, np.inf),
+    tol=1e-6,
+    maxiter=30,
+    **kwargs,
+):
     """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
 
     First solves for the computational coordinates that correspond to inbasis, then
     evaluates outbasis at those locations.
+
+    Speed can often be significantly improved by providing a reasonable initial guess.
+    The default is a nearest neighbor search on a coarse grid.
 
     NOTE: this function cannot be JIT compiled or differentiated with AD.
 
@@ -32,36 +46,67 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
         Labels for input and output coordinates, eg ("R", "phi", "Z") or
         ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
         same as the compute function data key
+    guess : None or ndarray, shape(k,3)
+        Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
+        corresponding to coords in inbasis. If None, heuristics are used based on
+        in basis and a nearest neighbor search on a coarse grid.
+    period : tuple of float
+        Assumed periodicity for each quantity in inbasis.
+        Use np.inf to denote no periodicity.
     tol : float
         Stopping tolerance.
     maxiter : int > 0
         Maximum number of Newton iterations
-    rhomin : float
-        Minimum allowable value of rho (to avoid singularity at rho=0)
 
+    Returns
+    -------
+    coords : ndarray, shape(k,3)
+        Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
+        for coordinates where root finding did not succeed, possibly because the
+        coordinate is not in the plasma volume.
 
     """
+    inbasis = tuple(inbasis)
+    outbasis = tuple(outbasis)
     assert (
         np.isfinite(maxiter) and maxiter > 0
     ), f"maxiter must be a positive integer, got {maxiter}"
     assert np.isfinite(tol) and tol > 0, f"tol must be a positive float, got {tol}"
 
-    basis_derivs = [f"{X}_{d}" for X in inbasis for d in ("r", "t", "z")]
+    basis_derivs = tuple([f"{X}_{d}" for X in inbasis for d in ("r", "t", "z")])
     for key in basis_derivs:
         assert (
-            key in data_index.keys()
+            key in data_index["desc.equilibrium.equilibrium.Equilibrium"]
         ), f"don't have recipe to compute partial derivative {key}"
 
-    # can't use AD or jit compile this because of grid stuff
+    rhomin = kwargs.pop("rhomin", tol / 10)
+    alpha = kwargs.pop("backtrack_frac", 0.1)
+    maxls = kwargs.pop("max_backtrack", 10)
+    assert len(kwargs) == 0, f"map_coordinates got unexpected kwargs: {kwargs.keys()}"
+    period = np.asarray(period)
+    coords = coords % period
+
+    params = get_params(inbasis + basis_derivs, eq)
+
+    @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
-        data = eq.compute(basis, grid=Grid(y, sort=False))
+        grid = Grid(y, sort=False, jitable=True)
+        profiles = get_profiles(inbasis + basis_derivs, eq, grid, jitable=True)
+        # do surface average to get iota once
+        if "current" in profiles and profiles["current"] is not None:
+            profiles["iota"] = eq.get_profile("iota")
+        transforms = get_transforms(inbasis + basis_derivs, eq, grid, jitable=True)
+        data = compute_fun(eq, basis, params, transforms, profiles)
         x = jnp.stack([data[k] for k in basis], axis=-1)
         return x
 
+    @jit
     def residual(y):
         xk = compute(y, inbasis)
-        return xk - coords
+        r = xk % period - coords % period
+        return jnp.where(r > period / 2, -period + r, r)
 
+    @jit
     def jac(y):
         J = compute(y, basis_derivs)
         J = J.reshape((-1, 3, 3))
@@ -71,10 +116,9 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
     def fixup(y):
         r, t, z = y.T
         # negative rho -> flip theta
-        t = jnp.where(r < 0, (t + np.pi) % (2 * np.pi), t % (2 * np.pi))
+        t = jnp.where(r < 0, (t + np.pi), t)
         r = jnp.abs(r)
         r = jnp.clip(r, rhomin, 1)
-        z = z % (2 * np.pi)
         y = jnp.array([r, t, z]).T
         return y
 
@@ -85,21 +129,37 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
         )
     )
 
-    # nearest neighbor search on coarse grid for initial guess
-    yg = ConcentricGrid(L=eq.L_grid, M=eq.M_grid, N=int(eq.N_grid * eq.NFP)).nodes
-    xg = compute(yg, inbasis)
-    idx = jnp.zeros(len(coords)).astype(int)
-    coords = jnp.asarray(coords)
+    yk = guess
+    if yk is None:
+        # nearest neighbor search on coarse grid for initial guess
+        yg = ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP).nodes
+        xg = compute(yg, inbasis)
+        idx = jnp.zeros(len(coords)).astype(int)
+        coords = jnp.asarray(coords)
 
-    def _distance_body(i, idx):
-        distance = jnp.linalg.norm(coords[i] - xg, axis=-1)
-        k = jnp.argmin(distance)
-        idx = put(idx, i, k)
-        return idx
+        def _distance_body(i, idx):
+            d = (coords[i] % period) - (xg % period)
+            d = jnp.where(d > period / 2, period - d, d)
+            distance = jnp.linalg.norm(d, axis=-1)
+            k = jnp.argmin(distance)
+            idx = put(idx, i, k)
+            return idx
 
-    idx = fori_loop(0, len(coords), _distance_body, idx)
-    yk = yg[idx]
-    alpha = 0.5
+        idx = fori_loop(0, len(coords), _distance_body, idx)
+        yk = yg[idx]
+
+        # apply some heuristics based on common patterns
+        if "rho" in inbasis:
+            yk = put(yk.T, 0, coords[:, inbasis.index("rho")]).T
+        if "theta" in inbasis:
+            yk = put(yk.T, 1, coords[:, inbasis.index("theta")]).T
+        elif "theta_PEST" in inbasis:  # lambda is usually small
+            yk = put(yk.T, 1, coords[:, inbasis.index("theta_PEST")]).T
+        if "zeta" in inbasis:
+            yk = put(yk.T, 2, coords[:, inbasis.index("zeta")]).T
+        elif "phi" in inbasis:
+            yk = put(yk.T, 2, coords[:, inbasis.index("phi")]).T
+
     yk = fixup(yk)
     resk = residual(yk)
 
@@ -109,7 +169,7 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
         J = jac(yk)
         d = lstsq(J, resk)
         alphak = jnp.ones(yk.shape[0])
-        for j in range(10):
+        for j in range(maxls):
             # backtracking line search
             yt = fixup(yk - alphak[:, None] * d)
             res = residual(yt)
@@ -139,6 +199,7 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
     yk = jnp.vstack([r, t, z]).T
 
     out = compute(yk, outbasis)
+
     return out
 
 
@@ -352,8 +413,9 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-    transforms = get_transforms("sqrt(g)_PEST", eq=eq, grid=grid)
+    transforms = get_transforms("sqrt(g)_PEST", obj=eq, grid=grid)
     data = compute_fun(
+        "desc.equilibrium.equilibrium.Equilibrium",
         "sqrt(g)_PEST",
         params={
             "R_lmn": R_lmn,

@@ -5,6 +5,7 @@ from desc.grid import Grid
 import desc.io
 from desc.backend import jnp
 import matplotlib.pyplot as plt
+import scipy.constants
 
 # Load Equilibrium
 eq = desc.io.load("input.final_freeb_output.h5")[-1]
@@ -30,8 +31,8 @@ def output_to_file(solution, i):
 
 # Energy and Mass info
 Energy_eV = 1
-Proton_Mass = 1.673e-27
-Proton_Charge = 1.6e-19
+Proton_Mass = scipy.constants.proton_mass
+Proton_Charge = scipy.constants.elementary_charge
 
 Energy_SI = Energy_eV*Proton_Charge
 
@@ -40,9 +41,9 @@ Mass = 4*Proton_Mass
 Charge = 2*Proton_Charge
 
 # Initial State
-psi_i = 0.8
-zeta_i = 0.1
-theta_i = 0.2
+psi_i = 0.3
+theta_i = 0.
+zeta_i = 0.
 vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)
 ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 

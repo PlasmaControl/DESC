@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import scipy.constants
 
 # Load Equilibrium
-eq = desc.io.load("input.final_freeb_output.h5")[-1]
+eq = desc.io.load("input.LandremanPaul2021_QA_scaled_output.h5")[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 eq.solve()
@@ -30,7 +30,7 @@ def output_to_file(solution, i):
             file.write(row_str + '\n')
 
 # Energy and Mass info
-Energy_eV = 1
+Energy_eV = 3.52e6
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
 
@@ -50,7 +50,7 @@ ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 # Time
 tmin = 0
 tmax = 0.01
-nt = 2000
+nt = 3000
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond
@@ -72,7 +72,7 @@ print("*************** SOLUTION .compute() ***************")
 print(solution)
 print("***************************************************")
 
-output_to_file(solution, "output_comparison.txt")
+output_to_file(solution, "output_comparison_scaled.txt")
 
 """
 f = open("output_file.txt", "w")

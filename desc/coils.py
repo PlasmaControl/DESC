@@ -183,7 +183,7 @@ class _Coil(_MagneticField, ABC):
         else:
             current = params.pop("current", self.current)
 
-        data = self.compute(["x", "x_s", "ds"], grid=grid, basis="xyz")
+        data = self.compute(["x", "x_s", "ds"], grid=grid, params=params, basis="xyz")
         B = biot_savart_quad(
             coords, data["x"], data["x_s"] * data["ds"][:, None], current
         )
@@ -492,12 +492,12 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         else:
             current = params.pop("current", self.current)
 
-        data = self.compute(["x"], grid=grid, basis="xyz")
+        data = self.compute(["x"], grid=grid, params=params, basis="xyz")
         # need to make sure the curve is closed. If it's already closed, this doesn't
         # do anything (effectively just adds a segment of zero length which has no
         # effect on the overall result)
         coil_pts_start = data["x"]
-        coil_pts_end = np.concatenate([data["x"][1:], data["x"][:1]])
+        coil_pts_end = jnp.concatenate([data["x"][1:], data["x"][:1]])
         # could get up to 4th order accuracy by shifting points outward as in
         # (McGreivy, Zhu, Gunderson, Hudson 2021), however that requires knowing the
         # coils curvature which is a 2nd derivative of the position, and doing that
@@ -856,7 +856,7 @@ class CoilSet(_Coil, MutableSequence):
                 )
             )
 
-        return CoilSet(*coils)
+        return cls(*coils)
 
     def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
         """Save CoilSet as a MAKEGRID-formatted coil txtfile.

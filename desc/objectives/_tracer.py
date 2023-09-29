@@ -154,7 +154,7 @@ class ParticleTracer(_Objective):
         initial_conditions_jax = jnp.array(self.initial_conditions, dtype=jnp.float64)
         t_jax = self.output_time
         system_jit = jit(system)
-        solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax)
+        solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax, rtol=1e-12)
 
         if self.compute_option == "optimization":
             return jnp.mean(solution[:, 0])

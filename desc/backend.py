@@ -76,7 +76,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln, logsumexp
-    from jax.tree_util import register_pytree_node
+    from jax.tree_util import register_pytree_node, tree_flatten
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -118,6 +118,44 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         y = jnp.where(x == 0, 1, jnp.sign(x))
         return y
 
+    @jit
+    def tree_stack(trees):
+        """Takes a list of trees and stacks every corresponding leaf.
+
+        For example, given two trees ((a, b), c) and ((a', b'), c'), returns
+        ((stack(a, a'), stack(b, b')), stack(c, c')).
+        Useful for turning a list of objects into something you can feed to a
+        vmapped function.
+        """
+        leaves_list = []
+        treedef_list = []
+        for tree in trees:
+            leaves, treedef = tree_flatten(tree)
+            leaves_list.append(leaves)
+            treedef_list.append(treedef)
+
+        grouped_leaves = zip(*leaves_list)
+        result_leaves = [jnp.stack(l) for l in grouped_leaves]
+        return treedef_list[0].unflatten(result_leaves)
+
+    @jit
+    def tree_unstack(tree):
+        """Takes a tree and turns it into a list of trees. Inverse of tree_stack.
+
+        For example, given a tree ((a, b), c), where a, b, and c all have first
+        dimension k, will make k trees
+        [((a[0], b[0]), c[0]), ..., ((a[k], b[k]), c[k])]
+        Useful for turning the output of a vmapped function into normal objects.
+        """
+        leaves, treedef = tree_flatten(tree)
+        n_trees = leaves[0].shape[0]
+        new_leaves = [[] for _ in range(n_trees)]
+        for leaf in leaves:
+            for i in range(n_trees):
+                new_leaves[i].append(leaf[i])
+        new_trees = [treedef.unflatten(l) for l in new_leaves]
+        return new_trees
+
 else:
     jit = lambda func, *args, **kwargs: func
     from scipy.integrate import odeint  # noqa: F401
@@ -129,6 +167,18 @@ else:
         solve_triangular,
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
+
+    def tree_flatten(*args, **kwargs):
+        """Flatten a pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_stack(*args, **kwargs):
+        """Stack pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_unstack(*args, **kwargs):
+        """Untack pytree for numpy backend."""
+        raise NotImplementedError
 
     def register_pytree_node(foo, *args):
         """Dummy decorator for non-jax pytrees."""

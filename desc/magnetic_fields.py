@@ -1000,7 +1000,7 @@ class ScalarPotentialField(_MagneticField):
 
 
 def field_line_integrate(
-    r0, z0, phis, field, params=None, rtol=1e-8, atol=1e-8, maxstep=1000
+    r0, z0, phis, field, params=None, grid=None, rtol=1e-8, atol=1e-8, maxstep=1000
 ):
     """Trace field lines by integration.
 
@@ -1016,6 +1016,8 @@ def field_line_integrate(
         source of magnetic field to integrate
     params: dict
         parameters passed to field
+    grid : Grid, optional
+        Collocation points used to discretize source field.
     rtol, atol : float
         relative and absolute tolerances for ode integration
     maxstep : int
@@ -1038,7 +1040,7 @@ def field_line_integrate(
     def odefun(rpz, s):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
-        br, bp, bz = field.compute_magnetic_field(rpz, params, basis="rpz").T
+        br, bp, bz = field.compute_magnetic_field(rpz, params, basis="rpz", grid=grid).T
         return jnp.array(
             [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
         ).squeeze()

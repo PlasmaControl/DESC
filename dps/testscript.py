@@ -1,16 +1,18 @@
-from desc.objectives import ParticleTracer, ObjectiveFunction
-from desc.grid import Grid, LinearGrid
+from desc import set_device
+set_device("gpu")
+from desc.objectives import ParticleTracer
+from desc.grid import Grid
 import desc.io
 from desc.backend import jnp
 import matplotlib.pyplot as plt
-import numpy as np
-import jax.random
 
-eq = desc.io.load("ct32NFP4_init.h5")
+# Load Equilibrium
+eq = desc.io.load("input.final_freeb_output.h5")[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
-# eq.solve()
+eq.solve()
 
+# Output the resulting solution to a .txt file, in 4 columns (psi, theta, zeta, vpar)
 def output_to_file(solution, i):
     list1 = solution[:, 0]
     list2 = solution[:, 1]
@@ -26,67 +28,49 @@ def output_to_file(solution, i):
             row_str = '\t'.join(map(str, row))
             file.write(row_str + '\n')
 
-def starting_ensamble(size):
-    mass = 1.673e-27
-    Energy = 3.52e6*1.6e-19
-    key = jax.random.PRNGKey(int(4120))
+# Energy and Mass info
+Energy_eV = 1
+Proton_Mass = 1.673e-27
+Proton_Charge = 1.6e-19
 
-    # v_init = jax.random.maxwell(key, (size,))*jnp.sqrt(2*Energy/mass)
-    
-    psi_init = jax.random.uniform(key, (size,), minval=1e-4, maxval=1-1e-4)
-    zeta_init = 0.2
-    theta_init = 0.2
-    v_init = (0.3 + jax.random.uniform(key, (size,), minval=-1e-2, maxval=1e-2)) * jnp.sqrt(2*Energy/mass) 
+Energy_SI = Energy_eV*Proton_Charge
 
-    ini_cond = [[float(psi_init[i]), theta_init, zeta_init, float(v_init[i])] for i in range(0, size)]
-    return ini_cond
+# Particle Info
+Mass = 4*Proton_Mass
+Charge = 2*Proton_Charge
 
-init = starting_ensamble(25)
-i = 0
+# Initial State
+psi_i = 0.8
+zeta_i = 0.1
+theta_i = 0.2
+vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)
+ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
-for initial_conditions in init:
-    
-    tmin = 0
-    tmax = 0.0007
-    nt = 500
-    time = jnp.linspace(tmin, tmax, nt)
-    psi_i = initial_conditions[0]
-    theta_i = initial_conditions[1]
-    zeta_i = initial_conditions[2]
-    ini_vpar = initial_conditions[3]
+# Time
+tmin = 0
+tmax = 1e-5
+nt = 2000
+time = jnp.linspace(tmin, tmax, nt)
 
-    mass = 1.673e-27
-    Energy = 3.52e6*1.6e-19
-    ini_cond = initial_conditions
+initial_conditions = ini_cond
+Mass_Charge_Ratio = Mass/Charge
 
-    mass_charge = mass/1.6e-19
+grid = Grid(jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=True, sort=False)
+data = eq.compute("|B|", grid=grid)
 
-    grid = Grid(jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=True, sort=False)
-    data = eq.compute("|B|", grid=grid)
+mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 
-    mu = Energy/(mass*data["|B|"]) - (ini_vpar**2)/(2*data["|B|"])
+ini_param = [float(mu), Mass_Charge_Ratio]
 
-    ini_param = [float(mu), mass_charge]
+objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer")
 
-    objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer")
+objective.build()
+solution = objective.compute(*objective.xs(eq))
 
-    objective.build()
-    solution = objective.compute(*objective.xs(eq))
+print("*************** SOLUTION .compute() ***************")
+print(solution)
+print("***************************************************")
 
-    print("*************** SOLUTION .compute() ***************")
-    print(solution)
-    print("***************************************************")
-    plt.plot(np.sqrt(solution[:, 0]) * np.cos(solution[:, 1]), np.sqrt(solution[:, 0]) * np.sin(solution[:, 1]))
-
-    output_to_file(solution, i)
-
-    i = i + 1
-
-f = open("output_mu" + ".txt", "w")
-f.write(f"{mu}")
-f.close()
-
-plt.savefig("all_traj.png")
 
 """
 f = open("output_file.txt", "w")

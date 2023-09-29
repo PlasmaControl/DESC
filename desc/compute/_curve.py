@@ -528,10 +528,11 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve",
     dim=3,
-    params=["X", "Y", "Z", "knots", "method"],
+    params=["X", "Y", "Z", "knots"],
     transforms={
         "rotmat": [],
         "shift": [],
+        "method": [],
     },
     profiles=[],
     coordinates="s",
@@ -546,7 +547,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["X"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=0,
         period=2 * jnp.pi,
     )
@@ -554,7 +555,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Y"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=0,
         period=2 * jnp.pi,
     )
@@ -562,7 +563,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Z"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=0,
         period=2 * jnp.pi,
     )
@@ -582,10 +583,11 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "method"],
+    params=["X", "Y", "Z", "knots"],
     transforms={
         "rotmat": [],
         "shift": [],
+        "method": [],
     },
     profiles=[],
     coordinates="s",
@@ -600,7 +602,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["X"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=1,
         period=2 * jnp.pi,
     )
@@ -608,7 +610,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Y"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=1,
         period=2 * jnp.pi,
     )
@@ -616,7 +618,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Z"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=1,
         period=2 * jnp.pi,
     )
@@ -630,7 +632,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["X"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -638,7 +640,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Y"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -646,7 +648,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Z"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -666,10 +668,11 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "method"],
+    params=["X", "Y", "Z", "knots"],
     transforms={
         "rotmat": [],
         "shift": [],
+        "method": [],
     },
     profiles=[],
     coordinates="s",
@@ -684,7 +687,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["X"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=2,
         period=2 * jnp.pi,
     )
@@ -692,7 +695,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Y"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=2,
         period=2 * jnp.pi,
     )
@@ -700,7 +703,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Z"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=2,
         period=2 * jnp.pi,
     )
@@ -714,7 +717,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["X"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -722,7 +725,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Y"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -730,7 +733,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Z"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -749,10 +752,11 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "method"],
+    params=["X", "Y", "Z", "knots"],
     transforms={
         "rotmat": [],
         "shift": [],
+        "method": [],
     },
     profiles=[],
     coordinates="s",
@@ -767,7 +771,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["X"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=3,
         period=2 * jnp.pi,
     )
@@ -775,7 +779,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Y"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=3,
         period=2 * jnp.pi,
     )
@@ -783,7 +787,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Z"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=3,
         period=2 * jnp.pi,
     )
@@ -797,7 +801,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["X"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -805,7 +809,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Y"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -813,7 +817,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Z"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -964,15 +968,15 @@ def _length(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Length of the curve",
     dim=0,
-    params=["method"],
-    transforms={},
+    params=[],
+    transforms={"method": []},
     profiles=[],
     coordinates="",
     data=["ds", "x", "x_s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
 )
 def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
-    if params["method"] == "nearest":  # cannot use derivative method as deriv=0
+    if transforms["method"] == "nearest":  # cannot use derivative method as deriv=0
         coords = data["x"]
         if kwargs.get("basis", "rpz").lower() == "rpz":
             coords = rpz2xyz(coords)

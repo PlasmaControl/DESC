@@ -1,4 +1,4 @@
-"""Objectives for targeting quasisymmetry."""
+"""Objectives for optimizing the equilibrium from tracing particles."""
 
 import warnings
 

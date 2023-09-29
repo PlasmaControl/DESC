@@ -18,7 +18,7 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 class ParticleTracer(_Objective):
-    """Quasi-symmetry Boozer harmonics error.
+    """Particle Tracer using Guiding Center equations of motion.
 
     Parameters
     ----------

@@ -67,11 +67,13 @@ class ParticleTracer(_Objective):
         output_time=None,
         initial_conditions=None,
         initial_parameters=None,
-        name="Particle Tracer"      
+        compute_option=None,
+        name="Particle Tracer"
     ):
         self.output_time = output_time
         self.initial_conditions=jnp.asarray(initial_conditions) 
-        self.initial_parameters=initial_parameters
+        self.initial_parameters=jnp.asarray(initial_parameters)
+        self.compute_option=compute_option
         
         if target is None and bounds is None:
             target = 0
@@ -102,10 +104,21 @@ class ParticleTracer(_Objective):
         self.charge = 1.6e-19
         self.mass = 1.673e-27 # CHECK VALUES
         self.Energy = 3.52e6*self.charge 
-        eq = eq or self._eq    
-        # self._dim_f = [len(self.output_time), 4]
-        self._dim_f = len(self.output_time)
+        eq = eq or self._eq
 
+        if self.compute_option == "optimization":
+            self._dim_f = len(self.output_time)
+        elif self.compute_option == "tracer":
+            self._dim_f = [len(self.output_time), 4]
+        elif self.compute_option == "average psi":
+            self._dim_f = len(self.output_time)
+        elif self.compute_option == "average theta":
+            self._dim_f = len(self.output_time)
+        elif self.compute_option == "average zeta":
+            self._dim_f = len(self.output_time)
+        elif self.compute_option == "average vpar":
+           self._dim_f = len(self.output_time)
+            
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -115,12 +128,12 @@ class ParticleTracer(_Objective):
             constants = self.constants
         
 
-        def system(t, y, initial_parameters = self.initial_parameters):
+        def system(t = self.output_time, initial_conditions = self.initial_conditions, initial_parameters = self.initial_parameters):
             #initial conditions
-            psi = y[0]
-            theta = y[1]
-            zeta = y[2]
-            vpar = y[3]
+            psi = initial_conditions[0]
+            theta = initial_conditions[1]
+            zeta = initial_conditions[2]
+            vpar = initial_conditions[3]
             
             grid = Grid(jnp.array([jnp.sqrt(psi), theta, zeta]).T, jitable=True, sort=False)
             transforms = get_transforms(self._data_keys, self._eq, grid, jitable=True)
@@ -133,7 +146,7 @@ class ParticleTracer(_Objective):
             zetadot = data["zetadot"]
             vpardot = data["vpardot"]
 
-            return jnp.array([psidot, thetadot, zetadot, vpardot]).squeeze()
+            return jnp.array([psidot, thetadot, zetadot, vpardot])
         
         initial_conditions_jax = self.initial_conditions
         t_jax = self.output_time
@@ -156,6 +169,15 @@ class ParticleTracer(_Objective):
             ).ys
 
 
-        # solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax)
-
-        return solution[:, 0]- solution[0,0]
+        if self.compute_option == "optimization":
+            return jnp.mean(solution[:, 0])
+        elif self.compute_option == "tracer":
+            return solution
+        elif self.compute_option == "average psi":
+            return jnp.mean(solution[:, 0])
+        elif self.compute_option == "average theta":
+            return jnp.mean(solution[:, 1])
+        elif self.compute_option == "average zeta":
+            return jnp.mean(solution[:, 2])
+        elif self.compute_option == "average vpar":
+            return jnp.mean(solution[:, 3])

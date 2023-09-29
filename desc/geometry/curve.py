@@ -624,7 +624,7 @@ class SplineXYZCurve(Curve):
 
     """
 
-    _io_attrs_ = Curve._io_attrs_ + ["_X", "_Y", "_Z", "_basis", "_transform"]
+    _io_attrs_ = Curve._io_attrs_ + ["_X", "_Y", "_Z", "_knots", "_method"]
 
     def __init__(
         self,

@@ -57,7 +57,7 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="sqrt(g)_PEST_z",
-    label="\\sqrt{g}_{PEST}_z",
+    label="\\sqrt{g}_{PEST, \\zeta}",
     units="m^{3}",
     units_long="cubic meters",
     description="Toroidal derivative of Jacobian determinant of PEST system",
@@ -74,15 +74,14 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _sqrtg_pest_z(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_PEST_z"] = data["sqrt(g)_z"] - data["sqrt(g)_t"] * data[
-        "lambda_z"
-    ] / (1 + data["lambda_t"])
+    comn_fac = data["lambda_z"] / (1 + data["lambda_t"])
+    data["sqrt(g)_PEST_z"] = data["sqrt(g)_z"] - data["sqrt(g)_t"] * comn_fac
     return data
 
 
 @register_compute_fun(
     name="sqrt(g)_PEST_zz",
-    label="\\sqrt{g}_{PEST}_zz",
+    label="\\sqrt{g}_{PEST, \\zeta \\zeta}",
     units="m^{3}",
     units_long="cubic meters",
     description="Toroidal derivative of Jacobian determinant of PEST system",
@@ -92,7 +91,6 @@ def _sqrtg_pest_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "sqrt(g)_z",
         "sqrt(g)_t",
         "sqrt(g)_zz",
         "sqrt(g)_tt",

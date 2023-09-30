@@ -27,6 +27,8 @@ dependencies:
   - sphinx-argparse
   - sphinx-copybutton
   - sphinx_rtd_theme >= 1.0, < 2.0
+  - pip:
+    - sphinx-github-style >= 1.0, <= 1.1
 
   # linting
   - black = 22.10.0

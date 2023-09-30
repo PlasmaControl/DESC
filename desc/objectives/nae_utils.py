@@ -1008,7 +1008,7 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_2_0_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        target = NAEcoeff * r**2
         for k in range(1, int(desc_eq.L / 2) + 1):
             modes.append([2 * k, 0, n])
             sum_weights.append([(-1) ** k * k * (k + 1)])
@@ -1023,7 +1023,7 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_2_2_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        target = NAEcoeff * r**2
         for k in range(1, int(desc_eq.L / 2) + 1):
             modes.append([2 * k, 2, n])
             sum_weights.append([(-1) ** k * k * (k + 1)])
@@ -1037,7 +1037,7 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_2_neg2_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        target = NAEcoeff * r**2
         for k in range(1, int(desc_eq.L / 2) + 1):
             modes.append([2 * k, -2, n])
             sum_weights.append([(-1) ** k * k * (k + 1)])
@@ -1051,7 +1051,7 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_0_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        target = NAEcoeff * r**2
         for k in range(1, int(desc_eq.L / 2) + 1):
             modes.append([2 * k, 0, n])
             sum_weights.append([(-1) ** k * k * (k + 1)])
@@ -1065,7 +1065,7 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_2_neg2_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        target = NAEcoeff * r**2
         for k in range(1, int(desc_eq.M / 2) + 1):
             modes.append([2 * k, -2, n])
             sum_weights.append([(-1) ** k * k * (k + 1)])
@@ -1079,7 +1079,7 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_2_n"]):
         sum_weights = []
         modes = []
-        target = NAEcoeff * r
+        target = NAEcoeff * r**2
         for k in range(1, int(desc_eq.M / 2) + 1):
             modes.append([2 * k, 2, n])
             sum_weights.append([(-1) ** k * k * (k + 1)])

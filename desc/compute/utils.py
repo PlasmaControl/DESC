@@ -362,6 +362,12 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
             transforms["rotmat"] = obj.rotmat
         elif c == "shift":
             transforms["shift"] = obj.shift
+        elif c == "potential":
+            transforms["potential"] = obj.potential
+        elif c == "potential_dtheta":
+            transforms["potential_dtheta"] = obj.potential_dtheta
+        elif c == "potential_dzeta":
+            transforms["potential_dzeta"] = obj.potential_dzeta
 
     return transforms
 

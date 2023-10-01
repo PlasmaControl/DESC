@@ -1,16 +1,18 @@
 """Classes for magnetic fields."""
 
+import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.backend import jit, jnp, odeint
+from desc.backend import fori_loop, jit, jnp, odeint, sign
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz_vec, xyz2rpz
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import LinearGrid
+from desc.geometry import FourierRZToroidalSurface
+from desc.grid import Grid, LinearGrid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
 from desc.transform import Transform
@@ -62,6 +64,40 @@ def biot_savart(eval_pts, coil_pts, current):
     vec = jnp.cross(d_vec[:, jnp.newaxis, :], Ri_vec, axis=-1)
     B = jnp.sum(B_mag[:, :, jnp.newaxis] * vec, axis=0)
     return B
+
+
+def biot_savart_general(re, rs, J, dV):
+    """Biot-Savart law for arbitrary sources.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in cartesian.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for current density J, in cartesian.
+    J : ndarray, shape(n_src_pts, 3)
+        current density vector at source points, in cartesian.
+    dV : ndarray, shape(n_src_pts)
+        volume element at source points
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+    """
+    re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
+    assert J.shape == rs.shape
+    JdV = J * dV[:, None]
+    B = jnp.zeros_like(re)
+
+    def body(i, B):
+        r = re - rs[i, :]
+        num = jnp.cross(JdV[i, :], r, axis=-1)
+        den = jnp.linalg.norm(r, axis=-1) ** 3
+        B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
+        return B
+
+    return 1e-7 * fori_loop(0, J.shape[0], body, B)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
@@ -1097,3 +1133,644 @@ def field_line_integrate(
     r = x[:, :, 0].T.reshape((len(phis), *rshape))
     z = x[:, :, 2].T.reshape((len(phis), *rshape))
     return r, z
+
+
+class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
+    """Magnetic field due to a surface current potential on a toroidal surface.
+
+        surface current K is assumed given by
+         K = ∇ Φ x n
+        where:
+               n is the winding surface unit normal
+               Phi is the current potential function,
+               which is a function of theta and zeta
+        this function then uses biot-savart to find the
+        B field from this current density K on the surface
+
+    Parameters
+    ----------
+    potential : callable
+        function to compute the current potential. Should have a signature of
+        the form potential(theta,zeta,**params) -> ndarray.
+        theta,zeta are poloidal and toroidal angles on the surface
+    potential_dtheta: callable
+        function to compute the theta derivative of the current potential
+    potential_dzeta: callable
+        function to compute the theta derivative of the current potential
+    surface_grid : Grid,
+        grid upon which to evaluate the surface current density K
+    params : dict, optional
+        default parameters to pass to potential function (and its derivatives)
+    R_lmn, Z_lmn : array-like, shape(k,)
+        Fourier coefficients for winding surface R and Z in cylindrical coordinates
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry. Default is "auto" which enforces if
+        modes are symmetric. If True, non-symmetric modes will be truncated.
+    rho : float [0,1]
+        flux surface label for the toroidal surface
+    name : str
+        name for this field
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+
+    """
+
+    _io_attrs_ = (
+        _MagneticField._io_attrs_
+        + FourierRZToroidalSurface._io_attrs_
+        + [
+            "_surface_grid",
+            "_params",
+        ]
+    )
+
+    def __init__(
+        self,
+        potential,
+        potential_dtheta,
+        potential_dzeta,
+        surface_grid,
+        params=None,
+        R_lmn=None,
+        Z_lmn=None,
+        modes_R=None,
+        modes_Z=None,
+        NFP=1,
+        sym="auto",
+        rho=1,
+        name="",
+        check_orientation=True,
+    ):
+        assert callable(potential), "Potential must be callable!"
+        assert callable(potential_dtheta), "Potential derivative must be callable!"
+        assert callable(potential_dzeta), "Potential derivative must be callable!"
+
+        self._potential = potential
+        self._potential_dtheta = potential_dtheta
+        self._potential_dzeta = potential_dzeta
+        self._surface_grid = surface_grid
+        self._params = params
+
+        assert (
+            self.surface_grid.NFP == NFP
+        ), "NFP of surface must match NFP of surface_grid"
+
+        super().__init__(
+            R_lmn, Z_lmn, modes_R, modes_Z, NFP, sym, rho, name, check_orientation
+        )
+
+    @property
+    def surface_grid(self):
+        """Grid of points to evaluate surface current at."""
+        return self._surface_grid
+
+    @surface_grid.setter
+    def surface_grid(self, new):
+        if new != self._surface_grid:
+            self._surface_grid = new
+
+    @property
+    def params(self):
+        """Dict of parameters to pass to potential function and its derivatives."""
+        return self._params
+
+    @params.setter
+    def params(self, new):
+        if new != self._params:
+            if len(new) != len(self._params):
+                warnings.warn(
+                    "Length of new params is different from length of current params! "
+                    "May cause errors unless potential function is also changed.",
+                    UserWarning,
+                )
+            self._params = new
+
+    @property
+    def potential(self):
+        """Potential function, signature (theta,zeta,**params) -> potential value."""
+        return self._potential
+
+    @potential.setter
+    def potential(self, new):
+        if new != self._potential:
+            assert callable(new), "Potential must be callable!"
+            self._potential = new
+
+    @property
+    def potential_dtheta(self):
+        """Phi poloidal deriv. function, signature (theta,zeta,**params) -> value."""
+        return self._potential_dtheta
+
+    @potential_dtheta.setter
+    def potential_dtheta(self, new):
+        if new != self._potential_dtheta:
+            assert callable(new), "Potential derivative must be callable!"
+            self._potential_dtheta = new
+
+    @property
+    def potential_dzeta(self):
+        """Phi toroidal deriv. function, signature (theta,zeta,**params) -> value."""
+        return self._potential_dzeta
+
+    @potential_dzeta.setter
+    def potential_dzeta(self, new):
+        if new != self._potential_dzeta:
+            assert callable(new), "Potential derivative must be callable!"
+            self._potential_dzeta = new
+
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical or cartesian coordinates
+        params : dict, optional
+            parameters to pass to compute function
+            should include the potential
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
+        grid : Grid,
+            grid upon which to evaluate the surface current density K
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        assert basis.lower() in ["rpz", "xyz"]
+        if isinstance(coords, Grid):
+            coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+        surface_grid = grid or self.surface_grid
+
+        # compute surface current, and store grid quantities
+        # needed for integration in class
+        # TODO: does this have to be xyz, or can it be computed in rpz as well?
+        data = self.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
+        _K = xyz2rpz_vec(data["K"], phi=self.surface_grid.nodes[:, 2])
+        _rs = xyz2rpz_vec(data["x"], phi=self.surface_grid.nodes[:, 2])
+        # surface element, must divide by NFP to remove the NFP multiple on the
+        # surface grid weights, as we account for that when doing the for loop
+        # over NFP
+        _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
+
+        def nfp_loop(j, f):
+            # calculate (by rotating) rs, rs_t, rz_t
+            phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
+                2 * jnp.pi
+            )
+            rs = rpz2xyz_vec(_rs, phi=phi)
+            K = rpz2xyz_vec(_K, phi=phi)
+            fj = biot_savart_general(
+                coords,
+                rs,
+                K,
+                _dV,
+            )
+            f += fj
+            return f
+
+        B = fori_loop(0, self.surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+        if basis == "rpz":
+            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+        return B
+
+    @classmethod
+    def from_surface(
+        cls,
+        surface,
+        potential,
+        potential_dtheta,
+        potential_dzeta,
+        surface_grid,
+        params=None,
+        rho=1,
+        name="",
+        check_orientation=True,
+    ):
+        """Create CurrentPotentialField using geometry provided by given surface.
+
+        Parameters
+        ----------
+        surface: FourierRZToroidalSurface, optional, default None
+            Existing FourierRZToroidalSurface object to create a
+            CurrentPotentialField with.
+        potential : callable
+            function to compute the current potential. Should have a signature of
+            the form potential(theta,zeta,**params) -> ndarray.
+            theta,zeta are poloidal and toroidal angles on the surface
+        potential_dtheta: callable
+            function to compute the theta derivative of the current potential
+        potential_dzeta: callable
+            function to compute the theta derivative of the current potential
+        surface_grid : Grid,
+            grid upon which to evaluate the surface current density K
+        params : dict, optional
+            default parameters to pass to potential function (and its derivatives)
+
+        name : str
+            name for this field
+        check_orientation : bool
+            ensure that this surface has a right handed orientation. Do not set to False
+            unless you are sure the parameterization you have given is right handed
+            (ie, e_theta x e_zeta points outward from the surface).
+
+        """
+        if not isinstance(surface, FourierRZToroidalSurface):
+            raise TypeError(
+                "Expected type FourierRZToroidalSurface for argument surface, "
+                f"instead got type {type(surface)}"
+            )
+        R_lmn = surface.R_lmn
+        Z_lmn = surface.Z_lmn
+        modes_R = surface._R_basis.modes[:, 1:]
+        modes_Z = surface._Z_basis.modes[:, 1:]
+        NFP = surface.NFP
+        sym = surface.sym
+        rho = surface.rho
+
+        return cls(
+            potential,
+            potential_dtheta,
+            potential_dzeta,
+            surface_grid,
+            params,
+            R_lmn,
+            Z_lmn,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            rho,
+            name,
+            check_orientation,
+        )
+
+
+class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
+    """Magnetic field due to a surface current potential on a toroidal surface.
+
+        surface current K is assumed given by
+
+        K = ∇ Φ x n
+        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+        where:
+              n is the winding surface unit normal
+              Phi is the current potential function,
+              which is a function of theta and zeta,
+              and is given as a secular linear term in theta/zeta
+              and a double Fourier series in theta/zeta
+        this function then uses biot-savart to find the
+        B field from this current density K on the surface
+
+    Parameters
+    ----------
+    Phi_mn : ndarray
+        Fourier coefficients of the double FourierSeries part of the current potential.
+    modes_Phi : array-like, shape(k,2)
+        Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn coefficients
+    I : float
+        Net current linking the plasma and the coils toroidally
+        Denoted I in the algorithm
+    G : float
+        Net current linking the plasma and the coils poloidally
+        Denoted G in the algorithm
+    surface_grid : Grid
+        grid upon which to evaluate the surface current density K
+    sym_Phi : str or False, one of {"auto","cos","sin",False}
+        whether to enforce a given symmetry for the DoubleFourierSeries part of the
+        current potential. Default is "auto" which enforces if modes are symmetric.
+        If True, non-symmetric modes will be truncated.
+    R_lmn, Z_lmn : array-like, shape(k,)
+        Fourier coefficients for winding surface R and Z in cylindrical coordinates
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry for the toroidal surface.
+        Default is "auto" which enforces if modes are symmetric.
+        If True, non-symmetric modes will be truncated.
+    rho : float [0,1]
+        flux surface label for the toroidal surface
+    name : str
+        name for this field
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+
+    """
+
+    _io_attrs_ = (
+        _MagneticField._io_attrs_
+        + FourierRZToroidalSurface._io_attrs_
+        + ["_surface_grid", "Phi_mn", "I", "G"]
+    )
+
+    def __init__(
+        self,
+        Phi_mn=np.array([0.0]),
+        modes_Phi=np.array([[0, 0]]),
+        I=0,
+        G=0,
+        surface_grid=None,
+        sym_Phi="auto",
+        R_lmn=None,
+        Z_lmn=None,
+        modes_R=None,
+        modes_Z=None,
+        NFP=1,
+        sym="auto",
+        rho=1,
+        name="",
+        check_orientation=True,
+    ):
+        self._Phi_mn = Phi_mn
+
+        Phi_mn, modes_Phi = map(np.asarray, (Phi_mn, modes_Phi))
+
+        assert issubclass(modes_Phi.dtype.type, np.integer)
+
+        M_Phi = np.max(abs(modes_Phi[:, 0]))
+        N_Phi = np.max(abs(modes_Phi[:, 1]))
+
+        self._M_Phi = M_Phi
+        self._N_Phi = N_Phi
+
+        if sym_Phi == "auto":
+            if np.all(
+                Phi_mn[np.where(sign(modes_Phi[:, 0]) == sign(modes_Phi[:, 1]))] == 0
+            ):
+                sym_Phi = "sin"
+            elif np.all(
+                Phi_mn[np.where(sign(modes_Phi[:, 0]) != sign(modes_Phi[:, 1]))] == 0
+            ):
+                sym_Phi = "cos"
+            else:
+                sym_Phi = False
+            # catch case where only (0,0) mode is given as 0
+            if np.all(Phi_mn == 0.0) and np.all(modes_Phi == 0):
+                sym_Phi = "cos"
+        self._sym_Phi = sym_Phi
+        self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
+
+        assert np.isscalar(I), "I must be a scalar"
+        assert np.isscalar(G), "G must be a scalar"
+        self._I = I
+        self._G = G
+
+        self._surface_grid = surface_grid or LinearGrid(
+            M=M_Phi * 2 + 1, N=N_Phi * 2 + 1, NFP=NFP
+        )
+
+        assert (
+            self.surface_grid.NFP == NFP
+        ), "NFP of surface must match NFP of surface_grid"
+
+        super().__init__(
+            R_lmn, Z_lmn, modes_R, modes_Z, NFP, sym, rho, name, check_orientation
+        )
+
+    @property
+    def surface_grid(self):
+        """Grid of points to evaluate surface current at."""
+        return self._surface_grid
+
+    @surface_grid.setter
+    def surface_grid(self, new):
+        if new != self._surface_grid:
+            self._surface_grid = new
+
+    @property
+    def I(self):  # noqa: E743
+        """Net current linking the plasma and the coils toroidally."""
+        return self._I
+
+    @I.setter
+    def I(self, new):  # noqa: E743
+        assert np.isscalar(new), "I must be a scalar"
+        self._I = new
+
+    @property
+    def G(self):
+        """Net current linking the plasma and the coils poloidally."""
+        return self._G
+
+    @G.setter
+    def G(self, new):
+        assert np.isscalar(new), "G must be a scalar"
+        self._G = new
+
+    @property
+    def Phi_mn(self):
+        """Fourier coefficients describing single-valued part of potential."""
+        return self._Phi_mn
+
+    @Phi_mn.setter
+    def Phi_mn(self, new):
+        if len(new) == self.Phi_basis.num_modes:
+            self._Phi_mn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Phi_mn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.Phi_basis.num_modes} modes."
+            )
+
+    @property
+    def Phi_basis(self):
+        """DoubleFourierSeries: Spectral basis for Phi."""
+        return self._Phi_basis
+
+    @property
+    def sym_Phi(self):
+        """str: Type of symmetry of periodic part of Phi (no symmetry if False)."""
+        return self._sym_Phi
+
+    def change_Phi_resolution(self, *args, **kwargs):
+        """Change the maximum poloidal and toroidal resolution for Phi."""
+        assert (
+            ((len(args) in [2, 3]) and len(kwargs) == 0)
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
+            or (len(args) == 0)
+        ), (
+            "change_Phi_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+            + "positional arguments or only keyword arguments."
+        )
+        L = kwargs.pop("L", None)
+        M = kwargs.pop("M", None)
+        N = kwargs.pop("N", None)
+        NFP = kwargs.pop("NFP", None)
+        sym_Phi = kwargs.pop("sym_Phi", None)
+        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
+        self._NFP = NFP if NFP is not None else self.NFP
+        self._sym_Phi = sym_Phi if sym_Phi is not None else self.sym_Phi
+        if L is not None:
+            warnings.warn("Phi basis does not have radial resolution, ignoring L")
+        if len(args) == 2:
+            M, N = args
+        elif len(args) == 3:
+            L, M, N = args
+
+        if (
+            ((N is not None) and (N != self.N))
+            or ((M is not None) and (M != self.M))
+            or (NFP is not None)
+        ):
+            M = M if M is not None else self.M
+            N = N if N is not None else self.N
+            Phi_modes_old = self.Phi_basis.modes
+            self.Phi_basis.change_resolution(M=M, N=N, NFP=self.NFP, sym=self.sym_Phi)
+
+            self._Phi_mn = copy_coeffs(self.Phi_mn, Phi_modes_old, self.Phi_basis.modes)
+            self._M_Phi = M
+            self._N_Phi = N
+
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical or cartesian coordinates
+        params : dict, optional
+            parameters to pass to compute function
+            should include the potential
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
+        grid : Grid,
+            grid upon which to evaluate the surface current density K
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        assert basis.lower() in ["rpz", "xyz"]
+        if isinstance(coords, Grid):
+            coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+        surface_grid = grid or self.surface_grid
+
+        # compute surface current, and store grid quantities
+        # needed for integration in class
+        # TODO: does this have to be xyz, or can it be computed in rpz as well?
+        data = self.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
+        _K = xyz2rpz_vec(data["K"], phi=self.surface_grid.nodes[:, 2])
+        _rs = xyz2rpz_vec(data["x"], phi=self.surface_grid.nodes[:, 2])
+        # surface element, must divide by NFP to remove the NFP multiple on the
+        # surface grid weights, as we account for that when doing the for loop
+        # over NFP
+        _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
+
+        def nfp_loop(j, f):
+            # calculate (by rotating) rs, rs_t, rz_t
+            phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
+                2 * jnp.pi
+            )
+            rs = rpz2xyz_vec(_rs, phi=phi)
+            K = rpz2xyz_vec(_K, phi=phi)
+            fj = biot_savart_general(
+                coords,
+                rs,
+                K,
+                _dV,
+            )
+            f += fj
+            return f
+
+        B = fori_loop(0, self.surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+        if basis == "rpz":
+            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+        return B
+
+    @classmethod
+    def from_surface(
+        cls,
+        surface,
+        Phi_mn=np.array([0.0]),
+        modes_Phi=np.array([[0, 0]]),
+        I=0,
+        G=0,
+        surface_grid=None,
+        sym_Phi="auto",
+        name="",
+        check_orientation=True,
+    ):
+        """Create FourierCurrentPotentialField using geometry of given surface.
+
+        Parameters
+        ----------
+        surface: FourierRZToroidalSurface, optional, default None
+            Existing FourierRZToroidalSurface object to create a
+            CurrentPotentialField with.
+        Phi_mn : ndarray
+            Fourier coefficients of the double FourierSeries of the current potential.
+            Should correspond to the given DoubleFourierSeries basis object passed in.
+        modes_Phi : array-like, shape(k,2)
+            Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn
+            coefficients
+        I : float
+            Net current linking the plasma and the coils toroidally
+            Denoted I in the algorithm
+        G : float
+            Net current linking the plasma and the coils poloidally
+            Denoted G in the algorithm
+        surface_grid : Grid
+            grid upon which to evaluate the surface current density K
+        name : str
+            name for this field
+        check_orientation : bool
+            ensure that this surface has a right handed orientation. Do not set to False
+            unless you are sure the parameterization you have given is right handed
+            (ie, e_theta x e_zeta points outward from the surface).
+
+        """
+        if not isinstance(surface, FourierRZToroidalSurface):
+            raise TypeError(
+                "Expected type FourierRZToroidalSurface for argument surface, "
+                f"instead got type {type(surface)}"
+            )
+        R_lmn = surface.R_lmn
+        Z_lmn = surface.Z_lmn
+        modes_R = surface._R_basis.modes[:, 1:]
+        modes_Z = surface._Z_basis.modes[:, 1:]
+        NFP = surface.NFP
+        sym = surface.sym
+        rho = surface.rho
+
+        return cls(
+            Phi_mn,
+            modes_Phi,
+            I,
+            G,
+            surface_grid,
+            sym_Phi,
+            R_lmn,
+            Z_lmn,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            rho,
+            name,
+            check_orientation,
+        )

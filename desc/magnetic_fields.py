@@ -2,12 +2,11 @@
 
 import warnings
 from abc import ABC, abstractmethod
-from functools import partial
 
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.backend import fori_loop, jit, jnp, odeint, sign, vmap
+from desc.backend import fori_loop, jit, jnp, odeint, sign
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
@@ -1145,25 +1144,20 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         this function then uses biot-savart to find the
         B field from this current density K on the surface
 
-        Note: potential function derivatives, if AD is used,
-        will not be vectorized over the params
-
     Parameters
     ----------
     potential : callable
         function to compute the current potential. Should have a signature of
         the form potential(theta,zeta,**params) -> ndarray.
         theta,zeta are poloidal and toroidal angles on the surface
+    potential_dtheta: callable
+        function to compute the theta derivative of the current potential
+    potential_dzeta: callable
+        function to compute the theta derivative of the current potential
     surface_grid : Grid,
         grid upon which to evaluate the surface current density K
     params : dict, optional
         default parameters to pass to potential function (and its derivatives)
-    potential_dtheta: callable
-        function to compute the theta derivative of the current potential
-        if None, will use AD to calculate
-    potential_dzeta: callable
-        function to compute the theta derivative of the current potential
-        if None, will use AD to calculate
     R_lmn, Z_lmn : array-like, shape(k,)
         Fourier coefficients for winding surface R and Z in cylindrical coordinates
     modes_R : array-like, shape(k,2)
@@ -1198,10 +1192,10 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     def __init__(
         self,
         potential,
+        potential_dtheta,
+        potential_dzeta,
         surface_grid,
         params=None,
-        potential_dtheta=None,
-        potential_dzeta=None,
         R_lmn=None,
         Z_lmn=None,
         modes_R=None,
@@ -1213,7 +1207,12 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         check_orientation=True,
     ):
         assert callable(potential), "Potential must be callable!"
+        assert callable(potential_dtheta), "Potential derivative must be callable!"
+        assert callable(potential_dzeta), "Potential derivative must be callable!"
+
         self._potential = potential
+        self._potential_dtheta = potential_dtheta
+        self._potential_dzeta = potential_dzeta
         self._surface_grid = surface_grid
         self._params = params
 
@@ -1222,7 +1221,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         super().__init__(
             R_lmn, Z_lmn, modes_R, modes_Z, NFP, sym, rho, name, check_orientation
         )
-        self._set_derivatives(potential_dtheta, potential_dzeta)
 
     @property
     def surface_grid(self):
@@ -1249,8 +1247,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
                     UserWarning,
                 )
             self._params = new
-            # reset derivatives if params has changed
-            self._set_derivatives()
 
     @property
     def potential(self):
@@ -1262,37 +1258,34 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         if new != self._potential:
             assert callable(new), "Potential must be callable!"
             self._potential = new
-            # reset derivatives if potential has changed, using AD
-            self._set_derivatives()
 
-    def _set_derivatives(self, potential_dtheta=None, potential_dzeta=None):
-        if potential_dtheta:
-            self._potential_t = partial(potential_dtheta, **self.params)
-        else:
-            self._potential_t = vmap(
-                Derivative(
-                    partial(self.potential, **self.params),
-                    argnum=0,
-                    mode="grad",
-                ).compute,
-                in_axes=[0, 0],
-            )
-        if potential_dzeta:
-            self._potential_z = partial(potential_dzeta, **self.params)
-        else:
-            self._potential_z = vmap(
-                Derivative(
-                    partial(self.potential, **self.params), argnum=1, mode="grad"
-                ).compute,
-                in_axes=[0, 0],
-            )
+    @property
+    def potential_dtheta(self):
+        """Phi poloidal deriv. function, signature (theta,zeta,**params) -> value."""
+        return self._potential_dtheta
+
+    @potential_dtheta.setter
+    def potential_dtheta(self, new):
+        if new != self._potential_dtheta:
+            assert callable(new), "Potential derivative must be callable!"
+            self._potential_dtheta = new
+
+    @property
+    def potential_dzeta(self):
+        """Phi toroidal deriv. function, signature (theta,zeta,**params) -> value."""
+        return self._potential_dzeta
+
+    @potential_dzeta.setter
+    def potential_dzeta(self, new):
+        if new != self._potential_dzeta:
+            assert callable(new), "Potential derivative must be callable!"
+            self._potential_dzeta = new
 
     def _compute_surface_current(self, surface_grid=None, params=None):
         if surface_grid is None:
             surface_grid = self.surface_grid
-        if params is not None:
-            # reset derivatives using new params
-            self.params = params
+        if params is None:
+            params = self.params
 
         # surface is the source of current density for the magnetic field
         # compute source positions rs, and their theta/zeta derivatives
@@ -1313,8 +1306,8 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         # in compute_magnetic_field is correct
 
         # compute the potential derivatives on the surface
-        phi_t = self._potential_t(theta, zeta)
-        phi_z = self._potential_z(theta, zeta)
+        phi_t = self._potential_dtheta(theta, zeta, **params)
+        phi_z = self._potential_dzeta(theta, zeta, **params)
 
         # compute K = nabla(Phi) x n
         self._K = xyz2rpz_vec(
@@ -1380,10 +1373,10 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         cls,
         surface,
         potential,
+        potential_dtheta,
+        potential_dzeta,
         surface_grid,
         params=None,
-        potential_dtheta=None,
-        potential_dzeta=None,
         rho=1,
         name="",
         check_orientation=True,
@@ -1394,22 +1387,20 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         ----------
         surface: FourierRZToroidalSurface, optional, default None
             Existing FourierRZToroidalSurface object to create a
-            CurrentPotentialField with, if provided will use this
-            object's R_lmn, Z_lmn etc instead of any passed-in values
+            CurrentPotentialField with.
         potential : callable
             function to compute the current potential. Should have a signature of
             the form potential(theta,zeta,**params) -> ndarray.
             theta,zeta are poloidal and toroidal angles on the surface
+        potential_dtheta: callable
+            function to compute the theta derivative of the current potential
+        potential_dzeta: callable
+            function to compute the theta derivative of the current potential
         surface_grid : Grid,
             grid upon which to evaluate the surface current density K
         params : dict, optional
             default parameters to pass to potential function (and its derivatives)
-        potential_dtheta: callable
-            function to compute the theta derivative of the current potential
-            if None, will use AD to calculate
-        potential_dzeta: callable
-            function to compute the theta derivative of the current potential
-            if None, will use AD to calculate
+
         name : str
             name for this field
         check_orientation : bool
@@ -1433,10 +1424,10 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
         return cls(
             potential,
-            surface_grid,
-            params,
             potential_dtheta,
             potential_dzeta,
+            surface_grid,
+            params,
             R_lmn,
             Z_lmn,
             modes_R,
@@ -1591,11 +1582,6 @@ class FourierCurrentPotentialField(CurrentPotentialField):
         assert np.isscalar(new), "I must be a scalar"
         self._I = new
         self._params["I"] = new
-        # have to call set_derivatives to update the Phi derivative methods
-        # with the new params
-        self._set_derivatives(
-            self._fourier_potential_d_theta, self._fourier_potential_d_zeta
-        )
 
     @property
     def G(self):
@@ -1607,9 +1593,6 @@ class FourierCurrentPotentialField(CurrentPotentialField):
         assert np.isscalar(new), "G must be a scalar"
         self._G = new
         self._params["G"] = new
-        self._set_derivatives(
-            self._fourier_potential_d_theta, self._fourier_potential_d_zeta
-        )
 
     @property
     def Phi_mn(self):
@@ -1621,9 +1604,6 @@ class FourierCurrentPotentialField(CurrentPotentialField):
         if len(new) == self.Phi_basis.num_modes:
             self._Phi_mn = jnp.asarray(new)
             self._params["Phi_mn"] = new
-            self._set_derivatives(
-                self._fourier_potential_d_theta, self._fourier_potential_d_zeta
-            )
         else:
             raise ValueError(
                 f"Phi_mn should have the same size as the basis, got {len(new)} for "
@@ -1752,8 +1732,7 @@ class FourierCurrentPotentialField(CurrentPotentialField):
         ----------
         surface: FourierRZToroidalSurface, optional, default None
             Existing FourierRZToroidalSurface object to create a
-            CurrentPotentialField with, if provided will use this
-            object's R_lmn, Z_lmn etc instead of any passed-in values
+            CurrentPotentialField with.
         Phi_mn : ndarray
             Fourier coefficients of the double FourierSeries of the current potential.
             Should correspond to the given DoubleFourierSeries basis object passed in.

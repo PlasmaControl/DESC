@@ -142,7 +142,6 @@ _class_inheritance = {
         "desc.magnetic_fields.MagneticField",
     ],
     "desc.magnetic_fields.FourierCurrentPotentialField": [
-        "desc.magnetic_fields.CurrentPotentialField",
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.core.Surface",
         "desc.magnetic_fields.MagneticField",

@@ -7,6 +7,7 @@ from scipy.interpolate import interp1d
 
 import desc.examples
 import desc.io
+from desc.compute import _stability
 from desc.compute.utils import cross, dot
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
@@ -297,7 +298,11 @@ def test_magwell_print(capsys):
 
 @pytest.mark.unit
 def test_ballooning_geo(tmpdir_factory):
-    """Test the geometry coefficients used for the adjoint-ballooning solver."""
+    """Test the geometry coefficients used for the adjoint-ballooning solver.
+
+    The same coefficients are used for local gyrokinetic solvers which would
+    be useful when we couple DESC with GX/GS2 etc.
+    """
     psi = 0.5
     alpha = 0
     ntor = 3.0
@@ -372,8 +377,8 @@ def test_ballooning_geo(tmpdir_factory):
     gds21 = -sign_iota * np.array(dot(grad_psi, grad_alpha)) * shat / Bref
     gds21_alt = -sign_iota * data["g^ra"] * shat / Bref * (psi_r)
 
-    gds22 = grad_psi_sq * psi * (shat / (Lref * Bref)) ** 2
-    gds22_alt = data["g^rr"] * (psi_r) ** 2 * psi * (shat / (Lref * Bref)) ** 2
+    gds22 = grad_psi_sq * (1 / psi) * (shat / (Lref * Bref)) ** 2
+    gds22_alt = data["g^rr"] * (psi_r) ** 2 * (1 / psi) * (shat / (Lref * Bref)) ** 2
 
     gbdrift = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_alpha))
     gbdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**3 * np.sqrt(psi)
@@ -383,3 +388,17 @@ def test_ballooning_geo(tmpdir_factory):
     np.testing.assert_allclose(gds22, gds22_alt)
     np.testing.assert_allclose(gds21, gds21_alt)
     np.testing.assert_allclose(gbdrift, gbdrift_alt)
+
+
+@pytest.mark.unit
+def test_ballooning_eigenvalue():
+    """Compare the max. eigenvalues from flavors of the adjoint-ballooning solver."""
+    try:
+        eq = desc.examples.get("W7-X")[-1]
+    except TypeError:
+        eq = desc.examples.get("W7-X")
+
+    lam1 = _stability._gamma_ideal_ballooning_FD1(eq)
+    lam2 = _stability._gamma_ideal_ballooning_FD2(eq)
+
+    np.testing.assert_allclose(lam1 - lam2, 0, atol=1000, rtol=100)

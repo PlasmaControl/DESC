@@ -238,43 +238,76 @@ def _gamma_ideal_ballooning_FD1(eq):
     """
     Ideal-ballooning growth rate finder.
 
-    This function uses a pseudospectral Fourier technique to
+    This function uses a finite-difference method
     calculate the maximum growth rate against the infinite-n
-    ideal ballooning mode
+    ideal ballooning mode. The equation being solved is
+
+    d / d z (g d X / d z) + c * X - lam * f * X = 0, g, f > 0
+
+    where
+
+    bmag = B/B_N,
+    kappa = b dot grad b
+    g = a_N^3 * (b dot grad zeta) * |grad alpha|^2 / bmag,
+    c = a_N^2 * (1/ b dot grad zeta) * dp/drho * (b cross kappa) dot grad alpha,
+    f = a_N^2 * |grad alpha|^2 / bmag^2
 
     Parameters
     ----------
     eq :  Input equilibrium object
     N : resolution
     """
-    s = 0.81
-    alpha = 0.0
-    iota = 0.5
-    nperiod = 5
+    ns = 1
+    nalpha = 1
+    s = np.linspace(0.5, 0.95, ns) ** 2
+    rho = np.sqrt(s)
+
+    eq_keys = ["iota", "rho"]
+
+    data_eq = eq.compute(eq_keys)
+
+    iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
+    sign_iota = iota / np.abs(iota)
+
+    alpha = np.linspace(0, np.pi, nalpha)
+    zeta_0 = 0.0
+
+    nperiod = 3
+    # Number of toroidal turns
     ntor = 2 * nperiod - 1
-    N = (2 * eq.Mgrid * eq.Ngrid + 1) * ntor
-    coords = np.ones((N, 3))
-    coords = coords.at[:, 0].set(coords[:, 0] * jnp.sqrt(s))
-    coords = coords.at[:, 2].set(np.linspace(-ntor * np.pi, ntor * np.pi, N))
-    guess = coords.copy()
+    N = (2 * eq.M_grid * eq.N_grid + 1) * ntor
 
-    coords = coords.at[:, 1].set(coords[:, 1] * alpha)  # set which field line we want
-
-    guess = guess.at[:, 1].set((alpha - guess[:, 2]) / iota)
-
-    coords1 = eq.map_coordinates(
-        coords=coords,
-        inbasis=["rho", "alpha", "zeta"],
-        outbasis=["rho", "theta", "zeta"],
-        period=[-np.inf, 2 * np.pi, np.inf],
-        guess=guess,
+    rho_full = np.ones(
+        int(N * ns * nalpha),
+    )
+    theta_full = np.zeros(
+        int(N * ns * nalpha),
+    )
+    zeta_full = np.zeros(
+        int(N * ns * nalpha),
     )
 
-    coords1 = coords1.at[:, 2].set(coords[:, 2])
+    zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
 
-    zeta_0 = 0
-    print("mapped coords")
-    grid2 = Grid(coords1, sort=False)
+    for i in range(ns):
+        for j in range(nalpha):
+            rho_full[i * N : (i + 1) * N] = rho[i] * np.ones(
+                N,
+            )
+            zeta_full[i * N : (i + 1) * N] = zeta
+            theta_full[i * N : (i + 1) * N] = (
+                sign_iota[i]
+                * iota[i]
+                * alpha[j]
+                * np.ones(
+                    N,
+                )
+                + iota[i] * zeta
+            )
+
+    C0 = np.vstack([rho_full, theta_full, zeta_full]).T
+    coords = eq.compute_theta_coords(C0, tol=1e-10, maxiter=50)
+    grid = Grid(coords, sort=False)
 
     data_names = [
         "g^aa",
@@ -288,24 +321,17 @@ def _gamma_ideal_ballooning_FD1(eq):
         "psi_r",
     ]
 
-    data = eq.compute(data_names, grid2)
+    data = eq.compute(data_names, grid)
 
-    # sqrt(g)_PEST = B dot grad zeta
+    # sqrt(g)_PEST is B dot grad zeta
     gradpar = data["sqrt(g)_PEST"] / data["|B|"]
-
     gds2 = data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
-
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
     f = gds2 / data["|B|"] ** 2
-
     g = f * data["sqrt(g)_PEST"]
-
     g_half = (g[1:] + g[:-1]) / 2
-
     c = 1 / gradpar * dpdpsi * data["cvdrift"] + zeta_0 * data["cvdrift0"]
-
-    # Equation: d/dz (g dX/ dz) + c * X - lam * f * X = 0, f > 0
 
     # grid spacing
     h = 2 * ntor * np.pi / N
@@ -321,7 +347,7 @@ def _gamma_ideal_ballooning_FD1(eq):
 
     w, v = scipy.sparse.linalg.eigs(A, k=1)
 
-    # variational refinement here
+    # Variational refinement here
     X = np.zeros((N,))
     dX = np.zeros((N,))
 
@@ -340,60 +366,100 @@ def _gamma_ideal_ballooning_FD1(eq):
 
     Y0 = -g * dX**2 + c * X**2
     Y1 = f * X**2
-    gam = simps(Y0) / simps(Y1)
 
-    return gam
+    lam = simps(Y0) / simps(Y1)
+
+    return lam
 
 
-def _gamma_ideal_ballooning_FD(eq):
+def _gamma_ideal_ballooning_FD2(eq):
     """
     Ideal-ballooning growth rate finder.
 
-    This function uses a pseudospectral Fourier technique to
+    This function uses a finite-difference solver to
     calculate the maximum growth rate against the infinite-n
-    ideal ballooning mode
+    ideal ballooning mode. The problem is reformulated
+
+    d^2 X / d z^2 + V * X - lam * b * X = 0, b > 0
+
+    where
+
+    bmag = B/B_N,
+    kappa = b dot grad b
+    g = a_N^3 * (b dot grad zeta) * |grad alpha|^2 / bmag,
+    c = a_N^2 * (1/ b dot grad zeta) * dp/drho * (b cross kappa) dot grad alpha,
+    f = a_N^2 * |grad alpha|^2 / bmag^2
 
     Parameters
     ----------
     eq :  Input equilibrium object
     N : resolution
     """
-    s = 0.81
-    alpha = 0.0
-    iota = 0.5
-    nperiod = 5
+    ns = 1
+    nalpha = 1
+    s = np.linspace(0.5, 0.95, ns) ** 2
+    alpha = np.linspace(0, np.pi, nalpha)
+    zeta_0 = 0.0
+
+    eq_keys = ["iota", "rho"]
+    data_eq = eq.compute(eq_keys)
+
+    rho = np.sqrt(s)
+    iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
+    sign_iota = iota / np.abs(iota)
+
+    nperiod = 3
+    # Number of toroidal turns
     ntor = 2 * nperiod - 1
-    N = (2 * eq.Mpol * eq.Ntor + 1) * ntor
-    coords = np.ones((N, 3))
-    coords = coords.at[:, 0].set(coords[:, 0] * jnp.sqrt(s))
-    coords = coords.at[:, 2].set(np.linspace(-ntor * np.pi, ntor * np.pi, N))
-    guess = coords.copy()
+    N = (2 * eq.M_grid * eq.N_grid + 1) * ntor
 
-    coords = coords.at[:, 1].set(coords[:, 1] * alpha)  # set which field line we want
-
-    guess = guess.at[:, 1].set((alpha - guess[:, 2]) / iota)
-
-    coords1 = eq.map_coordinates(
-        coords=coords,
-        inbasis=["rho", "alpha", "zeta"],
-        outbasis=["rho", "theta", "zeta"],
-        period=[-np.inf, 2 * np.pi, np.inf],
-        guess=guess,
+    rho_full = np.ones(
+        int(N * ns * nalpha),
+    )
+    theta_full = np.zeros(
+        int(N * ns * nalpha),
+    )
+    zeta_full = np.zeros(
+        int(N * ns * nalpha),
     )
 
-    coords1 = coords1.at[:, 2].set(coords[:, 2])
+    zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
 
-    zeta_0 = 0
-    print("mapped coords")
-    grid2 = Grid(coords1, sort=False)
+    for i in range(ns):
+        for j in range(nalpha):
+            rho_full[i * N : (i + 1) * N] = rho[i] * np.ones(
+                N,
+            )
+            zeta_full[i * N : (i + 1) * N] = zeta
+            theta_full[i * N : (i + 1) * N] = (
+                sign_iota[i]
+                * iota[i]
+                * alpha[j]
+                * np.ones(
+                    N,
+                )
+                + iota[i] * zeta
+            )
+
+    C0 = np.vstack([rho_full, theta_full, zeta_full]).T
+    coords = eq.compute_theta_coords(C0, tol=1e-10, maxiter=50)
+    grid = Grid(coords, sort=False)
 
     data_names = [
         "g^aa",
         "g^ra",
         "g^rr",
+        "g^aa_z",
+        "g^aa_zz",
+        "g^ra_z",
+        "g^ra_zz",
+        "g^rr_z",
+        "g^rr_zz",
         "cvdrift",
         "cvdrift0",
         "|B|",
+        "|B|_z",
+        "|B|_zz",
         "sqrt(g)_PEST",
         "sqrt(g)_PEST_z",
         "sqrt(g)_PEST_zz",
@@ -401,9 +467,9 @@ def _gamma_ideal_ballooning_FD(eq):
         "psi_r",
     ]
 
-    data = eq.compute(data_names, grid2)
+    data = eq.compute(data_names, grid)
 
-    # sqrt(g)_PEST = B dot grad zeta
+    # sqrt(g)_PEST is (B dot grad zeta)^-1
     gradpar = data["sqrt(g)_PEST"] / data["|B|"]
 
     gds2 = data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
@@ -413,7 +479,7 @@ def _gamma_ideal_ballooning_FD(eq):
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
     f = gds2 / data["|B|"] ** 2
-    f_z = gds2_z / data["|B|"] ** 2 - 2 * data["B_z"] * gds2
+    f_z = gds2_z / data["|B|"] ** 2 - 2 * data["|B|_z"] * gds2
     f_zz = (
         gds2_zz / data["|B|"] ** 2
         - 4 * data["|B|_z"] * gds2_z
@@ -430,20 +496,43 @@ def _gamma_ideal_ballooning_FD(eq):
 
     c = 1 / gradpar * dpdpsi * data["cvdrift"] + zeta_0 * data["cvdrift0"]
 
-    V = (c + 1 / 4 * g_z**2 - 1 / 2 * g_zz) / g
-
-    b = f / g
-
-    # Equation: d^2 X / d z^2 + V * X - lam * b * X = 0, b > 0
+    V = c / g + 1 / 4 * g_z**2 / g**2 - 1 / 2 * g_zz / g
 
     # grid spacing
     h = 2 * ntor * np.pi / N
 
-    D2 = np.diag(1 / h**2, -1) + np.diag(-2 / h**2 + V, 0) + np.diag(1 / h**2, 1)
+    D2 = (
+        np.diag(
+            1
+            / h**2
+            * np.ones(
+                N - 3,
+            ),
+            -1,
+        )
+        + np.diag(
+            -2
+            / h**2
+            * np.ones(
+                N - 2,
+            )
+            + V[1:-1],
+            0,
+        )
+        + np.diag(
+            1
+            / h**2
+            * np.ones(
+                N - 3,
+            ),
+            1,
+        )
+    )
 
-    b = f / g * np.eye(N)
+    b = f / g
+    M = np.diag(b[1:-1], 0)
 
-    w, v = scipy.sparse.linalg.eigs(D2, b, k=1)
+    w, v = scipy.sparse.linalg.eigs(D2, k=1, M=M)
 
     # variational refinement here
     X = np.zeros((N,))
@@ -462,11 +551,11 @@ def _gamma_ideal_ballooning_FD(eq):
 
     dX[2:-2] = 2 / (3 * h) * (X[3:-1] - X[1:-3]) - (X[4:] - X[0:-4]) / (12 * h)
 
-    Y0 = -g * dX**2 + c * X**2
-    Y1 = f * X**2
-    gam = simps(Y0) / simps(Y1)
+    Y0 = -1 * dX**2 + V * X**2
+    Y1 = b * X**2
+    lam = simps(Y0) / simps(Y1)
 
-    return gam
+    return lam
 
 
 def _gamma_ideal_ballooning_spectral(eq):
@@ -477,51 +566,86 @@ def _gamma_ideal_ballooning_spectral(eq):
     calculate the maximum growth rate against the infinite-n
     ideal ballooning mode
 
+    d^2 X / d z^2 + V * X - lam * b * X = 0, b > 0
+
+    where
+
+    bmag = B/B_N,
+    kappa = b dot grad b
+    g = a_N^3 * (b dot grad zeta) * |grad alpha|^2 / bmag,
+    c = a_N^2 * (1/ b dot grad zeta) * dp/drho * (b cross kappa) dot grad alpha,
+    f = a_N^2 * |grad alpha|^2 / bmag^2
+
     Parameters
     ----------
     eq :  Input equilibrium object
+    D2 = jax.scipy.linalg.toeplitz(col1, row1) + np.diag(V, 0)
     x = jax.scipy.linalg.eikh(D2, b * np.eye(N))
-    Equation: d^2 X / d z^2 + V * X - lam * b * X = 0, b > 0
-    Psedospectral representation D^2 X + V * X - lam * b * X = 0
-    grid spacing
-    obtain g, c, and f using eq and other classes
     """
-    s = 0.81
-    alpha = 0.0
-    iota = 0.5
-    nperiod = 5
-    ntor = 2 * nperiod - 1
-    N = (2 * eq.Mpol * eq.Ntor + 1) * ntor
-    coords = np.ones((N, 3))
-    coords = coords.at[:, 0].set(coords[:, 0] * jnp.sqrt(s))
-    coords = coords.at[:, 2].set(np.linspace(-ntor * np.pi, ntor * np.pi, N))
-    guess = coords.copy()
+    ns = 1
+    nalpha = 1
+    s = np.linspace(0.5, 0.95, ns) ** 2
+    alpha = np.linspace(0, np.pi, nalpha)
+    zeta_0 = 0.0
 
-    coords = coords.at[:, 1].set(coords[:, 1] * alpha)  # set which field line we want
+    eq_keys = ["iota", "rho"]
+    data_eq = eq.compute(eq_keys)
 
-    guess = guess.at[:, 1].set((alpha - guess[:, 2]) / iota)
+    rho = np.sqrt(s)
+    iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
+    sign_iota = iota / np.abs(iota)
 
-    coords1 = eq.map_coordinates(
-        coords=coords,
-        inbasis=["rho", "alpha", "zeta"],
-        outbasis=["rho", "theta", "zeta"],
-        period=[-np.inf, 2 * np.pi, np.inf],
-        guess=guess,
+    nperiod = 3
+    ntor = 2 * nperiod - 1  # Number of toroidal turns
+    N = int((2 * eq.M_grid * eq.N_grid + 1) * ntor)
+
+    rho_full = np.ones(
+        int(N * ns * nalpha),
+    )
+    theta_full = np.zeros(
+        int(N * ns * nalpha),
+    )
+    zeta_full = np.zeros(
+        int(N * ns * nalpha),
     )
 
-    coords1 = coords1.at[:, 2].set(coords[:, 2])
+    zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
 
-    zeta_0 = 0
-    print("mapped coords")
-    grid2 = Grid(coords1, sort=False)
+    for i in range(ns):
+        for j in range(nalpha):
+            rho_full[i * N : (i + 1) * N] = rho[i] * np.ones(
+                N,
+            )
+            zeta_full[i * N : (i + 1) * N] = zeta
+            theta_full[i * N : (i + 1) * N] = (
+                sign_iota[i]
+                * iota[i]
+                * alpha[j]
+                * np.ones(
+                    N,
+                )
+                + iota[i] * zeta
+            )
+
+    C0 = np.vstack([rho_full, theta_full, zeta_full]).T
+    coords = eq.compute_theta_coords(C0, tol=1e-10, maxiter=50)
+    grid = Grid(coords, sort=False)
 
     data_names = [
         "g^aa",
         "g^ra",
         "g^rr",
+        "g^aa_z",
+        "g^aa_zz",
+        "g^ra_z",
+        "g^ra_zz",
+        "g^rr_z",
+        "g^rr_zz",
         "cvdrift",
         "cvdrift0",
         "|B|",
+        "|B|_z",
+        "|B|_zz",
         "sqrt(g)_PEST",
         "sqrt(g)_PEST_z",
         "sqrt(g)_PEST_zz",
@@ -529,9 +653,9 @@ def _gamma_ideal_ballooning_spectral(eq):
         "psi_r",
     ]
 
-    data = eq.compute(data_names, grid2)
+    data = eq.compute(data_names, grid)
 
-    # sqrt(g)_PEST = B dot grad zeta
+    # sqrt(g)_PEST is B dot grad zeta
     gradpar = data["sqrt(g)_PEST"] / data["|B|"]
 
     gds2 = data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
@@ -541,7 +665,7 @@ def _gamma_ideal_ballooning_spectral(eq):
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
     f = gds2 / data["|B|"] ** 2
-    f_z = gds2_z / data["|B|"] ** 2 - 2 * data["B_z"] * gds2
+    f_z = gds2_z / data["|B|"] ** 2 - 2 * data["|B|_z"] * gds2
     f_zz = (
         gds2_zz / data["|B|"] ** 2
         - 4 * data["|B|_z"] * gds2_z
@@ -556,39 +680,45 @@ def _gamma_ideal_ballooning_spectral(eq):
         + f * data["sqrt(g)_PEST_zz"]
     )
 
-    c = 1 / gradpar * dpdpsi * data["cvdrift"] + zeta_0 * data["cvdrift0"]
+    c = 1 / gradpar * dpdpsi * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
 
-    V = (c + 1 / 4 * g_z**2 - 1 / 2 * g_zz) / g
+    V = c / g + 1 / 4 * g_z**2 / g**2 - 1 / 2 * g_zz / g
 
     b = f / g
 
-    h = 2 * ntor * np.pi / N
-    kk = np.linspace(1, N - 1, N - 1)
-    n1 = np.floor((N - 1) / 2)
-    n2 = np.ceil((N - 1) / 2)
+    h = 2 * np.pi / N
+    n1 = int(np.ceil((N - 1) / 2))
+    n2 = int(np.floor((N - 1) / 2))
+    kk1 = np.linspace(1, n1, n1)
+    kk2 = np.linspace(n1 + 1, n1 + n2, n2)
 
-    if jnp.mod(N, 2) == 0:  # of 2nd derivative matrix
-        topc = 1 / (np.sin(jnp.linspace(1, n2, n2) * h / 2)) ** 2
-        col1 = [
-            -(np.pi**2 / 3) / h**2 - (1 / 6),
-            -0.5 * ((-1) ** kk) * [topc, np.flipud(topc[1:n1])],
-        ]
-    else:
-        topc = (
-            1
-            / (np.sin(jnp.linspace(1, n2, n2) * h / 2))
-            * 1
-            / (np.tan(jnp.linspace(1, n2, n2) * h / 2))
+    if np.mod(N, 2) == 0:  # of 2nd derivative matrix
+        topc = 1 / (np.sin(np.linspace(1, n1, n1) * h / 2)) ** 2
+        col1 = np.concatenate(
+            (
+                np.array([-(np.pi**2 / 3) / h**2 - 1 / 6]),
+                -0.5 * ((-1) ** kk1) * topc,
+                -0.5 * ((-1) ** kk2) * topc[0:n2][::-1],
+            )
         )
-        col1 = [
-            -np.pi**2 / 3 / h**2 + 1 / 12,
-            -0.5 * ((-1) ** kk) * [topc, -np.flipud(topc[1:n1])],
-        ]
+    else:
+        topc = 1 / (
+            np.sin(np.linspace(h / 2, h / 2 * n1, n1))
+            * np.tan(np.linspace(h / 2, h / 2 * n1, n1))
+        )
+        col1 = np.concatenate(
+            (
+                np.array([-np.pi**2 / 3 / h**2 + 1 / 12]),
+                -0.5 * ((-1) ** kk1) * topc,
+                0.5 * ((-1) ** kk2) * topc[0:n2][::-1],
+            )
+        )
 
     row1 = col1  # first row
 
-    D2 = np.toeplitz(col1, row1) + V * np.eye(N)
+    D2 = scipy.linalg.toeplitz(col1, r=row1) * (1 / ntor) ** 2 + np.diag(V, 0)
 
-    x = scipy.linalg.eik(D2, b * np.eye(N))
+    # eigvals will be deprecated, replace by subset_by_idx in scipy >= 1.12
+    w, v = scipy.linalg.eigh(D2, b=np.diag(b, 0), eigvals=(N - 2, N - 1))
 
-    return x
+    return w

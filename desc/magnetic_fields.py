@@ -1416,7 +1416,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         )
 
 
-class FourierCurrentPotentialField(FourierRZToroidalSurface):
+class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
         surface current K is assumed given by

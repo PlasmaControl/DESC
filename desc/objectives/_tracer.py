@@ -112,7 +112,7 @@ class ParticleTracer(_Objective):
         eq = eq or self._eq
 
         if self.compute_option == "optimization":
-            self._dim_f = [len(self.output_time), 1]
+            self._dim_f = len(self.output_time)
         elif self.compute_option == "tracer":
             self._dim_f = [len(self.output_time), 4]
         elif self.compute_option == "average psi":

@@ -6,8 +6,8 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import jnp
-from desc.compute import rpz2xyz, xyz2rpz_vec
+from desc.backend import jnp, tree_stack, tree_unstack, vmap
+from desc.compute import get_params, rpz2xyz, xyz2rpz_vec
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -15,7 +15,7 @@ from desc.geometry import (
     SplineXYZCurve,
 )
 from desc.magnetic_fields import _MagneticField
-from desc.utils import flatten_list
+from desc.utils import equals, errorif, flatten_list
 
 
 def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
@@ -510,13 +510,50 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         return B
 
 
+def _check_type(coil0, coil):
+    errorif(
+        not isinstance(coil, coil0.__class__),
+        TypeError,
+        (
+            "coils in a CoilSet must all be the same type, got types "
+            + f"{type(coil0)}, {type(coil)}. Consider using a MixedCoilSet"
+        ),
+    )
+    errorif(
+        isinstance(coil0, CoilSet),
+        TypeError,
+        (
+            "coils in a CoilSet must all be base Coil types, not CoilSet. "
+            + "Consider using a MixedCoilSet"
+        ),
+    )
+    attrs = {
+        FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
+        FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
+        FourierPlanarCoil: ["r_basis"],
+        SplineXYZCoil: ["method", "N"],
+    }
+
+    for attr in attrs[coil0.__class__]:
+        a0 = getattr(coil0, attr)
+        a1 = getattr(coil, attr)
+        errorif(
+            not equals(a0, a1),
+            ValueError,
+            (
+                "coils in a CoilSet must have the same parameterization, got a "
+                + f"mismatch between attr {attr}, with values {a0} and {a1}"
+            ),
+        )
+
+
 class CoilSet(_Coil, MutableSequence):
-    """Set of coils of different geometry.
+    """Set of coils of different geometry but shared parameterization and resolution.
 
     Parameters
     ----------
     coils : Coil or array-like of Coils
-        collection of coils
+        collection of coils. Must all be the same type and resolution.
     currents : float or array-like of float
         currents in each coil, or a single current shared by all coils in the set
     name : str
@@ -529,6 +566,7 @@ class CoilSet(_Coil, MutableSequence):
     def __init__(self, *coils, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
+        [_check_type(coil, coils[0]) for coil in coils]
         self._coils = list(coils)
         self._name = str(name)
 
@@ -586,13 +624,11 @@ class CoilSet(_Coil, MutableSequence):
         grid : Grid or int or array-like, optional
             Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
-            If array-like, should be 1 value per coil.
         params : dict of ndarray or array-like
             Parameters from the equilibrium. Defaults to attributes of self.
             If array-like, should be 1 value per coil.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
-            If array-like, should be 1 value per coil.
         data : dict of ndarray or array-like
             Data computed so far, generally output from other compute functions
             If array-like, should be 1 value per coil.
@@ -605,18 +641,27 @@ class CoilSet(_Coil, MutableSequence):
             individual coil.
 
         """
-        grid = self._make_arraylike(grid)
-        params = self._make_arraylike(params)
-        transforms = self._make_arraylike(transforms)
-        data = self._make_arraylike(data)
-        return [
-            coil.compute(
-                names, grid=grd, params=par, transforms=tran, data=dat, **kwargs
-            )
-            for (coil, grd, par, tran, dat) in zip(
-                self.coils, grid, params, transforms, data
-            )
-        ]
+        if params is None:
+            params = [get_params(names, coil) for coil in self]
+
+        # if user supplied initial data for each coil we also need to vmap over that.
+        if data:
+
+            data = vmap(
+                lambda d, x: self[0].compute(
+                    names, grid=grid, transforms=transforms, data=d, params=x
+                )
+            )(tree_stack(data), tree_stack(params))
+
+        else:
+
+            data = vmap(
+                lambda x: self[0].compute(
+                    names, grid=grid, transforms=transforms, data=data, params=x
+                )
+            )(tree_stack(params))
+
+        return tree_unstack(data)
 
     def translate(self, *args, **kwargs):
         """Translate the coils along an axis."""
@@ -643,21 +688,24 @@ class CoilSet(_Coil, MutableSequence):
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None or array-like, optional
-            Grid used to discretize coil, either the same for all coils or one for each
-            member of the coilset. If an integer, uses that many equally spaced
-            points.
+            Grid used to discretize coil, the same for all coils. If an integer, uses
+            that many equally spaced points.
 
         Returns
         -------
         field : ndarray, shape(n,3)
             magnetic field at specified points, in either rpz or xyz coordinates
         """
-        params = self._make_arraylike(params)
-        grid = self._make_arraylike(grid)
+        if params is None:
+            params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
+            for par, coil in zip(params, self):
+                par["current"] = coil.current
 
-        B = 0
-        for coil, par, grd in zip(self.coils, params, grid):
-            B += coil.compute_magnetic_field(coords, par, basis, grd)
+        B = vmap(
+            lambda x: self[0].compute_magnetic_field(
+                coords, params=x, basis=basis, grid=grid
+            )
+        )(tree_stack(params)).sum(axis=0)
 
         return B
 
@@ -682,7 +730,7 @@ class CoilSet(_Coil, MutableSequence):
         endpoint : bool
             whether to include a coil at final angle
         """
-        assert isinstance(coil, _Coil)
+        assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
@@ -714,7 +762,7 @@ class CoilSet(_Coil, MutableSequence):
         endpoint : bool
             whether to include a coil at final point
         """
-        assert isinstance(coil, _Coil)
+        assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
@@ -749,6 +797,9 @@ class CoilSet(_Coil, MutableSequence):
         """
         if not isinstance(coils, CoilSet):
             coils = CoilSet(coils)
+
+        [_check_type(coil, coils[0]) for coil in coils]
+
         coilset = []
         if sym:
             # first reflect/flip original coilset
@@ -989,6 +1040,7 @@ class CoilSet(_Coil, MutableSequence):
     def __setitem__(self, i, new_item):
         if not isinstance(new_item, _Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
+        _check_type(new_item, self[0])
         self._coils[i] = new_item
 
     def __delitem__(self, i):
@@ -1001,6 +1053,7 @@ class CoilSet(_Coil, MutableSequence):
         """Insert a new coil into the coilset at position i."""
         if not isinstance(new_item, _Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
+        _check_type(new_item, self[0])
         self._coils.insert(i, new_item)
 
     def __repr__(self):
@@ -1011,3 +1064,123 @@ class CoilSet(_Coil, MutableSequence):
             + str(hex(id(self)))
             + " (name={}, with {} submembers)".format(self.name, len(self))
         )
+
+
+class MixedCoilSet(CoilSet):
+    """Set of coils or coilsets of different geometry.
+
+    Parameters
+    ----------
+    coils : Coil or array-like of Coils
+        collection of coils
+    currents : float or array-like of float
+        currents in each coil, or a single current shared by all coils in the set
+    name : str
+        name of this CoilSet
+
+    """
+
+    def __init__(self, *coils, name=""):
+        coils = flatten_list(coils, flatten_tuple=True)
+        assert all([isinstance(coil, (_Coil)) for coil in coils])
+        self._coils = list(coils)
+        self._name = str(name)
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid, for each coil in the coilset.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int or array-like, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+            If array-like, should be 1 value per coil.
+        params : dict of ndarray or array-like
+            Parameters from the equilibrium. Defaults to attributes of self.
+            If array-like, should be 1 value per coil.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+            If array-like, should be 1 value per coil.
+        data : dict of ndarray or array-like
+            Data computed so far, generally output from other compute functions
+            If array-like, should be 1 value per coil.
+
+        Returns
+        -------
+        data : list of dict of ndarray
+            Computed quantity and intermediate variables, for each coil in the set.
+            List entries map to coils in coilset, each dict contains data for an
+            individual coil.
+
+        """
+        grid = self._make_arraylike(grid)
+        params = self._make_arraylike(params)
+        transforms = self._make_arraylike(transforms)
+        data = self._make_arraylike(data)
+        return [
+            coil.compute(
+                names, grid=grd, params=par, transforms=tran, data=dat, **kwargs
+            )
+            for (coil, grd, par, tran, dat) in zip(
+                self.coils, grid, params, transforms, data
+            )
+        ]
+
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3) or Grid
+            coordinates to evaluate field at [R,phi,Z] or [x,y,z]
+        params : dict or array-like of dict, optional
+            parameters to pass to curves, either the same for all curves,
+            or one for each member
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
+        grid : Grid, int or None or array-like, optional
+            Grid used to discretize coil, either the same for all coils or one for each
+            member of the coilset. If an integer, uses that many equally spaced
+            points.
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points, in either rpz or xyz coordinates
+        """
+        params = self._make_arraylike(params)
+        grid = self._make_arraylike(grid)
+
+        B = 0
+        for coil, par, grd in zip(self.coils, params, grid):
+            B += coil.compute_magnetic_field(coords, par, basis, grd)
+
+        return B
+
+    def __add__(self, other):
+        if isinstance(other, (CoilSet, MixedCoilSet)):
+            return MixedCoilSet(*self.coils, *other.coils)
+        if isinstance(other, (list, tuple)):
+            return MixedCoilSet(*self.coils, *other)
+        raise TypeError
+
+    def __setitem__(self, i, new_item):
+        if not isinstance(new_item, _Coil):
+            raise TypeError("Members of CoilSet must be of type Coil.")
+        self._coils[i] = new_item
+
+    def insert(self, i, new_item):
+        """Insert a new coil into the coilset at position i."""
+        if not isinstance(new_item, _Coil):
+            raise TypeError("Members of CoilSet must be of type Coil.")
+        self._coils.insert(i, new_item)

@@ -10,6 +10,7 @@ from desc.coils import (
     FourierPlanarCoil,
     FourierRZCoil,
     FourierXYZCoil,
+    MixedCoilSet,
     SplineXYZCoil,
 )
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
@@ -153,7 +154,7 @@ class TestCoilSet:
         B_true = np.array([0, Bp_true, 0])
         coil = FourierPlanarCoil(I)
         coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=N // 4)
-        coils = CoilSet.from_symmetry(coils, NFP=4)
+        coils = MixedCoilSet.from_symmetry(coils, NFP=4)
         B_approx = coils.compute_magnetic_field([10, 0, 0], basis="rpz", grid=32)[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
@@ -164,7 +165,7 @@ class TestCoilSet:
         coils = CoilSet.linspaced_angular(
             coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2
         )
-        coils2 = CoilSet.from_symmetry(coils, NFP, True)
+        coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)
         B_approx = coils2.compute_magnetic_field([10, 0, 0], basis="rpz", grid=32)[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
@@ -292,11 +293,11 @@ class TestCoilSet:
     def test_dunder_methods(self):
         """Test methods for combining and calling CoilSet objects."""
         coil1 = FourierXYZCoil()
-        coils1 = CoilSet.from_symmetry(coil1, NFP=4)
+        coils1 = MixedCoilSet.from_symmetry(coil1, NFP=4)
         coil2 = FourierPlanarCoil()
         coils2 = coils1 + [coil2]
         assert coils2[-1] is coil2
-        coils2 = coils1 + CoilSet([coil2, coil2])
+        coils2 = coils1 + MixedCoilSet([coil2, coil2])
         assert coils2[-1] is coil2
 
         with pytest.raises(TypeError):

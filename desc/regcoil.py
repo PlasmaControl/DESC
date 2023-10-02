@@ -197,8 +197,10 @@ def run_regcoil(  # noqa: C901 fxn too complex
             Z_lmn=np.array([a_ves]),
             modes_R=np.array([[0, 0], [1, 0]]),  # [M, N] boundary Fourier modes
             modes_Z=np.array([[-1, 0]]),
-            NFP=1,  # number of (toroidal) field periods
+            NFP=eq.NFP,  # number of (toroidal) field periods
         )
+        # TODO: why must this be true for my results to be good?
+    assert winding_surf.NFP == eq.NFP, "winding surface NFP should be equal to eq NFP!"
 
     ########### calculate quantities on DESC  plasma surface #############
 

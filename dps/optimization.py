@@ -10,7 +10,7 @@ import numpy as np
 import jax.random
 
 # Load Equilibrium
-eq = desc.io.load("input.final_freeb_output.h5")[-1]
+eq = desc.io.load("DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5")[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 eq.solve()
@@ -80,4 +80,4 @@ print("****************************************")
 R_modes = np.array([[0, 0, 0]])
 constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
 eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3)
-eq.save("test_run_optimized.h5")
+eq.save("elipse_optimized.h5")

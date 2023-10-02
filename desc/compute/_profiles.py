@@ -701,22 +701,21 @@ def _iota_vacuum(params, transforms, profiles, data, **kwargs):
 )
 def _iota_num_current(params, transforms, profiles, data, **kwargs):
     """Current contribution to the numerator of rotational transform formula."""
-    if profiles["current"] is None:
+    if profiles["iota"] is not None:
         data["iota_num current"] = jnp.nan * data["0"]
-        return data
-
-    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
-    current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
-    current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
-    data["iota_num current"] = (
-        2
-        * jnp.pi
-        * mu_0
-        * transforms["grid"].replace_at_axis(
-            current / data["psi_r"],
-            lambda: current_r / data["psi_rr"],
+    elif profiles["current"] is not None:
+        # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+        current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
+        current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
+        data["iota_num current"] = (
+            2
+            * jnp.pi
+            * mu_0
+            * transforms["grid"].replace_at_axis(
+                current / data["psi_r"],
+                lambda: current_r / data["psi_rr"],
+            )
         )
-    )
     return data
 
 
@@ -760,23 +759,25 @@ def _iota_num_vacuum(params, transforms, profiles, data, **kwargs):
     data=["0", "psi_r", "psi_rr"],
 )
 def _iota_num_r_current(params, transforms, profiles, data, **kwargs):
-    if profiles["current"] is None:
+    if profiles["iota"] is not None:
         data["iota_num_r current"] = jnp.nan * data["0"]
-        return data
-
-    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
-    current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
-    current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
-    current_rr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=2)
-    data["iota_num_r current"] = (
-        2
-        * jnp.pi
-        * mu_0
-        * transforms["grid"].replace_at_axis(
-            (current_r * data["psi_r"] - current * data["psi_rr"]) / data["psi_r"] ** 2,
-            lambda: current_rr / (2 * data["psi_rr"]),
+    elif profiles["current"] is not None:
+        # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+        current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
+        current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
+        current_rr = profiles["current"].compute(
+            transforms["grid"], params["c_l"], dr=2
         )
-    )
+        data["iota_num_r current"] = (
+            2
+            * jnp.pi
+            * mu_0
+            * transforms["grid"].replace_at_axis(
+                (current_r * data["psi_r"] - current * data["psi_rr"])
+                / data["psi_r"] ** 2,
+                lambda: current_rr / (2 * data["psi_rr"]),
+            )
+        )
     return data
 
 
@@ -856,11 +857,10 @@ def _iota_num(params, transforms, profiles, data, **kwargs):
     of GitHub pull request #556. 𝛼 supplements the rotational transform with an
     additional term to account for the enclosed net toroidal current.
     """
-    if profiles["current"] is None:
+    if profiles["iota"] is not None:
         data["iota_num"] = jnp.nan * data["0"]
-        return data
-
-    data["iota_num"] = data["iota_num current"] + data["iota_num vacuum"]
+    elif profiles["current"] is not None:
+        data["iota_num"] = data["iota_num current"] + data["iota_num vacuum"]
     return data
 
 
@@ -884,11 +884,10 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
     of GitHub pull request #556. 𝛼 supplements the rotational transform with an
     additional term to account for the enclosed net toroidal current.
     """
-    if profiles["current"] is None:
+    if profiles["iota"] is not None:
         data["iota_num_r"] = jnp.nan * data["0"]
-        return data
-
-    data["iota_num_r"] = data["iota_num_r current"] + data["iota_num_r vacuum"]
+    elif profiles["current"] is not None:
+        data["iota_num_r"] = data["iota_num_r current"] + data["iota_num_r vacuum"]
     return data
 
 
@@ -933,79 +932,82 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
     of GitHub pull request #556. 𝛼 supplements the rotational transform with an
     additional term to account for the enclosed net toroidal current.
     """
-    if profiles["current"] is None:
+    if profiles["iota"] is not None:
         data["iota_num_rr"] = jnp.nan * data["0"]
-        return data
-
-    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
-    current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
-    current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
-    current_rr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=2)
-    current_rrr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=3)
-    alpha_rr = (
-        jnp.pi
-        * mu_0
-        * transforms["grid"].replace_at_axis(
-            2 * current_rr / data["psi_r"]
-            - 4 * current_r * data["psi_rr"] / data["psi_r"] ** 2
-            + 2
-            * current
-            * (2 * data["psi_rr"] ** 2 - data["psi_rrr"] * data["psi_r"])
-            / data["psi_r"] ** 3,
-            lambda: 2 * current_rrr / (3 * data["psi_rr"])
-            - current_rr * data["psi_rrr"] / data["psi_rr"] ** 2
-            + current_r * data["psi_rrr"] ** 2 / data["psi_rr"] ** 3,
+    elif profiles["current"] is not None:
+        # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+        current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
+        current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
+        current_rr = profiles["current"].compute(
+            transforms["grid"], params["c_l"], dr=2
         )
-    )
-    beta = (
-        data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
-    ) / data["sqrt(g)"]
-    beta_r = (
-        data["lambda_rz"] * data["g_tt"]
-        + data["lambda_z"] * data["g_tt_r"]
-        - data["lambda_rt"] * data["g_tz"]
-        - (1 + data["lambda_t"]) * data["g_tz_r"]
-        - beta * data["sqrt(g)_r"]
-    ) / data["sqrt(g)"]
-    beta_rr = transforms["grid"].replace_at_axis(
-        (
-            data["lambda_rrz"] * data["g_tt"]
-            + 2 * data["lambda_rz"] * data["g_tt_r"]
-            + data["lambda_z"] * data["g_tt_rr"]
-            - data["lambda_rrt"] * data["g_tz"]
-            - 2 * data["lambda_rt"] * data["g_tz_r"]
-            - (1 + data["lambda_t"]) * data["g_tz_rr"]
-            - 2 * beta_r * data["sqrt(g)_r"]
-            - beta * data["sqrt(g)_rr"]
+        current_rrr = profiles["current"].compute(
+            transforms["grid"], params["c_l"], dr=3
         )
-        / data["sqrt(g)"],
-        lambda: (
-            2
-            * data["sqrt(g)_r"] ** 2
-            * (
-                3 * data["g_tt_rr"] * data["lambda_rz"]
-                + data["g_tt_rrr"] * data["lambda_z"]
-                - 3 * data["g_tz_rr"] * data["lambda_rt"]
-                - 3 * data["g_tz_r"] * data["lambda_rrt"]
-                - data["g_tz_rrr"] * (1 + data["lambda_t"])
+        alpha_rr = (
+            jnp.pi
+            * mu_0
+            * transforms["grid"].replace_at_axis(
+                2 * current_rr / data["psi_r"]
+                - 4 * current_r * data["psi_rr"] / data["psi_r"] ** 2
+                + 2
+                * current
+                * (2 * data["psi_rr"] ** 2 - data["psi_rrr"] * data["psi_r"])
+                / data["psi_r"] ** 3,
+                lambda: 2 * current_rrr / (3 * data["psi_rr"])
+                - current_rr * data["psi_rrr"] / data["psi_rr"] ** 2
+                + current_r * data["psi_rrr"] ** 2 / data["psi_rr"] ** 3,
             )
-            + data["sqrt(g)_r"]
-            * (
-                3
-                * data["sqrt(g)_rr"]
+        )
+        beta = (
+            data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
+        ) / data["sqrt(g)"]
+        beta_r = (
+            data["lambda_rz"] * data["g_tt"]
+            + data["lambda_z"] * data["g_tt_r"]
+            - data["lambda_rt"] * data["g_tz"]
+            - (1 + data["lambda_t"]) * data["g_tz_r"]
+            - beta * data["sqrt(g)_r"]
+        ) / data["sqrt(g)"]
+        beta_rr = transforms["grid"].replace_at_axis(
+            (
+                data["lambda_rrz"] * data["g_tt"]
+                + 2 * data["lambda_rz"] * data["g_tt_r"]
+                + data["lambda_z"] * data["g_tt_rr"]
+                - data["lambda_rrt"] * data["g_tz"]
+                - 2 * data["lambda_rt"] * data["g_tz_r"]
+                - (1 + data["lambda_t"]) * data["g_tz_rr"]
+                - 2 * beta_r * data["sqrt(g)_r"]
+                - beta * data["sqrt(g)_rr"]
+            )
+            / data["sqrt(g)"],
+            lambda: (
+                2
+                * data["sqrt(g)_r"] ** 2
                 * (
-                    2 * data["g_tz_r"] * data["lambda_rt"]
-                    - data["g_tt_rr"] * data["lambda_t"]
-                    + data["g_tz_rr"] * (1 + data["lambda_t"])
+                    3 * data["g_tt_rr"] * data["lambda_rz"]
+                    + data["g_tt_rrr"] * data["lambda_z"]
+                    - 3 * data["g_tz_rr"] * data["lambda_rt"]
+                    - 3 * data["g_tz_r"] * data["lambda_rrt"]
+                    - data["g_tz_rrr"] * (1 + data["lambda_t"])
                 )
-                + 2 * data["sqrt(g)_rrr"] * data["g_tz_r"] * (1 + data["lambda_t"])
+                + data["sqrt(g)_r"]
+                * (
+                    3
+                    * data["sqrt(g)_rr"]
+                    * (
+                        2 * data["g_tz_r"] * data["lambda_rt"]
+                        - data["g_tt_rr"] * data["lambda_t"]
+                        + data["g_tz_rr"] * (1 + data["lambda_t"])
+                    )
+                    + 2 * data["sqrt(g)_rrr"] * data["g_tz_r"] * (1 + data["lambda_t"])
+                )
+                - 3 * data["sqrt(g)_rr"] ** 2 * data["g_tz_r"] * (1 + data["lambda_t"])
             )
-            - 3 * data["sqrt(g)_rr"] ** 2 * data["g_tz_r"] * (1 + data["lambda_t"])
+            / (6 * data["sqrt(g)_r"] ** 3),
         )
-        / (6 * data["sqrt(g)_r"] ** 3),
-    )
-    beta_rr = surface_integrals(transforms["grid"], beta_rr)
-    data["iota_num_rr"] = alpha_rr + beta_rr
+        beta_rr = surface_integrals(transforms["grid"], beta_rr)
+        data["iota_num_rr"] = alpha_rr + beta_rr
     return data
 
 
@@ -1054,84 +1056,92 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
     of GitHub pull request #556. 𝛼 supplements the rotational transform with an
     additional term to account for the enclosed net toroidal current.
     """
-    if profiles["current"] is None:
+    if profiles["iota"] is not None:
         data["iota_num_rrr"] = jnp.nan * data["0"]
-        return data
-
-    current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
-    current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
-    current_rr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=2)
-    current_rrr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=3)
-    current_rrrr = profiles["current"].compute(transforms["grid"], params["c_l"], dr=4)
-    # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
-    alpha_rrr = (
-        jnp.pi
-        * mu_0
-        * transforms["grid"].replace_at_axis(
-            2 * current_rrr / data["psi_r"]
-            - 6 * current_rr * data["psi_rr"] / data["psi_r"] ** 2
-            + 6
-            * current_r
-            * (
-                2 * data["psi_r"] * data["psi_rr"] ** 2
-                - data["psi_rrr"] * data["psi_r"] ** 2
+    elif profiles["current"] is not None:
+        current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
+        current_r = profiles["current"].compute(transforms["grid"], params["c_l"], dr=1)
+        current_rr = profiles["current"].compute(
+            transforms["grid"], params["c_l"], dr=2
+        )
+        current_rrr = profiles["current"].compute(
+            transforms["grid"], params["c_l"], dr=3
+        )
+        current_rrrr = profiles["current"].compute(
+            transforms["grid"], params["c_l"], dr=4
+        )
+        # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
+        alpha_rrr = (
+            jnp.pi
+            * mu_0
+            * transforms["grid"].replace_at_axis(
+                2 * current_rrr / data["psi_r"]
+                - 6 * current_rr * data["psi_rr"] / data["psi_r"] ** 2
+                + 6
+                * current_r
+                * (
+                    2 * data["psi_r"] * data["psi_rr"] ** 2
+                    - data["psi_rrr"] * data["psi_r"] ** 2
+                )
+                / data["psi_r"] ** 4
+                + 12
+                * current
+                * (
+                    data["psi_rrr"] * data["psi_rr"] * data["psi_r"]
+                    - data["psi_rr"] ** 3
+                )
+                / data["psi_r"] ** 4,
+                lambda: current_rrrr / (2 * data["psi_rr"])
+                - current_rrr * data["psi_rrr"] / data["psi_rr"] ** 2
+                + 3 * current_rr * data["psi_rrr"] ** 2 / (2 * data["psi_rr"] ** 3)
+                - 3 * current_r * data["psi_rrr"] ** 3 / (2 * data["psi_rr"] ** 4),
             )
-            / data["psi_r"] ** 4
-            + 12
-            * current
-            * (data["psi_rrr"] * data["psi_rr"] * data["psi_r"] - data["psi_rr"] ** 3)
-            / data["psi_r"] ** 4,
-            lambda: current_rrrr / (2 * data["psi_rr"])
-            - current_rrr * data["psi_rrr"] / data["psi_rr"] ** 2
-            + 3 * current_rr * data["psi_rrr"] ** 2 / (2 * data["psi_rr"] ** 3)
-            - 3 * current_r * data["psi_rrr"] ** 3 / (2 * data["psi_rr"] ** 4),
         )
-    )
-    beta = (
-        data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
-    ) / data["sqrt(g)"]
-    beta_r = (
-        data["lambda_rz"] * data["g_tt"]
-        + data["lambda_z"] * data["g_tt_r"]
-        - data["lambda_rt"] * data["g_tz"]
-        - (1 + data["lambda_t"]) * data["g_tz_r"]
-        - beta * data["sqrt(g)_r"]
-    ) / data["sqrt(g)"]
-    beta_rr = (
-        data["lambda_rrz"] * data["g_tt"]
-        + 2 * data["lambda_rz"] * data["g_tt_r"]
-        + data["lambda_z"] * data["g_tt_rr"]
-        - data["lambda_rrt"] * data["g_tz"]
-        - 2 * data["lambda_rt"] * data["g_tz_r"]
-        - (1 + data["lambda_t"]) * data["g_tz_rr"]
-        - 2 * beta_r * data["sqrt(g)_r"]
-        - beta * data["sqrt(g)_rr"]
-    ) / data["sqrt(g)"]
-    beta_rrr = transforms["grid"].replace_at_axis(
-        (
-            data["lambda_rrrz"] * data["g_tt"]
-            + 3 * data["lambda_rrz"] * data["g_tt_r"]
-            + 3 * data["lambda_rz"] * data["g_tt_rr"]
-            + data["lambda_z"] * data["g_tt_rrr"]
-            - data["lambda_rrrt"] * data["g_tz"]
-            - 3 * data["lambda_rrt"] * data["g_tz_r"]
-            - 3 * data["lambda_rt"] * data["g_tz_rr"]
-            - (1 + data["lambda_t"]) * data["g_tz_rrr"]
-            - 3 * beta_rr * data["sqrt(g)_r"]
-            - 3 * beta_r * data["sqrt(g)_rr"]
-            - beta * data["sqrt(g)_rrr"]
+        beta = (
+            data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
+        ) / data["sqrt(g)"]
+        beta_r = (
+            data["lambda_rz"] * data["g_tt"]
+            + data["lambda_z"] * data["g_tt_r"]
+            - data["lambda_rt"] * data["g_tz"]
+            - (1 + data["lambda_t"]) * data["g_tz_r"]
+            - beta * data["sqrt(g)_r"]
+        ) / data["sqrt(g)"]
+        beta_rr = (
+            data["lambda_rrz"] * data["g_tt"]
+            + 2 * data["lambda_rz"] * data["g_tt_r"]
+            + data["lambda_z"] * data["g_tt_rr"]
+            - data["lambda_rrt"] * data["g_tz"]
+            - 2 * data["lambda_rt"] * data["g_tz_r"]
+            - (1 + data["lambda_t"]) * data["g_tz_rr"]
+            - 2 * beta_r * data["sqrt(g)_r"]
+            - beta * data["sqrt(g)_rr"]
+        ) / data["sqrt(g)"]
+        beta_rrr = transforms["grid"].replace_at_axis(
+            (
+                data["lambda_rrrz"] * data["g_tt"]
+                + 3 * data["lambda_rrz"] * data["g_tt_r"]
+                + 3 * data["lambda_rz"] * data["g_tt_rr"]
+                + data["lambda_z"] * data["g_tt_rrr"]
+                - data["lambda_rrrt"] * data["g_tz"]
+                - 3 * data["lambda_rrt"] * data["g_tz_r"]
+                - 3 * data["lambda_rt"] * data["g_tz_rr"]
+                - (1 + data["lambda_t"]) * data["g_tz_rrr"]
+                - 3 * beta_rr * data["sqrt(g)_r"]
+                - 3 * beta_r * data["sqrt(g)_rr"]
+                - beta * data["sqrt(g)_rrr"]
+            )
+            / data["sqrt(g)"],
+            # Todo: axis limit of beta_rrr
+            #   Computed with four applications of l’Hôpital’s rule.
+            #   Requires sqrt(g)_rrrr and fourth derivatives of basis vectors.
+            jnp.nan,
         )
-        / data["sqrt(g)"],
-        # Todo: axis limit of beta_rrr
-        #   Computed with four applications of l’Hôpital’s rule.
-        #   Requires sqrt(g)_rrrr and fourth derivatives of basis vectors.
-        jnp.nan,
-    )
-    beta_rrr = surface_integrals(transforms["grid"], beta_rrr)
-    # force limit to nan until completed because integration replaces nan with 0
-    data["iota_num_rrr"] = alpha_rrr + transforms["grid"].replace_at_axis(
-        beta_rrr, jnp.nan
-    )
+        beta_rrr = surface_integrals(transforms["grid"], beta_rrr)
+        # force limit to nan until completed because integration replaces nan with 0
+        data["iota_num_rrr"] = alpha_rrr + transforms["grid"].replace_at_axis(
+            beta_rrr, jnp.nan
+        )
     return data
 
 

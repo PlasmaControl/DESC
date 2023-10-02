@@ -71,6 +71,7 @@ class ParticleTracer(_Objective):
         initial_conditions=None,
         initial_parameters=None,
         compute_option=None,
+        tolerance =1.4e-8
         name="Particle Tracer"
     ):
         self.output_time = output_time
@@ -110,7 +111,7 @@ class ParticleTracer(_Objective):
         eq = eq or self._eq
 
         if self.compute_option == "optimization":
-            self._dim_f = len(self.output_time)
+            self._dim_f = [len(self.output_time), 1]
         elif self.compute_option == "tracer":
             self._dim_f = [len(self.output_time), 4]
         elif self.compute_option == "average psi":
@@ -157,7 +158,7 @@ class ParticleTracer(_Objective):
         solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax)
 
         if self.compute_option == "optimization":
-            return jnp.mean(solution[:, 0])
+            return solution[:, 0] - solution[0, 0]
         elif self.compute_option == "tracer":
             return solution
         elif self.compute_option == "average psi":

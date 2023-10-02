@@ -71,13 +71,14 @@ class ParticleTracer(_Objective):
         initial_conditions=None,
         initial_parameters=None,
         compute_option=None,
-        tolerance =1.4e-8
+        tolerance =1.4e-8,
         name="Particle Tracer"
     ):
         self.output_time = output_time
         self.initial_conditions=jnp.asarray(initial_conditions) 
         self.initial_parameters=jnp.asarray(initial_parameters)
         self.compute_option=compute_option
+        self.tolerance = tolerance
         
         if target is None and bounds is None:
             target = 0
@@ -155,7 +156,7 @@ class ParticleTracer(_Objective):
         initial_conditions_jax = jnp.array(self.initial_conditions, dtype=jnp.float64)
         t_jax = self.output_time
         system_jit = jit(system)
-        solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax)
+        solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax, rtol = self.tolerance)
 
         if self.compute_option == "optimization":
             return solution[:, 0] - solution[0, 0]

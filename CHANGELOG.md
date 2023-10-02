@@ -1,6 +1,9 @@
 Changelog
 =========
 
+- Adds new compute quantities `"iota current"` and `"iota vacuum"` to compute the
+rotational transform contributions from the toroidal current and background field.
+
 v0.10.1
 -------
 

@@ -692,17 +692,18 @@ def _iota_vacuum(params, transforms, profiles, data, **kwargs):
     units_long="inverse meters",
     description="Numerator of rotational transform formula, current contribution",
     dim=1,
-    params=["c_l"],
+    params=["c_l", "i_l"],
     transforms={"grid": []},
-    profiles=["current"],
+    profiles=["current", "iota"],
     coordinates="r",
-    data=["0", "psi_r"],
+    data=["psi_r", "iota_den", "iota_num vacuum"],
     axis_limit_data=["psi_rr"],
 )
 def _iota_num_current(params, transforms, profiles, data, **kwargs):
     """Current contribution to the numerator of rotational transform formula."""
     if profiles["iota"] is not None:
-        data["iota_num current"] = jnp.nan * data["0"]
+        iota = profiles["iota"].compute(transforms["grid"], params["i_l"], dr=0)
+        data["iota_num current"] = iota * data["iota_den"] - data["iota_num vacuum"]
     elif profiles["current"] is not None:
         # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
         current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
@@ -752,15 +753,18 @@ def _iota_num_vacuum(params, transforms, profiles, data, **kwargs):
     description="Numerator of rotational transform formula, current contribution, "
     + "first radial derivative",
     dim=1,
-    params=["c_l"],
+    params=["c_l", "i_l"],
     transforms={"grid": []},
-    profiles=["current"],
+    profiles=["current", "iota"],
     coordinates="r",
-    data=["0", "psi_r", "psi_rr"],
+    data=["psi_r", "psi_rr", "iota_den_r", "iota_num_r vacuum"],
 )
 def _iota_num_r_current(params, transforms, profiles, data, **kwargs):
     if profiles["iota"] is not None:
-        data["iota_num_r current"] = jnp.nan * data["0"]
+        iota_r = profiles["iota"].compute(transforms["grid"], params["i_l"], dr=1)
+        data["iota_num_r current"] = (
+            iota_r * data["iota_den_r"] - data["iota_num_r vacuum"]
+        )
     elif profiles["current"] is not None:
         # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
         current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
@@ -846,7 +850,7 @@ def _iota_num_r_vacuum(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=[],
     transforms={},
-    profiles=["current"],
+    profiles=[],
     coordinates="r",
     data=["0", "iota_num current", "iota_num vacuum"],
 )
@@ -857,10 +861,7 @@ def _iota_num(params, transforms, profiles, data, **kwargs):
     of GitHub pull request #556. 𝛼 supplements the rotational transform with an
     additional term to account for the enclosed net toroidal current.
     """
-    if profiles["iota"] is not None:
-        data["iota_num"] = jnp.nan * data["0"]
-    elif profiles["current"] is not None:
-        data["iota_num"] = data["iota_num current"] + data["iota_num vacuum"]
+    data["iota_num"] = data["iota_num current"] + data["iota_num vacuum"]
     return data
 
 
@@ -873,7 +874,7 @@ def _iota_num(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=[],
     transforms={},
-    profiles=["current"],
+    profiles=[],
     coordinates="r",
     data=["0", "iota_num_r current", "iota_num_r vacuum"],
 )
@@ -884,10 +885,7 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
     of GitHub pull request #556. 𝛼 supplements the rotational transform with an
     additional term to account for the enclosed net toroidal current.
     """
-    if profiles["iota"] is not None:
-        data["iota_num_r"] = jnp.nan * data["0"]
-    elif profiles["current"] is not None:
-        data["iota_num_r"] = data["iota_num_r current"] + data["iota_num_r vacuum"]
+    data["iota_num_r"] = data["iota_num_r current"] + data["iota_num_r vacuum"]
     return data
 
 

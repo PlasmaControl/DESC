@@ -7,7 +7,6 @@ from desc.objectives import ForceBalance, FixBoundaryR, FixBoundaryZ, FixPressur
 from desc.backend import jnp
 import matplotlib.pyplot as plt
 import numpy as np
-import jax.random
 
 # Load Equilibrium
 eq = desc.io.load("DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5")[-1]

@@ -12,7 +12,7 @@ import numpy as np
 eq = desc.io.load("DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5")[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
-eq.solve()
+
 
 # Energy and Mass info
 Energy_eV = 3.52e6

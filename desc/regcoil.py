@@ -10,13 +10,17 @@ from scipy.constants import mu_0
 
 from desc.backend import jit
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec
+from desc.compute import get_params, rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import ToroidalMagneticField, _MagneticField
-from desc.transform import Transform
+from desc.magnetic_fields import (
+    FourierCurrentPotentialField,
+    ToroidalMagneticField,
+    _MagneticField,
+    biot_savart_general,
+)
 
 
 ######################### Define functions #######################
@@ -35,19 +39,7 @@ def biot_loop(re, rs, J, dV):
     dV : ndarray, shape(n_src_pts)
         volume element at source points
     """
-    re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
-    assert J.shape == rs.shape
-    JdV = J * dV[:, None]
-    B = jnp.zeros_like(re)
-
-    def body(i, B):
-        r = re - rs[i, :]
-        num = jnp.cross(JdV[i, :], r, axis=-1)
-        den = jnp.linalg.norm(r, axis=-1) ** 3
-        B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
-        return B
-
-    return 1e-7 * jax.lax.fori_loop(0, J.shape[0], body, B)
+    return biot_savart_general(re, rs, J, dV)
 
 
 ######################################################################
@@ -145,33 +137,36 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     Returns
     -------
-    phi_mn_opt: array, the double fourier series coefficients for the
+    all_phi_mns: list of ndarray
+         **Only returned if scan=True!
+         the double fourier series coefficients for the
          single-valued part of the current potential
-         if scan=True, this is a list of length n_scan containing
+         this is a list of length n_scan containing
          the phi_mn corresponding to each scanned value of alpha
-         if external_TF_scan=True, is a dict of the TF fractions
+         if external_TF_scan=True, this a dict of the TF fractions
          and the entries are the arrays of phi_mn for different alpha
-    curr_pot_trans: Transform, transform for the basis used for the phi_mn_opt,
-         can find value of phi_SV with curr_pot_trans.transform(phi_mn_opt)
-    I: float, net toroidal current linking the plasma and coils,
-         determined by helicity ratio and G
-    G: float, net poloidal current linking the plasma and coils,
-         determined by the equilibrium toroidal field
-         note: this value is the value after subtraction of the
-         external linking poloidal current if external_TF_fraction > 0
-    phi_total_function: fxn, accepts a LinearGrid object (or any grid),
-         and returns the total current potential on that grid. Convenience function.
-    TF_B: ToroidalMagneticField, the TF provided by external TF coils.
+    alphase : array
+        **Only returned if scan=True!
+        array of the values of the regularization parameter alpha
+        scanned over, corresponding to the all_phi_mns list.
+    surface_current_field : FourierCurrentPotentialField
+        FourierCurrentPotentialField with the Phi_mn which minimize
+        the Bn on the desired eq surface, with the given
+        regularization parameter alpha and the I,G determined by
+        the provided eq and helicity_ratio.
+    TF_B: ToroidalMagneticField
+        the TF provided by external TF coils. Is a field of strength 0
+        by default. (i.e. no coils external to )
     mean_Bn : ndarray
         the average of the total Bnormal on the surface
     chi_Bn : ndarray
         the sum of squares of the total Bnormal on the surface
     lowest_idx_without_saddles: int, the lowest index of the
         phi_mn_opt array that has contours without saddle coils.
-        only returned if scan=True
+        **only returned if scan=True
     Bn_tot_i : ndarray
         the total Bn at each point on the surface.
-        only returned if scan=False
+        **only returned if scan=False
     """
     # TODO: add defaults for grid values, as stated in docstring
     ##### Load in DESC equilbrium #####
@@ -192,22 +187,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
             + f" got type {type(external_field)} "
         )
 
-    ########### calculate quantities on DESC  plasma surface #############
-
-    sgrid = LinearGrid(M=source_grid_M, N=source_grid_N)  # source grid must have NFP=1
-    egrid = LinearGrid(M=eval_grid_M, N=eval_grid_N, NFP=eq.NFP)
-    edata = eq.compute(["e^rho", "R", "Z", "phi", "e_theta", "e_zeta"], egrid)
-
-    ne_cyl = jnp.cross(
-        edata["e_theta"], edata["e_zeta"], axis=-1
-    )  # surface normal on evaluation surface (ie plasma bdry)
-    ne = rpz2xyz_vec(ne_cyl, phi=egrid.nodes[:, 2])
-    ne_mag = jnp.linalg.norm(ne, axis=-1)
-    ne = ne / ne_mag[:, None]
-    re = jnp.array(
-        [edata["R"], egrid.nodes[:, 2], edata["Z"]]
-    ).T  # evaluation points on plasma bdry
-
     if winding_surf is None:
         # use nt tao as default
         R0_ves = 0.7035  # m
@@ -220,18 +199,32 @@ def run_regcoil(  # noqa: C901 fxn too complex
             modes_Z=np.array([[-1, 0]]),
             NFP=1,  # number of (toroidal) field periods
         )
+
+    ########### calculate quantities on DESC  plasma surface #############
+
+    sgrid = LinearGrid(
+        M=source_grid_M, N=source_grid_N, NFP=winding_surf.NFP
+    )  # source grid must have NFP=1
+    egrid = LinearGrid(M=eval_grid_M, N=eval_grid_N, NFP=eq.NFP)
+    edata = eq.compute(["e_theta", "e_zeta"], egrid)
+
+    ne_cyl = jnp.cross(
+        edata["e_theta"], edata["e_zeta"], axis=-1
+    )  # surface normal on evaluation surface (ie plasma bdry)
+    ne = rpz2xyz_vec(ne_cyl, phi=egrid.nodes[:, 2])
+    ne_mag = jnp.linalg.norm(ne, axis=-1)
+
     # make basis for current potential double fourier series
     sym = "sin" if eq.sym else False
     curr_pot_basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=eq.NFP, sym=sym)
-    curr_pot_trans = Transform(sgrid, curr_pot_basis, derivs=1, build=True)
 
-    # calc quantities on winding surface (source)
-    data = winding_surf.compute(
-        ["x", "e_theta", "e_zeta"], grid=sgrid
-    )  # data on winding surface
-    rs = data["x"]
-    rs_t = data["e_theta"]
-    rs_z = data["e_zeta"]
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        winding_surf,
+        Phi_mn=jnp.zeros(curr_pot_basis.num_modes),
+        modes_Phi=curr_pot_basis.modes[:, 1:],
+        surface_grid=sgrid,
+        sym_Phi="sin",
+    )
 
     # calculate net enclosed poloidal and toroidal currents
     G_tot = (
@@ -244,29 +237,28 @@ def run_regcoil(  # noqa: C901 fxn too complex
     # /99f9abf8b0b0c6ec7bb6e7975dbee5e438808162/regcoil_init_plasma_mod.f90#L500
 
     # define fxns to calculate Bnormal from SV part of phi and from secular part
-    def B_from_K_SV(phi_mn, I, G, re, rs, rs_t, rs_z, ne):
+    def B_from_K_SV(phi_mn):
         """B from single value part of K from REGCOIL eqn 4."""
-        phi_t = curr_pot_trans.transform(phi_mn, dt=1)
-        phi_z = curr_pot_trans.transform(phi_mn, dz=1)
-        ns_mag = jnp.linalg.norm(jnp.cross(rs_t, rs_z), axis=1)
-        K = -(phi_t * (1 / ns_mag) * rs_z.T).T + (phi_z * (1 / ns_mag) * rs_t.T).T
-        dV = sgrid.weights * jnp.linalg.norm(jnp.cross(rs_t, rs_z, axis=-1), axis=-1)
-        B = biot_loop(
-            rpz2xyz(re), rpz2xyz(rs), rpz2xyz_vec(K, phi=sgrid.nodes[:, 2]), dV
+        params = get_params(["K"], surface_current_field)
+        params["Phi_mn"] = phi_mn
+        params["I"] = 0
+        params["G"] = 0
+        Bn, _ = surface_current_field.compute_Bnormal(
+            eq.surface, eval_grid=egrid, source_grid=sgrid, params=params
         )
-        return jnp.sum(B * ne, axis=-1)
+        return Bn
 
-    def B_from_K_secular(I, G, re, rs, rs_t, rs_z, ne):
+    def B_from_K_secular(I, G):
         """B from secular part of K, i.e. B^GI_{normal} from REGCOIL eqn 4."""
-        phi_t = I / (2 * jnp.pi)
-        phi_z = G / (2 * jnp.pi)
-        ns_mag = jnp.linalg.norm(jnp.cross(rs_t, rs_z), axis=1)
-        K = -(phi_t * (1 / ns_mag) * rs_z.T).T + (phi_z * (1 / ns_mag) * rs_t.T).T
-        dV = sgrid.weights * jnp.linalg.norm(jnp.cross(rs_t, rs_z, axis=-1), axis=-1)
-        B = biot_loop(
-            rpz2xyz(re), rpz2xyz(rs), rpz2xyz_vec(K, phi=sgrid.nodes[:, 2]), dV
+        params = get_params(["K"], surface_current_field)
+        params["I"] = I
+        params["G"] = G
+        params["Phi_mn"] = jnp.zeros_like(params["Phi_mn"])
+
+        Bn, _ = surface_current_field.compute_Bnormal(
+            eq.surface, eval_grid=egrid, source_grid=sgrid, params=params
         )
-        return jnp.sum(B * ne, axis=-1)
+        return Bn
 
     # $B$ is linear in $K$ as long as the geometry is fixed
     # so just need to evaluate the jacobian
@@ -330,27 +322,22 @@ def run_regcoil(  # noqa: C901 fxn too complex
             I = 0  # toroidal
         else:
             I = G / helicity_ratio / eq.NFP  # toroidal
-        # initialize phi_mn
-        phi_mn = jnp.zeros(curr_pot_basis.num_modes)
         # calculate jacobian A at this external TF fraction
         t_start = time.time()
         print(f"Starting Jacobian Calculation {i}/{len(external_TFs)}")
-        A = A_fun(phi_mn, I, G, re, rs, rs_t, rs_z, ne)
+        A = A_fun(surface_current_field.Phi_mn)
         print(f"Jacobian Calculation finished, took {time.time()-t_start} s")
 
-        B_GI_normal = B_from_K_secular(I, G, re, rs, rs_t, rs_z, ne)
+        surface_current_field.I = float(I)
+        surface_current_field.G = float(G)
+
+        B_GI_normal = B_from_K_secular(I, G)
         Bn = np.zeros_like(B_GI_normal)  # from plasma current, currently assume is 0
 
         # if ext field, must calc based off that field
 
         if external_field:
-            external_field_on_surface = external_field.compute_magnetic_field(
-                re, basis="rpz"
-            )
-            Bn_ext = jnp.sum(
-                external_field_on_surface * ne_cyl,
-                axis=-1,
-            )
+            Bn_ext, _ = external_field.compute_Bnormal(eq.surface, eval_grid=egrid)
             TF_B = None
 
         if not external_field:
@@ -359,8 +346,11 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 TF_B = ToroidalMagneticField(B0=0, R0=1)
             else:
                 TF_B = ToroidalMagneticField(B0=mu_0 * G_ext / 2 / jnp.pi, R0=1)
-                Bn_ext = B_from_K_secular(0, G_ext, re, rs, rs_t, rs_z, ne)
+                Bn_ext = B_from_K_secular(0, G_ext)
                 # TODO: check that this is the same as calculating B from TF_B...
+                # TODO: change this to using FourierCurrentPotentialField for I and G,
+                #  as is not just a simple TF field if wind surf is not a
+                #  circular axisym torus
 
         rhs = -(Bn + Bn_ext + B_GI_normal).T @ A
 
@@ -445,17 +435,12 @@ def run_regcoil(  # noqa: C901 fxn too complex
             ########################################################
 
             plt.figure(figsize=(15, 8))
-
             for whichPlot in range(numPlots):
                 plt.subplot(numRows, numCols, whichPlot + 1)
                 phi_mn_opt = phi_mns[ilambda_to_plot[whichPlot] - 1]
-                phi = curr_pot_trans.transform(phi_mn_opt)
+                surface_current_field.Phi_mn = phi_mn_opt
+                phi_tot = surface_current_field.compute("Phi", grid=sgrid)["Phi"]
 
-                phi_tot = (
-                    phi
-                    + G / 2 / np.pi * curr_pot_trans.grid.nodes[:, 2]
-                    + I / 2 / np.pi * curr_pot_trans.grid.nodes[:, 1]
-                )
                 plt.rcParams.update({"font.size": 18})
 
                 cdata = plt.contour(
@@ -531,14 +516,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
             plt.title("Bnormal on plasma surface")
             plt.colorbar()
             plt.xlim([0, 2 * np.pi / eq.NFP])
-
-        phi = curr_pot_trans.transform(phi_mn_opt)
-
-        phi_tot = (
-            phi
-            + G / 2 / np.pi * curr_pot_trans.grid.nodes[:, 2]
-            + I / 2 / np.pi * curr_pot_trans.grid.nodes[:, 1]
-        )
+        surface_current_field.Phi_mn = phi_mn_opt
+        phi_tot = surface_current_field.compute("Phi", grid=sgrid)["Phi"]
 
         if show_plots and not scan:
             plt.figure(figsize=(10, 10))
@@ -591,16 +570,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
             plt.xlim([0, 2 * np.pi / eq.NFP])
 
-    def phi_total_function(grid):
-        """Helper fxn to calculate the total phi given a LinearGrid."""
-        trans = Transform(grid, curr_pot_basis)
-        phi = trans.transform(phi_mn_opt)
-        return (
-            phi
-            + G / 2 / np.pi * trans.grid.nodes[:, 2]
-            + I / 2 / np.pi * trans.grid.nodes[:, 1]
-        )
-
     if not external_TF_scan:
         all_phi_mns = all_phi_mns[list(all_phi_mns.keys())[0]]
     if not scan and not external_TF_scan:
@@ -610,21 +579,14 @@ def run_regcoil(  # noqa: C901 fxn too complex
         return (
             all_phi_mns,
             alphas,
-            curr_pot_trans,
-            I,
-            G,
-            phi_total_function,
+            surface_current_field,
             TF_B,
             chi_B,
             lowest_idx_without_saddles,
         )
 
     return (
-        all_phi_mns,
-        curr_pot_trans,
-        I,
-        G,
-        phi_total_function,
+        surface_current_field,
         TF_B,
         np.mean(np.abs(Bn_tot)),
         chi_B,

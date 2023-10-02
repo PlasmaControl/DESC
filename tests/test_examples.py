@@ -795,6 +795,7 @@ def test_regcoil_axisymmetric():
         modes_R=np.array([[0, 0], [1, 0]]),
         modes_Z=np.array([[-1, 0]]),
         sym=True,
+        NFP=3,
     )
 
     # make a simple axisymmetric vacuum equilibrium
@@ -858,11 +859,11 @@ def test_regcoil_axisymmetric():
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
-def test_regcoil_ellipse():
+def test_regcoil_ellipse_and_axisym_surface():
     """Test elliptical eq and circular winding surf regcoil solution."""
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
-    (phi_mn_opt_0, trans, I, G, _, _, _, chi_B, _,) = run_regcoil(
+    (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
         basis_M=8,
         basis_N=8,
         eqname=eq,
@@ -875,11 +876,8 @@ def test_regcoil_ellipse():
     assert np.all(chi_B < 1e-5)
 
     fieldR, fieldZ = trace_from_curr_pot(
-        phi_mn_opt_0,
-        trans,
+        surface_current_field,
         eq,
-        I,
-        G,
         alpha=1e-15,
         M=50,
         N=160,
@@ -891,10 +889,9 @@ def test_regcoil_ellipse():
     assert np.min(fieldR) > 0.67
 
     assert np.max(fieldZ) < 0.02
-    assert np.min(fieldZ) > -0.02
-
+    assert np.min(fieldZ) > -0.02  # 333 seconds for without NFP utiliation
     # test with alpha large, should have very small phi_mn
-    phi_mn_opt_0, trans, I, G, phi_fxn, _, _, _, _ = run_regcoil(
+    (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
         basis_M=2,
         basis_N=2,
         eqname=eq,
@@ -905,7 +902,7 @@ def test_regcoil_ellipse():
         alpha=1e8,
     )
     # should be small
-    np.testing.assert_allclose(phi_mn_opt_0, 0, atol=1e-11)
+    np.testing.assert_allclose(surface_current_field.Phi_mn, 0, atol=1e-11)
 
 
 @pytest.mark.regression

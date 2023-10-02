@@ -15,7 +15,7 @@ eq._current = None
 eq.solve()
 
 # Energy and Mass info
-Energy_eV = 1
+Energy_eV = 3.52e6
 Proton_Mass = 1.673e-27
 Proton_Charge = 1.6e-19
 
@@ -26,15 +26,15 @@ Mass = 4*Proton_Mass
 Charge = 2*Proton_Charge
 
 # Initial State
-psi_i = 0.8
-zeta_i = 0.1
-theta_i = 0.2
+psi_i = 0.3
+zeta_i = 0
+theta_i = 0
 vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)
 ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
-tmax = 1e-5
+tmax = 1e-4
 nt = 2000
 time = jnp.linspace(tmin, tmax, nt)
 
@@ -57,18 +57,12 @@ print("*************** SOLUTION .compute() ***************")
 print(solution)
 print("***************************************************")
 
-
 ObjFunction = ObjectiveFunction([objective])
 ObjFunction.build()
 
 print("*************** ObjFunction.compile() ***************")
 ObjFunction.compile(mode="bfgs")
 print("*****************************************************")
-
-gradient = ObjFunction.grad(ObjFunction.x(eq))
-print("*************** GRADIENT ***************")
-print(gradient)
-print("****************************************")
 
 #print(ObjFunction.x(eq))
 #xs = objective.xs(eq)

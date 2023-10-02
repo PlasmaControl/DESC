@@ -740,6 +740,11 @@ class SplineXYZCurve(Curve):
             )
 
     @property
+    def N(self):
+        """Number of knots in the spline."""
+        return self.knots.size
+
+    @property
     def method(self):
         """Method of interpolation to usee."""
         return self._method

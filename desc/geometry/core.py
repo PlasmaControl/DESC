@@ -182,6 +182,8 @@ class Curve(IOAble, ABC):
         """
         from .curve import FourierXYZCurve
 
+        if grid is None and s is not None:
+            grid = LinearGrid(zeta=s)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, s=s, basis="xyz", name=name)
 
@@ -219,6 +221,8 @@ class Curve(IOAble, ABC):
         """
         from .curve import SplineXYZCurve
 
+        if grid is None and knots is not None:
+            grid = LinearGrid(zeta=knots)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCurve.from_values(
             coords, knots=knots, method=method, name=name, basis="xyz"

@@ -167,11 +167,6 @@ class TestRZCurve:
             atol=3e-3,
         )
 
-        # pass in unclosed curve
-        grid = LinearGrid(N=20, endpoint=False)
-        with pytest.raises(AssertionError):
-            xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=grid.nodes[:, 2])
-
         # pass in non-monotonic s
         grid = LinearGrid(N=20, endpoint=False)
         s = grid.nodes[:, 2]
@@ -185,7 +180,7 @@ class TestRZCurve:
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
         xyz = rz.to_SplineXYZCurve(grid=500)
 
-        grid = LinearGrid(N=20, endpoint=True)
+        grid = LinearGrid(N=20, endpoint=False)
 
         np.testing.assert_allclose(
             rz.compute("length", grid=grid)["length"],
@@ -330,7 +325,7 @@ class TestFourierXYZCurve:
             c2.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
         )
 
-        grid = LinearGrid(N=20, endpoint=True)
+        grid = LinearGrid(N=20, endpoint=False)
         coords1 = c.compute("x", grid=grid, basis="xyz")["x"]
         coords2 = c2.compute("x", grid=grid, basis="xyz")["x"]
 
@@ -530,7 +525,7 @@ class TestSplineXYZCurve:
             )
 
             # make a simple circular curve with supplied knots as phi
-            phi = np.linspace(0, 2 * np.pi, 201, endpoint=True)
+            phi = np.linspace(0, 2 * np.pi, 201, endpoint=False)
             c = SplineXYZCurve(
                 X=R * np.cos(phi),
                 Y=R * np.sin(phi),
@@ -564,7 +559,7 @@ class TestSplineXYZCurve:
             c.X = R * np.cos(phi)
             c.Y = R * np.sin(phi)
             c.Z = np.ones_like(phi)
-            grid = LinearGrid(zeta=np.linspace(0, 2 * np.pi, npts, endpoint=True))
+            grid = LinearGrid(zeta=np.linspace(0, 2 * np.pi, npts, endpoint=False))
             np.testing.assert_allclose(
                 c.compute("length", grid=grid)["length"],
                 R * 2 * np.pi,
@@ -583,7 +578,7 @@ class TestSplineXYZCurve:
         """Test lab frame coordinates of circular curve."""
         # make a simple circular curve of radius 2
         R = 3
-        phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
+        phi = np.linspace(0, 2 * np.pi, 101, endpoint=False)
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
         x, y, z = c.compute("x", grid=Grid(np.array([[0.0, 0.0, 0.0]])), basis="xyz")[
             "x"
@@ -650,7 +645,7 @@ class TestSplineXYZCurve:
         np.testing.assert_allclose(
             c2.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
         )
-        grid = LinearGrid(N=20, endpoint=True)
+        grid = LinearGrid(N=20, endpoint=False)
         coords1 = c.compute("x", grid=grid)["x"]
         coords2 = c2.compute("x", grid=grid)["x"]
 
@@ -663,12 +658,7 @@ class TestSplineXYZCurve:
         R = 2
         phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        with pytest.raises(AssertionError):
-            SplineXYZCurve(
-                X=R * np.cos(phi[:-1]),
-                Y=R * np.sin(phi[:-1]),
-                Z=np.zeros_like(phi[:-1]),
-            )
+
         # change number of knots, should raise error since is different than
         # existing knots
         phi = np.linspace(0, 2 * np.pi, 102, endpoint=True)

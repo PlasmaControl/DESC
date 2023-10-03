@@ -412,7 +412,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
     current : float
         current through coil, in Amperes
     X, Y, Z: array-like
-        points for X, Y, Z describing a closed curve
+        Points for X, Y, Z describing the curve. If the endpoint is included
+        (ie, X[0] == X[-1]), then the final point will be dropped.
     knots : ndarray
         arbitrary curve parameter values to use for spline knots,
         should be a monotonic, 1D ndarray of same length as the input X,Y,Z.

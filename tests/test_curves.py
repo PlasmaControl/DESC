@@ -137,7 +137,7 @@ class TestRZCurve:
         """Test conversion to FourierXYZCurve."""
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
         grid = LinearGrid(N=20, endpoint=False)
-        xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=grid.nodes[:, 2])
+        xyz = rz.to_FourierXYZ(N=2, grid=grid, s=grid.nodes[:, 2])
 
         np.testing.assert_allclose(
             rz.compute("curvature", grid=grid)["curvature"],
@@ -159,7 +159,7 @@ class TestRZCurve:
 
         # same thing but with arclength angle
 
-        xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=None)
+        xyz = rz.to_FourierXYZ(N=2, grid=grid, s=None)
 
         np.testing.assert_allclose(
             rz.compute("length", grid=grid)["length"],
@@ -171,14 +171,14 @@ class TestRZCurve:
         grid = LinearGrid(N=20, endpoint=False)
         s = grid.nodes[:, 2]
         s[-2] = s[-1]
-        with pytest.raises(AssertionError):
-            xyz = rz.to_FourierXYZCurve(N=2, grid=grid, s=s)
+        with pytest.raises(ValueError):
+            xyz = rz.to_FourierXYZ(N=2, grid=grid, s=s)
 
     @pytest.mark.unit
     def test_to_SplineXYZCurve(self):
         """Test conversion to SplineXYZCurve."""
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
-        xyz = rz.to_SplineXYZCurve(grid=500)
+        xyz = rz.to_SplineXYZ(grid=500)
 
         grid = LinearGrid(N=20, endpoint=False)
 
@@ -316,7 +316,7 @@ class TestFourierXYZCurve:
         R = 2
         phi = np.linspace(0, 2 * np.pi, 1001, endpoint=True)
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        c2 = c.to_FourierXYZCurve(N=1, grid=1000)
+        c2 = c.to_FourierXYZ(N=1, grid=1000)
 
         np.testing.assert_allclose(
             c.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
@@ -637,7 +637,7 @@ class TestSplineXYZCurve:
         # make a simple circular curve of radius 2
         R = 2
         c = FourierXYZCurve()
-        c2 = c.to_SplineXYZCurve(grid=npts)
+        c2 = c.to_SplineXYZ(grid=npts)
 
         np.testing.assert_allclose(
             c.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3

@@ -220,7 +220,7 @@ class FourierRZCurve(Curve):
             inputs = InputReader.parse_vmec_inputs(f)[-1]
         else:
             inputs = InputReader().parse_inputs(f)[-1]
-        curve = cls(
+        curve = FourierRZCurve(
             inputs["axis"][:, 1],
             inputs["axis"][:, 2],
             inputs["axis"][:, 0].astype(int),
@@ -466,7 +466,7 @@ class FourierXYZCurve(Curve):
         X_n = transform.fit(coords_xyz[:, 0])
         Y_n = transform.fit(coords_xyz[:, 1])
         Z_n = transform.fit(coords_xyz[:, 2])
-        return cls(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
+        return FourierXYZCurve(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
 
 
 class FourierPlanarCurve(Curve):
@@ -828,4 +828,6 @@ class SplineXYZCurve(Curve):
         """
         if basis == "rpz":
             coords = rpz2xyz(coords)
-        return cls(coords[:, 0], coords[:, 1], coords[:, 2], knots, method, name)
+        return SplineXYZCurve(
+            coords[:, 0], coords[:, 1], coords[:, 2], knots, method, name
+        )

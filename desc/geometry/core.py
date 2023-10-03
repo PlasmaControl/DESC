@@ -158,7 +158,7 @@ class Curve(IOAble, ABC):
             + " (name={})".format(self.name)
         )
 
-    def to_FourierXYZCurve(self, N=None, grid=None, s=None, name=""):
+    def to_FourierXYZ(self, N=None, grid=None, s=None, name=""):
         """Convert Curve to FourierXYZCurve representation.
 
         Parameters
@@ -187,7 +187,7 @@ class Curve(IOAble, ABC):
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, s=s, basis="xyz", name=name)
 
-    def to_SplineXYZCurve(self, knots=None, grid=None, method="cubic", name=""):
+    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
         """Convert Curve to SplineXYZCurve.
 
         Parameters

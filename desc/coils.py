@@ -14,6 +14,7 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
+from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.utils import equals, errorif, flatten_list
 
@@ -201,6 +202,74 @@ class _Coil(_MagneticField, ABC):
             + " (name={}, current={})".format(self.name, self.current)
         )
 
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
+        """Convert Curve to FourierXYZCurve representation.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
+            If an integer, uses that many equally spaced points.
+        s : ndarray
+            arbitrary curve parameter to use for the fitting. if None, defaults to
+            normalized arclength
+        name : str
+            name for this coil
+
+        Returns
+        -------
+        coil : FourierXYZCoil
+            New representation of the coil parameterized by Fourier series for X,Y,Z.
+
+        """
+        if grid is None and s is not None:
+            grid = LinearGrid(zeta=s)
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierXYZCoil.from_values(
+            self.current, coords, N=N, s=s, basis="xyz", name=name
+        )
+
+    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+        """Convert coil to SplineXYZCoil.
+
+        Parameters
+        ----------
+        knots : ndarray
+            arbitrary curve parameter values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Coil.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for this coil
+
+        Returns
+        -------
+        coil: SplineXYZCoil
+            New representation of the coil parameterized by a spline for X,Y,Z.
+
+        """
+        if grid is None and knots is not None:
+            grid = LinearGrid(zeta=knots)
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return SplineXYZCoil.from_values(
+            self.current, coords, knots=knots, method=method, name=name, basis="xyz"
+        )
+
 
 class FourierRZCoil(_Coil, FourierRZCurve):
     """Coil parameterized by fourier series for R,Z in terms of toroidal angle phi.
@@ -331,6 +400,41 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         name="",
     ):
         super().__init__(current, X_n, Y_n, Z_n, modes, name)
+
+    @classmethod
+    def from_values(cls, current, coords, N=10, s=None, basis="xyz", name=""):
+        """Fit coordinates to FourierXYZCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amps.
+        coords: ndarray
+            Coordinates to fit a FourierXYZCoil object with.
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+            default is 10
+        s : ndarray
+            arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords
+            if None, defaults to normalized arclength
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "xyz"
+        Returns
+        -------
+        coil : FourierXYZCoil
+            New representation of the coil parameterized by Fourier series for X,Y,Z.
+
+        """
+        curve = super().from_values(coords, N, s, basis)
+        return cls(
+            current,
+            X_n=curve.X_n,
+            Y_n=curve.Y_n,
+            Z_n=curve.Z_n,
+            name=name,
+        )
 
 
 class FourierPlanarCoil(_Coil, FourierPlanarCurve):
@@ -509,6 +613,58 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         if basis == "rpz":
             B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
         return B
+
+    @classmethod
+    def from_values(
+        cls, current, coords, knots=None, method="cubic", name="", basis="xyz"
+    ):
+        """Create SplineXYZCoil from coordinate values.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amps.
+        coords: ndarray
+            Points for X, Y, Z describing the curve. If the endpoint is included
+            (ie, X[0] == X[-1]), then the final point will be dropped.
+        knots : ndarray
+            arbitrary curve parameter values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Curve.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        method : str
+            method of interpolation
+
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+
+        name : str
+            name for this curve
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "xyz"
+
+        Returns
+        -------
+        coil: SplineXYZCoil
+            New representation of the coil parameterized by splines in X,Y,Z.
+
+        """
+        curve = super().from_values(coords, knots, method, basis=basis)
+        return cls(
+            current,
+            X=curve.X,
+            Y=curve.Y,
+            Z=curve.Z,
+            knots=curve.knots,
+            method=curve.method,
+            name=name,
+        )
 
 
 def _check_type(coil0, coil):

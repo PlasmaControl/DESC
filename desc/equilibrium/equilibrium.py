@@ -1930,10 +1930,6 @@ class Equilibrium(IOAble, Optimizable):
                 maxiter,
                 0,
                 np.inf,
-                0,
-                np.inf,
-                0,
-                np.inf,
             )
             if actual_reduction > 0:
                 params = self.params_dict.copy()

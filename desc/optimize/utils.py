@@ -409,8 +409,6 @@ STATUS_MESSAGES = {
     "ftol": "`ftol` condition satisfied.",
     "gtol": "`gtol` condition satisfied.",
     "max_nfev": "Maximum number of function evaluations has been exceeded.",
-    "max_ngev": "Maximum number of gradient evaluations has been exceeded.",
-    "max_nhev": "Maximum number of Jacobian/Hessian evaluations has been exceeded.",
     "maxiter": "Maximum number of iterations has been exceeded.",
     "pr_loss": "Desired error not necessarily achieved due to precision loss.",
     "nan": "NaN result encountered.",
@@ -436,10 +434,6 @@ def check_termination(
     maxiter,
     nfev,
     max_nfev,
-    ngev,
-    max_ngev,
-    nhev,
-    max_nhev,
     **kwargs,
 ):
     """Check termination condition and get message."""
@@ -463,12 +457,6 @@ def check_termination(
     elif nfev >= max_nfev:
         success = False
         message = STATUS_MESSAGES["max_nfev"]
-    elif ngev >= max_ngev:
-        success = False
-        message = STATUS_MESSAGES["max_ngev"]
-    elif nhev >= max_nhev:
-        success = False
-        message = STATUS_MESSAGES["max_nhev"]
     elif dx_norm < kwargs.get("min_trust_radius", np.finfo(x_norm.dtype).eps):
         success = False
         message = STATUS_MESSAGES["approx"]

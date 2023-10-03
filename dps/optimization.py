@@ -9,10 +9,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load Equilibrium
-eq = desc.io.load("DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5")[-1]
+eq = desc.io.load("input.nearaxis_6.82_output.h5")[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
-
+eq.solve()
 
 # Energy and Mass info
 Energy_eV = 3.52e6
@@ -48,7 +48,7 @@ mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 
 ini_param = [float(mu), Mass_Charge_Ratio]
 
-objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1.4e-8)
+objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1e-8)
 
 objective.build()
 solution = objective.compute(*objective.xs(eq))

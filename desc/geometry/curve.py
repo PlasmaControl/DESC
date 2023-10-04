@@ -766,7 +766,7 @@ class SplineXYZCurve(Curve):
 
     @property
     def method(self):
-        """Method of interpolation to usee."""
+        """Method of interpolation to use."""
         return self._method
 
     @method.setter

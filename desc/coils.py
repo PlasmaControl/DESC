@@ -803,7 +803,6 @@ class CoilSet(_Coil, MutableSequence):
 
         # if user supplied initial data for each coil we also need to vmap over that.
         if data:
-
             data = vmap(
                 lambda d, x: self[0].compute(
                     names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
@@ -811,7 +810,6 @@ class CoilSet(_Coil, MutableSequence):
             )(tree_stack(data), tree_stack(params))
 
         else:
-
             data = vmap(
                 lambda x: self[0].compute(
                     names,
@@ -1054,16 +1052,12 @@ class CoilSet(_Coil, MutableSequence):
         for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
             coords = np.genfromtxt(lines[start + 1 : end])
 
-            tempx = np.append(coords[:, 0], np.array([coords[0, 0]]))
-            tempy = np.append(coords[:, 1], np.array([coords[0, 1]]))
-            tempz = np.append(coords[:, 2], np.array([coords[0, 2]]))
-
             coils.append(
                 SplineXYZCoil(
                     coords[:, -1][0],
-                    tempx,
-                    tempy,
-                    tempz,
+                    coords[:, 0],
+                    coords[:, 1],
+                    coords[:, 2],
                     method=method,
                     name=names[i],
                 )
@@ -1135,7 +1129,7 @@ class CoilSet(_Coil, MutableSequence):
         if hasattr(grid, "endpoint"):
             endpoint = grid.endpoint
         elif isinstance(grid, numbers.Integral):
-            endpoint = True  # if int, will create a grid w/ endpoint=True in compute
+            endpoint = False  # if int, will create a grid w/ endpoint=False in compute
         for i in range(int(len(coils))):
             coil = coils[i]
             coords = coil.compute("x", basis="xyz", grid=grid)["x"]

@@ -542,7 +542,7 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
         np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check values at interpolated points, ensure they match closely
-    grid = LinearGrid(N=51, endpoint=False)
+    grid = LinearGrid(N=101, endpoint=False)
     for c1, c2 in zip(coilset, coilset2):
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
@@ -576,7 +576,7 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
     B1 = coilset.compute_magnetic_field(np.array([[10, 0, 0]]), basis="xyz", grid=grid)
     B2 = coilset2.compute_magnetic_field(np.array([[10, 0, 0]]), basis="xyz", grid=grid)
 
-    np.testing.assert_allclose(B1, B2, atol=1e-16)
+    np.testing.assert_allclose(B1, B2, atol=1e-10)
 
 
 @pytest.mark.unit

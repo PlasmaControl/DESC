@@ -757,14 +757,14 @@ def _iota_num_vacuum(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["current", "iota"],
     coordinates="r",
-    data=["psi_r", "psi_rr", "iota_den_r", "iota_num_r vacuum"],
+    data=["psi_r", "psi_rr", "iota_den", "iota_den_r", "iota_num", "iota_num_r vacuum"],
 )
 def _iota_num_r_current(params, transforms, profiles, data, **kwargs):
     if profiles["iota"] is not None:
         iota_r = profiles["iota"].compute(transforms["grid"], params["i_l"], dr=1)
         data["iota_num_r current"] = (
-            iota_r * data["iota_den_r"] - data["iota_num_r vacuum"]
-        )
+            iota_r * data["iota_den"] ** 2 + data["iota_num"] * data["iota_den_r"]
+        ) / data["iota_den"] - data["iota_num_r vacuum"]
     elif profiles["current"] is not None:
         # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
         current = profiles["current"].compute(transforms["grid"], params["c_l"], dr=0)
@@ -852,7 +852,7 @@ def _iota_num_r_vacuum(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["0", "iota_num current", "iota_num vacuum"],
+    data=["iota_num current", "iota_num vacuum"],
 )
 def _iota_num(params, transforms, profiles, data, **kwargs):
     """Numerator of rotational transform formula.
@@ -876,7 +876,7 @@ def _iota_num(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["0", "iota_num_r current", "iota_num_r vacuum"],
+    data=["iota_num_r current", "iota_num_r vacuum"],
 )
 def _iota_num_r(params, transforms, profiles, data, **kwargs):
     """Numerator of rotational transform formula, first radial derivative.
@@ -898,7 +898,7 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=["c_l"],
     transforms={"grid": []},
-    profiles=["current"],
+    profiles=["current", "iota"],
     coordinates="r",
     data=[
         "0",
@@ -1018,7 +1018,7 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=["c_l"],
     transforms={"grid": []},
-    profiles=["current"],
+    profiles=["current", "iota"],
     coordinates="r",
     data=[
         "0",

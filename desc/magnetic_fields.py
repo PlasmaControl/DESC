@@ -1747,8 +1747,8 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     # needed for integration in class
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
     data = field.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
-    _K = xyz2rpz_vec(data["K"], phi=field.surface_grid.nodes[:, 2])
-    _rs = xyz2rpz_vec(data["x"], phi=field.surface_grid.nodes[:, 2])
+    _K = xyz2rpz_vec(data["K"], phi=surface_grid.nodes[:, 2])
+    _rs = xyz2rpz_vec(data["x"], phi=surface_grid.nodes[:, 2])
     # surface element, must divide by NFP to remove the NFP multiple on the
     # surface grid weights, as we account for that when doing the for loop
     # over NFP
@@ -1770,7 +1770,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
         f += fj
         return f
 
-    B = fori_loop(0, field.surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+    B = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
     if basis == "rpz":
         B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
     return B

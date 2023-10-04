@@ -16,7 +16,7 @@ class Optimizable(ABC):
 
     @property
     def optimizable_params(self):
-        """list: names of parameters that have been declared optimizable."""
+        """list: string names of parameters that have been declared optimizable."""
         if not hasattr(self, "_optimizable_params"):
             p = []
             for methodname in dir(self):
@@ -59,7 +59,7 @@ class Optimizable(ABC):
 
     @property
     def x_idx(self):
-        """dict: dictionary of arrays of indices into array for each parameter."""
+        """dict: arrays of indices for each parameter in concatenated array."""
         dimensions = self.dimensions
         idx = {}
         dim_x = 0
@@ -71,9 +71,7 @@ class Optimizable(ABC):
     @property
     def dim_x(self):
         """int: total number of optimizable parameters."""
-        return sum(
-            jnp.asarray(getattr(self, key)).size for key in self.optimizable_params
-        )
+        return sum(self.dimensions.values())
 
     def pack_params(self, p):
         """Convert a dictionary of parameters into a single array.

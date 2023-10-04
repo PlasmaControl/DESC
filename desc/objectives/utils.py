@@ -58,7 +58,7 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
         for thing in con.things:
             if thing not in objective.things:
                 warnings.warn(
-                    f"Optimizable object {thing} is constrained"
+                    f"Optimizable object {thing} is constrained by {con}"
                     + " but not included in Objective"
                 )
     # set state vector

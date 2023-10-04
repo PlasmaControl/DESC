@@ -168,7 +168,6 @@ class Equilibrium(IOAble, Optimizable):
         spectral_indexing=None,
         **kwargs,
     ):
-        super().__init__()
         errorif(
             not isinstance(Psi, numbers.Real),
             ValueError,

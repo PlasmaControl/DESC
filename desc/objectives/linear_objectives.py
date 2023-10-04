@@ -46,7 +46,7 @@ class FixParameter(_Objective):
 
     Parameters
     ----------
-    things : Optimizable
+    thing : Optimizable
         Object whose degrees of freedom are being fixed.
     params : str or list of str
         Names of parameters to fix. Defaults to all parameters.
@@ -146,115 +146,6 @@ class FixParameter(_Objective):
 
         """
         return jnp.concatenate([params[par] for par in self._params])
-
-
-class ShareParameter(_Objective):
-    """Require that params from two or more Optimizable objects share the same values.
-
-    Parameters
-    ----------
-    things : tuple or list of Optimizable
-        Objects whose degrees of freedom are being shared.
-    params : str or list of str
-        Names of parameters to share. Defaults to all parameters.
-    target : dict of {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Should have the same tree structure as thing.params. Defaults to things.params.
-    bounds : tuple of dict {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Should have the same tree structure as thing.params.
-    weight : dict of {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Should be a scalar or have the same tree structure as thing.params.
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Has no effect for this objective.
-    name : str, optional
-        Name of the objective function.
-
-    """
-
-    _scalar = False
-    _linear = True
-    _fixes = True
-    _units = "(~)"
-    _print_value_fmt = "Fixed parameter error: {:10.3e} "
-
-    def __init__(
-        self,
-        thing=None,
-        params=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=False,
-        normalize_target=False,
-        name="Fixed parameter",
-    ):
-
-        self._target_from_user = target
-        self._params = params
-        super().__init__(
-            things=thing,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-        )
-
-    def build(self, thing=None, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        self.things = setdefault(thing, self.things)
-        thing = self.things[0]
-        params = setdefault(self._params, thing.optimizable_params)
-
-        if not isinstance(params, (list, tuple)):
-            params = [params]
-        assert all(p in t.opimizable_params for p in params for t in self.things)
-        self._params = params
-        target = setdefault(
-            self._target_from_user, {par: thing.params[par] for par in params}
-        )
-        self._dim_f = sum(thing.dimensions[p] for p in params) * len(self.things)
-        self.target = jnp.tile(
-            jnp.concatenate([target[par] for par in params]), len(self.things)
-        )
-
-        super().build(things=thing, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, *params, constants=None):
-        """Compute fixed degree of freedom errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Fixed degree of freedom errors.
-
-        """
-        return jnp.concatenate([par[p] for par in params for p in self._params])
 
 
 class BoundaryRSelfConsistency(_Objective):

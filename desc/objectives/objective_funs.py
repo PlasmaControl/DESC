@@ -1040,7 +1040,7 @@ class _Objective(IOAble, ABC):
                 )
 
     def xs(self, *things):
-        """Return a tuple of args required by this objective from the Equilibrium eq."""
+        """Return a tuple of args required by this objective from optimizable things."""
         things = things or self.things
         return tuple([t.params_dict for t in things])
 

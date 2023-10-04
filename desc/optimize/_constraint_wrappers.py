@@ -553,6 +553,7 @@ class ProximalProjection(ObjectiveFunction):
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
+        things = things or self.things
         assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
         # things for this is just the equilibrium
         xs = [jnp.atleast_1d(things[0].params_dict[arg]) for arg in self._args]

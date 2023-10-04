@@ -150,6 +150,7 @@ class Optimizer(IOAble):
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
 
+        # eq may be None
         eq = get_instance(things, Equilibrium)
 
         options = {} if options is None else options

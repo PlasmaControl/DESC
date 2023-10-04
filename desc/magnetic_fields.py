@@ -1282,6 +1282,26 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             assert callable(new), "Potential derivative must be callable!"
             self._potential_dzeta = new
 
+    def save(self, file_name, file_format=None, file_mode="w"):
+        """Save the object.
+
+        **Not supported for this object!
+
+        Parameters
+        ----------
+        file_name : str file path OR file instance
+            location to save object
+        file_format : str (Default hdf5)
+            format of save file. Only used if file_name is a file path
+        file_mode : str (Default w - overwrite)
+            mode for save file. Only used if file_name is a file path
+
+        """
+        raise OSError(
+            "Saving CurrentPotentialField is not supported,"
+            " as the potential function cannot be serialized."
+        )
+
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
@@ -1433,10 +1453,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     modes_Phi : array-like, shape(k,2)
         Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn coefficients
     I : float
-        Net current linking the plasma and the coils toroidally
+        Net current linking the plasma and the surface toroidally
         Denoted I in the algorithm
     G : float
-        Net current linking the plasma and the coils poloidally
+        Net current linking the plasma and the surface poloidally
         Denoted G in the algorithm
     surface_grid : Grid
         grid upon which to evaluate the surface current density K
@@ -1470,7 +1490,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     _io_attrs_ = (
         _MagneticField._io_attrs_
         + FourierRZToroidalSurface._io_attrs_
-        + ["_surface_grid", "Phi_mn", "I", "G"]
+        + ["_surface_grid", "_Phi_mn", "_I", "_G"]
     )
 
     def __init__(
@@ -1549,7 +1569,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
     @property
     def I(self):  # noqa: E743
-        """Net current linking the plasma and the coils toroidally."""
+        """Net current linking the plasma and the surface toroidally."""
         return self._I
 
     @I.setter
@@ -1559,7 +1579,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
     @property
     def G(self):
-        """Net current linking the plasma and the coils poloidally."""
+        """Net current linking the plasma and the surface poloidally."""
         return self._G
 
     @G.setter
@@ -1719,10 +1739,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn
             coefficients
         I : float
-            Net current linking the plasma and the coils toroidally
+            Net current linking the plasma and the surface toroidally
             Denoted I in the algorithm
         G : float
-            Net current linking the plasma and the coils poloidally
+            Net current linking the plasma and the surface poloidally
             Denoted G in the algorithm
         surface_grid : Grid
             grid upon which to evaluate the surface current density K

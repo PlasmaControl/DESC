@@ -116,6 +116,9 @@ class TestMagneticFields:
             rtol=1e-8,
         )
 
+        with pytest.raises(IOError):
+            field.save("test_field.h5")
+
     @pytest.mark.unit
     def test_fourier_current_potential_field(self):
         """Test Fourier current potential magnetic field against analytic result."""

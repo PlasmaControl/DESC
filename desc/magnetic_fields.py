@@ -1323,45 +1323,9 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field at specified points
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        if isinstance(coords, Grid):
-            coords = coords.nodes
-        coords = jnp.atleast_2d(coords)
-        if basis == "rpz":
-            coords = rpz2xyz(coords)
-        surface_grid = grid or self.surface_grid
-
-        # compute surface current, and store grid quantities
-        # needed for integration in class
-        # TODO: does this have to be xyz, or can it be computed in rpz as well?
-        data = self.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
-        _K = xyz2rpz_vec(data["K"], phi=self.surface_grid.nodes[:, 2])
-        _rs = xyz2rpz_vec(data["x"], phi=self.surface_grid.nodes[:, 2])
-        # surface element, must divide by NFP to remove the NFP multiple on the
-        # surface grid weights, as we account for that when doing the for loop
-        # over NFP
-        _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
-
-        def nfp_loop(j, f):
-            # calculate (by rotating) rs, rs_t, rz_t
-            phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
-                2 * jnp.pi
-            )
-            rs = rpz2xyz_vec(_rs, phi=phi)
-            K = rpz2xyz_vec(_K, phi=phi)
-            fj = biot_savart_general(
-                coords,
-                rs,
-                K,
-                _dV,
-            )
-            f += fj
-            return f
-
-        B = fori_loop(0, self.surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
-        if basis == "rpz":
-            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
-        return B
+        return _compute_magnetic_field_from_CurrentPotentialField(
+            field=self, coords=coords, params=params, basis=basis, grid=grid
+        )
 
     @classmethod
     def from_surface(
@@ -1672,45 +1636,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field at specified points
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        if isinstance(coords, Grid):
-            coords = coords.nodes
-        coords = jnp.atleast_2d(coords)
-        if basis == "rpz":
-            coords = rpz2xyz(coords)
-        surface_grid = grid or self.surface_grid
-
-        # compute surface current, and store grid quantities
-        # needed for integration in class
-        # TODO: does this have to be xyz, or can it be computed in rpz as well?
-        data = self.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
-        _K = xyz2rpz_vec(data["K"], phi=self.surface_grid.nodes[:, 2])
-        _rs = xyz2rpz_vec(data["x"], phi=self.surface_grid.nodes[:, 2])
-        # surface element, must divide by NFP to remove the NFP multiple on the
-        # surface grid weights, as we account for that when doing the for loop
-        # over NFP
-        _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
-
-        def nfp_loop(j, f):
-            # calculate (by rotating) rs, rs_t, rz_t
-            phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
-                2 * jnp.pi
-            )
-            rs = rpz2xyz_vec(_rs, phi=phi)
-            K = rpz2xyz_vec(_K, phi=phi)
-            fj = biot_savart_general(
-                coords,
-                rs,
-                K,
-                _dV,
-            )
-            f += fj
-            return f
-
-        B = fori_loop(0, self.surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
-        if basis == "rpz":
-            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
-        return B
+        return _compute_magnetic_field_from_CurrentPotentialField(
+            field=self, coords=coords, params=params, basis=basis, grid=grid
+        )
 
     @classmethod
     def from_surface(
@@ -1784,3 +1712,69 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             name,
             check_orientation,
         )
+
+
+def _compute_magnetic_field_from_CurrentPotentialField(
+    field, coords, params=None, basis="rpz", grid=None
+):
+    """Compute magnetic field at a set of points.
+
+    Parameters
+    ----------
+    field : CurrentPotentialField or FourierCurrentPotentialField
+        current potential field object from which to compute magnetic field.
+    coords : array-like shape(N,3) or Grid
+        cylindrical or cartesian coordinates
+    params : dict, optional
+        parameters to pass to compute function
+        should include the potential
+    basis : {"rpz", "xyz"}
+        basis for input coordinates and returned magnetic field
+    grid : Grid,
+        grid upon which to evaluate the surface current density K
+
+    Returns
+    -------
+    field : ndarray, shape(N,3)
+        magnetic field at specified points
+
+    """
+    assert basis.lower() in ["rpz", "xyz"]
+    if isinstance(coords, Grid):
+        coords = coords.nodes
+    coords = jnp.atleast_2d(coords)
+    if basis == "rpz":
+        coords = rpz2xyz(coords)
+    surface_grid = grid or field.surface_grid
+
+    # compute surface current, and store grid quantities
+    # needed for integration in class
+    # TODO: does this have to be xyz, or can it be computed in rpz as well?
+    data = field.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
+    _K = xyz2rpz_vec(data["K"], phi=field.surface_grid.nodes[:, 2])
+    _rs = xyz2rpz_vec(data["x"], phi=field.surface_grid.nodes[:, 2])
+    # surface element, must divide by NFP to remove the NFP multiple on the
+    # surface grid weights, as we account for that when doing the for loop
+    # over NFP
+    _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
+
+    def nfp_loop(j, f):
+        # calculate (by rotating) rs, rs_t, rz_t
+        phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
+            2 * jnp.pi
+        )
+        rs = rpz2xyz_vec(_rs, phi=phi)
+        K = rpz2xyz_vec(_K, phi=phi)
+        fj = biot_savart_general(
+            coords,
+            rs,
+            K,
+            _dV,
+        )
+        f += fj
+        return f
+
+    B = fori_loop(0, field.surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+    if basis == "rpz":
+        B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+    return B

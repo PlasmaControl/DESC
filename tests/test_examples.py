@@ -22,6 +22,7 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
+    FixParameter,
     FixPressure,
     FixPsi,
     ForceBalance,
@@ -704,9 +705,9 @@ def test_multiobject_optimization():
     eq = Equilibrium(L=4, M=4, N=0, iota=2)
     surf = FourierRZToroidalSurface(
         R_lmn=[10, 2.1],
-        Z_lmn=[0, -2],
+        Z_lmn=[-2],
         modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[0, 0], [-1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
     )
     surf.change_resolution(M=4, N=0)
     constraints = (
@@ -714,19 +715,17 @@ def test_multiobject_optimization():
         FixPressure(eq=eq),
         FixIota(eq=eq),
         FixPsi(eq=eq),
+        FixParameter(surf, "Z_lmn", [-1]),
+        FixParameter(surf, "R_lmn", [0]),
+        FixBoundaryR(eq, modes=[[0, 0, 0]]),
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
     )
 
-    objective = ObjectiveFunction(
-        (
-            Volume(eq=eq, target=eq.compute("V")["V"] * 2),
-            AspectRatio(eq=eq, target=10),
-        )
-    )
+    objective = ObjectiveFunction((Volume(eq=eq, target=eq.compute("V")["V"] * 2),))
 
     eq.solve(verbose=3)
 
-    optimizer = Optimizer("lsq-auglag")
+    optimizer = Optimizer("fmin-auglag")
     (eq, surf), result = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=500
     )
@@ -734,6 +733,8 @@ def test_multiobject_optimization():
     np.testing.assert_allclose(
         constraints[-1].compute(*constraints[-1].xs(eq, surf)), 1, atol=1e-3
     )
+    assert surf.R_lmn[0] == 10
+    assert surf.Z_lmn[-1] == -2
 
 
 class TestGetExample:

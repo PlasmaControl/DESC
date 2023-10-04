@@ -50,6 +50,8 @@ class FixParameter(_Objective):
         Object whose degrees of freedom are being fixed.
     params : str or list of str
         Names of parameters to fix. Defaults to all parameters.
+    index : array-like or list of array-like
+        Indices to fix for each parameter in params. Use True to fix all indices.
     target : dict of {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Should have the same tree structure as thing.params. Defaults to things.params.
@@ -81,6 +83,7 @@ class FixParameter(_Objective):
         self,
         thing=None,
         params=None,
+        indices=True,
         target=None,
         bounds=None,
         weight=1,
@@ -91,6 +94,7 @@ class FixParameter(_Objective):
 
         self._target_from_user = target
         self._params = params
+        self._indices = indices
         super().__init__(
             things=thing,
             target=target,
@@ -118,12 +122,29 @@ class FixParameter(_Objective):
 
         if not isinstance(params, (list, tuple)):
             params = [params]
-        assert all(par in thing.opimizable_params for par in params)
+        assert all(par in thing.optimizable_params for par in params)
         self._params = params
+
+        # replace indices=True with actual indices
+        if self._indices and isinstance(self._indices, bool):
+            self._indices = [np.arange(thing.dimensions[par]) for par in self._params]
+        # make sure its iterable if only a scalar was passed in
+        if not isinstance(self._indices, (list, tuple)):
+            self._indices = [self._indices]
+        # replace idx=True with array of all indices, throwing an error if the length
+        # of indices is different from number of params
+        indices = {}
+        for idx, par in zip(self._indices, self._params, strict=True):
+            if idx and isinstance(idx, bool):
+                idx = np.arange(thing.dimensions[par])
+            indices[par] = np.atleast_1d(idx)
+        self._indices = indices
+
         target = setdefault(
-            self._target_from_user, {par: thing.params[par] for par in params}
+            self._target_from_user,
+            {par: thing.params_dict[par][self._indices[par]] for par in params},
         )
-        self._dim_f = sum(thing.dimensions[p] for p in params)
+        self._dim_f = sum(t.size for t in self._indices.values())
         self.target = jnp.concatenate([target[par] for par in params])
 
         super().build(things=thing, use_jit=use_jit, verbose=verbose)
@@ -145,7 +166,9 @@ class FixParameter(_Objective):
             Fixed degree of freedom errors.
 
         """
-        return jnp.concatenate([params[par] for par in self._params])
+        return jnp.concatenate(
+            [params[par][self._indices[par]] for par in self._params]
+        )
 
 
 class BoundaryRSelfConsistency(_Objective):

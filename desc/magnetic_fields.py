@@ -4,10 +4,12 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 from netCDF4 import Dataset
+from scipy.constants import physical_constants
 
-from desc.backend import jit, jnp, odeint
+from desc.backend import jit, jnp, odeint, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz_vec, xyz2rpz
+from desc.compute.utils import cross, dot
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
@@ -1050,3 +1052,133 @@ def field_line_integrate(
     r = x[:, :, 0].T.reshape((len(phis), *rshape))
     z = x[:, :, 2].T.reshape((len(phis), *rshape))
     return r, z
+
+
+def trace_particles(
+    x0,
+    lambda0,
+    ts,
+    field,
+    m=4,
+    q=2,
+    E=3.52e6,
+    params=None,
+    grid=None,
+    basis="rpz",
+    rtol=1e-8,
+    atol=1e-8,
+    maxstep=np.inf,
+):
+    """Trace particles in external magnetic field.
+
+    Parameters
+    ----------
+    x0 : array-like, shape(num_particles,3)
+        Initial starting coordinates for r, phi, z (if basis="rpz")
+        or x, y, z (if basis="xyz")
+    lambda0 : array-like, shape(num_particles,)
+        Initial value for pitch angle parameter λ = m μ ||B|| / E
+        where μ ||B|| = 1/2 v²_⊥
+    ts : array-like
+        Strictly increasing array of times where output is desired.
+    field : MagneticField
+        Source of magnetic field to integrate
+    m : float or array-like, shape(num_particles,)
+        Mass of particles, in units of proton masses
+    q : float or array-like, shape(num_particles,)
+        Charge of particles, in units of elementary charge.
+    E : float or array-like, shape(num_particles,)
+        Kinetic energy of particles, in eV.
+    params: dict, optional
+        Parameters passed to field
+    grid : Grid, optional
+        Grid to use to discretize field
+    basis : {"rpz", "xyz"}
+        Whether to use cylindrical or cartesian coordinates.
+    rtol, atol : float
+        relative and absolute tolerances for ode integration
+    maxstep : int
+        maximum number of steps between different output times
+
+    Returns
+    -------
+    x : ndarray, shape(num_particles, num_timesteps, 3)
+        Position of each particle at each requested time, in
+        either r,phi,z or x,y,z depending on basis argument.
+    v : ndarray, shape(num_particles, num_timesteps)
+        Parallel velocity of each particle at specified times.
+    mu : ndarray, shape(num_particles,)
+        Magnetic moment of each particle.
+
+    """
+    x0, lambda0, m, q, E = map(jnp.asarray, (x0, lambda0, m, q, E))
+    n_particles = x0.shape[0]
+    lambda0, m, q, E = map(
+        lambda x: jnp.broadcast_to(x, n_particles), (lambda0, m, q, E)
+    )
+
+    m *= physical_constants["proton mass"][0]
+    q *= physical_constants["elementary charge"][0]
+    E *= physical_constants["electron volt"][0]
+
+    v0 = jnp.sqrt((1 - lambda0) * 2 * E / m)
+
+    y0 = jnp.hstack([x0, v0[:, None]])
+
+    @jit
+    def field_compute(x):
+        return field.compute_magnetic_field(
+            jnp.atleast_2d(x), params=params, basis=basis, grid=grid
+        ).squeeze()
+
+    B = field_compute(x0)
+    modB = jnp.linalg.norm(B, axis=-1)
+    mu = (E / m - 1 / 2 * v0**2) / modB
+
+    @jit
+    def odefun(y, t, *args):
+        # this is the one implemented in simsopt for method="gc_vac"
+        # should be equivalent to full lagrangian from Cary & Brizard in vacuum
+        m_over_q, mu = args
+        vpar = y[-1]
+        x = y[:-1]
+        B = field_compute(x)
+        dB = jnp.vectorize(
+            Derivative(
+                field_compute,
+                mode="fwd",
+            ),
+            signature="(n)->(n,n)",
+        )(x).squeeze()
+
+        modB = jnp.linalg.norm(B, axis=-1)
+        b = B / modB
+        grad_B = jnp.sum(b[:, None] * dB, axis=0)
+        if basis == "rpz":
+            g1, g2, g3 = grad_B
+            # factor of R from grad in cylindrical coordinates
+            g2 /= x[0]
+            grad_B = jnp.array([g1, g2, g3])
+
+        dRdt = vpar * b + (m_over_q / modB**2 * (mu * modB + vpar**2)) * cross(
+            b, grad_B
+        )
+        if basis == "rpz":
+            d1, d2, d3 = dRdt
+            d2 /= x[0]
+            dRdt = jnp.array([d1, d2, d3])
+
+        dvdt = -mu * dot(b, grad_B)
+        dxdt = jnp.append(dRdt, dvdt)
+        return dxdt.flatten()
+
+    @jit
+    def intfun(x, m_over_q, mu):
+        return odeint(odefun, x, ts, m_over_q, mu, rtol=rtol, atol=atol, mxstep=maxstep)
+
+    yt = jit(vmap(intfun))(y0, m / q, mu)
+
+    x = yt[:, :, :3]
+    v = yt[:, :, 3]
+
+    return x, v, mu

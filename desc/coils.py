@@ -806,7 +806,7 @@ class CoilSet(_Coil, MutableSequence):
 
             data = vmap(
                 lambda d, x: self[0].compute(
-                    names, grid=grid, transforms=transforms, data=d, params=x
+                    names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
                 )
             )(tree_stack(data), tree_stack(params))
 
@@ -814,7 +814,12 @@ class CoilSet(_Coil, MutableSequence):
 
             data = vmap(
                 lambda x: self[0].compute(
-                    names, grid=grid, transforms=transforms, data=data, params=x
+                    names,
+                    grid=grid,
+                    transforms=transforms,
+                    data=data,
+                    params=x,
+                    **kwargs,
                 )
             )(tree_stack(params))
 

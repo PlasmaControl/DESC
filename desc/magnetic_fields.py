@@ -1372,7 +1372,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         sym = surface.sym
         rho = surface.rho
         name = surface.name
-        rho = surface.rho
 
         return cls(
             potential,
@@ -1648,8 +1647,6 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         G=0,
         surface_grid=None,
         sym_Phi="auto",
-        name="",
-        check_orientation=True,
     ):
         """Create FourierCurrentPotentialField using geometry of given surface.
 
@@ -1692,6 +1689,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         NFP = surface.NFP
         sym = surface.sym
         rho = surface.rho
+        name = surface.name
 
         return cls(
             Phi_mn,
@@ -1708,7 +1706,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             sym,
             rho,
             name,
-            check_orientation,
+            check_orientation=False,
         )
 
 

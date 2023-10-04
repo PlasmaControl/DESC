@@ -1153,7 +1153,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     potential_dtheta: callable
         function to compute the theta derivative of the current potential
     potential_dzeta: callable
-        function to compute the theta derivative of the current potential
+        function to compute the zeta derivative of the current potential
     surface_grid : Grid,
         grid upon which to evaluate the surface current density K
     params : dict, optional
@@ -1371,7 +1371,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         potential_dtheta: callable
             function to compute the theta derivative of the current potential
         potential_dzeta: callable
-            function to compute the theta derivative of the current potential
+            function to compute the zeta derivative of the current potential
         surface_grid : Grid,
             grid upon which to evaluate the surface current density K
         params : dict, optional

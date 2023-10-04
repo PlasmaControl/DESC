@@ -6,6 +6,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
+from desc.compute import rpz2xyz_vec, xyz2rpz_vec
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -194,6 +195,18 @@ class TestMagneticFields:
             correct_field(10.0, np.pi / 4, 0),
             atol=1e-16,
             rtol=1e-8,
+        )
+
+        K_xyz = field.compute(["K", "x"], basis="xyz")
+        K_rpz = field.compute(["K", "x"], basis="rpz")
+
+        np.testing.assert_allclose(
+            K_xyz["K"], rpz2xyz_vec(K_rpz["K"], phi=K_rpz["x"][:, 1]), atol=1e-16
+        )
+        np.testing.assert_allclose(
+            K_rpz["K"],
+            xyz2rpz_vec(K_xyz["K"], x=K_xyz["x"][:, 0], y=K_xyz["x"][:, 1]),
+            atol=1e-16,
         )
 
     @pytest.mark.slow

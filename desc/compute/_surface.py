@@ -431,16 +431,15 @@ def _e_zeta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     name="Phi",
     label="\\Phi",
     units="A",
-    units_long="amperes",
+    units_long="Amperes",
     description="Surface current potential",
-    dim=2,
+    dim=1,
     params=["I", "G", "Phi_mn"],
     transforms={"Phi": [[0, 0, 0]]},
     profiles=[],
     coordinates="tz",
     data=[],
     parameterization="desc.magnetic_fields.FourierCurrentPotentialField",
-    basis="basis",
 )
 def _Phi_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi"] = (
@@ -455,16 +454,15 @@ def _Phi_FourierCurrentPotentialField(params, transforms, profiles, data, **kwar
     name="Phi_t",
     label="\\partial_{\\theta}Phi",
     units="A",
-    units_long="amperes",
+    units_long="Amperes",
     description="Surface current potential, poloidal derivative",
-    dim=2,
+    dim=1,
     params=["I", "G", "Phi_mn"],
     transforms={"Phi": [[0, 1, 0]]},
     profiles=[],
     coordinates="tz",
     data=[],
     parameterization="desc.magnetic_fields.FourierCurrentPotentialField",
-    basis="basis",
 )
 def _Phi_t_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_t"] = (
@@ -477,16 +475,15 @@ def _Phi_t_FourierCurrentPotentialField(params, transforms, profiles, data, **kw
     name="Phi_z",
     label="\\partial_{\\zeta}Phi",
     units="A",
-    units_long="amperes",
+    units_long="Amperes",
     description="Surface current potential, toroidal derivative",
-    dim=2,
+    dim=1,
     params=["I", "G", "Phi_mn"],
     transforms={"Phi": [[0, 0, 1]]},
     profiles=[],
     coordinates="tz",
     data=[],
     parameterization="desc.magnetic_fields.FourierCurrentPotentialField",
-    basis="basis",
 )
 def _Phi_z_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_z"] = (
@@ -499,16 +496,15 @@ def _Phi_z_FourierCurrentPotentialField(params, transforms, profiles, data, **kw
     name="Phi",
     label="\\Phi",
     units="A",
-    units_long="amperes",
+    units_long="Amperes",
     description="Surface current potential",
-    dim=2,
+    dim=1,
     params=["params"],
     transforms={"grid": [], "potential": []},
     profiles=[],
     coordinates="tz",
     data=[],
     parameterization="desc.magnetic_fields.CurrentPotentialField",
-    basis="basis",
 )
 def _Phi_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi"] = transforms["potential"](
@@ -523,16 +519,15 @@ def _Phi_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     name="Phi_t",
     label="\\partial_{\\theta}Phi",
     units="A",
-    units_long="amperes",
+    units_long="Amperes",
     description="Surface current potential, poloidal derivative",
-    dim=2,
+    dim=1,
     params=["params"],
     transforms={"grid": [], "potential_dtheta": []},
     profiles=[],
     coordinates="tz",
     data=[],
     parameterization="desc.magnetic_fields.CurrentPotentialField",
-    basis="basis",
 )
 def _Phi_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_t"] = transforms["potential_dtheta"](
@@ -547,16 +542,15 @@ def _Phi_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     name="Phi_z",
     label="\\partial_{\\zeta}Phi",
     units="A",
-    units_long="amperes",
+    units_long="Amperes",
     description="Surface current potential, toroidal derivative",
-    dim=2,
+    dim=1,
     params=["params"],
     transforms={"grid": [], "potential_dzeta": []},
     profiles=[],
     coordinates="tz",
     data=[],
     parameterization="desc.magnetic_fields.CurrentPotentialField",
-    basis="basis",
 )
 def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_z"] = transforms["potential_dzeta"](
@@ -570,11 +564,11 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="K",
     label="\\mathbf{K}",
-    units="A",
-    units_long="amperes",
+    units="A/m",
+    units_long="Amperes per meter",
     description="Surface current density, defined as the"
     " surface normal vector cross gradient of current potential",
-    dim=2,
+    dim=3,
     params=[],
     transforms={},
     profiles=[],
@@ -584,7 +578,6 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
         "desc.magnetic_fields.CurrentPotentialField",
         "desc.magnetic_fields.FourierCurrentPotentialField",
     ],
-    basis="basis",
 )
 def _K_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["K"] = (

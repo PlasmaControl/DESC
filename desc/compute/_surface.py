@@ -567,7 +567,7 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     units="A/m",
     units_long="Amperes per meter",
     description="Surface current density, defined as the"
-    " surface normal vector cross gradient of current potential",
+    "gradient of current potential cross surface normal vector",
     dim=3,
     params=[],
     transforms={},

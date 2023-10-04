@@ -1,6 +1,6 @@
-name: Benchmarks 
+name: Benchmarks
 
-on: 
+on:
   push:
   pull_request:
     types: [labeled]
@@ -18,11 +18,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up Python 3.9
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.9
       - name: Install dependencies
@@ -34,9 +34,9 @@ jobs:
           pwd
           lscpu
           cd tests/benchmarks
-          python -m pytest benchmark.py --benchmark-save='Latest_Commit'
+          python -m pytest benchmark_cpu_small.py --benchmark-save='Latest_Commit'
       - name:  Checkout current master
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           ref: master
           clean: false
@@ -45,7 +45,7 @@ jobs:
           pwd
           lscpu
           cd tests/benchmarks
-          python -m pytest benchmark.py --benchmark-save='master'
+          python -m pytest benchmark_cpu_small.py --benchmark-save='master'
       - name: put benchmark results in same folder
         run: |
           pwd
@@ -69,5 +69,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           path: tests/benchmarks/commit_msg.txt
-
-          

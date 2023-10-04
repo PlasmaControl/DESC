@@ -14,7 +14,31 @@ Basis
     desc.basis.FourierSeries
     desc.basis.DoubleFourierSeries
     desc.basis.ZernikePolynomial
+    desc.basis.ChebyshevDoubleFourierBasis
     desc.basis.FourierZernikeBasis
+
+Coils
+*****
+
+.. autosummary::
+    :toctree: _api/coils/
+    :recursive:
+    :template: class.rst
+
+    desc.coils.FourierRZCoil
+    desc.coils.FourierXYZCoil
+    desc.coils.FourierPlanarCoil
+    desc.coils.SplineXYZCoil
+    desc.coils.CoilSet
+
+Continuation
+************
+.. autosummary::
+    :toctree: _api/continuation
+    :recursive:
+
+    desc.continuation.solve_continuation
+    desc.continuation.solve_continuation_automatic
 
 
 Derivatives
@@ -33,7 +57,7 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
 Equilibrium
 ***********
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/equilibrium
     :recursive:
     :template: class.rst
@@ -50,6 +74,7 @@ Examples
     :recursive:
 
     desc.examples.get
+    desc.examples.listall
 
 
 Geometry
@@ -64,8 +89,9 @@ Geometry
     desc.geometry.FourierXYZCurve
     desc.geometry.FourierPlanarCurve
     desc.geometry.FourierRZToroidalSurface
+    desc.geometry.SplineXYZCurve
     desc.geometry.ZernikeRZToroidalSection
-    
+
 Grid
 ****
 
@@ -78,6 +104,8 @@ Grid
     desc.grid.LinearGrid
     desc.grid.QuadratureGrid
     desc.grid.ConcentricGrid
+    desc.grid.find_least_rational_surfaces
+    desc.grid.find_most_rational_surfaces
 
 IO
 ***
@@ -90,6 +118,26 @@ IO
     desc.io.InputReader
     desc.io.load
 
+
+Magnetic Fields
+***************
+
+.. autosummary::
+    :toctree: _api/magnetic_fields
+    :recursive:
+    :template: class.rst
+
+    desc.magnetic_fields.ScaledMagneticField
+    desc.magnetic_fields.SumMagneticField
+    desc.magnetic_fields.ToroidalMagneticField
+    desc.magnetic_fields.VerticalMagneticField
+    desc.magnetic_fields.PoloidalMagneticField
+    desc.magnetic_fields.SplineMagneticField
+    desc.magnetic_fields.ScalarPotentialField
+    desc.magnetic_fields.field_line_integrate
+    desc.magnetic_fields.read_BNORM_file
+    desc.magnetic_fields.biot_savart
+
 Objective Functions
 *******************
 
@@ -99,57 +147,86 @@ Objective Functions
     :template: class.rst
 
     desc.objectives.AspectRatio
+    desc.objectives.BootstrapRedlConsistency
+    desc.objectives.BScaleLength
     desc.objectives.CurrentDensity
+    desc.objectives.Elongation
     desc.objectives.Energy
+    desc.objectives.FixAtomicNumber
+    desc.objectives.FixAxisR
+    desc.objectives.FixAxisZ
     desc.objectives.FixBoundaryR
     desc.objectives.FixBoundaryZ
     desc.objectives.FixCurrent
+    desc.objectives.FixElectronDensity
+    desc.objectives.FixElectronTemperature
+    desc.objectives.FixIonTemperature
     desc.objectives.FixIota
-    desc.objectives.FixLambdaGauge
+    desc.objectives.FixModeR
+    desc.objectives.FixModeZ
     desc.objectives.FixPressure
     desc.objectives.FixPsi
+    desc.objectives.FixSumModesR
+    desc.objectives.FixSumModesZ
+    desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
     desc.objectives.GenericObjective
-    desc.objectives.get_fixed_boundary_constraints
     desc.objectives.get_equilibrium_objective
+    desc.objectives.get_fixed_axis_constraints
+    desc.objectives.get_fixed_boundary_constraints
+    desc.objectives.get_NAE_constraints
     desc.objectives.HelicalForceBalance
+    desc.objectives.Isodynamicity
     desc.objectives.MagneticWell
+    desc.objectives.MeanCurvature
     desc.objectives.MercierStability
+    desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
+    desc.objectives.PlasmaVesselDistance
+    desc.objectives.Pressure
+    desc.objectives.PrincipalCurvature
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.RadialForceBalance
+    desc.objectives.RotationalTransform
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
+
 
 
 Optimize
 ********
 
-.. autosummary:: 
+.. autosummary::
    :toctree: _api/optimize
    :recursive:
    :template: class.rst
 
    desc.optimize.Optimizer
+   desc.optimize.fmin_auglag
    desc.optimize.fmintr
+   desc.optimize.lsq_auglag
    desc.optimize.lsqtr
+   desc.optimize.register_optimizer
+   desc.optimize.sgd
+
 
 Perturbations
 *************
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/perturbations
     :recursive:
 
+    desc.perturbations.get_deltas
     desc.perturbations.perturb
     desc.perturbations.optimal_perturb
 
 Plotting
 ********
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/plotting
     :recursive:
 
@@ -159,9 +236,12 @@ Plotting
     desc.plotting.plot_basis
     desc.plotting.plot_boozer_modes
     desc.plotting.plot_boozer_surface
+    desc.plotting.plot_boundaries
     desc.plotting.plot_boundary
     desc.plotting.plot_coefficients
+    desc.plotting.plot_coils
     desc.plotting.plot_comparison
+    desc.plotting.plot_field_lines_sfl
     desc.plotting.plot_fsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo
@@ -176,11 +256,14 @@ Profiles
     :toctree: _api/profiles
     :recursive:
     :template: class.rst
-	       
+
     desc.profiles.PowerSeriesProfile
     desc.profiles.SplineProfile
     desc.profiles.MTanhProfile
-    
+    desc.profiles.ScaledProfile
+    desc.profiles.SumProfile
+    desc.profiles.ProductProfile
+
 Transform
 *********
 
@@ -194,7 +277,7 @@ Transform
 VMEC
 ****
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/vmec/
     :recursive:
     :template: class.rst

@@ -42,7 +42,7 @@ extensions = [
     "sphinx.ext.coverage",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
-    "sphinx.ext.viewcode",
+    "sphinx_github_style",
     "sphinx.ext.githubpages",
     "nbsphinx",
     "sphinx.ext.napoleon",
@@ -50,6 +50,12 @@ extensions = [
     "sphinxarg.ext",
     "sphinx_copybutton",
 ]
+# options for sphinx_github_style
+top_level = "desc"
+linkcode_blob = "head"
+linkcode_url = r"https://github.com/PlasmaControl/DESC"
+linkcode_link_text = "Source"
+
 # numpydoc_class_members_toctree = False
 # Napoleon settings
 napoleon_google_docstring = False
@@ -88,7 +94,7 @@ master_doc = "index"
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = "en"
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -116,9 +122,9 @@ html_theme_options = {
     "style_external_links": False,
     "style_nav_header_background": "#3c4142",
     # Toc options
-    "collapse_navigation": False,
+    "collapse_navigation": True,
     "sticky_navigation": True,
-    "navigation_depth": 4,
+    "navigation_depth": 2,
     "includehidden": True,
     "titles_only": False,
 }
@@ -207,11 +213,11 @@ latex_elements = {
     \setcounter{tocdepth}{3}
     \usepackage{amsmath,amsfonts,amssymb,amsthm}
     \usepackage{graphicx}
-    
+
     %% % reduce spaces for Table of contents, figures and tables
     %% % it is used "\addtocontents{toc}{\vskip -1.2cm}" etc. in the document
     \usepackage[notlot,nottoc,notlof]{}
-    
+
     \usepackage{color}
     \usepackage{transparent}
     \usepackage{eso-pic}
@@ -261,27 +267,27 @@ latex_elements = {
     "maketitle": r"""
     \pagenumbering{Roman} %% % to avoid page 1 conflict with actual page 1
     \begin{titlepage}
-    
+
         \vspace*{80mm} %% % * is used to give space from top
-    
+
         \centering
         \textbf{\Huge {DESC Documentation}}
-            
+
         \vspace*{2mm}
-                   
+
         \vspace*{10mm}
-        
+
         \centering
         \textbf{ \Large {Daniel Dudt, Rory Conlin, Dario Panici, Egemen Kolemen}}
-                   
+
         \vspace*{10mm}
-        
+
         \centering
         \small {Created: \today}
         %% \vfill adds at the bottom
-        
+
         \vfill
-        
+
     \end{titlepage}
     \clearpage
     %\pagenumbering{roman}

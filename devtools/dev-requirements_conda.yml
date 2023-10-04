@@ -5,40 +5,40 @@ dependencies:
   # standard install
   - colorama
   - h5py >= 3.0.0
-  - matplotlib >= 3.3.0, <= 3.6.0, ~= 3.4.3
+  - matplotlib >= 3.5.0, <= 3.7.2
   - mpmath >= 1.0.0
   - netcdf4 >= 1.5.4
-  - numpy >= 1.20.0
+  - numpy >= 1.20.0, < 1.25.0
   - psutil
-  - scipy >= 1.5.0
+  - scipy >= 1.5.0, < 1.11.0
   - termcolor
   - pip
   - pip:
-    - jax >= 0.2.11, <= 0.2.25
-    - jaxlib >= 0.1.69, <= 0.1.76
+    - jax[cpu] >= 0.3.2, <= 0.4.14
     - nvgpu
     # testing and benchmarking
     - qsc
+    - qicna @ git+https://github.com/rogeriojorge/pyQIC/
 
   # building the docs
   - nbsphinx > 0.8.5
+  - pandoc
   - sphinx > 3.0.0
   - sphinx-argparse
   - sphinx-copybutton
-  - sphinx_rtd_theme
+  - sphinx_rtd_theme >= 1.0, < 2.0
+  - pip:
+    - sphinx-github-style >= 1.0, <= 1.1
 
   # linting
-  - black = 21.7b0
-  - click = 8.0.4
-  - flake8 >= 4.0.1
-  - flake8-docstrings
-  - flake8-eradicate
-  - flake8-isort
-  - pydocstyle >= 2.0.0
-  - pylint >= 2.12.2
+  - black = 22.10.0
+  - flake8 >= 5.0.0, <=6.0.0
+  - flake8-docstrings >= 1.0.0, <=2.0.0
+  - flake8-eradicate >= 1.0.0, <=2.0.0
+  - flake8-isort >=5.0.0, <= 6.0.0
+  - pre-commit
 
   # testing and benchmarking
-  - codecov
   - markupsafe = 2.0.1
   - nbmake
   - pytest >= 5.0.0

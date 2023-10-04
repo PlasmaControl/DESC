@@ -1,11 +1,17 @@
 """Function for solving nonlinear least squares problems."""
 
-import numpy as np
 from scipy.optimize import OptimizeResult
-from termcolor import colored
 
 from desc.backend import jnp
+from desc.utils import errorif, setdefault
 
+from .bound_utils import (
+    cl_scaling_vector,
+    find_active_constraints,
+    in_bounds,
+    make_strictly_feasible,
+    select_step,
+)
 from .tr_subproblems import (
     trust_region_step_exact_cho,
     trust_region_step_exact_svd,
@@ -15,7 +21,6 @@ from .utils import (
     STATUS_MESSAGES,
     check_termination,
     compute_jac_scale,
-    evaluate_quadratic,
     print_header_nonlinear,
     print_iteration_nonlinear,
 )
@@ -25,16 +30,16 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     jac,
+    bounds=(-jnp.inf, jnp.inf),
     args=(),
-    x_scale=1,
+    x_scale="jac",
     ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,
     verbose=1,
     maxiter=None,
-    tr_method="svd",
     callback=None,
-    options={},
+    options=None,
 ):
     """Solve a least squares problem using a (quasi)-Newton trust region method.
 
@@ -45,7 +50,12 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     x0 : array-like
         initial guess
     jac : callable:
-        function to compute jacobian matrix of fun
+        function to compute Jacobian matrix of fun
+    bounds : tuple of array-like
+        Lower and upper bounds on independent variables. Defaults to no bounds.
+        Each array must match the size of x0 or be a scalar, in the latter case a
+        bound will be the same for all variables. Use np.inf with an appropriate sign
+        to disable bounds on all or some variables.
     args : tuple
         additional arguments passed to fun, grad, and jac
     x_scale : array_like or ``'jac'``, optional
@@ -56,45 +66,76 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         be achieved by setting ``x_scale`` such that a step of a given size
         along any of the scaled variables has a similar effect on the cost
         function. If set to ``'jac'``, the scale is iteratively updated using the
-        inverse norms of the columns of the jacobian matrix.
+        inverse norms of the columns of the Jacobian matrix.
     ftol : float or None, optional
-        Tolerance for termination by the change of the cost function. Default
-        is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
+        Tolerance for termination by the change of the cost function.
+        The optimization process is stopped when ``dF < ftol * F``,
         and there was an adequate agreement between a local quadratic model and
         the true model in the last step. If None, the termination by this
         condition is disabled.
     xtol : float or None, optional
         Tolerance for termination by the change of the independent variables.
-        Default is 1e-8. Optimization is stopped when
-        ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
-        this condition is disabled.
+        Optimization is stopped when ``norm(dx) < xtol * (xtol + norm(x))``.
+        If None, the termination by this condition is disabled.
     gtol : float or None, optional
-        Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
-        Optimizer teriminates when ``norm(g) < gtol``, where
+        Absolute tolerance for termination by the norm of the gradient.
+        Optimizer terminates when ``max(abs(g)) < gtol``.
         If None, the termination by this condition is disabled.
     verbose : {0, 1, 2}, optional
-        * 0 (default) : work silently.
-        * 1 : display a termination report.
+        * 0 : work silently.
+        * 1 (default) : display a termination report.
         * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
-    tr_method : {'cho', 'svd'}
-        method to use for solving the trust region subproblem. 'cho' uses a sequence of
-        cholesky factorizations (generally 2-3), while 'svd' uses one singular value
-        decomposition. 'cho' is generally faster for large systems, especially on GPU,
-        but may be less accurate in some cases.
     callback : callable, optional
         Called after each iteration. Should be a callable with
         the signature:
 
             ``callback(xk, *args) -> bool``
 
-        where ``xk`` is the current parameter vector. and ``args``
+        where ``xk`` is the current parameter vector, and ``args``
         are the same arguments passed to fun and jac. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
-        See the code for more details.
+
+        - ``"max_nfev"`` : (int > 0) Maximum number of function evaluations (each
+          iteration may take more than one function evaluation). Default is
+          ``5*maxiter+1``
+        - ``"max_dx"`` : (float > 0) Maximum allowed change in the norm of x from its
+          starting point. Default np.inf.
+        - ``"initial_trust_radius"`` : (``"scipy"``, ``"conngould"``, ``"mix"`` or
+          float > 0) Initial trust region radius. ``"scipy"`` uses the scaled norm of
+          x0, which is the default behavior in ``scipy.optimize.least_squares``.
+          ``"conngould"`` uses the norm of the Cauchy point, as recommended in ch17
+          of [1]_. ``"mix"`` uses the geometric mean of the previous two options. A
+          float can also be passed to specify the trust radius directly.
+          Default is ``"scipy"``.
+        - ``"initial_trust_ratio"`` : (float > 0) A extra scaling factor that is
+          applied after one of the previous heuristics to determine the initial trust
+          radius. Default 1.
+        - ``"max_trust_radius"`` : (float > 0) Maximum allowable trust region radius.
+          Default ``np.inf``.
+        - ``"min_trust_radius"`` : (float >= 0) Minimum allowable trust region radius.
+          Optimization is terminated if the trust region falls below this value.
+          Default ``np.finfo(x0.dtype).eps``.
+        - ``"tr_increase_threshold"`` : (0 < float < 1) Increase the trust region
+          radius when the ratio of actual to predicted reduction exceeds this threshold.
+          Default 0.75.
+        - ``"tr_decrease_threshold"`` : (0 < float < 1) Decrease the trust region
+          radius when the ratio of actual to predicted reduction is less than this
+          threshold. Default 0.25.
+        - ``"tr_increase_ratio"`` : (float > 1) Factor to increase the trust region
+          radius by when  the ratio of actual to predicted reduction exceeds threshold.
+          Default 2.
+        - ``"tr_decrease_ratio"`` : (0 < float < 1) Factor to decrease the trust region
+          radius by when  the ratio of actual to predicted reduction falls below
+          threshold. Default 0.25.
+        - ``"tr_method"`` : ``"svd"``, ``"cho"``) Method to use for solving the trust
+          region subproblem. ``"cho"`` uses a sequence of cholesky factorizations
+          (generally 2-3), while ``"svd"`` uses one singular value decomposition.
+          ``"cho"`` is generally faster for large systems, especially on GPU, but may
+          be less accurate for badly scaled systems. Default ``"svd"``
 
     Returns
     -------
@@ -105,17 +146,18 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         ``message`` which describes the cause of the termination. See
         ``OptimizeResult`` for a description of other attributes.
 
+    References
+    ----------
+    .. [1] Conn, Andrew, and Gould, Nicholas, and Toint, Philippe. "Trust-region
+           methods" (2000).
+
     """
-    if tr_method not in ["cho", "svd"]:
-        raise ValueError(
-            "tr_method should be one of 'cho', 'svd', got {}".format(tr_method)
-        )
-    if isinstance(x_scale, str) and x_scale not in ["jac", "auto"]:
-        raise ValueError(
-            "x_scale should be one of 'jac', 'auto' or array-like, got {}".format(
-                x_scale
-            )
-        )
+    options = {} if options is None else options
+    errorif(
+        isinstance(x_scale, str) and x_scale not in ["jac", "auto"],
+        ValueError,
+        "x_scale should be one of 'jac', 'auto' or array-like, got {}".format(x_scale),
+    )
 
     nfev = 0
     njev = 0
@@ -123,6 +165,11 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     n = x0.size
     x = x0.copy()
+    lb, ub = jnp.broadcast_to(bounds[0], x.size), jnp.broadcast_to(bounds[1], x.size)
+    bounded = jnp.any(lb != -jnp.inf) | jnp.any(ub != jnp.inf)
+    assert in_bounds(x, lb, ub), "x0 is infeasible"
+    x = make_strictly_feasible(x, lb, ub)
+
     f = fun(x, *args)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
@@ -130,79 +177,100 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     njev += 1
     g = jnp.dot(J.T, f)
 
-    if maxiter is None:
-        maxiter = n * 100
-    max_nfev = options.pop("max_nfev", maxiter)
-    max_njev = options.pop("max_njev", max_nfev)
-    gnorm_ord = options.pop("gnorm_ord", np.inf)
-    xnorm_ord = options.pop("xnorm_ord", 2)
-
-    ga_fd_step = options.pop("ga_fd_step", 1e-3)
-    ga_tr_ratio = options.pop("ga_tr_ratio", 0)
-    return_all = options.pop("return_all", True)
-    return_tr = options.pop("return_tr", True)
+    maxiter = setdefault(maxiter, n * 100)
+    max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
+    max_dx = options.pop("max_dx", jnp.inf)
 
     jac_scale = isinstance(x_scale, str) and x_scale in ["jac", "auto"]
     if jac_scale:
         scale, scale_inv = compute_jac_scale(J)
     else:
-        x_scale = np.broadcast_to(x_scale, x.shape)
+        x_scale = jnp.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
-    # initial trust region radius
-    trust_radius = options.pop("initial_trust_radius", np.linalg.norm(x * scale_inv))
-    max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
-    min_trust_radius = options.pop("min_trust_radius", 0)
+    v, dv = cl_scaling_vector(x, g, lb, ub)
+    v = jnp.where(dv != 0, v * scale_inv, v)
+    d = v**0.5 * scale
+    diag_h = g * dv * scale
+
+    g_h = g * d
+    J_h = J * d
+    g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+
+    # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
+    # scipy : norm of the scaled x, as used in scipy
+    # mix : geometric mean of conngould and scipy
+    init_tr = {
+        "scipy": jnp.linalg.norm(x * scale_inv / v**0.5),
+        "conngould": jnp.sum(g_h**2) / jnp.sum((J_h @ g_h) ** 2),
+        "mix": jnp.sqrt(
+            jnp.sum(g_h**2)
+            / jnp.sum((J_h @ g_h) ** 2)
+            * jnp.linalg.norm(x * scale_inv / v**0.5)
+        ),
+    }
+    trust_radius = options.pop("initial_trust_radius", "scipy")
+    tr_ratio = options.pop("initial_trust_ratio", 1.0)
+    trust_radius = init_tr.get(trust_radius, trust_radius)
+    trust_radius *= tr_ratio
+    trust_radius = trust_radius if (trust_radius > 0) else 1.0
+
+    max_trust_radius = options.pop("max_trust_radius", jnp.inf)
+    min_trust_radius = options.pop("min_trust_radius", jnp.finfo(x0.dtype).eps)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
+    tr_method = options.pop("tr_method", "svd")
 
-    if trust_radius == 0:
-        trust_radius = 1.0
-    if len(options) > 0:
-        raise ValueError(
-            colored("Unknown options: {}".format([key for key in options]), "red")
-        )
+    errorif(
+        len(options) > 0,
+        ValueError,
+        "Unknown options: {}".format([key for key in options]),
+    )
+    errorif(
+        tr_method not in ["cho", "svd"],
+        ValueError,
+        "tr_method should be one of 'cho', 'svd', got {}".format(tr_method),
+    )
 
-    x_norm = np.linalg.norm(x, ord=xnorm_ord)
+    callback = setdefault(callback, lambda *args: False)
+
+    x_norm = jnp.linalg.norm(x, ord=2)
     success = None
     message = None
-    step_norm = np.inf
-    actual_reduction = np.inf
-    ratio = 0  # ratio between actual reduction and predicted reduction
+    step_norm = jnp.inf
+    actual_reduction = jnp.inf
+    reduction_ratio = 0
 
     if verbose > 1:
         print_header_nonlinear()
+        print_iteration_nonlinear(
+            iteration, nfev, cost, actual_reduction, step_norm, g_norm
+        )
 
-    if return_all:
-        allx = [x]
-    if return_tr:
-        alltr = [trust_radius]
+    allx = [x]
+    alltr = [trust_radius]
+    if g_norm < gtol:
+        success, message = True, STATUS_MESSAGES["gtol"]
 
     alpha = 0  # "Levenberg-Marquardt" parameter
 
-    while True:
+    while iteration < maxiter and success is None:
 
-        g_norm = np.linalg.norm(g, ord=gnorm_ord)
-        if g_norm < gtol:
-            success = True
-            message = STATUS_MESSAGES["gtol"]
-        if verbose > 1:
-            print_iteration_nonlinear(
-                iteration, nfev, cost, actual_reduction, step_norm, g_norm
-            )
-        if success is not None:
-            break
+        # we don't want to factorize the extra stuff if we don't need to
+        J_a = jnp.vstack([J_h, jnp.diag(diag_h**0.5)]) if bounded else J_h
+        f_a = jnp.concatenate([f, jnp.zeros(diag_h.size)]) if bounded else f
 
-        g_h = g * scale
-        J_h = J * scale
         if tr_method == "svd":
-            U, s, Vt = jnp.linalg.svd(J_h, full_matrices=False)
+            U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
-            B_h = jnp.dot(J_h.T, J_h)
+            B_h = jnp.dot(J_a.T, J_a)
 
         actual_reduction = -1
+
+        # theta controls step back step ratio from the bounds.
+        theta = max(0.995, 1 - g_norm)
 
         while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.
@@ -211,73 +279,63 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             # has reached the trust region boundary or not.
             if tr_method == "svd":
                 step_h, hits_boundary, alpha = trust_region_step_exact_svd(
-                    f, U, s, Vt.T, trust_radius, alpha
+                    f_a, U, s, Vt.T, trust_radius, alpha
                 )
             elif tr_method == "cho":
                 step_h, hits_boundary, alpha = trust_region_step_exact_cho(
                     g_h, B_h, trust_radius, alpha
                 )
+            step = d * step_h  # Trust-region solution in the original space.
 
-            step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
+            step, step_h, predicted_reduction = select_step(
+                x,
+                J_h,
+                diag_h,
+                g_h,
+                step,
+                step_h,
+                d,
+                trust_radius,
+                lb,
+                ub,
+                theta,
+                mode="jac",
+            )
 
-            # geodesic acceleration
-            if ga_tr_ratio > 0:
-                f0 = f
-                f1 = fun(x + ga_fd_step * step_h * scale, *args)
-                nfev += 1
-                df = (f1 - f0) / ga_fd_step
-                RHS = 2 / ga_fd_step * (df - J.dot(step_h * scale))
-                if tr_method == "svd":
-                    ga_step_h, _, _ = trust_region_step_exact_svd(
-                        RHS, U, s, Vt.T, ga_tr_ratio * step_h_norm, alpha
-                    )
-                elif tr_method == "cho":
-                    RHS = jnp.dot(J_h.T, RHS)
-                    ga_step_h, _, _ = trust_region_step_exact_cho(
-                        RHS, B_h, ga_tr_ratio * step_h_norm, alpha
-                    )
-                step_h += ga_step_h
+            step_h_norm = jnp.linalg.norm(step_h, ord=2)
+            step_norm = jnp.linalg.norm(step, ord=2)
 
-            # calculate the predicted value at the proposed point
-            predicted_reduction = -evaluate_quadratic(J_h, g_h, step_h)
-
-            # calculate actual reduction and step norm
-            step = scale * step_h
-            step_norm = np.linalg.norm(step, ord=xnorm_ord)
-
-            x_new = x + step
+            x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
             f_new = fun(x_new, *args)
             nfev += 1
 
-            cost_new = 0.5 * np.dot(f_new, f_new)
+            cost_new = 0.5 * jnp.dot(f_new, f_new)
             actual_reduction = cost - cost_new
 
             # update the trust radius according to the actual/predicted ratio
             tr_old = trust_radius
-            trust_radius, ratio = update_tr_radius(
+            trust_radius, reduction_ratio = update_tr_radius(
                 trust_radius,
                 actual_reduction,
                 predicted_reduction,
                 step_h_norm,
                 hits_boundary,
                 max_trust_radius,
-                min_trust_radius,
                 tr_increase_threshold,
                 tr_increase_ratio,
                 tr_decrease_threshold,
                 tr_decrease_ratio,
             )
-            if return_tr:
-                alltr.append(trust_radius)
+            alltr.append(trust_radius)
             alpha *= tr_old / trust_radius
-
+            # TODO: does this need to move to the outer loop?
             success, message = check_termination(
                 actual_reduction,
                 cost,
                 step_norm,
                 x_norm,
                 g_norm,
-                ratio,
+                reduction_ratio,
                 ftol,
                 xtol,
                 gtol,
@@ -285,10 +343,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 maxiter,
                 nfev,
                 max_nfev,
-                0,
-                np.inf,
-                njev,
-                max_njev,
+                min_trust_radius=min_trust_radius,
+                dx_total=jnp.linalg.norm(x - x0),
+                max_dx=max_dx,
             )
             if success is not None:
                 break
@@ -296,43 +353,62 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         # if reduction was enough, accept the step
         if actual_reduction > 0:
             x = x_new
-            if return_all:
-                allx.append(x)
+            allx.append(x)
             f = f_new
             cost = cost_new
             J = jac(x, *args)
             njev += 1
             g = jnp.dot(J.T, f)
-            x_norm = np.linalg.norm(x, ord=xnorm_ord)
 
             if jac_scale:
                 scale, scale_inv = compute_jac_scale(J, scale_inv)
 
-            if callback is not None:
-                stop = callback(np.copy(x), *args)
-                if stop:
-                    success = False
-                    message = STATUS_MESSAGES["callback"]
-                    break
+            v, dv = cl_scaling_vector(x, g, lb, ub)
+            v = jnp.where(dv != 0, v * scale_inv, v)
+            d = v**0.5 * scale
+            diag_h = g * dv * scale
+
+            g_h = g * d
+            J_h = J * d
+            x_norm = jnp.linalg.norm(x, ord=2)
+            g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+
+            if g_norm < gtol:
+                success, message = True, STATUS_MESSAGES["gtol"]
+
+            if callback(jnp.copy(x), *args):
+                success, message = False, STATUS_MESSAGES["callback"]
 
         else:
-            step_norm = 0
-            actual_reduction = 0
+            step_norm = actual_reduction = 0
 
         iteration += 1
+        if verbose > 1:
+            print_iteration_nonlinear(
+                iteration, nfev, cost, actual_reduction, step_norm, g_norm
+            )
 
+    if g_norm < gtol:
+        success, message = True, STATUS_MESSAGES["gtol"]
+    if (iteration == maxiter) and success is None:
+        success, message = False, STATUS_MESSAGES["maxiter"]
+    active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
     result = OptimizeResult(
         x=x,
         success=success,
         cost=cost,
         fun=f,
         grad=g,
+        v=v,
         jac=J,
         optimality=g_norm,
         nfev=nfev,
         njev=njev,
         nit=iteration,
         message=message,
+        active_mask=active_mask,
+        allx=allx,
+        alltr=alltr,
     )
     if verbose > 0:
         if result["success"]:
@@ -340,12 +416,11 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         else:
             print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["cost"]))
+        print(
+            "         Total delta_x: {:.3e}".format(jnp.linalg.norm(x0 - result["x"]))
+        )
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Jacobian evaluations: {:d}".format(result["njev"]))
 
-    if return_all:
-        result["allx"] = allx
-    if return_tr:
-        result["alltr"] = alltr
     return result

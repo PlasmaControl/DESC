@@ -74,7 +74,7 @@ print(latest_commit_index)
 print(master_commit_index)
 commit_msg_lines = [
     "```diff",
-    f"| {'benchmark_name':^31} | {'dt(%)':^19} | {'dt(s)':^19} | {'t_new(s)':^18} | {'t_old(s)':^18} | ",  # noqa: E501
+    f"| {'benchmark_name':^38} | {'dt(%)':^19} | {'dt(s)':^19} | {'t_new(s)':^18} | {'t_old(s)':^18} | ",  # noqa: E501
     "| ------------------------------- | ------------------- | ------------------- | ------------------ | ------------------ |",  # noqa: E501
 ]
 
@@ -82,8 +82,8 @@ for i, (dt, dpct, sdt, sdpct) in enumerate(
     zip(delta_times_ms, delta_times_pct, delta_stds_ms, delta_stds_pct)
 ):
 
-    line = f"{colors[i]:>1}{test_names[i]:<32} | "
-    line += f"{dpct:+.2e}+/-{sdpct:.1e} | "
+    line = f"{colors[i]:>1}{test_names[i]:<38} | "
+    line += f"{dpct:+4.2f}+/-{sdpct:4.2f} | "
     line += f"{dt:+.2e}+/-{sdt:.1e} | "
     line += f"{times[i, latest_commit_index]:.2e}+/-{stddevs[i, latest_commit_index]:.1e} | "  # noqa: E501
     line += (
@@ -93,7 +93,8 @@ for i, (dt, dpct, sdt, sdpct) in enumerate(
     commit_msg_lines.append(line)
 
 commit_msg_lines.append("```")
-print("\n".join(commit_msg_lines))
+commit_msg_lines = [line + "\n" for line in commit_msg_lines]
+print("".join(commit_msg_lines))
 # write out commit msg
 
 fname = "commit_msg.txt"

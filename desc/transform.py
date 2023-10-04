@@ -1,7 +1,6 @@
 """Class to transform from spectral basis to real space."""
 
 import warnings
-from itertools import combinations_with_replacement, permutations
 
 import numpy as np
 import scipy.linalg
@@ -9,7 +8,7 @@ from termcolor import colored
 
 from desc.backend import jnp, put
 from desc.io import IOAble
-from desc.utils import isalmostequal, islinspaced, issorted
+from desc.utils import combination_permutation, isalmostequal, islinspaced, issorted
 
 
 class Transform(IOAble):
@@ -26,18 +25,20 @@ class Transform(IOAble):
         * if an array, derivative orders specified explicitly. Shape should be (N,3),
           where each row is one set of partial derivatives [dr, dt, dz]
     rcond : float
-         relative cutoff for singular values for inverse fitting
+        relative cutoff for singular values for inverse fitting
     build : bool
         whether to precompute the transforms now or do it later
     build_pinv : bool
         whether to precompute the pseudoinverse now or do it later
-    method : {```'auto'``, `'fft'``, ``'direct1'``, ``'direct2'``}
+    method : {```'auto'``, `'fft'``, ``'direct1'``, ``'direct2'``, ``'jitable'``}
         * ``'fft'`` uses fast fourier transforms in the zeta direction, and so must have
-          equally spaced toroidal nodes, and the same node pattern on each zeta plane
+          equally spaced toroidal nodes, and the same node pattern on each zeta plane.
         * ``'direct1'`` uses full matrices and can handle arbitrary node patterns and
           spectral bases.
-        * ``'direct2'`` uses a DFT instead of FFT that can be faster in practice
-        * ``'auto'`` selects the method based on the grid and basis resolution
+        * ``'direct2'`` uses a DFT instead of FFT that can be faster in practice.
+        * ``'jitable'`` is the same as ``'direct1'`` but avoids some checks, allowing
+          you to create transforms inside JIT compiled functions.
+        * ``'auto'`` selects the method based on the grid and basis resolution.
 
     """
 
@@ -58,7 +59,13 @@ class Transform(IOAble):
         self._basis = basis
         self._rcond = rcond if rcond is not None else "auto"
 
-        if not (self.grid.NFP == self.basis.NFP) and grid.node_pattern != "custom":
+        if (
+            method != "jitable"
+            and grid.node_pattern != "custom"
+            and self.basis.N != 0
+            and self.grid.NFP != self.basis.NFP
+            and np.any(self.grid.nodes[:, 2] != 0)
+        ):
             warnings.warn(
                 colored(
                     "Unequal number of field periods for grid {} and basis {}.".format(
@@ -68,28 +75,18 @@ class Transform(IOAble):
                 )
             )
 
+        self._built = False
+        self._built_pinv = False
         self._derivatives = self._get_derivatives(derivs)
         self._sort_derivatives()
         self._method = method
-
-        self._built = False
-        self._built_pinv = False
-        self._set_up()
+        # assign according to logic in setter function
+        self.method = method
+        self._matrices = self._get_matrices()
         if build:
             self.build()
         if build_pinv:
             self.build_pinv()
-
-    def _set_up(self):
-
-        self.method = self._method
-        self._matrices = {
-            "direct1": {
-                i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
-            },
-            "fft": {i: {j: {} for j in range(4)} for i in range(4)},
-            "direct2": {i: {} for i in range(4)},
-        }
 
     def _get_derivatives(self, derivs):
         """Get array of derivatives needed for calculating objective function.
@@ -111,21 +108,10 @@ class Transform(IOAble):
 
         """
         if isinstance(derivs, int) and derivs >= 0:
-            derivatives = np.array([[]])
-            combos = combinations_with_replacement(range(derivs + 1), 3)
-            for combo in list(combos):
-                perms = set(permutations(combo))
-                for perm in list(perms):
-                    if derivatives.shape[1] == 3:
-                        derivatives = np.vstack([derivatives, np.array(perm)])
-                    else:
-                        derivatives = np.array([perm])
-            derivatives = derivatives[
-                derivatives.sum(axis=1) <= derivs
-            ]  # remove higher orders
-        elif np.atleast_1d(derivs).ndim == 1 and len(derivs) == 3:
+            derivatives = combination_permutation(3, derivs, False)
+        elif np.ndim(derivs) == 1 and len(derivs) == 3:
             derivatives = np.asarray(derivs).reshape((1, 3))
-        elif np.atleast_2d(derivs).ndim == 2 and np.atleast_2d(derivs).shape[1] == 3:
+        elif np.ndim(derivs) == 2 and np.atleast_2d(derivs).shape[1] == 3:
             derivatives = np.atleast_2d(derivs)
         else:
             raise NotImplementedError(
@@ -134,7 +120,9 @@ class Transform(IOAble):
                     "red",
                 )
             )
-
+        # always include the 0,0,0 derivative
+        if not (np.array([0, 0, 0]) == derivatives).all(axis=-1).any():
+            derivatives = np.concatenate([derivatives, np.array([[0, 0, 0]])])
         return derivatives
 
     def _sort_derivatives(self):
@@ -144,11 +132,24 @@ class Transform(IOAble):
         )
         self._derivatives = self.derivatives[sort_idx]
 
+    def _get_matrices(self):
+        """Get matrices to compute all derivatives."""
+        n = np.amax(self.derivatives) + 1
+        matrices = {
+            "direct1": {
+                i: {j: {k: {} for k in range(n)} for j in range(n)} for i in range(n)
+            },
+            "fft": {i: {j: {} for j in range(n)} for i in range(n)},
+            "direct2": {i: {} for i in range(n)},
+        }
+        return matrices
+
     def _check_inputs_fft(self, grid, basis):
         """Check that inputs are formatted correctly for fft method."""
         if grid.num_nodes == 0 or basis.num_modes == 0:
             # trivial case where we just return all zeros, so it doesn't matter
-            self._method = "fft"
+            self._method = "direct1"
+            return
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 
@@ -286,7 +287,7 @@ class Transform(IOAble):
         """Check that inputs are formatted correctly for direct2 method."""
         if grid.num_nodes == 0 or basis.num_modes == 0:
             # trivial case where we just return all zeros, so it doesn't matter
-            self._method = "direct2"
+            self._method = "direct1"
             return
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
@@ -375,8 +376,14 @@ class Transform(IOAble):
 
         if self.method == "direct1":
             for d in self.derivatives:
-                self._matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
+                self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
                     self.grid.nodes, d, unique=True
+                )
+
+        if self.method == "jitable":
+            for d in self.derivatives:
+                self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
+                    self.grid.nodes, d, unique=False
                 )
 
         if self.method in ["fft", "direct2"]:
@@ -407,9 +414,9 @@ class Transform(IOAble):
         if self.built_pinv:
             return
         rcond = None if self.rcond == "auto" else self.rcond
-        if self.method == "direct1":
+        if self.method in ["direct1", "jitable"]:
             A = self.basis.evaluate(self.grid.nodes, np.array([0, 0, 0]))
-            self._matrices["pinv"] = (
+            self.matrices["pinv"] = (
                 scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)
             )
         elif self.method == "direct2":
@@ -475,42 +482,37 @@ class Transform(IOAble):
         if len(c) == 0:
             return np.zeros(self.grid.num_nodes)
 
-        if self.method == "direct1":
-            A = self.matrices["direct1"][dr][dt][dz]
+        if self.method in ["direct1", "jitable"]:
+            A = self.matrices["direct1"].get(dr, {}).get(dt, {}).get(dz, {})
             if isinstance(A, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
-            return jnp.matmul(A, c)
+            return A @ c
 
         elif self.method == "direct2":
-            A = self.matrices["fft"][dr][dt]
-            B = self.matrices["direct2"][dz]
-
+            A = self.matrices["fft"].get(dr, {}).get(dt, {})
+            B = self.matrices["direct2"].get(dz, {})
             if isinstance(A, dict) or isinstance(B, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
             c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
-
-            cc = jnp.matmul(A, c_mtrx)
-            return jnp.matmul(cc, B.T).flatten(order="F")
+            cc = A @ c_mtrx
+            return (cc @ B.T).flatten(order="F")
 
         elif self.method == "fft":
-            A = self.matrices["fft"][dr][dt]
+            A = self.matrices["fft"].get(dr, {}).get(dt, {})
             if isinstance(A, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
-
             # reshape coefficients
             c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
-
             # differentiate
-            c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk ** dz * (-1) ** (dz > 1)
-
+            c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)
             # re-format in complex notation
             c_real = jnp.pad(
                 (self.num_z_nodes / 2)
@@ -525,10 +527,9 @@ class Transform(IOAble):
                     jnp.fliplr(jnp.conj(c_real)),
                 )
             )
-
             # transform coefficients
             c_fft = jnp.real(jnp.fft.ifft(c_cplx))
-            return jnp.matmul(A, c_fft).flatten(order="F")
+            return (A @ c_fft).flatten(order="F")
 
     def fit(self, x):
         """Transform from physical domain to spectral using weighted least squares fit.
@@ -735,27 +736,20 @@ class Transform(IOAble):
         self._sort_derivatives()
 
         if len(derivs_to_add):
-            # if we actually added derivatives and didn't build them, then its not built
+            # if we actually added derivatives and didn't build them, then it's not
+            # built
             self._built = False
         if build:
-            # we don't update self._built here because it is still built from before
+            # we don't update self._built here because it is still built from before,
             # but it still might have unbuilt matrices from new derivatives
             self.build()
 
     @property
     def matrices(self):
         """dict: transform matrices such that x=A*c."""
-        return self.__dict__.setdefault(
-            "_matrices",
-            {
-                "direct1": {
-                    i: {j: {k: {} for k in range(4)} for j in range(4)}
-                    for i in range(4)
-                },
-                "fft": {i: {j: {} for j in range(4)} for i in range(4)},
-                "direct2": {i: {} for i in range(4)},
-            },
-        )
+        if not hasattr(self, "_matrices"):
+            self._matrices = self._get_matrices()
+        return self._matrices
 
     @property
     def num_nodes(self):
@@ -812,6 +806,8 @@ class Transform(IOAble):
             self._check_inputs_direct2(self.grid, self.basis)
         elif method == "direct1":
             self._method = "direct1"
+        elif method == "jitable":
+            self._method = "jitable"
         else:
             raise ValueError("Unknown transform method: {}".format(method))
         if self.method != old_method:

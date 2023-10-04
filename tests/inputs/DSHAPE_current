@@ -23,7 +23,7 @@ pert_order = 2
 ftol = 1e-2
 xtol = 1e-6
 gtol = 1e-6
-nfev = 100
+maxiter = 100
 
 # solver methods
 optimizer         = scipy-trf
@@ -46,5 +46,5 @@ n:   0  Z0 =  0.00
 m:   0  n:   0  R1 =  3.510
 m:   1  n:   0  R1 =  1.000
 m:   2  n:   0  R1 =  0.106
-m:  -1  n:   0  Z1 =  1.470
-m:  -2  n:   0  Z1 = -0.160
+m:  -1  n:   0  Z1 = -1.470
+m:  -2  n:   0  Z1 =  0.160

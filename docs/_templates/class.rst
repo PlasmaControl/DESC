@@ -11,11 +11,11 @@
 
    .. autosummary::
     :toctree: {{ objname }}
-   
+
    {% for item in methods %}
    {% if item != "__init__" %}
       ~{{ name }}.{{ item }}
-   {% endif %}      
+   {% endif %}
    {%- endfor %}
    {% endif %}
    {% endblock %}
@@ -26,7 +26,7 @@
 
    .. autosummary::
     :toctree: {{ objname }}
-	      
+
    {% for item in attributes %}
       ~{{ name }}.{{ item }}
    {%- endfor %}

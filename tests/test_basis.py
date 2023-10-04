@@ -4,12 +4,18 @@ import mpmath
 import numpy as np
 import pytest
 
+from desc.backend import jnp
 from desc.basis import (
+    ChebyshevDoubleFourierBasis,
     DoubleFourierSeries,
     FourierSeries,
+    FourierZernike_to_FourierZernike_no_N_modes,
+    FourierZernike_to_PoincareZernikePolynomial,
     FourierZernikeBasis,
     PowerSeries,
     ZernikePolynomial,
+    _jacobi,
+    chebyshev,
     fourier,
     polyder_vec,
     polyval_vec,
@@ -17,12 +23,11 @@ from desc.basis import (
     zernike_radial,
     zernike_radial_coeffs,
     zernike_radial_poly,
-    FourierZernike_to_PoincareZernikePolynomial,
-    FourierZernike_to_FourierZernike_no_N_modes,
 )
+from desc.derivatives import Derivative
+from desc.examples import get
 from desc.grid import LinearGrid
 from desc.transform import Transform
-from desc.equilibrium import Equilibrium
 
 
 class TestBasis:
@@ -33,7 +38,7 @@ class TestBasis:
         """Test polyder_vec function."""
         p0 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
         p1 = polyder_vec(p0, 1)
-        p2 = polyder_vec(p0, 2)
+        p2 = polyder_vec(p0, 2, exact=True)
 
         correct_p1 = np.array([[0, 2, 0], [0, 0, 1], [0, 0, 0], [0, 2, 1]])
         correct_p2 = np.array([[0, 0, 2], [0, 0, 0], [0, 0, 0], [0, 0, 2]])
@@ -47,7 +52,7 @@ class TestBasis:
         p = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
         x = np.linspace(0, 1, 11)
 
-        correct_vals = np.array([x ** 2, x, np.ones_like(x), x ** 2 + x + 1])
+        correct_vals = np.array([x**2, x, np.ones_like(x), x**2 + x + 1])
         values = polyval_vec(p, x)
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
@@ -80,19 +85,19 @@ class TestBasis:
         exactdf = np.array(
             [
                 np.asarray(mpmath.polyval(list(ci), r), dtype=float)
-                for ci in polyder_vec(coeffs, 1)
+                for ci in polyder_vec(coeffs, 1, exact=True)
             ]
         ).T
         exactddf = np.array(
             [
                 np.asarray(mpmath.polyval(list(ci), r), dtype=float)
-                for ci in polyder_vec(coeffs, 2)
+                for ci in polyder_vec(coeffs, 2, exact=True)
             ]
         ).T
         exactdddf = np.array(
             [
                 np.asarray(mpmath.polyval(list(ci), r), dtype=float)
-                for ci in polyder_vec(coeffs, 3)
+                for ci in polyder_vec(coeffs, 3, exact=True)
             ]
         ).T
 
@@ -121,7 +126,7 @@ class TestBasis:
         l = np.array([0, 1, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
 
-        correct_vals = np.array([np.ones_like(r), r, r ** 2]).T
+        correct_vals = np.array([np.ones_like(r), r, r**2]).T
         correct_ders = np.array([np.zeros_like(r), np.ones_like(r), 2 * r]).T
 
         values = powers(r, l, dr=0)
@@ -131,44 +136,85 @@ class TestBasis:
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     @pytest.mark.unit
-    def test_zernike_radial(self):
+    def test_chebyshev(self):
+        """Test chebyshev function for Chebyshev polynomial evaluation."""
+        l = np.array([0, 1, 2])
+        r = np.linspace(0, 1, 11)  # rho coordinates
+
+        correct_vals = np.array([np.ones_like(r), 2 * r - 1, 8 * r**2 - 8 * r + 1]).T
+        values = chebyshev(r[:, np.newaxis], l, dr=0)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+        with pytest.raises(NotImplementedError):
+            chebyshev(r[:, np.newaxis], l, dr=1)
+
+    @pytest.mark.unit
+    def test_zernike_radial(self):  # noqa: C901
         """Test zernike_radial function, comparing to analytic formulas."""
+        # https://en.wikipedia.org/wiki/Zernike_polynomials#Radial_polynomials
+
+        def Z3_1(x, dx=0):
+            if dx == 0:
+                return 3 * x**3 - 2 * x
+            if dx == 1:
+                return 9 * x**2 - 2
+            if dx == 2:
+                return 18 * x
+            if dx == 3:
+                return np.full_like(x, 18)
+            if dx >= 4:
+                return np.zeros_like(x)
+
+        def Z4_2(x, dx=0):
+            if dx == 0:
+                return 4 * x**4 - 3 * x**2
+            if dx == 1:
+                return 16 * x**3 - 6 * x
+            if dx == 2:
+                return 48 * x**2 - 6
+            if dx == 3:
+                return 96 * x
+            if dx == 4:
+                return np.full_like(x, 96)
+            if dx >= 5:
+                return np.zeros_like(x)
+
+        def Z6_2(x, dx=0):
+            if dx == 0:
+                return 15 * x**6 - 20 * x**4 + 6 * x**2
+            if dx == 1:
+                return 90 * x**5 - 80 * x**3 + 12 * x
+            if dx == 2:
+                return 450 * x**4 - 240 * x**2 + 12
+            if dx == 3:
+                return 1800 * x**3 - 480 * x
+            if dx == 4:
+                return 5400 * x**2 - 480
+            if dx == 5:
+                return 10800 * x
+            if dx == 6:
+                return np.full_like(x, 10800)
+            if dx >= 7:
+                return np.zeros_like(x)
+
         l = np.array([3, 4, 6])
         m = np.array([1, 2, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
-
-        # correct value functions
-        def Z3_1(x):
-            return 3 * x ** 3 - 2 * x
-
-        def Z4_2(x):
-            return 4 * x ** 4 - 3 * x ** 2
-
-        def Z6_2(x):
-            return 15 * x ** 6 - 20 * x ** 4 + 6 * x ** 2
-
-        # correct derivative functions
-        def dZ3_1(x):
-            return 9 * x ** 2 - 2
-
-        def dZ4_2(x):
-            return 16 * x ** 3 - 6 * x
-
-        def dZ6_2(x):
-            return 90 * x ** 5 - 80 * x ** 3 + 12 * x
-
-        correct_vals = np.array([Z3_1(r), Z4_2(r), Z6_2(r)]).T
-        correct_ders = np.array([dZ3_1(r), dZ4_2(r), dZ6_2(r)]).T
-
-        values1 = zernike_radial(r[:, np.newaxis], l, m, 0)
-        derivs1 = zernike_radial(r[:, np.newaxis], l, m, 1)
-        values2 = zernike_radial_poly(r[:, np.newaxis], l, m, 0)
-        derivs2 = zernike_radial_poly(r[:, np.newaxis], l, m, 1)
-
-        np.testing.assert_allclose(values1, correct_vals, atol=1e-8)
-        np.testing.assert_allclose(derivs1, correct_ders, atol=1e-8)
-        np.testing.assert_allclose(values2, correct_vals, atol=1e-8)
-        np.testing.assert_allclose(derivs2, correct_ders, atol=1e-8)
+        max_dr = 4
+        desired = {
+            dr: np.array([Z3_1(r, dr), Z4_2(r, dr), Z6_2(r, dr)]).T
+            for dr in range(max_dr + 1)
+        }
+        radial = {
+            dr: zernike_radial(r[:, np.newaxis], l, m, dr) for dr in range(max_dr + 1)
+        }
+        radial_poly = {
+            dr: zernike_radial_poly(r[:, np.newaxis], l, m, dr)
+            for dr in range(max_dr + 1)
+        }
+        for dr in range(max_dr + 1):
+            np.testing.assert_allclose(radial[dr], desired[dr], err_msg=dr)
+            np.testing.assert_allclose(radial_poly[dr], desired[dr], err_msg=dr)
 
     @pytest.mark.unit
     def test_fourier(self):
@@ -191,7 +237,7 @@ class TestBasis:
         grid = LinearGrid(rho=11)
         r = grid.nodes[:, 0]  # rho coordinates
 
-        correct_vals = np.array([np.ones_like(r), r, r ** 2]).T
+        correct_vals = np.array([np.ones_like(r), r, r**2]).T
         correct_ders = np.array([np.zeros_like(r), np.ones_like(r), 2 * r]).T
 
         basis = PowerSeries(L=2, sym=False)
@@ -250,6 +296,10 @@ class TestBasis:
         zpf.change_resolution(L=6, M=3)
         assert zpf.num_modes == 16
 
+        cdf = ChebyshevDoubleFourierBasis(L=2, M=2, N=0)
+        cdf.change_resolution(L=3, M=2, N=1)
+        assert cdf.num_modes == 60
+
         fz = FourierZernikeBasis(L=3, M=3, N=0)
         fz.change_resolution(L=3, M=3, N=1)
         assert fz.num_modes == 30
@@ -286,10 +336,9 @@ class TestBasis:
 
 
 @pytest.mark.unit
-def test_FourierZernike_to_PoincareZernikePolynomial(DummyStellarator):
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+def test_FourierZernike_to_PoincareZernikePolynomial():
+    """Test FourierZernike to ZernikePolynomial utility function."""
+    eq = get("HELIOTRON")
     eq.L_lmn = np.random.rand(*np.shape(eq.L_lmn))
     L_lmn_2d, L_ZP_zeta0_basis = FourierZernike_to_PoincareZernikePolynomial(
         eq.L_lmn, eq.L_basis
@@ -297,15 +346,15 @@ def test_FourierZernike_to_PoincareZernikePolynomial(DummyStellarator):
     grid = LinearGrid(L=50, M=50, zeta=0)
     transf = Transform(grid=grid, basis=L_ZP_zeta0_basis, derivs=0)
     L_2D = transf.transform(L_lmn_2d)
-    L_3D = eq.compute(name="lambda", grid=grid)["lambda"]
+    L_3D = eq.compute("lambda", grid=grid)["lambda"]
     np.testing.assert_allclose(L_2D, L_3D, atol=1e-14)
 
 
 @pytest.mark.unit
-def test_FourierZernike_to_FourierZernike_no_N_modes(DummyStellarator):
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+def test_FourierZernike_to_FourierZernike_no_N_modes():
+    """Test FourierZernike to FourierZernike w/o N modes utility function."""
+    eq = get("HELIOTRON")
+
     eq.L_lmn = np.random.rand(*np.shape(eq.L_lmn))
     L_lmn_no_N, L_basis = FourierZernike_to_FourierZernike_no_N_modes(
         eq.L_lmn, eq.L_basis
@@ -313,5 +362,93 @@ def test_FourierZernike_to_FourierZernike_no_N_modes(DummyStellarator):
     grid = LinearGrid(L=50, M=50, zeta=0)
     transf = Transform(grid=grid, basis=L_basis, derivs=0)
     L_2D = transf.transform(L_lmn_no_N)
-    L_3D = eq.compute(name="lambda", grid=grid)["lambda"]
+    L_3D = eq.compute("lambda", grid=grid)["lambda"]
     np.testing.assert_allclose(L_2D, L_3D, atol=1e-14)
+
+    @pytest.mark.unit
+    def test_derivative_not_in_basis_zeros(self):
+        """Test that d/dx = 0 when x is not in the basis."""
+        nodes = np.random.random((10, 3))
+
+        basis = PowerSeries(L=3)
+        ft = basis.evaluate(nodes, derivatives=[0, 1, 0])
+        fz = basis.evaluate(nodes, derivatives=[0, 0, 1])
+        assert np.all(ft == 0)
+        assert np.all(fz == 0)
+
+        basis = FourierSeries(N=4)
+        fr = basis.evaluate(nodes, derivatives=[1, 0, 0])
+        ft = basis.evaluate(nodes, derivatives=[0, 1, 0])
+        assert np.all(fr == 0)
+        assert np.all(ft == 0)
+
+        basis = DoubleFourierSeries(M=2, N=4)
+        fr = basis.evaluate(nodes, derivatives=[1, 0, 0])
+        assert np.all(fr == 0)
+
+        basis = ZernikePolynomial(L=2, M=3)
+        fz = basis.evaluate(nodes, derivatives=[0, 0, 1])
+        assert np.all(fz == 0)
+
+    @pytest.mark.unit
+    def test_basis_resolutions_assert_integers(self):
+        """Test that basis modes are asserted as integers."""
+        L = 3.0
+        M = 3.0
+        N = 3.0
+
+        basis = PowerSeries(L=L)
+        assert isinstance(basis.L, int)
+        assert basis.L == 3
+
+        basis = FourierSeries(N=N)
+        assert isinstance(basis.N, int)
+        assert basis.N == 3
+
+        basis = DoubleFourierSeries(M=M, N=N)
+        assert isinstance(basis.M, int)
+        assert isinstance(basis.N, int)
+        assert basis.M == 3
+        assert basis.N == 3
+
+        basis = ZernikePolynomial(L=L, M=M)
+        assert isinstance(basis.M, int)
+        assert isinstance(basis.L, int)
+        assert basis.M == 3
+        assert basis.L == 3
+
+        L = 3.1
+        M = 3.1
+        N = 3.1
+
+        with pytest.raises(AssertionError):
+            PowerSeries(L=L)
+
+        with pytest.raises(AssertionError):
+            FourierSeries(N=N)
+
+        with pytest.raises(AssertionError):
+            DoubleFourierSeries(M=M, N=N)
+
+        with pytest.raises(AssertionError):
+            ZernikePolynomial(L=L, M=M)
+
+
+@pytest.mark.unit
+def test_jacobi_jvp():
+    """Test that custom derivative rule for jacobi polynomials works."""
+    basis = ZernikePolynomial(25, 25)
+    l, m = basis.modes[:, :2].T
+    m = jnp.abs(m)
+    alpha = m
+    beta = 0
+    n = (l - m) // 2
+    r = np.linspace(0, 1, 1000)
+    jacobi_arg = 1 - 2 * r**2
+    for i in range(5):
+        # custom jvp rule for derivative of jacobi should just call jacobi with dx+1
+        f1 = jnp.vectorize(Derivative(_jacobi, 3, "grad"))(
+            n, alpha, beta, jacobi_arg[:, None], i
+        )
+        f2 = _jacobi(n, alpha, beta, jacobi_arg[:, None], i + 1)
+        np.testing.assert_allclose(f1, f2)

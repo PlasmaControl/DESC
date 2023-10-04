@@ -2,28 +2,35 @@
 
 import numpy as np
 
-from desc.backend import cho_factor, cho_solve, jnp, qr, solve_triangular
+from desc.backend import (
+    cho_factor,
+    cho_solve,
+    cond,
+    jit,
+    jnp,
+    qr,
+    solve_triangular,
+    while_loop,
+)
+from desc.utils import setdefault
+
+from .utils import chol
 
 
-def solve_trust_region_dogleg(
-    g, hess, scale, trust_radius, f=None, initial_alpha=None, **kwargs
-):
-    """Solve trust region subproblem the dog-leg method.
+@jit
+def solve_trust_region_dogleg(g, H, trust_radius, initial_alpha=None, **kwargs):
+    """Solve trust region subproblem using the dog-leg method.
 
     Parameters
     ----------
     g : ndarray
         gradient of objective function
-    hess : Hessian
-        Hessian with dot and solve methods
-    scale : ndarray
-        scaling array for gradient and hessian
+    H : ndarray
+        Hessian matrix
     trust_radius : float
         We are allowed to wander only this far away from the origin.
-    f : ndarray, optional
-        function values for least squares dogleg step
     initial_alpha : float
-        initial guess for levenberg-marquadt parameter - unused by this method
+        initial guess for Levenberg-Marquardt parameter - unused by this method.
 
     Returns
     -------
@@ -32,34 +39,22 @@ def solve_trust_region_dogleg(
     hits_boundary : bool
         True if the proposed step is on the boundary of the trust region.
     alpha : float
-        "levenberg-marquadt" parameter - unused by this method
-
-    Notes
-    -----
-    The Hessian is required to be positive definite.
+        "Levenberg-Marquardt" parameter - unused by this method.
 
     """
+    L = chol(H)
     # This is the optimum for the quadratic model function.
     # If it is inside the trust radius then return this point.
-    if f is None:
-        p_newton = -1 / scale * hess.solve(g)
-    else:
-        p_newton = -1 / scale * hess.solve(f)
-    if jnp.linalg.norm(p_newton) < trust_radius:
-        hits_boundary = False
-        return p_newton, hits_boundary, initial_alpha
+    p_newton = -cho_solve((L, True), g)
+    p_newton_norm = jnp.linalg.norm(p_newton)
 
     # This is the predicted optimum along the direction of steepest descent.
-    gBg = hess.quadratic(scale ** 2 * g, scale ** 2 * g)
-    p_cauchy = -(jnp.dot(scale * g, scale * g) / gBg) * scale * g
-
+    gBg = g @ H @ g
+    p_cauchy = -(jnp.dot(g, g) / gBg) * g
     # If the Cauchy point is outside the trust region,
     # then return the point where the path intersects the boundary.
     p_cauchy_norm = jnp.linalg.norm(p_cauchy)
-    if p_cauchy_norm >= trust_radius:
-        p_boundary = p_cauchy * (trust_radius / p_cauchy_norm)
-        hits_boundary = True
-        return p_boundary, hits_boundary, initial_alpha
+    p_boundary1 = p_cauchy * (trust_radius / p_cauchy_norm)
 
     # Compute the intersection of the trust region boundary
     # and the line segment connecting the Cauchy and Newton points.
@@ -68,15 +63,24 @@ def solve_trust_region_dogleg(
     # Solve this for positive time t using the quadratic formula.
     delta = p_newton - p_cauchy
     _, tb = get_boundaries_intersections(p_cauchy, delta, trust_radius)
-    p_boundary = p_cauchy + tb * delta
-    hits_boundary = True
+    p_boundary2 = p_cauchy + tb * delta
 
-    return p_boundary, hits_boundary, initial_alpha
+    # p_boundary1,2 are super cheap to compute so easier to just compute all of them
+    # and then select the one to return
+    out = cond(
+        p_cauchy_norm >= trust_radius,
+        lambda _: (p_boundary1, True),
+        lambda _: (p_boundary2, True),
+        None,
+    )
+    out = cond(
+        p_newton_norm < trust_radius, lambda _: (p_newton, False), lambda _: out, None
+    )
+    return *out, initial_alpha
 
 
-def solve_trust_region_2d_subspace(
-    grad, hess, scale, trust_radius, f=None, initial_alpha=None, **kwargs
-):
+@jit
+def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwargs):
     """Solve a trust region problem using 2d subspace method.
 
     Minimizes model function over subspace spanned by the gradient
@@ -84,18 +88,14 @@ def solve_trust_region_2d_subspace(
 
     Parameters
     ----------
-    grad : ndarray
+    g : ndarray
         gradient of objective function
-    hess : OptimizerDerivative
-        hessian of objective function
-    scale : ndarray
-        scaling array for gradient and hessian
+    H : ndarray
+        Hessian of objective function
     trust_radius : float
         We are allowed to wander only this far away from the origin.
-    f : ndarray, optional
-        function values for least squares subspace step
     initial_alpha : float
-        initial guess for levenberg-marquadt parameter - unused by this method
+        initial guess for Levenberg-Marquardt parameter - unused by this method
 
     Returns
     -------
@@ -104,61 +104,60 @@ def solve_trust_region_2d_subspace(
     hits_boundary : bool
         True if the proposed step is on the boundary of the trust region.
     alpha : float
-        "levenberg-marquadt" parameter - unused by this method
+        "Levenberg-Marquardt" parameter - unused by this method
 
     """
-    if hess.is_pos_def and f is None:
-        p_newton = -1 / scale * hess.solve(grad)
-    elif f is None:
-        p_newton = hess.negative_curvature_direction
-    else:
-        p_newton = -1 / scale * hess.solve(f)
+    L = chol(H)
+    # This is the optimum for the quadratic model function.
+    p_newton = -cho_solve((L, True), g)
 
-    S = np.vstack([grad, p_newton]).T
+    S = jnp.vstack([g, p_newton]).T
     S, _ = qr(S, mode="economic")
-    g = S.T.dot(scale * grad)
-    Sscale = S * scale[:, jnp.newaxis]
-    B = hess.quadratic(Sscale, Sscale)
+    g = S.T @ g
+    B = S.T @ H @ S
 
     # B = [a b]  g = [d f]
     #     [b c]  q = [x y]
     # p = Sq                    # noqa: E800
 
-    try:
-        R, lower = cho_factor(B)
-        q = -cho_solve((R, lower), g)
-        if np.dot(q, q) <= trust_radius ** 2:
-            return S.dot(q), True, initial_alpha
-    except np.linalg.linalg.LinAlgError:
-        pass
+    R, lower = cho_factor(B)
+    q1 = -cho_solve((R, lower), g)
+    p1 = S.dot(q1)
 
-    a = B[0, 0] * trust_radius ** 2
-    b = B[0, 1] * trust_radius ** 2
-    c = B[1, 1] * trust_radius ** 2
+    a = B[0, 0] * trust_radius**2
+    b = B[0, 1] * trust_radius**2
+    c = B[1, 1] * trust_radius**2
 
     d = g[0] * trust_radius
     f = g[1] * trust_radius
 
-    coeffs = np.array([-b + d, 2 * (a - c + f), 6 * b, 2 * (-a + c + f), -b - d])
-    t = np.roots(coeffs)  # Can handle leading zeros.
-    t = np.real(t[np.isreal(t)])
+    coeffs = jnp.array([-b + d, 2 * (a - c + f), 6 * b, 2 * (-a + c + f), -b - d])
+    t = jnp.roots(coeffs, strip_zeros=False)
+    t = jnp.where(jnp.isreal(t), jnp.real(t), jnp.nan)
 
-    q = trust_radius * np.vstack((2 * t / (1 + t ** 2), (1 - t ** 2) / (1 + t ** 2)))
-    value = 0.5 * np.sum(q * B.dot(q), axis=0) + np.dot(g, q)
-    i = np.argmin(value)
-    q = q[:, i]
-    p = S.dot(q)
+    q2 = trust_radius * jnp.vstack((2 * t / (1 + t**2), (1 - t**2) / (1 + t**2)))
+    value = 0.5 * jnp.sum(q2 * B.dot(q2), axis=0) + jnp.dot(g, q2)
+    i = jnp.argmin(jnp.where(jnp.isnan(value), jnp.inf, value))
+    q2 = q2[:, i]
+    p2 = S.dot(q2)
 
-    return p, False, initial_alpha
+    out = cond(
+        jnp.dot(q1, q1) <= trust_radius**2,
+        lambda _: (p1, True),
+        lambda _: (p2, False),
+        None,
+    )
+    return *out, initial_alpha
 
 
+@jit
 def trust_region_step_exact_svd(
-    f, u, s, v, Delta, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None
+    f, u, s, v, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None
 ):
     """Solve a trust-region problem using a semi-exact method.
 
     Solves problems of the form
-        min_p ||J*p + f||^2,  ||p|| < Delta
+        min_p ||J*p + f||^2,  ||p|| < trust_radius
 
     Parameters
     ----------
@@ -170,14 +169,15 @@ def trust_region_step_exact_svd(
         Singular values of J.
     v : ndarray
         Right singular vectors of J (eg transpose of VT).
-    Delta : float
+    trust_radius : float
         Radius of a trust region.
     initial_alpha : float, optional
         Initial guess for alpha, which might be available from a previous
         iteration. If None, determined automatically.
     rtol : float, optional
         Stopping tolerance for the root-finding procedure. Namely, the
-        solution ``p`` will satisfy ``abs(norm(p) - Delta) < rtol * Delta``.
+        solution ``p`` will satisfy
+        ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
     max_iter : int, optional
         Maximum allowed number of iterations for the root-finding procedure.
     threshold : float
@@ -197,88 +197,102 @@ def trust_region_step_exact_svd(
     uf = u.T.dot(f)
     suf = s * uf
 
-    def phi_and_derivative(alpha, suf, s, Delta):
+    def phi_and_derivative(alpha, suf, s, trust_radius):
         """Function of which to find zero.
 
         It is defined as "norm of regularized (by alpha) least-squares
-        solution minus `Delta`".
+        solution minus `trust_radius`".
         """
-        denom = s ** 2 + alpha
-        p_norm = np.linalg.norm(suf / denom)
-        phi = p_norm - Delta
-        phi_prime = -np.sum(suf ** 2 / denom ** 3) / p_norm
+        denom = s**2 + alpha
+        p_norm = jnp.linalg.norm(suf / denom)
+        phi = p_norm - trust_radius
+        phi_prime = -jnp.sum(suf**2 / denom**3) / p_norm
         return phi, phi_prime
 
     # Check if J has full rank and try Gauss-Newton step.
-    if threshold is None:
-        threshold = np.finfo(s.dtype).eps * f.size * s[0]
-    else:
-        threshold *= s[0]
+    threshold = setdefault(threshold, jnp.finfo(s.dtype).eps * f.size)
+    threshold *= s[0]
     large = s > threshold
-    s_inv = np.divide(1, s, where=large)
-    s_inv[(~large,)] = 0
+    s_inv = jnp.where(large, 1 / s, 0)
 
-    p = -v.dot(uf * s_inv)
-    if np.linalg.norm(p) <= Delta:
-        return p, False, 0.0
+    p_newton = -v.dot(uf * s_inv)
 
-    alpha_upper = np.linalg.norm(suf) / Delta
-    alpha_lower = 0.0
+    def truefun(*_):
+        return p_newton, False, 0.0
 
-    if initial_alpha is None or initial_alpha == 0:
-        alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
-    else:
-        alpha = initial_alpha
+    def falsefun(*_):
 
-    for it in range(max_iter):
-        if alpha < alpha_lower or alpha > alpha_upper:
-            alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
+        alpha_upper = jnp.linalg.norm(suf) / trust_radius
+        alpha_lower = 0.0
+        alpha = setdefault(
+            initial_alpha,
+            jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+        )
 
-        phi, phi_prime = phi_and_derivative(alpha, suf, s, Delta)
+        phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
+        k = 0
 
-        if phi < 0:
-            alpha_upper = alpha
+        def loop_cond(state):
+            alpha, alpha_lower, alpha_upper, phi, k = state
+            return (jnp.abs(phi) > rtol * trust_radius) & (k < max_iter)
 
-        ratio = phi / phi_prime
-        alpha_lower = max(alpha_lower, alpha - ratio)
-        alpha -= (phi + Delta) * ratio / Delta
+        def loop_body(state):
+            alpha, alpha_lower, alpha_upper, phi, k = state
+            alpha = jnp.where(
+                (alpha < alpha_lower) | (alpha > alpha_upper),
+                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+                alpha,
+            )
 
-        if np.abs(phi) < rtol * Delta:
-            break
+            phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
+            alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
+            ratio = phi / phi_prime
+            alpha_lower = jnp.maximum(alpha_lower, alpha - ratio)
+            alpha -= (phi + trust_radius) * ratio / trust_radius
+            k += 1
+            return alpha, alpha_lower, alpha_upper, phi, k
 
-    p = -v.dot(suf / (s ** 2 + alpha))
+        alpha, *_ = while_loop(
+            loop_cond, loop_body, (alpha, alpha_lower, alpha_upper, phi, k)
+        )
 
-    # Make the norm of p equal to Delta; p is changed only slightly during this.
-    # This is done to prevent p from lying outside the trust region
-    # (which can cause problems later).
-    p *= Delta / np.linalg.norm(p)
+        p = -v.dot(suf / (s**2 + alpha))
 
-    return p, True, alpha
+        # Make the norm of p equal to trust_radius; p is changed only slightly.
+        # This is done to prevent p from lying outside the trust region
+        # (which can cause problems later).
+        p *= trust_radius / jnp.linalg.norm(p)
+
+        return p, True, alpha
+
+    return cond(jnp.linalg.norm(p_newton) <= trust_radius, truefun, falsefun, None)
 
 
+@jit
 def trust_region_step_exact_cho(
-    g, B, Delta, initial_alpha=None, rtol=0.01, max_iter=10
+    g, B, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
 ):
     """Solve a trust-region problem using a semi-exact method.
 
     Solves problems of the form
-        (B + alpha*I)*p = -g,  ||p|| < Delta
-    for symmetric positive definite B
+        (B + alpha*I)*p = -g,  ||p|| < trust_radius
+    for symmetric B. A modified Cholesky factorization is used to deal with indefinite B
 
     Parameters
     ----------
     g : ndarray
         gradient vector
     B : ndarray
-        Hessian or approximate hessian
-    Delta : float
+        Hessian or approximate Hessian
+    trust_radius : float
         Radius of a trust region.
     initial_alpha : float, optional
         Initial guess for alpha, which might be available from a previous
         iteration. If None, determined automatically.
     rtol : float, optional
         Stopping tolerance for the root-finding procedure. Namely, the
-        solution ``p`` will satisfy ``abs(norm(p) - Delta) < rtol * Delta``.
+        solution ``p`` will satisfy
+        ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
     max_iter : int, optional
         Maximum allowed number of iterations for the root-finding procedure.
 
@@ -294,51 +308,65 @@ def trust_region_step_exact_cho(
 
     """
     # try full newton step
-    R, lower = cho_factor(B)
-    p = cho_solve((R, lower), -g)
-    if np.linalg.norm(p) <= Delta:
-        return p, False, 0.0
+    R = chol(B)
+    p_newton = cho_solve((R, True), -g)
 
-    alpha_upper = np.linalg.norm(g) / Delta
-    alpha_lower = 0.0
+    def truefun(*_):
+        return p_newton, False, 0.0
 
-    if initial_alpha is None or initial_alpha == 0:
-        alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
-    else:
-        alpha = initial_alpha
+    def falsefun(*_):
+        alpha_upper = jnp.linalg.norm(g) / trust_radius
+        alpha_lower = 0.0
+        alpha = setdefault(
+            initial_alpha,
+            jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+        )
+        k = 0
+        # algorithm 4.3 from Nocedal & Wright
 
-    # algorithm 4.3 from Nocedal & Wright
-    for it in range(max_iter):
-        if alpha < alpha_lower or alpha > alpha_upper:
-            alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
+        def loop_cond(state):
+            alpha, alpha_lower, alpha_upper, phi, k = state
+            return (jnp.abs(phi) > rtol * trust_radius) & (k < max_iter)
 
+        def loop_body(state):
+            alpha, alpha_lower, alpha_upper, phi, k = state
+
+            alpha = jnp.where(
+                (alpha < alpha_lower) | (alpha > alpha_upper),
+                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+                alpha,
+            )
+
+            Bi = B + alpha * jnp.eye(B.shape[0])
+            R = chol(Bi)
+            p = cho_solve((R, True), -g)
+            p_norm = jnp.linalg.norm(p)
+            phi = p_norm - trust_radius
+            alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
+            alpha_lower = jnp.where(phi > 0, alpha, alpha_lower)
+
+            q = solve_triangular(R.T, p, lower=False)
+            q_norm = jnp.linalg.norm(q)
+
+            alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
+            k += 1
+            return alpha, alpha_lower, alpha_upper, phi, k
+
+        alpha, *_ = while_loop(
+            loop_cond, loop_body, (alpha, alpha_lower, alpha_upper, jnp.inf, k)
+        )
         Bi = B + alpha * jnp.eye(B.shape[0])
-        R, lower = cho_factor(Bi)
-        p = cho_solve((R, lower), -g)
-        p_norm = np.linalg.norm(p)
-        phi = p_norm - Delta
-        if phi < 0:
-            alpha_upper = alpha
-        if phi > 0:
-            alpha_lower = alpha
+        R = chol(Bi)
+        p = cho_solve((R, True), -g)
 
-        q = solve_triangular(R.T, p, lower=(not lower))
-        q_norm = np.linalg.norm(q)
+        # Make the norm of p equal to trust_radius; p is changed only slightly.
+        # This is done to prevent p from lying outside the trust region
+        # (which can cause problems later).
+        p *= trust_radius / jnp.linalg.norm(p)
 
-        alpha += (p_norm / q_norm) ** 2 * phi / Delta
-        if np.abs(phi) < rtol * Delta:
-            break
+        return p, True, alpha
 
-    Bi = B + alpha * jnp.eye(B.shape[0])
-    R, lower = cho_factor(Bi)
-    p = cho_solve((R, lower), -g)
-
-    # Make the norm of p equal to Delta; p is changed only slightly during this.
-    # This is done to prevent p from lying outside the trust region
-    # (which can cause problems later).
-    p *= Delta / np.linalg.norm(p)
-
-    return p, True, alpha
+    return cond(jnp.linalg.norm(p_newton) <= trust_radius, truefun, falsefun, None)
 
 
 def update_tr_radius(
@@ -348,7 +376,6 @@ def update_tr_radius(
     step_norm,
     bound_hit,
     max_tr=np.inf,
-    min_tr=0,
     increase_threshold=0.75,
     increase_ratio=2,
     decrease_threshold=0.25,
@@ -370,10 +397,8 @@ def update_tr_radius(
         whether the current step hits the trust region bound
     max_tr : float
         maximum allowed trust region radius
-    min_tr : float
-        minimum allowed trust region radius
     increase_threshold, increase_ratio : float
-        if ratio > inrease_threshold, trust radius is increased by a factor
+        if ratio > increase_threshold, trust radius is increased by a factor
         of increase_ratio
     decrease_threshold, decrease_ratio : float
         if ratio < decrease_threshold, trust radius is decreased by a factor
@@ -383,24 +408,24 @@ def update_tr_radius(
     -------
     trust_radius : float
         New radius.
-    ratio : float
+    reduction_ratio : float
         Ratio between actual and predicted reductions.
     """
     if predicted_reduction > 0:
-        ratio = actual_reduction / predicted_reduction
+        reduction_ratio = actual_reduction / predicted_reduction
     elif predicted_reduction == actual_reduction == 0:
-        ratio = 1
+        reduction_ratio = 1
     else:
-        ratio = 0
+        reduction_ratio = 0
 
-    if ratio < decrease_threshold:
+    if reduction_ratio < decrease_threshold:
         trust_radius = decrease_ratio * step_norm
-    elif ratio > increase_threshold and bound_hit:
-        trust_radius *= increase_ratio
+    elif reduction_ratio > increase_threshold:
+        trust_radius = max(step_norm * increase_ratio, trust_radius)
 
-    trust_radius = np.clip(trust_radius, min_tr, max_tr)
+    trust_radius = np.clip(trust_radius, 0, max_tr)
 
-    return trust_radius, ratio
+    return trust_radius, reduction_ratio
 
 
 def get_boundaries_intersections(z, d, trust_radius):
@@ -411,8 +436,9 @@ def get_boundaries_intersections(z, d, trust_radius):
     """
     a = jnp.dot(d, d)
     b = 2 * jnp.dot(z, d)
-    c = jnp.dot(z, z) - trust_radius ** 2
-    sqrt_discriminant = jnp.sqrt(b * b - 4 * a * c)
+    c = jnp.dot(z, z) - trust_radius**2
+    # abs to catch possible floating point errors for near duplicate roots
+    sqrt_discriminant = jnp.sqrt(jnp.abs(b * b - 4 * a * c))
 
     # The following calculation is mathematically
     # equivalent to:
@@ -424,4 +450,4 @@ def get_boundaries_intersections(z, d, trust_radius):
     aux = b + jnp.copysign(sqrt_discriminant, b)
     ta = -aux / (2 * a)
     tb = -2 * c / aux
-    return np.sort(np.array([ta, tb]))
+    return jnp.sort(jnp.array([ta, tb]))

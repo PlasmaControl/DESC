@@ -1,0 +1,46 @@
+# This is the DESC input file for a D-shaped tokamak with beta = 3%
+# It is similar to the VMEC example from Hirshman & Witson 1983
+
+# global parameters
+sym = 1
+NFP = 1
+Psi = 1.0
+
+# spectral resolution
+M_pol  =  6, 10, 13
+N_tor  =  0
+M_grid = 12, 20, 26
+N_grid =  0
+
+# continuation parameters
+bdry_ratio = 1
+pres_ratio = 0, 0, 1
+pert_order = 2
+
+# solver tolerances
+ftol = 1e-2
+xtol = 1e-6
+gtol = 1e-6
+maxiter = 100
+
+# solver methods
+optimizer         = lsq-exact
+objective         = force
+spectral_indexing = fringe
+node_pattern      = jacobi
+
+# pressure and rotational transform profiles
+l:   0  p =  1.6E+3  i =  1.00
+l:   2  p = -3.2E+3  i = -0.67
+l:   4  p =  1.6E+3
+
+# magnetic axis initial guess
+n:   0  R0 =  3.65
+n:   0  Z0 =  0.00
+
+# fixed-boundary surface shape
+m:  -2	n:   0	R1 =   0.00000000E+00	Z1 =   1.60000000E-01
+m:  -1	n:   0	R1 =   0.00000000E+00	Z1 =  -1.47000000E+00
+m:   0	n:   0	R1 =   3.51000000E+00	Z1 =   0.00000000E+00
+m:   1	n:   0	R1 =   1.00000000E+00	Z1 =   0.00000000E+00
+m:   2	n:   0	R1 =   1.06000000E-01	Z1 =   0.00000000E+00

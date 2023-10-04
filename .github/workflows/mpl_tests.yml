@@ -7,13 +7,13 @@ on:
 
 jobs:
   mpl_tests:
-    if: ${{ github.event.label.name == 'test_mpl' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}  
+    if: ${{ github.event.label.name == 'test_mpl' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         mpl-version: [3.0.0]
-        include: 
+        include:
           - mpl-version: 3.0.0
           - mpl-version: 3.0.1
           - mpl-version: 3.0.2
@@ -39,10 +39,16 @@ jobs:
           - mpl-version: 3.5.2
           - mpl-version: 3.5.3
           - mpl-version: 3.6.0
+          - mpl-version: 3.6.1
+          - mpl-version: 3.6.2
+          - mpl-version: 3.6.3
+          - mpl-version: 3.7.0
+          - mpl-version: 3.7.1
+          - mpl-version: 3.7.2
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
         with:
           python-version: 3.8
           cache: pip
@@ -55,4 +61,4 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest tests/test_plotting.py --durations=0 --mpl --maxfail=1 
+          python -m pytest tests/test_plotting.py --durations=0 --mpl --maxfail=1

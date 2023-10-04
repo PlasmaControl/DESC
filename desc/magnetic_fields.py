@@ -1,6 +1,5 @@
 """Classes for magnetic fields."""
 
-import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -1479,7 +1478,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
         Phi_mn, modes_Phi = map(np.asarray, (Phi_mn, modes_Phi))
 
-        assert issubclass(modes_Phi.dtype.type, np.integer)
+        assert np.issubdtype(modes_Phi.dtype, np.integer)
 
         M_Phi = np.max(abs(modes_Phi[:, 0]))
         N_Phi = np.max(abs(modes_Phi[:, 1]))
@@ -1576,44 +1575,43 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         """str: Type of symmetry of periodic part of Phi (no symmetry if False)."""
         return self._sym_Phi
 
-    def change_Phi_resolution(self, *args, **kwargs):
-        """Change the maximum poloidal and toroidal resolution for Phi."""
-        assert (
-            ((len(args) in [2, 3]) and len(kwargs) == 0)
-            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
-            or (len(args) == 0)
-        ), (
-            "change_Phi_resolution should be called with 2 (M,N) or 3 (L,M,N) "
-            + "positional arguments or only keyword arguments."
-        )
-        L = kwargs.pop("L", None)
-        M = kwargs.pop("M", None)
-        N = kwargs.pop("N", None)
-        NFP = kwargs.pop("NFP", None)
-        sym_Phi = kwargs.pop("sym_Phi", None)
-        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
-        self._NFP = NFP if NFP is not None else self.NFP
-        self._sym_Phi = sym_Phi if sym_Phi is not None else self.sym_Phi
-        if L is not None:
-            warnings.warn("Phi basis does not have radial resolution, ignoring L")
-        if len(args) == 2:
-            M, N = args
-        elif len(args) == 3:
-            L, M, N = args
+    def change_Phi_resolution(self, M=None, N=None, NFP=None, sym_Phi=None):
+        """Change the maximum poloidal and toroidal resolution for Phi.
 
-        if (
-            ((N is not None) and (N != self.N))
-            or ((M is not None) and (M != self.M))
-            or (NFP is not None)
-        ):
-            M = M if M is not None else self.M
-            N = N if N is not None else self.N
-            Phi_modes_old = self.Phi_basis.modes
-            self.Phi_basis.change_resolution(M=M, N=N, NFP=self.NFP, sym=self.sym_Phi)
+        Parameters
+        ----------
+        M : int
+            Poloidal resolution to change Phi basis to.
+            If None, defaults to current self.Phi_basis poloidal resolution
+        N : int
+            Toroidal resolution to change Phi basis to.
+            If None, defaults to current self.Phi_basis toroidal resolution
+        NFP : int
+            Number of field periods for surface and Phi basis.
+            If None, defaults to current NFP.
+            Note: will change the NFP of the surface geometry as well as the
+            Phi basis.
+        sym_Phi : str or False, one of {"auto","cos","sin",False}
+            whether to enforce a given symmetry for the DoubleFourierSeries part of the
+            current potential. Default is "auto" which enforces if modes are symmetric.
+            If True, non-symmetric modes will be truncated.
 
-            self._Phi_mn = copy_coeffs(self.Phi_mn, Phi_modes_old, self.Phi_basis.modes)
-            self._M_Phi = M
-            self._N_Phi = N
+        """
+        M = self._M_Phi or M
+        N = self._M_Phi or N
+        NFP = NFP or self.NFP
+        sym_Phi = sym_Phi or self.sym_Phi
+
+        Phi_modes_old = self.Phi_basis.modes
+        self.Phi_basis.change_resolution(M=M, N=N, NFP=self.NFP, sym=sym_Phi)
+
+        self._Phi_mn = copy_coeffs(self.Phi_mn, Phi_modes_old, self.Phi_basis.modes)
+        self._M_Phi = M
+        self._N_Phi = N
+        self._sym_Phi = sym_Phi
+        self.change_resolution(
+            NFP=NFP
+        )  # make sure surface and Phi basis NFP are the same
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.

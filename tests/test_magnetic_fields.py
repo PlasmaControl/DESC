@@ -149,6 +149,7 @@ class TestMagneticFields:
         )
 
         field.change_resolution(3, 3)
+        field.change_Phi_resolution(2, 2)
 
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, 0, 0]),

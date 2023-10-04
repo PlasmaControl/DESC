@@ -345,6 +345,39 @@ class TestCoilSet:
         assert coils1[-1] is coil2
         assert coils1[-2][0].__class__ is coil1.__class__
 
+    @pytest.mark.unit
+    def test_coilset_convert(self):
+        """Test converting coilsets between different representations."""
+        grid = LinearGrid(N=20)
+        coil1 = FourierXYZCoil(current=1e6)
+        coil2 = coil1.to_SplineXYZ(grid=grid)
+
+        coils1 = MixedCoilSet.linspaced_angular(coil1, n=12)
+        coils2 = coils1.to_SplineXYZ(grid=grid)
+        assert isinstance(coils2, MixedCoilSet)
+        assert all(isinstance(coil, SplineXYZCoil) for coil in coils2)
+        x1 = coils1.compute("x", grid=grid, basis="xyz")
+        x2 = coils2.compute("x", grid=grid, basis="xyz")
+        np.testing.assert_allclose(
+            [xi["x"] for xi in x1], [xi["x"] for xi in x2], atol=1e-12
+        )
+        B1 = coils1.compute_magnetic_field(np.array([[10, 2, 1]]), grid=grid)
+        B2 = coils2.compute_magnetic_field(np.array([[10, 2, 1]]), grid=grid)
+        np.testing.assert_allclose(B1, B2, rtol=1e-2)
+
+        coils3 = CoilSet.linspaced_angular(coil2, n=12)
+        coils4 = coils3.to_FourierXYZ(grid=grid)
+        assert isinstance(coils4, CoilSet)
+        assert all(isinstance(coil, FourierXYZCoil) for coil in coils4)
+        x3 = coils3.compute("x", grid=grid, basis="xyz")
+        x4 = coils4.compute("x", grid=grid, basis="xyz")
+        np.testing.assert_allclose(
+            [xi["x"] for xi in x3], [xi["x"] for xi in x4], atol=1e-12
+        )
+        B3 = coils3.compute_magnetic_field(np.array([[10, 2, 1]]), grid=grid)
+        B4 = coils4.compute_magnetic_field(np.array([[10, 2, 1]]), grid=grid)
+        np.testing.assert_allclose(B3, B4, rtol=1e-2)
+
 
 @pytest.mark.unit
 def test_load_and_save_makegrid_coils(tmpdir_factory):

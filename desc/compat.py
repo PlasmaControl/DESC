@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from desc.grid import Grid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 
 
 def ensure_positive_jacobian(eq):
@@ -46,4 +46,76 @@ def ensure_positive_jacobian(eq):
 
     signgs = np.sign(eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
     assert signgs == 1
+    return eq
+
+
+def rescale(eq, R0=None, B0=None, verbose=0):
+    """Rescale an Equilibrium to major radius R and magnetic field strength on axis B.
+
+    Assumes the aspect ratio is held constant?
+
+    Parameters
+    ----------
+    eq : Equilibrium or iterable of Equilibrium
+        Equilibria to rescale.
+    R0 : float
+        Desired major radius. If None, no change (default).
+    B0 : float
+        Desired magnetic field strength on axis. If None, no change (default).
+    verbose : int
+        Level of output.
+
+    Returns
+    -------
+    eq : Equilibrium or iterable of Equilibrium
+        Same as input, but rescaled to the desired major radius and field strength.
+
+    """
+    # maybe it's iterable:
+    if hasattr(eq, "__len__"):
+        for e in eq:
+            rescale(e, R0, B0)
+        return eq
+
+    # compute actual major radius
+    grid_R = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    R = eq.compute("R0", grid=grid_R)["R0"]
+    R0 = R0 or R
+
+    # compute actual |B| on axis
+    grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
+    B = np.mean(eq.compute("|B|", grid=grid_B)["|B|"])
+    B0 = B0 or B
+
+    # scaling factor = desired / actual
+    cR = R0 / R
+    cB = B0 / B
+    if verbose:
+        print("Major radius scaling factor:   {:.2f}".format(cR))
+        print("Magnetic field scaling factor: {:.2f}".format(cB))
+
+    # scale flux surfaces
+    eq.R_lmn *= cR
+    eq.Z_lmn *= cR
+    eq.Psi *= cR**2 * cB
+
+    # scale pressure profile
+    scale = cR**5 * cB**2
+    if eq.pressure is not None:
+        eq.p_l *= scale
+    else:
+        eq.ne_l *= np.sqrt(scale)
+        eq.Te_l *= np.sqrt(scale)
+        eq.Ti_l *= np.sqrt(scale)
+
+    # check new major radius
+    grid_R = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    R = eq.compute("R0", grid=grid_R)["R0"]
+    assert R == R0
+
+    # check new |B| on axis
+    grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
+    B = np.mean(eq.compute("|B|", grid=grid_B)["|B|"])
+    assert B == B0
+
     return eq

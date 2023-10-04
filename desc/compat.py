@@ -100,13 +100,16 @@ def rescale(eq, R0=None, B0=None, verbose=0):
     eq.Psi *= cR**2 * cB
 
     # scale pressure profile
-    scale = cR**5 * cB**2
     if eq.pressure is not None:
-        eq.p_l *= scale
+        eq.p_l *= cB**2
     else:
-        eq.ne_l *= np.sqrt(scale)
-        eq.Te_l *= np.sqrt(scale)
-        eq.Ti_l *= np.sqrt(scale)
+        eq.ne_l *= cB
+        eq.Te_l *= cB
+        eq.Ti_l *= cB
+
+    # scale current profile
+    if eq.current is not None:
+        eq.c_l *= cR * cB
 
     # check new major radius
     grid_R = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)

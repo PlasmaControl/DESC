@@ -98,6 +98,25 @@ class TestCoil:
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
+    @pytest.mark.unit
+    def test_converting_coil_types(self):
+        """Test conversions between coil representations."""
+        s = np.linspace(0, 2 * np.pi, 100, endpoint=False)
+        coil1 = FourierRZCoil(1e6, [0, 10, 2], [-2, 0, 0])
+        coil2 = coil1.to_FourierXYZ(s=s)
+        coil3 = coil1.to_SplineXYZ(knots=s)
+        grid = LinearGrid(zeta=s)
+        x1 = coil1.compute("x", grid=grid, basis="xyz")["x"]
+        x2 = coil2.compute("x", grid=grid, basis="xyz")["x"]
+        x3 = coil3.compute("x", grid=grid, basis="xyz")["x"]
+        B1 = coil1.compute_magnetic_field(np.zeros((1, 3)), grid=grid, basis="xyz")
+        B2 = coil2.compute_magnetic_field(np.zeros((1, 3)), grid=grid, basis="xyz")
+        B3 = coil3.compute_magnetic_field(np.zeros((1, 3)), grid=grid, basis="xyz")
+        np.testing.assert_allclose(x1, x2, atol=1e-12)
+        np.testing.assert_allclose(x1, x3, atol=1e-12)
+        np.testing.assert_allclose(B1, B2, rtol=1e-8, atol=1e-8)
+        np.testing.assert_allclose(B1, B3, rtol=1e-3, atol=1e-8)
+
 
 class TestCoilSet:
     """Tests for sets of multiple coils."""

@@ -1,9 +1,5 @@
 """Objectives for solving equilibrium problems."""
 
-import warnings
-
-from termcolor import colored
-
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
@@ -103,29 +99,14 @@ class ForceBalance(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            if eq.node_pattern is None or eq.node_pattern in [
-                "jacobi",
-                "cheb1",
-                "cheb2",
-                "ocs",
-                "linear",
-            ]:
-                grid = ConcentricGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
-                )
-            elif eq.node_pattern == "quad":
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
         else:
             grid = self._grid
 
@@ -293,29 +274,14 @@ class RadialForceBalance(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            if eq.node_pattern is None or eq.node_pattern in [
-                "jacobi",
-                "cheb1",
-                "cheb2",
-                "ocs",
-                "linear",
-            ]:
-                grid = ConcentricGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
-                )
-            elif eq.node_pattern == "quad":
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
         else:
             grid = self._grid
 
@@ -476,29 +442,14 @@ class HelicalForceBalance(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            if eq.node_pattern is None or eq.node_pattern in [
-                "jacobi",
-                "cheb1",
-                "cheb2",
-                "ocs",
-                "linear",
-            ]:
-                grid = ConcentricGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
-                )
-            elif eq.node_pattern == "quad":
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
         else:
             grid = self._grid
 
@@ -661,38 +612,12 @@ class Energy(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            if eq.node_pattern in [
-                "jacobi",
-                "cheb1",
-                "cheb2",
-                "ocs",
-                "linear",
-            ]:
-                warnings.warn(
-                    colored(
-                        "Energy objective built using grid "
-                        + "that is not the quadrature grid! "
-                        + "This is not recommended and may result in poor convergence. "
-                        "yellow",
-                    )
-                )
-                grid = ConcentricGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
-                )
-
-            else:
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
+            grid = QuadratureGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+            )
         else:
             grid = self._grid
 
@@ -860,29 +785,14 @@ class CurrentDensity(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            if eq.node_pattern is None or eq.node_pattern in [
-                "jacobi",
-                "cheb1",
-                "cheb2",
-                "ocs",
-                "linear",
-            ]:
-                grid = ConcentricGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
-                )
-            elif eq.node_pattern == "quad":
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
         else:
             grid = self._grid
 

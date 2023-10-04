@@ -16,7 +16,7 @@ from desc.grid import Grid, LinearGrid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.utils import copy_coeffs
+from desc.utils import copy_coeffs, errorif, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -1241,14 +1241,13 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
     @params.setter
     def params(self, new):
-        if new != self._params:
-            if len(new) != len(self._params):
-                warnings.warn(
-                    "Length of new params is different from length of current params! "
-                    "May cause errors unless potential function is also changed.",
-                    UserWarning,
-                )
-            self._params = new
+        warnif(
+            len(new) != len(self._params),
+            UserWarning,
+            "Length of new params is different from length of current params! "
+            "May cause errors unless potential function is also changed.",
+        )
+        self._params = new
 
     @property
     def potential(self):
@@ -1353,9 +1352,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         potential_dzeta,
         surface_grid,
         params=None,
-        rho=1,
-        name="",
-        check_orientation=True,
     ):
         """Create CurrentPotentialField using geometry provided by given surface.
 
@@ -1377,25 +1373,22 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         params : dict, optional
             default parameters to pass to potential function (and its derivatives)
 
-        name : str
-            name for this field
-        check_orientation : bool
-            ensure that this surface has a right handed orientation. Do not set to False
-            unless you are sure the parameterization you have given is right handed
-            (ie, e_theta x e_zeta points outward from the surface).
-
         """
-        if not isinstance(surface, FourierRZToroidalSurface):
-            raise TypeError(
-                "Expected type FourierRZToroidalSurface for argument surface, "
-                f"instead got type {type(surface)}"
-            )
+        errorif(
+            not isinstance(surface, FourierRZToroidalSurface),
+            TypeError,
+            "Expected type FourierRZToroidalSurface for argument surface, "
+            f"instead got type {type(surface)}",
+        )
+
         R_lmn = surface.R_lmn
         Z_lmn = surface.Z_lmn
         modes_R = surface._R_basis.modes[:, 1:]
         modes_Z = surface._Z_basis.modes[:, 1:]
         NFP = surface.NFP
         sym = surface.sym
+        rho = surface.rho
+        name = surface.name
         rho = surface.rho
 
         return cls(
@@ -1412,7 +1405,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             sym,
             rho,
             name,
-            check_orientation,
+            check_orientation=False,
         )
 
 

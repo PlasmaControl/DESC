@@ -286,29 +286,14 @@ class ForceBalanceAnisotropic(_Objective):
         """
         eq = eq or self._eq
         if self._grid is None:
-            if eq.node_pattern is None or eq.node_pattern in [
-                "jacobi",
-                "cheb1",
-                "cheb2",
-                "ocs",
-                "linear",
-            ]:
-                grid = ConcentricGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
-                )
-            elif eq.node_pattern == "quad":
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
         else:
             grid = self._grid
 

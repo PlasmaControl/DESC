@@ -375,7 +375,8 @@ class InputReader:
             if match:
                 warnings.warn(
                     "node_pattern parameter has been deprecated. To use a custom node "
-                    + "pattern, pass in the desired grid when creating the objective."
+                    + "pattern, pass in the desired grid when creating the objective "
+                    + "in a python script."
                 )
                 flag = True
             match = re.search(r"bdry_mode", argument, re.IGNORECASE)

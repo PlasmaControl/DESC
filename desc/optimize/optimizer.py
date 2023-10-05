@@ -416,10 +416,6 @@ def _get_default_tols(
     # if we define an "iteration" as a successful step, it can take a few function
     # evaluations per iteration
     stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
-    # pretty much all the methods only evaluate derivatives once per iteration
-    stoptol["max_ngev"] = options.pop("max_ngev", stoptol["maxiter"] + 1)
-    stoptol["max_njev"] = options.pop("max_njev", stoptol["maxiter"] + 1)
-    stoptol["max_nhev"] = options.pop("max_nhev", stoptol["maxiter"] + 1)
 
     return stoptol
 
@@ -462,7 +458,7 @@ def register_optimizer(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
         settings.

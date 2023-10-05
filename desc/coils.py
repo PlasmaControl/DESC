@@ -6,16 +6,107 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import jnp
-from desc.compute import rpz2xyz, xyz2rpz_vec
+from desc.backend import jnp, tree_stack, tree_unstack, vmap
+from desc.compute import get_params, rpz2xyz, xyz2rpz_vec
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.magnetic_fields import _MagneticField, biot_savart
-from desc.utils import flatten_list
+from desc.grid import LinearGrid
+from desc.magnetic_fields import _MagneticField
+from desc.utils import equals, errorif, flatten_list
+
+
+def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
+    """Biot-Savart law for filamentary coils following [1].
+
+    The coil is approximated by a series of straight line segments
+    and an analytic expression is used to evaluate the field from each
+    segment.
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(n,3)
+        Evaluation points in cartesian coordinates
+    coil_pts_start, coil_pts_end : array-like shape(m,3)
+        Points in cartesian space defining the start and end of each segment.
+        Should be a closed curve, such that coil_pts_start[0] == coil_pts_end[-1]
+        though this is not checked.
+    current : float
+        Current through the coil (in Amps).
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+
+    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart
+    fields of a filamentary segment" (2002)
+    """
+    d_vec = coil_pts_end - coil_pts_start
+    L = jnp.linalg.norm(d_vec, axis=-1)
+
+    Ri_vec = eval_pts[jnp.newaxis, :] - coil_pts_start[:, jnp.newaxis, :]
+    Ri = jnp.linalg.norm(Ri_vec, axis=-1)
+    Rf = jnp.linalg.norm(
+        eval_pts[jnp.newaxis, :] - coil_pts_end[:, jnp.newaxis, :], axis=-1
+    )
+    Ri_p_Rf = Ri + Rf
+
+    # 1.0e-7 == mu_0/(4 pi)
+    B_mag = (
+        1.0e-7
+        * current
+        * 2.0
+        * Ri_p_Rf
+        / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - (L * L)[:, jnp.newaxis]))
+    )
+
+    # cross product of L*hat(eps)==d_vec with Ri_vec, scaled by B_mag
+    vec = jnp.cross(d_vec[:, jnp.newaxis, :], Ri_vec, axis=-1)
+    B = jnp.sum(B_mag[:, :, jnp.newaxis] * vec, axis=0)
+    return B
+
+
+def biot_savart_quad(eval_pts, coil_pts, tangents, current):
+    """Biot-Savart law for filamentary coil using numerical quadrature.
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(n,3)
+        Evaluation points in cartesian coordinates
+    coil_pts : array-like shape(m,3)
+        Points in cartesian space defining coil
+    tangents : array-like, shape(m,3)
+        Tangent vectors to the coil at coil_pts. If the curve is given
+        by x(s) with curve parameter s, coil_pts = x, tangents = dx/ds*ds where
+        ds is the spacing between points.
+    current : float
+        Current through the coil (in Amps).
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+
+    Notes
+    -----
+    This method does not give curl(B) == 0 exactly. The error in the curl
+    scales the same as the error in B itself, so will only be zero when fully
+    converged. However in practice, for smooth curves described by Fourier series,
+    this method converges exponentially in the number of coil points.
+    """
+    dl = tangents
+    R_vec = eval_pts[jnp.newaxis, :] - coil_pts[:, jnp.newaxis, :]
+    R_mag = jnp.linalg.norm(R_vec, axis=-1)
+
+    vec = jnp.cross(dl[:, jnp.newaxis, :], R_vec, axis=-1)
+    denom = R_mag * R_mag * R_mag
+
+    B = jnp.sum(1.0e-7 * current * vec / denom[:, :, None], axis=0)
+    return B
 
 
 class _Coil(_MagneticField, ABC):
@@ -68,12 +159,19 @@ class _Coil(_MagneticField, ABC):
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None
             Grid used to discretize coil. If an integer, uses that many equally spaced
-            points.
+            points. Should NOT include endpoint at 2pi.
 
         Returns
         -------
         field : ndarray, shape(n,3)
             magnetic field at specified points, in either rpz or xyz coordinates
+
+        Notes
+        -----
+        Uses direct quadrature of the Biot-Savart integral for filamentary coils with
+        tangents provided by the underlying curve class. Convergence should be
+        exponential in the number of points used to discretize the curve, though curl(B)
+        may not be zero if not fully converged.
         """
         assert basis.lower() in ["rpz", "xyz"]
         if hasattr(coords, "nodes"):
@@ -85,8 +183,12 @@ class _Coil(_MagneticField, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
-        coil_coords = self.compute("x", params=params, grid=grid, basis="xyz")["x"]
-        B = biot_savart(coords, coil_coords, current)
+
+        data = self.compute(["x", "x_s", "ds"], grid=grid, params=params, basis="xyz")
+        B = biot_savart_quad(
+            coords, data["x"], data["x_s"] * data["ds"][:, None], current
+        )
+
         if basis == "rpz":
             B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
         return B
@@ -98,6 +200,74 @@ class _Coil(_MagneticField, ABC):
             + " at "
             + str(hex(id(self)))
             + " (name={}, current={})".format(self.name, self.current)
+        )
+
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
+        """Convert coil to FourierXYZCoil representation.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
+            If an integer, uses that many equally spaced points.
+        s : ndarray
+            arbitrary curve parameter to use for the fitting. if None, defaults to
+            normalized arclength
+        name : str
+            name for this coil
+
+        Returns
+        -------
+        coil : FourierXYZCoil
+            New representation of the coil parameterized by Fourier series for X,Y,Z.
+
+        """
+        if grid is None and s is not None:
+            grid = LinearGrid(zeta=s)
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierXYZCoil.from_values(
+            self.current, coords, N=N, s=s, basis="xyz", name=name
+        )
+
+    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+        """Convert coil to SplineXYZCoil.
+
+        Parameters
+        ----------
+        knots : ndarray
+            arbitrary curve parameter values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Coil.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for this coil
+
+        Returns
+        -------
+        coil: SplineXYZCoil
+            New representation of the coil parameterized by a spline for X,Y,Z.
+
+        """
+        if grid is None and knots is not None:
+            grid = LinearGrid(zeta=knots)
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return SplineXYZCoil.from_values(
+            self.current, coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
 
@@ -231,6 +401,41 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     ):
         super().__init__(current, X_n, Y_n, Z_n, modes, name)
 
+    @classmethod
+    def from_values(cls, current, coords, N=10, s=None, basis="xyz", name=""):
+        """Fit coordinates to FourierXYZCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amps.
+        coords: ndarray
+            Coordinates to fit a FourierXYZCoil object with.
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+            default is 10
+        s : ndarray
+            arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords
+            if None, defaults to normalized arclength
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "xyz"
+        Returns
+        -------
+        coil : FourierXYZCoil
+            New representation of the coil parameterized by Fourier series for X,Y,Z.
+
+        """
+        curve = super().from_values(coords, N, s, basis)
+        return cls(
+            current,
+            X_n=curve.X_n,
+            Y_n=curve.Y_n,
+            Z_n=curve.Z_n,
+            name=name,
+        )
+
 
 class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     """Coil that lines in a plane.
@@ -311,7 +516,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
     current : float
         current through coil, in Amperes
     X, Y, Z: array-like
-        points for X, Y, Z describing a closed curve
+        Points for X, Y, Z describing the curve. If the endpoint is included
+        (ie, X[0] == X[-1]), then the final point will be dropped.
     knots : ndarray
         arbitrary curve parameter values to use for spline knots,
         should be a monotonic, 1D ndarray of same length as the input X,Y,Z.
@@ -351,14 +557,160 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
     ):
         super().__init__(current, X, Y, Z, knots, method, name)
 
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+        """Compute magnetic field at a set of points.
+
+        The coil current may be overridden by including `current`
+        in the `params` dictionary.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3) or Grid
+            coordinates to evaluate field at [R,phi,Z] or [x,y,z]
+        params : dict, optional
+            parameters to pass to curve
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points, in either rpz or xyz coordinates
+
+        Notes
+        -----
+        Discretizes the coil into straight segments between grid points, and uses the
+        Hanson-Hirshman expression for exact field from a straight segment. Convergence
+        is approximately quadratic in the number of coil points.
+        """
+        assert basis.lower() in ["rpz", "xyz"]
+        if hasattr(coords, "nodes"):
+            coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+        if params is None:
+            current = self.current
+        else:
+            current = params.pop("current", self.current)
+
+        data = self.compute(["x"], grid=grid, params=params, basis="xyz")
+        # need to make sure the curve is closed. If it's already closed, this doesn't
+        # do anything (effectively just adds a segment of zero length which has no
+        # effect on the overall result)
+        coil_pts_start = data["x"]
+        coil_pts_end = jnp.concatenate([data["x"][1:], data["x"][:1]])
+        # could get up to 4th order accuracy by shifting points outward as in
+        # (McGreivy, Zhu, Gunderson, Hudson 2021), however that requires knowing the
+        # coils curvature which is a 2nd derivative of the position, and doing that
+        # with only possibly c1 cubic splines is inaccurate, so we don't do it
+        # (for now, maybe in the future?)
+        B = biot_savart_hh(coords, coil_pts_start, coil_pts_end, current)
+
+        if basis == "rpz":
+            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+        return B
+
+    @classmethod
+    def from_values(
+        cls, current, coords, knots=None, method="cubic", name="", basis="xyz"
+    ):
+        """Create SplineXYZCoil from coordinate values.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amps.
+        coords: ndarray
+            Points for X, Y, Z describing the curve. If the endpoint is included
+            (ie, X[0] == X[-1]), then the final point will be dropped.
+        knots : ndarray
+            arbitrary curve parameter values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Curve.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        method : str
+            method of interpolation
+
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+
+        name : str
+            name for this curve
+        basis : {"rpz", "xyz"}
+            basis for input coordinates. Defaults to "xyz"
+
+        Returns
+        -------
+        coil: SplineXYZCoil
+            New representation of the coil parameterized by splines in X,Y,Z.
+
+        """
+        curve = super().from_values(coords, knots, method, basis=basis)
+        return cls(
+            current,
+            X=curve.X,
+            Y=curve.Y,
+            Z=curve.Z,
+            knots=curve.knots,
+            method=curve.method,
+            name=name,
+        )
+
+
+def _check_type(coil0, coil):
+    errorif(
+        not isinstance(coil, coil0.__class__),
+        TypeError,
+        (
+            "coils in a CoilSet must all be the same type, got types "
+            + f"{type(coil0)}, {type(coil)}. Consider using a MixedCoilSet"
+        ),
+    )
+    errorif(
+        isinstance(coil0, CoilSet),
+        TypeError,
+        (
+            "coils in a CoilSet must all be base Coil types, not CoilSet. "
+            + "Consider using a MixedCoilSet"
+        ),
+    )
+    attrs = {
+        FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
+        FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
+        FourierPlanarCoil: ["r_basis"],
+        SplineXYZCoil: ["method", "N"],
+    }
+
+    for attr in attrs[coil0.__class__]:
+        a0 = getattr(coil0, attr)
+        a1 = getattr(coil, attr)
+        errorif(
+            not equals(a0, a1),
+            ValueError,
+            (
+                "coils in a CoilSet must have the same parameterization, got a "
+                + f"mismatch between attr {attr}, with values {a0} and {a1}"
+            ),
+        )
+
 
 class CoilSet(_Coil, MutableSequence):
-    """Set of coils of different geometry.
+    """Set of coils of different geometry but shared parameterization and resolution.
 
     Parameters
     ----------
     coils : Coil or array-like of Coils
-        collection of coils
+        collection of coils. Must all be the same type and resolution.
     currents : float or array-like of float
         currents in each coil, or a single current shared by all coils in the set
     name : str
@@ -371,6 +723,7 @@ class CoilSet(_Coil, MutableSequence):
     def __init__(self, *coils, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
+        [_check_type(coil, coils[0]) for coil in coils]
         self._coils = list(coils)
         self._name = str(name)
 
@@ -428,13 +781,11 @@ class CoilSet(_Coil, MutableSequence):
         grid : Grid or int or array-like, optional
             Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
-            If array-like, should be 1 value per coil.
         params : dict of ndarray or array-like
             Parameters from the equilibrium. Defaults to attributes of self.
             If array-like, should be 1 value per coil.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
-            If array-like, should be 1 value per coil.
         data : dict of ndarray or array-like
             Data computed so far, generally output from other compute functions
             If array-like, should be 1 value per coil.
@@ -447,18 +798,18 @@ class CoilSet(_Coil, MutableSequence):
             individual coil.
 
         """
-        grid = self._make_arraylike(grid)
-        params = self._make_arraylike(params)
-        transforms = self._make_arraylike(transforms)
-        data = self._make_arraylike(data)
-        return [
-            coil.compute(
-                names, grid=grd, params=par, transforms=tran, data=dat, **kwargs
+        if params is None:
+            params = [get_params(names, coil) for coil in self]
+        if data is None:
+            data = [{}] * len(self)
+        # if user supplied initial data for each coil we also need to vmap over that.
+        data = vmap(
+            lambda d, x: self[0].compute(
+                names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
             )
-            for (coil, grd, par, tran, dat) in zip(
-                self.coils, grid, params, transforms, data
-            )
-        ]
+        )(tree_stack(data), tree_stack(params))
+
+        return tree_unstack(data)
 
     def translate(self, *args, **kwargs):
         """Translate the coils along an axis."""
@@ -485,21 +836,24 @@ class CoilSet(_Coil, MutableSequence):
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None or array-like, optional
-            Grid used to discretize coil, either the same for all coils or one for each
-            member of the coilset. If an integer, uses that many equally spaced
-            points.
+            Grid used to discretize coil, the same for all coils. If an integer, uses
+            that many equally spaced points.
 
         Returns
         -------
         field : ndarray, shape(n,3)
             magnetic field at specified points, in either rpz or xyz coordinates
         """
-        params = self._make_arraylike(params)
-        grid = self._make_arraylike(grid)
+        if params is None:
+            params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
+            for par, coil in zip(params, self):
+                par["current"] = coil.current
 
-        B = 0
-        for coil, par, grd in zip(self.coils, params, grid):
-            B += coil.compute_magnetic_field(coords, par, basis, grd)
+        B = vmap(
+            lambda x: self[0].compute_magnetic_field(
+                coords, params=x, basis=basis, grid=grid
+            )
+        )(tree_stack(params)).sum(axis=0)
 
         return B
 
@@ -524,7 +878,7 @@ class CoilSet(_Coil, MutableSequence):
         endpoint : bool
             whether to include a coil at final angle
         """
-        assert isinstance(coil, _Coil)
+        assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
@@ -556,7 +910,7 @@ class CoilSet(_Coil, MutableSequence):
         endpoint : bool
             whether to include a coil at final point
         """
-        assert isinstance(coil, _Coil)
+        assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
@@ -591,6 +945,9 @@ class CoilSet(_Coil, MutableSequence):
         """
         if not isinstance(coils, CoilSet):
             coils = CoilSet(coils)
+
+        [_check_type(coil, coils[0]) for coil in coils]
+
         coilset = []
         if sym:
             # first reflect/flip original coilset
@@ -683,22 +1040,18 @@ class CoilSet(_Coil, MutableSequence):
         for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
             coords = np.genfromtxt(lines[start + 1 : end])
 
-            tempx = np.append(coords[:, 0], np.array([coords[0, 0]]))
-            tempy = np.append(coords[:, 1], np.array([coords[0, 1]]))
-            tempz = np.append(coords[:, 2], np.array([coords[0, 2]]))
-
             coils.append(
                 SplineXYZCoil(
                     coords[:, -1][0],
-                    tempx,
-                    tempy,
-                    tempz,
+                    coords[:, 0],
+                    coords[:, 1],
+                    coords[:, 2],
                     method=method,
                     name=names[i],
                 )
             )
 
-        return CoilSet(*coils)
+        return cls(*coils)
 
     def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
         """Save CoilSet as a MAKEGRID-formatted coil txtfile.
@@ -764,7 +1117,7 @@ class CoilSet(_Coil, MutableSequence):
         if hasattr(grid, "endpoint"):
             endpoint = grid.endpoint
         elif isinstance(grid, numbers.Integral):
-            endpoint = True  # if int, will create a grid w/ endpoint=True in compute
+            endpoint = False  # if int, will create a grid w/ endpoint=False in compute
         for i in range(int(len(coils))):
             coil = coils[i]
             coords = coil.compute("x", basis="xyz", grid=grid)["x"]
@@ -817,6 +1170,66 @@ class CoilSet(_Coil, MutableSequence):
         with open(coilsFilename, "w") as f:
             f.writelines(lines)
 
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
+        """Convert all coils to FourierXYZCoil representation.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
+            If an integer, uses that many equally spaced points.
+        s : ndarray
+            arbitrary curve parameter to use for the fitting. if None, defaults to
+            normalized arclength
+        name : str
+            name for the new CoilSet
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by Fourier series for X,Y,Z.
+
+        """
+        coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
+        return self.__class__(*coils, name=name)
+
+    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+        """Convert all coils to SplineXYZCoil.
+
+        Parameters
+        ----------
+        knots : ndarray
+            arbitrary curve parameter values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Coil.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for the new CoilSet
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by a spline for X,Y,Z.
+
+        """
+        coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
+        return self.__class__(*coils, name=name)
+
     def __add__(self, other):
         if isinstance(other, (CoilSet)):
             return CoilSet(*self.coils, *other.coils)
@@ -831,6 +1244,7 @@ class CoilSet(_Coil, MutableSequence):
     def __setitem__(self, i, new_item):
         if not isinstance(new_item, _Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
+        _check_type(new_item, self[0])
         self._coils[i] = new_item
 
     def __delitem__(self, i):
@@ -843,6 +1257,7 @@ class CoilSet(_Coil, MutableSequence):
         """Insert a new coil into the coilset at position i."""
         if not isinstance(new_item, _Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
+        _check_type(new_item, self[0])
         self._coils.insert(i, new_item)
 
     def __repr__(self):
@@ -853,3 +1268,123 @@ class CoilSet(_Coil, MutableSequence):
             + str(hex(id(self)))
             + " (name={}, with {} submembers)".format(self.name, len(self))
         )
+
+
+class MixedCoilSet(CoilSet):
+    """Set of coils or coilsets of different geometry.
+
+    Parameters
+    ----------
+    coils : Coil or array-like of Coils
+        collection of coils
+    currents : float or array-like of float
+        currents in each coil, or a single current shared by all coils in the set
+    name : str
+        name of this CoilSet
+
+    """
+
+    def __init__(self, *coils, name=""):
+        coils = flatten_list(coils, flatten_tuple=True)
+        assert all([isinstance(coil, (_Coil)) for coil in coils])
+        self._coils = list(coils)
+        self._name = str(name)
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid, for each coil in the coilset.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int or array-like, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+            If array-like, should be 1 value per coil.
+        params : dict of ndarray or array-like
+            Parameters from the equilibrium. Defaults to attributes of self.
+            If array-like, should be 1 value per coil.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+            If array-like, should be 1 value per coil.
+        data : dict of ndarray or array-like
+            Data computed so far, generally output from other compute functions
+            If array-like, should be 1 value per coil.
+
+        Returns
+        -------
+        data : list of dict of ndarray
+            Computed quantity and intermediate variables, for each coil in the set.
+            List entries map to coils in coilset, each dict contains data for an
+            individual coil.
+
+        """
+        grid = self._make_arraylike(grid)
+        params = self._make_arraylike(params)
+        transforms = self._make_arraylike(transforms)
+        data = self._make_arraylike(data)
+        return [
+            coil.compute(
+                names, grid=grd, params=par, transforms=tran, data=dat, **kwargs
+            )
+            for (coil, grd, par, tran, dat) in zip(
+                self.coils, grid, params, transforms, data
+            )
+        ]
+
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3) or Grid
+            coordinates to evaluate field at [R,phi,Z] or [x,y,z]
+        params : dict or array-like of dict, optional
+            parameters to pass to curves, either the same for all curves,
+            or one for each member
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
+        grid : Grid, int or None or array-like, optional
+            Grid used to discretize coil, either the same for all coils or one for each
+            member of the coilset. If an integer, uses that many equally spaced
+            points.
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points, in either rpz or xyz coordinates
+        """
+        params = self._make_arraylike(params)
+        grid = self._make_arraylike(grid)
+
+        B = 0
+        for coil, par, grd in zip(self.coils, params, grid):
+            B += coil.compute_magnetic_field(coords, par, basis, grd)
+
+        return B
+
+    def __add__(self, other):
+        if isinstance(other, (CoilSet, MixedCoilSet)):
+            return MixedCoilSet(*self.coils, *other.coils)
+        if isinstance(other, (list, tuple)):
+            return MixedCoilSet(*self.coils, *other)
+        raise TypeError
+
+    def __setitem__(self, i, new_item):
+        if not isinstance(new_item, _Coil):
+            raise TypeError("Members of CoilSet must be of type Coil.")
+        self._coils[i] = new_item
+
+    def insert(self, i, new_item):
+        """Insert a new coil into the coilset at position i."""
+        if not isinstance(new_item, _Coil):
+            raise TypeError("Members of CoilSet must be of type Coil.")
+        self._coils.insert(i, new_item)

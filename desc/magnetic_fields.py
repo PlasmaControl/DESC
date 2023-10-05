@@ -18,52 +18,6 @@ from desc.utils import copy_coeffs
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
-def biot_savart(eval_pts, coil_pts, current):
-    """Biot-Savart law following [1].
-
-    Parameters
-    ----------
-    eval_pts : array-like shape(n,3)
-        evaluation points in cartesian coordinates
-    coil_pts : array-like shape(m,3)
-        points in cartesian space defining coil, should be closed curve
-    current : float
-        current through the coil
-
-    Returns
-    -------
-    B : ndarray, shape(n,3)
-        magnetic field in cartesian components at specified points
-
-    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart
-    fields of a filamentary segment" (2002)
-    """
-    # TODO: vectorize this over multiple coils
-    d_vec = jnp.diff(coil_pts, axis=0)
-    L = jnp.linalg.norm(d_vec, axis=-1)
-
-    Ri_vec = eval_pts[jnp.newaxis, :] - coil_pts[:-1, jnp.newaxis, :]
-    Ri = jnp.linalg.norm(Ri_vec, axis=-1)
-    Rf = jnp.linalg.norm(
-        eval_pts[jnp.newaxis, :] - coil_pts[1:, jnp.newaxis, :], axis=-1
-    )
-    Ri_p_Rf = Ri + Rf
-
-    # 1.0e-7 == mu_0/(4 pi)
-    B_mag = (
-        1.0e-7
-        * current
-        * 2.0
-        * Ri_p_Rf
-        / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - (L * L)[:, jnp.newaxis]))
-    )
-
-    # cross product of L*hat(eps)==d_vec with Ri_vec, scaled by B_mag
-    vec = jnp.cross(d_vec[:, jnp.newaxis, :], Ri_vec, axis=-1)
-    B = jnp.sum(B_mag[:, :, jnp.newaxis] * vec, axis=0)
-    return B
-
-
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     """Read BNORM-style .txt file containing Bnormal Fourier coefficients.
 
@@ -1064,7 +1018,7 @@ class ScalarPotentialField(_MagneticField):
 
 
 def field_line_integrate(
-    r0, z0, phis, field, params=None, rtol=1e-8, atol=1e-8, maxstep=1000
+    r0, z0, phis, field, params=None, grid=None, rtol=1e-8, atol=1e-8, maxstep=1000
 ):
     """Trace field lines by integration.
 
@@ -1080,6 +1034,8 @@ def field_line_integrate(
         source of magnetic field to integrate
     params: dict
         parameters passed to field
+    grid : Grid, optional
+        Collocation points used to discretize source field.
     rtol, atol : float
         relative and absolute tolerances for ode integration
     maxstep : int
@@ -1102,7 +1058,7 @@ def field_line_integrate(
     def odefun(rpz, s):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
-        br, bp, bz = field.compute_magnetic_field(rpz, params, basis="rpz").T
+        br, bp, bz = field.compute_magnetic_field(rpz, params, basis="rpz", grid=grid).T
         return jnp.array(
             [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
         ).squeeze()

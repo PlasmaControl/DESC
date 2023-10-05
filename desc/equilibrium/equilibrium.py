@@ -98,6 +98,9 @@ class Equilibrium(IOAble, Optimizable):
     atomic_number : Profile or ndarray shape(k,2) (optional)
         Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral
         coefficients. Default is 1
+    anisotropy : Profile or ndarray
+        Anisotropic pressure profile or array of mode numbers and spectral coefficients.
+        Default is a PowerSeriesProfile with zero anisotropic pressure.
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
@@ -136,6 +139,7 @@ class Equilibrium(IOAble, Optimizable):
         "_electron_density",
         "_ion_temperature",
         "_atomic_number",
+        "_anisotropy",
         "_spectral_indexing",
         "_bdry_mode",
         "_L_grid",
@@ -162,6 +166,7 @@ class Equilibrium(IOAble, Optimizable):
         electron_density=None,
         ion_temperature=None,
         atomic_number=None,
+        anisotropy=None,
         surface=None,
         axis=None,
         sym=None,
@@ -293,7 +298,7 @@ class Equilibrium(IOAble, Optimizable):
             "Cannot specify both iota and current profiles.",
         )
         errorif(
-            pressure is not None and use_kinetic,
+            ((pressure is not None) or (anisotropy is not None)) and use_kinetic,
             ValueError,
             "Cannot specify both pressure and kinetic profiles.",
         )
@@ -317,6 +322,7 @@ class Equilibrium(IOAble, Optimizable):
         self._ion_temperature = parse_profile(ion_temperature, "ion temperature")
         self._atomic_number = parse_profile(atomic_number, "atomic number")
         self._pressure = parse_profile(pressure, "pressure")
+        self._anisotropy = parse_profile(anisotropy, "anisotropy")
         self._iota = parse_profile(iota, "iota")
         self._current = parse_profile(current, "current")
 
@@ -329,6 +335,7 @@ class Equilibrium(IOAble, Optimizable):
             "electron_density",
             "ion_temperature",
             "atomic_number",
+            "anisotropy",
         ]:
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
@@ -549,6 +556,7 @@ class Equilibrium(IOAble, Optimizable):
             "electron_density",
             "ion_temperature",
             "atomic_number",
+            "anisotropy",
         ]:
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
@@ -1256,6 +1264,29 @@ class Equilibrium(IOAble, Optimizable):
             "Attempt to set pressure on an equilibrium with fixed kinetic profiles",
         )
         self.pressure.params = p_l
+
+    @property
+    def anisotropy(self):
+        """Profile: Anisotropy profile."""
+        return self._anisotropy
+
+    @anisotropy.setter
+    def anisotropy(self, new):
+        self._anisotropy = parse_profile(new, "anisotropy")
+
+    @property
+    def a_lmn(self):
+        """ndarray: Coefficients of anisotropy profile."""
+        return np.empty(0) if self.anisotropy is None else self.anisotropy.params
+
+    @a_lmn.setter
+    def a_lmn(self, a_lmn):
+        errorif(
+            self.anisotropy is None,
+            ValueError,
+            "Attempt to set anisotropy on an equilibrium without anisotropy profile",
+        )
+        self.anisotropy.params = a_lmn
 
     @property
     def electron_temperature(self):

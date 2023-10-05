@@ -145,7 +145,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         import jax.tree_util as jtu
 
         leaves, treedef = jtu.tree_flatten(tree)
-        return [treedef.unflatten(leaf) for leaf in zip(*leaves, strict=True)]
+        return [treedef.unflatten(leaf) for leaf in zip(*leaves)]
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it

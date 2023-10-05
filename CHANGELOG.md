@@ -3,6 +3,9 @@ Changelog
 
 - Adds new compute quantities `"iota current"` and `"iota vacuum"` to compute the
 rotational transform contributions from the toroidal current and background field.
+- Adds ability to compute equilibria with anisotropic pressure. This includes a new
+profile, ``Equilibrium.anisotropy``, new compute quantity ``F_anisotropic``, and a new
+objective ``ForceBalanceAnisotropic``.
 
 v0.10.1
 -------

@@ -454,6 +454,42 @@ def _p_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="p_t",
+    label="\\partial_{\\theta} p",
+    units="Pa",
+    units_long="Pascals",
+    description="Pressure, first poloidal derivative",
+    dim=1,
+    params=["p_l"],
+    transforms={"grid": []},
+    profiles=["pressure"],
+    coordinates="rtz",
+    data=[],
+)
+def _p_t(params, transforms, profiles, data, **kwargs):
+    data["p_t"] = profiles["pressure"].compute(transforms["grid"], params["p_l"], dt=1)
+    return data
+
+
+@register_compute_fun(
+    name="p_z",
+    label="\\partial_{\\zeta} p",
+    units="Pa",
+    units_long="Pascals",
+    description="Pressure, first toroidal derivative",
+    dim=1,
+    params=["p_l"],
+    transforms={"grid": []},
+    profiles=["pressure"],
+    coordinates="rtz",
+    data=[],
+)
+def _p_z(params, transforms, profiles, data, **kwargs):
+    data["p_z"] = profiles["pressure"].compute(transforms["grid"], params["p_l"], dz=1)
+    return data
+
+
+@register_compute_fun(
     name="grad(p)",
     label="\\nabla p",
     units="N \\cdot m^{-3}",
@@ -464,10 +500,16 @@ def _p_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["p_r", "e^rho"],
+    data=["p_r", "p_t", "p_z", "e^rho", "e^theta", "e^zeta"],
 )
 def _gradp(params, transforms, profiles, data, **kwargs):
-    data["grad(p)"] = (data["p_r"] * data["e^rho"].T).T
+    data["grad(p)"] = (
+        data["p_r"] * data["e^rho"].T
+        # e^theta is blows up at the axis but the limit should go to zero
+        # if pressure is analytic
+        + jnp.where(data["p_t"] == 0, 0, data["p_t"] * data["e^theta"].T)
+        + data["p_z"] * data["e^zeta"].T
+    ).T
     return data
 
 
@@ -525,6 +567,120 @@ def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
         jnp.sum(data["|grad(p)|"] * data["sqrt(g)"] * transforms["grid"].weights)
         / data["V"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="beta_a",
+    label="\\beta_a = \\mu_0 (p_{||} - p_{\\perp})/B^2",
+    units="~",
+    units_long="None",
+    description="Pressure anisotropy",
+    dim=1,
+    params=["a_lmn"],
+    transforms={"grid": []},
+    profiles=["anisotropy"],
+    coordinates="rtz",
+    data=["0"],
+)
+def _beta_a(params, transforms, profiles, data, **kwargs):
+    if profiles["anisotropy"] is not None:
+        data["beta_a"] = profiles["anisotropy"].compute(
+            transforms["grid"], params["a_lmn"], dr=0
+        )
+    else:
+        data["beta_a"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="beta_a_r",
+    label="\\partial_{\\rho} \\beta_a = \\mu_0 (p_{||} - p_{\\perp})/B^2",
+    units="~",
+    units_long="None",
+    description="Pressure anisotropy, first radial derivative",
+    dim=1,
+    params=["a_lmn"],
+    transforms={"grid": []},
+    profiles=["anisotropy"],
+    coordinates="rtz",
+    data=["0"],
+)
+def _beta_a_r(params, transforms, profiles, data, **kwargs):
+    if profiles["anisotropy"] is not None:
+        data["beta_a_r"] = profiles["anisotropy"].compute(
+            transforms["grid"], params["a_lmn"], dr=1
+        )
+    else:
+        data["beta_a_r"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="beta_a_t",
+    label="\\partial_{\\theta} \\beta_a = \\mu_0 (p_{||} - p_{\\perp})/B^2",
+    units="~",
+    units_long="None",
+    description="Pressure anisotropy, first poloidal derivative",
+    dim=1,
+    params=["a_lmn"],
+    transforms={"grid": []},
+    profiles=["anisotropy"],
+    coordinates="rtz",
+    data=["0"],
+)
+def _beta_a_t(params, transforms, profiles, data, **kwargs):
+    if profiles["anisotropy"] is not None:
+        data["beta_a_t"] = profiles["anisotropy"].compute(
+            transforms["grid"], params["a_lmn"], dt=1
+        )
+    else:
+        data["beta_a_t"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="beta_a_z",
+    label="\\partial_{\\zeta} \\beta_a = \\mu_0 (p_{||} - p_{\\perp})/B^2",
+    units="~",
+    units_long="None",
+    description="Pressure anisotropy, first toroidal derivative",
+    dim=1,
+    params=["a_lmn"],
+    transforms={"grid": []},
+    profiles=["anisotropy"],
+    coordinates="rtz",
+    data=["0"],
+)
+def _beta_a_z(params, transforms, profiles, data, **kwargs):
+    if profiles["anisotropy"] is not None:
+        data["beta_a_z"] = profiles["anisotropy"].compute(
+            transforms["grid"], params["a_lmn"], dz=1
+        )
+    else:
+        data["beta_a_z"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="grad(beta_a)",
+    label="\\nabla \\beta_a = \\nabla \\mu_0 (p_{||} - p_{\\perp})/B^2",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Pressure anisotropy gradient",
+    dim=3,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["beta_a_r", "beta_a_t", "beta_a_z", "e^rho", "e^theta", "e^zeta"],
+)
+def _gradbeta_a(params, transforms, profiles, data, **kwargs):
+    data["grad(beta_a)"] = (
+        data["beta_a_r"] * data["e^rho"].T
+        + data["beta_a_t"] * data["e^theta"].T
+        + data["beta_a_z"] * data["e^zeta"].T
+    ).T
     return data
 
 

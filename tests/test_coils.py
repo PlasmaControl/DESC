@@ -345,6 +345,15 @@ class TestCoilSet:
         assert coils1[-1] is coil2
         assert coils1[-2][0].__class__ is coil1.__class__
 
+        coils2 = CoilSet.linspaced_angular(coil1)
+        assert coils2[0].eq(coil1) and not (coils2[0] is coil1)
+        coils2[0] = coil1
+        assert coils2[0] is coil1
+        with pytest.raises(TypeError):
+            coils2[1] = coil2
+        with pytest.raises(TypeError):
+            coils2.insert(4, coil2)
+
     @pytest.mark.unit
     def test_coilset_convert(self):
         """Test converting coilsets between different representations."""

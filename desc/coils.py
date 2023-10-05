@@ -800,26 +800,14 @@ class CoilSet(_Coil, MutableSequence):
         """
         if params is None:
             params = [get_params(names, coil) for coil in self]
-
+        if data is None:
+            data = [{}] * len(self)
         # if user supplied initial data for each coil we also need to vmap over that.
-        if data:
-            data = vmap(
-                lambda d, x: self[0].compute(
-                    names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
-                )
-            )(tree_stack(data), tree_stack(params))
-
-        else:
-            data = vmap(
-                lambda x: self[0].compute(
-                    names,
-                    grid=grid,
-                    transforms=transforms,
-                    data=data,
-                    params=x,
-                    **kwargs,
-                )
-            )(tree_stack(params))
+        data = vmap(
+            lambda d, x: self[0].compute(
+                names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
+            )
+        )(tree_stack(data), tree_stack(params))
 
         return tree_unstack(data)
 

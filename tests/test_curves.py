@@ -676,6 +676,10 @@ class TestSplineXYZCurve:
         knots[-2] = knots[-1]  # make it non-monotonic
         with pytest.raises(ValueError):
             c.knots = knots
+        with pytest.raises(ValueError):
+            c.knots *= -1
+        with pytest.raises(ValueError):
+            c.knots += np.pi
 
         # setter for method
         with pytest.raises(ValueError):

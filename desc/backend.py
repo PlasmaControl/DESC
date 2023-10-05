@@ -147,7 +147,10 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         leaves, treedef = jtu.tree_flatten(tree)
         return [treedef.unflatten(leaf) for leaf in zip(*leaves, strict=True)]
 
-else:
+
+# we can't really test the numpy backend stuff in automated testing, so we ignore it
+# for coverage purposes
+else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
@@ -158,10 +161,6 @@ else:
         solve_triangular,
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
-
-    def tree_flatten(*args, **kwargs):
-        """Flatten a pytree for numpy backend."""
-        raise NotImplementedError
 
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""

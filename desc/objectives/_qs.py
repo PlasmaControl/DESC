@@ -5,7 +5,7 @@ import warnings
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer, setdefault
+from desc.utils import Timer
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
@@ -53,7 +53,7 @@ class QuasisymmetryBoozer(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -88,20 +88,17 @@ class QuasisymmetryBoozer(_Objective):
             + "{:10.3e} "
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
@@ -152,7 +149,7 @@ class QuasisymmetryBoozer(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute quasi-symmetry Boozer harmonics error.
@@ -247,7 +244,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -278,20 +275,17 @@ class QuasisymmetryTwoTerm(_Objective):
             + "{:10.3e} "
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
@@ -322,7 +316,7 @@ class QuasisymmetryTwoTerm(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"] ** 3
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute quasi-symmetry two-term errors.
@@ -414,7 +408,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -436,20 +430,17 @@ class QuasisymmetryTripleProduct(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
@@ -479,7 +470,7 @@ class QuasisymmetryTripleProduct(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"] ** 4 / scales["a"] ** 2
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute quasi-symmetry triple product errors.
@@ -549,7 +540,7 @@ class Isodynamicity(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -571,20 +562,17 @@ class Isodynamicity(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
@@ -610,7 +598,7 @@ class Isodynamicity(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute isodynamicity errors.

@@ -434,9 +434,9 @@ def test_rejit():
             self.y = y
             super().__init__(things=eq, target=target, weight=weight, name=name)
 
-        def build(self, eq=None, use_jit=True, verbose=1):
+        def build(self, use_jit=True, verbose=1):
             self._dim_f = 1
-            super().build(eq, use_jit, verbose)
+            super().build(use_jit, verbose)
 
         def compute(self, params, constants=None):
             return 200 + self.target * self.weight - self.y * params["R_lmn"] ** 3

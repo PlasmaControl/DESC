@@ -8,7 +8,7 @@ from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer, setdefault
+from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -65,7 +65,7 @@ class BootstrapRedlConsistency(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -91,20 +91,17 @@ class BootstrapRedlConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
@@ -191,7 +188,7 @@ class BootstrapRedlConsistency(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"] * scales["J"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute the bootstrap current self-consistency objective.

@@ -46,7 +46,6 @@ from desc.optimize import (
     optimizers,
     sgd,
 )
-from desc.utils import setdefault
 
 
 @jit
@@ -332,13 +331,12 @@ def test_overstepping():
         _print_value_fmt = "Dummy: {:.3e}"
         _units = "(Foo)"
 
-        def build(self, eq, *args, **kwargs):
-            self.things = setdefault(eq, self.things)
+        def build(self, *args, **kwargs):
             eq = self.things[0]
             # objective = just shift x by a lil bit
             self._x0 = {key: val + 1e-6 for key, val in eq.params_dict.items()}
             self._dim_f = sum(np.asarray(x).size for x in self._x0.values())
-            super().build(eq)
+            super().build()
 
         def compute(self, params, constants=None):
             x = jnp.concatenate(

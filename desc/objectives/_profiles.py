@@ -5,7 +5,7 @@ import numpy as np
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer, setdefault
+from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -51,7 +51,7 @@ class Pressure(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -73,20 +73,17 @@ class Pressure(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
@@ -125,7 +122,7 @@ class Pressure(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["p"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute the quantity.
@@ -195,7 +192,7 @@ class RotationalTransform(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -217,20 +214,17 @@ class RotationalTransform(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
@@ -267,7 +261,7 @@ class RotationalTransform(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute the quantity.
@@ -339,7 +333,7 @@ class Shear(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -361,20 +355,17 @@ class Shear(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
@@ -411,7 +402,7 @@ class Shear(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute the quantity.
@@ -481,7 +472,7 @@ class ToroidalCurrent(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -503,20 +494,17 @@ class ToroidalCurrent(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
@@ -557,7 +545,7 @@ class ToroidalCurrent(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["I"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute the quantity.

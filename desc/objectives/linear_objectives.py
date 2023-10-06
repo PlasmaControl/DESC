@@ -81,7 +81,7 @@ class FixParameter(_Objective):
 
     def __init__(
         self,
-        thing=None,
+        thing,
         params=None,
         indices=True,
         target=None,
@@ -105,7 +105,7 @@ class FixParameter(_Objective):
             name=name,
         )
 
-    def build(self, thing=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -116,7 +116,6 @@ class FixParameter(_Objective):
             Level of output.
 
         """
-        self.things = setdefault(thing, self.things)
         thing = self.things[0]
         params = setdefault(self._params, thing.optimizable_params)
 
@@ -159,7 +158,7 @@ class FixParameter(_Objective):
         self._dim_f = sum(t.size for t in self._indices.values())
         self.target = jnp.concatenate([target[par] for par in params])
 
-        super().build(things=thing, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute fixed degree of freedom errors.
@@ -208,7 +207,7 @@ class BoundaryRSelfConsistency(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         surface_label=None,
         name="self_consistency R",
     ):
@@ -224,20 +223,17 @@ class BoundaryRSelfConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         modes = eq.surface.R_basis.modes
         idx = np.arange(eq.surface.R_basis.num_modes)
@@ -258,7 +254,7 @@ class BoundaryRSelfConsistency(_Objective):
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute boundary R self-consistency errors.
@@ -308,7 +304,7 @@ class BoundaryZSelfConsistency(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         surface_label=None,
         name="self_consistency Z",
     ):
@@ -324,7 +320,7 @@ class BoundaryZSelfConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -337,7 +333,6 @@ class BoundaryZSelfConsistency(_Objective):
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         modes = eq.surface.Z_basis.modes
         idx = np.arange(eq.surface.Z_basis.num_modes)
@@ -358,7 +353,7 @@ class BoundaryZSelfConsistency(_Objective):
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute boundary Z self-consistency errors.
@@ -405,7 +400,7 @@ class AxisRSelfConsistency(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         name="axis R self consistency",
     ):
 
@@ -418,20 +413,17 @@ class AxisRSelfConsistency(_Objective):
             normalize_target=False,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         ns = eq.axis.R_basis.modes[:, 2]
         self._dim_f = ns.size
@@ -447,7 +439,7 @@ class AxisRSelfConsistency(_Objective):
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute axis R self-consistency errors.
@@ -495,7 +487,7 @@ class AxisZSelfConsistency(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         name="axis Z self consistency",
     ):
 
@@ -508,20 +500,17 @@ class AxisZSelfConsistency(_Objective):
             normalize_target=False,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         ns = eq.axis.Z_basis.modes[:, 2]
         self._dim_f = ns.size
@@ -537,7 +526,7 @@ class AxisZSelfConsistency(_Objective):
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute axis Z self-consistency errors.
@@ -608,7 +597,7 @@ class FixBoundaryR(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -632,20 +621,17 @@ class FixBoundaryR(_FixedObjective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
@@ -701,7 +687,7 @@ class FixBoundaryR(_FixedObjective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute boundary R errors.
@@ -768,7 +754,7 @@ class FixBoundaryZ(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -792,20 +778,17 @@ class FixBoundaryZ(_FixedObjective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
@@ -861,7 +844,7 @@ class FixBoundaryZ(_FixedObjective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute boundary Z errors.
@@ -906,7 +889,7 @@ class FixLambdaGauge(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         name="lambda gauge",
     ):
 
@@ -920,20 +903,17 @@ class FixLambdaGauge(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         L_basis = eq.L_basis
 
@@ -962,7 +942,7 @@ class FixLambdaGauge(_Objective):
 
         self._dim_f = self._A.shape[0]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute lambda gauge freedom errors.
@@ -1002,24 +982,21 @@ class FixThetaSFL(_Objective):
     _units = "(radians)"
     _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
-    def __init__(self, eq=None, name="Theta SFL"):
+    def __init__(self, eq, name="Theta SFL"):
 
         super().__init__(things=eq, target=0, weight=1, name=name)
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         idx = np.arange(eq.L_basis.num_modes)
         modes_idx = idx
@@ -1029,7 +1006,7 @@ class FixThetaSFL(_Objective):
 
         self.target = np.zeros_like(modes_idx)
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute Theta SFL errors.
@@ -1089,7 +1066,7 @@ class FixAxisR(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -1111,20 +1088,17 @@ class FixAxisR(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
 
         if self._modes is False or self._modes is None:  # no modes
@@ -1181,7 +1155,7 @@ class FixAxisR(_FixedObjective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute axis R errors.
@@ -1241,7 +1215,7 @@ class FixAxisZ(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -1263,20 +1237,17 @@ class FixAxisZ(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
 
         if self._modes is False or self._modes is None:  # no modes
@@ -1333,7 +1304,7 @@ class FixAxisZ(_FixedObjective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute axis Z errors.
@@ -1394,7 +1365,7 @@ class FixModeR(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -1420,20 +1391,17 @@ class FixModeR(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
@@ -1475,7 +1443,7 @@ class FixModeR(_FixedObjective):
                 )
             self.target = self._target_from_user[modes_idx]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute Fixed mode R errors.
@@ -1536,7 +1504,7 @@ class FixModeZ(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -1562,20 +1530,17 @@ class FixModeZ(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
@@ -1617,7 +1582,7 @@ class FixModeZ(_FixedObjective):
                 )
             self.target = self._target_from_user[modes_idx]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute Fixed mode Z errors.
@@ -1682,7 +1647,7 @@ class FixSumModesR(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -1717,20 +1682,17 @@ class FixSumModesR(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
@@ -1777,7 +1739,7 @@ class FixSumModesR(_FixedObjective):
         if self._target_from_user is None:
             self.target = np.dot(sum_weights.T, eq.R_lmn[self._idx])
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute Sum mode R errors.
@@ -1842,7 +1804,7 @@ class FixSumModesZ(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -1877,20 +1839,17 @@ class FixSumModesZ(_FixedObjective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
@@ -1938,7 +1897,7 @@ class FixSumModesZ(_FixedObjective):
         if self._target_from_user is None:
             self.target = np.dot(sum_weights.T, eq.Z_lmn[self._idx])
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute Sum mode Z errors.
@@ -2000,7 +1959,7 @@ class _FixProfile(_FixedObjective, ABC):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -2024,7 +1983,7 @@ class _FixProfile(_FixedObjective, ABC):
             name=name,
         )
 
-    def build(self, eq=None, profile=None, use_jit=False, verbose=1):
+    def build(self, eq, profile, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2039,7 +1998,6 @@ class _FixProfile(_FixedObjective, ABC):
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._profile is None or self._profile.params.size != eq.L + 1:
             self._profile = profile
@@ -2057,7 +2015,7 @@ class _FixProfile(_FixedObjective, ABC):
         if self._target_from_user is None:
             self.target = self._profile.params[self._idx]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
 
 class FixPressure(_FixProfile):
@@ -2101,7 +2059,7 @@ class FixPressure(_FixProfile):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -2124,20 +2082,17 @@ class FixPressure(_FixProfile):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if eq.pressure is None:
             raise RuntimeError(
@@ -2211,7 +2166,7 @@ class FixAnisotropy(_FixProfile):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -2234,20 +2189,17 @@ class FixAnisotropy(_FixProfile):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if eq.anisotropy is None:
             raise RuntimeError(
@@ -2319,7 +2271,7 @@ class FixIota(_FixProfile):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -2342,20 +2294,17 @@ class FixIota(_FixProfile):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if eq.iota is None:
             raise RuntimeError(
@@ -2426,7 +2375,7 @@ class FixCurrent(_FixProfile):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -2449,20 +2398,17 @@ class FixCurrent(_FixProfile):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if eq.current is None:
             raise RuntimeError(
@@ -2536,7 +2482,7 @@ class FixElectronTemperature(_FixProfile):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -2559,20 +2505,17 @@ class FixElectronTemperature(_FixProfile):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if eq.electron_temperature is None:
             raise RuntimeError(
@@ -2646,7 +2589,7 @@ class FixElectronDensity(_FixProfile):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -2669,20 +2612,17 @@ class FixElectronDensity(_FixProfile):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if eq.electron_density is None:
             raise RuntimeError(
@@ -2756,7 +2696,7 @@ class FixIonTemperature(_FixProfile):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -2779,20 +2719,17 @@ class FixIonTemperature(_FixProfile):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if eq.ion_temperature is None:
             raise RuntimeError(
@@ -2867,7 +2804,7 @@ class FixAtomicNumber(_FixProfile):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -2890,20 +2827,17 @@ class FixAtomicNumber(_FixProfile):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if eq.atomic_number is None:
             raise RuntimeError(
@@ -2966,7 +2900,7 @@ class FixPsi(_FixedObjective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -2985,20 +2919,17 @@ class FixPsi(_FixedObjective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         self._dim_f = 1
 
@@ -3009,7 +2940,7 @@ class FixPsi(_FixedObjective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["Psi"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute fixed-Psi error.

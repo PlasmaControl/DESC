@@ -76,7 +76,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln, logsumexp
-    from jax.tree_util import register_pytree_node, tree_flatten
+    from jax.tree_util import register_pytree_node
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -127,16 +127,10 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         Useful for turning a list of objects into something you can feed to a
         vmapped function.
         """
-        leaves_list = []
-        treedef_list = []
-        for tree in trees:
-            leaves, treedef = tree_flatten(tree)
-            leaves_list.append(leaves)
-            treedef_list.append(treedef)
+        # from https://gist.github.com/willwhitney/dd89cac6a5b771ccff18b06b33372c75
+        import jax.tree_util as jtu
 
-        grouped_leaves = zip(*leaves_list)
-        result_leaves = [jnp.stack(l) for l in grouped_leaves]
-        return treedef_list[0].unflatten(result_leaves)
+        return jtu.tree_map(lambda *v: jnp.stack(v), *trees)
 
     @jit
     def tree_unstack(tree):
@@ -147,16 +141,16 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         [((a[0], b[0]), c[0]), ..., ((a[k], b[k]), c[k])]
         Useful for turning the output of a vmapped function into normal objects.
         """
-        leaves, treedef = tree_flatten(tree)
-        n_trees = leaves[0].shape[0]
-        new_leaves = [[] for _ in range(n_trees)]
-        for leaf in leaves:
-            for i in range(n_trees):
-                new_leaves[i].append(leaf[i])
-        new_trees = [treedef.unflatten(l) for l in new_leaves]
-        return new_trees
+        # from https://gist.github.com/willwhitney/dd89cac6a5b771ccff18b06b33372c75
+        import jax.tree_util as jtu
 
-else:
+        leaves, treedef = jtu.tree_flatten(tree)
+        return [treedef.unflatten(leaf) for leaf in zip(*leaves)]
+
+
+# we can't really test the numpy backend stuff in automated testing, so we ignore it
+# for coverage purposes
+else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
@@ -168,16 +162,12 @@ else:
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
 
-    def tree_flatten(*args, **kwargs):
-        """Flatten a pytree for numpy backend."""
-        raise NotImplementedError
-
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""
         raise NotImplementedError
 
     def tree_unstack(*args, **kwargs):
-        """Untack pytree for numpy backend."""
+        """Unstack pytree for numpy backend."""
         raise NotImplementedError
 
     def register_pytree_node(foo, *args):

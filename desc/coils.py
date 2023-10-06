@@ -203,14 +203,14 @@ class _Coil(_MagneticField, ABC):
         )
 
     def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
-        """Convert Curve to FourierXYZCurve representation.
+        """Convert coil to FourierXYZCoil representation.
 
         Parameters
         ----------
         N : int
             Fourier resolution of the new X,Y,Z representation.
         grid : Grid, int or None
-            Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
             If an integer, uses that many equally spaced points.
         s : ndarray
             arbitrary curve parameter to use for the fitting. if None, defaults to
@@ -800,28 +800,14 @@ class CoilSet(_Coil, MutableSequence):
         """
         if params is None:
             params = [get_params(names, coil) for coil in self]
-
+        if data is None:
+            data = [{}] * len(self)
         # if user supplied initial data for each coil we also need to vmap over that.
-        if data:
-
-            data = vmap(
-                lambda d, x: self[0].compute(
-                    names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
-                )
-            )(tree_stack(data), tree_stack(params))
-
-        else:
-
-            data = vmap(
-                lambda x: self[0].compute(
-                    names,
-                    grid=grid,
-                    transforms=transforms,
-                    data=data,
-                    params=x,
-                    **kwargs,
-                )
-            )(tree_stack(params))
+        data = vmap(
+            lambda d, x: self[0].compute(
+                names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
+            )
+        )(tree_stack(data), tree_stack(params))
 
         return tree_unstack(data)
 
@@ -1054,16 +1040,12 @@ class CoilSet(_Coil, MutableSequence):
         for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
             coords = np.genfromtxt(lines[start + 1 : end])
 
-            tempx = np.append(coords[:, 0], np.array([coords[0, 0]]))
-            tempy = np.append(coords[:, 1], np.array([coords[0, 1]]))
-            tempz = np.append(coords[:, 2], np.array([coords[0, 2]]))
-
             coils.append(
                 SplineXYZCoil(
                     coords[:, -1][0],
-                    tempx,
-                    tempy,
-                    tempz,
+                    coords[:, 0],
+                    coords[:, 1],
+                    coords[:, 2],
                     method=method,
                     name=names[i],
                 )
@@ -1135,7 +1117,7 @@ class CoilSet(_Coil, MutableSequence):
         if hasattr(grid, "endpoint"):
             endpoint = grid.endpoint
         elif isinstance(grid, numbers.Integral):
-            endpoint = True  # if int, will create a grid w/ endpoint=True in compute
+            endpoint = False  # if int, will create a grid w/ endpoint=False in compute
         for i in range(int(len(coils))):
             coil = coils[i]
             coords = coil.compute("x", basis="xyz", grid=grid)["x"]
@@ -1187,6 +1169,66 @@ class CoilSet(_Coil, MutableSequence):
             lines[real_end_ind] = lines[real_end_ind].strip("\n") + f" {name}\n"
         with open(coilsFilename, "w") as f:
             f.writelines(lines)
+
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
+        """Convert all coils to FourierXYZCoil representation.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
+            If an integer, uses that many equally spaced points.
+        s : ndarray
+            arbitrary curve parameter to use for the fitting. if None, defaults to
+            normalized arclength
+        name : str
+            name for the new CoilSet
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by Fourier series for X,Y,Z.
+
+        """
+        coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
+        return self.__class__(*coils, name=name)
+
+    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+        """Convert all coils to SplineXYZCoil.
+
+        Parameters
+        ----------
+        knots : ndarray
+            arbitrary curve parameter values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+            Coil.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for the new CoilSet
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by a spline for X,Y,Z.
+
+        """
+        coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
+        return self.__class__(*coils, name=name)
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):

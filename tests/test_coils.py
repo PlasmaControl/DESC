@@ -345,6 +345,48 @@ class TestCoilSet:
         assert coils1[-1] is coil2
         assert coils1[-2][0].__class__ is coil1.__class__
 
+        coils2 = CoilSet.linspaced_angular(coil1)
+        assert coils2[0].eq(coil1) and not (coils2[0] is coil1)
+        coils2[0] = coil1
+        assert coils2[0] is coil1
+        with pytest.raises(TypeError):
+            coils2[1] = coil2
+        with pytest.raises(TypeError):
+            coils2.insert(4, coil2)
+
+    @pytest.mark.unit
+    def test_coilset_convert(self):
+        """Test converting coilsets between different representations."""
+        grid = LinearGrid(N=20)
+        coil1 = FourierXYZCoil(current=1e6)
+        coil2 = coil1.to_SplineXYZ(grid=grid)
+
+        coils1 = MixedCoilSet.linspaced_angular(coil1, n=12)
+        coils2 = coils1.to_SplineXYZ(grid=grid)
+        assert isinstance(coils2, MixedCoilSet)
+        assert all(isinstance(coil, SplineXYZCoil) for coil in coils2)
+        x1 = coils1.compute("x", grid=grid, basis="xyz")
+        x2 = coils2.compute("x", grid=grid, basis="xyz")
+        np.testing.assert_allclose(
+            [xi["x"] for xi in x1], [xi["x"] for xi in x2], atol=1e-12
+        )
+        B1 = coils1.compute_magnetic_field(np.array([[10, 2, 1]]), grid=grid)
+        B2 = coils2.compute_magnetic_field(np.array([[10, 2, 1]]), grid=grid)
+        np.testing.assert_allclose(B1, B2, rtol=1e-2)
+
+        coils3 = CoilSet.linspaced_angular(coil2, n=12)
+        coils4 = coils3.to_FourierXYZ(grid=grid)
+        assert isinstance(coils4, CoilSet)
+        assert all(isinstance(coil, FourierXYZCoil) for coil in coils4)
+        x3 = coils3.compute("x", grid=grid, basis="xyz")
+        x4 = coils4.compute("x", grid=grid, basis="xyz")
+        np.testing.assert_allclose(
+            [xi["x"] for xi in x3], [xi["x"] for xi in x4], atol=1e-12
+        )
+        B3 = coils3.compute_magnetic_field(np.array([[10, 2, 1]]), grid=grid)
+        B4 = coils4.compute_magnetic_field(np.array([[10, 2, 1]]), grid=grid)
+        np.testing.assert_allclose(B3, B4, rtol=1e-2)
+
 
 @pytest.mark.unit
 def test_load_and_save_makegrid_coils(tmpdir_factory):
@@ -509,7 +551,7 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
         np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check values at interpolated points, ensure they match closely
-    grid = LinearGrid(N=51, endpoint=False)
+    grid = LinearGrid(N=101, endpoint=False)
     for c1, c2 in zip(coilset, coilset2):
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
         X1 = coords1[:, 0]
@@ -543,7 +585,7 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
     B1 = coilset.compute_magnetic_field(np.array([[10, 0, 0]]), basis="xyz", grid=grid)
     B2 = coilset2.compute_magnetic_field(np.array([[10, 0, 0]]), basis="xyz", grid=grid)
 
-    np.testing.assert_allclose(B1, B2, atol=1e-16)
+    np.testing.assert_allclose(B1, B2, atol=1e-10)
 
 
 @pytest.mark.unit

@@ -206,11 +206,10 @@ def test_2d_lambda(DSHAPE_current):
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_B(DSHAPE_current):
     """Test 3d plot of toroidal field."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_3d(eq, "B^zeta", return_data=True)
+    fig, data = plot_3d(eq, "B^zeta", return_data=True)
     assert "X" in data.keys()
     assert "Y" in data.keys()
     assert "Z" in data.keys()
@@ -222,45 +221,41 @@ def test_3d_B(DSHAPE_current):
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_J(DSHAPE_current):
     """Test 3d plotting of poloidal current."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=1.0, theta=100, zeta=100)
-    fig, ax = plot_3d(eq, "J^theta", grid=grid)
+    fig = plot_3d(eq, "J^theta", grid=grid)
     return fig
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_tz(DSHAPE_current):
     """Test 3d plot of force on interior surface."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=100)
-    fig, ax = plot_3d(eq, "|F|", log=True, grid=grid)
+    fig = plot_3d(eq, "|F|", log=True, grid=grid)
     return fig
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_rz(DSHAPE_current):
     """Test 3d plotting of pressure on toroidal cross section."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=0.0, zeta=100)
-    fig, ax = plot_3d(eq, "p", grid=grid)
+    fig = plot_3d(eq, "p", grid=grid)
     return fig
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_rt(DSHAPE_current):
     """Test 3d plotting of flux on poloidal ribbon."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)
-    fig, ax = plot_3d(eq, "psi", grid=grid)
+    fig = plot_3d(eq, "psi", grid=grid)
     return fig
 
 
@@ -874,7 +869,6 @@ def test_plot_qs_error():
 
 
 @pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_plot_coils():
     """Test 3d plotting of coils with currents."""
     N = 48
@@ -885,7 +879,7 @@ def test_plot_coils():
     coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
     coils.grid = 100
     coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)
-    fig, ax, data = plot_coils(coils2, return_data=True)
+    fig, data = plot_coils(coils2, return_data=True)
 
     def flatten_coils(coilset):
         if hasattr(coilset, "__len__"):

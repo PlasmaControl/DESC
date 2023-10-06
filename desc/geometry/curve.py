@@ -231,6 +231,21 @@ class FourierRZCurve(Curve):
         return curve
 
 
+def _unclose_curve(X, Y, Z):
+    if np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14):
+        closedX, closedY, closedZ = X.copy(), Y.copy(), Z.copy()
+        X, Y, Z = X[:-1], Y[:-1], Z[:-1]
+        flag = True
+    else:
+        closedX, closedY, closedZ = (
+            np.append(X, X[0]),
+            np.append(Y, Y[0]),
+            np.append(Z, Z[0]),
+        )
+        flag = False
+    return X, Y, Z, closedX, closedY, closedZ, flag
+
+
 class FourierXYZCurve(Curve):
     """Curve parameterized by Fourier series for X,Y,Z in terms of arbitrary angle phi.
 
@@ -431,15 +446,8 @@ class FourierXYZCurve(Curve):
         Y = coords_xyz[:, 1]
         Z = coords_xyz[:, 2]
 
-        if np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14):
-            closedX, closedY, closedZ = X.copy(), Y.copy(), Z.copy()
-            X, Y, Z = X[:-1], Y[:-1], Z[:-1]
-        else:
-            closedX, closedY, closedZ = (
-                np.append(X, X[0]),
-                np.append(Y, Y[0]),
-                np.append(Z, Z[0]),
-            )
+        X, Y, Z, closedX, closedY, closedZ, _ = _unclose_curve(X, Y, Z)
+
         if s is None:
             # find equal arclength angle-like variable, and use that as theta
             # L_along_curve / L = theta / 2pi
@@ -651,17 +659,8 @@ class SplineXYZCurve(Curve):
         X, Y, Z = np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)
         X, Y, Z = np.broadcast_arrays(X, Y, Z)
 
-        if np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14):
-            closed = True
-            closedX, closedY, closedZ = X.copy(), Y.copy(), Z.copy()
-            X, Y, Z = X[:-1], Y[:-1], Z[:-1]
-        else:
-            closed = False
-            closedX, closedY, closedZ = (
-                np.append(X, X[0]),
-                np.append(Y, Y[0]),
-                np.append(Z, Z[0]),
-            )
+        X, Y, Z, closedX, closedY, closedZ, closed_flag = _unclose_curve(X, Y, Z)
+
         self._X = X
         self._Y = Y
         self._Z = Z
@@ -685,8 +684,7 @@ class SplineXYZCurve(Curve):
             )
             errorif(knots[0] < 0, ValueError, "knots must lie in [0, 2pi]")
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")
-            if closed:
-                knots = knots[:-1]
+            knots = knots[:-1] if closed_flag else knots
 
         self._knots = knots
         self.method = method
@@ -766,7 +764,7 @@ class SplineXYZCurve(Curve):
 
     @property
     def method(self):
-        """Method of interpolation to usee."""
+        """Method of interpolation to use."""
         return self._method
 
     @method.setter

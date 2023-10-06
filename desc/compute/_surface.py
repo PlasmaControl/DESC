@@ -1,7 +1,7 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz, rpz2xyz_vec
+from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz
 
 
 @register_compute_fun(
@@ -31,6 +31,73 @@ def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     if kwargs.get("basis", "rpz").lower() == "xyz":
         coords = rpz2xyz(coords)
     data["x"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="R",
+    label="R",
+    units="m",
+    units_long="meters",
+    description="Cylindrical radial position along surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["x"],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    basis="basis",
+)
+def _R_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords = xyz2rpz(coords)
+    data["R"] = coords[:, 0]
+    return data
+
+
+@register_compute_fun(
+    name="phi",
+    label="\\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal phi position along surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["x"],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    basis="basis",
+)
+def _phi_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords = xyz2rpz(coords)
+    data["phi"] = coords[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="Z",
+    label="Z",
+    units="m",
+    units_long="meters",
+    description="Cylindrical vertical position along surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["x"],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+)
+def _Z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    data["Z"] = data["x"][:, 2]
     return data
 
 

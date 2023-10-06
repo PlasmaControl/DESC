@@ -6,6 +6,16 @@ rotational transform contributions from the toroidal current and background fiel
 - Adds ability to compute equilibria with anisotropic pressure. This includes a new
 profile, ``Equilibrium.anisotropy``, new compute quantity ``F_anisotropic``, and a new
 objective ``ForceBalanceAnisotropic``.
+- `plot_3d` and `plot_coils` have been updated to use Plotly as a backend instead of
+Matplotlib, since Matplotlib isn't great for 3d plots, especially ones with multiple
+overlapping objects in the scene. Main API differences:
+    * Plotly doesn't have "axes" like Matplotlib does, just figures. So the `ax`
+    argument has been replaced by `fig` for `plot_3d` and `plot_coils`, and they no
+    longer return `ax`.
+    * Names of colormaps, line patterns, etc are different, so use caution when
+    specifying those using `kwargs`. Thankfully the error messages Plotly generates are
+    usually pretty informative and list the available options.
+
 
 v0.10.1
 -------

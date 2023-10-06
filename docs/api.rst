@@ -171,6 +171,7 @@ Objective Functions
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
+    desc.objectives.ForceBalanceAnisotropic
     desc.objectives.GenericObjective
     desc.objectives.get_equilibrium_objective
     desc.objectives.get_fixed_axis_constraints

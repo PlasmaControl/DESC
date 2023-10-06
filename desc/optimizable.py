@@ -40,7 +40,7 @@ class Optimizable(ABC):
     def params_dict(self):
         """dict: dictionary of arrays of optimizable parameters."""
         return {
-            key: jnp.atleast_1d(jnp.asarray(getattr(self, key)).copy())
+            key: jnp.atleast_1d(getattr(self, key)).copy()
             for key in self.optimizable_params
         }
 

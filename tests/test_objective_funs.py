@@ -24,6 +24,7 @@ from desc.objectives import (
     Elongation,
     Energy,
     ForceBalance,
+    ForceBalanceAnisotropic,
     GenericObjective,
     HelicalForceBalance,
     Isodynamicity,
@@ -433,9 +434,9 @@ def test_rejit():
             self.y = y
             super().__init__(things=eq, target=target, weight=weight, name=name)
 
-        def build(self, eq=None, use_jit=True, verbose=1):
+        def build(self, use_jit=True, verbose=1):
             self._dim_f = 1
-            super().build(eq, use_jit, verbose)
+            super().build(use_jit, verbose)
 
         def compute(self, params, constants=None):
             return 200 + self.target * self.weight - self.y * params["R_lmn"] ** 3
@@ -1076,6 +1077,21 @@ def test_compute_scalar_resolution():  # noqa: C901
             sym=eq.sym,
         )
         obj = ObjectiveFunction(ForceBalance(eq=eq, grid=grid), verbose=0)
+        obj.build(verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[-1], rtol=2e-2)
+
+    # ForceBalanceAnisotropic
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(
+            L=int(eq.L * res),
+            M=int(eq.M * res),
+            N=int(eq.N * res),
+            NFP=eq.NFP,
+            sym=eq.sym,
+        )
+        obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)

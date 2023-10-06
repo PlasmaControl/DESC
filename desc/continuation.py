@@ -10,7 +10,7 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.optimize import Optimizer
 from desc.perturbations import get_deltas
-from desc.utils import Timer
+from desc.utils import Timer, errorif
 
 MIN_MRES_STEP = 1
 MIN_PRES_STEP = 0.1
@@ -85,7 +85,7 @@ def _solve_axisym(
 
         if ii > 0:
             eqi = eqfam[-1].copy()
-            # increase resolution of vacuum soln
+            # increase resolution of vacuum solution
             Mi = min(Mi + mres_step, M)
             Li = int(np.ceil(L / M) * Mi)
             L_gridi = np.ceil(L_grid / L * Li).astype(int)
@@ -510,11 +510,16 @@ def solve_continuation_automatic(  # noqa: C901
         final desired configuration,
 
     """
-    if eq.electron_temperature is not None:
-        raise NotImplementedError(
-            "Continuation method with kinetic profiles is not currently supported"
-        )
-
+    errorif(
+        eq.electron_temperature is not None,
+        NotImplementedError,
+        "Continuation method with kinetic profiles is not currently supported",
+    )
+    errorif(
+        eq.anisotropy is not None,
+        NotImplementedError,
+        "Continuation method with anisotropic pressure is not currently supported",
+    )
     timer = Timer()
     timer.start("Total time")
 
@@ -636,10 +641,16 @@ def solve_continuation(  # noqa: C901
         final desired configuration,
 
     """
-    if not all([eq.electron_temperature is None for eq in eqfam]):
-        raise NotImplementedError(
-            "Continuation method with kinetic profiles is not currently supported"
-        )
+    errorif(
+        not all([eq.electron_temperature is None for eq in eqfam]),
+        NotImplementedError,
+        "Continuation method with kinetic profiles is not currently supported",
+    )
+    errorif(
+        not all([eq.anisotropy is None for eq in eqfam]),
+        NotImplementedError,
+        "Continuation method with anisotropic pressure is not currently supported",
+    )
 
     timer = Timer()
     timer.start("Total time")

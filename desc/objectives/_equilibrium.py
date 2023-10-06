@@ -8,7 +8,7 @@ from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import ConcentricGrid, QuadratureGrid
-from desc.utils import Timer, setdefault
+from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -66,7 +66,7 @@ class ForceBalance(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -88,20 +88,17 @@ class ForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
@@ -160,7 +157,7 @@ class ForceBalance(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["f"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute MHD force balance errors.
@@ -192,6 +189,176 @@ class ForceBalance(_Objective):
         fb = data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
 
         return jnp.concatenate([fr, fb])
+
+
+class ForceBalanceAnisotropic(_Objective):
+    """Force balance for anisotropic pressure equilibria.
+
+    Solves for F = J × B − ∇ ⋅ Π = 0
+
+    Where Π is the anisotropic pressure tensor of the form Π = (p_∥ - p_⊥)𝐛𝐛 + p_⊥𝕀
+
+    Expanded out, this gives:
+
+    F =  (1−βₐ)J × B − 1/μ₀ (B ⋅ ∇ βₐ)B − βₐ ∇(B²/2μ₀) − ∇(p_⊥)
+
+    where βₐ is the anisotropy term: βₐ = μ₀ (p_∥ − p_⊥)/B²
+
+    For this objective, the standard ``Equilibrium.pressure`` profile is used for p_⊥,
+    and ``Equilibrium.anisotropy`` is used for βₐ. To get fully 3D anisotropy, these
+    should be ``FourierZernikeProfile``, not the standard ``PowerSeriesProfile`` (which
+    is only a function of rho).
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _units = "(N)"
+    _coordinates = "rtz"
+    _equilibrium = True
+    _print_value_fmt = "Anisotropic force error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="force-anisotropic",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+        else:
+            grid = self._grid
+
+        self._dim_f = 3 * grid.num_nodes
+        self._data_keys = ["F_anisotropic", "sqrt(g)"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["f"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute MHD force balance errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            MHD force balance error at each node (N).
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        f = (data["sqrt(g)"] * data["F_anisotropic"].T).T
+
+        return f.flatten(order="F")  # to line up with quad weights
 
 
 class RadialForceBalance(_Objective):
@@ -234,7 +401,7 @@ class RadialForceBalance(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -256,20 +423,17 @@ class RadialForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
@@ -322,7 +486,7 @@ class RadialForceBalance(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["f"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute radial MHD force balance errors.
@@ -395,7 +559,7 @@ class HelicalForceBalance(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -417,20 +581,17 @@ class HelicalForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
@@ -483,7 +644,7 @@ class HelicalForceBalance(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["f"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute helical MHD force balance errors.
@@ -556,7 +717,7 @@ class Energy(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -580,20 +741,17 @@ class Energy(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             if eq.node_pattern in [
@@ -656,7 +814,7 @@ class Energy(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["W"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute MHD energy.
@@ -735,7 +893,7 @@ class CurrentDensity(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -757,20 +915,17 @@ class CurrentDensity(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
@@ -823,7 +978,7 @@ class CurrentDensity(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["J"] * scales["V"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute toroidal current density.

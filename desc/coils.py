@@ -52,7 +52,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
     @current.setter
     def current(self, new):
         assert jnp.isscalar(new) or new.size == 1
-        self._current = new
+        self._current = float(new)
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.

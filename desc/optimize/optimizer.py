@@ -158,9 +158,6 @@ class Optimizer(IOAble):
         options = {} if options is None else options
         wrapper, method = _parse_method(self.method)
 
-        if not isinstance(constraints, tuple) or not isinstance(constraints, list):
-            constraints = (constraints,)
-
         linear_constraints, nonlinear_constraint = _parse_constraints(constraints)
         objective, nonlinear_constraint = _maybe_wrap_nonlinear_constraints(
             eq, objective, nonlinear_constraint, self.method, options

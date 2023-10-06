@@ -8,7 +8,7 @@ from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.utils import Timer, setdefault
+from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -51,7 +51,7 @@ class AspectRatio(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -73,20 +73,17 @@ class AspectRatio(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
@@ -112,7 +109,7 @@ class AspectRatio(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute aspect ratio.
@@ -179,7 +176,7 @@ class Elongation(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -201,20 +198,17 @@ class Elongation(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
@@ -240,7 +234,7 @@ class Elongation(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute elongation.
@@ -306,7 +300,7 @@ class Volume(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -328,20 +322,17 @@ class Volume(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
@@ -371,7 +362,7 @@ class Volume(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["V"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute plasma volume.
@@ -424,12 +415,10 @@ class PlasmaVesselDistance(_Objective):
 
     Parameters
     ----------
-    surface : Surface
-        Bounding surface to penalize distance to.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    surface : Surface
+        Bounding surface to penalize distance to.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -468,8 +457,8 @@ class PlasmaVesselDistance(_Objective):
 
     def __init__(
         self,
+        eq,
         surface,
-        eq=None,
         target=None,
         bounds=None,
         weight=1,
@@ -498,13 +487,11 @@ class PlasmaVesselDistance(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -567,7 +554,7 @@ class PlasmaVesselDistance(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, equil_params, surface_params, constants=None):
         """Compute plasma-surface distance.
@@ -657,7 +644,7 @@ class MeanCurvature(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -679,20 +666,17 @@ class MeanCurvature(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
@@ -722,7 +706,7 @@ class MeanCurvature(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["a"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute mean curvature.
@@ -797,7 +781,7 @@ class PrincipalCurvature(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -819,20 +803,17 @@ class PrincipalCurvature(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
@@ -862,7 +843,7 @@ class PrincipalCurvature(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["a"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute max absolute principal curvature.
@@ -934,7 +915,7 @@ class BScaleLength(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -956,20 +937,17 @@ class BScaleLength(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(eq, self.things)
         eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
@@ -999,7 +977,7 @@ class BScaleLength(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["R0"]
 
-        super().build(things=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute magnetic field scale length.

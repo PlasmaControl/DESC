@@ -26,6 +26,7 @@ from desc.objectives import (
     FixPressure,
     FixPsi,
     ForceBalance,
+    ForceBalanceAnisotropic,
     HelicalForceBalance,
     ObjectiveFunction,
     PlasmaVesselDistance,
@@ -37,7 +38,7 @@ from desc.objectives import (
     get_NAE_constraints,
 )
 from desc.optimize import Optimizer
-from desc.profiles import PowerSeriesProfile
+from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
@@ -59,6 +60,27 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
 def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
+
+    np.testing.assert_allclose(rho_err, 0, atol=1e-3)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_SOLOVEV_anisotropic_results(SOLOVEV):
+    """Tests that SOLOVEV with zero anisotropic pressure gives the same result."""
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    # reset to start
+    eq.set_initial_guess()
+    # give it a zero anisotropy profile
+    anisotropy = FourierZernikeProfile()
+    anisotropy.change_resolution(eq.L, eq.M, eq.N)
+    eq.anisotropy = anisotropy
+
+    obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq))
+    constraints = get_fixed_boundary_constraints(eq=eq, anisotropy=True)
+    eq.solve(obj, constraints, verbose=3)
     rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
     np.testing.assert_allclose(rho_err, 0, atol=1e-3)
@@ -713,10 +735,8 @@ def test_multiobject_optimization():
     constraints = (
         ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
         FixPressure(eq=eq),
-        FixIota(eq=eq),
-        FixPsi(eq=eq),
-        FixParameter(surf, "Z_lmn", [-1]),
-        FixParameter(surf, "R_lmn", [0]),
+        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
+        FixParameter(eq, ["Psi", "i_l"]),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
     )
@@ -735,6 +755,8 @@ def test_multiobject_optimization():
     )
     assert surf.R_lmn[0] == 10
     assert surf.Z_lmn[-1] == -2
+    assert eq.Psi == 1.0
+    np.testing.assert_allclose(eq.i_l, [2, 0, 0])
 
 
 class TestGetExample:

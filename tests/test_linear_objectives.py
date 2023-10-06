@@ -725,36 +725,43 @@ def test_FixSumModes_passed_target_too_long():
     """Test Fixing Modes with more than a size-1 target."""
     # TODO: remove this test if FixSumModes is generalized
     # to accept multiple targets and sets of modes at a time
+    eq = Equilibrium(L=3, M=4)
     with pytest.raises(ValueError):
-        FixSumModesZ(modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]]))
+        FixSumModesZ(
+            eq, modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]])
+        )
     with pytest.raises(ValueError):
-        FixSumModesR(modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]]))
+        FixSumModesR(
+            eq, modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]])
+        )
 
 
 @pytest.mark.unit
 def test_FixMode_False_or_None_modes():
     """Test Fixing Modes without specifying modes or All modes."""
+    eq = Equilibrium(L=3, M=4)
     with pytest.raises(ValueError):
-        FixModeR(modes=False, target=np.array([[0, 1]]))
+        FixModeR(eq, modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixModeR(modes=None, target=np.array([[0, 1]]))
+        FixModeR(eq, modes=None, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixModeZ(modes=False, target=np.array([[0, 1]]))
+        FixModeZ(eq, modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixModeZ(modes=None, target=np.array([[0, 1]]))
+        FixModeZ(eq, modes=None, target=np.array([[0, 1]]))
 
 
 @pytest.mark.unit
 def test_FixSumModes_False_or_None_modes():
     """Test Fixing Sum Modes without specifying modes or All modes."""
+    eq = Equilibrium(L=3, M=4)
     with pytest.raises(ValueError):
-        FixSumModesZ(modes=False, target=np.array([[0, 1]]))
+        FixSumModesZ(eq, modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixSumModesZ(modes=None, target=np.array([[0, 1]]))
+        FixSumModesZ(eq, modes=None, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixSumModesR(modes=False, target=np.array([[0, 1]]))
+        FixSumModesR(eq, modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixSumModesR(modes=None, target=np.array([[0, 1]]))
+        FixSumModesR(eq, modes=None, target=np.array([[0, 1]]))
 
 
 def _is_any_instance(things, cls):
@@ -764,16 +771,15 @@ def _is_any_instance(things, cls):
 @pytest.mark.unit
 def test_FixAxis_util_correct_objectives():
     """Test util for fix axis constraints."""
-    with pytest.warns(FutureWarning):
-        cs = get_fixed_axis_constraints(iota=False)
+    eq = Equilibrium()
+    cs = get_fixed_axis_constraints(eq, iota=False)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)
     assert _is_any_instance(cs, FixPressure)
     assert _is_any_instance(cs, FixCurrent)
 
-    with pytest.warns(FutureWarning):
-        cs = get_fixed_axis_constraints(iota=True, kinetic=True)
+    cs = get_fixed_axis_constraints(eq, iota=True, kinetic=True)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)

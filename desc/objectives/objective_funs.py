@@ -1,6 +1,5 @@
 """Base classes for objectives."""
 
-import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -152,13 +151,11 @@ class ObjectiveFunction(IOAble):
             if obj._use_jit:
                 obj.jit()
 
-    def build(self, eq=None, use_jit=None, verbose=1):
+    def build(self, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -175,7 +172,7 @@ class ObjectiveFunction(IOAble):
         for objective in self.objectives:
             if verbose > 0:
                 print("Building objective: " + objective.name)
-            objective.build(eq, use_jit=self.use_jit, verbose=verbose)
+            objective.build(use_jit=self.use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
         if self._dim_f == 1:
             self._scalar = True
@@ -775,13 +772,6 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        if things is None:
-            warnings.warn(
-                FutureWarning(
-                    "Creating an Objective without specifying the Equilibrium to"
-                    " optimize is deprecated, in the future this will raise an error."
-                )
-            )
         self._things = flatten_list([things], True)
 
     def _set_derivatives(self):
@@ -862,7 +852,7 @@ class _Objective(IOAble, ABC):
             raise ValueError("len(weight) != dim_f")
 
     @abstractmethod
-    def build(self, things=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays."""
         self._check_dimensions()
         self._set_derivatives()

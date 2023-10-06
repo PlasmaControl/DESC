@@ -14,7 +14,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import zernike_radial, zernike_radial_coeffs
-from desc.utils import setdefault
+from desc.utils import errorif, setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -122,11 +122,17 @@ class FixParameter(_Objective):
 
         if not isinstance(params, (list, tuple)):
             params = [params]
-        assert all(par in thing.optimizable_params for par in params)
+        for par in params:
+            errorif(
+                par not in thing.optimizable_params,
+                ValueError,
+                f"parameter {par} not found in optimizable_parameters: "
+                + f"{thing.optimizable_params}",
+            )
         self._params = params
 
         # replace indices=True with actual indices
-        if self._indices and isinstance(self._indices, bool):
+        if isinstance(self._indices, bool) and self._indices:
             self._indices = [np.arange(thing.dimensions[par]) for par in self._params]
         # make sure its iterable if only a scalar was passed in
         if not isinstance(self._indices, (list, tuple)):
@@ -134,8 +140,14 @@ class FixParameter(_Objective):
         # replace idx=True with array of all indices, throwing an error if the length
         # of indices is different from number of params
         indices = {}
-        for idx, par in zip(self._indices, self._params, strict=True):
-            if idx and isinstance(idx, bool):
+        errorif(
+            len(self._params) != len(self._indices),
+            ValueError,
+            f"not enough indices ({len(self._indices)}) "
+            + f"for params ({len(self._params)})",
+        )
+        for idx, par in zip(self._indices, self._params):
+            if isinstance(idx, bool) and idx:
                 idx = np.arange(thing.dimensions[par])
             indices[par] = np.atleast_1d(idx)
         self._indices = indices
@@ -2235,7 +2247,8 @@ class FixAnisotropy(_FixProfile):
             Level of output.
 
         """
-        eq = eq or self._eq
+        self.things = setdefault(eq, self.things)
+        eq = self.things[0]
         if eq.anisotropy is None:
             raise RuntimeError(
                 "Attempting to fix anisotropy on an equilibrium with no "
@@ -2244,13 +2257,16 @@ class FixAnisotropy(_FixProfile):
         profile = eq.anisotropy
         super().build(eq, profile, use_jit, verbose)
 
-    def compute(self, a_lmn, **kwargs):
+    def compute(self, params, constants=None):
         """Compute fixed pressure profile errors.
 
         Parameters
         ----------
-        a_lmn : ndarray
-            parameters of the anisotropic pressure profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -2258,7 +2274,7 @@ class FixAnisotropy(_FixProfile):
             Fixed profile errors.
 
         """
-        return a_lmn[self._idx]
+        return params["a_lmn"][self._idx]
 
 
 class FixIota(_FixProfile):

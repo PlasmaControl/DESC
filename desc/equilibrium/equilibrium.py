@@ -406,6 +406,7 @@ class Equilibrium(IOAble, Optimizable):
             "ne_l",
             "Ti_l",
             "Zeff_l",
+            "a_lmn",
             "Ra_n",
             "Za_n",
             "Rb_lmn",
@@ -1274,6 +1275,7 @@ class Equilibrium(IOAble, Optimizable):
     def anisotropy(self, new):
         self._anisotropy = parse_profile(new, "anisotropy")
 
+    @optimizable_parameter
     @property
     def a_lmn(self):
         """ndarray: Coefficients of anisotropy profile."""

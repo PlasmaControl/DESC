@@ -735,10 +735,8 @@ def test_multiobject_optimization():
     constraints = (
         ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
         FixPressure(eq=eq),
-        FixIota(eq=eq),
-        FixPsi(eq=eq),
-        FixParameter(surf, "Z_lmn", [-1]),
-        FixParameter(surf, "R_lmn", [0]),
+        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
+        FixParameter(eq, ["Psi", "i_l"]),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
     )
@@ -757,6 +755,8 @@ def test_multiobject_optimization():
     )
     assert surf.R_lmn[0] == 10
     assert surf.Z_lmn[-1] == -2
+    assert eq.Psi == 1.0
+    np.testing.assert_allclose(eq.i_l, [2, 0, 0])
 
 
 class TestGetExample:

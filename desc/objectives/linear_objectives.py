@@ -21,7 +21,6 @@ from .objective_funs import _Objective
 
 
 class _FixedObjective(_Objective):
-
     _fixed = True
     _linear = True
     _scalar = False
@@ -91,7 +90,6 @@ class FixParameter(_Objective):
         normalize_target=False,
         name="Fixed parameter",
     ):
-
         self._target_from_user = target
         self._params = params
         self._indices = indices
@@ -135,7 +133,7 @@ class FixParameter(_Objective):
         # of indices is different from number of params
         indices = {}
         for idx, par in zip(self._indices, self._params, strict=True):
-            if idx and isinstance(idx, bool):
+            if isinstance(idx, bool) and idx:
                 idx = np.arange(thing.dimensions[par])
             indices[par] = np.atleast_1d(idx)
         self._indices = indices
@@ -200,7 +198,6 @@ class BoundaryRSelfConsistency(_Objective):
         surface_label=None,
         name="self_consistency R",
     ):
-
         self._surface_label = surface_label
         super().__init__(
             things=eq,
@@ -300,7 +297,6 @@ class BoundaryZSelfConsistency(_Objective):
         surface_label=None,
         name="self_consistency Z",
     ):
-
         self._surface_label = surface_label
         super().__init__(
             things=eq,
@@ -396,7 +392,6 @@ class AxisRSelfConsistency(_Objective):
         eq=None,
         name="axis R self consistency",
     ):
-
         super().__init__(
             things=eq,
             target=0,
@@ -486,7 +481,6 @@ class AxisZSelfConsistency(_Objective):
         eq=None,
         name="axis Z self consistency",
     ):
-
         super().__init__(
             things=eq,
             target=0,
@@ -606,7 +600,6 @@ class FixBoundaryR(_FixedObjective):
         surface_label=None,
         name="lcfs R",
     ):
-
         self._modes = modes
         self._target_from_user = target
         self._surface_label = surface_label
@@ -766,7 +759,6 @@ class FixBoundaryZ(_FixedObjective):
         surface_label=None,
         name="lcfs Z",
     ):
-
         self._modes = modes
         self._target_from_user = target
         self._surface_label = surface_label
@@ -897,7 +889,6 @@ class FixLambdaGauge(_Objective):
         eq=None,
         name="lambda gauge",
     ):
-
         super().__init__(
             things=eq,
             target=0,
@@ -991,7 +982,6 @@ class FixThetaSFL(_Objective):
     _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
     def __init__(self, eq=None, name="Theta SFL"):
-
         super().__init__(things=eq, target=0, weight=1, name=name)
 
     def build(self, eq=None, use_jit=False, verbose=1):
@@ -1086,7 +1076,6 @@ class FixAxisR(_FixedObjective):
         modes=True,
         name="axis R",
     ):
-
         self._modes = modes
         self._target_from_user = target
         super().__init__(
@@ -1238,7 +1227,6 @@ class FixAxisZ(_FixedObjective):
         modes=True,
         name="axis Z",
     ):
-
         self._modes = modes
         self._target_from_user = target
         super().__init__(
@@ -1391,7 +1379,6 @@ class FixModeR(_FixedObjective):
         modes=True,
         name="Fix Mode R",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1533,7 +1520,6 @@ class FixModeZ(_FixedObjective):
         modes=True,
         name="Fix Mode Z",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1680,7 +1666,6 @@ class FixSumModesR(_FixedObjective):
         modes=True,
         name="Fix Sum Modes R",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1840,7 +1825,6 @@ class FixSumModesZ(_FixedObjective):
         modes=True,
         name="Fix Sum Modes Z",
     ):
-
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
@@ -1998,7 +1982,6 @@ class _FixProfile(_FixedObjective, ABC):
         indices=True,
         name="",
     ):
-
         self._profile = profile
         self._indices = indices
         self._target_from_user = target
@@ -2099,7 +2082,6 @@ class FixPressure(_FixProfile):
         indices=True,
         name="fixed-pressure",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2210,7 +2192,6 @@ class FixIota(_FixProfile):
         indices=True,
         name="fixed-iota",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2317,7 +2298,6 @@ class FixCurrent(_FixProfile):
         indices=True,
         name="fixed-current",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2427,7 +2407,6 @@ class FixElectronTemperature(_FixProfile):
         indices=True,
         name="fixed-electron-temperature",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2537,7 +2516,6 @@ class FixElectronDensity(_FixProfile):
         indices=True,
         name="fixed-electron-density",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2647,7 +2625,6 @@ class FixIonTemperature(_FixProfile):
         indices=True,
         name="fixed-ion-temperature",
     ):
-
         super().__init__(
             eq=eq,
             target=target,
@@ -2758,7 +2735,6 @@ class FixAtomicNumber(_FixProfile):
         indices=True,
         name="fixed-atomic-number",
     ):
-
         super().__init__(
             eq=eq,
             target=target,

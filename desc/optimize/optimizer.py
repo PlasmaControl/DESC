@@ -40,7 +40,6 @@ class Optimizer(IOAble):
     _wrappers = [None, "prox", "proximal"]
 
     def __init__(self, method):
-
         self.method = method
 
     def __repr__(self):
@@ -158,6 +157,9 @@ class Optimizer(IOAble):
         timer = Timer()
         options = {} if options is None else options
         wrapper, method = _parse_method(self.method)
+
+        if not isinstance(constraints, tuple) or not isinstance(constraints, list):
+            constraints = (constraints,)
 
         linear_constraints, nonlinear_constraint = _parse_constraints(constraints)
         objective, nonlinear_constraint = _maybe_wrap_nonlinear_constraints(
@@ -562,7 +564,6 @@ def register_optimizer(
     )
 
     def _decorator(func):
-
         for i, nm in enumerate(name):
             d = {
                 "description": description[i % len(name)],

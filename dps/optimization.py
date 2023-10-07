@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load Equilibrium
-eq = desc.io.load("input.nearaxis_6.82_output.h5")[-1]
+eq = desc.io.load("DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5")[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 eq.solve()
@@ -26,7 +26,7 @@ Mass = 4*Proton_Mass
 Charge = 2*Proton_Charge
 
 # Initial State
-psi_i = 0.3
+psi_i = 0.2
 zeta_i = 0
 theta_i = 0
 vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)

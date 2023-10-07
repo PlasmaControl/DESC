@@ -64,7 +64,6 @@ def _solve_axisym(
         L_grid=L_gridi,
         M_grid=M_gridi,
         N_grid=N_gridi,
-        node_pattern=eq.node_pattern,
         pressure=pres_vac.copy(),
         iota=copy.copy(eq.iota),  # have to use copy.copy here since may be None
         current=copy.copy(eq.current),

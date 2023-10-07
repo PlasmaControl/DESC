@@ -178,7 +178,6 @@ class InputReader:
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
-            "node_pattern": "jacobi",
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
@@ -374,7 +373,11 @@ class InputReader:
                 flag = True
             match = re.search(r"node_pattern", argument, re.IGNORECASE)
             if match:
-                inputs["node_pattern"] = words[0].lower()
+                warnings.warn(
+                    "node_pattern parameter has been deprecated. To use a custom node "
+                    + "pattern, pass in the desired grid when creating the objective "
+                    + "in a python script."
+                )
                 flag = True
             match = re.search(r"bdry_mode", argument, re.IGNORECASE)
             if match:
@@ -741,7 +744,6 @@ class InputReader:
         f.write("objective = {}\n".format(inputs[0]["objective"]))
         f.write("bdry_mode = {}\n".format(inputs[0]["bdry_mode"]))
         f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
-        f.write("node_pattern = {}\n".format(inputs[0]["node_pattern"]))
 
         f.write("\n# pressure and rotational transform/current profiles\n")
         if "iota" in inputs[-1].keys():
@@ -857,7 +859,6 @@ class InputReader:
         f.write(f"optimizer = {optimizer}\n")
         f.write(f"objective = {objective}\n")
         f.write("spectral_indexing = {}\n".format(eq0._spectral_indexing))
-        f.write("node_pattern = {}\n".format(eq0._node_pattern))
 
         f.write("\n# pressure and rotational transform/current profiles\n")
 
@@ -1006,7 +1007,6 @@ class InputReader:
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
-            "node_pattern": "jacobi",
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),

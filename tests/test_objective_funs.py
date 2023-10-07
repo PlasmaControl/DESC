@@ -151,8 +151,8 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(W, 10 / mu_0)
             np.testing.assert_allclose(W_scaled, 10)
 
-        test(Equilibrium(node_pattern="quad", iota=PowerSeriesProfile(0)))
-        test(Equilibrium(node_pattern="quad", current=PowerSeriesProfile(0)))
+        test(Equilibrium(iota=PowerSeriesProfile(0)))
+        test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
     def test_target_iota(self):

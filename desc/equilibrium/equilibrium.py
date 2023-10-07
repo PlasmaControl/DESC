@@ -74,8 +74,6 @@ class Equilibrium(IOAble, Optimizable):
         resolution of real space nodes in poloidal direction
     N_grid : int (optional)
         resolution of real space nodes in toroidal direction
-    node_pattern : str (optional)
-        pattern of nodes in real space. Default is ``'jacobi'``
     pressure : Profile or ndarray shape(k,2) (optional)
         Pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero pressure
@@ -145,7 +143,6 @@ class Equilibrium(IOAble, Optimizable):
         "_L_grid",
         "_M_grid",
         "_N_grid",
-        "_node_pattern",
     ]
 
     def __init__(
@@ -158,7 +155,6 @@ class Equilibrium(IOAble, Optimizable):
         L_grid=None,
         M_grid=None,
         N_grid=None,
-        node_pattern=None,
         pressure=None,
         iota=None,
         current=None,
@@ -247,7 +243,6 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = setdefault(L_grid, 2 * self.L)
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
-        self._node_pattern = setdefault(node_pattern, "jacobi")
 
         self._surface.change_resolution(self.L, self.M, self.N)
         self._axis.change_resolution(self.N)
@@ -1492,11 +1487,6 @@ class Equilibrium(IOAble, Optimizable):
             self._N_grid = N_grid
 
     @property
-    def node_pattern(self):
-        """str: Pattern for placement of nodes in curvilinear coordinates."""
-        return self._node_pattern
-
-    @property
     def resolution(self):
         """dict: Spectral and real space resolution parameters of the Equilibrium."""
         return {
@@ -1512,7 +1502,6 @@ class Equilibrium(IOAble, Optimizable):
         """Print a summary of the spectral and real space resolution."""
         print("Spectral indexing: {}".format(self.spectral_indexing))
         print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
-        print("Node pattern: {}".format(self.node_pattern))
         print(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid

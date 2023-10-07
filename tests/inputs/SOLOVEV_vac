@@ -11,7 +11,6 @@ N_tor  =  0
 
 # solver methods
 objective = vacuum
-node_pattern = quad
 
 # fixed-boundary surface shape
 m:   0  n:   0  R1 =  3.999

@@ -80,10 +80,10 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``scipy.optimize.minimize`` for details.
 
     Returns
     -------
@@ -219,10 +219,6 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             stoptol["maxiter"],
             len(func_allx),
             stoptol["max_nfev"],
-            len(grad_allx),
-            stoptol["max_ngev"],
-            len(hess_allx),
-            stoptol["max_nhev"],
             dx_total=np.linalg.norm(x1 - x0),
             max_dx=options.get("max_dx", np.inf),
         )
@@ -339,10 +335,10 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``scipy.optimize.least_squares`` for details.
 
     Returns
     -------
@@ -428,10 +424,6 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
             stoptol["maxiter"],
             len(fun_allf),
             stoptol["max_nfev"],
-            len(jac_allf),  # ngev
-            stoptol["max_njev"],  # max_ngev,
-            len(jac_allf),  # nhev,
-            stoptol["max_njev"],  # max_nhev,
             dx_total=np.linalg.norm(x1 - x0),
             max_dx=options.get("max_dx", np.inf),
         )
@@ -542,10 +534,10 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``scipy.optimize.minimize`` for details.
 
     Returns
     -------
@@ -751,10 +743,6 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             stoptol["maxiter"],
             len(func_allx),
             stoptol["max_nfev"],
-            len(grad_allx),
-            stoptol["max_ngev"],
-            len(hess_allx),
-            stoptol["max_nhev"],
             dx_total=np.linalg.norm(x1 - x0),
             max_dx=options.get("max_dx", np.inf),
             ctol=stoptol["ctol"],

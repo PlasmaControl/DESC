@@ -8,8 +8,11 @@ from desc.backend import jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+filename = "input.LandremanPaul2021_QA_scaled_output.h5"
+savename = "optimized" + filename
+
 # Load Equilibrium
-eq = desc.io.load("input.LandremanPaul2021_QA_scaled_output.h5")[-1]
+eq = desc.io.load(filename)[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 eq.solve()
@@ -73,4 +76,23 @@ print("*****************************************************")
 R_modes = np.array([[0, 0, 0]])
 constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
 eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3)
-eq.save("elipse_optimized.h5")
+eq.save(savename)
+
+eq_opt = desc.io.load(savename)[-1]
+eq_opt._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
+eq_opt._current = None
+eq_opt.solve()
+
+optimized_objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1e-8)
+
+optimized_objective.build()
+solution_opt = optimized_objective.compute(*optimized_objective.xs(eq))
+
+print("*************** SOLUTION .compute() ***************")
+print(solution_opt)
+print("***************************************************")
+
+
+print("*************** SOLUTION - SOLUTION_OPT ***************")
+print(solution - solution_opt)
+print("*******************************************************")

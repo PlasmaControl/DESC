@@ -13,7 +13,13 @@ overlapping objects in the scene. Main API differences:
     * Names of colormaps, line patterns, etc are different, so use caution when
     specifying those using `kwargs`. Thankfully the error messages Plotly generates are
     usually pretty informative and list the available options.
-
+- Implements `CurrentPotentialField` and `FourierCurrentPotentialField` classes,
+which allow for computation of the magnetic field from a surface current density
+given by `K = n x grad(Phi)` where `Phi` is a surface current potential.
+    * `CurrentPotentialField` allows for an arbitrary current potential function `Phi`
+    * `FourierCurrentPotentialField` assumes the current potential function to
+    be of the form of a periodic potential (represented by a `DoubleFourierSeries`)
+    and two secular terms, one each linear in the poloidal and in the toroidal angle.
 
 v0.10.1
 -------

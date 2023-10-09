@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load Equilibrium
-eq = desc.io.load("input.LandremanPaul2021_QA_scaled_output.h5")
+eq = desc.io.load("input.LandremanPaul2021_QA_scaled_output.h5")[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 eq.solve()

@@ -1153,8 +1153,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         function to compute the theta derivative of the current potential
     potential_dzeta: callable
         function to compute the zeta derivative of the current potential
-    surface_grid : Grid,
-        grid upon which to evaluate the surface current density K
     params : dict, optional
         default parameters to pass to potential function (and its derivatives)
     R_lmn, Z_lmn : array-like, shape(k,)
@@ -1193,7 +1191,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         potential,
         potential_dtheta,
         potential_dzeta,
-        surface_grid,
         params=None,
         R_lmn=None,
         Z_lmn=None,
@@ -1212,26 +1209,11 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         self._potential = potential
         self._potential_dtheta = potential_dtheta
         self._potential_dzeta = potential_dzeta
-        self._surface_grid = surface_grid
         self._params = params
-
-        assert (
-            self.surface_grid.NFP == NFP
-        ), "NFP of surface must match NFP of surface_grid"
 
         super().__init__(
             R_lmn, Z_lmn, modes_R, modes_Z, NFP, sym, rho, name, check_orientation
         )
-
-    @property
-    def surface_grid(self):
-        """Grid of points to evaluate surface current at."""
-        return self._surface_grid
-
-    @surface_grid.setter
-    def surface_grid(self, new):
-        if new != self._surface_grid:
-            self._surface_grid = new
 
     @property
     def params(self):
@@ -1314,7 +1296,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid,
-            grid upon which to evaluate the surface current density K
+            source grid upon which to evaluate the surface current density K
 
         Returns
         -------
@@ -1333,7 +1315,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         potential,
         potential_dtheta,
         potential_dzeta,
-        surface_grid,
         params=None,
     ):
         """Create CurrentPotentialField using geometry provided by given surface.
@@ -1351,8 +1332,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             function to compute the theta derivative of the current potential
         potential_dzeta: callable
             function to compute the zeta derivative of the current potential
-        surface_grid : Grid,
-            grid upon which to evaluate the surface current density K
         params : dict, optional
             default parameters to pass to potential function (and its derivatives)
 
@@ -1377,7 +1356,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             potential,
             potential_dtheta,
             potential_dzeta,
-            surface_grid,
             params,
             R_lmn,
             Z_lmn,
@@ -1420,8 +1398,6 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     G : float
         Net current linking the plasma and the surface poloidally
         Denoted G in the algorithm
-    surface_grid : Grid
-        grid upon which to evaluate the surface current density K
     sym_Phi : str or False, one of {"auto","cos","sin",False}
         whether to enforce a given symmetry for the DoubleFourierSeries part of the
         current potential. Default is "auto" which enforces if modes are symmetric.
@@ -1461,7 +1437,6 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         modes_Phi=np.array([[0, 0]]),
         I=0,
         G=0,
-        surface_grid=None,
         sym_Phi="auto",
         R_lmn=None,
         Z_lmn=None,
@@ -1507,27 +1482,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         self._I = I
         self._G = G
 
-        self._surface_grid = surface_grid or LinearGrid(
-            M=M_Phi * 2 + 1, N=N_Phi * 2 + 1, NFP=NFP
-        )
-
-        assert (
-            self.surface_grid.NFP == NFP
-        ), "NFP of surface must match NFP of surface_grid"
-
         super().__init__(
             R_lmn, Z_lmn, modes_R, modes_Z, NFP, sym, rho, name, check_orientation
         )
-
-    @property
-    def surface_grid(self):
-        """Grid of points to evaluate surface current at."""
-        return self._surface_grid
-
-    @surface_grid.setter
-    def surface_grid(self, new):
-        if new != self._surface_grid:
-            self._surface_grid = new
 
     @property
     def I(self):  # noqa: E743
@@ -1633,6 +1590,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field at specified points
 
         """
+        grid = grid or LinearGrid(
+            M=self._M_Phi * 3 + 1, N=self._N_Phi * 3 + 1, NFP=self.NFP
+        )
         return _compute_magnetic_field_from_CurrentPotentialField(
             field=self, coords=coords, params=params, basis=basis, grid=grid
         )
@@ -1645,7 +1605,6 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         modes_Phi=np.array([[0, 0]]),
         I=0,
         G=0,
-        surface_grid=None,
         sym_Phi="auto",
     ):
         """Create FourierCurrentPotentialField using geometry of given surface.
@@ -1667,8 +1626,6 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         G : float
             Net current linking the plasma and the surface poloidally
             Denoted G in the algorithm
-        surface_grid : Grid
-            grid upon which to evaluate the surface current density K
         name : str
             name for this field
         check_orientation : bool
@@ -1696,7 +1653,6 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             modes_Phi,
             I,
             G,
-            surface_grid,
             sym_Phi,
             R_lmn,
             Z_lmn,
@@ -1727,7 +1683,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     basis : {"rpz", "xyz"}
         basis for input coordinates and returned magnetic field
     grid : Grid,
-        grid upon which to evaluate the surface current density K
+        source grid upon which to evaluate the surface current density K
 
     Returns
     -------
@@ -1741,7 +1697,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     coords = jnp.atleast_2d(coords)
     if basis == "rpz":
         coords = rpz2xyz(coords)
-    surface_grid = grid or field.surface_grid
+    surface_grid = grid or LinearGrid(M=30, N=30, NFP=field.NFP)
 
     # compute surface current, and store grid quantities
     # needed for integration in class

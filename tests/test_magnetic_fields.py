@@ -96,7 +96,6 @@ class TestMagneticFields:
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
             modes_Z=surface._Z_basis.modes[:, 1:],
-            surface_grid=LinearGrid(M=120, N=120, NFP=10),
             params=params,
             potential_dtheta=potential_dtheta,
             potential_dzeta=potential_dzeta,
@@ -144,21 +143,21 @@ class TestMagneticFields:
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
             modes_Z=surface._Z_basis.modes[:, 1:],
-            surface_grid=LinearGrid(M=120, N=120, NFP=10),
             NFP=10,
         )
+        surface_grid = LinearGrid(M=120, N=120, NFP=10)
 
         field.change_resolution(3, 3)
         field.change_Phi_resolution(2, 2)
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0]),
+            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
             correct_field(10.0, 0, 0),
             atol=1e-16,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=surface_grid),
             correct_field(10.0, np.pi / 4, 0),
             atol=1e-16,
             rtol=1e-8,
@@ -167,15 +166,16 @@ class TestMagneticFields:
         field.G = 2 * G
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0]),
+            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
             correct_field(10.0, 0, 0) * 2,
             atol=1e-16,
             rtol=1e-8,
         )
+        # use default grid
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=None),
             correct_field(10.0, np.pi / 4, 0) * 2,
-            atol=1e-16,
+            atol=1e-12,
             rtol=1e-8,
         )
 
@@ -185,24 +185,23 @@ class TestMagneticFields:
             modes_Phi=basis.modes[:, 1:],
             I=0,
             G=G,
-            surface_grid=LinearGrid(M=120, N=120, NFP=10),
         )
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0]),
+            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
             correct_field(10.0, 0, 0),
             atol=1e-16,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=surface_grid),
             correct_field(10.0, np.pi / 4, 0),
             atol=1e-16,
             rtol=1e-8,
         )
 
-        K_xyz = field.compute(["K", "x"], basis="xyz")
-        K_rpz = field.compute(["K", "x"], basis="rpz")
+        K_xyz = field.compute(["K", "x"], basis="xyz", grid=surface_grid)
+        K_rpz = field.compute(["K", "x"], basis="rpz", grid=surface_grid)
 
         np.testing.assert_allclose(
             K_xyz["K"], rpz2xyz_vec(K_rpz["K"], phi=K_rpz["x"][:, 1]), atol=1e-16

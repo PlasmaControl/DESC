@@ -698,7 +698,7 @@ class FixLambdaGauge(_Objective):
             self._A = np.zeros((0, L_basis.num_modes))
         else:
             # l(rho,0,0) = 0
-            # at theta=zeta=0, basis for lamba reduces to just a polynomial in rho
+            # at theta=zeta=0, basis for lambda reduces to just a polynomial in rho
             # what this constraint does is make all the coefficients of each power
             # of rho equal to zero
             # i.e. if lambda = (L_200 + 2*L_310) rho**2 + (L_100 + 2*L_210)*rho
@@ -1880,6 +1880,109 @@ class FixPressure(_FixProfile):
 
         """
         return p_l[self._idx]
+
+
+class FixAnisotropy(_FixProfile):
+    """Fixes anisotropic pressure coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    profile : Profile, optional
+        Profile containing the radial modes to evaluate at.
+    indices : ndarray or bool, optional
+        indices of the Profile.params array to fix.
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the Profile.params indices.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _target_arg = "a_lmn"
+    _units = "(dimensionless)"
+    _print_value_fmt = "Fixed-anisotropy profile error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        profile=None,
+        indices=True,
+        name="fixed-anisotropy",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            profile=profile,
+            indices=indices,
+            name=name,
+        )
+
+    def build(self, eq=None, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        if eq.anisotropy is None:
+            raise RuntimeError(
+                "Attempting to fix anisotropy on an equilibrium with no "
+                + "anisotropy profile assigned"
+            )
+        profile = eq.anisotropy
+        super().build(eq, profile, use_jit, verbose)
+
+    def compute(self, a_lmn, **kwargs):
+        """Compute fixed pressure profile errors.
+
+        Parameters
+        ----------
+        a_lmn : ndarray
+            parameters of the anisotropic pressure profile.
+
+        Returns
+        -------
+        f : ndarray
+            Fixed profile errors.
+
+        """
+        return a_lmn[self._idx]
 
 
 class FixIota(_FixProfile):

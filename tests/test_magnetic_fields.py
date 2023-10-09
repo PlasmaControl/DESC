@@ -87,7 +87,7 @@ class TestMagneticFields:
         potential_dtheta = lambda theta, zeta, G: jnp.zeros_like(theta)
         potential_dzeta = lambda theta, zeta, G: G * jnp.ones_like(theta) / 2 / jnp.pi
 
-        params = {"G": G}
+        params = {"G": -G}
         correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
 
         field = CurrentPotentialField(
@@ -138,7 +138,7 @@ class TestMagneticFields:
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
             I=0,
-            G=G,
+            G=-G,
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -163,7 +163,7 @@ class TestMagneticFields:
             rtol=1e-8,
         )
 
-        field.G = 2 * G
+        field.G = -2 * G
 
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
@@ -184,7 +184,7 @@ class TestMagneticFields:
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
             I=0,
-            G=G,
+            G=-G,
         )
 
         np.testing.assert_allclose(

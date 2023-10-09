@@ -1135,13 +1135,13 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
         surface current K is assumed given by
-         K = ∇ Φ x n
+         K = n x ∇ Φ
         where:
-               n is the winding surface unit normal
+               n is the winding surface unit normal.
                Phi is the current potential function,
-               which is a function of theta and zeta
-        this function then uses biot-savart to find the
-        B field from this current density K on the surface
+                which is a function of theta and zeta.
+        This function then uses biot-savart to find the
+        B field from this current density K on the surface.
 
     Parameters
     ----------
@@ -1374,17 +1374,17 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
         surface current K is assumed given by
 
-        K = ∇ Φ x n
+        K = n x ∇ Φ
         Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
 
         where:
-              n is the winding surface unit normal
+              n is the winding surface unit normal.
               Phi is the current potential function,
-              which is a function of theta and zeta,
-              and is given as a secular linear term in theta/zeta
-              and a double Fourier series in theta/zeta
-        this function then uses biot-savart to find the
-        B field from this current density K on the surface
+                which is a function of theta and zeta,
+                and is given as a secular linear term in theta/zeta
+                and a double Fourier series in theta/zeta.
+        This function then uses biot-savart to find the
+        B field from this current density K on the surface.
 
     Parameters
     ----------
@@ -1398,6 +1398,11 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     G : float
         Net current linking the plasma and the surface poloidally
         Denoted G in the algorithm
+        NOTE: a negative G will tend to produce a positive toroidal magnetic field
+        B in DESC, as in DESC the poloidal angle is taken to be positive
+        and increasing when going in the clockwise direction, which with the
+        convention n x grad(phi) will result in a toroidal field in the negative
+        toroidal direction.
     sym_Phi : str or False, one of {"auto","cos","sin",False}
         whether to enforce a given symmetry for the DoubleFourierSeries part of the
         current potential. Default is "auto" which enforces if modes are symmetric.
@@ -1626,6 +1631,11 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         G : float
             Net current linking the plasma and the surface poloidally
             Denoted G in the algorithm
+            NOTE: a negative G will tend to produce a positive toroidal magnetic field
+            B in DESC, as in DESC the poloidal angle is taken to be positive
+            and increasing when going in the clockwise direction, which with the
+            convention n x grad(phi) will result in a toroidal field in the negative
+            toroidal direction.
         name : str
             name for this field
         check_orientation : bool

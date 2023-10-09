@@ -634,7 +634,7 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     units="A/m",
     units_long="Amperes per meter",
     description="Surface current density, defined as the"
-    "gradient of current potential cross surface normal vector",
+    "surface normal vector cross the gradient of the current potential.",
     dim=3,
     params=[],
     transforms={},
@@ -648,9 +648,8 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
 )
 def _K_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["K"] = (
-        -(data["Phi_t"] * (1 / data["|e_theta x e_zeta|"]) * data["e_zeta"].T).T
-        + (data["Phi_z"] * (1 / data["|e_theta x e_zeta|"]) * data["e_theta"].T).T
-    )
+        data["Phi_t"] * (1 / data["|e_theta x e_zeta|"]) * data["e_zeta"].T
+    ).T - (data["Phi_z"] * (1 / data["|e_theta x e_zeta|"]) * data["e_theta"].T).T
     return data
 
 

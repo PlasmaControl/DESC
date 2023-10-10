@@ -50,9 +50,11 @@ class BoundaryErrorBIESTSC(_Objective):
         Hyperparameters for singular integration scheme, s is roughly equal to the size
         of the local singular grid with respect to the global grid, q is the order of
         integration on the local grid
-    src_grid, eval_grid : Grid, ndarray, optional
+    src_grid, eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for source terms and where
         to evaluate errors.
+    field_grid : Grid, optional
+        Grid used to discretize ext_field.
     name : str
         Name of the objective function.
 
@@ -77,6 +79,7 @@ class BoundaryErrorBIESTSC(_Objective):
         q=None,
         src_grid=None,
         eval_grid=None,
+        field_grid=None,
         name="Boundary error BIEST (SC)",
     ):
         self._src_grid = src_grid
@@ -84,6 +87,7 @@ class BoundaryErrorBIESTSC(_Objective):
         self._s = s
         self._q = q
         self._ext_field = ext_field
+        self._field_grid = field_grid
         super().__init__(
             eq=eq,
             target=target,
@@ -263,7 +267,9 @@ class BoundaryErrorBIESTSC(_Objective):
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"]) + eval_data["B"] / 2
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
-        Bext = constants["ext_field"].compute_magnetic_field(x)
+        Bext = constants["ext_field"].compute_magnetic_field(
+            x, grid=self._field_grid, basis="rpz"
+        )
         Bex_total = Bext + Bplasma
         Bin_total = eval_data["B"]
         Bn = jnp.sum(Bex_total * eval_data["n_rho"], axis=-1)
@@ -311,9 +317,11 @@ class BoundaryErrorBIEST(_Objective):
         Hyperparameters for singular integration scheme, s is roughly equal to the size
         of the local singular grid with respect to the global grid, q is the order of
         integration on the local grid
-    src_grid, eval_grid : Grid, ndarray, optional
+    src_grid, eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for source terms and where
         to evaluate errors.
+    field_grid : Grid, optional
+        Grid used to discretize ext_field.
     name : str
         Name of the objective function.
 
@@ -338,6 +346,7 @@ class BoundaryErrorBIEST(_Objective):
         q=None,
         src_grid=None,
         eval_grid=None,
+        field_grid=None,
         name="Boundary error BIEST",
     ):
         self._src_grid = src_grid
@@ -345,6 +354,7 @@ class BoundaryErrorBIEST(_Objective):
         self._s = s
         self._q = q
         self._ext_field = ext_field
+        self._field_grid = field_grid
         super().__init__(
             eq=eq,
             target=target,
@@ -521,7 +531,9 @@ class BoundaryErrorBIEST(_Objective):
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"]) + eval_data["B"] / 2
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
-        Bext = constants["ext_field"].compute_magnetic_field(x)
+        Bext = constants["ext_field"].compute_magnetic_field(
+            x, grid=self._field_grid, basis="rpz"
+        )
         Bex_total = Bext + Bplasma
         Bn = jnp.sum(Bex_total * eval_data["n_rho"], axis=-1)
 
@@ -564,9 +576,11 @@ class QuadraticFlux(_Objective):
         Hyperparameters for singular integration scheme, s is roughly equal to the size
         of the local singular grid with respect to the global grid, q is the order of
         integration on the local grid
-    src_grid, eval_grid : Grid, ndarray, optional
+    src_grid, eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for source terms and where
         to evaluate errors.
+    field_grid : Grid, optional
+        Grid used to discretize ext_field.
     name : str
         Name of the objective function.
 
@@ -591,6 +605,7 @@ class QuadraticFlux(_Objective):
         q=None,
         src_grid=None,
         eval_grid=None,
+        field_grid=None,
         name="Quadratic flux",
     ):
         self._src_grid = src_grid
@@ -598,6 +613,7 @@ class QuadraticFlux(_Objective):
         self._s = s
         self._q = q
         self._ext_field = ext_field
+        self._field_grid = field_grid
         super().__init__(
             eq=eq,
             target=target,
@@ -771,7 +787,9 @@ class QuadraticFlux(_Objective):
         # don't need extra B/2 since we only care about normal component
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
-        Bext = constants["ext_field"].compute_magnetic_field(x)
+        Bext = constants["ext_field"].compute_magnetic_field(
+            x, grid=self._field_grid, basis="rpz"
+        )
         return jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)
 
 
@@ -799,8 +817,10 @@ class ToroidalFlux(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    grid : Grid, ndarray, optional
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+    field_grid : Grid, optional
+        Grid used to discretize ext_field.
     name : str
         Name of the objective function.
 
@@ -822,10 +842,12 @@ class ToroidalFlux(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
+        field_grid=None,
         name="Toroidal flux",
     ):
         self._grid = grid
         self._ext_field = ext_field
+        self._field_grid = field_grid
         super().__init__(
             eq=eq,
             target=target,
@@ -935,7 +957,9 @@ class ToroidalFlux(_Objective):
             profiles=constants["profiles"],
         )
         x = jnp.array([data["R"], data["zeta"], data["Z"]]).T
-        Bext = constants["ext_field"].compute_magnetic_field(x, basis="rpz")
+        Bext = constants["ext_field"].compute_magnetic_field(
+            x, grid=self._field_grid, basis="rpz"
+        )
         n = data["e^zeta"] / jnp.linalg.norm(data["e^zeta"], axis=-1)[:, None]
         Bn = jnp.sum(Bext * n, axis=-1)
         return jnp.sum(

@@ -1395,10 +1395,8 @@ class FixModeLambda(_FixedObjective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = True
-    _units = "(m)"
+    _target_arg = "L_lmn"
+    _units = "(dimensionless)"
     _print_value_fmt = "Fixed-lambda modes error: {:10.3e} "
 
     def __init__(
@@ -1857,10 +1855,9 @@ class FixSumModesLambda(_FixedObjective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = False
-    _units = "(m)"
+    _fixed = False  # not "diagonal", since its fixing a sum
+    _target_arg = "L_lmn"
+    _units = "(dimensionless)"
     _print_value_fmt = "Fixed-lambda sum modes error: {:10.3e} "
 
     def __init__(
@@ -2239,7 +2236,6 @@ class FixAnisotropy(_FixProfile):
         indices=True,
         name="fixed-anisotropy",
     ):
-
         super().__init__(
             eq=eq,
             target=target,

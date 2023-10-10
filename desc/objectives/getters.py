@@ -235,7 +235,7 @@ def get_NAE_constraints(
     N : int
         max toroidal resolution to constrain.
         If None, defaults to equilibrium's toroidal resolution
-    fix_lambda : bool
+    fix_lambda : bool or int
         Whether to constrain lambda to match that of the NAE near-axis
         if an int, fixes lambda up to that order in rho {0,1}
         if True, fixes lambda up to the specified order given by order

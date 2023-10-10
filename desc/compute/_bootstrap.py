@@ -402,7 +402,7 @@ def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
 )
 def _current_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the current profile consistent with the Redl bootstrap current."""
-    # perpendicular current density from MHD equilibrium
+    # parallel & perpendicular current density from MHD equilibrium
     J_ll = (data["J_parallel"] * data["b"].T).T
     J_perp = data["J"] - J_ll
 

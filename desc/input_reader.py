@@ -861,7 +861,7 @@ class InputReader:
         f.write("\n# solver methods\n")
         f.write(f"optimizer = {optimizer}\n")
         f.write(f"objective = {objective}\n")
-        f.write("spectral_indexing = {}\n".format(eq0._spectral_indexing))
+        f.write("spectral_indexing = {}\n".format(eq._spectral_indexing))
 
         f.write("\n# pressure and rotational transform/current profiles\n")
 

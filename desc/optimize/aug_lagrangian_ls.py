@@ -87,15 +87,15 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         If None, the termination by this condition is disabled.
     gtol : float or None, optional
         Absolute tolerance for termination by the norm of the gradient.
-        Optimizer terminates when ``norm(g) < gtol``, where
+        Optimizer terminates when ``max(abs(g)) < gtol``., where
         If None, the termination by this condition is disabled.
     ctol : float, optional
         Tolerance for stopping based on infinity norm of the constraint violation.
         Optimizer terminates when ``max(abs(constr_violation)) < ctol`` AND one or more
         of the other tolerances are met (``ftol``, ``xtol``, ``gtol``)
     verbose : {0, 1, 2}, optional
-        * 0 (default) : work silently.
-        * 1 : display a termination report.
+        * 0 : work silently.
+        * 1 (default) : display a termination report.
         * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
@@ -110,7 +110,66 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
-        See the code for more details.
+
+        - ``"initial_penalty_parameter"`` : (float or array-like) Initial value for the
+          quadratic penalty parameter. May be array like, in which case it should be the
+          same length as the number of constraint residuals. Default 10.
+        - ``"initial_multipliers"`` : (float or array-like or ``"least_squares"``)
+          Initial Lagrange multipliers. May be array like, in which case it should be
+          the same length as the number of constraint residuals. If ``"least_squares"``,
+          uses an estimate based on the least squares solution of the optimality
+          conditions, see ch 14 of [1]_. Default 0.
+        - ``"omega"`` : (float) Hyperparameter for determining initial gradient
+          tolerance. See algorithm 14.4.2 from [1]_ for details. Default 1.0
+        - ``"eta"`` : (float) Hyperparameter for determining initial constraint
+          tolerance. See algorithm 14.4.2 from [1]_ for details. Default 1.0
+        - ``"alpha_omega"`` : (float) Hyperparameter for updating gradient tolerance.
+          See algorithm 14.4.2 from [1]_ for details. Default 1.0
+        - ``"beta_omega"`` : (float) Hyperparameter for updating gradient tolerance.
+          See algorithm 14.4.2 from [1]_ for details. Default 1.0
+        - ``"alpha_eta"`` : (float) Hyperparameter for updating constraint tolerance.
+          See algorithm 14.4.2 from [1]_ for details. Default 0.1
+        - ``"beta_eta"`` : (float) Hyperparameter for updating constraint tolerance.
+          See algorithm 14.4.2 from [1]_ for details. Default 0.9
+        - ``"tau"`` : (float) Factor to increase penalty parameter by when constraint
+          violation doesn't decrease sufficiently. Default 10
+        - ``"max_nfev"`` : (int > 0) Maximum number of function evaluations (each
+          iteration may take more than one function evaluation). Default is
+          ``5*maxiter+1``
+        - ``"max_dx"`` : (float > 0) Maximum allowed change in the norm of x from its
+          starting point. Default np.inf.
+        - ``"initial_trust_radius"`` : (``"scipy"``, ``"conngould"``, ``"mix"`` or
+          float > 0) Initial trust region radius. ``"scipy"`` uses the scaled norm of
+          x0, which is the default behavior in ``scipy.optimize.least_squares``.
+          ``"conngould"`` uses the norm of the Cauchy point, as recommended in ch17
+          of [1]_. ``"mix"`` uses the geometric mean of the previous two options. A
+          float can also be passed to specify the trust radius directly.
+          Default is ``"scipy"``.
+        - ``"initial_trust_ratio"`` : (float > 0) A extra scaling factor that is
+          applied after one of the previous heuristics to determine the initial trust
+          radius. Default 1.
+        - ``"max_trust_radius"`` : (float > 0) Maximum allowable trust region radius.
+          Default ``np.inf``.
+        - ``"min_trust_radius"`` : (float >= 0) Minimum allowable trust region radius.
+          Optimization is terminated if the trust region falls below this value.
+          Default ``np.finfo(x0.dtype).eps``.
+        - ``"tr_increase_threshold"`` : (0 < float < 1) Increase the trust region
+          radius when the ratio of actual to predicted reduction exceeds this threshold.
+          Default 0.75.
+        - ``"tr_decrease_threshold"`` : (0 < float < 1) Decrease the trust region
+          radius when the ratio of actual to predicted reduction is less than this
+          threshold. Default 0.25.
+        - ``"tr_increase_ratio"`` : (float > 1) Factor to increase the trust region
+          radius by when  the ratio of actual to predicted reduction exceeds threshold.
+          Default 2.
+        - ``"tr_decrease_ratio"`` : (0 < float < 1) Factor to decrease the trust region
+          radius by when  the ratio of actual to predicted reduction falls below
+          threshold. Default 0.25.
+        - ``"tr_method"`` : ``"svd"``, ``"cho"``) Method to use for solving the trust
+          region subproblem. ``"cho"`` uses a sequence of cholesky factorizations
+          (generally 2-3), while ``"svd"`` uses one singular value decomposition.
+          ``"cho"`` is generally faster for large systems, especially on GPU, but may
+          be less accurate for badly scaled systems. Default ``"svd"``
 
     Returns
     -------
@@ -118,6 +177,11 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         The optimization result represented as a ``OptimizeResult`` object.
         Important attributes are: ``x`` the solution array, ``success`` a
         Boolean flag indicating if the optimizer exited successfully.
+
+    References
+    ----------
+    .. [1] Conn, Andrew, and Gould, Nicholas, and Toint, Philippe. "Trust-region
+           methods" (2000).
 
     """
     constraint = setdefault(
@@ -185,6 +249,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         _g = f @ jac_wrapped(z, *args)
         y = jnp.linalg.lstsq(_J.T, _g)[0]
         y = jnp.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+    mu = jnp.atleast_1d(mu)
+    y = jnp.atleast_1d(y)
 
     # notation following Conn & Gould, algorithm 14.4.2, but with our mu = their mu^-1
     omega = options.pop("omega", 1.0)
@@ -195,8 +261,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     beta_eta = options.pop("beta_eta", 0.9)
     tau = options.pop("tau", 10)
 
-    gtolk = omega / jnp.mean(mu) ** alpha_omega
-    ctolk = eta / jnp.mean(mu) ** alpha_eta
+    gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
+    ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)
 
     L = lagfun(f, c, y, mu)
     J = lagjac(z, y, mu, *args)
@@ -204,12 +270,9 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     g = L @ J
 
     allx = []
-    return_all = options.pop("return_all", True)
-    return_tr = options.pop("return_tr", True)
 
     maxiter = setdefault(maxiter, z.size * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
-    max_njev = options.pop("max_njev", maxiter + 1)
     max_dx = options.pop("max_dx", jnp.inf)
 
     jac_scale = isinstance(x_scale, str) and x_scale in ["jac", "auto"]
@@ -270,10 +333,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     Lactual_reduction = jnp.inf
     alpha = 0  # "Levenberg-Marquardt" parameter
 
-    if return_all:
-        allx = [z]
-    if return_tr:
-        alltr = [trust_radius]
+    allx = [z]
+    alltr = [trust_radius]
     if g_norm < gtol and constr_violation < ctol:
         success, message = True, STATUS_MESSAGES["gtol"]
 
@@ -287,7 +348,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             step_norm,
             g_norm,
             constr_violation,
-            jnp.max(mu),
+            jnp.mean(mu),
             jnp.max(jnp.abs(y)),
         )
 
@@ -366,8 +427,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 tr_decrease_threshold,
                 tr_decrease_ratio,
             )
-            if return_tr:
-                alltr.append(trust_radius)
+            alltr.append(trust_radius)
             alpha *= tr_old / trust_radius
 
             success, message = check_termination(
@@ -384,10 +444,6 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 maxiter,
                 nfev,
                 max_nfev,
-                0,
-                jnp.inf,
-                njev,
-                max_njev,
                 min_trust_radius=min_trust_radius,
                 dx_total=jnp.linalg.norm(z - z0),
                 max_dx=max_dx,
@@ -400,8 +456,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         # if reduction was enough, accept the step
         if Lactual_reduction > 0:
             z = z_new
-            if return_all:
-                allx.append(z)
+            allx.append(z)
             f = f_new
             c = c_new
             constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
@@ -423,11 +478,11 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 y = jnp.where(jnp.abs(c) < ctolk, y - mu * c, y)
                 mu = jnp.where(jnp.abs(c) >= ctolk, tau * mu, mu)
                 if constr_violation < ctolk:
-                    ctolk = ctolk / (jnp.mean(mu) ** beta_eta)
-                    gtolk = gtolk / (jnp.mean(mu) ** beta_omega)
+                    ctolk = max(ctolk / (jnp.mean(mu) ** beta_eta), ctol)
+                    gtolk = max(gtolk / (jnp.mean(mu) ** beta_omega), gtol)
                 else:
-                    ctolk = eta / (jnp.mean(mu) ** alpha_eta)
-                    gtolk = omega / (jnp.mean(mu) ** alpha_omega)
+                    ctolk = max(eta / (jnp.mean(mu) ** alpha_eta), ctol)
+                    gtolk = max(omega / (jnp.mean(mu) ** alpha_omega), gtol)
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
                 Lcost = 0.5 * jnp.dot(L, L)
@@ -467,7 +522,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
                 step_norm,
                 g_norm,
                 constr_violation,
-                jnp.max(mu),
+                jnp.mean(mu),
                 jnp.max(jnp.abs(y)),
             )
 
@@ -481,6 +536,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         x=x,
         s=s,
         y=y,
+        penalty_param=mu,
         success=success,
         cost=cost,
         fun=f,
@@ -494,6 +550,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         message=message,
         active_mask=active_mask,
         constr_violation=constr_violation,
+        allx=[z2xs(x)[0] for x in allx],
+        alltr=alltr,
     )
     if verbose > 0:
         if result["success"]:
@@ -506,7 +564,5 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         print(f"""         Iterations: {result["nit"]:d}""")
         print(f"""         Function evaluations: {result["nfev"]:d}""")
         print(f"""         Jacobian evaluations: {result["njev"]:d}""")
-
-    result["allx"] = [z2xs(x)[0] for x in allx]
 
     return result

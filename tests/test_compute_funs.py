@@ -18,6 +18,7 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.grid import LinearGrid, QuadratureGrid
+from desc.io import load
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -46,9 +47,7 @@ def myconvolve_2d(arr_1d, stencil, shape):
 @pytest.mark.unit
 def test_total_volume(DummyStellarator):
     """Test that the volume enclosed by the LCFS is equal to the total volume."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
     lcfs_volume = eq.compute("V(r)", grid=grid)["V(r)"]
@@ -176,9 +175,7 @@ def test_elongation():
 @pytest.mark.unit
 def test_magnetic_field_derivatives(DummyStellarator):
     """Test that the derivatives of B and |B| are close to numerical derivatives."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     # partial derivatives wrt rho
     rtol = 1e-3
@@ -958,9 +955,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
 @pytest.mark.unit
 def test_metric_derivatives(DummyStellarator):
     """Compare analytic formula for metric derivatives with finite differences."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     metric_components = ["g^rr", "g^rt", "g^rz", "g^tt", "g^tz", "g^zz"]
 
@@ -1020,9 +1015,7 @@ def test_metric_derivatives(DummyStellarator):
 @pytest.mark.unit
 def test_magnetic_pressure_gradient(DummyStellarator):
     """Test that the components of grad(|B|^2)) match with numerical gradients."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     # partial derivatives wrt rho
     num_rho = 110
@@ -1087,9 +1080,7 @@ def test_currents(DSHAPE_current):
 @pytest.mark.unit
 def test_BdotgradB(DummyStellarator):
     """Test that the components of grad(B*grad(|B|)) match with numerical gradients."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     def test_partial_derivative(name):
         cases = {
@@ -1293,9 +1284,7 @@ def test_compute_averages():
 @pytest.mark.unit
 def test_covariant_basis_vectors(DummyStellarator):
     """Test calculation of covariant basis vectors by comparing to finite diff of x."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
     keys = [
         "e_rho",
         "e_rho_r",
@@ -1397,3 +1386,201 @@ def test_covariant_basis_vectors(DummyStellarator):
             atol=1e-6,
             err_msg=key,
         )
+
+
+@pytest.mark.unit
+def test_contravariant_basis_vectors():
+    """Test calculation of contravariant basis vectors by comparing to finite diff."""
+    eq = get("HELIOTRON")
+    keys = [
+        "e^rho",
+        "e^theta",
+        "e^zeta",
+        "e^rho_r",
+        "e^rho_t",
+        "e^rho_z",
+        "e^theta_r",
+        "e^theta_t",
+        "e^theta_z",
+        "e^zeta_r",
+        "e^zeta_t",
+        "e^zeta_z",
+        "e^rho_rr",
+        "e^theta_rr",
+        "e^zeta_rr",
+        "e^rho_rt",
+        "e^rho_tt",
+        "e^theta_rt",
+        "e^theta_tt",
+        "e^zeta_rt",
+        "e^zeta_tt",
+        "e^rho_rz",
+        "e^rho_tz",
+        "e^rho_zz",
+        "e^theta_rz",
+        "e^theta_tz",
+        "e^theta_zz",
+        "e^zeta_rz",
+        "e^zeta_tz",
+        "e^zeta_zz",
+    ]
+    gridsize = 300
+    grids = {
+        "r": LinearGrid(gridsize, 0, 0, NFP=eq.NFP, axis=False),
+        "t": LinearGrid(0, gridsize, 0, NFP=eq.NFP, axis=False),
+        "z": LinearGrid(0, 0, gridsize, NFP=eq.NFP, axis=False),
+        "rt": LinearGrid(gridsize, gridsize, 0, NFP=eq.NFP, axis=False),
+        "tz": LinearGrid(0, gridsize, gridsize, NFP=eq.NFP, axis=False),
+        "rz": LinearGrid(gridsize, 0, gridsize, NFP=eq.NFP, axis=False),
+    }
+
+    atol = 2e-3
+
+    for key in keys[3:]:  # don't test base vectors for now
+        split = key.split("_")
+        base_quant = split[0]
+        second_deriv = False
+        # higher order finite differences are unstable, so we only ever do 1 order
+        # eg compare e_rho vs fd of x, e_rho_t vs fd of e_rho etc.
+        if len(split) == 1:  # stuff like e^rho, e^theta
+            # testing the e^rho etc against finite difference would involve
+            # getting a equal spaced grid in R,phi,Z, which I will
+            # punt on for now, could be in a separate test
+            second_deriv = False
+        else:
+            deriv = split[-1]
+            if len(deriv) > 1:
+                if deriv[0] != deriv[1]:  # don't do this loop
+                    continue
+                else:
+                    second_deriv = True
+                    deriv = deriv[0]
+        print(key)
+        grid = grids[deriv]
+        data = eq.compute([key, base_quant, "phi"], grid=grid)
+        data[key] = (
+            rpz2xyz_vec(data[key], phi=data["phi"])
+            .reshape((grid.num_theta, grid.num_rho, grid.num_zeta, -1), order="F")
+            .squeeze()
+        )
+        data[base_quant] = (
+            rpz2xyz_vec(data[base_quant], phi=data["phi"])
+            .reshape((grid.num_theta, grid.num_rho, grid.num_zeta, -1), order="F")
+            .squeeze()
+        )
+
+        spacing = {
+            "r": grid.spacing[0, 0],
+            "t": grid.spacing[0, 1],
+            "z": grid.spacing[0, 2] / grid.NFP,
+        }
+        # do one for loop for 1st derivs, one for 2nd derivs...
+
+        dx = (
+            np.apply_along_axis(my_convolve, 0, data[base_quant], FD_COEF_1_2)
+            / spacing[deriv]
+        ).squeeze()
+        if second_deriv:  # is a 2nd deriv like rr,tt,zz, apply again
+            dx = (
+                np.apply_along_axis(my_convolve, 0, data[base_quant], FD_COEF_2_4)
+                / spacing[deriv] ** 2
+            ).squeeze()
+
+        if "^theta" in key and "r" in deriv:
+            # this vector goes to infinity at the magnetic axis
+            # so dont compare to finite differences too close to the axis
+            compare_data_compute = data[key][75:4]
+            compare_data_FD = dx[75:4]
+        else:
+            compare_data_compute = data[key][4:-4]
+            compare_data_FD = dx[4:-4]
+
+        np.testing.assert_allclose(
+            compare_data_compute,
+            compare_data_FD,
+            rtol=1e-5,
+            atol=atol,
+            err_msg=key,
+        )
+
+    # second derivatives, mixed
+    for key in keys[3:]:
+        split = key.split("_")
+        base_quant = split[0]
+
+        if len(split) == 1:  # stuff like e^rho, e^theta
+            pass
+        else:
+            deriv = split[-1]
+            if len(deriv) == 1:
+                continue  # don't do this loop for single derivs
+            elif deriv[0] == deriv[1]:
+                continue  # dont do this for rr,tt,zz
+        print(key)
+        grid = grids[deriv]
+        data = eq.compute([key, base_quant, "phi"], grid=grid)
+        data[key] = rpz2xyz_vec(data[key].squeeze(), phi=data["phi"]).squeeze()
+        data[base_quant] = rpz2xyz_vec(
+            data[base_quant].squeeze(), phi=data["phi"]
+        ).squeeze()
+
+        spacing = {
+            "r": grid.spacing[0, 0],
+            "t": grid.spacing[0, 1],
+            "z": grid.spacing[0, 2] / grid.NFP,
+        }
+
+        shapes = {
+            "tz": (grid.num_zeta, grid.num_theta),
+            "rz": (grid.num_zeta, grid.num_rho),
+            "rt": (grid.num_rho, grid.num_theta),
+        }
+        dx = (
+            np.apply_along_axis(
+                myconvolve_2d, 0, data[base_quant], FD_COEF_1_4, shapes[deriv]
+            )
+            / spacing[deriv[0]]
+            / spacing[deriv[1]]
+        )
+
+        compare_data_compute = data[key].reshape(shapes[deriv] + (3,))
+
+        if "^theta" in key and "r" in deriv:
+            # this vector goes to infinity at the magnetic axis
+            # so dont compare to finite differences too close to the axis
+            compare_data_compute = compare_data_compute[75:4, 4:-4]
+            compare_data_FD = dx[75:4, 4:-4]
+        else:
+            compare_data_compute = compare_data_compute[4:-4, 4:-4]
+            compare_data_FD = dx[4:-4, 4:-4]
+
+        np.testing.assert_allclose(
+            compare_data_compute,
+            compare_data_FD,
+            rtol=1e-5,
+            atol=atol,
+            err_msg=key,
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+def test_iota_components(HELIOTRON_vac):
+    """Test that iota components are computed correctly."""
+    # axisymmetric, so all rotational transform should be from the current
+    eq_i = get("DSHAPE")  # iota profile assigned
+    eq_c = get("DSHAPE_CURRENT")  # current profile assigned
+    grid = LinearGrid(L=100, M=max(eq_i.M_grid, eq_c.M_grid), N=0, NFP=1, axis=True)
+    data_i = eq_i.compute(["iota", "iota current", "iota vacuum"], grid)
+    data_c = eq_c.compute(["iota", "iota current", "iota vacuum"], grid)
+    np.testing.assert_allclose(data_i["iota"], data_i["iota current"])
+    np.testing.assert_allclose(data_c["iota"], data_c["iota current"])
+    np.testing.assert_allclose(data_i["iota vacuum"], 0)
+    np.testing.assert_allclose(data_c["iota vacuum"], 0)
+
+    # vacuum stellarator, so all rotational transform should be from the external field
+    eq = load(load_from=str(HELIOTRON_vac["desc_h5_path"]), file_format="hdf5")[-1]
+    grid = LinearGrid(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
+    data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
+    np.testing.assert_allclose(data["iota"], data["iota vacuum"])
+    np.testing.assert_allclose(data["iota current"], 0)

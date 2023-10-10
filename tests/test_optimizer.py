@@ -106,11 +106,11 @@ class TestFmin:
             scalar_grad,
             scalar_hess,
             verbose=3,
-            method="dogleg",
             x_scale="hess",
             ftol=0,
             xtol=0,
             gtol=1e-12,
+            options={"tr_method": "dogleg"},
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -125,11 +125,11 @@ class TestFmin:
             scalar_grad,
             scalar_hess,
             verbose=3,
-            method="subspace",
             x_scale="hess",
             ftol=0,
             xtol=0,
             gtol=1e-12,
+            options={"tr_method": "subspace"},
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -144,11 +144,11 @@ class TestFmin:
             scalar_grad,
             scalar_hess,
             verbose=3,
-            method="exact",
             x_scale="hess",
             ftol=0,
             xtol=0,
             gtol=1e-12,
+            options={"tr_method": "exact"},
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -166,11 +166,11 @@ class TestFmin:
             rosen_der,
             hess="bfgs",
             verbose=3,
-            method="dogleg",
             x_scale="hess",
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
+            options={"tr_method": "dogleg"},
         )
         np.testing.assert_allclose(out["x"], true_x)
 
@@ -188,11 +188,11 @@ class TestFmin:
             rosen_der,
             hess=BFGS(),
             verbose=3,
-            method="subspace",
             x_scale=1,
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
+            options={"tr_method": "subspace"},
         )
         np.testing.assert_allclose(out["x"], true_x)
 
@@ -210,11 +210,11 @@ class TestFmin:
             rosen_der,
             hess=BFGS(),
             verbose=3,
-            method="exact",
             x_scale=1,
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
+            options={"tr_method": "exact"},
         )
         np.testing.assert_allclose(out["x"], true_x)
 
@@ -267,8 +267,11 @@ class TestLSQTR:
             jac,
             verbose=3,
             x_scale=1,
-            tr_method="cho",
-            options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
+            options={
+                "initial_trust_radius": 0.15,
+                "max_trust_radius": 0.25,
+                "tr_method": "cho",
+            },
         )
         np.testing.assert_allclose(out["x"], p)
 
@@ -278,8 +281,11 @@ class TestLSQTR:
             jac,
             verbose=3,
             x_scale=1,
-            tr_method="svd",
-            options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
+            options={
+                "initial_trust_radius": 0.15,
+                "max_trust_radius": 0.25,
+                "tr_method": "svd",
+            },
         )
         np.testing.assert_allclose(out["x"], p)
 
@@ -423,12 +429,12 @@ def test_maxiter_1_and_0_solve():
     )
     objectives = ForceBalance(eq=eq)
     obj = ObjectiveFunction(objectives)
-    for opt in ["lsq-exact", "fmin-dogleg-bfgs"]:
+    for opt in ["lsq-exact", "fmintr-bfgs"]:
         eq, result = eq.solve(
             maxiter=1, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
         assert result["nit"] == 1
-    for opt in ["lsq-exact", "fmin-dogleg-bfgs"]:
+    for opt in ["lsq-exact", "fmintr-bfgs"]:
         eq, result = eq.solve(
             maxiter=0, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
@@ -463,7 +469,6 @@ def test_scipy_fail_message():
             gtol=1e-12,
         )
         assert "Maximum number of iterations has been exceeded" in result["message"]
-    eq._node_pattern = "quad"
     eq.set_initial_guess()
     objectives = Energy(eq=eq)
     obj = ObjectiveFunction(objectives)
@@ -478,7 +483,7 @@ def test_scipy_fail_message():
             xtol=1e-12,
             gtol=1e-12,
         )
-        assert "Maximum number of Jacobian/Hessian evaluations" in result["message"]
+        assert "Maximum number of iterations has been exceeded" in result["message"]
 
 
 @pytest.mark.unit
@@ -565,7 +570,6 @@ def test_all_optimizers():
     """Just tests that the optimizers run without error, eg tests for the wrappers."""
     eqf = desc.examples.get("SOLOVEV")
     eqe = eqf.copy()
-    eqe._node_pattern = "quad"
     fobj = ObjectiveFunction(ForceBalance(eq=eqf))
     eobj = ObjectiveFunction(Energy(eq=eqe))
     fobj.build()
@@ -608,7 +612,6 @@ def test_scipy_constrained_solve():
     eq = desc.examples.get("DSHAPE")
     # increase pressure so no longer in force balance
     eq.p_l *= 1.1
-    eq._node_pattern = "quad"
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
@@ -728,7 +731,7 @@ def test_bounded_optimization():
         gtol=1e-8,
         verbose=3,
         x_scale=1,
-        tr_method="svd",
+        options={"tr_method": "svd"},
     )
     out2 = fmintr(
         sfun,
@@ -834,7 +837,7 @@ def test_auglag():
         ctol=1e-6,
         verbose=3,
         maxiter=None,
-        options={"initial_multipliers": "least_squares"},
+        options={"initial_multipliers": "least_squares", "tr_method": "cho"},
     )
 
     out3 = minimize(
@@ -871,7 +874,6 @@ def test_auglag():
 
 @pytest.mark.slow
 @pytest.mark.regression
-@pytest.mark.xfail
 def test_constrained_AL_lsq():
     """Tests that the least squares augmented Lagrangian optimizer does something."""
     eq = desc.examples.get("SOLOVEV")
@@ -912,7 +914,7 @@ def test_constrained_AL_lsq():
     )
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
-    Dwell = constraints[-2].compute(*constraints[-2].xs(eq2))
+    Dwell = constraints[-2].compute_scaled(*constraints[-2].xs(eq2))
     assert (ARbounds[0] - ctol) < AR2 < (ARbounds[1] + ctol)
     assert (Vbounds[0] - ctol) < V2 < (Vbounds[1] + ctol)
     assert eq2.is_nested()
@@ -921,7 +923,6 @@ def test_constrained_AL_lsq():
 
 @pytest.mark.slow
 @pytest.mark.regression
-@pytest.mark.xfail
 def test_constrained_AL_scalar():
     """Tests that the augmented Lagrangian constrained optimizer does something."""
     eq = desc.examples.get("SOLOVEV")
@@ -948,7 +949,7 @@ def test_constrained_AL_scalar():
         objective=obj,
         constraints=constraints,
         optimizer="fmin-auglag",
-        maxiter=500,
+        maxiter=1000,
         verbose=3,
         ctol=ctol,
         x_scale="auto",
@@ -957,8 +958,8 @@ def test_constrained_AL_scalar():
     )
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
-    Dwell = constraints[-2].compute(*constraints[-2].xs(eq2))
-    np.testing.assert_allclose(AR, AR2, atol=ctol)
-    np.testing.assert_allclose(V, V2, atol=ctol)
+    Dwell = constraints[-2].compute_scaled(*constraints[-2].xs(eq2))
+    np.testing.assert_allclose(AR, AR2, atol=ctol, rtol=ctol)
+    np.testing.assert_allclose(V, V2, atol=ctol, rtol=ctol)
     assert eq2.is_nested()
     np.testing.assert_array_less(-Dwell, ctol)

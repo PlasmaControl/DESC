@@ -170,6 +170,7 @@ Objective Functions
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
+    desc.objectives.ForceBalanceAnisotropic
     desc.objectives.GenericObjective
     desc.objectives.get_equilibrium_objective
     desc.objectives.get_fixed_axis_constraints
@@ -183,6 +184,7 @@ Objective Functions
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.PlasmaVesselDistance
+    desc.objectives.Pressure
     desc.objectives.PrincipalCurvature
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm
@@ -203,8 +205,12 @@ Optimize
    :template: class.rst
 
    desc.optimize.Optimizer
+   desc.optimize.fmin_auglag
    desc.optimize.fmintr
+   desc.optimize.lsq_auglag
    desc.optimize.lsqtr
+   desc.optimize.register_optimizer
+   desc.optimize.sgd
 
 
 Perturbations

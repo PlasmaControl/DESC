@@ -121,46 +121,19 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 **Note that DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet), and thus older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.**
 
-Della Cluster (Princeton)
-+++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Della cluster at Princeton as of 7-11-2023.
+Della and Stellar Clusters (Princeton)
+++++++++++++++++++++++++++++++++++++++
+These instructions were tested and confirmed to work on the Della and Stellar clusters at Princeton as of 8-26-2023.
 
-First, install JAX (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ):
+First, install JAX (check `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters):
 
 .. code-block:: sh
 
     module load anaconda3/2023.3
-    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.1=cuda112*" -c conda-forge
+    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.10=cuda112*" -c conda-forge
     conda activate desc-env
 
-Then, we install DESC:
-
-.. code-block:: sh
-
-    git clone https://github.com/PlasmaControl/DESC.git
-    cd DESC
-    # remove the jax lines from requirements.txt, as we already have installed them above
-    sed -i '/jax/d' ./requirements.txt
-    # then install as usual
-    pip install --editable .
-    # optionally install developer requirements (if you want to run tests)
-    pip install -r devtools/dev-requirements.txt
-
-
-Stellar Cluster (Princeton)
-+++++++++++++++++++++++++++
-Using pip install and including GPU capabilities.
-These instructions were tested and confirmed to work on the Stellar cluster at Princeton as of 5-2-2023.
-
-First, install JAX with GPU support (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ):
-
-.. code-block:: sh
-
-    module load anaconda3/2022.5
-    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.1=cuda112*" -c conda-forge
-    conda activate desc-env
-
-Then, we install DESC:
+Then, install DESC:
 
 .. code-block:: sh
 

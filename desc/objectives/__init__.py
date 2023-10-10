@@ -5,6 +5,7 @@ from ._equilibrium import (
     CurrentDensity,
     Energy,
     ForceBalance,
+    ForceBalanceAnisotropic,
     HelicalForceBalance,
     RadialForceBalance,
 )
@@ -18,7 +19,7 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
-from ._profiles import RotationalTransform, Shear, ToroidalCurrent
+from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._qs import (
     Isodynamicity,
     QuasisymmetryBoozer,
@@ -38,6 +39,7 @@ from .linear_objectives import (
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    FixAnisotropy,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,

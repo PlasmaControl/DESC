@@ -55,6 +55,24 @@ not_implemented_limits = {
     "iota_num_rrr",
     "iota_den_rrr",
     "D_current",
+    "e^rho_rr",
+    "e^theta_rr",
+    "e^zeta_rr",
+    "e^rho_rt",
+    "e^rho_tt",
+    "e^theta_rt",
+    "e^theta_tt",
+    "e^zeta_rt",
+    "e^zeta_tt",
+    "e^rho_rz",
+    "e^rho_tz",
+    "e^rho_zz",
+    "e^theta_rz",
+    "e^theta_tz",
+    "e^theta_zz",
+    "e^zeta_rz",
+    "e^zeta_tz",
+    "e^zeta_zz",
 }
 
 
@@ -101,8 +119,9 @@ def _skip_this(eq, name):
         or (eq.electron_temperature is None and "Te" in name)
         or (eq.electron_density is None and "ne" in name)
         or (eq.ion_temperature is None and "Ti" in name)
+        or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
-        or (eq.current is None and ("iota_num" in name or "iota_den" in name))
+        or (eq.current is None and "iota_num" in name)
     )
 
 

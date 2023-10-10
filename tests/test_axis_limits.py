@@ -138,7 +138,7 @@ def _skip_this(eq, name):
         or (eq.ion_temperature is None and "Ti" in name)
         or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
-        or (eq.current is None and ("iota_num" in name or "iota_den" in name))
+        or (eq.current is None and "iota_num" in name)
     )
 
 

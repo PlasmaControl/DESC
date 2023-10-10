@@ -25,6 +25,7 @@ from desc.objectives import (
     FixPressure,
     FixPsi,
     ForceBalance,
+    ForceBalanceAnisotropic,
     HelicalForceBalance,
     ObjectiveFunction,
     QuasisymmetryBoozer,
@@ -34,7 +35,7 @@ from desc.objectives import (
     get_NAE_constraints,
 )
 from desc.optimize import Optimizer
-from desc.profiles import PowerSeriesProfile
+from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
@@ -56,6 +57,27 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
 def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
+
+    np.testing.assert_allclose(rho_err, 0, atol=1e-3)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_SOLOVEV_anisotropic_results(SOLOVEV):
+    """Tests that SOLOVEV with zero anisotropic pressure gives the same result."""
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    # reset to start
+    eq.set_initial_guess()
+    # give it a zero anisotropy profile
+    anisotropy = FourierZernikeProfile()
+    anisotropy.change_resolution(eq.L, eq.M, eq.N)
+    eq.anisotropy = anisotropy
+
+    obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq))
+    constraints = get_fixed_boundary_constraints(eq=eq, anisotropy=True)
+    eq.solve(obj, constraints, verbose=3)
     rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
     np.testing.assert_allclose(rho_err, 0, atol=1e-3)
@@ -131,9 +153,8 @@ def test_force_balance_grids():
 
     def test(iota=False):
         if iota:
-            # pick quad here just to increase code coverage
-            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True, node_pattern="quad")
-            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True, node_pattern="quad")
+            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
+            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
         else:
             eq1 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
             eq2 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
@@ -330,7 +351,6 @@ def test_ATF_results(tmpdir_factory):
         L_grid=eq0.L_grid,
         M_grid=eq0.M_grid,
         N_grid=eq0.N_grid,
-        node_pattern=eq0.node_pattern,
         pressure=eq0.pressure,
         iota=eq0.iota,
         surface=eq0.get_surface_at(rho=1),
@@ -363,7 +383,6 @@ def test_ESTELL_results(tmpdir_factory):
         L_grid=eq0.L_grid,
         M_grid=eq0.M_grid,
         N_grid=eq0.N_grid,
-        node_pattern=eq0.node_pattern,
         pressure=eq0.pressure,
         current=eq0.current,
         surface=eq0.get_surface_at(rho=1),

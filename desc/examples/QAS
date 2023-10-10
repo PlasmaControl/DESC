@@ -1,9 +1,9 @@
 # This DESC input file is for QAS with a fixed toroidal current profile
 
 # global parameters
-sym = 1 
-NFP =   3 
-Psi = 0.49707021 
+sym = 1
+NFP =   3
+Psi = 0.49707021
 
 # spectral resolution
 L_rad = 6, 11, 11, 11, 11, 11, 11
@@ -14,10 +14,10 @@ M_grid = 22, 22, 22, 22, 22, 22, 22
 N_grid = 0, 0, 0, 12, 12, 12, 12
 
 # continuation parameters
-bdry_ratio = 0.0, 0.0, 0.0, 0.25, 0.5, 0.75, 1.0 
-pres_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0 
-curr_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0 
-pert_order = 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 
+bdry_ratio = 0.0, 0.0, 0.0, 0.25, 0.5, 0.75, 1.0
+pres_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
+curr_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
+pert_order = 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0
 
 # solver tolerances
 
@@ -26,7 +26,6 @@ optimizer = lsq-exact
 objective = force
 bdry_mode = lcfs
 spectral_indexing = ansi
-node_pattern = jacobi
 
 # pressure and rotational transform/current profiles
 l:   0	p =   6.85517649E+04	c =  -0.00000000E+00

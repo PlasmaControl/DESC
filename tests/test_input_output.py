@@ -272,7 +272,7 @@ class TestInputReader:
         ), "numpy environment variable incorrect with default argument"
         assert ir.args.version is False, "version is not default False"
         assert (
-            len(ir.inputs[0]) == 27
+            len(ir.inputs[0]) == 26
         ), "number of inputs does not match number expected in MIN_INPUT"
         # test equality of arguments
 
@@ -318,6 +318,15 @@ class TestInputReader:
         # ensure that a current profile instead of an iota profile is used
         assert "iota" not in ir.inputs[0].keys()
         assert "current" in ir.inputs[0].keys()
+
+    @pytest.mark.unit
+    def test_node_pattern_warning(self):
+        """Test that a warning is thrown when trying to use a custom node pattern."""
+        input_path = ".//tests//inputs//SOLOVEV_poincare"
+        # load an input file with vacuum obj but also an iota profile specified
+        with pytest.warns(UserWarning):
+            ir = InputReader(input_path)
+        assert "node_pattern" not in ir.inputs[0]
 
 
 class MockObject:

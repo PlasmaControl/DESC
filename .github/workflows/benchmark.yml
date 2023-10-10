@@ -44,17 +44,20 @@ jobs:
           pwd
           lscpu
           cd tests/benchmarks
-          python -m pytest benchmark_cpu_small.py --benchmark-save='Latest_Commit' -vv --durations=0
-      - name:  Checkout current master
-        run: |
-          git fetch origin master
-          git checkout origin/master -- desc
+          python -m pytest benchmark_cpu_small.py --benchmark-save='Latest_Commit' -vv --durations=0 --benchmark-save-data
+      - name: Checkout current master
+        uses: actions/checkout@v3
+        with:
+          ref: master
+          clean: false
+      - name: Checkout benchmarks from PR head
+        run: git checkout ${{ github.event.pull_request.head.sha }} -- tests/benchmarks
       - name: Benchmark with pytest-benchmark
         run: |
           pwd
           lscpu
           cd tests/benchmarks
-          python -m pytest benchmark_cpu_small.py --benchmark-save='master' -vv --durations=0
+          python -m pytest benchmark_cpu_small.py --benchmark-save='master' -vv --durations=0 --benchmark-save-data
       - name: put benchmark results in same folder
         run: |
           pwd
@@ -78,6 +81,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           path: tests/benchmarks/commit_msg.txt
+      - name: Upload benchmark data
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark_artifact
+          path: tests/benchmarks/.benchmarks
       - name: Setup tmate session
         if: ${{ failure() }}
         uses: mxschmitt/action-tmate@v3

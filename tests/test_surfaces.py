@@ -135,6 +135,19 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(data["curvature_k1_rho"], 0)
         np.testing.assert_allclose(data["curvature_k2_rho"], -1)
 
+    @pytest.mark.unit
+    def test_position(self):
+        """Tests for position on surface."""
+        s = FourierRZToroidalSurface()
+        grid = LinearGrid(theta=0, zeta=np.pi)
+        data = s.compute(["x", "R", "phi", "Z"], grid=grid, basis="xyz")
+        np.testing.assert_allclose(data["R"], 11)
+        np.testing.assert_allclose(data["x"][0, 0], -11)
+        np.testing.assert_allclose(data["phi"], np.pi)
+        np.testing.assert_allclose(data["x"][0, 1], 0, atol=1e-14)  # this is y
+        np.testing.assert_allclose(data["Z"], 0)
+        np.testing.assert_allclose(data["x"][0, 2], 0)
+
 
 class TestZernikeRZToroidalSection:
     """Tests for ZernikeRZToroidalSection class."""

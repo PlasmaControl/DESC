@@ -469,7 +469,6 @@ def test_scipy_fail_message():
             gtol=1e-12,
         )
         assert "Maximum number of iterations has been exceeded" in result["message"]
-    eq._node_pattern = "quad"
     eq.set_initial_guess()
     objectives = Energy(eq=eq)
     obj = ObjectiveFunction(objectives)
@@ -571,7 +570,6 @@ def test_all_optimizers():
     """Just tests that the optimizers run without error, eg tests for the wrappers."""
     eqf = desc.examples.get("SOLOVEV")
     eqe = eqf.copy()
-    eqe._node_pattern = "quad"
     fobj = ObjectiveFunction(ForceBalance(eq=eqf))
     eobj = ObjectiveFunction(Energy(eq=eqe))
     fobj.build()
@@ -614,7 +612,6 @@ def test_scipy_constrained_solve():
     eq = desc.examples.get("DSHAPE")
     # increase pressure so no longer in force balance
     eq.p_l *= 1.1
-    eq._node_pattern = "quad"
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position

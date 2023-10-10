@@ -995,14 +995,17 @@ class CoilSet(_Coil, MutableSequence):
 
         """
         coils = []  # list of SplineXYZCoils
-        coilinds = [2]  # always start at the 3rd line
+        coilinds = [2]  # always start at the 3rd line after periods
         names = []
 
         # read in the coils file
+        headind = -1
         with open(coil_file) as f:
             lines = f.readlines()
             for i, line in enumerate(lines):
                 if line.find("periods") != -1:
+                    headind = i  # skip anything that is above the periods line
+                    coilinds[0] += headind
                     continue
                 if (
                     line.find("begin filament") != -1
@@ -1011,12 +1014,15 @@ class CoilSet(_Coil, MutableSequence):
                 ):
                     continue  # skip headers and last line
                 if (
-                    len(line.split()) != 4
+                    len(line.split()) != 4  # find the line immediately before a coil,
+                    # where the line length is greater than 4
                     and line.strip()  # ensure not counting blank lines
+                    # if we have not found the header yet, skip the line
+                    and headind != -1
                 ):
                     coilinds.append(i)
                     names.append(" ".join(line.split()[4:]))
-        if len(lines[3].split()) != 4:
+        if len(lines[3 + headind].split()) != 4:
             raise OSError(
                 "4th line in file must be the start of the first coil! "
                 + "Expected a line of length 4 (after .split()), "
@@ -1024,22 +1030,22 @@ class CoilSet(_Coil, MutableSequence):
             )
         header_lines_not_as_expected = np.array(
             [
-                len(lines[0].split()) != 2,
-                len(lines[1].split()) != 2,
-                len(lines[2].split()) != 2,
+                len(lines[0 + headind].split()) != 2,
+                len(lines[1 + headind].split()) != 2,
+                len(lines[2 + headind].split()) != 2,
             ]
         )
         if np.any(header_lines_not_as_expected):
             raise OSError(
-                "First 3 lines in file must be the header lines,"
+                "First 3 lines in file starting with the periods line "
+                + "must be the header lines,"
                 + " each of length 2 (after .split())! "
-                + f"Line(s) {lines[np.where(header_lines_not_as_expected)[0]]}"
+                + f"Line(s) {lines[np.where(header_lines_not_as_expected)[0]+headind]}"
                 + " are not length 2"
             )
 
         for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
             coords = np.genfromtxt(lines[start + 1 : end])
-
             coils.append(
                 SplineXYZCoil(
                     coords[:, -1][0],

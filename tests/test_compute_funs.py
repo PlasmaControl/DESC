@@ -18,6 +18,7 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.grid import LinearGrid, QuadratureGrid
+from desc.io import load
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -46,9 +47,7 @@ def myconvolve_2d(arr_1d, stencil, shape):
 @pytest.mark.unit
 def test_total_volume(DummyStellarator):
     """Test that the volume enclosed by the LCFS is equal to the total volume."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
     lcfs_volume = eq.compute("V(r)", grid=grid)["V(r)"]
@@ -176,9 +175,7 @@ def test_elongation():
 @pytest.mark.unit
 def test_magnetic_field_derivatives(DummyStellarator):
     """Test that the derivatives of B and |B| are close to numerical derivatives."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     # partial derivatives wrt rho
     rtol = 1e-3
@@ -958,9 +955,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
 @pytest.mark.unit
 def test_metric_derivatives(DummyStellarator):
     """Compare analytic formula for metric derivatives with finite differences."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     metric_components = ["g^rr", "g^rt", "g^rz", "g^tt", "g^tz", "g^zz"]
 
@@ -1020,9 +1015,7 @@ def test_metric_derivatives(DummyStellarator):
 @pytest.mark.unit
 def test_magnetic_pressure_gradient(DummyStellarator):
     """Test that the components of grad(|B|^2)) match with numerical gradients."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     # partial derivatives wrt rho
     num_rho = 110
@@ -1087,9 +1080,7 @@ def test_currents(DSHAPE_current):
 @pytest.mark.unit
 def test_BdotgradB(DummyStellarator):
     """Test that the components of grad(B*grad(|B|)) match with numerical gradients."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     def test_partial_derivative(name):
         cases = {
@@ -1293,9 +1284,7 @@ def test_compute_averages():
 @pytest.mark.unit
 def test_covariant_basis_vectors(DummyStellarator):
     """Test calculation of covariant basis vectors by comparing to finite diff of x."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
     keys = [
         "e_rho",
         "e_rho_r",
@@ -1572,3 +1561,26 @@ def test_contravariant_basis_vectors():
             atol=atol,
             err_msg=key,
         )
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+def test_iota_components(HELIOTRON_vac):
+    """Test that iota components are computed correctly."""
+    # axisymmetric, so all rotational transform should be from the current
+    eq_i = get("DSHAPE")  # iota profile assigned
+    eq_c = get("DSHAPE_CURRENT")  # current profile assigned
+    grid = LinearGrid(L=100, M=max(eq_i.M_grid, eq_c.M_grid), N=0, NFP=1, axis=True)
+    data_i = eq_i.compute(["iota", "iota current", "iota vacuum"], grid)
+    data_c = eq_c.compute(["iota", "iota current", "iota vacuum"], grid)
+    np.testing.assert_allclose(data_i["iota"], data_i["iota current"])
+    np.testing.assert_allclose(data_c["iota"], data_c["iota current"])
+    np.testing.assert_allclose(data_i["iota vacuum"], 0)
+    np.testing.assert_allclose(data_c["iota vacuum"], 0)
+
+    # vacuum stellarator, so all rotational transform should be from the external field
+    eq = load(load_from=str(HELIOTRON_vac["desc_h5_path"]), file_format="hdf5")[-1]
+    grid = LinearGrid(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
+    data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
+    np.testing.assert_allclose(data["iota"], data["iota vacuum"])
+    np.testing.assert_allclose(data["iota current"], 0)

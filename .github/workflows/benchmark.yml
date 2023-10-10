@@ -8,6 +8,12 @@ on:
       - 'docs/**'
       - 'devtools/**'
   workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        required: false
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -18,6 +24,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Enable tmate debugging of manually-triggered workflows if the input option was provided
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -60,7 +70,7 @@ jobs:
         run: |
           pwd
           cd tests/benchmarks
-          python compare_bench_results.py
+          python -m pdb -c continue compare_bench_results.py
           cat commit_msg.txt
       - name: comment PR with the results
         uses: machine-learning-apps/pr-comment@master
@@ -68,3 +78,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           path: tests/benchmarks/commit_msg.txt
+      - name: Setup tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3

@@ -70,7 +70,7 @@ jobs:
         run: |
           pwd
           cd tests/benchmarks
-          python -m pdb -c continue compare_bench_results.py
+          python compare_bench_results.py
           cat commit_msg.txt
       - name: comment PR with the results
         uses: machine-learning-apps/pr-comment@master

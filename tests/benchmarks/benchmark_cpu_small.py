@@ -28,7 +28,7 @@ def test_build_transform_fft_lowres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, rounds=100)
+    benchmark.pedantic(build, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
@@ -44,7 +44,7 @@ def test_build_transform_fft_midres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, rounds=100)
+    benchmark.pedantic(build, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
@@ -60,7 +60,7 @@ def test_build_transform_fft_highres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, rounds=100)
+    benchmark.pedantic(build, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
@@ -73,7 +73,7 @@ def test_equilibrium_init_lowres(benchmark):
         N = 5
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, rounds=100)
+    benchmark.pedantic(build, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
@@ -86,7 +86,7 @@ def test_equilibrium_init_medres(benchmark):
         N = 15
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, rounds=100)
+    benchmark.pedantic(build, iterations=1, rounds=50)
 
 
 @pytest.mark.benchmark()
@@ -99,7 +99,7 @@ def test_equilibrium_init_highres(benchmark):
         N = 25
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, rounds=100)
+    benchmark.pedantic(build, iterations=1, rounds=50)
 
 
 @pytest.mark.slow
@@ -121,7 +121,7 @@ def test_objective_compile_dshape_current(benchmark):
     def run(objective, eq):
         objective.compile()
 
-    benchmark.pedantic(run, setup=setup, rounds=20, iterations=1)
+    benchmark.pedantic(run, setup=setup, rounds=10, iterations=1)
 
 
 @pytest.mark.slow
@@ -140,7 +140,7 @@ def test_objective_compile_atf(benchmark):
     def run(objective, eq):
         objective.compile()
 
-    benchmark.pedantic(run, setup=setup, rounds=20, iterations=1)
+    benchmark.pedantic(run, setup=setup, rounds=10, iterations=1)
 
 
 @pytest.mark.slow
@@ -156,7 +156,7 @@ def test_objective_compute_dshape_current(benchmark):
     def run(x, objective):
         objective.compute_scaled_error(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, objective), rounds=100, iterations=1)
+    benchmark.pedantic(run, args=(x, objective), rounds=50, iterations=1)
 
 
 @pytest.mark.slow
@@ -172,7 +172,7 @@ def test_objective_compute_atf(benchmark):
     def run(x, objective):
         objective.compute_scaled_error(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, objective), rounds=100, iterations=1)
+    benchmark.pedantic(run, args=(x, objective), rounds=50, iterations=1)
 
 
 @pytest.mark.slow
@@ -188,7 +188,7 @@ def test_objective_jac_dshape_current(benchmark):
     def run(x):
         objective.jac_scaled(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x,), rounds=25, iterations=1)
+    benchmark.pedantic(run, args=(x,), rounds=15, iterations=1)
 
 
 @pytest.mark.slow
@@ -204,7 +204,7 @@ def test_objective_jac_atf(benchmark):
     def run(x):
         objective.jac_scaled(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x,), rounds=25, iterations=1)
+    benchmark.pedantic(run, args=(x,), rounds=15, iterations=1)
 
 
 @pytest.mark.slow

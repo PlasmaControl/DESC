@@ -211,7 +211,7 @@ class InputReader:
 
         for line in lines:
             # check if VMEC input file format
-            isVMEC = re.search(r"&INDATA", line)
+            isVMEC = re.search(r"&INDATA", line, re.IGNORECASE)
             if isVMEC:
                 print("Converting VMEC input to DESC input")
                 path = self.input_path + "_desc"
@@ -1011,7 +1011,7 @@ class InputReader:
         # find start of namelist (&INDATA)
         vmeclines = vmec_file.readlines()
         for i, line in enumerate(vmeclines):
-            if line.find("&INDATA") != -1:
+            if line.upper().find("&INDATA") != -1:
                 start_ind = i
                 continue
             elif line.find("&") != -1:  # only care about the INDATA section

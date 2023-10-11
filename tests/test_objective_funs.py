@@ -364,7 +364,7 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_qs_boozer_grids(self):
         """Test grid compatibility with QS objectives."""
-        eq = get("QAS")
+        eq = get("NCSX")
 
         # symmetric grid
         grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)

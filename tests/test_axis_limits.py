@@ -268,7 +268,7 @@ class TestAxisLimits:
         # fixed iota
         assert_is_continuous(get("W7-X"), kwargs=kwargs)
         # fixed current
-        assert_is_continuous(get("QAS"), kwargs=kwargs)
+        assert_is_continuous(get("NCSX"), kwargs=kwargs)
 
     @pytest.mark.unit
     def test_magnetic_field_is_physical(self):
@@ -302,4 +302,4 @@ class TestAxisLimits:
                 np.testing.assert_allclose(B[:, 2], B[0, 2])
 
         test(get("W7-X"))
-        test(get("QAS"))
+        test(get("NCSX"))

@@ -217,7 +217,7 @@ def get_NAE_constraints(
     ----------
     desc_eq : Equilibrium
         Equilibrium to constrain behavior of
-        (assumed to be a fit from the NAE equil using .from_near_axis()).
+        (assumed to be a fit from the NAE equil using `.from_near_axis()`).
     qsc_eq : Qsc
         Qsc object defining the near-axis equilibrium to constrain behavior to.
     order : int
@@ -225,7 +225,7 @@ def get_NAE_constraints(
     profiles : bool
         Whether to also return constraints to fix input profiles.
     iota : bool
-        Whether to add FixIota or FixCurrent as a constraint.
+        Whether to add `FixIota` or `FixCurrent` as a constraint.
     kinetic : bool
         Whether to also fix kinetic profiles.
     anisotropy : bool
@@ -234,17 +234,19 @@ def get_NAE_constraints(
         Whether to apply constraints in normalized units.
     N : int
         max toroidal resolution to constrain.
-        If None, defaults to equilibrium's toroidal resolution
+        If `None`, defaults to equilibrium's toroidal resolution
     fix_lambda : bool or int
         Whether to constrain lambda to match that of the NAE near-axis
-        if an int, fixes lambda up to that order in rho {0,1}
-        if True, fixes lambda up to the specified order given by order
+        if an `int`, fixes lambda up to that order in rho {0,1}
+        if `True`, fixes lambda up to the specified order given by `order`
 
     Returns
     -------
     constraints, tuple of _Objectives
         A list of the linear constraints used in fixed-axis problems.
     """
+    if not isinstance(fix_lambda, bool):
+        fix_lambda = int(fix_lambda)
     constraints = (
         FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
@@ -287,7 +289,7 @@ def get_NAE_constraints(
             constraints += (
                 FixCurrent(eq=desc_eq, normalize=normalize, normalize_target=normalize),
             )
-    if fix_lambda or fix_lambda >= 0:
+    if fix_lambda or (fix_lambda >= 0 and type(fix_lambda) is int):
         L_axis_constraints, _, _ = calc_zeroth_order_lambda(
             qsc=qsc_eq, desc_eq=desc_eq, N=N
         )

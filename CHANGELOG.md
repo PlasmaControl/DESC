@@ -1,6 +1,12 @@
 Changelog
 =========
 
+- Updates `desc.examples`:
+    * `NCSX` now has a fixed current profile. Previously it used a fixed iota based on a
+    fit, but this was somewhat inaccurate.
+    * `QAS` has been removed as it is now redundant with `NCSX`.
+    * `ARIES-CS` has been scaled to the correct size and field strength.
+    * new example for `HSX`
 - Adds new compute quantities `"iota current"` and `"iota vacuum"` to compute the
 rotational transform contributions from the toroidal current and background field.
 - Adds ability to compute equilibria with anisotropic pressure. This includes a new

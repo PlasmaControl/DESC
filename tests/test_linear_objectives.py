@@ -550,7 +550,7 @@ def test_correct_indexing_passed_modes_axis():
         AxisZSelfConsistency(eq=eq),
         FixModeR(eq=eq, modes=np.array([[1, 1, 1], [2, 2, 2]]), normalize=False),
         FixModeZ(eq=eq, modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
-        FixModeLambda(modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
+        FixModeLambda(eq=eq, modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
         FixSumModesR(
             eq=eq,
             modes=np.array([[3, 3, 3], [4, 4, 4]]),
@@ -646,6 +646,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             normalize=False,
         ),
         FixModeLambda(
+            eq=eq,
             modes=np.array([[1, 1, -1], [2, 2, -2]]),
             target=np.array(
                 [
@@ -678,6 +679,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             normalize=False,
         ),
         FixSumModesLambda(
+            eq=eq,
             modes=np.array([[3, 3, -3], [4, 4, -4]]),
             target=np.array(
                 [
@@ -771,7 +773,7 @@ def test_FixMode_passed_target_no_passed_modes_error():
     FixR = FixModeR(eq=eq, modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixR.build(eq)
-    FixL = FixModeLambda(modes=True, target=np.array([[0]]))
+    FixL = FixModeLambda(eq=eq, modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixL.build(eq)
 

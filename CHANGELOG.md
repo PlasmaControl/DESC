@@ -1,16 +1,36 @@
 Changelog
 =========
+
+- Adds new compute quantities `"iota current"` and `"iota vacuum"` to compute the
+rotational transform contributions from the toroidal current and background field.
+- Adds ability to compute equilibria with anisotropic pressure. This includes a new
+profile, ``Equilibrium.anisotropy``, new compute quantity ``F_anisotropic``, and a new
+objective ``ForceBalanceAnisotropic``.
+- `plot_3d` and `plot_coils` have been updated to use Plotly as a backend instead of
+Matplotlib, since Matplotlib isn't great for 3d plots, especially ones with multiple
+overlapping objects in the scene. Main API differences:
+    * Plotly doesn't have "axes" like Matplotlib does, just figures. So the `ax`
+    argument has been replaced by `fig` for `plot_3d` and `plot_coils`, and they no
+    longer return `ax`.
+    * Names of colormaps, line patterns, etc are different, so use caution when
+    specifying those using `kwargs`. Thankfully the error messages Plotly generates are
+    usually pretty informative and list the available options.
 - Adds zeroth and first order NAE constraints on the poloidal stream function lambda,
 accessible by passing in ``fix_lambda=True`` to the ``get_NAE_constraint`` getter function.
+
+v0.10.1
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.10.0...v0.10.1)
+
+Improvements
 - Adds second derivatives of contravariant basis vectors to the list of quantities we can compute.
-- Removes ``grid`` attribute from ``Profile`` classes, ``grid`` should now be passed
-in when calling ``Profile.compute``.
 - Refactors most of the optimizer subproblems to use JAX control flow, allowing them
 to run more efficiently on the GPU.
 - Adds ``'shear'`` as a compute quantity and ``Shear`` as an objective function.
 - Adds a new objective ``Pressure`` to target a pressure profile as a function of rho instead
 of spectral coefficients like ``FixPressure``. Can also be used when optimizing kinetic equilibria.
-- Also allows all profile objectives to have callable bounds and targets.
+- Allows all profile objectives to have callable bounds and targets.
 - All objective function values should now be approximately independent of the grid
 resolution. Previously this was only true when objectives had `normalize=True`
 - `Objective.print_value` Now prints max/min/avg for most objectives, and it should be
@@ -18,6 +38,16 @@ clear whether it is printing the actual value of the quantity or the error betwe
 the objective and its target.
 - Adds new options to `plot_boozer_modes` to plot only symmetry breaking modes (when
 helicity is supplied) or only the pointwise maximum of the symmetry breaking modes.
+- Changes default ``Grid`` sorting to False, to avoid unintentional sorting of
+passed-in nodes. Must explicitly specify `sort=True` to ``Grid`` object to sort now.
+
+Breaking Changes
+- Removes ``grid`` attribute from ``Profile`` classes, ``grid`` should now be passed
+in when calling ``Profile.compute``.
+
+Bug Fixes
+- Fix bug where running DESC through the command line interface with the `-g` flag
+failed to properly utilize the GPU
 
 
 v0.10.0

@@ -1500,11 +1500,6 @@ class FixModeLambda(_FixedObjective):
         fixed_params = L_lmn[self._idx]
         return fixed_params
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "L_lmn"
-
 
 class FixSumModesR(_FixedObjective):
     """Fixes a linear sum of Fourier-Zernike R coefficients.
@@ -1976,11 +1971,6 @@ class FixSumModesLambda(_FixedObjective):
         """
         f = jnp.dot(self._A, L_lmn)
         return f
-
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "L_lmn"
 
 
 class _FixProfile(_FixedObjective, ABC):

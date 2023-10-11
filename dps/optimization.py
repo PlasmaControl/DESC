@@ -15,7 +15,7 @@ savename = "optimized" + filename
 eq = desc.io.load(filename)[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
-eq.solve()
+# eq.solve()
 
 # Energy and Mass info
 Energy_eV = 3.52e6
@@ -38,7 +38,7 @@ ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 # Time
 tmin = 0
 tmax = 1e-4
-nt = 2000
+nt = 1000
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond

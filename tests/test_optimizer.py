@@ -46,7 +46,6 @@ from desc.optimize import (
     optimizers,
     sgd,
 )
-from desc.utils import setdefault
 
 
 @jit
@@ -108,11 +107,11 @@ class TestFmin:
             scalar_grad,
             scalar_hess,
             verbose=3,
-            method="dogleg",
             x_scale="hess",
             ftol=0,
             xtol=0,
             gtol=1e-12,
+            options={"tr_method": "dogleg"},
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -127,11 +126,11 @@ class TestFmin:
             scalar_grad,
             scalar_hess,
             verbose=3,
-            method="subspace",
             x_scale="hess",
             ftol=0,
             xtol=0,
             gtol=1e-12,
+            options={"tr_method": "subspace"},
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -146,11 +145,11 @@ class TestFmin:
             scalar_grad,
             scalar_hess,
             verbose=3,
-            method="exact",
             x_scale="hess",
             ftol=0,
             xtol=0,
             gtol=1e-12,
+            options={"tr_method": "exact"},
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -168,11 +167,11 @@ class TestFmin:
             rosen_der,
             hess="bfgs",
             verbose=3,
-            method="dogleg",
             x_scale="hess",
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
+            options={"tr_method": "dogleg"},
         )
         np.testing.assert_allclose(out["x"], true_x)
 
@@ -190,11 +189,11 @@ class TestFmin:
             rosen_der,
             hess=BFGS(),
             verbose=3,
-            method="subspace",
             x_scale=1,
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
+            options={"tr_method": "subspace"},
         )
         np.testing.assert_allclose(out["x"], true_x)
 
@@ -212,11 +211,11 @@ class TestFmin:
             rosen_der,
             hess=BFGS(),
             verbose=3,
-            method="exact",
             x_scale=1,
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
+            options={"tr_method": "exact"},
         )
         np.testing.assert_allclose(out["x"], true_x)
 
@@ -269,8 +268,11 @@ class TestLSQTR:
             jac,
             verbose=3,
             x_scale=1,
-            tr_method="cho",
-            options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
+            options={
+                "initial_trust_radius": 0.15,
+                "max_trust_radius": 0.25,
+                "tr_method": "cho",
+            },
         )
         np.testing.assert_allclose(out["x"], p)
 
@@ -280,8 +282,11 @@ class TestLSQTR:
             jac,
             verbose=3,
             x_scale=1,
-            tr_method="svd",
-            options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
+            options={
+                "initial_trust_radius": 0.15,
+                "max_trust_radius": 0.25,
+                "tr_method": "svd",
+            },
         )
         np.testing.assert_allclose(out["x"], p)
 
@@ -326,13 +331,12 @@ def test_overstepping():
         _print_value_fmt = "Dummy: {:.3e}"
         _units = "(Foo)"
 
-        def build(self, eq, *args, **kwargs):
-            self.things = setdefault(eq, self.things)
+        def build(self, *args, **kwargs):
             eq = self.things[0]
             # objective = just shift x by a lil bit
             self._x0 = {key: val + 1e-6 for key, val in eq.params_dict.items()}
             self._dim_f = sum(np.asarray(x).size for x in self._x0.values())
-            super().build(eq)
+            super().build()
 
         def compute(self, params, constants=None):
             x = jnp.concatenate(
@@ -410,12 +414,12 @@ def test_maxiter_1_and_0_solve():
     )
     objectives = ForceBalance(eq=eq)
     obj = ObjectiveFunction(objectives)
-    for opt in ["lsq-exact", "fmin-dogleg-bfgs"]:
+    for opt in ["lsq-exact", "fmintr-bfgs"]:
         eq, result = eq.solve(
             maxiter=1, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
         assert result["nit"] == 1
-    for opt in ["lsq-exact", "fmin-dogleg-bfgs"]:
+    for opt in ["lsq-exact", "fmintr-bfgs"]:
         eq, result = eq.solve(
             maxiter=0, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
@@ -426,7 +430,7 @@ def test_maxiter_1_and_0_solve():
 @pytest.mark.slow
 def test_scipy_fail_message():
     """Test that scipy fail message does not cause an error (see PR #434)."""
-    eq = Equilibrium()
+    eq = Equilibrium(M=3)
     constraints = (
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),
@@ -450,7 +454,7 @@ def test_scipy_fail_message():
             gtol=1e-12,
         )
         assert "Maximum number of iterations has been exceeded" in result["message"]
-    eq._node_pattern = "quad"
+    eq.set_initial_guess()
     objectives = Energy(eq=eq)
     obj = ObjectiveFunction(objectives)
     for opt in ["scipy-trust-exact"]:
@@ -551,7 +555,6 @@ def test_all_optimizers():
     """Just tests that the optimizers run without error, eg tests for the wrappers."""
     eqf = desc.examples.get("SOLOVEV")
     eqe = eqf.copy()
-    eqe._node_pattern = "quad"
     fobj = ObjectiveFunction(ForceBalance(eq=eqf))
     eobj = ObjectiveFunction(Energy(eq=eqe))
     fobj.build()
@@ -591,7 +594,6 @@ def test_scipy_constrained_solve():
     eq = desc.examples.get("DSHAPE")
     # increase pressure so no longer in force balance
     eq.p_l *= 1.1
-    eq._node_pattern = "quad"
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
@@ -606,7 +608,8 @@ def test_scipy_constrained_solve():
     AR = eq.compute("R0/a")["R0/a"]
     ARbounds = (0.95 * AR, 1.05 * AR)
     H = eq.compute(
-        "curvature_H_rho", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        "curvature_H_rho",
+        grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
     )["curvature_H_rho"]
     Hbounds = ((1 - 0.05 * np.sign(H)) * H, (1 + 0.05 * np.sign(H)) * abs(H))
     constraints += (
@@ -632,7 +635,8 @@ def test_scipy_constrained_solve():
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
     H2 = eq2.compute(
-        "curvature_H_rho", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        "curvature_H_rho",
+        grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
     )["curvature_H_rho"]
 
     assert ARbounds[0] < AR2 < ARbounds[1]
@@ -709,7 +713,7 @@ def test_bounded_optimization():
         gtol=1e-8,
         verbose=3,
         x_scale=1,
-        tr_method="svd",
+        options={"tr_method": "svd"},
     )
     out2 = fmintr(
         sfun,
@@ -815,7 +819,7 @@ def test_auglag():
         ctol=1e-6,
         verbose=3,
         maxiter=None,
-        options={"initial_multipliers": "least_squares"},
+        options={"initial_multipliers": "least_squares", "tr_method": "cho"},
     )
 
     out3 = minimize(
@@ -858,7 +862,6 @@ def test_constrained_AL_lsq():
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
-        FixBoundaryZ(eq=eq),  # fix Z shape but not R
         FixPressure(eq=eq),  # fix pressure profile
         FixIota(eq=eq),  # fix rotational transform profile
         FixPsi(eq=eq),  # fix total toroidal magnetic flux
@@ -875,7 +878,8 @@ def test_constrained_AL_lsq():
         ForceBalance(eq=eq, bounds=(-1e-3, 1e-3), normalize_target=False),
     )
     H = eq.compute(
-        "curvature_H_rho", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        "curvature_H_rho",
+        grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
     )["curvature_H_rho"]
     obj = ObjectiveFunction(MeanCurvature(eq=eq, target=H))
     ctol = 1e-4
@@ -892,7 +896,7 @@ def test_constrained_AL_lsq():
     )
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
-    Dwell = constraints[-2].compute(*constraints[-2].xs(eq2))
+    Dwell = constraints[-2].compute_scaled(*constraints[-2].xs(eq2))
     assert (ARbounds[0] - ctol) < AR2 < (ARbounds[1] + ctol)
     assert (Vbounds[0] - ctol) < V2 < (Vbounds[1] + ctol)
     assert eq2.is_nested()
@@ -901,7 +905,6 @@ def test_constrained_AL_lsq():
 
 @pytest.mark.slow
 @pytest.mark.regression
-@pytest.mark.xfail
 def test_constrained_AL_scalar():
     """Tests that the augmented Lagrangian constrained optimizer does something."""
     eq = desc.examples.get("SOLOVEV")
@@ -928,7 +931,7 @@ def test_constrained_AL_scalar():
         objective=obj,
         constraints=constraints,
         optimizer="fmin-auglag",
-        maxiter=500,
+        maxiter=1000,
         verbose=3,
         ctol=ctol,
         x_scale="auto",
@@ -937,8 +940,8 @@ def test_constrained_AL_scalar():
     )
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
-    Dwell = constraints[-2].compute(*constraints[-2].xs(eq2))
-    np.testing.assert_allclose(AR, AR2, atol=ctol)
-    np.testing.assert_allclose(V, V2, atol=ctol)
+    Dwell = constraints[-2].compute_scaled(*constraints[-2].xs(eq2))
+    np.testing.assert_allclose(AR, AR2, atol=ctol, rtol=ctol)
+    np.testing.assert_allclose(V, V2, atol=ctol, rtol=ctol)
     assert eq2.is_nested()
     np.testing.assert_array_less(-Dwell, ctol)

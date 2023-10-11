@@ -1,6 +1,107 @@
 Changelog
 =========
 
+- Adds new compute quantities `"iota current"` and `"iota vacuum"` to compute the
+rotational transform contributions from the toroidal current and background field.
+- Adds ability to compute equilibria with anisotropic pressure. This includes a new
+profile, ``Equilibrium.anisotropy``, new compute quantity ``F_anisotropic``, and a new
+objective ``ForceBalanceAnisotropic``.
+- `plot_3d` and `plot_coils` have been updated to use Plotly as a backend instead of
+Matplotlib, since Matplotlib isn't great for 3d plots, especially ones with multiple
+overlapping objects in the scene. Main API differences:
+    * Plotly doesn't have "axes" like Matplotlib does, just figures. So the `ax`
+    argument has been replaced by `fig` for `plot_3d` and `plot_coils`, and they no
+    longer return `ax`.
+    * Names of colormaps, line patterns, etc are different, so use caution when
+    specifying those using `kwargs`. Thankfully the error messages Plotly generates are
+    usually pretty informative and list the available options.
+
+
+v0.10.1
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.10.0...v0.10.1)
+
+Improvements
+- Adds second derivatives of contravariant basis vectors to the list of quantities we can compute.
+- Refactors most of the optimizer subproblems to use JAX control flow, allowing them
+to run more efficiently on the GPU.
+- Adds ``'shear'`` as a compute quantity and ``Shear`` as an objective function.
+- Adds a new objective ``Pressure`` to target a pressure profile as a function of rho instead
+of spectral coefficients like ``FixPressure``. Can also be used when optimizing kinetic equilibria.
+- Allows all profile objectives to have callable bounds and targets.
+- All objective function values should now be approximately independent of the grid
+resolution. Previously this was only true when objectives had `normalize=True`
+- `Objective.print_value` Now prints max/min/avg for most objectives, and it should be
+clear whether it is printing the actual value of the quantity or the error between
+the objective and its target.
+- Adds new options to `plot_boozer_modes` to plot only symmetry breaking modes (when
+helicity is supplied) or only the pointwise maximum of the symmetry breaking modes.
+- Changes default ``Grid`` sorting to False, to avoid unintentional sorting of
+passed-in nodes. Must explicitly specify `sort=True` to ``Grid`` object to sort now.
+
+Breaking Changes
+- Removes ``grid`` attribute from ``Profile`` classes, ``grid`` should now be passed
+in when calling ``Profile.compute``.
+
+Bug Fixes
+- Fix bug where running DESC through the command line interface with the `-g` flag
+failed to properly utilize the GPU
+
+
+v0.10.0
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.9.2...v0.10.0)
+
+
+Major Changes
+- Removes the various ``compute_*`` methods from ``Surface`` and ``Curve`` classes in
+favor of a unified ``compute`` method, similar to ``Equilibrium.compute``. The method
+takes as arguments strings containing the desired data. A full list of available options
+is at https://desc-docs.readthedocs.io/en/stable/variables.html
+- Analytic limits at the magnetic axis of all quantities have now been implemented.
+- New functions ``desc.random.random_surface`` and ``desc.random.random_pressure`` for
+generating pseudo-random toroidal surfaces and monotonic profiles.
+- Adds new curve parameterization `` desc.geometry.SplineXYZCurve`` and corresponding
+coil ``desc.coils.SplineXYZCoil`` that use a local spline of points in real space.
+- New methods ``CoilSet.from_makegrid_coilfile`` and ``CoilSet.save_in_makegrid_format``
+for creating a ``CoilSet`` of ``SplineXYZCoil`` from a MAKEGRID style text file or saving
+coil data in the format expected by MAKEGRID.
+- New function ``desc.magnetic_fields.read_BNORM_file`` for reading the Bnormal distribution
+on a surface from a BNORM code output file.
+- New methods ``compute_Bnormal`` and ``save_BNORM_file`` for all magnetic field classes
+to compute the normal component of the field on a given surface and save the data in the
+same format as the BNORM code.
+
+Minor Changes
+- Increases default radial resolution for stability objectives to be consistent with
+other objectives.
+- Creating ``Equilibrium`` objects or calling ``change_resolution`` on objects that have
+it should now be significantly faster.
+- ``Grid`` and ``Transform`` objects can now be created within the context of ``jit``,
+by passing ``jitable=True`` to the constructor.
+- Added support for newer JAX versions, up to v0.4.14. Newer versions likely work as well
+but are not automatically tested.
+- Adds ability to compute curvatures of constant theta and constant zeta surfaces.
+- Fixes definition of derivatives of co- and contra-variant basis vectors to properly
+account for the chain rule derivatives of the cylindrical basis vectors as well.
+- Adds calculation of ``A(r)``, the approximate cross sectional area as a function of rho.
+- Adds method ``desc.io.InputReader.descout_to_input`` to create a text input file for
+DESC from a saved hdf5 output.
+
+Bug Fixes
+* Fixes bug in saving nested dicts/lists.
+* Removes default node at rho=1 for ``BootstrapRedlConsistency`` objective to avoid
+dividing by zero where profiles may be zero.
+- Fixes bug causing ``QuasisymmetryBoozer`` to fail when compiling due to JAX issues.
+- Fixes incorrect implementation of derivatives of contravariant metric tensor elements
+(these were unused at present so shouldn't have caused any issues.)
+* Fixes bug where bounds for profile objectives were not scaled correctly when used
+as an inequality constraint.
+- Fixes a bug where calculating elongation would return NaN for near-circular cross sections.
+
+
 v0.9.2
 ------
 

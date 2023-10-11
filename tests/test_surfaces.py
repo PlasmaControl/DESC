@@ -21,6 +21,15 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(s.compute("S", grid=grid)["S"], area)
 
     @pytest.mark.unit
+    def test_compute_ndarray_error(self):
+        """Test raising TypeError if ndarray is passed in."""
+        s = FourierRZToroidalSurface()
+        with pytest.raises(TypeError):
+            s.compute("S", grid=1)
+        with pytest.raises(TypeError):
+            s.compute("S", grid=np.linspace(0, 1, 10))
+
+    @pytest.mark.unit
     def test_normal(self):
         """Test calculation of surface normal vector."""
         s = FourierRZToroidalSurface()
@@ -126,9 +135,22 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(data["curvature_k1_rho"], 0)
         np.testing.assert_allclose(data["curvature_k2_rho"], -1)
 
+    @pytest.mark.unit
+    def test_position(self):
+        """Tests for position on surface."""
+        s = FourierRZToroidalSurface()
+        grid = LinearGrid(theta=0, zeta=np.pi)
+        data = s.compute(["x", "R", "phi", "Z"], grid=grid, basis="xyz")
+        np.testing.assert_allclose(data["R"], 11)
+        np.testing.assert_allclose(data["x"][0, 0], -11)
+        np.testing.assert_allclose(data["phi"], np.pi)
+        np.testing.assert_allclose(data["x"][0, 1], 0, atol=1e-14)  # this is y
+        np.testing.assert_allclose(data["Z"], 0)
+        np.testing.assert_allclose(data["x"][0, 2], 0)
+
 
 class TestZernikeRZToroidalSection:
-    """Tests for ZerinkeRZTorioidalSection class."""
+    """Tests for ZernikeRZToroidalSection class."""
 
     @pytest.mark.unit
     def test_area(self):

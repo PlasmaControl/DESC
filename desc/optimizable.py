@@ -5,7 +5,6 @@ import warnings
 from abc import ABC
 
 from desc.backend import jnp
-from desc.utils import sort_args
 
 
 class Optimizable(ABC):
@@ -17,7 +16,7 @@ class Optimizable(ABC):
 
     @property
     def optimizable_params(self):
-        """list: names of parameters that have been declared optimizable."""
+        """list: string names of parameters that have been declared optimizable."""
         if not hasattr(self, "_optimizable_params"):
             p = []
             for methodname in dir(self):
@@ -29,7 +28,7 @@ class Optimizable(ABC):
                     method = method.fget  # we want the property itself, not the value
                 if hasattr(method, "optimizable"):
                     p.append(methodname)
-            self._optimizable_params = sort_args(p)
+            self._optimizable_params = self._sort_args(p)
             if not len(p):
                 warnings.warn(
                     f"Object {self} was subclassed from Optimizable but no "
@@ -41,7 +40,7 @@ class Optimizable(ABC):
     def params_dict(self):
         """dict: dictionary of arrays of optimizable parameters."""
         return {
-            key: jnp.asarray(getattr(self, key)).copy()
+            key: jnp.atleast_1d(getattr(self, key)).copy()
             for key in self.optimizable_params
         }
 
@@ -60,7 +59,7 @@ class Optimizable(ABC):
 
     @property
     def x_idx(self):
-        """dict: dictionary of arrays of indices into array for each parameter."""
+        """dict: arrays of indices for each parameter in concatenated array."""
         dimensions = self.dimensions
         idx = {}
         dim_x = 0
@@ -72,9 +71,7 @@ class Optimizable(ABC):
     @property
     def dim_x(self):
         """int: total number of optimizable parameters."""
-        return sum(
-            jnp.asarray(getattr(self, key)).size for key in self.optimizable_params
-        )
+        return sum(self.dimensions.values())
 
     def pack_params(self, p):
         """Convert a dictionary of parameters into a single array.
@@ -113,6 +110,14 @@ class Optimizable(ABC):
         for arg in self.optimizable_params:
             params[arg] = jnp.atleast_1d(x[x_idx[arg]])
         return params
+
+    def _sort_args(self, args):
+        """Put arguments in a canonical order. Returns unique sorted elements.
+
+        Actual order doesn't really matter as long as its consistent, though subclasses
+        may override this method to enforce a specific ordering
+        """
+        return sorted(set(list(args)))
 
 
 def optimizable_parameter(f):

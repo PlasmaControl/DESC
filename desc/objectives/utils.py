@@ -8,7 +8,19 @@ import warnings
 import numpy as np
 
 from desc.backend import cond, jnp, logsumexp, put
-from desc.utils import Index, sort_things, svd_inv_null
+from desc.utils import Index, flatten_list, svd_inv_null
+
+
+def _tree_zeros_like(x):
+    """Get a pytree of zeros with the same structure as x."""
+    if isinstance(x, list):
+        return [_tree_zeros_like(xi) for xi in x]
+    if isinstance(x, tuple):
+        return tuple([_tree_zeros_like(xi) for xi in x])
+    if isinstance(x, dict):
+        return {key: _tree_zeros_like(val) for key, val in x.items()}
+    else:
+        return jnp.atleast_1d(jnp.zeros_like(x))
 
 
 def factorize_linear_constraints(constraints, objective):  # noqa: C901
@@ -46,11 +58,10 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
         for thing in con.things:
             if thing not in objective.things:
                 warnings.warn(
-                    f"Optimizable object {thing} is constrained"
+                    f"Optimizable object {thing} is constrained by {con}"
                     + " but not included in Objective"
                 )
     # set state vector
-    xz = objective.unpack_state(np.zeros(objective.dim_x))
     xp = jnp.zeros(objective.dim_x)  # particular solution to Ax=b
     A = []
     b = []
@@ -66,13 +77,14 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
                 f"Linear constraint {con} must use target instead of bounds."
             )
         A_per_thing = []
+        xz = _tree_zeros_like([t.params_dict for t in con.things])
         # computing A matrix for each constraint for each thing in the optimization
-        for thing in objective._all_things:
+        for thing in objective.things:
             if thing in con.things:
                 # for now we implicitly assume that each linear constraint is bound to
                 # only 1  thing, to generalize we need to make jac_scaled work for all
                 # positional args not just the first one.
-                A_ = con.jac_scaled(map_params(xz, con, objective.things)[0])
+                A_ = con.jac_scaled(*xz)
             else:
                 A_ = {
                     arg: jnp.zeros((con.dim_f, dimx))
@@ -81,7 +93,7 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
             args = objective._args if prox_flag else thing.optimizable_params
             A_per_thing.append(jnp.hstack([A_[arg] for arg in args]))
         # using obj.compute instead of obj.target to allow for correct scale/weight
-        b_ = -con.compute_scaled_error(map_params(xz, con, objective.things)[0])
+        b_ = -con.compute_scaled_error(*xz)
         A.append(A_per_thing)
         b.append(b_)
 
@@ -136,9 +148,10 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 
     # check that all constraints are actually satisfiable
-    xp_ = objective.unpack_state(xp)
+    xp_ = objective.unpack_state(xp, False)
     for con in constraints:
-        y1 = con.compute_unscaled(*map_params(xp_, con, objective.things))
+        xpi = [xp_[i] for i, t in enumerate(objective.things) if t in con.things]
+        y1 = con.compute_unscaled(*xpi)
         y2 = con.target
         y1, y2 = np.broadcast_arrays(y1, y2)
         np.testing.assert_allclose(
@@ -228,16 +241,24 @@ def combine_args(*objectives):
     objectives : ObjectiveFunction
         Original ObjectiveFunctions modified to take the same state vector.
     """
-    things = sort_things([obj.things for obj in objectives])
+    things = flatten_list([obj.things for obj in objectives])
     for obj in objectives:
         extras = []
         for thing in things:
             if thing not in obj.things:
                 extras.append(thing)
         obj._extra_things = extras
+        obj._set_things(obj._all_things)
     return objectives
 
 
-def map_params(params, objective, things):
-    """Return a list of parameters for the things objective is tied to."""
-    return [p for p, t in zip(params, things) if t in objective.things]
+def _parse_callable_target_bounds(target, bounds, x):
+    if x.ndim > 1:
+        x = x[:, 0]
+    if callable(target):
+        target = target(x)
+    if bounds is not None and callable(bounds[0]):
+        bounds = (bounds[0](x), bounds[1])
+    if bounds is not None and callable(bounds[1]):
+        bounds = (bounds[0], bounds[1](x))
+    return target, bounds

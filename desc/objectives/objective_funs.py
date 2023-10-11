@@ -1,6 +1,5 @@
 """Base classes for objectives."""
 
-import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -9,9 +8,14 @@ from desc.backend import jit, jnp, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
-from desc.utils import Timer, errorif, flatten_list, is_broadcastable, sort_things
-
-from .utils import map_params
+from desc.utils import (
+    Timer,
+    errorif,
+    flatten_list,
+    is_broadcastable,
+    setdefault,
+    unique_list,
+)
 
 
 class ObjectiveFunction(IOAble):
@@ -147,13 +151,11 @@ class ObjectiveFunction(IOAble):
             if obj._use_jit:
                 obj.jit()
 
-    def build(self, eq=None, use_jit=None, verbose=1):
+    def build(self, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -170,7 +172,7 @@ class ObjectiveFunction(IOAble):
         for objective in self.objectives:
             if verbose > 0:
                 print("Building objective: " + objective.name)
-            objective.build(eq, use_jit=self.use_jit, verbose=verbose)
+            objective.build(use_jit=self.use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
         if self._dim_f == 1:
             self._scalar = True
@@ -181,10 +183,53 @@ class ObjectiveFunction(IOAble):
         if self.use_jit:
             self.jit()
 
+        self._set_things()
+
         self._built = True
         timer.stop("Objective build")
         if verbose > 1:
             timer.disp("Objective build")
+
+    def _set_things(self, things=None):
+        """Tell the ObjectiveFunction what things it is optimizing.
+
+        Parameters
+        ----------
+        things : list, tuple, or nested list, tuple of Optimizable
+            Collection of things used by this objective. Defaults to all things from
+            all sub-objectives.
+
+        Notes
+        -----
+        Sets ``self._flatten`` as a function to return unique flattened list of things
+        and ``self._unflatten`` to recreate full nested list of things
+        from unique flattened version.
+        """
+        from jax.tree_util import tree_flatten, tree_unflatten
+
+        things = setdefault(things, [obj.things for obj in self.objectives])
+
+        flat_, treedef_ = tree_flatten(
+            things, is_leaf=lambda x: isinstance(x, Optimizable)
+        )
+        unique_, inds_ = unique_list(flat_)
+
+        def unflatten(unique):
+            assert len(unique) == len(unique_)
+            flat = [unique[i] for i in inds_]
+            return tree_unflatten(treedef_, flat)
+
+        def flatten(things):
+            flat, treedef = tree_flatten(
+                things, is_leaf=lambda x: isinstance(x, Optimizable)
+            )
+            assert treedef == treedef_
+            assert len(flat) == len(flat_)
+            unique, inds = unique_list(flat)
+            return unique
+
+        self._unflatten = unflatten
+        self._flatten = flatten
 
     def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
@@ -207,10 +252,8 @@ class ObjectiveFunction(IOAble):
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_unscaled(
-                    *map_params(params, obj, self._all_things), constants=const
-                )
-                for obj, const in zip(self.objectives, constants)
+                obj.compute_unscaled(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
             ]
         )
         return f
@@ -236,10 +279,8 @@ class ObjectiveFunction(IOAble):
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled(
-                    *map_params(params, obj, self._all_things), constants=const
-                )
-                for obj, const in zip(self.objectives, constants)
+                obj.compute_scaled(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
             ]
         )
         return f
@@ -265,10 +306,8 @@ class ObjectiveFunction(IOAble):
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled_error(
-                    *map_params(params, obj, self._all_things), constants=const
-                )
-                for obj, const in zip(self.objectives, constants)
+                obj.compute_scaled_error(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
             ]
         )
         return f
@@ -308,27 +347,31 @@ class ObjectiveFunction(IOAble):
         if self.compiled and self._compile_mode in {"scalar", "all"}:
             f = self.compute_scalar(x, constants=constants)
         else:
-            f = jnp.sum(self.compute_scaled(x, constants=constants) ** 2) / 2
+            f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         print("Total (sum of squares): {:10.3e}, ".format(f))
         params = self.unpack_state(x)
-        for obj, const in zip(self.objectives, constants):
-            obj.print_value(*map_params(params, obj, self._all_things), constants=const)
+        for par, obj, const in zip(params, self.objectives, constants):
+            obj.print_value(*par, constants=const)
         return None
 
-    def unpack_state(self, x):
+    def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        per_objective : bool
+            Whether to return param dicts for each objective (default) or for each
+            unique optimizable thing.
 
         Returns
         -------
-        params : list of dict
-            List of parameter dictionary for each optimizable object tied to the
-            ObjectiveFunction.
-
+        params : pytree of dict
+            if per_objective is True, this is a nested list of of parameters for each
+            sub-Objective, such that self.objectives[i] has parameters params[i].
+            Otherwise, it is a list of parameters tied to each optimizable thing
+            such that params[i] = self.things[i].params_dict
         """
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
@@ -340,15 +383,18 @@ class ObjectiveFunction(IOAble):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs_splits = np.cumsum([t.dim_x for t in self._all_things])
+        xs_splits = np.cumsum([t.dim_x for t in self.things])
         xs = jnp.split(x, xs_splits)
-        params = [t.unpack_params(xi) for t, xi in zip(self._all_things, xs)]
+        params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
+        if per_objective:
+            params = self._unflatten(params)
         return params
 
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
-        assert [type(t1) == type(t2) for t1, t2 in zip(things, self._all_things)]
+        things = things or self.things
+        assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
         xs = [t.pack_params(t.params_dict) for t in things]
         return jnp.concatenate(xs)
 
@@ -565,7 +611,7 @@ class ObjectiveFunction(IOAble):
     @property
     def dim_x(self):
         """int: Dimensional of the state vector."""
-        return sum(t.dim_x for t in self._all_things)
+        return sum(t.dim_x for t in self.things)
 
     @property
     def dim_f(self):
@@ -622,12 +668,17 @@ class ObjectiveFunction(IOAble):
         """list: all things known to this objective, used and unused."""
         if not hasattr(self, "_extra_things"):
             self._extra_things = []
-        return sort_things(self.things + self._extra_things)
+        return [obj.things for obj in self.objectives] + self._extra_things
 
     @property
     def things(self):
         """list: Optimizable things that this objective is tied to."""
-        return sort_things([obj.things for obj in self._objectives])
+        errorif(
+            not hasattr(self, "_flatten"),
+            RuntimeError,
+            "ObjectiveFunction must be built with ObjectiveFunction.build() first",
+        )
+        return self._flatten(self._all_things)
 
     @things.setter
     def things(self, new):
@@ -637,23 +688,21 @@ class ObjectiveFunction(IOAble):
         # in general this is a hard problem, since we don't really know which object
         # to replace with which if there are multiple of the same type, but we can
         # do our best and throw an error if we can't figure it out here.
-        inclasses = {thing.__class__ for thing in new}
-        classes = {thing.__class__ for thing in self.things}
+        expected_types = [type(a) for a in self.things]
+        got_types = [type(a) for a in new]
         errorif(
-            len(inclasses) != len(new) or len(classes) != len(self.things),
-            ValueError,
-            "Cannot unambiguously parse Optimizable objects to individual Objectives,"
-            + " try setting Objective.things on each sub Objective individually.",
+            expected_types != got_types,
+            TypeError,
+            "Cannot unambiguously parse Optimizable objects to individual Objectives, "
+            + f"expected types {expected_types} but got types {got_types}. "
+            + "Try setting Objective.things on each sub Objective individually then "
+            + "call ObjectiveFunction.build().",
         )
         # now we know that new and self.things contains instances of unique classes, so
         # we should be able to just replace like with like
-        for obj in self.objectives:
-            objthings = obj.things.copy()
-            for i, thing1 in enumerate(obj.things):
-                for thing2 in new:
-                    if type(thing1) == type(thing2):
-                        objthings[i] = thing2
-            obj.things = objthings
+        things = self._unflatten(new)
+        for obj, t in zip(self.objectives, things[: -len(self._extra_things)]):
+            obj.things = t
 
 
 class _Objective(IOAble, ABC):
@@ -663,28 +712,30 @@ class _Objective(IOAble, ABC):
     ----------
     things : Optimizable or tuple/list of Optimizable
         Objects that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
 
     _scalar = False
     _linear = False
+    _coordinates = ""
+    _units = "(Unknown)"
     _equilibrium = False
     _io_attrs_ = [
         "_target",
@@ -706,6 +757,8 @@ class _Objective(IOAble, ABC):
         normalize_target=True,
         name=None,
     ):
+        if self._scalar:
+            assert self._coordinates == ""
         assert np.all(np.asarray(weight) > 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
@@ -720,13 +773,6 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        if things is None:
-            warnings.warn(
-                FutureWarning(
-                    "Creating an Objective without specifying the Equilibrium to"
-                    " optimize is deprecated, in the future this will raise an error."
-                )
-            )
         self._things = flatten_list([things], True)
 
     def _set_derivatives(self):
@@ -807,10 +853,28 @@ class _Objective(IOAble, ABC):
             raise ValueError("len(weight) != dim_f")
 
     @abstractmethod
-    def build(self, things=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays."""
         self._check_dimensions()
         self._set_derivatives()
+
+        # set quadrature weights if they haven't been
+        if hasattr(self, "_constants") and ("quad_weights" not in self._constants):
+            if self._coordinates == "":
+                w = jnp.ones((self.dim_f,))
+            elif self._coordinates == "rtz":
+                w = self._constants["transforms"]["grid"].weights
+                w *= jnp.sqrt(self._constants["transforms"]["grid"].num_nodes)
+            elif self._coordinates == "r":
+                w = self._constants["transforms"]["grid"].compress(
+                    self._constants["transforms"]["grid"].spacing[:, 0],
+                    surface_label="rho",
+                )
+                w = jnp.sqrt(w)
+            if w.size:
+                w = jnp.tile(w, self.dim_f // w.size)
+            self._constants["quad_weights"] = w
+
         if use_jit is not None:
             self._use_jit = use_jit
         if self._use_jit:
@@ -828,12 +892,12 @@ class _Objective(IOAble, ABC):
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
         f = self.compute(*args, **kwargs)
-        return self._scale(f)
+        return self._scale(f, **kwargs)
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         f = self.compute(*args, **kwargs)
-        return self._scale(self._shift(f))
+        return self._scale(self._shift(f), **kwargs)
 
     def _shift(self, f):
         """Subtract target or clamp to bounds."""
@@ -859,10 +923,15 @@ class _Objective(IOAble, ABC):
             f_target = f - target
         return f_target
 
-    def _scale(self, f):
+    def _scale(self, f, *args, **kwargs):
         """Apply weighting, normalization etc."""
+        constants = kwargs.get("constants", self.constants)
+        if constants is None:
+            w = jnp.ones_like(f)
+        else:
+            w = constants["quad_weights"]
         f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
-        return f_norm * self.weight  # weighting
+        return f_norm * w * self.weight
 
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
@@ -890,20 +959,80 @@ class _Objective(IOAble, ABC):
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
+        # compute_unscaled is jitted so better to use than than bare compute
         f = self.compute_unscaled(*args, **kwargs)
-        print(
-            self._print_value_fmt.format(jnp.linalg.norm(self._shift(f))) + self._units
-        )
-        if self._normalize:
-            print(
-                self._print_value_fmt.format(
-                    jnp.linalg.norm(self._scale(self._shift(f)))
+        if self.linear:
+            # probably a Fixed* thing, just need to know norm
+            f = jnp.linalg.norm(self._shift(f))
+            print(self._print_value_fmt.format(f) + self._units)
+
+        elif self.scalar:
+            # dont need min/max/mean of a scalar
+            print(self._print_value_fmt.format(f.squeeze()) + self._units)
+            if self._normalize and self._units != "(dimensionless)":
+                print(
+                    self._print_value_fmt.format(self._scale(self._shift(f)).squeeze())
+                    + "(normalized error)"
                 )
-                + "(normalized)"
+
+        else:
+            # try to do weighted mean if possible
+            constants = kwargs.get("constants", self.constants)
+            if constants is None:
+                w = jnp.ones_like(f)
+            else:
+                w = constants["quad_weights"]
+
+            # target == 0 probably indicates f is some sort of error metric,
+            # mean abs makes more sense than mean
+            abserr = jnp.all(self.target == 0)
+            f = jnp.abs(f) if abserr else f
+            fmax = jnp.max(f)
+            fmin = jnp.min(f)
+            fmean = jnp.mean(f * w) / jnp.mean(w)
+
+            print(
+                "Maximum "
+                + ("absolute " if abserr else "")
+                + self._print_value_fmt.format(fmax)
+                + self._units
+            )
+            print(
+                "Minimum "
+                + ("absolute " if abserr else "")
+                + self._print_value_fmt.format(fmin)
+                + self._units
+            )
+            print(
+                "Average "
+                + ("absolute " if abserr else "")
+                + self._print_value_fmt.format(fmean)
+                + self._units
             )
 
+            if self._normalize and self._units != "(dimensionless)":
+                print(
+                    "Maximum "
+                    + ("absolute " if abserr else "")
+                    + self._print_value_fmt.format(fmax / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Minimum "
+                    + ("absolute " if abserr else "")
+                    + self._print_value_fmt.format(fmin / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Average "
+                    + ("absolute " if abserr else "")
+                    + self._print_value_fmt.format(fmean / self.normalization)
+                    + "(normalized)"
+                )
+
     def xs(self, *things):
-        """Return a tuple of args required by this objective from the Equilibrium eq."""
+        """Return a tuple of args required by this objective from optimizable things."""
+        things = things or self.things
         return tuple([t.params_dict for t in things])
 
     @property
@@ -990,11 +1119,12 @@ class _Objective(IOAble, ABC):
         """list: Optimizable things that this objective is tied to."""
         if not hasattr(self, "_things"):
             self._things = []
-        return self._things
+        return list(self._things)
 
     @things.setter
     def things(self, new):
         if not isinstance(new, (tuple, list)):
             new = [new]
         assert all(isinstance(x, Optimizable) for x in new)
+        assert all(type(a) == type(b) for a, b in zip(new, self.things))
         self._things = list(new)

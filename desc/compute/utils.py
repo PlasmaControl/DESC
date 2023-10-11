@@ -9,7 +9,6 @@ from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, LinearGrid
-from desc.utils import sort_args
 
 from .data_index import data_index
 
@@ -263,13 +262,6 @@ def get_profiles(keys, obj, grid=None, has_axis=False, jitable=False, **kwargs):
         return profs
     # need to use copy here because profile may be None
     profiles = {name: copy.deepcopy(getattr(obj, name)) for name in profs}
-    if grid is None:
-        return profiles
-    for val in profiles.values():
-        if val is not None:
-            if jitable and hasattr(val, "_transform"):
-                val._transform.method = "jitable"
-            val.grid = grid
     return profiles
 
 
@@ -298,10 +290,6 @@ def get_params(keys, obj, has_axis=False, **kwargs):
     params = []
     for key in deps:
         params += data_index[p][key]["dependencies"]["params"]
-    if p == "desc.equilibrium.equilibrium.Equilibrium":
-        # probably need some way to distinguish between params from different instances
-        # of the same class?
-        params = sort_args(params)
     if isinstance(obj, str) or inspect.isclass(obj):
         return params
     params = {name: np.atleast_1d(getattr(obj, name)).copy() for name in params}
@@ -1288,3 +1276,35 @@ def surface_min(grid, x, surface_label="rho"):
     # The above implementation was benchmarked to be more efficient than
     # alternatives without explicit loops in GitHub pull request #501.
     return grid.expand(mins, surface_label)
+
+
+# defines the order in which objective arguments get concatenated into the state vector
+arg_order = (
+    "R_lmn",
+    "Z_lmn",
+    "L_lmn",
+    "p_l",
+    "i_l",
+    "c_l",
+    "Psi",
+    "Te_l",
+    "ne_l",
+    "Ti_l",
+    "Zeff_l",
+    "a_lmn",
+    "Ra_n",
+    "Za_n",
+    "Rb_lmn",
+    "Zb_lmn",
+)
+# map from profile name to equilibrium parameter name
+profile_names = {
+    "pressure": "p_l",
+    "iota": "i_l",
+    "current": "c_l",
+    "electron_temperature": "Te_l",
+    "electron_density": "ne_l",
+    "ion_temperature": "Ti_l",
+    "atomic_number": "Zeff_l",
+    "anisotropy": "a_lmn",
+}

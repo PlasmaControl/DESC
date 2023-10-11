@@ -14,7 +14,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import dot, surface_averages
+from .utils import cross, dot, surface_averages
 
 
 @register_compute_fun(
@@ -465,7 +465,7 @@ def _F_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="F_helical",
-    label="F_{helical}",
+    label="F_{\\mathrm{helical}}",
     units="A",
     units_long="Amperes",
     description="Covariant helical component of force balance error",
@@ -577,6 +577,30 @@ def _e_sup_helical(params, transforms, profiles, data, **kwargs):
 )
 def _e_sup_helical_mag(params, transforms, profiles, data, **kwargs):
     data["|e^helical|"] = jnp.linalg.norm(data["e^helical"], axis=-1)
+    return data
+
+
+@register_compute_fun(
+    name="F_anisotropic",
+    label="F_{anisotropic}",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="Anisotropic force balance error",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "B", "grad(beta_a)", "beta_a", "grad(|B|^2)", "grad(p)"],
+)
+def _F_anisotropic(params, transforms, profiles, data, **kwargs):
+    data["F_anisotropic"] = (
+        (1 - data["beta_a"]) * cross(data["J"], data["B"]).T
+        - dot(data["B"], data["grad(beta_a)"]) * data["B"].T / mu_0
+        - data["beta_a"] * data["grad(|B|^2)"].T / (2 * mu_0)
+        - data["grad(p)"].T
+    ).T
+
     return data
 
 

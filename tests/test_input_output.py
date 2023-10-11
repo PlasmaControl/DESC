@@ -1,4 +1,4 @@
-"""Tests for reading/writing intput/output, both ascii and binary."""
+"""Tests for reading/writing input/output, both ascii and binary."""
 
 import os
 import pathlib
@@ -70,7 +70,7 @@ def test_write_desc_input_Nones(tmpdir_factory):
     # the written file will have ftol = 0.01,0.001
     # and the None will have not been written
 
-    # if only Nones are passed for just one of the tols, only that one will not
+    # if only Nones are passed for just one of the tolerances, only that one will not
     # be written. gtol is used here as that test
 
     input_path = "./tests/inputs/DSHAPE"
@@ -112,7 +112,7 @@ def test_write_desc_input_Nones(tmpdir_factory):
 
 
 @pytest.mark.unit
-def test_descout_to_input(tmpdir_factory):
+def test_desc_output_to_input(tmpdir_factory):
     """
     Test converting DESC output to a DESC input file.
 
@@ -128,7 +128,7 @@ def test_descout_to_input(tmpdir_factory):
     shutil.copyfile(outfile_path, tmpout_path)
 
     ir1 = InputReader()
-    ir1.descout_to_input(str(tmp_path), str(tmpout_path))
+    ir1.desc_output_to_input(str(tmp_path), str(tmpout_path))
     ir1 = InputReader(cl_args=[str(tmp_path)])
     arr1 = ir1.parse_inputs()[-1]["surface"]
     arr1 = arr1[arr1[:, 1].argsort()]
@@ -172,7 +172,7 @@ def test_descout_to_input(tmpdir_factory):
     shutil.copyfile(outfile_path, tmpout_path)
 
     ir1 = InputReader()
-    ir1.descout_to_input(str(tmp_path), str(tmpout_path))
+    ir1.desc_output_to_input(str(tmp_path), str(tmpout_path))
     ir1 = InputReader(cl_args=[str(tmp_path)])
     arr1 = ir1.parse_inputs()[-1]["surface"]
     arr1 = arr1[arr1[:, 1].argsort()]
@@ -239,7 +239,7 @@ class TestInputReader:
     """Tests for the InputReader class."""
 
     argv0 = []
-    argv1 = ["nonexistant_input_file"]
+    argv1 = ["nonexistent_input_file"]
     argv2 = ["./tests/inputs/MIN_INPUT"]
 
     @pytest.mark.unit
@@ -272,7 +272,7 @@ class TestInputReader:
         ), "numpy environment variable incorrect with default argument"
         assert ir.args.version is False, "version is not default False"
         assert (
-            len(ir.inputs[0]) == 27
+            len(ir.inputs[0]) == 26
         ), "number of inputs does not match number expected in MIN_INPUT"
         # test equality of arguments
 
@@ -318,6 +318,15 @@ class TestInputReader:
         # ensure that a current profile instead of an iota profile is used
         assert "iota" not in ir.inputs[0].keys()
         assert "current" in ir.inputs[0].keys()
+
+    @pytest.mark.unit
+    def test_node_pattern_warning(self):
+        """Test that a warning is thrown when trying to use a custom node pattern."""
+        input_path = ".//tests//inputs//SOLOVEV_poincare"
+        # load an input file with vacuum obj but also an iota profile specified
+        with pytest.warns(UserWarning):
+            ir = InputReader(input_path)
+        assert "node_pattern" not in ir.inputs[0]
 
 
 class MockObject:

@@ -10,7 +10,7 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.optimize import Optimizer
 from desc.perturbations import get_deltas
-from desc.utils import Timer
+from desc.utils import Timer, errorif
 
 MIN_MRES_STEP = 1
 MIN_PRES_STEP = 0.1
@@ -64,7 +64,6 @@ def _solve_axisym(
         L_grid=L_gridi,
         M_grid=M_gridi,
         N_grid=N_gridi,
-        node_pattern=eq.node_pattern,
         pressure=pres_vac.copy(),
         iota=copy.copy(eq.iota),  # have to use copy.copy here since may be None
         current=copy.copy(eq.current),
@@ -85,7 +84,7 @@ def _solve_axisym(
 
         if ii > 0:
             eqi = eqfam[-1].copy()
-            # increase resolution of vacuum soln
+            # increase resolution of vacuum solution
             Mi = min(Mi + mres_step, M)
             Li = int(np.ceil(L / M) * Mi)
             L_gridi = np.ceil(L_grid / L * Li).astype(int)
@@ -161,7 +160,7 @@ def _solve_axisym(
         if mres_step == MIN_MRES_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with mres_step=1, "
-                + "something is probaby very wrong with your desired equilibrium."
+                + "something is probably very wrong with your desired equilibrium."
             )
         else:
             warnings.warn(
@@ -291,7 +290,7 @@ def _add_pressure(
         if pres_step <= MIN_PRES_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with "
-                + f"pres_step={pres_step}, something is probaby very wrong with your "
+                + f"pres_step={pres_step}, something is probably very wrong with your "
                 + "desired equilibrium."
             )
         else:
@@ -424,7 +423,7 @@ def _add_shaping(
         if bdry_step <= MIN_BDRY_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with "
-                + f"bdry_step={bdry_step}, something is probaby very wrong with your "
+                + f"bdry_step={bdry_step}, something is probably very wrong with your "
                 + "desired equilibrium."
             )
         else:
@@ -479,7 +478,7 @@ def solve_continuation_automatic(  # noqa: C901
         Unsolved Equilibrium with the final desired boundary, profiles, resolution.
     objective : {"force", "energy", "vacuum"}
         function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
+    optimizer : str or Optimizer (optional)
         optimizer to use
     pert_order : int
         order of perturbations to use.
@@ -510,11 +509,16 @@ def solve_continuation_automatic(  # noqa: C901
         final desired configuration,
 
     """
-    if eq.electron_temperature is not None:
-        raise NotImplementedError(
-            "Continuation method with kinetic profiles is not currently supported"
-        )
-
+    errorif(
+        eq.electron_temperature is not None,
+        NotImplementedError,
+        "Continuation method with kinetic profiles is not currently supported",
+    )
+    errorif(
+        eq.anisotropy is not None,
+        NotImplementedError,
+        "Continuation method with anisotropic pressure is not currently supported",
+    )
     timer = Timer()
     timer.start("Total time")
 
@@ -600,7 +604,7 @@ def solve_continuation(  # noqa: C901
 ):
     """Solve for an equilibrium by continuation method.
 
-    Steps through an EquilibriaFamily, solving each equilibrium, and uses pertubations
+    Steps through an EquilibriaFamily, solving each equilibrium, and uses perturbations
     to step between different profiles/boundaries.
 
     Uses the previous step as an initial guess for each solution.
@@ -611,7 +615,7 @@ def solve_continuation(  # noqa: C901
         Equilibria to solve for at each step.
     objective : {"force", "energy", "vacuum"}
         function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
+    optimizer : str or Optimizer (optional)
         optimizer to use
     pert_order : int or array of int
         order of perturbations to use. If array-like, should be same length as eqfam
@@ -636,10 +640,16 @@ def solve_continuation(  # noqa: C901
         final desired configuration,
 
     """
-    if not all([eq.electron_temperature is None for eq in eqfam]):
-        raise NotImplementedError(
-            "Continuation method with kinetic profiles is not currently supported"
-        )
+    errorif(
+        not all([eq.electron_temperature is None for eq in eqfam]),
+        NotImplementedError,
+        "Continuation method with kinetic profiles is not currently supported",
+    )
+    errorif(
+        not all([eq.anisotropy is None for eq in eqfam]),
+        NotImplementedError,
+        "Continuation method with anisotropic pressure is not currently supported",
+    )
 
     timer = Timer()
     timer.start("Total time")

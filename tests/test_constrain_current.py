@@ -31,7 +31,7 @@ class _ExactValueProfile:
         )
         self.output = {dr: data[name] for dr, name in enumerate(names)}
 
-    def compute(self, params, dr, *args, **kwargs):
+    def compute(self, grid, params, dr, *args, **kwargs):
         return self.output.get(dr, np.nan)
 
 
@@ -80,7 +80,7 @@ class TestConstrainCurrent:
             # Compute rotational transform directly from the power series which
             # defines it.
             desired = {
-                name: profiles[names[0]].compute(params=params["i_l"], dr=dr)
+                name: profiles[names[0]].compute(grid, params=params["i_l"], dr=dr)
                 for dr, name in enumerate(names)
             }
             # Compute rotational transform using the below toroidal current,
@@ -162,7 +162,7 @@ class TestConstrainCurrent:
             # Compute toroidal current directly from the power series which
             # defines it. Recall that vacuum objective sets a current profile.
             desired = {
-                name: profiles[names[0]].compute(params=params["c_l"], dr=dr)
+                name: profiles[names[0]].compute(grid, params=params["c_l"], dr=dr)
                 for dr, name in enumerate(names)
             }
             # Compute toroidal current using the below rotational transform,

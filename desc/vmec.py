@@ -64,7 +64,7 @@ class VMECIO:
 
         Notes
         -----
-        To ensure compatibiltiy with different profile representations in VMEC,
+        To ensure compatibility with different profile representations in VMEC,
         the resulting equilibrium will always have SplineProfile types for all profiles
 
         """
@@ -186,7 +186,7 @@ class VMECIO:
         _, _, _, _, _, project, recover = factorize_linear_constraints(
             constraints, objective
         )
-        args = objective.unpack_state(recover(project(objective.x(eq))))[0]
+        args = objective.unpack_state(recover(project(objective.x(eq))), False)[0]
         eq.params_dict = args
 
         # now we flip the orientation at the very end
@@ -249,7 +249,7 @@ class VMECIO:
         file.createDimension("n_tor", N + 1)  # number of toroidal Fourier modes
         file.createDimension("preset", 21)  # dimension of profile inputs
         file.createDimension("ndfmax", 101)  # used for am_aux & ai_aux
-        file.createDimension("time", 100)  # used for fsqrt & wdot
+        file.createDimension("time", 100)  # used for fsq* & wdot
         file.createDimension("dim_00001", 1)
         file.createDimension("dim_00020", 20)
         file.createDimension("dim_00100", 100)
@@ -377,13 +377,22 @@ class VMECIO:
         pcurr_type.long_name = "parameterization of current density function"
         pcurr_type[:] = power_series
 
+        grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_full, NFP=NFP)
+        grid_half = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
+
+        p_full = grid_full.compress(eq.compute("p", grid=grid_full)["p"])
+        p_half = grid_half.compress(eq.compute("p", grid=grid_half)["p"])
+        i_full = grid_full.compress(eq.compute("iota", grid=grid_full)["iota"])
+        i_half = grid_half.compress(eq.compute("iota", grid=grid_half)["iota"])
+        c_full = grid_full.compress(eq.compute("current", grid=grid_full)["current"])
+
         am = file.createVariable("am", np.float64, ("preset",))
         am.long_name = "pressure coefficients"
         am.units = "Pa"
         am[:] = np.zeros((file.dimensions["preset"].size,))
         # only using up to 10th order to avoid poor conditioning
         am[:11] = PowerSeriesProfile.from_values(
-            s_full, eq.pressure(r_full), order=10, sym=False
+            s_full, p_full, order=10, sym=False
         ).params
 
         ai = file.createVariable("ai", np.float64, ("preset",))
@@ -393,7 +402,7 @@ class VMECIO:
             # only using up to 10th order to avoid poor conditioning
             # negative sign for negative Jacobian
             ai[:11] = -PowerSeriesProfile.from_values(
-                s_full, eq.iota(r_full), order=10, sym=False
+                s_full, i_full, order=10, sym=False
             ).params
 
         ac = file.createVariable("ac", np.float64, ("preset",))
@@ -402,19 +411,19 @@ class VMECIO:
         if eq.current is not None:
             # only using up to 10th order to avoid poor conditioning
             ac[:11] = PowerSeriesProfile.from_values(
-                s_full, eq.current(r_full), order=10, sym=False
+                s_full, c_full, order=10, sym=False
             ).params
 
         presf = file.createVariable("presf", np.float64, ("radius",))
         presf.long_name = "pressure on full mesh"
         presf.units = "Pa"
-        presf[:] = eq.pressure(r_full)
+        presf[:] = p_full
 
         pres = file.createVariable("pres", np.float64, ("radius",))
         pres.long_name = "pressure on half mesh"
         pres.units = "Pa"
         pres[0] = 0
-        pres[1:] = eq.pressure(r_half)
+        pres[1:] = p_half
 
         mass = file.createVariable("mass", np.float64, ("radius",))
         mass.long_name = "mass on half mesh"
@@ -424,11 +433,7 @@ class VMECIO:
         iotaf = file.createVariable("iotaf", np.float64, ("radius",))
         iotaf.long_name = "rotational transform on full mesh"
         iotaf.units = "None"
-        if eq.iota is not None:
-            iotaf[:] = -eq.iota(r_full)  # negative sign for negative Jacobian
-        else:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_full, NFP=NFP)
-            iotaf[:] = -grid.compress(eq.compute("iota", grid=grid)["iota"])
+        iotaf[:] = -i_full  # negative sign for negative Jacobian
 
         q_factor = file.createVariable("q_factor", np.float64, ("radius",))
         q_factor.long_name = "inverse rotational transform on full mesh"
@@ -439,11 +444,7 @@ class VMECIO:
         iotas.long_name = "rotational transform on half mesh"
         iotas.units = "None"
         iotas[0] = 0
-        if eq.iota is not None:
-            iotas[1:] = -eq.iota(r_half)  # negative sign for negative Jacobian
-        else:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
-            iotas[1:] = -grid.compress(eq.compute("iota", grid=grid)["iota"])
+        iotas[1:] = -i_half  # negative sign for negative Jacobian
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"
@@ -514,7 +515,7 @@ class VMECIO:
         betator[:] = eq.compute("<beta_tor>_vol")["<beta_tor>_vol"]
 
         ctor = file.createVariable("ctor", np.float64)
-        ctor.long_name = "total toroidal plamsa current"
+        ctor.long_name = "total toroidal plasma current"
         ctor.units = "A"
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=NFP)
         ctor[:] = eq.compute("I", grid=grid)["I"][0] * 2 * np.pi / mu_0
@@ -1095,6 +1096,7 @@ class VMECIO:
         if verbose > 1:
             timer.disp("B_zeta")
 
+        # J^theta
         timer.start("J^theta*sqrt(g)")
         if verbose > 0:
             print("Saving J^theta*sqrt(g)")
@@ -1144,6 +1146,7 @@ class VMECIO:
         if verbose > 1:
             timer.disp("J^theta*sqrt(g)")
 
+        # J^zeta
         timer.start("J^zeta*sqrt(g)")
         if verbose > 0:
             print("Saving J^zeta*sqrt(g)")
@@ -1404,7 +1407,8 @@ class VMECIO:
         s : array-like
             desired radial coordinates (normalized toroidal magnetic flux)
         theta_star : array-like
-            desired straigh field line poloidal angles (PEST/VMEC-like flux coordinates)
+            desired straight field-line poloidal angles (PEST/VMEC-like flux
+            coordinates)
         zeta : array-like
             desired toroidal angles (toroidal coordinate phi)
         si : ndarray

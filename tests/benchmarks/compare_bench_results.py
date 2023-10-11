@@ -53,15 +53,18 @@ for id_num, commit_id in enumerate(data.keys()):
         test_names[i] = test["name"]
 
 
+# we say a slowdown/speedup has occurred if the mean time difference is greater than
+# n_sigma * (stdev of time delta)
+significance = 3  # n_sigmas of normal distribution, ie z score of 3
 colors = [" "] * num_benchmarks  # g if faster, w if similar, r if slower
 delta_times_ms = times[:, latest_idx] - times[:, master_idx]
 delta_stds_ms = np.sqrt(stddevs[:, latest_idx] ** 2 + stddevs[:, master_idx] ** 2)
 delta_times_pct = delta_times_ms / times[:, master_idx] * 100
 delta_stds_pct = delta_stds_ms / times[:, master_idx] * 100
 for i, (pct, spct) in enumerate(zip(delta_times_pct, delta_stds_pct)):
-    if pct > 0 and pct > spct:
+    if pct > 0 and pct > significance * spct:
         colors[i] = "-"  # this will make the line red
-    elif pct < 0 and -pct > spct:
+    elif pct < 0 and -pct > significance * spct:
         colors[i] = "+"  # this makes text green
     else:
         pass

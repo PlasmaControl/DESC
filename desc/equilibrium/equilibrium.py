@@ -148,7 +148,6 @@ class Equilibrium(IOAble):
         "_L_grid",
         "_M_grid",
         "_N_grid",
-        "_node_pattern",
         "_L_well",
         "_M_well",
         "_L_omni",

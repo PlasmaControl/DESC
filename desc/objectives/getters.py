@@ -195,6 +195,7 @@ def get_NAE_constraints(
     fix_lambda=False,
     N_cutoff=None,
     offset_ratio=None,
+    offset_magnitude=None,
 ):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem.
 
@@ -222,6 +223,14 @@ def get_NAE_constraints(
         Whether to constrain lambda to match that of the NAE near-axis
         if an int, fixes lambda up to that order in rho {0,1}
         if True, fixes lambda up to the specified order given by order
+    offset_ratio : float
+        number to multiply target by to make the N_cutoff coefficient incorrect
+        i.e. it will try to make the DESC behavior go like
+        (R_n+offset_magnitude) * offset_ratio instead of R_n
+    offset_magnitude : float
+        number to add to target to make the N_cutoff coefficient incorrect
+        i.e. it will try to make the DESC behavior go like
+        (R_n+offset_magnitude) * offset_ratio instead of R_n
 
     Returns
     -------
@@ -277,6 +286,7 @@ def get_NAE_constraints(
             fix_lambda=fix_lambda and fix_lambda > 0,
             N_cutoff=N_cutoff,
             offset_ratio=offset_ratio,
+            offset_magnitude=offset_magnitude,
         )
     if order >= 2:  # 2nd order constraints
         raise NotImplementedError("NAE constraints only implemented up to O(rho) ")

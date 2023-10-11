@@ -99,7 +99,7 @@ def register_compute_fun(
     return _decorator
 
 
-# This allows us to handle subclasses whos data_index stuff should inherit
+# This allows us to handle subclasses whose data_index stuff should inherit
 # from parent classes.
 # This is the least bad solution I've found, since everything else requires
 # crazy circular imports
@@ -113,6 +113,9 @@ _class_inheritance = {
         "desc.geometry.core.Curve",
     ],
     "desc.geometry.curve.FourierPlanarCurve": [
+        "desc.geometry.core.Curve",
+    ],
+    "desc.geometry.curve.SplineXYZCurve": [
         "desc.geometry.core.Curve",
     ],
     "desc.geometry.surface.FourierRZToroidalSurface": [
@@ -133,6 +136,11 @@ _class_inheritance = {
         "desc.geometry.curve.FourierPlanarCurve",
         "desc.geometry.core.Curve",
     ],
+    "desc.coils.SplineXYZCoil": [
+        "desc.geometry.curve.SplineXYZCurve",
+        "desc.geometry.core.Curve",
+    ],
+    "desc.magnetic_fields.OmnigeneousField": [],
 }
 
 data_index = {p: {} for p in _class_inheritance.keys()}

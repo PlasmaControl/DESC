@@ -115,7 +115,7 @@ class hdf5Reader(hdf5IO, Reader):
         ----------
         obj : python object instance
             object must have _io_attrs_ attribute to have attributes read and loaded
-        where : None or file insance
+        where : None or file instance
             specifies where to read obj from
 
         """
@@ -217,7 +217,7 @@ class hdf5Reader(hdf5IO, Reader):
         Parameters
         ----------
         where : None or file instance
-            specifies wehre to read dict from
+            specifies where to read dict from
 
         """
         thelist = []

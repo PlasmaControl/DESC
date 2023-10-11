@@ -5,15 +5,11 @@ from ._equilibrium import (
     CurrentDensity,
     Energy,
     ForceBalance,
+    ForceBalanceAnisotropic,
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import (
-    GenericObjective,
-    ObjectiveFromUser,
-    RotationalTransform,
-    ToroidalCurrent,
-)
+from ._generic import GenericObjective, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
     BScaleLength,
@@ -30,6 +26,7 @@ from ._omnigenity import (
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
 )
+from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._stability import MagneticWell, MercierStability
 from .getters import (
     get_equilibrium_objective,
@@ -43,6 +40,7 @@ from .linear_objectives import (
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    FixAnisotropy,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
@@ -57,6 +55,7 @@ from .linear_objectives import (
     FixModeR,
     FixModeZ,
     FixOmni,
+    FixParameter,
     FixPressure,
     FixPsi,
     FixSumModesR,

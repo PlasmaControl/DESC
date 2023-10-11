@@ -7,7 +7,7 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import fori_loop, gammaln, jit, jnp, sign
+from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
 from desc.utils import flatten_list
 
@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 
-class Basis(IOAble, ABC):
+class _Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets."""
 
     _io_attrs_ = [
@@ -224,7 +224,7 @@ class Basis(IOAble, ABC):
         )
 
 
-class PowerSeries(Basis):
+class PowerSeries(_Basis):
     """1D basis set for flux surface quantities.
 
     Power series in the radial coordinate.
@@ -334,7 +334,7 @@ class PowerSeries(Basis):
             self._set_up()
 
 
-class FourierSeries(Basis):
+class FourierSeries(_Basis):
     """1D basis set for use with the magnetic axis.
 
     Fourier series in the toroidal coordinate.
@@ -454,7 +454,7 @@ class FourierSeries(Basis):
             self._set_up()
 
 
-class DoubleFourierSeries(Basis):
+class DoubleFourierSeries(_Basis):
     """2D basis set for use on a single flux surface.
 
     Fourier series in both the poloidal and toroidal coordinates.
@@ -601,7 +601,7 @@ class DoubleFourierSeries(Basis):
             self._set_up()
 
 
-class ZernikePolynomial(Basis):
+class ZernikePolynomial(_Basis):
     """2D basis set for analytic functions in a unit disc.
 
     Parameters
@@ -811,7 +811,7 @@ class ZernikePolynomial(Basis):
             self._set_up()
 
 
-class ChebyshevDoubleFourierBasis(Basis):
+class ChebyshevDoubleFourierBasis(_Basis):
     """3D basis: tensor product of Chebyshev polynomials and two Fourier series.
 
     Fourier series in both the poloidal and toroidal coordinates.
@@ -944,7 +944,7 @@ class ChebyshevDoubleFourierBasis(Basis):
             self._set_up()
 
 
-class FourierZernikeBasis(Basis):
+class FourierZernikeBasis(_Basis):
     """3D basis set for analytic functions in a toroidal volume.
 
     Zernike polynomials in the radial & poloidal coordinates, and a Fourier
@@ -1182,7 +1182,7 @@ class FourierZernikeBasis(Basis):
             self._set_up()
 
 
-class ChebyshevPolynomial(Basis):
+class ChebyshevPolynomial(_Basis):
     """Shifted Chebyshev polynomial of the first kind.
 
     Parameters
@@ -1411,7 +1411,7 @@ def zernike_radial_coeffs(l, m, exact=True):
     Returns
     -------
     coeffs : ndarray
-
+        Polynomial coefficients for Zernike polynomials, in descending powers of r.
 
     Notes
     -----
@@ -1617,7 +1617,7 @@ def powers(rho, l, dr=0):
     return polyval_vec(coeffs, rho).T
 
 
-@jit
+@functools.partial(jit, static_argnums=2)
 def chebyshev(r, l, dr=0):
     """Shifted Chebyshev polynomial.
 
@@ -1638,8 +1638,14 @@ def chebyshev(r, l, dr=0):
     """
     r, l = map(jnp.asarray, (r, l))
     x = 2 * r - 1  # shift
-    x, l, dr = map(jnp.asarray, (x, l, dr))
-    return jnp.cos(l * jnp.arccos(x))
+    if dr == 0:
+        return jnp.cos(l * jnp.arccos(x))
+    else:
+        # dy/dr = dy/dx * dx/dr = dy/dx * 2
+        raise NotImplementedError(
+            "Analytic radial derivatives of Chebyshev polynomials "
+            + "have not been implemented."
+        )
 
 
 @jit
@@ -1706,6 +1712,7 @@ def _binom(n, k):
     return b
 
 
+@custom_jvp
 @jit
 @jnp.vectorize
 def _jacobi(n, alpha, beta, x, dx=0):
@@ -1770,6 +1777,19 @@ def _jacobi(n, alpha, beta, x, dx=0):
     out = jnp.where(n == 0, 1.0, out)
     out = jnp.where(n == 1, 0.5 * (2 * (alpha + 1) + (alpha + beta + 2) * (x - 1)), out)
     return c * out
+
+
+@_jacobi.defjvp
+def _jacobi_jvp(x, xdot):
+    (n, alpha, beta, x, dx) = x
+    (ndot, alphadot, betadot, xdot, dxdot) = xdot
+    f = _jacobi(n, alpha, beta, x, dx)
+    df = _jacobi(n, alpha, beta, x, dx + 1)
+    # in theory n, alpha, beta, dx aren't differentiable (they're integers)
+    # but marking them as non-diff argnums seems to cause escaped tracer values.
+    # probably a more elegant fix, but just setting those derivatives to zero seems
+    # to work fine.
+    return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
 
 
 def zernike_norm(l, m):

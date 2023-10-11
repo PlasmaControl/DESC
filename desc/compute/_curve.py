@@ -1,4 +1,5 @@
 from desc.backend import jnp
+from desc.interpolate import interp1d
 
 from .data_index import register_compute_fun
 from .geom_utils import (
@@ -32,7 +33,7 @@ def _s(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x",
-    label="\\mathbf{r}",
+    label="\\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve",
@@ -68,7 +69,7 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_s",
-    label="\\partial_{s} \\mathbf{r}",
+    label="\\partial_{s} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, first derivative",
@@ -110,7 +111,7 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_ss",
-    label="\\partial_{ss} \\mathbf{r}",
+    label="\\partial_{ss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, second derivative",
@@ -157,7 +158,7 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_sss",
-    label="\\partial_{sss} \\mathbf{r}",
+    label="\\partial_{sss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, third derivative",
@@ -211,7 +212,7 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x",
-    label="\\mathbf{r}",
+    label="\\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve",
@@ -246,7 +247,7 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_s",
-    label="\\partial_{s} \\mathbf{r}",
+    label="\\partial_{s} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, first derivative",
@@ -281,7 +282,7 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_ss",
-    label="\\partial_{ss} \\mathbf{r}",
+    label="\\partial_{ss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, second derivative",
@@ -320,7 +321,7 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_sss",
-    label="\\partial_{sss} \\mathbf{r}",
+    label="\\partial_{sss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, third derivative",
@@ -359,7 +360,7 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x",
-    label="\\mathbf{r}",
+    label="\\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve",
@@ -392,7 +393,7 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_s",
-    label="\\partial_{s} \\mathbf{r}",
+    label="\\partial_{s} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, first derivative",
@@ -429,7 +430,7 @@ def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_ss",
-    label="\\partial_{ss} \\mathbf{r}",
+    label="\\partial_{ss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, second derivative",
@@ -466,7 +467,7 @@ def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x_sss",
-    label="\\partial_{sss} \\mathbf{r}",
+    label="\\partial_{sss} \\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve, third derivative",
@@ -498,6 +499,311 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
             y=transforms["Y"].transform(params["Y_n"]) + transforms["shift"][1],
         )
     data["x_sss"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="x",
+    label="\\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve",
+    dim=3,
+    params=["X", "Y", "Z", "knots", "method"],
+    transforms={
+        "rotmat": [],
+        "shift": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.SplineXYZCurve",
+    basis="basis",
+)
+def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    xq = data["s"]
+
+    Xq = interp1d(
+        xq,
+        params["knots"],
+        params["X"],
+        method=params["method"],
+        derivative=0,
+        period=2 * jnp.pi,
+    )
+    Yq = interp1d(
+        xq,
+        params["knots"],
+        params["Y"],
+        method=params["method"],
+        derivative=0,
+        period=2 * jnp.pi,
+    )
+    Zq = interp1d(
+        xq,
+        params["knots"],
+        params["Z"],
+        method=params["method"],
+        derivative=0,
+        period=2 * jnp.pi,
+    )
+
+    coords = jnp.stack([Xq, Yq, Zq], axis=1)
+    coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        coords = xyz2rpz(coords)
+    data["x"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="x_s",
+    label="\\partial_{s} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, first derivative",
+    dim=3,
+    params=["X", "Y", "Z", "knots", "method"],
+    transforms={
+        "rotmat": [],
+        "shift": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.SplineXYZCurve",
+    basis="basis",
+)
+def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    xq = data["s"]
+
+    dXq = interp1d(
+        xq,
+        params["knots"],
+        params["X"],
+        method=params["method"],
+        derivative=1,
+        period=2 * jnp.pi,
+    )
+    dYq = interp1d(
+        xq,
+        params["knots"],
+        params["Y"],
+        method=params["method"],
+        derivative=1,
+        period=2 * jnp.pi,
+    )
+    dZq = interp1d(
+        xq,
+        params["knots"],
+        params["Z"],
+        method=params["method"],
+        derivative=1,
+        period=2 * jnp.pi,
+    )
+
+    coords_s = jnp.stack([dXq, dYq, dZq], axis=1)
+    coords_s = coords_s @ transforms["rotmat"].T
+
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        # calculate the xy coordinates to rotate to rpz
+        Xq = interp1d(
+            xq,
+            params["knots"],
+            params["X"],
+            method=params["method"],
+            derivative=0,
+            period=2 * jnp.pi,
+        )
+        Yq = interp1d(
+            xq,
+            params["knots"],
+            params["Y"],
+            method=params["method"],
+            derivative=0,
+            period=2 * jnp.pi,
+        )
+        Zq = interp1d(
+            xq,
+            params["knots"],
+            params["Z"],
+            method=params["method"],
+            derivative=0,
+            period=2 * jnp.pi,
+        )
+
+        coords = jnp.stack([Xq, Yq, Zq], axis=1)
+        coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+
+        coords_s = xyz2rpz_vec(coords_s, x=coords[:, 0], y=coords[:, 1])
+    data["x_s"] = coords_s
+    return data
+
+
+@register_compute_fun(
+    name="x_ss",
+    label="\\partial_{ss} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, second derivative",
+    dim=3,
+    params=["X", "Y", "Z", "knots", "method"],
+    transforms={
+        "rotmat": [],
+        "shift": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.SplineXYZCurve",
+    basis="basis",
+)
+def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    xq = data["s"]
+
+    d2Xq = interp1d(
+        xq,
+        params["knots"],
+        params["X"],
+        method=params["method"],
+        derivative=2,
+        period=2 * jnp.pi,
+    )
+    d2Yq = interp1d(
+        xq,
+        params["knots"],
+        params["Y"],
+        method=params["method"],
+        derivative=2,
+        period=2 * jnp.pi,
+    )
+    d2Zq = interp1d(
+        xq,
+        params["knots"],
+        params["Z"],
+        method=params["method"],
+        derivative=2,
+        period=2 * jnp.pi,
+    )
+
+    coords_ss = jnp.stack([d2Xq, d2Yq, d2Zq], axis=1)
+    coords_ss = coords_ss @ transforms["rotmat"].T
+
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        # calculate the xy coordinates to rotate to rpz
+        Xq = interp1d(
+            xq,
+            params["knots"],
+            params["X"],
+            method=params["method"],
+            derivative=0,
+            period=2 * jnp.pi,
+        )
+        Yq = interp1d(
+            xq,
+            params["knots"],
+            params["Y"],
+            method=params["method"],
+            derivative=0,
+            period=2 * jnp.pi,
+        )
+        Zq = interp1d(
+            xq,
+            params["knots"],
+            params["Z"],
+            method=params["method"],
+            derivative=0,
+            period=2 * jnp.pi,
+        )
+        coords = jnp.stack([Xq, Yq, Zq], axis=1)
+        coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+
+        coords_ss = xyz2rpz_vec(coords_ss, x=coords[:, 0], y=coords[:, 1])
+    data["x_ss"] = coords_ss
+    return data
+
+
+@register_compute_fun(
+    name="x_sss",
+    label="\\partial_{sss} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, third derivative",
+    dim=3,
+    params=["X", "Y", "Z", "knots", "method"],
+    transforms={
+        "rotmat": [],
+        "shift": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.SplineXYZCurve",
+    basis="basis",
+)
+def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    xq = data["s"]
+
+    d3Xq = interp1d(
+        xq,
+        params["knots"],
+        params["X"],
+        method=params["method"],
+        derivative=3,
+        period=2 * jnp.pi,
+    )
+    d3Yq = interp1d(
+        xq,
+        params["knots"],
+        params["Y"],
+        method=params["method"],
+        derivative=3,
+        period=2 * jnp.pi,
+    )
+    d3Zq = interp1d(
+        xq,
+        params["knots"],
+        params["Z"],
+        method=params["method"],
+        derivative=3,
+        period=2 * jnp.pi,
+    )
+
+    coords_sss = jnp.stack([d3Xq, d3Yq, d3Zq], axis=1)
+    coords_sss = coords_sss @ transforms["rotmat"].T
+
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        # calculate the xy coordinates to rotate to rpz
+        Xq = interp1d(
+            xq,
+            params["knots"],
+            params["X"],
+            method=params["method"],
+            derivative=0,
+            period=2 * jnp.pi,
+        )
+        Yq = interp1d(
+            xq,
+            params["knots"],
+            params["Y"],
+            method=params["method"],
+            derivative=0,
+            period=2 * jnp.pi,
+        )
+        Zq = interp1d(
+            xq,
+            params["knots"],
+            params["Z"],
+            method=params["method"],
+            derivative=0,
+            period=2 * jnp.pi,
+        )
+        coords = jnp.stack([Xq, Yq, Zq], axis=1)
+        coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+
+        coords_sss = xyz2rpz_vec(coords_sss, x=coords[:, 0], y=coords[:, 1])
+    data["x_sss"] = coords_sss
+
     return data
 
 
@@ -618,9 +924,43 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["s", "x_s"],
-    parameterization="desc.geometry.core.Curve",
+    parameterization=[
+        "desc.geometry.curve.FourierRZCurve",
+        "desc.geometry.curve.FourierXYZCurve",
+        "desc.geometry.curve.FourierPlanarCurve",
+    ],
 )
 def _length(params, transforms, profiles, data, **kwargs):
     T = jnp.linalg.norm(data["x_s"], axis=-1)
     data["length"] = jnp.trapz(T, data["s"])
+    return data
+
+
+@register_compute_fun(
+    name="length",
+    label="L",
+    units="m",
+    units_long="meters",
+    description="Length of the curve",
+    dim=0,
+    params=["method"],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["s", "x", "x_s"],
+    parameterization="desc.geometry.curve.SplineXYZCurve",
+)
+def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
+    if params["method"] == "nearest":  # cannot use derivative method as deriv=0
+        coords = data["x"]
+        if kwargs.get("basis", "rpz").lower() == "rpz":
+            coords = rpz2xyz(coords)
+        X = coords[:, 0]
+        Y = coords[:, 1]
+        Z = coords[:, 2]
+        lengths = jnp.sqrt(jnp.diff(X) ** 2 + jnp.diff(Y) ** 2 + jnp.diff(Z) ** 2)
+        data["length"] = jnp.sum(lengths)
+    else:
+        T = jnp.linalg.norm(data["x_s"], axis=-1)
+        data["length"] = jnp.trapz(T, data["s"])
     return data

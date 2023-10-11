@@ -12,6 +12,7 @@ from .linear_objectives import (
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    FixAnisotropy,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
@@ -30,11 +31,13 @@ from .nae_utils import make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
 
 
-def get_equilibrium_objective(eq=None, mode="force", normalize=True):
+def get_equilibrium_objective(eq, mode="force", normalize=True):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
     ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
     mode : one of {"force", "forces", "energy", "vacuum"}
         which objective to return. "force" computes force residuals on unified grid.
         "forces" uses two different grids for radial and helical forces. "energy" is
@@ -68,18 +71,22 @@ def get_equilibrium_objective(eq=None, mode="force", normalize=True):
 
 
 def get_fixed_axis_constraints(
-    eq=None, profiles=True, iota=True, kinetic=False, normalize=True
+    eq, profiles=True, iota=True, kinetic=False, anisotropy=False, normalize=True
 ):
     """Get the constraints necessary for a fixed-axis equilibrium problem.
 
     Parameters
     ----------
+    eq : Equilibrium
+        Equilibrium being constrained.
     profiles : bool
         Whether to also return constraints to fix input profiles.
     iota : bool
         Whether to add FixIota or FixCurrent as a constraint.
     kinetic : bool
         Whether to add constraints to fix kinetic profiles or pressure
+    anisotropy : bool
+        Whether to add constraint to fix anisotropic pressure.
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -112,6 +119,12 @@ def get_fixed_axis_constraints(
             constraints += (
                 FixPressure(eq=eq, normalize=normalize, normalize_target=normalize),
             )
+            if anisotropy:
+                constraints += (
+                    FixAnisotropy(
+                        eq=eq, normalize=normalize, normalize_target=normalize
+                    ),
+                )
 
         if iota:
             constraints += (
@@ -125,7 +138,7 @@ def get_fixed_axis_constraints(
 
 
 def get_fixed_boundary_constraints(
-    eq=None, profiles=True, iota=True, kinetic=False, normalize=True
+    eq, profiles=True, iota=True, kinetic=False, anisotropy=False, normalize=True
 ):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
@@ -139,6 +152,8 @@ def get_fixed_boundary_constraints(
         Whether to add FixIota or FixCurrent as a constraint.
     kinetic : bool
         Whether to also fix kinetic profiles.
+    anisotropy : bool
+        Whether to add constraint to fix anisotropic pressure.
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -171,7 +186,12 @@ def get_fixed_boundary_constraints(
             constraints += (
                 FixPressure(eq=eq, normalize=normalize, normalize_target=normalize),
             )
-
+            if anisotropy:
+                constraints += (
+                    FixAnisotropy(
+                        eq=eq, normalize=normalize, normalize_target=normalize
+                    ),
+                )
         if iota:
             constraints += (
                 FixIota(eq=eq, normalize=normalize, normalize_target=normalize),
@@ -190,6 +210,7 @@ def get_NAE_constraints(
     profiles=True,
     iota=False,
     kinetic=False,
+    anisotropy=False,
     normalize=True,
     N=None,
 ):
@@ -210,6 +231,8 @@ def get_NAE_constraints(
         Whether to add FixIota or FixCurrent as a constraint.
     kinetic : bool
         Whether to also fix kinetic profiles.
+    anisotropy : bool
+        Whether to add constraint to fix anisotropic pressure.
     normalize : bool
         Whether to apply constraints in normalized units.
     N : int,
@@ -248,6 +271,12 @@ def get_NAE_constraints(
                     eq=desc_eq, normalize=normalize, normalize_target=normalize
                 ),
             )
+            if anisotropy:
+                constraints += (
+                    FixAnisotropy(
+                        eq=desc_eq, normalize=normalize, normalize_target=normalize
+                    ),
+                )
 
         if iota:
             constraints += (

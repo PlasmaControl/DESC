@@ -17,7 +17,6 @@ N_grid =  0,  0, 12, 12, 12, 12, 12, 12
 # continuation parameters
 bdry_ratio = 0.0, 0.0, 0.25, 0.5, 0.75, 1.0  1.0, 1.0
 pres_ratio = 0.0, 0.0, 0.0,  0.0, 0.0,  0.0, 0.5, 1.0
-#curr_ratio = 0.1, 0.5, 1.0, 1.0, 1.0, 1.0,  1.0, 1.0,  1.0
 pert_order = 2.0
 
 # solver methods

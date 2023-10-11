@@ -141,9 +141,6 @@ class TestBasis:
         values = chebyshev(r[:, np.newaxis], l, dr=0)
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
-        with pytest.raises(NotImplementedError):
-            chebyshev(r[:, np.newaxis], l, dr=1)
-
     @pytest.mark.unit
     def test_zernike_radial(self):  # noqa: C901
         """Test zernike_radial function, comparing to analytic formulas."""

@@ -8,7 +8,7 @@ from desc.backend import jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-filename = "input.LandremanPaul2021_QA_scaled_output.h5"
+filename = "input.final_freeb_output.h5"
 savename = "optimized" + filename
 
 # Load Equilibrium

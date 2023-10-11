@@ -9,12 +9,12 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-from scipy.constants import elementary_charge
+from scipy.constants import elementary_charge, mu_0
 from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
 from .data_index import register_compute_fun
-from .utils import cumtrapz, dot, surface_averages_map, surface_integrals
+from .utils import cumtrapz, surface_averages_map
 
 
 @register_compute_fun(
@@ -343,8 +343,8 @@ def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
 
     Compute 〈𝐉 ⋅ 𝐁〉 using the formulae in
-    Redl et al., Physics of Plasmas 28, 022502 (2021). This formula for
-    the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
+    Redl et al., Physics of Plasmas 28, 022502 (2021).
+    This formula for the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
     and quasi-helical symmetry, but not in other stellarators.
     """
     grid = transforms["grid"]
@@ -388,7 +388,7 @@ def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="current Redl",
-    label="\\frac{2\\pi}{\\mu_0} I",
+    label="\\frac{2\\pi}{\\mu_0} I_{Redl}",
     units="A",
     units_long="Amperes",
     description="Net toroidal current enclosed by flux surfaces, "
@@ -398,25 +398,21 @@ def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["rho", "e^zeta", "sqrt(g)", "b", "|B|", "J", "J_parallel", "<J*B> Redl"],
+    data=["rho", "psi_r", "p_r", "current", "<|B|^2>", "<J*B> Redl"],
 )
 def _current_Redl(params, transforms, profiles, data, **kwargs):
-    """Compute the current profile consistent with the Redl bootstrap current."""
-    # parallel & perpendicular current density from MHD equilibrium
-    J_ll = (data["J_parallel"] * data["b"].T).T
-    J_perp = data["J"] - J_ll
+    """Compute the current profile consistent with the Redl bootstrap current.
 
-    # J assuming parallel current density from Redl formula
-    J_ll_Redl = (data["<J*B> Redl"] / data["|B|"] * data["b"].T).T
-    J_Redl = J_ll_Redl + J_perp
-
-    # integrate current density to get net toroidal current
-    J_tor = dot(J_Redl, data["e^zeta"])  # TODO: this should really be e^phi
-    current_r = surface_integrals(
-        transforms["grid"], data["sqrt(g)"] * J_tor, expand_out=False
-    ) / (2 * jnp.pi)
+    Compute the current using Equation C3 in
+    Landreman and Catto, Physics of Plasmas 19, 056103 (2012).
+    This is the same approach as STELLOPT VBOOT with SFINCS, and should be used in an
+    iterative method to update the current profile until self-consistency is achieved.
+    """
     rho = transforms["grid"].compress(data["rho"])
+    current_r = transforms["grid"].compress(
+        -mu_0 * data["current"] / data["<|B|^2>"] * data["p_r"]  # perpendicular
+        + 2 * jnp.pi * data["psi_r"] * data["<J*B> Redl"] / data["<|B|^2>"]  # parallel
+    )
     current = cumtrapz(current_r, rho, initial=0)
-
     data["current Redl"] = transforms["grid"].expand(current)
     return data

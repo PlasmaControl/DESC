@@ -24,7 +24,6 @@ maxiter = 50
 optimizer         = lsq-exact
 objective         = vacuum
 spectral_indexing = ansi
-node_pattern      = jacobi
 
 # Note that the vacuum objective will optimize for current density = 0.
 # The rotational transform profile coefficients below will only be used

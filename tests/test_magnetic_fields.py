@@ -115,8 +115,65 @@ class TestMagneticFields:
             rtol=1e-8,
         )
 
+        potential = lambda theta, zeta, G: G * zeta / 2 / jnp.pi * 2
+        potential_dtheta = lambda theta, zeta, G: jnp.zeros_like(theta)
+        potential_dzeta = (
+            lambda theta, zeta, G: G * jnp.ones_like(theta) / 2 / jnp.pi * 2
+        )
+
+        correct_field = lambda R, phi, Z: 2 * jnp.array(
+            [[0, mu_0 * G / 2 / jnp.pi / R, 0]]
+        )
+        field.potential = potential
+        field.potential_dtheta = potential_dtheta
+        field.potential_dzeta = potential_dzeta
+
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, 0, 0]),
+            correct_field(10.0, 0, 0),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            correct_field(10.0, np.pi / 4, 0),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+
+        field = CurrentPotentialField.from_surface(
+            surface=surface,
+            potential=potential,
+            params=params,
+            potential_dtheta=potential_dtheta,
+            potential_dzeta=potential_dzeta,
+        )
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, 0, 0]),
+            correct_field(10.0, 0, 0),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            correct_field(10.0, np.pi / 4, 0),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+
         with pytest.raises(IOError):
             field.save("test_field.h5")
+        with pytest.warns(UserWarning):
+            # check that if passing in a longer params dict, that
+            # the warning is thrown
+            field.params = {"key1": None, "key2": None}
+        # check assert callable statement
+        with pytest.raises(AssertionError):
+            field.potential = 1
+        with pytest.raises(AssertionError):
+            field.potential_dtheta = 1
+        with pytest.raises(AssertionError):
+            field.potential_dzeta = 1
 
     @pytest.mark.unit
     def test_fourier_current_potential_field(self):

@@ -19,6 +19,7 @@ from desc.geometry import (
 )
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import load
+from desc.magnetic_fields import CurrentPotentialField, FourierCurrentPotentialField
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -1213,6 +1214,19 @@ def test_compute_everything():
         ),
         "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
             **elliptic_cross_section_with_torsion
+        ),
+        # magnetic fields
+        "desc.magnetic_fields.CurrentPotentialField": CurrentPotentialField(
+            **elliptic_cross_section_with_torsion,
+            potential=lambda theta, zeta, G: G * zeta / 2 / np.pi,
+            potential_dtheta=lambda theta, zeta, G: np.zeros_like(theta),
+            potential_dzeta=lambda theta, zeta, G: G * np.ones_like(theta) / 2 / np.pi,
+            params={"G": 1e7},
+        ),
+        "desc.magnetic_fields.FourierCurrentPotentialField": (
+            FourierCurrentPotentialField(
+                **elliptic_cross_section_with_torsion, I=0, G=1e7
+            )
         ),
     }
     things_keys = list(things.keys()).sort()

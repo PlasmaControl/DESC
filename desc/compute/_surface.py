@@ -519,7 +519,7 @@ def _Phi_FourierCurrentPotentialField(params, transforms, profiles, data, **kwar
 
 @register_compute_fun(
     name="Phi_t",
-    label="\\partial_{\\theta}Phi",
+    label="\\partial_{\\theta}\\Phi",
     units="A",
     units_long="Amperes",
     description="Surface current potential, poloidal derivative",
@@ -540,7 +540,7 @@ def _Phi_t_FourierCurrentPotentialField(params, transforms, profiles, data, **kw
 
 @register_compute_fun(
     name="Phi_z",
-    label="\\partial_{\\zeta}Phi",
+    label="\\partial_{\\zeta}\\Phi",
     units="A",
     units_long="Amperes",
     description="Surface current potential, toroidal derivative",
@@ -584,7 +584,7 @@ def _Phi_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Phi_t",
-    label="\\partial_{\\theta}Phi",
+    label="\\partial_{\\theta}\\Phi",
     units="A",
     units_long="Amperes",
     description="Surface current potential, poloidal derivative",
@@ -607,7 +607,7 @@ def _Phi_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Phi_z",
-    label="\\partial_{\\zeta}Phi",
+    label="\\partial_{\\zeta}\\Phi",
     units="A",
     units_long="Amperes",
     description="Surface current potential, toroidal derivative",

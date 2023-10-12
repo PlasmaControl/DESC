@@ -11,7 +11,7 @@ from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
 from desc.transform import Transform
@@ -1164,8 +1164,9 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     NFP : int
         number of field periods
     sym : bool
-        whether to enforce stellarator symmetry. Default is "auto" which enforces if
-        modes are symmetric. If True, non-symmetric modes will be truncated.
+        whether to enforce stellarator symmetry for the surface geometry.
+        Default is "auto" which enforces if modes are symmetric. If True,
+        non-symmetric modes will be truncated.
     rho : float [0,1]
         flux surface label for the toroidal surface
     name : str
@@ -1349,7 +1350,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         modes_Z = surface._Z_basis.modes[:, 1:]
         NFP = surface.NFP
         sym = surface.sym
-        rho = surface.rho
         name = surface.name
 
         return cls(
@@ -1363,8 +1363,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             modes_Z,
             NFP,
             sym,
-            rho,
-            name,
+            name=name,
             check_orientation=False,
         )
 
@@ -1403,7 +1402,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         and increasing when going in the clockwise direction, which with the
         convention n x grad(phi) will result in a toroidal field in the negative
         toroidal direction.
-    sym_Phi : str or False, one of {"auto","cos","sin",False}
+    sym_Phi :  {"auto","cos","sin",False}
         whether to enforce a given symmetry for the DoubleFourierSeries part of the
         current potential. Default is "auto" which enforces if modes are symmetric.
         If True, non-symmetric modes will be truncated.
@@ -1416,11 +1415,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     NFP : int
         number of field periods
     sym : bool
-        whether to enforce stellarator symmetry for the toroidal surface.
-        Default is "auto" which enforces if modes are symmetric.
-        If True, non-symmetric modes will be truncated.
-    rho : float [0,1]
-        flux surface label for the toroidal surface
+        whether to enforce stellarator symmetry for the surface geometry.
+        Default is "auto" which enforces if modes are symmetric. If True,
+        non-symmetric modes will be truncated.
     name : str
         name for this field
     check_orientation : bool
@@ -1449,7 +1446,6 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         modes_Z=None,
         NFP=1,
         sym="auto",
-        rho=1,
         name="",
         check_orientation=True,
     ):
@@ -1484,11 +1480,18 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
         assert np.isscalar(I), "I must be a scalar"
         assert np.isscalar(G), "G must be a scalar"
-        self._I = I
-        self._G = G
+        self._I = float(I)
+        self._G = float(G)
 
         super().__init__(
-            R_lmn, Z_lmn, modes_R, modes_Z, NFP, sym, rho, name, check_orientation
+            R_lmn,
+            Z_lmn,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            name=name,
+            check_orientation=check_orientation,
         )
 
     @property
@@ -1499,7 +1502,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     @I.setter
     def I(self, new):  # noqa: E743
         assert np.isscalar(new), "I must be a scalar"
-        self._I = new
+        self._I = float(new)
 
     @property
     def G(self):
@@ -1509,7 +1512,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     @G.setter
     def G(self, new):
         assert np.isscalar(new), "G must be a scalar"
-        self._G = new
+        self._G = float(new)
 
     @property
     def Phi_mn(self):
@@ -1552,7 +1555,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             If None, defaults to current NFP.
             Note: will change the NFP of the surface geometry as well as the
             Phi basis.
-        sym_Phi : str or False, one of {"auto","cos","sin",False}
+        sym_Phi :  {"auto","cos","sin",False}
             whether to enforce a given symmetry for the DoubleFourierSeries part of the
             current potential. Default is "auto" which enforces if modes are symmetric.
             If True, non-symmetric modes will be truncated.
@@ -1655,7 +1658,6 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         modes_Z = surface._Z_basis.modes[:, 1:]
         NFP = surface.NFP
         sym = surface.sym
-        rho = surface.rho
         name = surface.name
 
         return cls(
@@ -1670,8 +1672,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             modes_Z,
             NFP,
             sym,
-            rho,
-            name,
+            name=name,
             check_orientation=False,
         )
 
@@ -1702,7 +1703,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
 
     """
     assert basis.lower() in ["rpz", "xyz"]
-    if isinstance(coords, Grid):
+    if hasattr(coords, "nodes"):
         coords = coords.nodes
     coords = jnp.atleast_2d(coords)
     if basis == "rpz":
@@ -1713,8 +1714,9 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     # needed for integration in class
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
     data = field.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
-    _K = xyz2rpz_vec(data["K"], phi=surface_grid.nodes[:, 2])
     _rs = xyz2rpz_vec(data["x"], phi=surface_grid.nodes[:, 2])
+    _K = xyz2rpz_vec(data["K"], phi=surface_grid.nodes[:, 2])
+
     # surface element, must divide by NFP to remove the NFP multiple on the
     # surface grid weights, as we account for that when doing the for loop
     # over NFP
@@ -1725,7 +1727,8 @@ def _compute_magnetic_field_from_CurrentPotentialField(
         phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
             2 * jnp.pi
         )
-        rs = rpz2xyz_vec(_rs, phi=phi)
+        rs = jnp.vstack((_rs[:, 0], _rs[:, 1] + phi, _rs[:, 2])).T
+        rs = rpz2xyz(rs)
         K = rpz2xyz_vec(_K, phi=phi)
         fj = biot_savart_general(
             coords,

@@ -30,8 +30,11 @@ The easiest way to install DESC is from pypi: :console:`pip install desc-opt`
 
 For more detailed instructions on installing DESC and its dependencies, see Installation_.
 The code is run using the syntax :console:`desc <path/to/inputfile>` and the full list of command line options are given in `Command Line Interface`_. (Note that you may have to prepend the command with :console:`python -m`)
+
 DESC can be ran in two ways:
+
 The first is through an input file specifying the equilibrium and solver options, this way can also can also accept VMEC input files.
+
 The second is through a python script, where the equilibrium and solver options are specified programmatically, this method offers much more flexibility over what types of equilibrium solution, optimization and analysis can be performed.
 See the tutorial `Script Interface`_ for more detailed information.
 
@@ -39,8 +42,9 @@ Refer to `Inputs`_ for documentation on how to format the input file.
 The equilibrium solution is output in a HDF5 binary file, whose format is detailed in `Outputs`_.
 
 As an example usage of the input file method, to use DESC to solve for the equilibrium of the high-beta, D-shaped plasma described with the DSHAPE input file, the command from the :console:`DESC` directory is
-:console:`desc -p desc/examples/DSHAPE`
-Where the :console:`-p` flag tells DESC to plot the results once it finishes.
+:console:`desc -p desc/examples/DSHAPE`, where the :console:`-p` flag tells DESC to plot the results once it finishes.
+
+An example of the script usage to solve and optimize an equilibrium, refer to the python script `desc/examples/precise_QA.py`, which can be run from the :console:`DESC` directory from the command line with :console:`python3 desc/examples/precise_QA.py`
 
 .. _Installation: https://desc-docs.readthedocs.io/en/latest/installation.html
 .. _Command Line Interface: https://desc-docs.readthedocs.io/en/latest/command_line.html

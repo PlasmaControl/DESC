@@ -1714,7 +1714,8 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     # needed for integration in class
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
     data = field.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
-    _rs = xyz2rpz_vec(data["x"], phi=surface_grid.nodes[:, 2])
+
+    _rs = xyz2rpz(data["x"])
     _K = xyz2rpz_vec(data["K"], phi=surface_grid.nodes[:, 2])
 
     # surface element, must divide by NFP to remove the NFP multiple on the
@@ -1727,7 +1728,8 @@ def _compute_magnetic_field_from_CurrentPotentialField(
         phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
             2 * jnp.pi
         )
-        rs = jnp.vstack((_rs[:, 0], _rs[:, 1] + phi, _rs[:, 2])).T
+        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
+        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
         rs = rpz2xyz(rs)
         K = rpz2xyz_vec(_K, phi=phi)
         fj = biot_savart_general(

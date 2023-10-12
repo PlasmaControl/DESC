@@ -1561,3 +1561,26 @@ def test_contravariant_basis_vectors():
             atol=atol,
             err_msg=key,
         )
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+def test_iota_components(HELIOTRON_vac):
+    """Test that iota components are computed correctly."""
+    # axisymmetric, so all rotational transform should be from the current
+    eq_i = get("DSHAPE")  # iota profile assigned
+    eq_c = get("DSHAPE_CURRENT")  # current profile assigned
+    grid = LinearGrid(L=100, M=max(eq_i.M_grid, eq_c.M_grid), N=0, NFP=1, axis=True)
+    data_i = eq_i.compute(["iota", "iota current", "iota vacuum"], grid)
+    data_c = eq_c.compute(["iota", "iota current", "iota vacuum"], grid)
+    np.testing.assert_allclose(data_i["iota"], data_i["iota current"])
+    np.testing.assert_allclose(data_c["iota"], data_c["iota current"])
+    np.testing.assert_allclose(data_i["iota vacuum"], 0)
+    np.testing.assert_allclose(data_c["iota vacuum"], 0)
+
+    # vacuum stellarator, so all rotational transform should be from the external field
+    eq = load(load_from=str(HELIOTRON_vac["desc_h5_path"]), file_format="hdf5")[-1]
+    grid = LinearGrid(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
+    data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
+    np.testing.assert_allclose(data["iota"], data["iota vacuum"])
+    np.testing.assert_allclose(data["iota current"], 0)

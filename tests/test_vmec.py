@@ -371,6 +371,22 @@ def test_vmec_save_asym(TmpDir):
     VMECIO.save(eq, output_path)
 
 
+@pytest.mark.unit
+def test_vmec_save_kinetic(TmpDir):
+    """Tests that saving an equilibrium with kinetic profiles runs without errors."""
+    output_path = str(TmpDir.join("output.nc"))
+    eq = Equilibrium(
+        L=2,
+        M=2,
+        N=2,
+        NFP=3,
+        electron_density=np.array([[0, 1], [2, -1]]),
+        electron_temperature=np.array([[0, 1], [2, -1]]),
+        sym=True,
+    )
+    VMECIO.save(eq, output_path)
+
+
 @pytest.mark.regression
 @pytest.mark.slow
 def test_vmec_save_1(VMEC_save):

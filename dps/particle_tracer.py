@@ -1,5 +1,5 @@
-from desc import set_device
-set_device("gpu")
+# from desc import set_device
+# set_device("gpu")
 from desc.objectives import ParticleTracer
 from desc.grid import Grid
 import desc.io
@@ -7,12 +7,17 @@ from desc.backend import jnp
 import scipy.constants
 import matplotlib.pyplot as plt
 import numpy as np
+from time import time as timet
 
+initial_time = timet()
 # Load Equilibrium
-eq = desc.io.load("DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5")[-1]
+# filename = "DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5"
+# filename = "input.final_freeb_output.h5"
+filename = "input.LandremanPaul2021_QA_scaled_output.h5"
+eq = desc.io.load(filename)[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
-eq.solve()
+# eq.solve()
 
 # Output the resulting solution to a .txt file, in 4 columns (psi, theta, zeta, vpar)
 def output_to_file(solution, name):
@@ -45,13 +50,13 @@ Charge = 2*Proton_Charge
 psi_i = 0.2
 zeta_i = 0
 theta_i = 0
-vpar_i = 0.8*jnp.sqrt(2*Energy_SI/Mass)
+vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)
 ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
 tmax = 1e-4
-nt = 100
+nt = 1000
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond
@@ -73,8 +78,12 @@ print(f"μ: {mu}")
 print(f"Gyroradius: {Mass/Charge*jnp.sqrt(2*mu/data['|B|'])}") #GyroRadius
 print(f"Gyrofrequency: {Charge*data['|B|']/Mass}") #Gyrofrequency
 
+intermediate_time = timet()
+print(f"Time from beginning until here: {intermediate_time - initial_time}s")
 objective.build()
 solution = objective.compute(*objective.xs(eq))
+intermediate_time_2 = timet()
+print(f"Time to build and compute: {intermediate_time_2 - intermediate_time}s")
 
 print("*************** SOLUTION .compute() ***************")
 print(solution)
@@ -88,8 +97,8 @@ def Trajectory_Plot():
     fig, ax = plt.subplots()
     ax.plot(np.sqrt(solution[:, 0]) * np.cos(solution[:, 1]), np.sqrt(solution[:, 0]) * np.sin(solution[:, 1]))
     ax.set_aspect("equal", adjustable='box')
-    plt.xlabel(r'$\sqrt$($\psi$)cos($\theta$)')
-    plt.ylabel(r'$\sqrt$($\psi$)sin($\theta$)')
+    plt.xlabel(r'$\sqrt{\psi}cos(\theta)$')
+    plt.ylabel(r'$\sqrt{\psi}sin(\theta)$')
     fig.savefig("Trajectory_Plot.png")
 
     
@@ -108,6 +117,7 @@ def Quantity_Plot():
     fig.savefig("Quantity_Plot.png")
 
 def Energy_Plot():
+    fig, axs = plt.subplots(2, 2)
     grid = Grid(np.vstack((np.sqrt(solution[:, 0]), solution[:, 1], solution[:, 2])).T,sort=False)
     B_field = eq.compute("|B|", grid=grid)
     Energy = 0.5*(solution[:, 3]**2 + 2*B_field["|B|"]*mu)*Mass
@@ -116,3 +126,7 @@ def Energy_Plot():
     plt.title(r"(E - E$_0$)/E$_0$")
     plt.ticklabel_format(axis="y", style="sci", scilimits=(0,0))
     plt.savefig("Energy_Plot.png")
+
+Trajectory_Plot()
+Quantity_Plot()
+Energy_Plot()

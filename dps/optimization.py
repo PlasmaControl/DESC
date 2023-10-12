@@ -1,5 +1,5 @@
-from desc import set_device
-set_device("gpu")
+# from desc import set_device
+# set_device("gpu")
 from desc.objectives import ParticleTracer, ObjectiveFunction
 from desc.grid import Grid
 import desc.io
@@ -7,8 +7,11 @@ from desc.objectives import ForceBalance, FixBoundaryR, FixBoundaryZ, FixPressur
 from desc.backend import jnp
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy
 
-filename = "input.final_freeb_output.h5"
+# filename = "input.final_freeb_output.h5"
+# filename = "DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5"
+filename = "input.LandremanPaul2021_QA_scaled_output.h5"
 savename = "optimized" + filename
 
 # Load Equilibrium
@@ -19,8 +22,8 @@ eq._current = None
 
 # Energy and Mass info
 Energy_eV = 3.52e6
-Proton_Mass = 1.673e-27
-Proton_Charge = 1.6e-19
+Proton_Mass = scipy.constants.proton_mass
+Proton_Charge = scipy.constants.elementary_charge
 
 Energy_SI = Energy_eV*Proton_Charge
 

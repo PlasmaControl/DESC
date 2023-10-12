@@ -117,7 +117,7 @@ def Quantity_Plot():
     fig.savefig("Quantity_Plot.png")
 
 def Energy_Plot():
-    fig, axs = plt.subplots(2, 2)
+    plt.figure()
     grid = Grid(np.vstack((np.sqrt(solution[:, 0]), solution[:, 1], solution[:, 2])).T,sort=False)
     B_field = eq.compute("|B|", grid=grid)
     Energy = 0.5*(solution[:, 3]**2 + 2*B_field["|B|"]*mu)*Mass

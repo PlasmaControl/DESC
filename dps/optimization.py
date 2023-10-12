@@ -8,6 +8,9 @@ from desc.backend import jnp
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
+from time import time as timet
+
+initial_time = timet()
 
 # filename = "input.final_freeb_output.h5"
 # filename = "DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5"
@@ -54,10 +57,16 @@ mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 
 ini_param = [float(mu), Mass_Charge_Ratio]
 
+intermediate_time = timet()
+print(f"Time from beginning until here: {intermediate_time - initial_time}s")
+
 objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1e-8)
 
 objective.build()
 solution = objective.compute(*objective.xs(eq))
+
+intermediate_time_2 = timet()
+print(f"Time to build and compute: {intermediate_time_2 - intermediate_time}s")
 
 print("*************** SOLUTION .compute() ***************")
 print(solution)
@@ -70,6 +79,9 @@ print("*************** ObjFunction.compile() ***************")
 ObjFunction.compile(mode="bfgs")
 print("*****************************************************")
 
+intermediate_time_3 = timet()
+print(f"Time to build and compile: {intermediate_time_3 - intermediate_time_2}s")
+
 #print(ObjFunction.x(eq))
 #xs = objective.xs(eq)
 #print("*************** xs **************")
@@ -78,8 +90,11 @@ print("*****************************************************")
 
 R_modes = np.array([[0, 0, 0]])
 constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
-eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3)
+eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3) # Mudar o número de iterações para 3, 10, 100
 eq.save(savename)
+
+intermediate_time_4 = timet()
+print(f"Time to optimize: {intermediate_time_4 - intermediate_time_3}s")
 
 eq_opt = desc.io.load(savename)[-1]
 eq_opt._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)

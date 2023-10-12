@@ -7,8 +7,10 @@ import warnings
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from pylatexenc.latex2text import LatexNodes2Text
 from scipy.integrate import solve_ivp
 from scipy.interpolate import Rbf
 from termcolor import colored
@@ -18,7 +20,7 @@ from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import surface_averages_map
 from desc.grid import Grid, LinearGrid
-from desc.utils import flatten_list, parse_argname_change
+from desc.utils import errorif, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
 __all__ = [
@@ -697,13 +699,68 @@ def plot_2d(
     return fig, ax
 
 
+def _trimesh_idx(n1, n2, periodic1=True, periodic2=True):
+    # suppose grid is something like this (n1=3, n2=4):
+    # 0  1  2  3
+    # 4  5  6  7
+    # 8  9 10 11
+
+    # first set of triangles are (0,1,4), (1,2,5), (2,3,6), (3,0,7), ... (8,9,0) etc
+    # second set are (1,5,4), (2,6,5), (3,7,6), (0,4,7) etc.
+    # for the first set, i1 is the linear index, j1 = i1+1, k1=i1+n2
+    # for second set, i2 from the second set is j1 from the first, and j2 = k1,
+    # k2 = i1 + 1 + n2 with some other tricks to handle wrapping or out of bounds
+    n = n1 * n2
+    c, r = np.meshgrid(np.arange(n1), np.arange(n2), indexing="ij")
+
+    def clip_or_mod(x, p, flag):
+        if flag:
+            return x % p
+        else:
+            return np.clip(x, 0, p - 1)
+
+    i1 = c * n2 + r
+    j1 = c * n2 + clip_or_mod((r + 1), n2, periodic2)
+    k1 = clip_or_mod((c + 1), n1, periodic1) * n2 + r
+
+    i2 = c * n2 + clip_or_mod((r + 1), n2, periodic2)
+    j2 = clip_or_mod((c + 1), n1, periodic1) * n2 + r
+    k2 = clip_or_mod((c + 1), n1, periodic1) * n2 + clip_or_mod((r + 1), n2, periodic2)
+
+    i = np.concatenate([i1.flatten(), i2.flatten()])
+    j = np.concatenate([j1.flatten(), j2.flatten()])
+    k = np.concatenate([k1.flatten(), k2.flatten()])
+
+    # remove degenerate triangles, ie with the same vertex twice
+    degens = (i == j) | (j == k) | (i == k)
+    ijk = np.array([i, j, k])[:, ~degens]
+    # remove out of bounds indices
+    ijk = ijk[:, np.all(ijk < n, axis=0)]
+    # remove duplicates
+    ijk = np.unique(np.sort(ijk, axis=0), axis=1)
+
+    # expected number of triangles
+    # start with 2 per square
+    exnum = (n1 - 1) * (n2 - 1) * 2
+    # if periodic, add extra "ghost" cells to connect ends
+    if periodic1:
+        exnum += (n2 - 1) * 2
+    if periodic2:
+        exnum += (n1 - 1) * 2
+    # if doubly periodic, there's also 2 at the corner
+    if periodic1 and periodic2:
+        exnum += 2
+
+    assert ijk.shape[1] == exnum
+    return ijk
+
+
 def plot_3d(
     eq,
     name,
     grid=None,
     log=False,
-    all_field_periods=True,
-    ax=None,
+    fig=None,
     return_data=False,
     use_colorbar=True,
     **kwargs,
@@ -720,38 +777,29 @@ def plot_3d(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
-    all_field_periods : bool, optional
-        Whether to plot full torus or one field period. Ignored if grid is specified.
-    ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+    fig : plotly.graph_objs._figure.Figure, optional
+        Figure to plot on
     return_data : bool
         if True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
-            plot_X(figsize=(4,6),cmap="plasma")
+            plot_X(figsize=(4,6), cmap="RdBu")
 
         Valid keyword arguments are:
 
-        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
-          matplotlib)
+        * ``figsize``: tuple of length 2, the size of the figure in inches
         * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
           which element to plot. Default is the norm of the vector.
-        * ``title_fontsize``: integer, font size of the title
-        * ``xlabel_fontsize``: float, fontsize of the xlabel
-        * ``ylabel_fontsize``: float, fontsize of the ylabel
-        * ``zlabel_fontsize``: float, fontsize of the zlabel
+        * ``title``: title to add to the figure.
+        * ``cmap``: string denoting colormap to use.
+        * ``levels``: array of data values where ticks on colorbar should be placed.
         * ``alpha``: float in [0,1.0], the transparency of the plotted surface
-        * ``elev``: float, elevation orientation angle of 3D plot (in the z plane)
-        * ``azim``: float, azimuthal orientation angle of 3D plot (in the x,y plane)
-        * ``dist``: float, distance from the camera to the center point of the plot
 
     Returns
     -------
-    fig : matplotlib.figure.Figure
-        Figure being plotted to.
-    ax : matplotlib.axes.Axes or ndarray of Axes
-        Axes being plotted to.
+    fig : plotly.graph_objs._figure.Figure
+        Figure being plotted to
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
 
@@ -769,19 +817,35 @@ def plot_3d(
                 zeta=np.linspace(0, 2 * np.pi, 100),
                 axis=True,
             )
-        fig, ax = plot_3d(eq, "|F|", log=True, grid=grid)
+        fig = plot_3d(eq, "|F|", log=True, grid=grid)
 
     """
-    nfp = 1 if all_field_periods else eq.NFP
     if grid is None:
-        grid_kwargs = {"M": 33, "N": int(33 * eq.NFP), "NFP": nfp}
+        grid_kwargs = {"M": 50, "N": int(50 * eq.NFP), "NFP": 1, "endpoint": True}
         grid = _get_grid(**grid_kwargs)
-    plot_axes = _get_plot_axes(grid)
-    if len(plot_axes) != 2:
-        return ValueError(colored("Grid must be 2D", "red"))
+    assert isinstance(grid, LinearGrid), "grid must be LinearGrid for 3d plotting"
+    assert only1(
+        grid.num_rho == 1, grid.num_theta == 1, grid.num_zeta == 1
+    ), "Grid must be 2D"
+    figsize = kwargs.pop("figsize", (10, 10))
+    alpha = kwargs.pop("alpha", 1.0)
+    cmap = kwargs.pop("cmap", "RdBu_r")
+    title = kwargs.pop("title", "")
+    levels = kwargs.pop("levels", None)
+    component = kwargs.pop("component", None)
 
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
-    fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.pop("figsize", None))
+    errorif(
+        len(kwargs) != 0,
+        ValueError,
+        f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
+    )
+
+    data, label = _compute(
+        eq,
+        name,
+        grid,
+        component=component,
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         coords = eq.compute(["X", "Y", "Z"], grid=grid)
@@ -789,97 +853,95 @@ def plot_3d(
     Y = coords["Y"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
-    if 0 in plot_axes:
-        if 1 in plot_axes:  # rho & theta
-            data = data[:, :, 0]
-            X = X[:, :, 0]
-            Y = Y[:, :, 0]
-            Z = Z[:, :, 0]
-        else:  # rho & zeta
-            data = data[0, :, :].T
-            X = X[0, :, :].T
-            Y = Y[0, :, :].T
-            Z = Z[0, :, :].T
-    else:  # theta & zeta
-        data = data[:, 0, :].T
-        X = X[:, 0, :].T
-        Y = Y[:, 0, :].T
-        Z = Z[:, 0, :].T
+    if grid.num_rho == 1:
+        n1, n2 = grid.num_theta, grid.num_zeta
+        p1, p2 = True, True
+    elif grid.num_theta == 1:
+        n1, n2 = grid.num_rho, grid.num_zeta
+        p1, p2 = False, True
+    elif grid.num_zeta == 1:
+        n1, n2 = grid.num_theta, grid.num_rho
+        p1, p2 = True, False
+    ijk = _trimesh_idx(n1, n2, p1, p2)
 
     if log:
-        data = np.abs(data)  # ensure data is positive for log plot
-        minn, maxx = data.min().min(), data.max().max()
-        norm = matplotlib.colors.LogNorm(vmin=minn, vmax=maxx)
+        data = np.log10(np.abs(data))  # ensure data is positive for log plot
+        cmin = np.floor(np.nanmin(data)).astype(int)
+        cmax = np.ceil(np.nanmax(data)).astype(int)
+        levels = setdefault(levels, np.logspace(cmin, cmax, cmax - cmin + 1))
+        ticks = np.log10(levels)
+        cbar = dict(
+            title=LatexNodes2Text().latex_to_text(label),
+            ticktext=[f"{l:.0e}" for l in levels],
+            tickvals=ticks,
+        )
+
     else:
-        minn, maxx = data.min().min(), data.max().max()
-        norm = matplotlib.colors.Normalize(vmin=minn, vmax=maxx)
-    m = plt.cm.ScalarMappable(cmap=plt.cm.jet, norm=norm)
-    m.set_array([])
-    alpha = kwargs.pop("alpha", 1)
-    title_fontsize = kwargs.pop("title_fontsize", None)
+        cbar = dict(
+            title=LatexNodes2Text().latex_to_text(label),
+            ticktext=levels,
+            tickvals=levels,
+        )
+        cmin = None
+        cmax = None
 
-    elev = kwargs.pop("elev", None)
-    azim = kwargs.pop("azim", None)
-    dist = kwargs.pop("dist", None)
-
-    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
-    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
-    zlabel_fontsize = kwargs.pop("zlabel_fontsize", None)
-
-    assert len(kwargs) == 0, f"plot_3d got unexpected keyword argument: {kwargs.keys()}"
-
-    ax.plot_surface(
-        X,
-        Y,
-        Z,
-        cmap="jet",
-        facecolors=plt.cm.jet(norm(data)),
-        vmin=minn,
-        vmax=maxx,
-        rstride=1,
-        cstride=1,
-        alpha=alpha,
+    meshdata = go.Mesh3d(
+        x=X.flatten(),
+        y=Y.flatten(),
+        z=Z.flatten(),
+        intensity=data.flatten(),
+        opacity=alpha,
+        cmin=cmin,
+        cmax=cmax,
+        i=ijk[0],
+        j=ijk[1],
+        k=ijk[2],
+        colorscale=cmap,
+        flatshading=True,
+        name=LatexNodes2Text().latex_to_text(label),
+        colorbar=cbar,
     )
-    if use_colorbar:
-        fig.colorbar(m, ax=ax)
 
-    ax.set_xlabel(_AXIS_LABELS_XYZ[0], fontsize=xlabel_fontsize)
-    ax.set_ylabel(_AXIS_LABELS_XYZ[1], fontsize=ylabel_fontsize)
-    ax.set_zlabel(_AXIS_LABELS_XYZ[2], fontsize=zlabel_fontsize)
-    ax.set_title(label, fontsize=title_fontsize)
-    _set_tight_layout(fig)
+    if fig is None:
+        fig = go.Figure()
+    fig.add_trace(meshdata)
 
-    # need this stuff to make all the axes equal, ax.axis('equal') doesn't work for 3d
-    x_limits = ax.get_xlim3d()
-    y_limits = ax.get_ylim3d()
-    z_limits = ax.get_zlim3d()
-
-    x_range = abs(x_limits[1] - x_limits[0])
-    x_middle = np.mean(x_limits)
-    y_range = abs(y_limits[1] - y_limits[0])
-    y_middle = np.mean(y_limits)
-    z_range = abs(z_limits[1] - z_limits[0])
-    z_middle = np.mean(z_limits)
-
-    if elev is not None or azim is not None:
-        ax.view_init(elev=elev, azim=azim)
-    if dist is not None:
-        ax.dist = dist
-
-    # The plot bounding box is a sphere in the sense of the infinity
-    # norm, hence I call half the max range the plot radius.
-    plot_radius = 0.5 * max([x_range, y_range, z_range])
-
-    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
-    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
-    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
-
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]),
+            yaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]),
+            zaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]),
+            aspectmode="data",
+            xaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+            yaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+            zaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+        ),
+        width=figsize[0] * dpi,
+        height=figsize[1] * dpi,
+        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
+        font=dict(family="Times"),
+    )
     plot_data = {"X": X, "Y": Y, "Z": Z, name: data}
 
     if return_data:
-        return fig, ax, plot_data
+        return fig, plot_data
 
-    return fig, ax
+    return fig
 
 
 def plot_fsa(
@@ -1991,69 +2053,57 @@ def plot_comparison(
     return fig, ax
 
 
-def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
+def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     """Create 3D plot of coil geometry.
 
     Parameters
     ----------
-    coils : Coil, CoilSet
+    coils : Coil, CoilSet, Curve, or iterable
         Coil or coils to plot
     grid : Grid, optional
         Grid to use for evaluating geometry
-    ax : matplotlib AxesSubplot, optional
-        Axis to plot on    return_data : bool
+    fig : plotly.graph_objs._figure.Figure, optional
+        Figure to plot on
     return_data : bool
         if True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
-            plot_X(figsize=(4,6),label="your_label")
+            plot_X(figsize=(4,6), color="darkgrey")
 
         Valid keyword arguments are:
 
-        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
-          matplotlib)
+        * ``figsize``: tuple of length 2, the size of the figure in inches
         * ``lw``: float, linewidth of plotted coils
         * ``ls``: str, linestyle of plotted coils
         * ``color``: str, color of plotted coils
-        * ``cmap``: str, name of colormap
 
     Returns
     -------
-    fig : matplotlib.figure.Figure
+    fig : plotly.graph_objs._figure.Figure
         Figure being plotted to
-    ax : matplotlib.axes.Axes or ndarray of Axes
-        Axes being plotted to
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
 
     """
-    figsize = kwargs.pop("figsize", None)
-    lw = kwargs.pop("lw", 2)
-    ls = kwargs.pop("ls", "-")
-    color = kwargs.pop("color", "current")
-    color = kwargs.pop("c", color)
-    cbar = False
-    if color == "current":
-        cbar = True
-        cmap = _get_cmap(kwargs.pop("cmap", "Spectral"))
-        currents = flatten_list(coils.current)
-        norm = matplotlib.colors.Normalize(vmin=np.min(currents), vmax=np.max(currents))
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-        color = [cmap(norm(cur)) for cur in currents]
-    assert (
-        len(kwargs) == 0
-    ), f"plot_coils got unexpected keyword argument: {kwargs.keys()}"
+    lw = kwargs.pop("lw", 5)
+    ls = kwargs.pop("ls", "solid")
+    figsize = kwargs.pop("figsize", (10, 10))
+    color = kwargs.pop("color", "black")
+    errorif(
+        len(kwargs) != 0,
+        ValueError,
+        f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
+    )
+
     if not isinstance(lw, (list, tuple)):
         lw = [lw]
     if not isinstance(ls, (list, tuple)):
         ls = [ls]
     if not isinstance(color, (list, tuple)):
         color = [color]
-    fig, ax = _format_ax(ax, True, figsize=figsize)
     if grid is None:
-        grid_kwargs = {"zeta": np.linspace(0, 2 * np.pi, 50)}
-        grid = _get_grid(**grid_kwargs)
+        grid = LinearGrid(N=400, endpoint=True)
 
     def flatten_coils(coilset):
         if hasattr(coilset, "__len__"):
@@ -2066,44 +2116,67 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     plot_data["X"] = []
     plot_data["Y"] = []
     plot_data["Z"] = []
+
+    if fig is None:
+        fig = go.Figure()
+
     for i, coil in enumerate(coils_list):
         x, y, z = coil.compute("x", grid=grid, basis="xyz")["x"].T
+        current = getattr(coil, "current", np.nan)
         plot_data["X"].append(x)
         plot_data["Y"].append(y)
         plot_data["Z"].append(z)
-        ax.plot(
-            x, y, z, lw=lw[i % len(lw)], ls=ls[i % len(ls)], c=color[i % len(color)]
+
+        trace = go.Scatter3d(
+            x=x,
+            y=y,
+            z=z,
+            marker=dict(
+                size=0,
+                opacity=0,
+            ),
+            line=dict(
+                color=color[i % len(color)],
+                width=lw[i % len(lw)],
+                dash=ls[i % len(ls)],
+            ),
+            showlegend=False,
+            name=coil.name or f"CoilSet[{i}]",
+            hovertext=f"Current = {current} (A)",
         )
 
-    if cbar:
-        cbar = fig.colorbar(sm, ax=ax)
-        cbar.set_label(r"$\mathrm{Current} ~(\mathrm{A})$")
-    x_limits = ax.get_xlim3d()
-    y_limits = ax.get_ylim3d()
-    z_limits = ax.get_zlim3d()
-
-    x_range = abs(x_limits[1] - x_limits[0])
-    x_middle = np.mean(x_limits)
-    y_range = abs(y_limits[1] - y_limits[0])
-    y_middle = np.mean(y_limits)
-    z_range = abs(z_limits[1] - z_limits[0])
-    z_middle = np.mean(z_limits)
-
-    # The plot bounding box is a sphere in the sense of the infinity
-    # norm, hence we call half the max range the plot radius.
-    plot_radius = 0.5 * max([x_range, y_range, z_range])
-
-    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
-    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
-    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
-    ax.set_xlabel(_AXIS_LABELS_XYZ[0])
-    ax.set_ylabel(_AXIS_LABELS_XYZ[1])
-    ax.set_zlabel(_AXIS_LABELS_XYZ[2])
-
+        fig.add_trace(trace)
+    fig.update_layout(
+        scene=dict(
+            xaxis_title="X (m)",
+            yaxis_title="Y (m)",
+            zaxis_title="Z (m)",
+            xaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+            yaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+            zaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+            ),
+            aspectmode="data",
+        ),
+        width=figsize[0] * dpi,
+        height=figsize[1] * dpi,
+    )
     if return_data:
-        return fig, ax, plot_data
-
-    return fig, ax
+        return fig, plot_data
+    return fig
 
 
 def plot_boozer_modes(  # noqa: C901

@@ -15,6 +15,8 @@ overlapping objects in the scene. Main API differences:
     * Names of colormaps, line patterns, etc are different, so use caution when
     specifying those using `kwargs`. Thankfully the error messages Plotly generates are
     usually pretty informative and list the available options.
+- Adds zeroth and first order NAE constraints on the poloidal stream function lambda,
+accessible by passing in ``fix_lambda=True`` to the ``get_NAE_constraint`` getter function.
 - Implements `CurrentPotentialField` and `FourierCurrentPotentialField` classes,
 which allow for computation of the magnetic field from a surface current density
 given by `K = n x grad(Phi)` where `Phi` is a surface current potential.

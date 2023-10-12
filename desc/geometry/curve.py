@@ -247,7 +247,7 @@ def _unclose_curve(X, Y, Z):
 
 
 class FourierXYZCurve(Curve):
-    """Curve parameterized by Fourier series for X,Y,Z in terms of arbitrary angle phi.
+    """Curve parameterized by Fourier series for X,Y,Z in terms of arbitrary angle s.
 
     Parameters
     ----------

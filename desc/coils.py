@@ -6,7 +6,7 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import jnp, tree_stack, tree_unstack, vmap
+from desc.backend import jit, jnp, tree_stack, tree_unstack, vmap
 from desc.compute import get_params, rpz2xyz, xyz2rpz_vec
 from desc.geometry import (
     FourierPlanarCurve,
@@ -19,6 +19,7 @@ from desc.magnetic_fields import _MagneticField
 from desc.utils import equals, errorif, flatten_list
 
 
+@jit
 def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
     """Biot-Savart law for filamentary coils following [1].
 
@@ -55,11 +56,9 @@ def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
     )
     Ri_p_Rf = Ri + Rf
 
-    # 1.0e-7 == mu_0/(4 pi)
     B_mag = (
-        1.0e-7
+        2.0e-7  #  == 2 * mu_0/(4 pi)
         * current
-        * 2.0
         * Ri_p_Rf
         / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - (L * L)[:, jnp.newaxis]))
     )
@@ -70,6 +69,7 @@ def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
     return B
 
 
+@jit
 def biot_savart_quad(eval_pts, coil_pts, tangents, current):
     """Biot-Savart law for filamentary coil using numerical quadrature.
 
@@ -103,8 +103,9 @@ def biot_savart_quad(eval_pts, coil_pts, tangents, current):
     R_mag = jnp.linalg.norm(R_vec, axis=-1)
 
     vec = jnp.cross(dl[:, jnp.newaxis, :], R_vec, axis=-1)
-    denom = R_mag * R_mag * R_mag
+    denom = R_mag**3
 
+    # 1e-7 == mu_0/(4 pi)
     B = jnp.sum(1.0e-7 * current * vec / denom[:, :, None], axis=0)
     return B
 
@@ -130,7 +131,7 @@ class _Coil(_MagneticField, ABC):
     _io_attrs_ = _MagneticField._io_attrs_ + ["_current"]
 
     def __init__(self, current, *args, **kwargs):
-        self._current = current
+        self._current = float(current)
         super().__init__(*args, **kwargs)
 
     @property
@@ -141,7 +142,7 @@ class _Coil(_MagneticField, ABC):
     @current.setter
     def current(self, new):
         assert jnp.isscalar(new) or new.size == 1
-        self._current = new
+        self._current = float(new)
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
@@ -340,7 +341,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
 
 
 class FourierXYZCoil(_Coil, FourierXYZCurve):
-    """Coil parameterized by fourier series for X,Y,Z in terms of arbitrary angle phi.
+    """Coil parameterized by fourier series for X,Y,Z in terms of arbitrary angle s.
 
     Parameters
     ----------
@@ -364,7 +365,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         I = 10
         mu0 = 4 * np.pi * 1e-7
         R_coil = 10
-        # circular coil given by X(phi) = 10*cos(phi), Y(phi) = 10*sin(phi)
+        # circular coil given by X(s) = 10*cos(s), Y(s) = 10*sin(s)
         coil = FourierXYZCoil(
             current=I,
             X_n=[0, R_coil, 0],

@@ -186,7 +186,7 @@ class TestMagneticFields:
             NFP=10,
         )
         basis = DoubleFourierSeries(M=2, N=2, sym="sin")
-        phi_mn = np.zeros((basis.num_modes,))
+        phi_mn = np.ones((basis.num_modes,))
         # make a current potential corresponding a purely poloidal current
         G = 10  # net poloidal current
         correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
@@ -203,6 +203,10 @@ class TestMagneticFields:
             NFP=10,
         )
         surface_grid = LinearGrid(M=120, N=120, NFP=10)
+
+        phi_mn = np.zeros((basis.num_modes,))
+
+        field.Phi_mn = phi_mn
 
         field.change_resolution(3, 3)
         field.change_Phi_resolution(2, 2)
@@ -221,6 +225,7 @@ class TestMagneticFields:
         )
 
         field.G = -2 * G
+        field.I = 0
 
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
@@ -268,6 +273,48 @@ class TestMagneticFields:
             xyz2rpz_vec(K_xyz["K"], x=K_xyz["x"][:, 0], y=K_xyz["x"][:, 1]),
             atol=1e-16,
         )
+
+    @pytest.mark.unit
+    def test_fourier_current_potential_field_symmetry(self):
+        """Test Fourier current potential magnetic field Phi symmetry logic."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        basis = DoubleFourierSeries(M=2, N=2, sym="cos")
+        phi_mn = np.ones((basis.num_modes,))
+        # make a current potential corresponding a purely poloidal current
+        field = FourierCurrentPotentialField(
+            Phi_mn=phi_mn,
+            modes_Phi=basis.modes[:, 1:],
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+        assert field.sym_Phi == "cos"
+
+        basis = DoubleFourierSeries(M=2, N=2, sym=False)
+        phi_mn = np.ones((basis.num_modes,))
+        # make a current potential corresponding a purely poloidal current
+        field = FourierCurrentPotentialField(
+            Phi_mn=phi_mn,
+            modes_Phi=basis.modes[:, 1:],
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+        assert field.sym_Phi is False
+
+        # check error thrown if new array is different size than old
+        with pytest.raises(ValueError):
+            field.Phi_mn = np.ones((basis.num_modes + 1,))
 
     @pytest.mark.slow
     @pytest.mark.unit

@@ -26,7 +26,7 @@ for fname in glob.glob(pwd + "/*.h5"):
     ):
         finputname = fname.split(".")[0].split("/")[-1].split("_")[0]
         print(f"Running the input file {finputname} \n")
-        main(cl_args=[str(f"{finputname}")])
+        main(cl_args=[str(f"{finputname}"), "-vv"])
         # save wout file
         eq = load(f"{pwd}/{finputname}")[-1]
         VMECIO.save(eq, "wout_" + fname + ".nc", surfs=256)
@@ -37,10 +37,10 @@ for fname in glob.glob(pwd + "/*.h5"):
     ):
         finputname = fname.split(".")[0].split("/")[-1].split("_")[0]
         print(f"Running the input file {finputname} \n")
-        main(cl_args=[str(f"{finputname}")])
+        main(cl_args=[str(f"{finputname}"), "-vv"])
     else:
         continue
 
-main(cl_args=["DSHAPE_CURRENT"])
+main(cl_args=["DSHAPE_CURRENT", "-vv"])
 spr.call(["python3 -u precise_QA.py"], shell=True)
 spr.call(["python3 -u precise_QH.py"], shell=True)

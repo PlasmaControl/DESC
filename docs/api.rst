@@ -25,11 +25,12 @@ Coils
     :recursive:
     :template: class.rst
 
+    desc.coils.CoilSet
     desc.coils.FourierRZCoil
     desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
+    desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
-    desc.coils.CoilSet
 
 Continuation
 ************
@@ -136,7 +137,6 @@ Magnetic Fields
     desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
-    desc.magnetic_fields.biot_savart
 
 Objective Functions
 *******************

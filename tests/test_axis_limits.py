@@ -1,4 +1,9 @@
-"""Tests for compute functions evaluated at limits."""
+"""Tests for compute functions evaluated at limits.
+
+If a new quantity is added to the compute functions whose limit is not finite
+(or does not exist), simply add it to the ``not_finite_limits`` set below.
+If the limit has yet to be derived, add it to the ``not_implemented_limits`` set.
+"""
 
 import numpy as np
 import pytest
@@ -109,7 +114,6 @@ not_implemented_limits = grow_seeds(
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
 )
-not_implemented_limits.discard("D_Mercier")
 
 
 def _skip_this(eq, name):

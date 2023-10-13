@@ -382,7 +382,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 )
             ).T
             sgrid = Grid(nodes_surf, sort=False, jitable=True)
-
+            # TODO: is this only valid for circular winding surfaces?
             K_sup_z_time_R = surf_current_vec_contravariant_zeta_times_R_times_g_tt(
                 sgrid
             )

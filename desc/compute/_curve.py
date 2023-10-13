@@ -18,7 +18,7 @@ from .utils import cross, dot
     units="~",
     units_long="None",
     description="Curve parameter, on [0, 2pi)",
-    dim=3,
+    dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
@@ -32,17 +32,34 @@ def _s(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="ds",
+    label="ds",
+    units="~",
+    units_long="None",
+    description="Spacing of curve parameter",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.core.Curve",
+)
+def _ds(params, transforms, profiles, data, **kwargs):
+    data["ds"] = transforms["grid"].spacing[:, 2]
+    return data
+
+
+@register_compute_fun(
     name="x",
     label="\\mathbf{x}",
     units="m",
     units_long="meters",
     description="Position vector along curve",
     dim=3,
-    params=["r_n", "center", "normal"],
+    params=["r_n", "center", "normal", "rotmat", "shift"],
     transforms={
         "r": [[0, 0, 0]],
-        "rotmat": [],
-        "shift": [],
     },
     profiles=[],
     coordinates="s",
@@ -60,7 +77,7 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     # rotate into place
     R = _rotation_matrix_from_normal(params["normal"])
     coords = jnp.matmul(coords, R.T) + params["center"]
-    coords = jnp.matmul(coords, transforms["rotmat"].T) + transforms["shift"]
+    coords = jnp.matmul(coords, params["rotmat"].T) + params["shift"]
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz(coords)
     data["x"] = coords
@@ -74,11 +91,9 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["r_n", "center", "normal"],
+    params=["r_n", "center", "normal", "rotmat", "shift"],
     transforms={
         "r": [[0, 0, 0], [0, 0, 1]],
-        "rotmat": [],
-        "shift": [],
     },
     profiles=[],
     coordinates="s",
@@ -95,14 +110,14 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([dX, dY, dZ]).T
     A = _rotation_matrix_from_normal(params["normal"])
     coords = jnp.matmul(coords, A.T)
-    coords = jnp.matmul(coords, transforms["rotmat"].T)
+    coords = jnp.matmul(coords, params["rotmat"].T)
     if kwargs.get("basis", "rpz").lower() == "rpz":
         X = r * jnp.cos(data["s"])
         Y = r * jnp.sin(data["s"])
         Z = jnp.zeros_like(X)
         xyzcoords = jnp.array([X, Y, Z]).T
         xyzcoords = jnp.matmul(xyzcoords, A.T) + params["center"]
-        xyzcoords = jnp.matmul(xyzcoords, transforms["rotmat"].T) + transforms["shift"]
+        xyzcoords = jnp.matmul(xyzcoords, params["rotmat"].T) + params["shift"]
         x, y, z = xyzcoords.T
         coords = xyz2rpz_vec(coords, x=x, y=y)
     data["x_s"] = coords
@@ -116,11 +131,9 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["r_n", "center", "normal"],
+    params=["r_n", "center", "normal", "rotmat", "shift"],
     transforms={
         "r": [[0, 0, 0], [0, 0, 1], [0, 0, 2]],
-        "rotmat": [],
-        "shift": [],
     },
     profiles=[],
     coordinates="s",
@@ -142,14 +155,14 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([d2X, d2Y, d2Z]).T
     A = _rotation_matrix_from_normal(params["normal"])
     coords = jnp.matmul(coords, A.T)
-    coords = jnp.matmul(coords, transforms["rotmat"].T)
+    coords = jnp.matmul(coords, params["rotmat"].T)
     if kwargs.get("basis", "rpz").lower() == "rpz":
         X = r * jnp.cos(data["s"])
         Y = r * jnp.sin(data["s"])
         Z = jnp.zeros_like(X)
         xyzcoords = jnp.array([X, Y, Z]).T
         xyzcoords = jnp.matmul(xyzcoords, A.T) + params["center"]
-        xyzcoords = jnp.matmul(xyzcoords, transforms["rotmat"].T) + transforms["shift"]
+        xyzcoords = jnp.matmul(xyzcoords, params["rotmat"].T) + params["shift"]
         x, y, z = xyzcoords.T
         coords = xyz2rpz_vec(coords, x=x, y=y)
     data["x_ss"] = coords
@@ -163,11 +176,9 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["r_n", "center", "normal"],
+    params=["r_n", "center", "normal", "rotmat", "shift"],
     transforms={
         "r": [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]],
-        "rotmat": [],
-        "shift": [],
     },
     profiles=[],
     coordinates="s",
@@ -196,14 +207,14 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([d3X, d3Y, d3Z]).T
     A = _rotation_matrix_from_normal(params["normal"])
     coords = jnp.matmul(coords, A.T)
-    coords = jnp.matmul(coords, transforms["rotmat"].T)
+    coords = jnp.matmul(coords, params["rotmat"].T)
     if kwargs.get("basis", "rpz").lower() == "rpz":
         X = r * jnp.cos(data["s"])
         Y = r * jnp.sin(data["s"])
         Z = jnp.zeros_like(X)
         xyzcoords = jnp.array([X, Y, Z]).T
         xyzcoords = jnp.matmul(xyzcoords, A.T) + params["center"]
-        xyzcoords = jnp.matmul(xyzcoords, transforms["rotmat"].T) + transforms["shift"]
+        xyzcoords = jnp.matmul(xyzcoords, params["rotmat"].T) + params["shift"]
         x, y, z = xyzcoords.T
         coords = xyz2rpz_vec(coords, x=x, y=y)
     data["x_sss"] = coords
@@ -217,13 +228,11 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve",
     dim=3,
-    params=["R_n", "Z_n"],
+    params=["R_n", "Z_n", "rotmat", "shift"],
     transforms={
         "R": [[0, 0, 0]],
         "Z": [[0, 0, 0]],
         "grid": [],
-        "rotmat": [],
-        "shift": [],
     },
     profiles=[],
     coordinates="s",
@@ -238,7 +247,7 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.stack([R, phi, Z], axis=1)
     # convert to xyz for displacement and rotation
     coords = rpz2xyz(coords)
-    coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+    coords = coords @ params["rotmat"].T + params["shift"][jnp.newaxis, :]
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz(coords)
     data["x"] = coords
@@ -252,12 +261,11 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["R_n", "Z_n"],
+    params=["R_n", "Z_n", "rotmat"],
     transforms={
         "R": [[0, 0, 0], [0, 0, 1]],
         "Z": [[0, 0, 1]],
         "grid": [],
-        "rotmat": [],
     },
     profiles=[],
     coordinates="s",
@@ -273,7 +281,7 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.stack([dR, dphi, dZ], axis=1)
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
-    coords = coords @ transforms["rotmat"].T
+    coords = coords @ params["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["x_s"] = coords
@@ -287,12 +295,11 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["R_n", "Z_n"],
+    params=["R_n", "Z_n", "rotmat"],
     transforms={
         "R": [[0, 0, 0], [0, 0, 1], [0, 0, 2]],
         "Z": [[0, 0, 2]],
         "grid": [],
-        "rotmat": [],
     },
     profiles=[],
     coordinates="s",
@@ -312,7 +319,7 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.stack([R, phi, Z], axis=1)
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
-    coords = coords @ transforms["rotmat"].T
+    coords = coords @ params["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["x_ss"] = coords
@@ -326,12 +333,11 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["R_n", "Z_n"],
+    params=["R_n", "Z_n", "rotmat"],
     transforms={
         "R": [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]],
         "Z": [[0, 0, 3]],
         "grid": [],
-        "rotmat": [],
     },
     profiles=[],
     coordinates="s",
@@ -351,7 +357,7 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.stack([R, phi, Z], axis=1)
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
-    coords = coords @ transforms["rotmat"].T
+    coords = coords @ params["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["x_sss"] = coords
@@ -365,13 +371,11 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve",
     dim=3,
-    params=["X_n", "Y_n", "Z_n"],
+    params=["X_n", "Y_n", "Z_n", "rotmat", "shift"],
     transforms={
         "X": [[0, 0, 0]],
         "Y": [[0, 0, 0]],
         "Z": [[0, 0, 0]],
-        "rotmat": [],
-        "shift": [],
     },
     profiles=[],
     coordinates="s",
@@ -384,7 +388,7 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     Y = transforms["Y"].transform(params["Y_n"], dz=0)
     Z = transforms["Z"].transform(params["Z_n"], dz=0)
     coords = jnp.stack([X, Y, Z], axis=1)
-    coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+    coords = coords @ params["rotmat"].T + params["shift"][jnp.newaxis, :]
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz(coords)
     data["x"] = coords
@@ -398,13 +402,11 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["X_n", "Y_n", "Z_n"],
+    params=["X_n", "Y_n", "Z_n", "rotmat", "shift"],
     transforms={
         "X": [[0, 0, 0], [0, 0, 1]],
         "Y": [[0, 0, 0], [0, 0, 1]],
         "Z": [[0, 0, 1]],
-        "rotmat": [],
-        "shift": [],
     },
     profiles=[],
     coordinates="s",
@@ -417,12 +419,12 @@ def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     dY = transforms["Y"].transform(params["Y_n"], dz=1)
     dZ = transforms["Z"].transform(params["Z_n"], dz=1)
     coords = jnp.stack([dX, dY, dZ], axis=1)
-    coords = coords @ transforms["rotmat"].T
+    coords = coords @ params["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(
             coords,
-            x=transforms["X"].transform(params["X_n"]) + transforms["shift"][0],
-            y=transforms["Y"].transform(params["Y_n"]) + transforms["shift"][1],
+            x=transforms["X"].transform(params["X_n"]) + params["shift"][0],
+            y=transforms["Y"].transform(params["Y_n"]) + params["shift"][1],
         )
     data["x_s"] = coords
     return data
@@ -435,13 +437,11 @@ def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["X_n", "Y_n", "Z_n"],
+    params=["X_n", "Y_n", "Z_n", "rotmat", "shift"],
     transforms={
         "X": [[0, 0, 0], [0, 0, 2]],
         "Y": [[0, 0, 0], [0, 0, 2]],
         "Z": [[0, 0, 2]],
-        "rotmat": [],
-        "shift": [],
     },
     profiles=[],
     coordinates="s",
@@ -454,12 +454,12 @@ def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     d2Y = transforms["Y"].transform(params["Y_n"], dz=2)
     d2Z = transforms["Z"].transform(params["Z_n"], dz=2)
     coords = jnp.stack([d2X, d2Y, d2Z], axis=1)
-    coords = coords @ transforms["rotmat"].T
+    coords = coords @ params["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(
             coords,
-            x=transforms["X"].transform(params["X_n"]) + transforms["shift"][0],
-            y=transforms["Y"].transform(params["Y_n"]) + transforms["shift"][1],
+            x=transforms["X"].transform(params["X_n"]) + params["shift"][0],
+            y=transforms["Y"].transform(params["Y_n"]) + params["shift"][1],
         )
     data["x_ss"] = coords
     return data
@@ -472,13 +472,11 @@ def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["X_n", "Y_n", "Z_n"],
+    params=["X_n", "Y_n", "Z_n", "rotmat", "shift"],
     transforms={
         "X": [[0, 0, 0], [0, 0, 3]],
         "Y": [[0, 0, 0], [0, 0, 3]],
         "Z": [[0, 0, 3]],
-        "rotmat": [],
-        "shift": [],
     },
     profiles=[],
     coordinates="s",
@@ -491,12 +489,12 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     d3Y = transforms["Y"].transform(params["Y_n"], dz=3)
     d3Z = transforms["Z"].transform(params["Z_n"], dz=3)
     coords = jnp.stack([d3X, d3Y, d3Z], axis=1)
-    coords = coords @ transforms["rotmat"].T
+    coords = coords @ params["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(
             coords,
-            x=transforms["X"].transform(params["X_n"]) + transforms["shift"][0],
-            y=transforms["Y"].transform(params["Y_n"]) + transforms["shift"][1],
+            x=transforms["X"].transform(params["X_n"]) + params["shift"][0],
+            y=transforms["Y"].transform(params["Y_n"]) + params["shift"][1],
         )
     data["x_sss"] = coords
     return data
@@ -509,10 +507,9 @@ def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve",
     dim=3,
-    params=["X", "Y", "Z", "knots", "method"],
+    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
     transforms={
-        "rotmat": [],
-        "shift": [],
+        "method": [],
     },
     profiles=[],
     coordinates="s",
@@ -527,7 +524,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["X"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=0,
         period=2 * jnp.pi,
     )
@@ -535,7 +532,7 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Y"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=0,
         period=2 * jnp.pi,
     )
@@ -543,13 +540,13 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Z"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=0,
         period=2 * jnp.pi,
     )
 
     coords = jnp.stack([Xq, Yq, Zq], axis=1)
-    coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+    coords = coords @ params["rotmat"].T + params["shift"][jnp.newaxis, :]
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz(coords)
     data["x"] = coords
@@ -563,10 +560,9 @@ def _x_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "method"],
+    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
     transforms={
-        "rotmat": [],
-        "shift": [],
+        "method": [],
     },
     profiles=[],
     coordinates="s",
@@ -581,7 +577,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["X"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=1,
         period=2 * jnp.pi,
     )
@@ -589,7 +585,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Y"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=1,
         period=2 * jnp.pi,
     )
@@ -597,13 +593,13 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Z"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=1,
         period=2 * jnp.pi,
     )
 
     coords_s = jnp.stack([dXq, dYq, dZq], axis=1)
-    coords_s = coords_s @ transforms["rotmat"].T
+    coords_s = coords_s @ params["rotmat"].T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
         # calculate the xy coordinates to rotate to rpz
@@ -611,7 +607,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["X"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -619,7 +615,7 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Y"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -627,13 +623,13 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Z"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
 
         coords = jnp.stack([Xq, Yq, Zq], axis=1)
-        coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+        coords = coords @ params["rotmat"].T + params["shift"][jnp.newaxis, :]
 
         coords_s = xyz2rpz_vec(coords_s, x=coords[:, 0], y=coords[:, 1])
     data["x_s"] = coords_s
@@ -647,10 +643,9 @@ def _x_s_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "method"],
+    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
     transforms={
-        "rotmat": [],
-        "shift": [],
+        "method": [],
     },
     profiles=[],
     coordinates="s",
@@ -665,7 +660,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["X"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=2,
         period=2 * jnp.pi,
     )
@@ -673,7 +668,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Y"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=2,
         period=2 * jnp.pi,
     )
@@ -681,13 +676,13 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Z"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=2,
         period=2 * jnp.pi,
     )
 
     coords_ss = jnp.stack([d2Xq, d2Yq, d2Zq], axis=1)
-    coords_ss = coords_ss @ transforms["rotmat"].T
+    coords_ss = coords_ss @ params["rotmat"].T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
         # calculate the xy coordinates to rotate to rpz
@@ -695,7 +690,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["X"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -703,7 +698,7 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Y"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -711,12 +706,12 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Z"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
         coords = jnp.stack([Xq, Yq, Zq], axis=1)
-        coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+        coords = coords @ params["rotmat"].T + params["shift"][jnp.newaxis, :]
 
         coords_ss = xyz2rpz_vec(coords_ss, x=coords[:, 0], y=coords[:, 1])
     data["x_ss"] = coords_ss
@@ -730,10 +725,9 @@ def _x_ss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["X", "Y", "Z", "knots", "method"],
+    params=["X", "Y", "Z", "knots", "rotmat", "shift"],
     transforms={
-        "rotmat": [],
-        "shift": [],
+        "method": [],
     },
     profiles=[],
     coordinates="s",
@@ -748,7 +742,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["X"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=3,
         period=2 * jnp.pi,
     )
@@ -756,7 +750,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Y"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=3,
         period=2 * jnp.pi,
     )
@@ -764,13 +758,13 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         xq,
         params["knots"],
         params["Z"],
-        method=params["method"],
+        method=transforms["method"],
         derivative=3,
         period=2 * jnp.pi,
     )
 
     coords_sss = jnp.stack([d3Xq, d3Yq, d3Zq], axis=1)
-    coords_sss = coords_sss @ transforms["rotmat"].T
+    coords_sss = coords_sss @ params["rotmat"].T
 
     if kwargs.get("basis", "rpz").lower() == "rpz":
         # calculate the xy coordinates to rotate to rpz
@@ -778,7 +772,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["X"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -786,7 +780,7 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Y"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
@@ -794,12 +788,12 @@ def _x_sss_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
             xq,
             params["knots"],
             params["Z"],
-            method=params["method"],
+            method=transforms["method"],
             derivative=0,
             period=2 * jnp.pi,
         )
         coords = jnp.stack([Xq, Yq, Zq], axis=1)
-        coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
+        coords = coords @ params["rotmat"].T + params["shift"][jnp.newaxis, :]
 
         coords_sss = xyz2rpz_vec(coords_sss, x=coords[:, 0], y=coords[:, 1])
     data["x_sss"] = coords_sss
@@ -856,8 +850,8 @@ def _frenet_normal(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Binormal unit vector to curve in Frenet-Serret frame",
     dim=3,
-    params=[],
-    transforms={"rotmat": []},
+    params=["rotmat"],
+    transforms={},
     profiles=[],
     coordinates="s",
     data=["frenet_tangent", "frenet_normal"],
@@ -866,7 +860,7 @@ def _frenet_normal(params, transforms, profiles, data, **kwargs):
 def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     data["frenet_binormal"] = cross(
         data["frenet_tangent"], data["frenet_normal"]
-    ) * jnp.linalg.det(transforms["rotmat"])
+    ) * jnp.linalg.det(params["rotmat"])
     return data
 
 
@@ -923,7 +917,7 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="",
-    data=["s", "x_s"],
+    data=["ds", "x_s"],
     parameterization=[
         "desc.geometry.curve.FourierRZCurve",
         "desc.geometry.curve.FourierXYZCurve",
@@ -932,7 +926,9 @@ def _torsion(params, transforms, profiles, data, **kwargs):
 )
 def _length(params, transforms, profiles, data, **kwargs):
     T = jnp.linalg.norm(data["x_s"], axis=-1)
-    data["length"] = jnp.trapz(T, data["s"])
+    # this is equivalent to jnp.trapz(T, s) for a closed curve, but also works
+    # if grid.endpoint is False
+    data["length"] = jnp.sum(T * data["ds"])
     return data
 
 
@@ -943,18 +939,21 @@ def _length(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Length of the curve",
     dim=0,
-    params=["method"],
-    transforms={},
+    params=[],
+    transforms={"method": []},
     profiles=[],
     coordinates="",
-    data=["s", "x", "x_s"],
+    data=["ds", "x", "x_s"],
     parameterization="desc.geometry.curve.SplineXYZCurve",
 )
 def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
-    if params["method"] == "nearest":  # cannot use derivative method as deriv=0
+    if transforms["method"] == "nearest":  # cannot use derivative method as deriv=0
         coords = data["x"]
         if kwargs.get("basis", "rpz").lower() == "rpz":
             coords = rpz2xyz(coords)
+        # ensure curve is closed. If it's already closed this doesn't add any length
+        # since ds will be zero
+        coords = jnp.concatenate([coords, coords[:1]])
         X = coords[:, 0]
         Y = coords[:, 1]
         Z = coords[:, 2]
@@ -962,5 +961,7 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         data["length"] = jnp.sum(lengths)
     else:
         T = jnp.linalg.norm(data["x_s"], axis=-1)
-        data["length"] = jnp.trapz(T, data["s"])
+        # this is equivalent to jnp.trapz(T, s) for a closed curve, but also works
+        # if grid.endpoint is False
+        data["length"] = jnp.sum(T * data["ds"])
     return data

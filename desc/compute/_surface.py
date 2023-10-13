@@ -577,7 +577,7 @@ def _Phi_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi"] = transforms["potential"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"][0]
+        **params["params"]
     )
     return data
 
@@ -600,7 +600,7 @@ def _Phi_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_t"] = transforms["potential_dtheta"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"][0]
+        **params["params"]
     )
     return data
 
@@ -623,7 +623,7 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_z"] = transforms["potential_dzeta"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"][0]
+        **params["params"]
     )
     return data
 

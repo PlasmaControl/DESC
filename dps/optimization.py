@@ -1,5 +1,6 @@
-# from desc import set_device
-# set_device("gpu")
+from desc import set_device
+set_device("gpu")
+import desc.equilibrium
 from desc.objectives import ParticleTracer, ObjectiveFunction
 from desc.grid import Grid
 import desc.io
@@ -15,7 +16,7 @@ initial_time = timet()
 # filename = "input.final_freeb_output.h5"
 # filename = "DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5"
 filename = "input.LandremanPaul2021_QA_scaled_output.h5"
-savename = "optimized" + filename
+savename = "optimized_" + filename
 
 # Load Equilibrium
 eq = desc.io.load(filename)[-1]
@@ -90,27 +91,26 @@ print(f"Time to build and compile: {intermediate_time_3 - intermediate_time_2}s"
 
 R_modes = np.array([[0, 0, 0]])
 constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
-eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3) # Mudar o número de iterações para 3, 10, 100
+eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=3) # Mudar o número de iterações para 3, 10, 100
 eq.save(savename)
 
 intermediate_time_4 = timet()
 print(f"Time to optimize: {intermediate_time_4 - intermediate_time_3}s")
 
-eq_opt = desc.io.load(savename)[-1]
-eq_opt._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
-eq_opt._current = None
-eq_opt.solve()
+# eq_opt = desc.io.load(savename)[-1]
+# eq_opt._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
+# eq_opt._current = None
+# eq_opt.solve()
 
-optimized_objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1e-8)
+# optimized_objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1e-8)
 
-optimized_objective.build()
-solution_opt = optimized_objective.compute(*optimized_objective.xs(eq))
+# optimized_objective.build()
+# solution_opt = optimized_objective.compute(*optimized_objective.xs(eq))
 
-print("*************** SOLUTION .compute() ***************")
-print(solution_opt)
-print("***************************************************")
+# print("*************** SOLUTION .compute() ***************")
+# print(solution_opt)
+# print("***************************************************")
 
-
-print("*************** SOLUTION - SOLUTION_OPT ***************")
-print(solution - solution_opt)
-print("*******************************************************")
+# print("*************** SOLUTION - SOLUTION_OPT ***************")
+# print(solution - solution_opt)
+# print("*******************************************************")

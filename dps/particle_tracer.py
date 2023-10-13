@@ -1,5 +1,5 @@
-# from desc import set_device
-# set_device("gpu")
+from desc import set_device
+set_device("gpu")
 from desc.objectives import ParticleTracer
 from desc.grid import Grid
 import desc.io
@@ -11,9 +11,9 @@ from time import time as timet
 
 initial_time = timet()
 # Load Equilibrium
-# filename = "DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5"
-# filename = "input.final_freeb_output.h5"
 filename = "input.LandremanPaul2021_QA_scaled_output.h5"
+save_text_name = "solution" + filename
+
 eq = desc.io.load(filename)[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
@@ -89,7 +89,7 @@ print("*************** SOLUTION .compute() ***************")
 print(solution)
 print("***************************************************")
 
-output_to_file(solution=solution, name="comparison_output_nearaxis_6.82")
+output_to_file(solution=solution, name=save_text_name)
 
 # PLOT FUNCTIONS
 
@@ -99,9 +99,8 @@ def Trajectory_Plot():
     ax.set_aspect("equal", adjustable='box')
     plt.xlabel(r'$\sqrt{\psi}cos(\theta)$')
     plt.ylabel(r'$\sqrt{\psi}sin(\theta)$')
-    fig.savefig("Trajectory_Plot.png")
+    fig.savefig("Trajectory_Plot.png", bbox_inches="tight", dpi=300)
 
-    
 def Quantity_Plot():
     fig, axs = plt.subplots(2, 2)
     axs[0, 1].plot(time, solution[:, 0], 'tab:orange')
@@ -114,7 +113,7 @@ def Quantity_Plot():
     axs[0, 0].set_title(r"$v_{\parallel}$ (t)")
     fig = plt.gcf()
     fig.set_size_inches(10.5, 10.5)
-    fig.savefig("Quantity_Plot.png")
+    fig.savefig("Quantity_Plot.png", bbox_inches="tight", dpi=300)
 
 def Energy_Plot():
     plt.figure()
@@ -125,7 +124,7 @@ def Energy_Plot():
     plt.plot(time, (Energy-Energy_SI)/Energy_SI)
     plt.title(r"(E - E$_0$)/E$_0$")
     plt.ticklabel_format(axis="y", style="sci", scilimits=(0,0))
-    plt.savefig("Energy_Plot.png")
+    plt.savefig("Energy_Plot.png", bbox_inches="tight", dpi=300)
 
 Trajectory_Plot()
 Quantity_Plot()

@@ -6,7 +6,10 @@ Changelog
     fit, but this was somewhat inaccurate.
     * `QAS` has been removed as it is now redundant with `NCSX`.
     * `ARIES-CS` has been scaled to the correct size and field strength.
-    * new example for `HSX`
+    * `WISTELL-A` is now a true vacuum solution, previously it approximated the vacuum
+    solution with fixed rotational transform.
+    * Flips sign of iota for `W7-X` and `ATF` to account for positive jacobian.
+    * new example for `HSX`.
 - Adds new compute quantities `"iota current"` and `"iota vacuum"` to compute the
 rotational transform contributions from the toroidal current and background field.
 - Adds ability to compute equilibria with anisotropic pressure. This includes a new

@@ -1,5 +1,5 @@
-# from desc import set_device
-# set_device("gpu")
+from desc import set_device
+set_device("gpu")
 import desc.equilibrium
 from desc.objectives import ParticleTracer, ObjectiveFunction
 from desc.grid import Grid

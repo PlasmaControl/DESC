@@ -1207,7 +1207,7 @@ def test_compute_everything():
         ),
         "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ).to_SplineXYZCurve(grid=LinearGrid(N=50, endpoint=True)),
+        ).to_SplineXYZ(grid=LinearGrid(N=50)),
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
@@ -1235,7 +1235,7 @@ def test_compute_everything():
         things_keys == data_keys
     ), "Missing a parameterization to test against master."
     # use this low resolution grid for equilibria to reduce file size
-    grid = LinearGrid(
+    eqgrid = LinearGrid(
         # include magnetic axis
         rho=np.linspace(0, 1, 10),
         M=5,
@@ -1243,7 +1243,15 @@ def test_compute_everything():
         NFP=things["desc.equilibrium.equilibrium.Equilibrium"].NFP,
         sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
     )
-    grid = {"desc.equilibrium.equilibrium.Equilibrium": {"grid": grid}}
+    curvegrid1 = LinearGrid(N=10)
+    curvegrid2 = LinearGrid(N=10, NFP=2)
+    grid = {
+        "desc.equilibrium.equilibrium.Equilibrium": {"grid": eqgrid},
+        "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
+        "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
+        "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
+        "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
+    }
 
     with open("tests/inputs/master_compute_data.pkl", "rb") as file:
         master_data = pickle.load(file)

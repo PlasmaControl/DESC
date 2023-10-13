@@ -118,7 +118,39 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         y = jnp.where(x == 0, 1, jnp.sign(x))
         return y
 
-else:
+    @jit
+    def tree_stack(trees):
+        """Takes a list of trees and stacks every corresponding leaf.
+
+        For example, given two trees ((a, b), c) and ((a', b'), c'), returns
+        ((stack(a, a'), stack(b, b')), stack(c, c')).
+        Useful for turning a list of objects into something you can feed to a
+        vmapped function.
+        """
+        # from https://gist.github.com/willwhitney/dd89cac6a5b771ccff18b06b33372c75
+        import jax.tree_util as jtu
+
+        return jtu.tree_map(lambda *v: jnp.stack(v), *trees)
+
+    @jit
+    def tree_unstack(tree):
+        """Takes a tree and turns it into a list of trees. Inverse of tree_stack.
+
+        For example, given a tree ((a, b), c), where a, b, and c all have first
+        dimension k, will make k trees
+        [((a[0], b[0]), c[0]), ..., ((a[k], b[k]), c[k])]
+        Useful for turning the output of a vmapped function into normal objects.
+        """
+        # from https://gist.github.com/willwhitney/dd89cac6a5b771ccff18b06b33372c75
+        import jax.tree_util as jtu
+
+        leaves, treedef = jtu.tree_flatten(tree)
+        return [treedef.unflatten(leaf) for leaf in zip(*leaves)]
+
+
+# we can't really test the numpy backend stuff in automated testing, so we ignore it
+# for coverage purposes
+else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
@@ -129,6 +161,14 @@ else:
         solve_triangular,
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
+
+    def tree_stack(*args, **kwargs):
+        """Stack pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_unstack(*args, **kwargs):
+        """Unstack pytree for numpy backend."""
+        raise NotImplementedError
 
     def register_pytree_node(foo, *args):
         """Dummy decorator for non-jax pytrees."""

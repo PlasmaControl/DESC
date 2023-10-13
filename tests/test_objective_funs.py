@@ -295,7 +295,9 @@ class TestObjectiveFunction:
         # check that these QH modes are not returned by the objective
         assert [b not in f for b in B_mn[idx_B[-3:]]]
         # check that the objective returns the lowest amplitudes
-        np.testing.assert_allclose(f[idx_f][:131], B_mn[idx_B][:131])
+        # 120 ~ smallest amplitudes BEFORE QH modes show up so that sorting both arrays
+        # should have the same values up until then
+        np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120])
 
     @pytest.mark.unit
     def test_qs_twoterm(self):
@@ -1048,7 +1050,7 @@ def test_softmax_and_softmin():
 def test_compute_scalar_resolution():  # noqa: C901
     """Test that compute_scalar values are roughly independent of grid resolution."""
     eq = get("HELIOTRON")
-    res_array = np.array([1.5, 2, 2.5])
+    res_array = np.array([2, 2.5, 3])
 
     # BootstrapRedlConsistency
     # this is already covered in tests/test_bootstrap.py

@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Adds new compute quantities `"iota current"` and `"iota vacuum"` to compute the
+rotational transform contributions from the toroidal current and background field.
 - Adds ability to compute equilibria with anisotropic pressure. This includes a new
 profile, ``Equilibrium.anisotropy``, new compute quantity ``F_anisotropic``, and a new
 objective ``ForceBalanceAnisotropic``.
@@ -13,7 +15,8 @@ overlapping objects in the scene. Main API differences:
     * Names of colormaps, line patterns, etc are different, so use caution when
     specifying those using `kwargs`. Thankfully the error messages Plotly generates are
     usually pretty informative and list the available options.
-
+- Adds zeroth and first order NAE constraints on the poloidal stream function lambda,
+accessible by passing in ``fix_lambda=True`` to the ``get_NAE_constraint`` getter function.
 
 v0.10.1
 -------

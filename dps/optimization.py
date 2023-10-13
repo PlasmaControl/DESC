@@ -1,5 +1,5 @@
-from desc import set_device
-set_device("gpu")
+# from desc import set_device
+# set_device("gpu")
 import desc.equilibrium
 from desc.objectives import ParticleTracer, ObjectiveFunction
 from desc.grid import Grid
@@ -45,7 +45,7 @@ ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 # Time
 tmin = 0
 tmax = 1e-4
-nt = 1000
+nt = 250
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond

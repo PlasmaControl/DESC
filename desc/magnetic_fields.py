@@ -1167,8 +1167,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         whether to enforce stellarator symmetry for the surface geometry.
         Default is "auto" which enforces if modes are symmetric. If True,
         non-symmetric modes will be truncated.
-    rho : float [0,1]
-        flux surface label for the toroidal surface
     name : str
         name for this field
     check_orientation : bool

@@ -1153,7 +1153,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         modes_Z=None,
         NFP=1,
         sym="auto",
-        rho=1,
         name="",
         check_orientation=True,
     ):
@@ -1167,7 +1166,14 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         self._params = params
 
         super().__init__(
-            R_lmn, Z_lmn, modes_R, modes_Z, NFP, sym, rho, name, check_orientation
+            R_lmn,
+            Z_lmn,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            name=name,
+            check_orientation=check_orientation,
         )
 
     @property

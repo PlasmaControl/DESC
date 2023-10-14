@@ -61,8 +61,8 @@ def sgd(
         Optimizer terminates when ``max(abs(g)) < gtol``.
         If None, the termination by this condition is disabled.
     verbose : {0, 1, 2}, optional
-        * 0 (default) : work silently.
-        * 1 : display a termination report.
+        * 0 : work silently.
+        * 1 (default) : display a termination report.
         * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
@@ -77,7 +77,10 @@ def sgd(
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
-        See the code for more details.
+
+        - ``"alpha"`` : (float > 0) Step size parameter. Default
+          ``1e-2 * norm(x)/norm(grad(x))``
+        - ``"beta"`` : (float > 0) Momentum parameter. Default 0.9
 
     Returns
     -------
@@ -108,11 +111,8 @@ def sgd(
     ngev += 1
 
     maxiter = setdefault(maxiter, N * 100)
-    gnorm_ord = options.pop("gnorm_ord", jnp.inf)
-    xnorm_ord = options.pop("xnorm_ord", 2)
-    g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
-    x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
-    return_all = options.pop("return_all", True)
+    g_norm = jnp.linalg.norm(g, ord=2)
+    x_norm = jnp.linalg.norm(x, ord=2)
     alpha = options.pop("alpha", 1e-2 * x_norm / g_norm)
     beta = options.pop("beta", 0.9)
     alpha0 = alpha
@@ -133,8 +133,7 @@ def sgd(
     if verbose > 1:
         print_header_nonlinear()
 
-    if return_all:
-        allx = [x]
+    allx = [x]
 
     v = beta * v + (1 - beta) * g
     x = x - alpha * v
@@ -158,10 +157,6 @@ def sgd(
             maxiter,
             nfev,
             jnp.inf,
-            0,
-            jnp.inf,
-            0,
-            jnp.inf,
         )
         if success is not None:
             break
@@ -176,16 +171,15 @@ def sgd(
         x = x - alpha * v
         obj._objective._update_equilibrium(obj.recover(x),store=True)
         ngev += 1
-        step_norm = jnp.linalg.norm(alpha * v, ord=xnorm_ord)
-        g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
+        step_norm = jnp.linalg.norm(alpha * v, ord=2)
+        g_norm = jnp.linalg.norm(g, ord=jnp.inf)
         fx = obj.compute_scaled_error(x, *args)
-        fnew = np.linalg.norm(fx)**2/2
+        fnew = fun(x, *args)
         nfev += 1
         df = f - fnew
         f = fnew
 
-        if return_all:
-            allx.append(x)
+        allx.append(x)
         if verbose > 1:
             print_iteration_nonlinear(iteration, nfev, f, df, step_norm, g_norm)
 
@@ -206,6 +200,7 @@ def sgd(
         ngev=ngev,
         nit=iteration,
         message=message,
+        allx=allx,
     )
     if verbose > 0:
         if result["success"]:
@@ -216,6 +211,5 @@ def sgd(
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Gradient evaluations: {:d}".format(result["ngev"]))
-    if return_all:
-        result["allx"] = allx
+
     return result

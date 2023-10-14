@@ -528,6 +528,12 @@ def errorif(cond, err=ValueError, msg=""):
         raise err(msg)
 
 
+def warnif(cond, err=UserWarning, msg=""):
+    """Throw a warning if condition is met."""
+    if cond:
+        warnings.warn(msg, err)
+
+
 def only1(*args):
     """Return True if 1 and only 1 of args evaluates to True."""
     # copied from https://stackoverflow.com/questions/16801322/

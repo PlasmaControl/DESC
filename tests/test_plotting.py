@@ -11,7 +11,7 @@ from desc.basis import (
     FourierZernikeBasis,
     PowerSeries,
 )
-from desc.coils import CoilSet, FourierXYZCoil
+from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
 from desc.compute import data_index
 from desc.compute.utils import surface_averages
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -877,7 +877,8 @@ def test_plot_coils():
     coil = FourierXYZCoil()
     coil.rotate(angle=np.pi / N)
     coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
-    coils2 = CoilSet.from_symmetry(coils, NFP, True)
+    coils.grid = 100
+    coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)
     fig, data = plot_coils(coils2, return_data=True)
 
     def flatten_coils(coilset):

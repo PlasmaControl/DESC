@@ -3,21 +3,18 @@ import os
 import sys
 import time
 
-import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
 
 import desc.examples
 import desc.io
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.magnetic_fields import (
+    CurrentPotentialField,
+    FourierCurrentPotentialField,
     SumMagneticField,
-    ToroidalMagneticField,
     field_line_integrate,
 )
 
@@ -30,11 +27,8 @@ sys.path.insert(0, os.path.abspath("../"))
 
 # TODO: add option to first make a spline field then use that for integration
 def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
-    phi_mn_desc_basis,
-    curr_pot_trans,
+    current_potential_field,
     eqname,
-    net_toroidal_current_Amperes,
-    net_poloidal_current_Amperes,
     M=30,
     N=30,
     alpha=0,
@@ -43,7 +37,6 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
     savename=None,
     Rs=None,
     phi0=0,
-    surface=None,
     xlim=[0.66, 0.74],
     ylim=[-0.04, 0.04],
 ):
@@ -51,26 +44,13 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
 
     Parameters
     ----------
-    phi_mn_desc_basis : ndarray
-        The DoubleFourierSeries coefficients for the surface current potential.
-    curr_pot_trans : Transform
-        The transform object for the current potential
-        an output of the run_regcoil function.
+    current_potential_field : CurrentPotentialField or FourierCurrentPotentialField
+        CurrentPotentialField or FourierCurrentPotentialField object from which to
+        calculate the magnetic field to field line trace with.
     eqname : str or Equilibrium
         The DESC equilibrum the surface current potential was found for
         If str, assumes it is the name of the equilibrium .h5 output and will
         load it
-    net_toroidal_current : float
-        Net current linking the plasma and the coils toroidally
-        Denoted I in the algorithm
-        An output of the run_regcoil function
-        If nonzero, helical coils are sought
-        If 0, then modular coils are sought, and this function is not
-        appropriate for that, and will raise an error
-    net_poloidal_current : float
-        Net current linking the plasma and the coils poloidally
-        Denoted G in the algorithm
-        an output of the run_regcoil function
     M : int, optional
         Poloidal resolution of source grid, by default 30
     N : int, optional
@@ -91,10 +71,6 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
         starting seed R points at zeta = 0 for the tracing, by default None
     phi0 : int, optional
         phi plane to create poincare plot at, by default 0
-    surface : FourierRZToroidalSurface
-        surface upon which the winding surface lies. Also will
-        be used to plot the surface with the poincare plot of
-        the field lines to show where the vessel is
     xlim : tuple or list, optional
         x limits for the plot, by default [0.66, 0.74]
     ylim : list, optional
@@ -116,103 +92,23 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
         eq = None
     if hasattr(eq, "__len__"):
         eq = eq[-1]
+    assert isinstance(
+        current_potential_field, FourierCurrentPotentialField
+    ) or isinstance(current_potential_field, CurrentPotentialField), (
+        "current_potential_field must be one of CurrentPotentialField "
+        "or FourierCurrentPotentialField"
+    )
 
-    R0_ves = 0.7035  # m
-    a_ves = 0.0365  # m
-
-    if surface is None:
-        winding_surf = FourierRZToroidalSurface(
-            R_lmn=np.array([R0_ves, -a_ves]),  # boundary coefficients in m
-            Z_lmn=np.array([-a_ves]),
-            modes_R=np.array([[0, 0], [1, 0]]),  # [M, N] boundary Fourier modes
-            modes_Z=np.array([[-1, 0]]),
-            NFP=1,  # number of (toroidal) field periods
-        )
-    else:
-        winding_surf = surface
-
-    curr_pot_trans.change_resolution(grid=LinearGrid(M=M, N=N))
-
-    @jax.jit
-    def biot_loop(re, rs, J, dV):
-        """Biot Savart loop.
-
-        Parameters
-        ----------
-        re : ndarray, shape(n_eval_pts, 3)
-            evaluation points
-        rs : ndarray, shape(n_src_pts, 3)
-            source points
-        J : ndarray, shape(n_src_pts, 3)
-            current density vector at source points
-        dV : ndarray, shape(n_src_pts)
-            volume element at source points
-        """
-        re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
-        assert J.shape == rs.shape
-        JdV = J * dV[:, None]
-        B = jnp.zeros_like(re)
-
-        def body(i, B):
-            r = re - rs[i, :]
-            num = jnp.cross(JdV[i, :], r, axis=-1)
-            den = jnp.linalg.norm(r, axis=-1) ** 3
-            B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
-            return B
-
-        return 1e-7 * jax.lax.fori_loop(0, J.shape[0], body, B)
-
-    def get_B_function_from_regcoil_current_potential(phi_mn_desc_basis, M=30, N=30):
-        """Given current potential, return fxn that calculates B."""
-        # M is grid M for source grid
-        # N is grid N for source grid
-
-        # calc surface geometric quantities needed for integration
-        sgrid = (
-            curr_pot_trans.grid
-        )  # LinearGrid(M=M + 1, N=N * eq.NFP + 1, NFP=1)  # source (wind surf)
-        # calc quantities on winding surface (source)
-        data = winding_surf.compute(
-            ["x", "e_theta", "e_zeta"], grid=sgrid
-        )  # data on winding surface
-        rs = data["x"]
-        rs_t = data["e_theta"]
-        rs_z = data["e_zeta"]
-
-        # define functions that calc B
-
-        ns_mag = np.linalg.norm(np.cross(rs_t, rs_z), axis=1)
-
-        phi_t = curr_pot_trans.transform(
-            phi_mn_desc_basis, dt=1
-        ) + net_toroidal_current_Amperes / (2 * np.pi)
-        phi_z = curr_pot_trans.transform(
-            phi_mn_desc_basis, dz=1
-        ) + net_poloidal_current_Amperes / (2 * np.pi)
-        ns_mag = np.linalg.norm(np.cross(rs_t, rs_z), axis=1)
-        # changed signs here
-        K = -(phi_t * (1 / ns_mag) * rs_z.T).T + (phi_z * (1 / ns_mag) * rs_t.T).T
-
-        def B_from_K_trace(re, params=None, basis="rpz", grid=None):
-            dV = sgrid.weights * jnp.linalg.norm(
-                jnp.cross(rs_t, rs_z, axis=-1), axis=-1
-            )
-            B = biot_loop(
-                rpz2xyz(re), rpz2xyz(rs), rpz2xyz_vec(K, phi=sgrid.nodes[:, 2]), dV
-            )
-            return xyz2rpz_vec(B, phi=re[:, 1])
-
-        return B_from_K_trace
+    current_potential_field.surface_grid = LinearGrid(
+        M=M, N=N, rho=np.array(1.0), NFP=current_potential_field.NFP
+    )
 
     # Field line tracing
 
     R0 = 703.5 / 1000
     r = 36.5 / 1000
 
-    Bfield_currpot = ToroidalMagneticField(B0=1, R0=1)
-    Bfield_currpot.compute_magnetic_field = (
-        get_B_function_from_regcoil_current_potential(phi_mn_desc_basis, M, N)
-    )
+    Bfield_currpot = current_potential_field
 
     if external_TF:
         Bfield = SumMagneticField(Bfield_currpot, external_TF)
@@ -274,7 +170,9 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
     plt.ylabel("Z")
     plt.xlabel("R")
 
-    data = winding_surf.compute("x", basis="rpz", grid=LinearGrid(rho=1, M=20))["x"]
+    data = current_potential_field.compute(
+        "x", basis="rpz", grid=LinearGrid(rho=1, M=20)
+    )["x"]
 
     R_ves = data[:, 0]
     Z_ves = data[:, 2]

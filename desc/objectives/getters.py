@@ -333,3 +333,84 @@ def maybe_add_self_consistency(eq, constraints):
     if not _is_any_instance(constraints, AxisZSelfConsistency):
         constraints += (AxisZSelfConsistency(eq=eq),)
     return constraints
+
+
+def get_fixed_boundary_constraints_poincare(
+    eq=None,
+    profiles=True,
+    iota=True,
+    kinetic=False,
+    poincare_lambda=False,
+    anisotropy=False,
+    normalize=True
+):
+    """Get the constraints necessary for a typical fixed-boundary equilibrium problem. For the Poincare BC, we only
+    need a constraint at the zeta=0 section. If we include FixAxisR etc. optimizer will try to preserve those shapes
+    which are actually not true. Even if you don't include maybe_add_self_consistency(), least square errors will
+    have unwanted components.
+    
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to constraint.
+    profiles : bool
+        Whether to also return constraints to fix input profiles.
+    iota : bool
+        Whether to add FixIota or FixCurrent as a constraint.
+    kinetic : bool
+        Whether to also fix kinetic profiles.
+    anisotropy : bool
+        Whether to add constraint to fix anisotropic pressure.
+    normalize : bool
+        Whether to apply constraints in normalized units.
+    poincare_lambda : bool
+        Whether to fix the poloidal stream function lambda's value at
+        the zeta=0 Poincare XS
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed-boundary problems.
+
+    """
+    from .linear_objectives import PoincareZ, PoincareR
+    constraints = (
+        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
+        PoincareR(eq=eq),
+        PoincareZ(eq=eq),
+    )
+    if poincare_lambda:
+        constraints += (PoincareLambda(eq=eq),)
+    if profiles:
+        if kinetic:
+            constraints += (
+                FixElectronDensity(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixElectronTemperature(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixIonTemperature(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixAtomicNumber(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
+        else:
+            constraints += (
+                FixPressure(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
+            if anisotropy:
+                constraints += (
+                    FixAnisotropy(
+                        eq=eq, normalize=normalize, normalize_target=normalize
+                    ),
+                )
+        if iota:
+            constraints += (
+                FixIota(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
+        else:
+            constraints += (
+                FixCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
+    return constraints

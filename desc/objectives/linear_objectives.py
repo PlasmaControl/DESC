@@ -3077,3 +3077,155 @@ class FixPsi(_FixedObjective):
 
         """
         return Psi
+    
+    
+class PoincareR(_FixedObjective):
+    """Enforces R values at zeta=0 XS (i.e. prescribes the SFL angle vartheta).
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Value to fix lambda to at rho=0 and (theta=0,zeta=0)
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    name : str
+        Name of the objective function.
+    """
+
+    _target_arg = "R_lmn"
+    _units = "(dimensionless)"
+    _print_value_fmt = "R poincare boundary error: {:10.3e}"
+
+    def __init__(
+        self, eq=None, target=None, bounds=None, weight=1, name="poincare R"
+    ):
+        self._args = ["R_lmn"]
+        super().__init__(eq=eq, target=target, bounds=bounds, weight=weight, name=name)
+
+    def build(self, eq=None, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        eq = eq or self._eq
+        R_modes = eq.R_basis.modes
+        dim_R = eq.R_basis.num_modes
+
+        if (
+            self.target is None
+        ):  # uses current eq's value of lambda at zeta=0 as constraint
+            Rb_lmn, Rb_basis = FourierZernike_to_PoincareZernikePolynomial(
+                eq.R_lmn, eq.R_basis
+            )
+            Rb_modes = Rb_basis.modes
+            self._dim_f = Rb_basis.num_modes
+            self.target = Rb_lmn
+
+        self._A = np.zeros((self._dim_f, dim_R))
+        for i, (l, m, n) in enumerate(R_modes):
+            j = np.argwhere(
+                np.logical_and(
+                    (Rb_modes[:, :2] == [l, m]).all(axis=1),
+                    Rb_modes[:, -1] >= 0,
+                )
+            )
+            self._A[j, i] = 1
+
+        if self.target is not None:
+            self._dim_f = self._A.shape[0]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute deviation from desired boundary."""
+        params, _ = self._parse_args(*args, **kwargs)
+        return jnp.dot(self._A, params["R_lmn"])
+    
+    
+class PoincareZ(_FixedObjective):
+    """Enforces Z values at zeta=0 XS (i.e. prescribes the SFL angle vartheta).
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Value to fix lambda to at rho=0 and (theta=0,zeta=0)
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    name : str
+        Name of the objective function.
+    """
+
+    _target_arg = "Z_lmn"
+    _units = "(dimensionless)"
+    _print_value_fmt = "Z poincare boundary error: {:10.3e}"
+
+    def __init__(
+        self, eq=None, target=None, bounds=None, weight=1, name="poincare Z"
+    ):
+        self._args = ["Z_lmn"]
+        super().__init__(eq=eq, target=target, bounds=bounds, weight=weight, name=name)
+
+    def build(self, eq=None, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        eq = eq or self._eq
+        Z_modes = eq.Z_basis.modes
+        dim_Z = eq.Z_basis.num_modes
+
+        if (
+            self.target is None
+        ):  # uses current eq's value of lambda at zeta=0 as constraint
+            Zb_lmn, Zb_basis = FourierZernike_to_PoincareZernikePolynomial(
+                eq.Z_lmn, eq.Z_basis
+            )
+            Zb_modes = Zb_basis.modes
+            self._dim_f = Zb_basis.num_modes
+            self.target = Zb_lmn
+
+        self._A = np.zeros((self._dim_f, dim_Z))
+        for i, (l, m, n) in enumerate(Z_modes):
+            j = np.argwhere(
+                np.logical_and(
+                    (Zb_modes[:, :2] == [l, m]).all(axis=1),
+                    Zb_modes[:, -1] >= 0,
+                )
+            )
+            self._A[j, i] = 1
+
+        if self.target is not None:
+            self._dim_f = self._A.shape[0]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute deviation from desired boundary."""
+        params, _ = self._parse_args(*args, **kwargs)
+        return jnp.dot(self._A, params["Z_lmn"])

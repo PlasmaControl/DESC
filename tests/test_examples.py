@@ -815,7 +815,7 @@ def test_regcoil_axisymmetric():
     # no phi_SV is needed since it is axisymmetric,
     # so phi_mn should be zero when running REGCOIL
     # especially with a nonzero alpha
-    phi_mn_opt, curr_pot_trans, _, G, phi_fxn, _, _, chi_B, _ = run_regcoil(
+    surface_current_field, _, _, chi_B, _ = run_regcoil(
         basis_M=1,
         basis_N=1,
         eqname=eq,
@@ -826,15 +826,19 @@ def test_regcoil_axisymmetric():
         alpha=0,
         winding_surf=surf_winding,
     )
+    phi_mn_opt = surface_current_field.Phi_mn
+    G = surface_current_field.G
     np.testing.assert_allclose(phi_mn_opt, 0, atol=2e-9)
     np.testing.assert_allclose(chi_B, 0, atol=1e-14)
 
     grid = LinearGrid(N=10, M=10)
     correct_phi = G * grid.nodes[:, 2] / 2 / np.pi
-    np.testing.assert_allclose(phi_fxn(grid), correct_phi, atol=5e-9)
+    np.testing.assert_allclose(
+        surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=5e-9
+    )
 
     # test with alpha large, should have no phi_mn
-    phi_mn_opt, _, _, G, phi_fxn, _, _, chi_B, _ = run_regcoil(
+    surface_current_field, _, _, chi_B, _ = run_regcoil(
         basis_M=2,
         basis_N=2,
         eqname=eq,
@@ -844,12 +848,15 @@ def test_regcoil_axisymmetric():
         source_grid_N=40,
         alpha=10,
     )
+    phi_mn_opt = surface_current_field.Phi_mn
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-16)
     np.testing.assert_allclose(chi_B, 0, atol=1e-26)
-    np.testing.assert_allclose(phi_fxn(grid), correct_phi, atol=1e-16)
+    np.testing.assert_allclose(
+        surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=1e-16
+    )
 
     # test with half the current given external to winding surface
-    phi_mn_opt, _, _, G_half, phi_fxn, _, _, chi_B, _ = run_regcoil(
+    surface_current_field, _, _, chi_B, _ = run_regcoil(
         basis_M=2,
         basis_N=2,
         eqname=eq,
@@ -858,12 +865,41 @@ def test_regcoil_axisymmetric():
         source_grid_M=40,
         source_grid_N=40,
         alpha=10,
-        external_field=ToroidalMagneticField(B0=mu_0 * (G / 2) / 2 / np.pi, R0=1),
+        external_field=ToroidalMagneticField(
+            B0=mu_0 * (surface_current_field.G / 2) / 2 / np.pi, R0=1
+        ),
     )
-
-    np.testing.assert_allclose(G / 2, G_half, atol=1e-8)
+    phi_mn_opt = surface_current_field.Phi_mn
+    np.testing.assert_allclose(G / 2, surface_current_field.G, atol=1e-8)
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-10)
-    np.testing.assert_allclose(phi_fxn(grid), correct_phi / 2, atol=1e-9)
+    np.testing.assert_allclose(
+        surface_current_field.compute("Phi", grid=grid)["Phi"],
+        correct_phi / 2,
+        atol=1e-9,
+    )
+    np.testing.assert_allclose(chi_B, 0, atol=1e-26)
+
+    # test with half the current given external to winding surface
+    # using external TF argument
+    surface_current_field, _, _, chi_B, _ = run_regcoil(
+        basis_M=2,
+        basis_N=2,
+        eqname=eq,
+        eval_grid_M=10,
+        eval_grid_N=10,
+        source_grid_M=40,
+        source_grid_N=40,
+        alpha=10,
+        external_TF_fraction=0.5,
+    )
+    phi_mn_opt = surface_current_field.Phi_mn
+    np.testing.assert_allclose(G / 2, surface_current_field.G, atol=1e-8)
+    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-10)
+    np.testing.assert_allclose(
+        surface_current_field.compute("Phi", grid=grid)["Phi"],
+        correct_phi / 2,
+        atol=1e-9,
+    )
     np.testing.assert_allclose(chi_B, 0, atol=1e-26)
 
 
@@ -895,13 +931,14 @@ def test_regcoil_ellipse_and_axisym_surface():
         N=160,
         ntransit=20,
         Rs=np.linspace(0.68, 0.72, 10),
+        use_agg_backend=True,
     )
 
     assert np.max(fieldR) < 0.73
     assert np.min(fieldR) > 0.67
 
     assert np.max(fieldZ) < 0.02
-    assert np.min(fieldZ) > -0.02  # 333 seconds for without NFP utiliation
+    assert np.min(fieldZ) > -0.02
     # test with alpha large, should have very small phi_mn
     (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
         basis_M=2,

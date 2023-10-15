@@ -3,6 +3,7 @@ import os
 import sys
 import time
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
@@ -39,6 +40,7 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
     phi0=0,
     xlim=[0.66, 0.74],
     ylim=[-0.04, 0.04],
+    **kwargs,
 ):
     """Field line trace from current potential.
 
@@ -84,6 +86,8 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
         Z locations each transit for each field line traced
 
     """
+    if kwargs.get("use_agg_backend", False):
+        matplotlib.use("agg")
     if isinstance(eqname, str):
         eq = desc.io.load(eqname)
     elif isinstance(eqname, EquilibriaFamily) or isinstance(eqname, Equilibrium):
@@ -125,7 +129,9 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
     n_R_points = rrr.size
 
     # integrate field lines
-    field_R, field_Z = field_line_integrate(rrr, np.zeros_like(rrr), phis, Bfield)
+    field_R, field_Z = field_line_integrate(
+        rrr, np.zeros_like(rrr), phis, Bfield, grid=current_potential_field.surface_grid
+    )
 
     t_elapse = time.time() - t0
     print(

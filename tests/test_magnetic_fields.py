@@ -6,6 +6,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
+from desc.compute import rpz2xyz_vec, xyz2rpz_vec
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -86,7 +87,7 @@ class TestMagneticFields:
         potential_dtheta = lambda theta, zeta, G: jnp.zeros_like(theta)
         potential_dzeta = lambda theta, zeta, G: G * jnp.ones_like(theta) / 2 / jnp.pi
 
-        params = {"G": G}
+        params = {"G": -G}
         correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
 
         field = CurrentPotentialField(
@@ -95,7 +96,6 @@ class TestMagneticFields:
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
             modes_Z=surface._Z_basis.modes[:, 1:],
-            surface_grid=LinearGrid(M=120, N=120, NFP=10),
             params=params,
             potential_dtheta=potential_dtheta,
             potential_dzeta=potential_dzeta,
@@ -115,6 +115,66 @@ class TestMagneticFields:
             rtol=1e-8,
         )
 
+        potential = lambda theta, zeta, G: G * zeta / 2 / jnp.pi * 2
+        potential_dtheta = lambda theta, zeta, G: jnp.zeros_like(theta)
+        potential_dzeta = (
+            lambda theta, zeta, G: G * jnp.ones_like(theta) / 2 / jnp.pi * 2
+        )
+
+        correct_field = lambda R, phi, Z: 2 * jnp.array(
+            [[0, mu_0 * G / 2 / jnp.pi / R, 0]]
+        )
+        field.potential = potential
+        field.potential_dtheta = potential_dtheta
+        field.potential_dzeta = potential_dzeta
+
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, 0, 0]),
+            correct_field(10.0, 0, 0),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            correct_field(10.0, np.pi / 4, 0),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+
+        field = CurrentPotentialField.from_surface(
+            surface=surface,
+            potential=potential,
+            params=params,
+            potential_dtheta=potential_dtheta,
+            potential_dzeta=potential_dzeta,
+        )
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, 0, 0]),
+            correct_field(10.0, 0, 0),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            correct_field(10.0, np.pi / 4, 0),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+
+        with pytest.raises(IOError):
+            field.save("test_field.h5")
+        with pytest.warns(UserWarning):
+            # check that if passing in a longer params dict, that
+            # the warning is thrown
+            field.params = {"key1": None, "key2": None}
+        # check assert callable statement
+        with pytest.raises(AssertionError):
+            field.potential = 1
+        with pytest.raises(AssertionError):
+            field.potential_dtheta = 1
+        with pytest.raises(AssertionError):
+            field.potential_dzeta = 1
+
     @pytest.mark.unit
     def test_fourier_current_potential_field(self):
         """Test Fourier current potential magnetic field against analytic result."""
@@ -126,7 +186,7 @@ class TestMagneticFields:
             NFP=10,
         )
         basis = DoubleFourierSeries(M=2, N=2, sym="sin")
-        phi_mn = np.zeros((basis.num_modes,))
+        phi_mn = np.ones((basis.num_modes,))
         # make a current potential corresponding a purely poloidal current
         G = 10  # net poloidal current
         correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
@@ -135,42 +195,49 @@ class TestMagneticFields:
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
             I=0,
-            G=G,
+            G=-G,
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
             modes_Z=surface._Z_basis.modes[:, 1:],
-            surface_grid=LinearGrid(M=120, N=120, NFP=10),
             NFP=10,
         )
+        surface_grid = LinearGrid(M=120, N=120, NFP=10)
+
+        phi_mn = np.zeros((basis.num_modes,))
+
+        field.Phi_mn = phi_mn
 
         field.change_resolution(3, 3)
+        field.change_Phi_resolution(2, 2)
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0]),
+            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
             correct_field(10.0, 0, 0),
             atol=1e-16,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=surface_grid),
             correct_field(10.0, np.pi / 4, 0),
             atol=1e-16,
             rtol=1e-8,
         )
 
-        field.G = 2 * G
+        field.G = -2 * G
+        field.I = 0
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0]),
+            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
             correct_field(10.0, 0, 0) * 2,
             atol=1e-16,
             rtol=1e-8,
         )
+        # use default grid
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=None),
             correct_field(10.0, np.pi / 4, 0) * 2,
-            atol=1e-16,
+            atol=1e-12,
             rtol=1e-8,
         )
 
@@ -179,22 +246,75 @@ class TestMagneticFields:
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
             I=0,
-            G=G,
-            surface_grid=LinearGrid(M=120, N=120, NFP=10),
+            G=-G,
         )
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0]),
+            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
             correct_field(10.0, 0, 0),
             atol=1e-16,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=surface_grid),
             correct_field(10.0, np.pi / 4, 0),
             atol=1e-16,
             rtol=1e-8,
         )
+
+        K_xyz = field.compute(["K", "x"], basis="xyz", grid=surface_grid)
+        K_rpz = field.compute(["K", "x"], basis="rpz", grid=surface_grid)
+
+        np.testing.assert_allclose(
+            K_xyz["K"], rpz2xyz_vec(K_rpz["K"], phi=K_rpz["x"][:, 1]), atol=1e-16
+        )
+        np.testing.assert_allclose(
+            K_rpz["K"],
+            xyz2rpz_vec(K_xyz["K"], x=K_xyz["x"][:, 0], y=K_xyz["x"][:, 1]),
+            atol=1e-16,
+        )
+
+    @pytest.mark.unit
+    def test_fourier_current_potential_field_symmetry(self):
+        """Test Fourier current potential magnetic field Phi symmetry logic."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        basis = DoubleFourierSeries(M=2, N=2, sym="cos")
+        phi_mn = np.ones((basis.num_modes,))
+        # make a current potential corresponding a purely poloidal current
+        field = FourierCurrentPotentialField(
+            Phi_mn=phi_mn,
+            modes_Phi=basis.modes[:, 1:],
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+        assert field.sym_Phi == "cos"
+
+        basis = DoubleFourierSeries(M=2, N=2, sym=False)
+        phi_mn = np.ones((basis.num_modes,))
+        # make a current potential corresponding a purely poloidal current
+        field = FourierCurrentPotentialField(
+            Phi_mn=phi_mn,
+            modes_Phi=basis.modes[:, 1:],
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+        assert field.sym_Phi is False
+
+        # check error thrown if new array is different size than old
+        with pytest.raises(ValueError):
+            field.Phi_mn = np.ones((basis.num_modes + 1,))
 
     @pytest.mark.slow
     @pytest.mark.unit

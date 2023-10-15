@@ -199,8 +199,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
             modes_Z=np.array([[-1, 0]]),
             NFP=eq.NFP,  # number of (toroidal) field periods
         )
-        # TODO: why must this be true for my results to be good?
-    assert winding_surf.NFP == eq.NFP, "winding surface NFP should be equal to eq NFP!"
 
     ########### calculate quantities on DESC  plasma surface #############
 
@@ -224,7 +222,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
         winding_surf,
         Phi_mn=jnp.zeros(curr_pot_basis.num_modes),
         modes_Phi=curr_pot_basis.modes[:, 1:],
-        surface_grid=sgrid,
         sym_Phi="sin",
     )
 
@@ -300,7 +297,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 (curve_data["R"], curve_data["phi"], curve_data["Z"])
             ).T
             ext_field_along_curve = external_field.compute_magnetic_field(
-                curve_coords, basis="rpz"
+                curve_coords, basis="rpz", grid=sgrid
             )
             # calculate covariant B_zeta from external field
             ext_field_B_zeta = jnp.sum(
@@ -339,7 +336,9 @@ def run_regcoil(  # noqa: C901 fxn too complex
         # if ext field, must calc based off that field
 
         if external_field:
-            Bn_ext, _ = external_field.compute_Bnormal(eq.surface, eval_grid=egrid)
+            Bn_ext, _ = external_field.compute_Bnormal(
+                eq.surface, eval_grid=egrid, source_grid=sgrid
+            )
             TF_B = None
 
         if not external_field:
@@ -347,12 +346,19 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 Bn_ext = np.zeros_like(B_GI_normal)
                 TF_B = ToroidalMagneticField(B0=0, R0=1)
             else:
-                TF_B = ToroidalMagneticField(B0=mu_0 * G_ext / 2 / jnp.pi, R0=1)
-                Bn_ext = B_from_K_secular(0, G_ext)
+                # make a surface with just G_ext
+                TF_B = surface_current_field.copy()
+                TF_B.G = float(G_ext / 2 / jnp.pi)
+                TF_B.I = float(0)
+                TF_B.Phi_mn = jnp.zeros_like(TF_B.Phi_mn)
+                Bn_ext, _ = TF_B.compute_Bnormal(
+                    eq.surface, eval_grid=egrid, source_grid=sgrid
+                )
                 # TODO: check that this is the same as calculating B from TF_B...
                 # TODO: change this to using FourierCurrentPotentialField for I and G,
                 #  as is not just a simple TF field if wind surf is not a
                 #  circular axisym torus
+        print(Bn_ext)
 
         rhs = -(Bn + Bn_ext + B_GI_normal).T @ A
 

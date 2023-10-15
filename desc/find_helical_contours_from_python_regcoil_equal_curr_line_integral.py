@@ -6,7 +6,7 @@ from scipy.optimize import minimize
 
 import desc.io
 from desc.backend import jit, jnp
-from desc.coils import CoilSet
+from desc.coils import MixedCoilSet
 from desc.compute.utils import cross, dot
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
@@ -642,7 +642,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                     )
                 )
             f.write("end\n")
-    final_coilset = CoilSet.from_makegrid_coilfile(coilsFilename)
+    final_coilset = MixedCoilSet.from_makegrid_coilfile(coilsFilename)
     ###################
     print(f"Coil current average is {jnp.mean(coil_currents):1.4e} A")
     print(f"Coil current variance is {jnp.var(coil_currents):1.4e} A")

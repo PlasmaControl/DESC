@@ -1725,7 +1725,7 @@ def FourierZernike_to_PoincareZernikePolynomial(X_lmn_3D, basis_3D):
 
     Parameters
     ----------
-    X_lmn_3D : array, size [basis_3D.num_modes,3]
+    X_lmn_3D : array, size [basis_3D.num_modes,1]
         The Fourier-Zernike basis coefficients of the quantity X, that you wish to find
         the 2D ZernikePolynomial basis corresponding to the quantity's value at the
         zeta=0 cross-section
@@ -1734,7 +1734,7 @@ def FourierZernike_to_PoincareZernikePolynomial(X_lmn_3D, basis_3D):
 
     Returns
     -------
-    X_lmn_2D : array, size [basis_2D.num_modes,3]
+    X_lmn_2D : array, size [basis_2D.num_modes,1]
         The ZernikePolynomial basis coefficients of the quantity X, such that their
         evaluation is the same as the input 3D basis when evaluated at zeta=0.
     basis_2D : FourierZernikeBasis
@@ -1794,7 +1794,7 @@ def FourierZernike_to_FourierZernike_no_N_modes(X_lmn_3D, basis_3D):
 
     Parameters
     ----------
-    X_lmn_3D : array, size [basis_3D.num_modes,3]
+    X_lmn_3D : array, size [basis_3D.num_modes,1]
         The Fourier-Zernike basis coefficients of the quantity X, that you wish to
         find the 2D ZernikePolynomial basis
         corresponding to the quantity's value at the zeta=0 cross-section
@@ -1803,7 +1803,7 @@ def FourierZernike_to_FourierZernike_no_N_modes(X_lmn_3D, basis_3D):
 
     Returns
     -------
-    X_lmn_no_N : array, size [basis_3D.num_modes,3]
+    X_lmn_no_N : array, size [basis_3D.num_modes,1]
         The FourerZernike basis coefficients of the quantity X, such that their
         evaluation is the same as the input 3D basis when evaluated at zeta=0.
         The coefficients with nonzero toroidal modenumbers are all zero.

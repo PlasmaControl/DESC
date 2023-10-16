@@ -677,6 +677,8 @@ def test_plasma_vessel_distance():
     d = obj.compute_unscaled(*obj.xs(eq))
     assert abs(d.min() - (a_s - a_p)) < 1e-14
     assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0
+    # ensure that it works (dimension-wise) when compute_scaled is called
+    _ = obj.compute_scaled(*obj.xs(eq))
 
     grid = LinearGrid(L=3, M=3, N=3)
     eq = Equilibrium()

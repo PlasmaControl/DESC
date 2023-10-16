@@ -26,6 +26,13 @@ overlapping objects in the scene. Main API differences:
     usually pretty informative and list the available options.
 - Adds zeroth and first order NAE constraints on the poloidal stream function lambda,
 accessible by passing in ``fix_lambda=True`` to the ``get_NAE_constraint`` getter function.
+- Implements `CurrentPotentialField` and `FourierCurrentPotentialField` classes,
+which allow for computation of the magnetic field from a surface current density
+given by `K = n x grad(Phi)` where `Phi` is a surface current potential.
+    * `CurrentPotentialField` allows for an arbitrary current potential function `Phi`
+    * `FourierCurrentPotentialField` assumes the current potential function to
+    be of the form of a periodic potential (represented by a `DoubleFourierSeries`)
+    and two secular terms, one each linear in the poloidal and in the toroidal angle.
 
 v0.10.1
 -------

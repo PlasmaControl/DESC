@@ -894,6 +894,56 @@ def test_rebuild():
 
 
 @pytest.mark.unit
+def test_objective_fun_things():
+    """Test that the objective things logic works correctly."""
+    R0 = 10.0
+    a_p = 1.0
+    a_s = 2.0
+    # default eq has R0=10, a=1
+    eq = Equilibrium(M=3, N=2)
+    # surface with same R0, a=2, so true d=1 for all pts
+    surface = FourierRZToroidalSurface(
+        R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    # For equally spaced grids, should get true d=1
+    surf_grid = LinearGrid(M=5, N=6)
+    plas_grid = LinearGrid(M=5, N=6)
+    obj = PlasmaVesselDistance(
+        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+    )
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq, surface))
+    np.testing.assert_allclose(d, a_s - a_p)
+
+    surface2 = surface.copy()
+    eq2 = eq.copy()
+    obj.things = [eq2, surface2]
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq2, surface2))
+    np.testing.assert_allclose(d, a_s - a_p)
+
+    a_s2 = 2.5
+    surface2 = FourierRZToroidalSurface(
+        R_lmn=[R0, a_s2], Z_lmn=[-a_s2], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    eq2 = Equilibrium(M=3, N=2)
+    obj.things = [eq2, surface2]
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq2, surface2))
+    np.testing.assert_allclose(d, a_s2 - a_p)
+
+    with pytest.raises(AssertionError):
+        # one of these is not optimizeable, throws error
+        obj.things = [eq, 2.0]
+    with pytest.raises(AssertionError):
+        # these are not the expected types
+        obj.things = [eq, eq2]
+    with pytest.raises(AssertionError):
+        # these are not in the correct order for the objective
+        obj.things = [surface, eq]
+
+
+@pytest.mark.unit
 def test_jvp_scaled():
     """Test that jvps are scaled correctly."""
     eq = Equilibrium()

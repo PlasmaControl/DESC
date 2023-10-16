@@ -14,17 +14,7 @@ from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, _MagneticField, field_line_integrate
 
-################## Inputs ################
-# coil .txt file in MAKEGRID format
-# vacuum equilibrium to compare against
-################# outputs #################
-# poincare plot at phi=0 of the surfaces
 
-
-# Field line tracing
-
-
-# first arg : coil file
 def field_trace_from_coilset(
     coils,
     eqname,

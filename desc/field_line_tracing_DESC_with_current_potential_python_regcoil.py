@@ -203,10 +203,10 @@ def compare_surfs_DESC_field_line_trace(
 ):
     """Compare surfaces of an equilibrium to traced flux surfaces."""
     # given initial ax object which already has stuff plotted,
-    #  and a list of R values of different surfaces
+    # and a list of R values of different surfaces
     # plot the flux surfaces of a DESC equiilibrium at the rhos corr. to those surfaces
     # those are values should be at theta=zeta=0... which should corr.
-    #  to the outboard plane
+    # to the outboard plane
 
     if eq_name is None:
         return  # dont do anything if no eq passed in
@@ -219,12 +219,10 @@ def compare_surfs_DESC_field_line_trace(
         eq = eq[-1]
 
     Rgrid = LinearGrid(theta=np.array([np.pi]), zeta=np.array([phi0]), L=100)
-    Rcoords_no_isl = eq.compute("R", grid=Rgrid)
-    rho_of_R_no_isl = interp1d(
-        x=Rcoords_no_isl["R"], y=Rgrid.nodes[:, 0], fill_value="extrapolate"
-    )
+    Rcoords = eq.compute("R", grid=Rgrid)
+    rho_of_R = interp1d(x=Rcoords["R"], y=Rgrid.nodes[:, 0], fill_value="extrapolate")
 
-    rhos_to_plot = rho_of_R_no_isl(np.asarray(R_list))
+    rhos_to_plot = rho_of_R(np.asarray(R_list))
     rhos_to_plot = rhos_to_plot[
         np.where(np.logical_and(rhos_to_plot > 0, np.abs(rhos_to_plot) <= 1))
     ]

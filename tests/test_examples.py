@@ -911,7 +911,14 @@ def test_regcoil_ellipse_and_axisym_surface():
     """Test elliptical eq and circular winding surf regcoil solution."""
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
-    (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
+    (
+        all_phi_mns,
+        alphas,
+        surface_current_field,
+        TF_B,
+        chi_B,
+        lowest_idx_without_saddles,
+    ) = run_regcoil(
         basis_M=8,
         basis_N=8,
         eqname=eq,
@@ -920,8 +927,12 @@ def test_regcoil_ellipse_and_axisym_surface():
         source_grid_M=40,
         source_grid_N=80,
         alpha=1e-19,
+        scan=True,
+        verbose=3,
     )
-    assert np.all(chi_B < 1e-5)
+
+    assert np.all(np.asarray(chi_B[0:-10]) < 1e-8)
+    surface_current_field.Phi_mn = all_phi_mns[12]
 
     fieldR, fieldZ = trace_from_curr_pot(
         surface_current_field,

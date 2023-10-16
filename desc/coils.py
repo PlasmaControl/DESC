@@ -1197,7 +1197,7 @@ class CoilSet(_Coil, MutableSequence):
             if None, will default to each coil's self._grid
         """
         for i, c in enumerate(coilset):
-            single_set = CoilSet(c)
+            single_set = MixedCoilSet(c)
             single_set.save_in_makegrid_format(f"{basefilename}_{i}.txt", NFP, grid)
 
     def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):

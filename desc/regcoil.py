@@ -358,7 +358,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 # TODO: change this to using FourierCurrentPotentialField for I and G,
                 #  as is not just a simple TF field if wind surf is not a
                 #  circular axisym torus
-        print(Bn_ext)
 
         rhs = -(Bn + Bn_ext + B_GI_normal).T @ A
 
@@ -589,7 +588,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
             alphas,
             surface_current_field,
             TF_B,
-            chi_B,
+            chi2Bs,
             lowest_idx_without_saddles,
         )
 

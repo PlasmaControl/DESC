@@ -650,13 +650,13 @@ def test_save_and_load_separate_files_coils(tmpdir_factory):
     c = FourierPlanarCoil()
     c1 = FourierRZCoil()
 
-    cs = CoilSet(c, c1)
+    cs = MixedCoilSet(c, c1)
     path_basename = tmpdir.join("separate_coil_file_test")
     cs.save_coilset_as_separate_coil_files(cs, str(path_basename), grid=200)
 
     for i in range(2):
-        c1 = CoilSet.from_makegrid_coilfile(f"{tmp_path_basename}_{i}.txt")[0]
-        c2 = CoilSet.from_makegrid_coilfile(f"{path_basename}_{i}.txt")[0]
+        c1 = MixedCoilSet.from_makegrid_coilfile(f"{tmp_path_basename}_{i}.txt")[0]
+        c2 = MixedCoilSet.from_makegrid_coilfile(f"{path_basename}_{i}.txt")[0]
 
         grid = LinearGrid(zeta=c1.knots, endpoint=False)
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]

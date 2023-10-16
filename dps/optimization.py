@@ -96,21 +96,3 @@ eq.save(savename)
 
 intermediate_time_4 = timet()
 print(f"Time to optimize: {intermediate_time_4 - intermediate_time_3}s")
-
-# eq_opt = desc.io.load(savename)[-1]
-# eq_opt._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
-# eq_opt._current = None
-# eq_opt.solve()
-
-# optimized_objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1e-8)
-
-# optimized_objective.build()
-# solution_opt = optimized_objective.compute(*optimized_objective.xs(eq))
-
-# print("*************** SOLUTION .compute() ***************")
-# print(solution_opt)
-# print("***************************************************")
-
-# print("*************** SOLUTION - SOLUTION_OPT ***************")
-# print(solution - solution_opt)
-# print("*******************************************************")

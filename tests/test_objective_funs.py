@@ -922,15 +922,29 @@ def test_objective_fun_things():
     d = obj.compute_unscaled(*obj.xs(eq2, surface2))
     np.testing.assert_allclose(d, a_s - a_p)
 
+    # change objects, and surface resolution as well
     a_s2 = 2.5
     surface2 = FourierRZToroidalSurface(
         R_lmn=[R0, a_s2], Z_lmn=[-a_s2], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
     eq2 = Equilibrium(M=3, N=2)
+    surface2.change_resolution(M=4, N=4)
     obj.things = [eq2, surface2]
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq2, surface2))
     np.testing.assert_allclose(d, a_s2 - a_p)
+
+    # test that works correctly when changing both objects
+    # with the resolution of the equilibrium surface also changing
+    a_s2 = 2.5
+    surface2 = FourierRZToroidalSurface(
+        R_lmn=[R0, a_s2], Z_lmn=[-a_s2], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    eq2 = Equilibrium(surface=surface, M=3, N=2)
+    obj.things = [eq2, surface2]
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq2, surface2))
+    np.testing.assert_allclose(d, a_s2 - a_s)
 
     with pytest.raises(AssertionError):
         # one of these is not optimizeable, throws error

@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from netCDF4 import Dataset
 from scipy.interpolate import interp1d
+from scipy.interpolate import CubicSpline as cubspl
 
 import desc.examples
 import desc.io
@@ -12,6 +13,8 @@ from desc.compute.utils import cross, dot
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.objectives import MagneticWell, MercierStability
+
+from matplotlib import pyplot as plt
 
 DEFAULT_RANGE = (0.05, 1)
 DEFAULT_RTOL = 1e-2
@@ -297,7 +300,7 @@ def test_magwell_print(capsys):
 
 
 @pytest.mark.unit
-def test_ballooning_geo(tmpdir_factory):
+def test_ballooning_geometry(tmpdir_factory):
     """Test the geometry coefficients used for the adjoint-ballooning solver.
 
     The same coefficients are used for local gyrokinetic solvers which would
@@ -308,87 +311,138 @@ def test_ballooning_geo(tmpdir_factory):
     ntor = 3.0
 
     try:
-        eq = desc.examples.get("W7-X")[-1]
+        eq0 = desc.examples.get("W7-X")[-1]
     except TypeError:
-        eq = desc.examples.get("W7-X")
+        eq0 = desc.examples.get("W7-X")
 
-    eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
+    eq_list = [eq0]
 
-    data_eq = eq.compute(eq_keys)
+    for eq in eq_list:
+        eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
 
-    fi = interp1d(data_eq["rho"], data_eq["iota"])
-    fs = interp1d(data_eq["rho"], data_eq["iota_r"])
+        data_eq = eq.compute(eq_keys)
 
-    iotas = fi(np.sqrt(psi))
-    shears = fs(np.sqrt(psi))
+        fi = interp1d(data_eq["rho"], data_eq["iota"])
+        fs = interp1d(data_eq["rho"], data_eq["iota_r"])
 
-    N = int((2 * eq.M_grid * eq.N_grid + 1) * ntor)
-    coords1 = np.zeros((N, 3))
-    coords1[:, 0] = np.sqrt(psi) * np.ones(N, dtype=int)
-    coords1[:, 1] = alpha * np.ones(N, dtype=int) + iotas * np.linspace(
-        -ntor * np.pi, ntor * np.pi, N
-    )
-    coords1[:, 2] = np.linspace(-ntor * np.pi, ntor * np.pi, N)
+        iotas = fi(np.sqrt(psi))
+        shears = fs(np.sqrt(psi))
 
-    c1 = eq.compute_theta_coords(coords1)
-    grid = Grid(c1, sort=False)
+        N = int((2 * eq.M_grid * eq.N_grid + 1) * ntor*2 + 1)
+        coords1 = np.zeros((N, 3))
+        coords1[:, 0] = np.sqrt(psi) * np.ones(N, dtype=int)
+        coords1[:, 1] = alpha * np.ones(N, dtype=int) + iotas * np.linspace(
+            -ntor * np.pi, ntor * np.pi, N
+        )
+        zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
+        h = 2 * ntor * np.pi/N
+        coords1[:, 2] = zeta
 
-    data_keys = [
-        "|grad(psi)|^2",
-        "grad(|B|)",
-        "grad(alpha)",
-        "grad(psi)",
-        "B",
-        "grad(|B|)",
-        "kappa",
-        "lambda_t",
-        "lambda_z",
-        "p_r",
-        "g^aa",
-        "g^ra",
-        "g^rr",
-        "psi_r",
-        "gbdrift",
-        "cvdrift",
-    ]
+        c1 = eq.compute_theta_coords(coords1)
+        grid = Grid(c1, sort=False)
 
-    data = eq.compute(data_keys, grid=grid)
+        data_keys = [
+            "|grad(psi)|^2",
+            "grad(|B|)",
+            "grad(alpha)",
+            "grad(psi)",
+            "B",
+            "grad(|B|)",
+            "kappa",
+            "lambda_t",
+            "lambda_z",
+            "p_r",
+            "g^aa",
+            "g^aa_z",
+            "g^aa_zz",
+            "g^ra",
+            "g^ra_z",
+            "g^ra_zz",
+            "g^rr",
+            "g^rr_z",
+            "g^rr_zz",
+            "psi_r",
+            "gbdrift",
+            "cvdrift",
+            "e^rho",
+            "e^theta",
+            "e^zeta",
+            "e^rho_z",
+            "e^theta_z",
+            "e^zeta_z",
+            "|B|",
+            "sqrt(g)_PEST",
+            "sqrt(g)_PEST_z0",
+            "sqrt(g)_PEST_zz0",
+            "sqrt(g)_PEST_z",
+            "sqrt(g)_PEST_zz",
+        ]
 
-    psib = data_eq["psi"][-1]
-    sign_psi = psib / np.abs(psib)
-    sign_iota = iotas / np.abs(iotas)
-    # normalizations
-    Lref = data_eq["a"]
-    Bref = 2 * np.abs(psib) / Lref**2
+        data = eq.compute(data_keys, grid=grid)
 
-    modB = data["|B|"]
-    x = Lref * np.sqrt(psi)
-    shat = -x / iotas * shears / Lref
+        psib = data_eq["psi"][-1]
+        sign_psi = psib / np.abs(psib)
+        sign_iota = iotas / np.abs(iotas)
+        # normalizations
+        Lref = data_eq["a"]
+        Bref = 2 * np.abs(psib) / Lref**2
 
-    psi_r = data["psi_r"]
+        modB = data["|B|"]
+        x = Lref * np.sqrt(psi)
+        shat = -x / iotas * shears / Lref
 
-    grad_psi = data["grad(psi)"]
-    grad_psi_sq = data["|grad(psi)|^2"]
-    grad_alpha = data["grad(alpha)"]
+        psi_r = data["psi_r"]
 
-    gds2 = np.array(dot(grad_alpha, grad_alpha)) * Lref**2 * psi
-    gds2_alt = data["g^aa"] * Lref**2 * psi
+        grad_psi = data["grad(psi)"]
+        grad_psi_sq = data["|grad(psi)|^2"]
+        grad_alpha = data["grad(alpha)"]
 
-    gds21 = -sign_iota * np.array(dot(grad_psi, grad_alpha)) * shat / Bref
-    gds21_alt = -sign_iota * data["g^ra"] * shat / Bref * (psi_r)
+        g_sup_aa = data["g^aa"]
+        g_sup_aa_z = data["g^aa_z"]
+        g_sup_aa_zz = data["g^aa_zz"]
+        g_sup_ra = data["g^ra"]
+        g_sup_ra_z = data["g^ra_z"]
+        g_sup_ra_zz = data["g^ra_zz"]
+        g_sup_rr = data["g^rr"]
+        g_sup_rr_z = data["g^rr_z"]
+        g_sup_rr_zz = data["g^rr_zz"]
 
-    gds22 = grad_psi_sq * (1 / psi) * (shat / (Lref * Bref)) ** 2
-    gds22_alt = data["g^rr"] * (psi_r) ** 2 * (1 / psi) * (shat / (Lref * Bref)) ** 2
+        sqrt_g_PEST = data["sqrt(g)_PEST"]
+        sqrt_g_PEST_z = data["sqrt(g)_PEST_z"]
+        sqrt_g_PEST_zz = data["sqrt(g)_PEST_zz"]
+        gds2 = np.array(dot(grad_alpha, grad_alpha)) * Lref**2 * psi
 
-    gbdrift = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_alpha))
-    gbdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**3 * np.sqrt(psi)
-    gbdrift_alt = data["gbdrift"] / psi_r * np.sqrt(psi) * Bref * Lref**2
+        gds2_alt = g_sup_aa * Lref**2 * psi
 
-    np.testing.assert_allclose(gds2, gds2_alt)
-    np.testing.assert_allclose(gds22, gds22_alt)
-    np.testing.assert_allclose(gds21, gds21_alt)
-    np.testing.assert_allclose(gbdrift, gbdrift_alt)
+        gds21 = -sign_iota * np.array(dot(grad_psi, grad_alpha)) * shat / Bref
+        gds21_alt = -sign_iota * g_sup_ra * shat / Bref * (psi_r)
 
+        gds22 = grad_psi_sq * (1 / psi) * (shat / (Lref * Bref)) ** 2
+        gds22_alt = g_sup_rr * (psi_r) ** 2 * (1 / psi) * (shat / (Lref * Bref)) ** 2
+
+        gbdrift = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_alpha))
+        gbdrift *= -sign_psi * 2 * Bref * Lref**2 / modB**3 * np.sqrt(psi)
+        gbdrift_alt = -sign_psi * data["gbdrift"] * 2 * Bref * Lref**2 * np.sqrt(psi) 
+
+        cvdrift = -sign_psi * 2 * Bref * Lref**2 * np.sqrt(psi) * dot(cross(data["B"], data["kappa"]), grad_alpha)/modB**2
+        cvdrift_alt = -sign_psi * data["cvdrift"] * 2 * Bref * Lref**2 * np.sqrt(psi)
+            
+        np.testing.assert_allclose(gds2, gds2_alt)
+        np.testing.assert_allclose(gds22, gds22_alt)
+        np.testing.assert_allclose(gds21, gds21_alt)
+        np.testing.assert_allclose(gbdrift, gbdrift_alt)
+        np.testing.assert_allclose(cvdrift, cvdrift_alt, atol=1e-2)
+
+        np.testing.assert_allclose(sqrt_g_PEST_z, spl0.derivative()(zeta), atol=5e-2)
+        np.testing.assert_allclose(sqrt_g_PEST_zz, spl0.derivative(nu=2)(zeta), atol=1e+1)
+
+        np.testing.assert_allclose(g_sup_aa_z, spl1.derivative()(zeta), atol=5e-2)
+        np.testing.assert_allclose(g_sup_aa_zz, spl1.derivative(nu=2)(zeta), atol=10)
+        np.testing.assert_allclose(g_sup_ra_z, spl2.derivative(nu=1)(zeta), atol=5e-2)
+        np.testing.assert_allclose(g_sup_ra_zz, spl2.derivative(nu=2)(zeta), atol=10)
+
+        np.testing.assert_allclose(g_sup_rr_z, spl3.derivative(nu=1)(zeta), atol=5e-2)
+        np.testing.assert_allclose(g_sup_rr_zz, spl3.derivative(nu=2)(zeta), atol=1e+1)
 
 @pytest.mark.unit
 def test_ballooning_eigenvalue():
@@ -400,5 +454,6 @@ def test_ballooning_eigenvalue():
 
     lam1 = _stability._gamma_ideal_ballooning_FD1(eq)
     lam2 = _stability._gamma_ideal_ballooning_FD2(eq)
+    lam3 = _stability._gamma_ideal_ballooning_Fourier(eq)
 
     np.testing.assert_allclose(lam1 - lam2, 0, atol=1000, rtol=100)

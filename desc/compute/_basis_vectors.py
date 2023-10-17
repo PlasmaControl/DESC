@@ -2370,6 +2370,101 @@ def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e_theta_PEST_z",
+    label="\\mathbf{e}_{\\theta_{PEST}}_{\\zeta}",
+    units="m",
+    units_long="meters",
+    description="Toroidal derivative of covariant straight field line (PEST) poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_z", "theta_PEST_t", "theta_PEST_tz"],
+)
+def _e_sub_theta_pest_z(params, transforms, profiles, data, **kwargs):
+    # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
+    data["e_theta_PEST_z"] = (data["e_theta_z"].T / data["theta_PEST_t"] - data["e_theta"].T * data["theta_PEST_tz"]/ data["theta_PEST_t"]**2).T
+    return data
+
+
+@register_compute_fun(
+    name="e_theta_PEST_zz",
+    label="\\mathbf{e}_{\\theta_{PEST}}_{\\zeta \\zeta}",
+    units="m",
+    units_long="meters",
+    description="Toroidal derivative of covariant straight field line (PEST) poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_z", "e_theta_zz", "theta_PEST_t", "theta_PEST_tz", "theta_PEST_tzz"],
+)
+def _e_sub_theta_pest_zz(params, transforms, profiles, data, **kwargs):
+    # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
+    data["e_theta_PEST_zz"] = (data["e_theta_zz"].T / data["theta_PEST_t"] - 2 * data["e_theta_z"].T * data["theta_PEST_tz"]/ data["theta_PEST_t"]**2 - data["e_theta"].T * data["theta_PEST_tzz"]/ data["theta_PEST_t"]**2 + 2 * data["e_theta"].T * data["theta_PEST_tz"]**2/ data["theta_PEST_t"]**3).T
+    return data
+
+
+@register_compute_fun(
+    name="e_theta_PEST_t",
+    label="\\mathbf{e}_{\\theta_{PEST}}_{\\theta}",
+    units="m",
+    units_long="meters",
+    description="Poloidal derivative of covariant straight field line (PEST) poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_t", "theta_PEST_t", "theta_PEST_tt"],
+)
+def _e_sub_theta_pest_t(params, transforms, profiles, data, **kwargs):
+    # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
+    data["e_theta_PEST_t"] = (data["e_theta_t"].T / data["theta_PEST_t"] - data["e_theta"].T * data["theta_PEST_tt"]/ data["theta_PEST_t"]**2).T
+    return data
+
+
+@register_compute_fun(
+    name="e_theta_PEST_tt",
+    label="\\mathbf{e}_{\\theta_{PEST}}_{\\zeta \\zeta}",
+    units="m",
+    units_long="meters",
+    description="Toroidal derivative of covariant straight field line (PEST) poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_t", "e_theta_tt", "theta_PEST_t", "theta_PEST_tt", "theta_PEST_ttt"],
+)
+def _e_sub_theta_pest_tt(params, transforms, profiles, data, **kwargs):
+    data["e_theta_PEST_tt"] = (data["e_theta_tt"].T / data["theta_PEST_t"] - 2 * data["e_theta_t"].T * data["theta_PEST_tt"]/ data["theta_PEST_t"]**2 - data["e_theta"].T * data["theta_PEST_ttt"]/ data["theta_PEST_t"]**2 + 2 * data["e_theta"].T * data["theta_PEST_tt"]**2/ data["theta_PEST_t"]**3).T
+    return data
+
+
+
+@register_compute_fun(
+    name="e_theta_PEST_tz",
+    label="\\mathbf{e}_{\\theta_{PEST}}_{\\theta \\zeta}",
+    units="m",
+    units_long="meters",
+    description="Mixed derivative of covariant straight field line (PEST) poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_t", "e_theta_z", "theta_PEST_t", "theta_PEST_z", "theta_PEST_tz"],
+)
+def _e_sub_theta_pest_tz(params, transforms, profiles, data, **kwargs):
+    data["e_theta_PEST_tz"] = (data["e_theta_t"].T / data["theta_PEST_t"] - data["e_theta"].T * data["theta_PEST_tt"]/ data["theta_PEST_t"]**2).T
+    return data
+
+
+
+@register_compute_fun(
     name="e_theta_r",
     label="\\partial_{\\rho} \\mathbf{e}_{\\theta}",
     units="m",
@@ -4358,6 +4453,32 @@ def _grad_alpha(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="grad(alpha)_t",
+    label="\\partial_{\\theta} \\nabla \\alpha",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal derivative of the gradient of the field line label",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^theta", "e^zeta","e^rho_t", "e^theta_t", "e^zeta_t", "alpha_r", "alpha_t", "alpha_z", "alpha_rt", "alpha_tt", "alpha_tz"],
+)
+def _grad_alpha_t(params, transforms, profiles, data, **kwargs):
+    data["grad(alpha)_t"] = (
+        data["alpha_r"] * data["e^rho_t"].T
+        +data["alpha_rt"] * data["e^rho"].T
+        + data["alpha_t"] * data["e^theta_t"].T
+        + data["alpha_tt"] * data["e^theta"].T
+        + data["alpha_z"] * data["e^zeta_t"].T
+        + data["alpha_tz"] * data["e^zeta"].T
+    ).T
+    return data
+
+
+
+@register_compute_fun(
     name="grad(alpha)_z",
     label="\\partial_{\\zeta} (\\nabla \\alpha)",
     units="m^{-1}",
@@ -4370,20 +4491,55 @@ def _grad_alpha(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=[
         "e^rho",
+        "e^theta",
+        "e^zeta",
         "e^rho_z",
         "e^theta_z",
         "e^zeta_z",
         "alpha_r",
+        "alpha_t",
         "alpha_z",
         "alpha_rz",
+        "alpha_tz",
+        "alpha_zz",
     ],
 )
 def _grad_alpha_z(params, transforms, profiles, data, **kwargs):
     data["grad(alpha)_z"] = (
-        data["alpha_rz"] * data["e^rho"].T
-        + data["alpha_r"] * data["e^rho_z"].T
-        + data["e^theta_z"].T
+         data["alpha_r"] * data["e^rho_z"].T  
+        + data["alpha_rz"] * data["e^rho"].T
+        + data["alpha_t"] * data["e^theta_z"].T 
+        + data["alpha_tz"] * data["e^theta"].T 
         + data["alpha_z"] * data["e^zeta_z"].T
+        + data["alpha_zz"] * data["e^zeta"].T
+        ).T
+    return data
+
+
+@register_compute_fun(
+    name="grad(alpha)_tt",
+    label="\\partial_{\\theta \\theta} \\nabla \\alpha",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Poloidal derivative of the gradient of the field line label",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^theta", "e^zeta","e^rho_t", "e^theta_t", "e^zeta_t","e^rho_tt", "e^theta_tt", "e^zeta_tt", "alpha_r", "alpha_t", "alpha_z", "alpha_rt", "alpha_tt", "alpha_tz","alpha_rtt", "alpha_ttt", "alpha_ttz", ],
+)
+def _grad_alpha_tt(params, transforms, profiles, data, **kwargs):
+    data["grad(alpha)_tt"] = (
+         data["alpha_r"] * data["e^rho_tt"].T
+        + data["alpha_rtt"] * data["e^rho"].T
+        + 2*data["alpha_rt"] * data["e^rho_t"].T
+        + data["alpha_t"] * data["e^theta_tt"].T
+        + data["alpha_ttt"] * data["e^theta"].T
+        + 2*data["alpha_tt"] * data["e^theta_t"].T
+        + data["alpha_z"] * data["e^zeta_tt"].T
+        + data["alpha_ttz"] * data["e^zeta"].T
+        + 2*data["alpha_tz"] * data["e^zeta_t"].T
     ).T
     return data
 
@@ -4401,25 +4557,92 @@ def _grad_alpha_z(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=[
         "e^rho",
+        "e^theta",
+        "e^zeta",
         "e^rho_z",
+        "e^theta_z",
+        "e^zeta_z",
         "e^rho_zz",
         "e^theta_zz",
         "e^zeta_zz",
-        "alpha_z",
         "alpha_r",
+        "alpha_t",
+        "alpha_z",
         "alpha_rz",
+        "alpha_tz",
+        "alpha_zz",
         "alpha_rzz",
+        "alpha_tzz",
+        "alpha_zzz",
     ],
 )
 def _grad_alpha_zz(params, transforms, profiles, data, **kwargs):
     data["grad(alpha)_zz"] = (
-        data["alpha_rzz"] * data["e^rho"].T
-        + 2 * data["alpha_rz"] * data["e^rho_z"].T
-        + data["alpha_r"] * data["e^rho_zz"].T
-        + data["e^theta_zz"].T
+         data["alpha_r"] * data["e^rho_zz"].T
+        + data["alpha_rzz"] * data["e^rho"].T
+        + 2*data["alpha_rz"] * data["e^rho_z"].T
+        + data["alpha_t"] * data["e^theta_zz"].T
+        + data["alpha_tzz"] * data["e^theta"].T
+        + 2*data["alpha_tz"] * data["e^theta_z"].T
         + data["alpha_z"] * data["e^zeta_zz"].T
+        + data["alpha_zzz"] * data["e^zeta"].T
+        + 2*data["alpha_zz"] * data["e^zeta_z"].T
     ).T
     return data
+
+
+@register_compute_fun(
+    name="grad(alpha)_tz",
+    label="\\partial_{\\theta \\zeta} (\\nabla \\alpha)",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Mixed toroidal and poloidal derivative of the gradient of the field line label",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e^rho",
+        "e^theta",
+        "e^zeta",
+        "e^rho_z",
+        "e^theta_z",
+        "e^zeta_z",
+        "e^rho_t",
+        "e^theta_t",
+        "e^zeta_t",
+        "e^rho_tz",
+        "e^theta_tz",
+        "e^zeta_tz",
+        "alpha_r",
+        "alpha_t",
+        "alpha_z",
+        "alpha_rz",
+        "alpha_tz",
+        "alpha_zz",
+        "alpha_rtz",
+        "alpha_ttz",
+        "alpha_tzz",
+    ],
+)
+def _grad_alpha_tz(params, transforms, profiles, data, **kwargs):
+    data["grad(alpha)_tz"] = (
+         data["alpha_r"] * data["e^rho_tz"].T
+        + data["alpha_rtz"] * data["e^rho"].T
+        + data["alpha_rz"] * data["e^rho_t"].T
+        + data["alpha_rt"] * data["e^rho_z"].T
+        + data["alpha_t"] * data["e^theta_tz"].T
+        + data["alpha_ttz"] * data["e^theta"].T
+        + data["alpha_tz"] * data["e^theta_t"].T
+        + data["alpha_tt"] * data["e^theta_z"].T
+        + data["alpha_z"] * data["e^zeta_tz"].T
+        + data["alpha_tzz"] * data["e^zeta"].T
+        + data["alpha_tz"] * data["e^zeta_t"].T
+        + data["alpha_tt"] * data["e^zeta_z"].T
+    ).T
+    return data
+
 
 
 @register_compute_fun(

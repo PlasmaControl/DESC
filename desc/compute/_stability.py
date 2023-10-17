@@ -20,6 +20,8 @@ from desc.grid import Grid
 from .data_index import register_compute_fun
 from .utils import dot, surface_integrals_map
 
+from matplotlib import pyplot as plt
+
 
 @register_compute_fun(
     name="D_shear",
@@ -246,11 +248,10 @@ def _gamma_ideal_ballooning_FD1(eq):
 
     where
 
-    bmag = B/B_N,
     kappa = b dot grad b
-    g = a_N^3 * (b dot grad zeta) * |grad alpha|^2 / bmag,
-    c = a_N^2 * (1/ b dot grad zeta) * dp/drho * (b cross kappa) dot grad alpha,
-    f = a_N^2 * |grad alpha|^2 / bmag^2
+    g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
+    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi * (b cross kappa) dot grad alpha/ B**2,
+    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta)
 
     Parameters
     ----------
@@ -259,18 +260,22 @@ def _gamma_ideal_ballooning_FD1(eq):
     """
     ns = 1
     nalpha = 1
-    s = np.linspace(0.5, 0.95, ns) ** 2
+    s = np.linspace(0.9, 1.00, ns)
     rho = np.sqrt(s)
 
-    eq_keys = ["iota", "rho"]
+    alpha = np.linspace(0, np.pi, nalpha)
+    zeta_0 = 0.0
+    eq_keys = ["iota", "rho", "psi", "a"]
 
     data_eq = eq.compute(eq_keys)
 
     iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
-    sign_iota = iota / np.abs(iota)
+    psi  = data_eq["psi"] 
+    sign_psi = np.sign(psi[-1])
+    sign_iota = np.sign(iota[-1])
 
-    alpha = np.linspace(0, np.pi, nalpha)
-    zeta_0 = 0.0
+    a_N = data_eq["a"]
+    B_N = 2*sign_psi*psi[-1]/a_N**2
 
     nperiod = 3
     # Number of toroidal turns
@@ -296,9 +301,7 @@ def _gamma_ideal_ballooning_FD1(eq):
             )
             zeta_full[i * N : (i + 1) * N] = zeta
             theta_full[i * N : (i + 1) * N] = (
-                sign_iota[i]
-                * iota[i]
-                * alpha[j]
+                alpha[j]
                 * np.ones(
                     N,
                 )
@@ -323,29 +326,20 @@ def _gamma_ideal_ballooning_FD1(eq):
 
     data = eq.compute(data_names, grid)
 
-    # sqrt(g)_PEST is B dot grad zeta
-    gradpar = data["sqrt(g)_PEST"] / data["|B|"]
-    gds2 = data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
+    # sqrt(g)_PEST is 1/(B dot grad zeta)
+    gradpar = 1/(data["sqrt(g)_PEST"] * data["|B|"])
+    gds2 = rho ** 2 * (data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"])
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
-    f = gds2 / data["|B|"] ** 2
-    g = f * data["sqrt(g)_PEST"]
+    f = a_N * B_N**3 * gds2 / data["|B|"] ** 2 * data["sqrt(g)_PEST"]
+    g = a_N ** 3 * B_N * gds2 / data["|B|"] * gradpar
     g_half = (g[1:] + g[:-1]) / 2
-    c = 1 / gradpar * dpdpsi * data["cvdrift"] + zeta_0 * data["cvdrift0"]
-
-    # grid spacing
+    c = a_N * data["sqrt(g)_PEST"] * 2 * rho * sign_psi * dpdpsi * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
     h = 2 * ntor * np.pi / N
 
-    A = (
-        np.diag(g_half[1:-1] / f[2:-1] * 1 / h**2, -1)
-        + np.diag(
-            -(g_half[1:] + g_half[:-1]) / f[1:-1] * 1 / h**2 + c[1:-1] / f[1:-1],
-            0,
-        )
-        + np.diag(g_half[1:-1] / f[1:-2] * 1 / h**2, 1)
-    )
+    A = np.diag(g_half[1:-1] / f[2:-1] * 1 / h**2, -1) + np.diag(-(g_half[1:] + g_half[:-1]) / f[1:-1] * 1 / h**2 + c[1:-1] / f[1:-1], 0) + np.diag(g_half[1:-1] / f[1:-2] * 1 / h**2, 1)
 
-    w, v = scipy.sparse.linalg.eigs(A, k=1)
+    w, v = scipy.sparse.linalg.eigs(A, k=1, sigma = 5.0, OPpart='r')
 
     # Variational refinement here
     X = np.zeros((N,))
@@ -368,6 +362,8 @@ def _gamma_ideal_ballooning_FD1(eq):
     Y1 = f * X**2
 
     lam = simps(Y0) / simps(Y1)
+    print(f"w = {w}, lam = {lam}")
+    plt.plot(zeta, X); plt.show()
 
     return lam
 
@@ -386,9 +382,9 @@ def _gamma_ideal_ballooning_FD2(eq):
 
     bmag = B/B_N,
     kappa = b dot grad b
-    g = a_N^3 * (b dot grad zeta) * |grad alpha|^2 / bmag,
-    c = a_N^2 * (1/ b dot grad zeta) * dp/drho * (b cross kappa) dot grad alpha,
-    f = a_N^2 * |grad alpha|^2 / bmag^2
+    g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
+    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi * (b cross kappa) dot grad alpha/ B**2,
+    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta)
 
     Parameters
     ----------
@@ -397,16 +393,23 @@ def _gamma_ideal_ballooning_FD2(eq):
     """
     ns = 1
     nalpha = 1
-    s = np.linspace(0.5, 0.95, ns) ** 2
+    s = np.linspace(0.9, 1.00, ns)
+    rho = np.sqrt(s)
+
     alpha = np.linspace(0, np.pi, nalpha)
     zeta_0 = 0.0
+    eq_keys = ["iota", "rho", "psi", "a"]
 
-    eq_keys = ["iota", "rho"]
     data_eq = eq.compute(eq_keys)
 
-    rho = np.sqrt(s)
     iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
-    sign_iota = iota / np.abs(iota)
+    psi  = data_eq["psi"] 
+    sign_psi = np.sign(psi[-1])
+    sign_iota = np.sign(iota[-1])
+
+    a_N = data_eq["a"]
+    B_N = 2*sign_psi*psi[-1]/a_N**2
+
 
     nperiod = 3
     # Number of toroidal turns
@@ -432,9 +435,7 @@ def _gamma_ideal_ballooning_FD2(eq):
             )
             zeta_full[i * N : (i + 1) * N] = zeta
             theta_full[i * N : (i + 1) * N] = (
-                sign_iota[i]
-                * iota[i]
-                * alpha[j]
+                alpha[j]
                 * np.ones(
                     N,
                 )
@@ -470,69 +471,40 @@ def _gamma_ideal_ballooning_FD2(eq):
     data = eq.compute(data_names, grid)
 
     # sqrt(g)_PEST is (B dot grad zeta)^-1
-    gradpar = data["sqrt(g)_PEST"] / data["|B|"]
+    gradpar = 1/(data["sqrt(g)_PEST"] * data["|B|"])
+    gradpar_z = -(data["sqrt(g)_PEST_z"] * data["|B|"] + data["sqrt(g)_PEST"] * data["|B|_z"])/(data["sqrt(g)_PEST"] * data["|B|"])**2
+    gradpar_zz = 2 * (data["sqrt(g)_PEST_z"] * data["|B|"] + data["sqrt(g)_PEST"] * data["|B|_z"])**2/(data["sqrt(g)_PEST"] * data["|B|"])**3 - (data["sqrt(g)_PEST_zz"] * data["|B|"] + 2 * data["sqrt(g)_PEST_z"] * data["|B|_z"] + data["sqrt(g)_PEST"] * data["|B|_zz"])/(data["sqrt(g)_PEST"] * data["|B|"])**2
 
-    gds2 = data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
-    gds2_z = data["g^aa_z"] + zeta_0 * data["g^ra_z"] + zeta_0**2 * data["g^rr_z"]
-    gds2_zz = data["g^aa_zz"] + zeta_0 * data["g^ra_zz"] + zeta_0**2 * data["g^rr_zz"]
+    gds2 = rho**2 * data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
+    gds2_z = rho**2 * data["g^aa_z"] + zeta_0 * data["g^ra_z"] + zeta_0**2 * data["g^rr_z"]
+    gds2_zz = rho**2 * data["g^aa_zz"] + zeta_0 * data["g^ra_zz"] + zeta_0**2 * data["g^rr_zz"]
 
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
-    f = gds2 / data["|B|"] ** 2
-    f_z = gds2_z / data["|B|"] ** 2 - 2 * data["|B|_z"] * gds2
-    f_zz = (
-        gds2_zz / data["|B|"] ** 2
-        - 4 * data["|B|_z"] * gds2_z
-        - 2 * data["|B|_zz"] * gds2
-    )
+    f = a_N * B_N**3 * gds2 / data["|B|"] ** 2 * data["sqrt(g)_PEST"]
+    g = a_N ** 3 * B_N * gds2 / data["|B|"] * gradpar
+    g_z = a_N ** 3 * B_N * ((gds2_z * gradpar + gds2 * gradpar_z) / data["|B|"] - gds2 * gradpar * data["|B|_z"]/ data["|B|"]**2)
+    g_zz = a_N ** 3 * B_N * ((gds2_zz * gradpar + 2 * gds2_z * gradpar_z + gds2 * gradpar_zz) / data["|B|"] -(gds2_z * gradpar + gds2 * gradpar_z) * data["|B|_z"] / data["|B|"]**2  - (gds2_z * gradpar * data["|B|_z"] + gds2 * gradpar_z * data["|B|_z"] + gds2 * gradpar * data["|B|_zz"]) / data["|B|"]**2  + 2 * (gds2_z * gradpar * data["|B|_z"]**2)/ data["|B|"]**3)
 
-    g = f * data["sqrt(g)_PEST"]
-    g_z = f_z * data["sqrt(g)_PEST"] + f * data["sqrt(g)_PEST_z"]
-    g_zz = (
-        f_zz * data["sqrt(g)_PEST"]
-        + 2 * f_z * data["sqrt(g)_PEST_z"]
-        + f * data["sqrt(g)_PEST_zz"]
-    )
-
-    c = 1 / gradpar * dpdpsi * data["cvdrift"] + zeta_0 * data["cvdrift0"]
+    c = a_N * data["sqrt(g)_PEST"] * 2 * rho * sign_psi * dpdpsi * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
 
     V = c / g + 1 / 4 * g_z**2 / g**2 - 1 / 2 * g_zz / g
 
     # grid spacing
     h = 2 * ntor * np.pi / N
 
-    D2 = (
-        np.diag(
-            1
-            / h**2
-            * np.ones(
-                N - 3,
-            ),
-            -1,
-        )
-        + np.diag(
-            -2
-            / h**2
-            * np.ones(
-                N - 2,
-            )
-            + V[1:-1],
-            0,
-        )
-        + np.diag(
-            1
-            / h**2
-            * np.ones(
-                N - 3,
-            ),
-            1,
-        )
-    )
+    sub_diag = 1 / h**2 * np.ones(N - 3,)
+    sup_diag = sub_diag
+    diag = -2 / h**2 * np.ones(N - 2, )
+
+    D2 = np.diag(sub_diag, -1) + np.diag(diag + V[1:-1], 0) + np.diag(sup_diag, 1)
+    
 
     b = f / g
     M = np.diag(b[1:-1], 0)
 
-    w, v = scipy.sparse.linalg.eigs(D2, k=1, M=M)
+    vguess = np.exp(-np.abs(zeta[1:-1])/2)
+    w, v = scipy.sparse.linalg.eigs(D2, k=1, M=M, sigma = 10.0, v0 = vguess, OPpart='r')
 
     # variational refinement here
     X = np.zeros((N,))
@@ -554,11 +526,13 @@ def _gamma_ideal_ballooning_FD2(eq):
     Y0 = -1 * dX**2 + V * X**2
     Y1 = b * X**2
     lam = simps(Y0) / simps(Y1)
+    print(f"w = {w}, lam = {lam}")
+    plt.plot(zeta, X); plt.show()
 
     return lam
 
 
-def _gamma_ideal_ballooning_spectral(eq):
+def _gamma_ideal_ballooning_Fourier(eq):
     """
     Ideal-ballooning growth rate finder.
 
@@ -570,11 +544,10 @@ def _gamma_ideal_ballooning_spectral(eq):
 
     where
 
-    bmag = B/B_N,
     kappa = b dot grad b
-    g = a_N^3 * (b dot grad zeta) * |grad alpha|^2 / bmag,
-    c = a_N^2 * (1/ b dot grad zeta) * dp/drho * (b cross kappa) dot grad alpha,
-    f = a_N^2 * |grad alpha|^2 / bmag^2
+    g = a_N^3 * B_N* (b dot grad zeta) * |grad alpha|^2 / B,
+    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi * (b cross kappa) dot grad alpha/ B**2,
+    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta)
 
     Parameters
     ----------
@@ -584,16 +557,23 @@ def _gamma_ideal_ballooning_spectral(eq):
     """
     ns = 1
     nalpha = 1
-    s = np.linspace(0.5, 0.95, ns) ** 2
+    s = np.linspace(0.9, 1.00, ns)
+    rho = np.sqrt(s)
     alpha = np.linspace(0, np.pi, nalpha)
     zeta_0 = 0.0
 
-    eq_keys = ["iota", "rho"]
+    eq_keys = ["iota", "rho", "psi", "a"]
+
     data_eq = eq.compute(eq_keys)
 
-    rho = np.sqrt(s)
     iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
-    sign_iota = iota / np.abs(iota)
+    psi  = data_eq["psi"] 
+    sign_psi = np.sign(psi[-1])
+    sign_iota = np.sign(iota[-1])
+
+    a_N = data_eq["a"]
+    B_N = 2*sign_psi*psi[-1]/a_N**2
+
 
     nperiod = 3
     ntor = 2 * nperiod - 1  # Number of toroidal turns
@@ -618,9 +598,7 @@ def _gamma_ideal_ballooning_spectral(eq):
             )
             zeta_full[i * N : (i + 1) * N] = zeta
             theta_full[i * N : (i + 1) * N] = (
-                sign_iota[i]
-                * iota[i]
-                * alpha[j]
+                alpha[j]
                 * np.ones(
                     N,
                 )
@@ -655,37 +633,30 @@ def _gamma_ideal_ballooning_spectral(eq):
 
     data = eq.compute(data_names, grid)
 
-    # sqrt(g)_PEST is B dot grad zeta
-    gradpar = data["sqrt(g)_PEST"] / data["|B|"]
+    # sqrt(g)_PEST is (B dot grad zeta)^-1
+    gradpar = 1/(data["sqrt(g)_PEST"] * data["|B|"])
+    gradpar_z = -(data["sqrt(g)_PEST_z"] * data["|B|"] + data["sqrt(g)_PEST"] * data["|B|_z"])/(data["sqrt(g)_PEST"] * data["|B|"])**2
+    gradpar_zz = 2 * (data["sqrt(g)_PEST_z"] * data["|B|"] + data["sqrt(g)_PEST"] * data["|B|_z"])**2/(data["sqrt(g)_PEST"] * data["|B|"])**3 - (data["sqrt(g)_PEST_zz"] * data["|B|"] + 2 * data["sqrt(g)_PEST_z"] * data["|B|_z"] + data["sqrt(g)_PEST"] * data["|B|_zz"])/(data["sqrt(g)_PEST"] * data["|B|"])**2
 
-    gds2 = data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
-    gds2_z = data["g^aa_z"] + zeta_0 * data["g^ra_z"] + zeta_0**2 * data["g^rr_z"]
-    gds2_zz = data["g^aa_zz"] + zeta_0 * data["g^ra_zz"] + zeta_0**2 * data["g^rr_zz"]
+    gds2 = data["g^aa"] + 2*zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
+    gds2_z = data["g^aa_z"] + 2*zeta_0 * data["g^ra_z"] + zeta_0**2 * data["g^rr_z"]
+    gds2_zz = data["g^aa_zz"] + 2*zeta_0 * data["g^ra_zz"] + zeta_0**2 * data["g^rr_zz"]
 
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
-    f = gds2 / data["|B|"] ** 2
-    f_z = gds2_z / data["|B|"] ** 2 - 2 * data["|B|_z"] * gds2
-    f_zz = (
-        gds2_zz / data["|B|"] ** 2
-        - 4 * data["|B|_z"] * gds2_z
-        - 2 * data["|B|_zz"] * gds2
-    )
+    f = a_N * B_N**3 * gds2 / data["|B|"] ** 2 * data["sqrt(g)_PEST"]
+    g = a_N ** 3 * B_N * gds2 / data["|B|"] * gradpar
+    g_z = a_N ** 3 * B_N * ((gds2_z * gradpar + gds2 * gradpar_z) / data["|B|"] - gds2 * gradpar * data["|B|_z"]/ data["|B|"]**2)
+    g_zz = a_N ** 3 * B_N * ((gds2_zz * gradpar + 2 * gds2_z * gradpar_z + gds2 * gradpar_zz) / data["|B|"] -(gds2_z * gradpar + gds2 * gradpar_z) * data["|B|_z"] / data["|B|"]**2  - (gds2_z * gradpar * data["|B|_z"] + gds2 * gradpar_z * data["|B|_z"] + gds2 * gradpar * data["|B|_zz"]) / data["|B|"]**2  + 2 * (gds2_z * gradpar * data["|B|_z"]**2)/ data["|B|"]**3)
 
-    g = f * data["sqrt(g)_PEST"]
-    g_z = f_z * data["sqrt(g)_PEST"] + f * data["sqrt(g)_PEST_z"]
-    g_zz = (
-        f_zz * data["sqrt(g)_PEST"]
-        + 2 * f_z * data["sqrt(g)_PEST_z"]
-        + f * data["sqrt(g)_PEST_zz"]
-    )
-
-    c = 1 / gradpar * dpdpsi * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
+    c = a_N * data["sqrt(g)_PEST"] * 2 * rho * sign_psi * dpdpsi * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
 
     V = c / g + 1 / 4 * g_z**2 / g**2 - 1 / 2 * g_zz / g
 
     b = f / g
 
+    # Since N remains fixed during optimization, we don't need to recalculate
+    # the matrix
     h = 2 * np.pi / N
     n1 = int(np.ceil((N - 1) / 2))
     n2 = int(np.floor((N - 1) / 2))
@@ -708,7 +679,7 @@ def _gamma_ideal_ballooning_spectral(eq):
         )
         col1 = np.concatenate(
             (
-                np.array([-np.pi**2 / 3 / h**2 + 1 / 12]),
+                np.array([-(np.pi**2 / 3) / h**2 + 1 / 12]),
                 -0.5 * ((-1) ** kk1) * topc,
                 0.5 * ((-1) ** kk2) * topc[0:n2][::-1],
             )
@@ -718,7 +689,9 @@ def _gamma_ideal_ballooning_spectral(eq):
 
     D2 = scipy.linalg.toeplitz(col1, r=row1) * (1 / ntor) ** 2 + np.diag(V, 0)
 
-    # eigvals will be deprecated, replace by subset_by_idx in scipy >= 1.12
-    w, v = scipy.linalg.eigh(D2, b=np.diag(b, 0), eigvals=(N - 2, N - 1))
-
+    ## eigvals will be deprecated, replace by subset_by_idx in scipy >= 1.12
+    w, v = scipy.linalg.eigh(D2, b=np.diag(b, 0), eigvals=[N - 1, N - 1])
+    print(w)
     return w
+
+

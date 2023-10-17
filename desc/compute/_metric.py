@@ -54,66 +54,183 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
     )
     return data
 
-
 @register_compute_fun(
     name="sqrt(g)_PEST_z",
     label="\\sqrt{g}_{PEST, \\zeta}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Toroidal derivative of Jacobian determinant of PEST system",
+    description="Toroidal derivative jacobian determinant of PEST flux coordinate system",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "sqrt(g)_z",
-        "sqrt(g)_t",
-        "lambda_z",
-        "lambda_t",
-    ],
+    data=["e_rho", "e_theta_PEST", "e_zeta", "e_rho_z", "e_theta_PEST_z", "e_zeta_z"],
 )
 def _sqrtg_pest_z(params, transforms, profiles, data, **kwargs):
-    comn_fac = data["lambda_z"] / (1 + data["lambda_t"])
-    data["sqrt(g)_PEST_z"] = data["sqrt(g)_z"] - data["sqrt(g)_t"] * comn_fac
+    data["sqrt(g)_PEST_z"] = dot(
+    data["e_rho_z"], cross(data["e_theta_PEST"], data["e_zeta"]))
+    +dot(data["e_rho"], cross(data["e_theta_PEST_z"], data["e_zeta"]))
+    +dot(data["e_rho"], cross(data["e_theta_PEST"], data["e_zeta_z"])
+    )
     return data
-
 
 @register_compute_fun(
     name="sqrt(g)_PEST_zz",
     label="\\sqrt{g}_{PEST, \\zeta \\zeta}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Toroidal derivative of Jacobian determinant of PEST system",
+    description="Toroidal derivative of jacobian determinant of PEST flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_theta_PEST", "e_zeta","e_rho_z", "e_theta_PEST_z", "e_zeta_z","e_rho_zz", "e_theta_PEST_zz", "e_zeta_zz"],
+)
+def _sqrtg_pest_zz(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST_zz"] = dot(
+    data["e_rho_zz"], cross(data["e_theta_PEST"], data["e_zeta"]))
+    +dot(data["e_rho"], cross(data["e_theta_PEST_zz"], data["e_zeta"]))
+    +dot(data["e_rho"], cross(data["e_theta_PEST"], data["e_zeta_zz"]))
+    +2*dot(data["e_rho_z"], cross(data["e_theta_PEST_z"], data["e_zeta"]))
+    +2*dot(data["e_rho"], cross(data["e_theta_PEST_z"], data["e_zeta_z"]))
+    +2*dot(data["e_rho_z"], cross(data["e_theta_PEST"], data["e_zeta_z"]))
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_PEST_t",
+    label="\\sqrt{g}_{PEST, \\theta}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Poloidal derivative jacobian determinant of PEST flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_theta_PEST", "e_zeta", "e_rho_t", "e_theta_PEST_t", "e_zeta_t"],
+)
+def _sqrtg_pest_t(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST_t"] = dot(
+    data["e_rho_t"], cross(data["e_theta_PEST"], data["e_zeta"]))
+    +dot(data["e_rho"], cross(data["e_theta_PEST_t"], data["e_zeta"]))
+    +dot(data["e_rho"], cross(data["e_theta_PEST"], data["e_zeta_t"]))
+    return data
+
+@register_compute_fun(
+    name="sqrt(g)_PEST_tt",
+    label="\\sqrt{g}_{PEST, \\theta \\theta}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Toroidal derivative of jacobian determinant of PEST flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_theta_PEST", "e_zeta","e_rho_t", "e_theta_PEST_t", "e_zeta_t","e_rho_tt", "e_theta_PEST_tt", "e_zeta_tt"],
+)
+def _sqrtg_pest_tt(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST_tt"] = dot(data["e_rho_tt"], cross(data["e_theta_PEST"], data["e_zeta"]))+dot(data["e_rho"], cross(data["e_theta_PEST_tt"], data["e_zeta"]))
+    +dot(data["e_rho"], cross(data["e_theta_PEST"], data["e_zeta_tt"]))
+    +dot(2*data["e_rho_t"], cross(data["e_theta_PEST_t"], data["e_zeta"]))
+    +dot(2*data["e_rho"], cross(data["e_theta_PEST_t"], data["e_zeta_t"]))
+    +dot(2*data["e_rho_t"], cross(data["e_theta_PEST"], data["e_zeta_t"]))
+    return data
+
+
+
+@register_compute_fun(
+    name="sqrt(g)_PEST_tz",
+    label="\\sqrt{g}_{PEST, \\theta \\zeta}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Mixed derivative of jacobian determinant of PEST flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_theta_PEST", "e_phi","e_rho_t", "e_theta_PEST_t", "e_zeta_t","e_rho_z", "e_theta_PEST_z", "e_zeta_z","e_rho_tz", "e_theta_PEST_tz", "e_zeta_tz"],
+)
+def _sqrtg_pest_tz(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST_tz"] = dot(
+    data["e_rho_tz"], cross(data["e_theta_PEST"], data["e_zeta"]))
+    +dot(data["e_rho"], cross(data["e_theta_PEST_tz"], data["e_zeta"]))
+    +dot(data["e_rho"], cross(data["e_theta_PEST"], data["e_zeta_tz"]))
+    +dot(data["e_rho_t"], cross(data["e_theta_PEST_z"], data["e_zeta"]))
+    +dot(data["e_rho_z"], cross(data["e_theta_PEST_t"], data["e_zeta"]))
+    +dot(data["e_rho"], cross(data["e_theta_PEST_t"], data["e_zeta_z"]))
+    +dot(data["e_rho"], cross(data["e_theta_PEST_z"], data["e_zeta_t"]))
+    +dot(data["e_rho_t"], cross(data["e_theta_PEST"], data["e_zeta_z"]))
+    +dot(data["e_rho_z"], cross(data["e_theta_PEST"], data["e_zeta_t"]))
+    return data
+
+
+
+@register_compute_fun(
+    name="sqrt(g)_PEST_z0",
+    label="\\sqrt{g}_{PEST, \\zeta}\\lvert_{\\alpha}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Toroidal derivative of Jacobian determinant of PEST system at fixed alpha",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
-        "sqrt(g)_t",
-        "sqrt(g)_zz",
-        "sqrt(g)_tt",
-        "sqrt(g)_tz",
+        "sqrt(g)_PEST_z",
+        "sqrt(g)_PEST_t",
+        "lambda_z",
+        "lambda_t",
+        "iota",
+    ],
+)
+def _sqrtg_pest_z0(params, transforms, profiles, data, **kwargs):
+    comn_fac = (data["iota"]-data["lambda_z"]) / (1 + data["lambda_t"])
+    data["sqrt(g)_PEST_z0"] = data["sqrt(g)_PEST_z"] + data["sqrt(g)_PEST_t"] * comn_fac
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_PEST_zz0",
+    label="\\sqrt{g}_{PEST, \\zeta \\zeta}\\lvert_{\\alpha}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Toroidal derivative of Jacobian determinant of PEST system along a field line",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "sqrt(g)_PEST_t",
+        "sqrt(g)_PEST_z",
+        "sqrt(g)_PEST_zz",
+        "sqrt(g)_PEST_tt",
+        "sqrt(g)_PEST_tz",
         "lambda_z",
         "lambda_t",
         "lambda_tt",
         "lambda_zz",
         "lambda_tz",
+        "iota",
     ],
 )
-def _sqrtg_pest_zz(params, transforms, profiles, data, **kwargs):
-    comn_fac = data["lambda_z"] / (1 + data["lambda_t"])
-    data["sqrt(g)_PEST_zz"] = (
-        data["sqrt(g)_zz"]
-        - data["sqrt(g)_tz"] * data["lambda_z"] / (1 + data["lambda_t"])
-        - (data["sqrt(g)_tz"] - data["sqrt(g)_tt"] * comn_fac) * comn_fac
-        - data["sqrt(g)_t"]
-        * (data["lambda_zz"] - data["lambda_tz"] * comn_fac)
-        * comn_fac
-        + data["sqrt(g)_t"]
-        * (data["lambda_tz"] - data["lambda_tt"] * comn_fac)
-        * comn_fac
+def _sqrtg_pest_zz0(params, transforms, profiles, data, **kwargs):
+    comn_fac = (data["iota"] - data["lambda_z"]) / (1 + data["lambda_t"])
+    data["sqrt(g)_PEST_zz0"] = (data["sqrt(g)_PEST_zz"]
+    - data["sqrt(g)_PEST_tz"] * comn_fac
+    - (data["sqrt(g)_PEST_tz"] - data["sqrt(g)_PEST_tt"] * comn_fac) * comn_fac
+    - data["sqrt(g)_PEST_t"]
+    * (data["lambda_zz"] - data["lambda_tz"] * comn_fac)
+    * comn_fac
+    + data["sqrt(g)_PEST_t"]
+    * (data["lambda_tz"] - data["lambda_tt"] * comn_fac)
+    * comn_fac
     )
     return data
 
@@ -1432,6 +1549,27 @@ def _g_sup_rr_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="g^rr_z",
+    label="g^{\\rho}{\\rho}_{\\zeta}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Radial element of contravariant metric tensor, "
+    + "first toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^rho_z", "e^rho_t", "lambda_t", "lambda_z", "iota"],
+)
+def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
+    temp_fac = (data["iota"] - data["lambda_z"])/(1 + data["lambda_t"])
+    e_sup_rho_z = (data["e^rho_z"].T + data["e^rho_t"].T*temp_fac).T
+    data["g^rr_z"] = 2 * dot(e_sup_rho_z, data["e^rho"])
+    return data
+
+
+@register_compute_fun(
     name="g^rr_zz",
     label="g^{rr}_{zz}",
     units="~",
@@ -1442,11 +1580,16 @@ def _g_sup_rr_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["e^rho", "e^rho_z", "e^rho_zz"],
+    data=["e^rho", "e^rho_z", "e^rho_t", "e^rho_tt", "e^rho_zz", "e^rho_tz", "lambda_t", "lambda_z", "lambda_tt", "lambda_zz", "lambda_tz"],
 )
 def _g_sup_rr_sub_zz(params, transforms, profiles, data, **kwargs):
+    temp_fac1 = 1/(1 + data["lambda_t"])
+    temp_fac2 = (data["iota"] - data["lambda_z"])*temp_fac1
+    e_sup_rho_z = (data["e^rho_z"].T + data["e^rho_t"].T*temp_fac2).T
+    e_sup_rho_zz = (data["e^rho_zz"].T + 2 * data["e^rho_tz"].T * temp_fac2 - data["e^rho_t"].T * (data["lambda_zz"]*temp_fac1 + 2 * temp_fac2 * data["lambda_tz"]*temp_fac1 + temp_fac2**2*temp_fac1*data["lambda_tt"]) + data["e^rho_tt"].T*temp_fac2**2).T
+
     data["g^rr_zz"] = 2 * (
-        dot(data["e^rho_zz"], data["e^rho"]) + dot(data["e^rho_z"], data["e^rho_z"])
+        dot(e_sup_rho_zz, data["e^rho"]) + dot(e_sup_rho_z, e_sup_rho_z)
     )
     return data
 
@@ -1672,24 +1815,6 @@ def _g_sup_zz_t(params, transforms, profiles, data, **kwargs):
     return data
 
 
-@register_compute_fun(
-    name="g^rr_z",
-    label="g^{\\rho}{\\rho}_{\\zeta}",
-    units="m^-2",
-    units_long="inverse square meters",
-    description="Radial/Radial element of contravariant metric tensor, "
-    + "first toroidal derivative",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^rho", "e^rho_z"],
-)
-def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
-    data["g^rr_z"] = 2 * dot(data["e^rho_z"], data["e^rho"])
-    return data
-
 
 @register_compute_fun(
     name="g^rt_z",
@@ -1905,16 +2030,17 @@ def _g_sup_aa(params, transforms, profiles, data, **kwargs):
     label="g^{\\alpha \\alpha}_{\\zeta}",
     units="~",
     units_long="None",
-    description="Fieldline bending term3",
+    description="Toroidal derivative of the fieldline bending term on a field line",
     dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["grad(alpha)", "grad(alpha)_z"],
+    data=["grad(alpha)", "grad(alpha)_z", "grad(alpha)_t", "lambda_z", "lambda_t", "iota"],
 )
 def _g_sup_aa_sub_z(params, transforms, profiles, data, **kwargs):
-    data["g^aa_z"] = 2 * dot(data["grad(alpha)"], data["grad(alpha)_z"])
+    grad_alpha_z = data["grad(alpha)_z"] + (data["grad(alpha)_t"].T*(data["iota"] - data["lambda_z"])/(1 + data["lambda_t"])).T
+    data["g^aa_z"] = 2 * dot(data["grad(alpha)"], grad_alpha_z)
     return data
 
 
@@ -1923,18 +2049,20 @@ def _g_sup_aa_sub_z(params, transforms, profiles, data, **kwargs):
     label="g^{\\alpha \\alpha}_{\\zeta \\zeta}",
     units="~",
     units_long="None",
-    description="Fieldline bending term3",
+    description="Toroidal derivative of the fieldline bending term on a field line",
     dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["grad(alpha)", "grad(alpha)_z", "grad(alpha)_zz"],
+    data=["iota", "grad(alpha)", "grad(alpha)_z", "grad(alpha)_t", "lambda_t", "lambda_z", "lambda_tz","lambda_tt", "lambda_zz", "grad(alpha)_zz", "grad(alpha)_tt", "grad(alpha)_tz"],
 )
 def _g_sup_aa_sub_zz(params, transforms, profiles, data, **kwargs):
-    data["g^aa_zz"] = dot(data["grad(alpha)_z"], data["grad(alpha)_z"]) + dot(
-        data["grad(alpha)"], data["grad(alpha)_zz"]
-    )
+    grad_alpha_z = data["grad(alpha)_z"] + (data["grad(alpha)_t"].T*(data["iota"] - data["lambda_z"])/(1 + data["lambda_t"])).T
+    temp_fac1 = 1/(1 + data["lambda_t"])
+    temp_fac2 = (data["iota"] - data["lambda_z"])*temp_fac1
+    grad_alpha_zz = (data["grad(alpha)_zz"].T + 2 * data["grad(alpha)_tz"].T * temp_fac2 - data["grad(alpha)_t"].T * (data["lambda_zz"]*temp_fac1 + 2 * temp_fac2 * data["lambda_tz"]*temp_fac1 + temp_fac2**2*temp_fac1*data["lambda_tt"]) + data["grad(alpha)_tt"].T*temp_fac2**2).T
+    data["g^aa_zz"] = 2* (dot(grad_alpha_z, grad_alpha_z) + dot(data["grad(alpha)"], grad_alpha_zz))
     return data
 
 
@@ -1967,12 +2095,13 @@ def _g_sup_ra(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["grad(alpha)", "e^rho", "grad(alpha)_z", "e^rho_z"],
+    data=["grad(alpha)", "e^rho", "grad(alpha)_z", "grad(alpha)_t", "e^rho_z", "e^rho_t", "iota", "lambda_t", "lambda_z"],
 )
 def _g_sup_ra_sub_z(params, transforms, profiles, data, **kwargs):
-    data["g^ra_z"] = dot(data["grad(alpha)_z"], data["e^rho"]) + dot(
-        data["grad(alpha)"], data["e^rho_z"]
-    )
+    temp_fac = (data["iota"] - data["lambda_z"])/(1 + data["lambda_t"])
+    grad_alpha_z = (data["grad(alpha)_z"].T + data["grad(alpha)_t"].T*temp_fac).T
+    e_sup_rho_z = (data["e^rho_z"].T + data["e^rho_t"].T*temp_fac).T
+    data["g^ra_z"] = dot(grad_alpha_z, data["e^rho"]) + dot(data["grad(alpha)"], e_sup_rho_z)
     return data
 
 
@@ -1989,18 +2118,38 @@ def _g_sup_ra_sub_z(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=[
         "grad(alpha)",
+        "grad(alpha)_t",
         "grad(alpha)_z",
+        "grad(alpha)_tt",
         "grad(alpha)_zz",
+        "grad(alpha)_tz",
         "e^rho",
+        "e^rho_t",
         "e^rho_z",
+        "e^rho_tt",
         "e^rho_zz",
+        "e^rho_tz",
+        "iota",
+        "lambda_t",
+        "lambda_z",
+        "lambda_tt",
+        "lambda_zz",
+        "lambda_tz",
     ],
 )
 def _g_sup_ra_sub_zz(params, transforms, profiles, data, **kwargs):
+    grad_alpha_z = data["grad(alpha)_z"] + (data["grad(alpha)_t"].T*(data["iota"] - data["lambda_z"])/(1 + data["lambda_t"])).T
+    temp_fac1 = 1/(1 + data["lambda_t"])
+    temp_fac2 = (data["iota"] - data["lambda_z"])*temp_fac1
+    grad_alpha_zz = (data["grad(alpha)_zz"].T + 2 * data["grad(alpha)_tz"].T * temp_fac2 - data["grad(alpha)_t"].T * (data["lambda_zz"]*temp_fac1 + 2 * temp_fac2 * data["lambda_tz"]*temp_fac1 + temp_fac2**2*temp_fac1*data["lambda_tt"]) + data["grad(alpha)_tt"].T*temp_fac2**2).T
+
+    e_sup_rho_z = (data["e^rho_z"].T + data["e^rho_t"].T*temp_fac2).T
+    e_sup_rho_zz = (data["e^rho_zz"].T + 2 * data["e^rho_tz"].T * temp_fac2 - data["e^rho_t"].T * (data["lambda_zz"]*temp_fac1 + 2 * temp_fac2 * data["lambda_tz"]*temp_fac1 + temp_fac2**2*temp_fac1*data["lambda_tt"]) + data["e^rho_tt"].T*temp_fac2**2).T
+
     data["g^ra_zz"] = (
-        dot(data["grad(alpha)_zz"], data["e^rho"])
-        + 2 * dot(data["grad(alpha)_z"], data["e^rho_z"])
-        + dot(data["grad(alpha)"], data["e^rho_zz"])
+        dot(grad_alpha_zz, data["e^rho"])
+        + 2 * dot(grad_alpha_z, e_sup_rho_z)
+        + dot(data["grad(alpha)"], e_sup_rho_zz)
     )
     return data
 
@@ -2017,13 +2166,11 @@ def _g_sup_ra_sub_zz(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "b", "grad(alpha)", "grad(|B|)", "psi_r"],
+    data=["|B|", "b", "grad(alpha)", "grad(|B|)"],
 )
 def _gbdrift(params, transforms, profiles, data, **kwargs):
     data["gbdrift"] = (
-        data["psi_r"]
-        * 2
-        / data["|B|"] ** 2
+        1 / data["|B|"] ** 2
         * dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha)"]))
     )
     return data
@@ -2041,11 +2188,11 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["p_r", "psi_r", "|B|", "gbdrift"],
+    data=["p_r", "psi_r", "|B|", "gbdrift", "psi"],
 )
 def _cvdrift(params, transforms, profiles, data, **kwargs):
     dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
-    data["cvdrift"] = data["psi_r"] * 1 / data["|B|"] ** 2 * dp_dpsi + data["gbdrift"]
+    data["cvdrift"] =  1 / data["|B|"] ** 2 * dp_dpsi + data["gbdrift"]
     return data
 
 

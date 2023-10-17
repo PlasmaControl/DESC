@@ -744,22 +744,22 @@ class TestGetExample:
     @pytest.mark.unit
     def test_example_get_iota(self):
         """Test getting iota profile."""
-        iota = desc.examples.get("NCSX", "iota")
+        iota = desc.examples.get("W7-X", "iota")
         np.testing.assert_allclose(
             iota.params[:5],
             [
-                -3.49197642e-01,
-                -6.81105159e-01,
-                1.29781695e00,
-                -2.07888586e00,
-                1.15800135e00,
+                -8.56047021e-01,
+                -3.88095412e-02,
+                -6.86795128e-02,
+                -1.86970315e-02,
+                1.90561179e-02,
             ],
         )
 
     @pytest.mark.unit
     def test_example_get_current(self):
         """Test getting current profile."""
-        current = desc.examples.get("QAS", "current")
+        current = desc.examples.get("NCSX", "current")
         np.testing.assert_allclose(
             current.params[:11],
             [

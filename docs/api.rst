@@ -25,10 +25,12 @@ Coils
     :recursive:
     :template: class.rst
 
+    desc.coils.CoilSet
     desc.coils.FourierRZCoil
     desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
-    desc.coils.CoilSet
+    desc.coils.MixedCoilSet
+    desc.coils.SplineXYZCoil
 
 Continuation
 ************
@@ -88,6 +90,7 @@ Geometry
     desc.geometry.FourierXYZCurve
     desc.geometry.FourierPlanarCurve
     desc.geometry.FourierRZToroidalSurface
+    desc.geometry.SplineXYZCurve
     desc.geometry.ZernikeRZToroidalSection
 
 Grid
@@ -116,12 +119,14 @@ IO
     desc.io.InputReader
     desc.io.load
 
+
 Magnetic Fields
 ***************
 
 .. autosummary::
-    :toctree: _api/magnetic_fields/
+    :toctree: _api/magnetic_fields
     :recursive:
+    :template: class.rst
 
     desc.magnetic_fields.ScaledMagneticField
     desc.magnetic_fields.SumMagneticField
@@ -131,6 +136,7 @@ Magnetic Fields
     desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.field_line_integrate
+    desc.magnetic_fields.read_BNORM_file
 
 Objective Functions
 *******************
@@ -164,6 +170,7 @@ Objective Functions
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
+    desc.objectives.ForceBalanceAnisotropic
     desc.objectives.GenericObjective
     desc.objectives.get_equilibrium_objective
     desc.objectives.get_fixed_axis_constraints
@@ -177,6 +184,7 @@ Objective Functions
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.PlasmaVesselDistance
+    desc.objectives.Pressure
     desc.objectives.PrincipalCurvature
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm
@@ -185,6 +193,7 @@ Objective Functions
     desc.objectives.RotationalTransform
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
+
 
 
 Optimize
@@ -196,8 +205,13 @@ Optimize
    :template: class.rst
 
    desc.optimize.Optimizer
+   desc.optimize.fmin_auglag
    desc.optimize.fmintr
+   desc.optimize.lsq_auglag
    desc.optimize.lsqtr
+   desc.optimize.register_optimizer
+   desc.optimize.sgd
+
 
 Perturbations
 *************

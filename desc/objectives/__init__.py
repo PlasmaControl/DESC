@@ -5,16 +5,12 @@ from ._equilibrium import (
     CurrentDensity,
     Energy,
     ForceBalance,
+    ForceBalanceAnisotropic,
     ForceBalanceGalerkin,
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import (
-    GenericObjective,
-    ObjectiveFromUser,
-    RotationalTransform,
-    ToroidalCurrent,
-)
+from ._generic import GenericObjective, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
     BScaleLength,
@@ -25,6 +21,7 @@ from ._geometry import (
     SpectralCondensation,
     Volume,
 )
+from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._qs import (
     Isodynamicity,
     QuasisymmetryBoozer,
@@ -44,6 +41,7 @@ from .linear_objectives import (
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    FixAnisotropy,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
@@ -55,10 +53,12 @@ from .linear_objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixModeLambda,
     FixModeR,
     FixModeZ,
     FixPressure,
     FixPsi,
+    FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,

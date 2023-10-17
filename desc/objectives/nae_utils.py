@@ -45,9 +45,9 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
     else:
         N = np.min([desc_eq.N, N])
     if desc_eq.sym:
-        Lbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
+        Lbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
     else:
-        Lbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+        Lbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
 
     grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
     Ltrans_sin = Transform(grid, Lbasis_sin, build_pinv=True, method="auto")

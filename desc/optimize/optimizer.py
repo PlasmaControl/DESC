@@ -152,7 +152,7 @@ class Optimizer(IOAble):
             eq, objective, nonlinear_constraint, self.method, options
         )
 
-        if not isinstance(objective, ProximalProjection) and eq.bdry_mode=="lcfs":
+        if not isinstance(objective, ProximalProjection):
             # need to include self consistency constraints
             linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
         if len(linear_constraints):

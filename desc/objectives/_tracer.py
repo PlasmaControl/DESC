@@ -71,7 +71,7 @@ class ParticleTracer(_Objective):
         initial_conditions=None,
         initial_parameters=None,
         compute_option=None,
-        tolerance =1.4e-8,
+        tolerance = 1.4e-8,
         name="Particle Tracer"
     ):
         self.output_time = output_time
@@ -112,17 +112,17 @@ class ParticleTracer(_Objective):
         eq = eq or self._eq
 
         if self.compute_option == "optimization":
-            self._dim_f = len(self.output_time)
+            self._dim_f = 1
         elif self.compute_option == "tracer":
             self._dim_f = [len(self.output_time), 4]
         elif self.compute_option == "average psi":
-            self._dim_f = len(self.output_time)
+            self._dim_f = 1
         elif self.compute_option == "average theta":
-            self._dim_f = len(self.output_time)
+            self._dim_f = 1
         elif self.compute_option == "average zeta":
-            self._dim_f = len(self.output_time)
+            self._dim_f = 1
         elif self.compute_option == "average vpar":
-           self._dim_f = len(self.output_time)
+           self._dim_f = 1
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

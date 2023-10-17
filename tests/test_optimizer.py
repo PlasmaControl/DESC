@@ -326,7 +326,6 @@ def test_overstepping():
     """
 
     class DummyObjective(_Objective):
-
         name = "Dummy"
         _print_value_fmt = "Dummy: {:.3e}"
         _units = "(Foo)"
@@ -561,6 +560,7 @@ def test_all_optimizers():
     eobj.build()
     econ = get_fixed_boundary_constraints(eq=eqe)
     fcon = get_fixed_boundary_constraints(eq=eqf)
+    options = {"sgd": {"alpha": 1e-4}}
 
     for opt in optimizers:
         print("TESTING ", opt)
@@ -576,9 +576,10 @@ def test_all_optimizers():
             objective=obj,
             constraints=con,
             optimizer=opt,
-            verbose=3,
             copy=True,
+            verbose=3,
             maxiter=5,
+            options=options.get(opt, None),
         )
 
 

@@ -11,7 +11,7 @@ from time import time as timet
 
 initial_time = timet()
 # Load Equilibrium
-filename = "input.LandremanPaul2021_QA_scaled_output.h5"
+filename = "ellipse_higherPsi.h5"
 save_text_name = "solution" + filename
 
 eq = desc.io.load(filename)[-1]

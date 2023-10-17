@@ -60,7 +60,6 @@ class FourierRZToroidalSurface(Surface):
         NFP=1,
         sym="auto",
         rho=1,
-        grid=None,
         name="",
         check_orientation=True,
     ):
@@ -409,7 +408,6 @@ class ZernikeRZToroidalSection(Surface):
         spectral_indexing="ansi",
         sym="auto",
         zeta=0.0,
-        grid=None,
         name="",
         check_orientation=True,
     ):

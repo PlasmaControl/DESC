@@ -216,7 +216,7 @@ class FourierRZCurve(Curve):
 
         """
         f = open(path)
-        if "&INDATA" in f.readlines()[0]:  # vmec input, convert to desc
+        if "&INDATA" in f.readlines()[0].upper():  # vmec input, convert to desc
             inputs = InputReader.parse_vmec_inputs(f)[-1]
         else:
             inputs = InputReader().parse_inputs(f)[-1]
@@ -247,7 +247,7 @@ def _unclose_curve(X, Y, Z):
 
 
 class FourierXYZCurve(Curve):
-    """Curve parameterized by Fourier series for X,Y,Z in terms of arbitrary angle phi.
+    """Curve parameterized by Fourier series for X,Y,Z in terms of arbitrary angle s.
 
     Parameters
     ----------

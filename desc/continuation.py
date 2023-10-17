@@ -6,11 +6,12 @@ import warnings
 import numpy as np
 from termcolor import colored
 
+from desc.compute import arg_order
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.optimize import Optimizer
 from desc.perturbations import get_deltas
-from desc.utils import Timer
+from desc.utils import Timer, errorif
 
 MIN_MRES_STEP = 1
 MIN_PRES_STEP = 0.1
@@ -64,7 +65,6 @@ def _solve_axisym(
         L_grid=L_gridi,
         M_grid=M_gridi,
         N_grid=N_gridi,
-        node_pattern=eq.node_pattern,
         pressure=pres_vac.copy(),
         iota=copy.copy(eq.iota),  # have to use copy.copy here since may be None
         current=copy.copy(eq.current),
@@ -76,10 +76,11 @@ def _solve_axisym(
     if not isinstance(optimizer, Optimizer):
         optimizer = Optimizer(optimizer)
     constraints_i = get_fixed_boundary_constraints(
+        eq=eqi,
         iota=objective != "vacuum" and eq.iota is not None,
         kinetic=eq.electron_temperature is not None,
     )
-    objective_i = get_equilibrium_objective(objective)
+    objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
 
     eqfam = EquilibriaFamily()
 
@@ -90,7 +91,7 @@ def _solve_axisym(
 
         if ii > 0:
             eqi = eqfam[-1].copy()
-            # increase resolution of vacuum soln
+            # increase resolution of vacuum solution
             Mi = min(Mi + mres_step, M)
             Li = int(np.ceil(L / M) * Mi)
             L_gridi = np.ceil(L_grid / L * Li).astype(int)
@@ -118,10 +119,11 @@ def _solve_axisym(
             )
 
         constraints_i = get_fixed_boundary_constraints(
+            eq=eqi,
             iota=objective != "vacuum" and eq.iota is not None,
             kinetic=eq.electron_temperature is not None,
         )
-        objective_i = get_equilibrium_objective(objective)
+        objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
         if len(deltas) > 0:
             if verbose > 0:
                 print("Perturbing equilibrium")
@@ -164,7 +166,7 @@ def _solve_axisym(
         if mres_step == MIN_MRES_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with mres_step=1, "
-                + "something is probaby very wrong with your desired equilibrium."
+                + "something is probably very wrong with your desired equilibrium."
             )
         else:
             warnings.warn(
@@ -214,10 +216,11 @@ def _add_pressure(
     eqi.change_resolution(L=eq.L, M=eq.M, L_grid=eq.L_grid, M_grid=eq.M_grid)
 
     constraints_i = get_fixed_boundary_constraints(
+        eq=eqi,
         iota=objective != "vacuum" and eq.iota is not None,
         kinetic=eq.electron_temperature is not None,
     )
-    objective_i = get_equilibrium_objective(objective)
+    objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
 
     pres_steps = (
         0
@@ -278,6 +281,7 @@ def _add_pressure(
             )
         stop = stop or not eqi.is_nested()
         eqfam.append(eqi)
+        eqi = eqi.copy()
 
         if checkpoint_path is not None:
             if verbose > 0:
@@ -292,7 +296,7 @@ def _add_pressure(
         if pres_step <= MIN_PRES_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with "
-                + f"pres_step={pres_step}, something is probaby very wrong with your "
+                + f"pres_step={pres_step}, something is probably very wrong with your "
                 + "desired equilibrium."
             )
         else:
@@ -344,10 +348,11 @@ def _add_shaping(
     eqi.change_resolution(eq.L, eq.M, eq.N, eq.L_grid, eq.M_grid, eq.N_grid)
 
     constraints_i = get_fixed_boundary_constraints(
+        eq=eqi,
         iota=objective != "vacuum" and eq.iota is not None,
         kinetic=eq.electron_temperature is not None,
     )
-    objective_i = get_equilibrium_objective(objective)
+    objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
 
     bdry_steps = 0 if eq.N == 0 or bdry_step == 0 else int(np.ceil(1 / bdry_step))
     bdry_ratio = 0 if eq.N else 1
@@ -409,6 +414,7 @@ def _add_shaping(
             )
         stop = stop or not eqi.is_nested()
         eqfam.append(eqi)
+        eqi = eqi.copy()
 
         if checkpoint_path is not None:
             if verbose > 0:
@@ -423,7 +429,7 @@ def _add_shaping(
         if bdry_step <= MIN_BDRY_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with "
-                + f"bdry_step={bdry_step}, something is probaby very wrong with your "
+                + f"bdry_step={bdry_step}, something is probably very wrong with your "
                 + "desired equilibrium."
             )
         else:
@@ -478,7 +484,7 @@ def solve_continuation_automatic(  # noqa: C901
         Unsolved Equilibrium with the final desired boundary, profiles, resolution.
     objective : {"force", "energy", "vacuum"}
         function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
+    optimizer : str or Optimizer (optional)
         optimizer to use
     pert_order : int
         order of perturbations to use.
@@ -509,11 +515,16 @@ def solve_continuation_automatic(  # noqa: C901
         final desired configuration,
 
     """
-    if eq.electron_temperature is not None:
-        raise NotImplementedError(
-            "Continuation method with kinetic profiles is not currently supported"
-        )
-
+    errorif(
+        eq.electron_temperature is not None,
+        NotImplementedError,
+        "Continuation method with kinetic profiles is not currently supported",
+    )
+    errorif(
+        eq.anisotropy is not None,
+        NotImplementedError,
+        "Continuation method with anisotropic pressure is not currently supported",
+    )
     timer = Timer()
     timer.start("Total time")
 
@@ -567,10 +578,10 @@ def solve_continuation_automatic(  # noqa: C901
         verbose,
         checkpoint_path,
     )
-
-    eq.R_lmn = eqfam[-1].R_lmn
-    eq.Z_lmn = eqfam[-1].Z_lmn
-    eq.L_lmn = eqfam[-1].L_lmn
+    for arg in arg_order:
+        val = np.asarray(getattr(eqfam[-1], arg))
+        if val.size:
+            setattr(eq, arg, val)
     eqfam[-1] = eq
     timer.stop("Total time")
     if verbose > 0:
@@ -602,7 +613,7 @@ def solve_continuation(  # noqa: C901
 ):
     """Solve for an equilibrium by continuation method.
 
-    Steps through an EquilibriaFamily, solving each equilibrium, and uses pertubations
+    Steps through an EquilibriaFamily, solving each equilibrium, and uses perturbations
     to step between different profiles/boundaries.
 
     Uses the previous step as an initial guess for each solution.
@@ -613,7 +624,7 @@ def solve_continuation(  # noqa: C901
         Equilibria to solve for at each step.
     objective : {"force", "energy", "vacuum"}
         function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
+    optimizer : str or Optimizer (optional)
         optimizer to use
     pert_order : int or array of int
         order of perturbations to use. If array-like, should be same length as eqfam
@@ -638,10 +649,16 @@ def solve_continuation(  # noqa: C901
         final desired configuration,
 
     """
-    if not all([eq.electron_temperature is None for eq in eqfam]):
-        raise NotImplementedError(
-            "Continuation method with kinetic profiles is not currently supported"
-        )
+    errorif(
+        not all([eq.electron_temperature is None for eq in eqfam]),
+        NotImplementedError,
+        "Continuation method with kinetic profiles is not currently supported",
+    )
+    errorif(
+        not all([eq.anisotropy is None for eq in eqfam]),
+        NotImplementedError,
+        "Continuation method with anisotropic pressure is not currently supported",
+    )
 
     timer = Timer()
     timer.start("Total time")
@@ -653,8 +670,9 @@ def solve_continuation(  # noqa: C901
 
     if not isinstance(optimizer, Optimizer):
         optimizer = Optimizer(optimizer)
-    objective_i = get_equilibrium_objective(objective)
+    objective_i = get_equilibrium_objective(eq=eqfam[-1], mode=objective)
     constraints_i = get_fixed_boundary_constraints(
+        eq=eqfam[-1],
         iota=objective != "vacuum" and eqfam[0].iota is not None,
         kinetic=eqfam[0].electron_temperature is not None,
     )
@@ -700,8 +718,9 @@ def solve_continuation(  # noqa: C901
 
             # maybe rebuild objective if resolution changed.
             if eqfam[ii - 1].resolution != eqi.resolution:
-                objective_i = get_equilibrium_objective(objective)
+                objective_i = get_equilibrium_objective(eq=eqfam[ii], mode=objective)
                 constraints_i = get_fixed_boundary_constraints(
+                    eq=eqfam[ii],
                     iota=objective != "vacuum" and eqfam[ii].iota is not None,
                     kinetic=eqfam[ii].electron_temperature is not None,
                 )
@@ -720,9 +739,10 @@ def solve_continuation(  # noqa: C901
                 verbose=verbose,
                 copy=False,
             )
-            eqi.R_lmn = eqp.R_lmn
-            eqi.Z_lmn = eqp.Z_lmn
-            eqi.L_lmn = eqp.L_lmn
+            for arg in arg_order:
+                val = np.asarray(getattr(eqp, arg))
+                if val.size:
+                    setattr(eqi, arg, val)
             deltas = {}
             del eqp
 

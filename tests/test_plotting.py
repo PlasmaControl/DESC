@@ -11,7 +11,9 @@ from desc.basis import (
     FourierZernikeBasis,
     PowerSeries,
 )
-from desc.coils import CoilSet, FourierXYZCoil
+from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
+from desc.compute import data_index
+from desc.compute.utils import surface_averages
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -49,6 +51,15 @@ def test_kwarg_warning(DummyStellarator):
     eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
     with pytest.raises(AssertionError):
         fig, ax = plot_1d(eq, "psi_rr", not_a_kwarg=True)
+    return None
+
+
+@pytest.mark.unit
+def test_kwarg_future_warning(DummyStellarator):
+    """Test that passing in deprecated kwargs throws a warning."""
+    eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
+    with pytest.warns(FutureWarning):
+        fig, ax = plot_surfaces(eq, zeta=2)
     return None
 
 
@@ -195,11 +206,10 @@ def test_2d_lambda(DSHAPE_current):
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_B(DSHAPE_current):
     """Test 3d plot of toroidal field."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_3d(eq, "B^zeta", return_data=True)
+    fig, data = plot_3d(eq, "B^zeta", return_data=True)
     assert "X" in data.keys()
     assert "Y" in data.keys()
     assert "Z" in data.keys()
@@ -211,46 +221,114 @@ def test_3d_B(DSHAPE_current):
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_J(DSHAPE_current):
     """Test 3d plotting of poloidal current."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=1.0, theta=100, zeta=100)
-    fig, ax = plot_3d(eq, "J^theta", grid=grid)
+    fig = plot_3d(eq, "J^theta", grid=grid)
     return fig
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_tz(DSHAPE_current):
     """Test 3d plot of force on interior surface."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=100)
-    fig, ax = plot_3d(eq, "|F|", log=True, grid=grid)
+    fig = plot_3d(eq, "|F|", log=True, grid=grid)
     return fig
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_rz(DSHAPE_current):
     """Test 3d plotting of pressure on toroidal cross section."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=0.0, zeta=100)
-    fig, ax = plot_3d(eq, "p", grid=grid)
+    fig = plot_3d(eq, "p", grid=grid)
     return fig
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_rt(DSHAPE_current):
     """Test 3d plotting of flux on poloidal ribbon."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)
-    fig, ax = plot_3d(eq, "psi", grid=grid)
+    fig = plot_3d(eq, "psi", grid=grid)
     return fig
+
+
+@pytest.mark.unit
+def test_plot_fsa_axis_limit():
+    """Test magnetic axis limit of flux surface average is plotted."""
+    eq = get("W7-X")
+    rho = np.linspace(0, 1, 10)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho)
+    assert grid.axis.size
+
+    name = "J*B"
+    assert (
+        "<" + name + ">" in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
+    # should forward computation to compute function
+    _, _, plot_data = plot_fsa(
+        eq=eq,
+        name=name,
+        rho=rho,
+        M=eq.M_grid,
+        N=eq.N_grid,
+        with_sqrt_g=True,
+        return_data=True,
+    )
+    desired = grid.compress(
+        eq.compute(names="<" + name + ">", grid=grid)["<" + name + ">"]
+    )
+    np.testing.assert_allclose(plot_data["<" + name + ">"], desired, equal_nan=False)
+
+    name = "B0"
+    assert (
+        "<" + name + ">" not in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
+    # should automatically compute axis limit
+    _, _, plot_data = plot_fsa(
+        eq=eq,
+        name=name,
+        rho=rho,
+        M=eq.M_grid,
+        N=eq.N_grid,
+        with_sqrt_g=True,
+        return_data=True,
+    )
+    data = eq.compute(names=[name, "sqrt(g)", "sqrt(g)_r"], grid=grid)
+    desired = surface_averages(
+        grid=grid,
+        q=data[name],
+        sqrt_g=grid.replace_at_axis(data["sqrt(g)"], data["sqrt(g)_r"], copy=True),
+        expand_out=False,
+    )
+    np.testing.assert_allclose(
+        plot_data["<" + name + ">_fsa"], desired, equal_nan=False
+    )
+
+    name = "|B|"
+    assert (
+        "<" + name + ">" in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    ), "Test with a different quantity."
+    _, _, plot_data = plot_fsa(
+        eq=eq,
+        name=name,
+        rho=rho,
+        M=eq.M_grid,
+        N=eq.N_grid,
+        with_sqrt_g=False,  # Test that does not compute data_index["<|B|>"]
+        return_data=True,
+    )
+    data = eq.compute(names=name, grid=grid)
+    desired = surface_averages(grid=grid, q=data[name], expand_out=False)
+    np.testing.assert_allclose(
+        plot_data["<" + name + ">_fsa"], desired, equal_nan=False
+    )
 
 
 @pytest.mark.unit
@@ -286,7 +364,7 @@ def test_fsa_F_normalized(DSHAPE_current):
     """Test plotting flux surface average normalized force error on log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True, norm_name="<|grad(p)|>_vol")
-    ax.set_ylim([1e-5, 1e-2])
+    ax.set_ylim([1e-6, 1e-3])
     return fig
 
 
@@ -695,11 +773,61 @@ def test_plot_boozer_modes():
     """Test plotting boozer spectrum."""
     eq = get("WISTELL-A")
     fig, ax, data = plot_boozer_modes(
-        eq, M_booz=eq.M, N_booz=eq.N, num_modes=7, return_data=True
+        eq, M_booz=eq.M, N_booz=eq.N, num_modes=7, return_data=True, norm=True
     )
     ax.set_ylim([1e-6, 5e0])
     for string in ["|B|_mn", "B modes", "rho"]:
         assert string in data.keys()
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_boozer_modes_breaking_only():
+    """Test plotting symmetry breaking boozer spectrum."""
+    eq = get("WISTELL-A")
+    fig, ax = plot_boozer_modes(
+        eq,
+        M_booz=eq.M,
+        N_booz=eq.N,
+        helicity=(1, -eq.NFP),
+        norm=True,
+        num_modes=7,
+    )
+    ax.set_ylim([1e-6, 5e0])
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_boozer_modes_max():
+    """Test plotting symmetry breaking boozer spectrum."""
+    eq = get("WISTELL-A")
+    fig, ax = plot_boozer_modes(
+        eq,
+        M_booz=eq.M,
+        N_booz=eq.N,
+        helicity=(1, -eq.NFP),
+        max_only=True,
+        label="WISTELL-A",
+        color="r",
+        norm=True,
+    )
+    ax.set_ylim([1e-6, 5e0])
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_boozer_modes_no_norm():
+    """Test plotting boozer spectrum without B0 and norm."""
+    eq = get("ESTELL")
+    fig, ax = plot_boozer_modes(
+        eq, M_booz=eq.M, N_booz=eq.N, num_modes=7, B0=False, log=False
+    )
     return fig
 
 
@@ -741,7 +869,6 @@ def test_plot_qs_error():
 
 
 @pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_plot_coils():
     """Test 3d plotting of coils with currents."""
     N = 48
@@ -751,8 +878,8 @@ def test_plot_coils():
     coil.rotate(angle=np.pi / N)
     coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
     coils.grid = 100
-    coils2 = CoilSet.from_symmetry(coils, NFP, True)
-    fig, ax, data = plot_coils(coils2, return_data=True)
+    coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)
+    fig, data = plot_coils(coils2, return_data=True)
 
     def flatten_coils(coilset):
         if hasattr(coilset, "__len__"):

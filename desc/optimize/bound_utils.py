@@ -1,10 +1,13 @@
 """Utilities for dealing with simple bound constraints."""
 
-from desc.backend import jnp
+import functools
+
+from desc.backend import cond, jit, jnp
 
 from .utils import evaluate_quadratic_form_hess, evaluate_quadratic_form_jac
 
 
+@jit
 def cl_scaling_vector(x, g, lb, ub):
     """Compute Coleman-Li scaling vector and its derivatives.
 
@@ -58,6 +61,7 @@ def cl_scaling_vector(x, g, lb, ub):
     return v, dv
 
 
+@jit
 def step_size_to_bound(x, s, lb, ub):
     """Compute a min_step size required to reach a bound.
 
@@ -91,6 +95,7 @@ def step_size_to_bound(x, s, lb, ub):
     return min_step, jnp.equal(steps, min_step) * jnp.sign(s).astype(int)
 
 
+@jit
 def find_active_constraints(x, lb, ub, rtol=1e-10):
     """Determine which constraints are active in a given point.
 
@@ -112,32 +117,35 @@ def find_active_constraints(x, lb, ub, rtol=1e-10):
              * -1 - a lower bound is active.
              *  1 - a upper bound is active.
     """
-    active = jnp.zeros_like(x, dtype=int)
 
-    if rtol == 0:
+    def truefun(active):
         active = jnp.where(x <= lb, -1, active)
         active = jnp.where(x >= ub, 1, active)
         return active
 
-    lower_dist = x - lb
-    upper_dist = ub - x
+    def falsefun(active):
+        lower_dist = x - lb
+        upper_dist = ub - x
 
-    lower_threshold = rtol * jnp.maximum(1, jnp.abs(lb))
-    upper_threshold = rtol * jnp.maximum(1, jnp.abs(ub))
+        lower_threshold = rtol * jnp.maximum(1, jnp.abs(lb))
+        upper_threshold = rtol * jnp.maximum(1, jnp.abs(ub))
 
-    lower_active = jnp.isfinite(lb) & (
-        lower_dist <= jnp.minimum(upper_dist, lower_threshold)
-    )
-    active = jnp.where(lower_active, -1, active)
+        lower_active = jnp.isfinite(lb) & (
+            lower_dist <= jnp.minimum(upper_dist, lower_threshold)
+        )
+        active = jnp.where(lower_active, -1, active)
 
-    upper_active = jnp.isfinite(ub) & (
-        upper_dist <= jnp.minimum(lower_dist, upper_threshold)
-    )
-    active = jnp.where(upper_active, 1, active)
+        upper_active = jnp.isfinite(ub) & (
+            upper_dist <= jnp.minimum(lower_dist, upper_threshold)
+        )
+        active = jnp.where(upper_active, 1, active)
 
-    return active
+        return active
+
+    return cond(rtol == 0, truefun, falsefun, jnp.zeros_like(x, dtype=int))
 
 
+@jit
 def make_strictly_feasible(x, lb, ub, rstep=1e-10):
     """Shift a point to the interior of a feasible region.
 
@@ -148,12 +156,12 @@ def make_strictly_feasible(x, lb, ub, rstep=1e-10):
     lower_mask = jnp.equal(active, -1)
     upper_mask = jnp.equal(active, 1)
 
-    if rstep == 0:
-        lwr = jnp.nextafter(lb, ub)
-        upr = jnp.nextafter(ub, lb)
-    else:
-        lwr = lb + rstep * jnp.maximum(1, jnp.abs(lb))
-        upr = ub - rstep * jnp.maximum(1, jnp.abs(ub))
+    lwr = jnp.where(
+        rstep == 0, jnp.nextafter(lb, ub), lb + rstep * jnp.maximum(1, jnp.abs(lb))
+    )
+    upr = jnp.where(
+        rstep == 0, jnp.nextafter(ub, lb), ub - rstep * jnp.maximum(1, jnp.abs(ub))
+    )
 
     x_new = x.copy()
     x_new = jnp.where(lower_mask, lwr, x_new)
@@ -164,13 +172,22 @@ def make_strictly_feasible(x, lb, ub, rstep=1e-10):
     return x_new
 
 
+@jit
 def in_bounds(x, lb, ub):
     """Check if a point lies within bounds."""
     return jnp.all((x >= lb) & (x <= ub))
 
 
+@functools.partial(jit, static_argnames="mode")
 def select_step(x, JorH, diag_h, g_h, p, p_h, d, Delta, lb, ub, theta, mode="jac"):
-    """Select the best step according to Trust Region Reflective algorithm."""
+    """Select the best step according to Trust Region Reflective algorithm.
+
+    The algorithm chooses the best step among three options:
+
+        - a constrained trust-region step (p)
+        - a reflected step (r)
+        - a constrained Cauchy step (ag, minimizer along direction of scaled gradient)
+    """
     assert mode in ["jac", "hess"]
 
     if mode == "jac":
@@ -180,80 +197,87 @@ def select_step(x, JorH, diag_h, g_h, p, p_h, d, Delta, lb, ub, theta, mode="jac
         evaluate_quadratic_form = evaluate_quadratic_form_hess
         build_quadratic_1d = build_quadratic_1d_hess
 
-    if in_bounds(x + p, lb, ub):
+    def inbounds_true(p, p_h):
         p_value = evaluate_quadratic_form(JorH, g_h, p_h, diag=diag_h)
         return p, p_h, -p_value
 
-    p_stride, hits = step_size_to_bound(x, p, lb, ub)
+    def inbounds_false(p, p_h):
+        p_stride, hits = step_size_to_bound(x, p, lb, ub)
 
-    # Compute the reflected direction.
-    r_h = jnp.copy(p_h)
-    r_h = jnp.where(hits.astype(bool), r_h * -1, r_h)
-    r = d * r_h
+        # Compute the reflected direction.
+        r_h = jnp.copy(p_h)
+        r_h = jnp.where(hits.astype(bool), r_h * -1, r_h)
+        r = d * r_h
 
-    # Restrict trust-region step, such that it hits the bound.
-    p *= p_stride
-    p_h *= p_stride
-    x_on_bound = x + p
+        # Restrict trust-region step, such that it hits the bound.
+        p *= p_stride
+        p_h *= p_stride
+        x_on_bound = x + p
 
-    # Reflected direction will cross first either feasible region or trust region
-    # boundary.
-    _, to_tr = intersect_trust_region(p_h, r_h, Delta)
-    to_bound, _ = step_size_to_bound(x_on_bound, r, lb, ub)
+        # Reflected direction will cross first either feasible region or trust region
+        # boundary.
+        _, to_tr = intersect_trust_region(p_h, r_h, Delta)
+        to_bound, _ = step_size_to_bound(x_on_bound, r, lb, ub)
 
-    # Find lower and upper bounds on a step size along the reflected
-    # direction, considering the strict feasibility requirement. There is no
-    # single correct way to do that, the chosen approach seems to work best
-    # on test problems.
-    r_stride = min(to_bound, to_tr)
-    if r_stride > 0:
-        r_stride_l = (1 - theta) * p_stride / r_stride
-        if r_stride == to_bound:
-            r_stride_u = theta * to_bound
-        else:
-            r_stride_u = to_tr
-    else:
-        r_stride_l = 0
-        r_stride_u = -1
+        # Find lower and upper bounds on a step size along the reflected
+        # direction, considering the strict feasibility requirement. There is no
+        # single correct way to do that, the chosen approach seems to work best
+        # on test problems.
+        r_stride = jnp.minimum(to_bound, to_tr)
+        r_stride_l = cond(
+            r_stride > 0,
+            lambda _: (1 - theta) * p_stride / r_stride,
+            lambda _: 0.0,
+            None,
+        )
+        r_stride_u = cond(
+            r_stride > 0,
+            lambda _: jnp.where(r_stride == to_bound, theta * to_bound, to_tr),
+            lambda _: -1.0,
+            None,
+        )
 
-    # Check if reflection step is available.
-    if r_stride_l <= r_stride_u:
-        a, b, c = build_quadratic_1d(JorH, g_h, r_h, s0=p_h, diag=diag_h)
-        r_stride, r_value = minimize_quadratic_1d(a, b, r_stride_l, r_stride_u, c=c)
-        r_h *= r_stride
-        r_h += p_h
-        r = r_h * d
-    else:
-        r_value = jnp.inf
+        # Check if reflection step is available.
+        def r_truefun(r_h, r):
+            a, b, c = build_quadratic_1d(JorH, g_h, r_h, s0=p_h, diag=diag_h)
+            r_stride, r_value = minimize_quadratic_1d(a, b, r_stride_l, r_stride_u, c=c)
+            r_h *= r_stride
+            r_h += p_h
+            r = r_h * d
+            return r_h, r, r_value
 
-    # Now correct p_h to make it strictly interior.
-    p *= theta
-    p_h *= theta
-    p_value = evaluate_quadratic_form(JorH, g_h, p_h, diag=diag_h)
+        def r_falsefun(r_h, r):
+            return r_h, r, jnp.inf
 
-    ag_h = -g_h
-    ag = d * ag_h
+        r_h, r, r_value = cond(r_stride_l <= r_stride_u, r_truefun, r_falsefun, r_h, r)
 
-    to_tr = Delta / jnp.linalg.norm(ag_h)
-    to_bound, _ = step_size_to_bound(x, ag, lb, ub)
-    if to_bound < to_tr:
-        ag_stride = theta * to_bound
-    else:
-        ag_stride = to_tr
+        # Now correct p_h to make it strictly interior.
+        p *= theta
+        p_h *= theta
+        p_value = evaluate_quadratic_form(JorH, g_h, p_h, diag=diag_h)
 
-    a, b = build_quadratic_1d(JorH, g_h, ag_h, diag=diag_h)
-    ag_stride, ag_value = minimize_quadratic_1d(a, b, 0, ag_stride)
-    ag_h *= ag_stride
-    ag *= ag_stride
+        ag_h = -g_h
+        ag = d * ag_h
 
-    if p_value < r_value and p_value < ag_value:
-        return p, p_h, -p_value
-    elif r_value < p_value and r_value < ag_value:
-        return r, r_h, -r_value
-    else:
-        return ag, ag_h, -ag_value
+        to_tr = Delta / jnp.linalg.norm(ag_h)
+        to_bound, _ = step_size_to_bound(x, ag, lb, ub)
+        ag_stride = jnp.where(to_bound < to_tr, theta * to_bound, to_tr)
+
+        a, b = build_quadratic_1d(JorH, g_h, ag_h, diag=diag_h)
+        ag_stride, ag_value = minimize_quadratic_1d(a, b, 0, ag_stride)
+        ag_h *= ag_stride
+        ag *= ag_stride
+
+        values = jnp.array([p_value, r_value, ag_value])
+        steps = jnp.array([p, r, ag])
+        steps_h = jnp.array([p_h, r_h, ag_h])
+        idx = jnp.nanargmin(values)
+        return steps[idx], steps_h[idx], -values[idx]
+
+    return cond(in_bounds(x + p, lb, ub), inbounds_true, inbounds_false, p, p_h)
 
 
+@jit
 def build_quadratic_1d_jac(J, g, s, diag=None, s0=None):
     """Parameterize a multivariate quadratic function along a line.
 
@@ -305,6 +329,7 @@ def build_quadratic_1d_jac(J, g, s, diag=None, s0=None):
         return a, b
 
 
+@jit
 def build_quadratic_1d_hess(H, g, s, diag=None, s0=None):
     """Parameterize a multivariate quadratic function along a line.
 
@@ -355,6 +380,7 @@ def build_quadratic_1d_hess(H, g, s, diag=None, s0=None):
         return a, b
 
 
+@jit
 def minimize_quadratic_1d(a, b, lb, ub, c=0):
     """Minimize a 1-D quadratic function subject to bounds.
 
@@ -368,16 +394,16 @@ def minimize_quadratic_1d(a, b, lb, ub, c=0):
         Minimum value.
     """
     t = [lb, ub]
-    if a != 0:
-        extremum = -0.5 * b / a
-        if lb < extremum < ub:
-            t.append(extremum)
+    extremum = -0.5 * b / a
+    # need to split double sided inequality here to work with jax
+    t.append(jnp.where((lb < extremum) & (extremum < ub), extremum, jnp.nan))
     t = jnp.asarray(t)
     y = t * (a * t + b) + c
-    min_index = jnp.argmin(y)
+    min_index = jnp.nanargmin(y)
     return t[min_index], y[min_index]
 
 
+@jit
 def intersect_trust_region(x, s, Delta):
     """Find the intersection of a line with the boundary of a trust region.
 
@@ -390,26 +416,18 @@ def intersect_trust_region(x, s, Delta):
     t_neg, t_pos : tuple of float
         Negative and positive roots.
 
-    Raises
-    ------
-    AssertionError
-        If `s` is zero or `x` is not within the trust region.
     """
     a = jnp.dot(s, s)
-    assert a != 0, "`s` is zero."
-
     b = jnp.dot(x, s)
-
-    c = jnp.dot(x, x) - Delta**2
-    assert c <= 0, f"`x` is not within the trust region, c={c}"
-
+    # c should always be <= 0, but sometimes rounding error makes it positive
+    # so we clip it
+    c = jnp.minimum(jnp.dot(x, x) - Delta**2, 0)
     d = jnp.sqrt(b * b - a * c)  # Root from one fourth of the discriminant.
 
     q = -(b + jnp.sign(b) * jnp.abs(d))
     t1 = q / a
     t2 = c / q
-
-    if t1 < t2:
-        return t1, t2
-    else:
-        return t2, t1
+    t1, t2 = jnp.sort(jnp.array([t1, t2]))
+    # one root should be positive, one negative, but rounding error
+    # can throw that off, so we clip
+    return jnp.minimum(t1, 0), jnp.maximum(t2, 0)

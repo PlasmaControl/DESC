@@ -34,7 +34,6 @@ optimizer = lsq-exact
 objective = vacuum
 bdry_mode = lcfs
 spectral_indexing = ansi
-node_pattern = jacobi
 
 # pressure and rotational transform/current profiles
 l:   0	p =   0.00000000E+00	c =   0.00000000E+00

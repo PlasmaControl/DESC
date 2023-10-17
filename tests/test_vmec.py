@@ -5,7 +5,6 @@ import pytest
 from netCDF4 import Dataset
 
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
-from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 from desc.vmec import VMECIO
@@ -182,7 +181,7 @@ class TestVMECIO:
                 [1, 3, 3],
             ]
         )
-        np.testing.assert_allclose(modes[~idx], sym_modes)
+        np.testing.assert_allclose(np.delete(modes, idx, axis=0), sym_modes)
 
     @pytest.mark.unit
     def test_fourier_to_zernike(self):
@@ -276,10 +275,10 @@ def test_vmec_load_profiles(TmpDir):
     data_iota = eq_iota.compute(["iota", "current"], grid=grid)
     data_current = eq_current.compute(["iota", "current"], grid=grid)
 
-    iota_iota = compress(grid, data_iota["iota"])
-    iota_current = compress(grid, data_current["iota"])
-    current_iota = compress(grid, data_iota["current"])
-    current_current = compress(grid, data_current["current"])
+    iota_iota = grid.compress(data_iota["iota"])
+    iota_current = grid.compress(data_current["iota"])
+    current_iota = grid.compress(data_iota["current"])
+    current_current = grid.compress(data_current["current"])
 
     np.testing.assert_allclose(iota_iota, iota_current, rtol=2e-2)
     np.testing.assert_allclose(current_current, current_iota, rtol=2e-2)
@@ -313,6 +312,56 @@ def test_load_then_save(TmpDir):
     file2.close()
 
 
+@pytest.mark.slow
+@pytest.mark.unit
+def test_axis_surf_after_load():
+    """Tests if loading VMEC solution preserves axis and surface."""
+    input_path = "./tests/inputs/wout_HELIOTRON.nc"
+
+    eq = VMECIO.load(input_path, profile="iota")
+    assert eq.is_nested()
+    f = Dataset(input_path)
+
+    surf1 = eq.surface
+    surf2 = eq.get_surface_at(rho=1)
+    axis1 = eq.axis
+    axis2 = eq.get_axis()
+
+    np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn, atol=1e-14)
+    np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn, atol=1e-14)
+
+    np.testing.assert_allclose(axis1.R_n, axis2.R_n, atol=1e-14)
+    np.testing.assert_allclose(axis1.Z_n, axis2.Z_n, atol=1e-14)
+
+    # surface
+    rm, rn, Rb_cs, Rb_cc = ptolemy_identity_rev(
+        surf1.R_basis.modes[:, 1],
+        surf1.R_basis.modes[:, 2],
+        np.where(surf1.R_basis.modes[:, 1] < 0, -surf1.R_lmn, surf1.R_lmn)[None, :],
+    )
+
+    zm, zn, Zb_cs, Zb_cc = ptolemy_identity_rev(
+        surf1.Z_basis.modes[:, 1],
+        surf1.Z_basis.modes[:, 2],
+        np.where(surf1.Z_basis.modes[:, 1] < 0, -surf1.Z_lmn, surf1.Z_lmn)[None, :],
+    )
+
+    rmnc = f.variables["rmnc"][:].filled()
+    zmns = f.variables["zmns"][:].filled()
+
+    # axis
+    rax_cc = f.variables["raxis_cc"][:].filled()
+    zax_cs = -f.variables["zaxis_cs"][:].filled()
+
+    np.testing.assert_allclose(rmnc[-1], Rb_cc.squeeze(), atol=1e-14)
+    np.testing.assert_allclose(zmns[-1], Zb_cs.squeeze(), atol=1e-14)
+
+    np.testing.assert_allclose(rax_cc, axis1.R_n, atol=1e-14)
+    np.testing.assert_allclose(zax_cs[1:][::-1], axis1.Z_n, atol=1e-14)
+
+    f.close()
+
+
 @pytest.mark.unit
 def test_vmec_save_asym(TmpDir):
     """Tests that saving a non-symmetric equilibrium runs without errors."""
@@ -322,6 +371,22 @@ def test_vmec_save_asym(TmpDir):
 
 
 @pytest.mark.unit
+def test_vmec_save_kinetic(TmpDir):
+    """Tests that saving an equilibrium with kinetic profiles runs without errors."""
+    output_path = str(TmpDir.join("output.nc"))
+    eq = Equilibrium(
+        L=2,
+        M=2,
+        N=2,
+        NFP=3,
+        electron_density=np.array([[0, 1], [2, -1]]),
+        electron_temperature=np.array([[0, 1], [2, -1]]),
+        sym=True,
+    )
+    VMECIO.save(eq, output_path)
+
+
+@pytest.mark.regression
 @pytest.mark.slow
 def test_vmec_save_1(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""
@@ -506,7 +571,7 @@ def test_vmec_save_1(VMEC_save):
     )
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
 def test_vmec_save_2(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""

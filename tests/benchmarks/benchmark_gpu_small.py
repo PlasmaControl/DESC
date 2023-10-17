@@ -15,16 +15,7 @@ from desc.perturbations import perturb
 from desc.transform import Transform
 
 
-@pytest.fixture(scope="session")
-def TmpDir(tmpdir_factory):
-    """Create a temporary directory to store testing files."""
-    dir_path = tmpdir_factory.mktemp("test_results")
-    return dir_path
-
-
-@pytest.mark.benchmark(
-    min_rounds=1, max_time=50, disable_gc=False, warmup=True, warmup_iterations=50
-)
+@pytest.mark.benchmark()
 def test_build_transform_fft_lowres(benchmark):
     """Test time to build a transform (after compilation) for low resolution."""
 
@@ -37,10 +28,10 @@ def test_build_transform_fft_lowres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark(build)
+    benchmark.pedantic(build, iterations=1, rounds=100)
 
 
-@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
+@pytest.mark.benchmark()
 def test_build_transform_fft_midres(benchmark):
     """Test time to build a transform (after compilation) for mid resolution."""
 
@@ -53,10 +44,10 @@ def test_build_transform_fft_midres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=50)
+    benchmark.pedantic(build, iterations=1, rounds=100)
 
 
-@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
+@pytest.mark.benchmark()
 def test_build_transform_fft_highres(benchmark):
     """Test time to build a transform (after compilation) for high resolution."""
 
@@ -69,10 +60,10 @@ def test_build_transform_fft_highres(benchmark):
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
 
-    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
+    benchmark.pedantic(build, iterations=1, rounds=100)
 
 
-@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
+@pytest.mark.benchmark()
 def test_equilibrium_init_lowres(benchmark):
     """Test time to create an equilibrium for low resolution."""
 
@@ -82,10 +73,10 @@ def test_equilibrium_init_lowres(benchmark):
         N = 5
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
+    benchmark.pedantic(build, iterations=1, rounds=100)
 
 
-@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
+@pytest.mark.benchmark()
 def test_equilibrium_init_medres(benchmark):
     """Test time to create an equilibrium for medium resolution."""
 
@@ -95,10 +86,10 @@ def test_equilibrium_init_medres(benchmark):
         N = 15
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
+    benchmark.pedantic(build, iterations=1, rounds=100)
 
 
-@pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
+@pytest.mark.benchmark()
 def test_equilibrium_init_highres(benchmark):
     """Test time to create an equilibrium for high resolution."""
 
@@ -108,30 +99,7 @@ def test_equilibrium_init_highres(benchmark):
         N = 25
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
-
-
-@pytest.mark.slow
-@pytest.mark.benchmark
-def test_objective_compile_heliotron(benchmark):
-    """Benchmark compiling objective."""
-
-    def setup():
-        eq = desc.examples.get("HELIOTRON")
-        objective = get_equilibrium_objective()
-        objective.build(eq)
-        args = (
-            objective,
-            eq,
-        )
-        kwargs = {}
-        return args, kwargs
-
-    def run(objective, eq):
-        objective.compile()
-
-    benchmark.pedantic(run, setup=setup, rounds=5, iterations=1)
-    return None
+    benchmark.pedantic(build, iterations=1, rounds=100)
 
 
 @pytest.mark.slow
@@ -141,7 +109,7 @@ def test_objective_compile_dshape_current(benchmark):
 
     def setup():
         eq = desc.examples.get("DSHAPE_current")
-        objective = get_equilibrium_objective()
+        objective = get_equilibrium_objective(eq)
         objective.build(eq)
         args = (
             objective,
@@ -153,8 +121,7 @@ def test_objective_compile_dshape_current(benchmark):
     def run(objective, eq):
         objective.compile()
 
-    benchmark.pedantic(run, setup=setup, rounds=5, iterations=1)
-    return None
+    benchmark.pedantic(run, setup=setup, rounds=20, iterations=1)
 
 
 @pytest.mark.slow
@@ -164,37 +131,16 @@ def test_objective_compile_atf(benchmark):
 
     def setup():
         eq = desc.examples.get("ATF")
-        objective = get_equilibrium_objective()
+        objective = get_equilibrium_objective(eq)
         objective.build(eq)
-        args = (
-            objective,
-            eq,
-        )
+        args = (objective, eq)
         kwargs = {}
         return args, kwargs
 
     def run(objective, eq):
         objective.compile()
 
-    benchmark.pedantic(run, setup=setup, rounds=5, iterations=1)
-    return None
-
-
-@pytest.mark.slow
-@pytest.mark.benchmark
-def test_objective_compute_heliotron(benchmark):
-    """Benchmark computing objective."""
-    eq = desc.examples.get("HELIOTRON")
-    objective = get_equilibrium_objective()
-    objective.build(eq)
-    objective.compile()
-    x = objective.x(eq)
-
-    def run(x):
-        objective.compute_scaled_error(x).block_until_ready()
-
-    benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
-    return None
+    benchmark.pedantic(run, setup=setup, rounds=20, iterations=1)
 
 
 @pytest.mark.slow
@@ -202,16 +148,15 @@ def test_objective_compute_heliotron(benchmark):
 def test_objective_compute_dshape_current(benchmark):
     """Benchmark computing objective."""
     eq = desc.examples.get("DSHAPE_current")
-    objective = get_equilibrium_objective()
+    objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
-    def run(x):
-        objective.compute_scaled_error(x).block_until_ready()
+    def run(x, objective):
+        objective.compute_scaled_error(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
-    return None
+    benchmark.pedantic(run, args=(x, objective), rounds=100, iterations=1)
 
 
 @pytest.mark.slow
@@ -219,33 +164,15 @@ def test_objective_compute_dshape_current(benchmark):
 def test_objective_compute_atf(benchmark):
     """Benchmark computing objective."""
     eq = desc.examples.get("ATF")
-    objective = get_equilibrium_objective()
+    objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
-    def run(x):
-        objective.compute_scaled_error(x).block_until_ready()
+    def run(x, objective):
+        objective.compute_scaled_error(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
-    return None
-
-
-@pytest.mark.slow
-@pytest.mark.benchmark
-def test_objective_jac_heliotron(benchmark):
-    """Benchmark computing jacobian."""
-    eq = desc.examples.get("HELIOTRON")
-    objective = get_equilibrium_objective()
-    objective.build(eq)
-    objective.compile()
-    x = objective.x(eq)
-
-    def run(x):
-        objective.jac_scaled(x).block_until_ready()
-
-    benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
-    return None
+    benchmark.pedantic(run, args=(x, objective), rounds=100, iterations=1)
 
 
 @pytest.mark.slow
@@ -253,16 +180,15 @@ def test_objective_jac_heliotron(benchmark):
 def test_objective_jac_dshape_current(benchmark):
     """Benchmark computing jacobian."""
     eq = desc.examples.get("DSHAPE_current")
-    objective = get_equilibrium_objective()
+    objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
     def run(x):
-        objective.jac_scaled(x).block_until_ready()
+        objective.jac_scaled(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
-    return None
+    benchmark.pedantic(run, args=(x,), rounds=25, iterations=1)
 
 
 @pytest.mark.slow
@@ -270,16 +196,15 @@ def test_objective_jac_dshape_current(benchmark):
 def test_objective_jac_atf(benchmark):
     """Benchmark computing jacobian."""
     eq = desc.examples.get("ATF")
-    objective = get_equilibrium_objective()
+    objective = get_equilibrium_objective(eq)
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
 
     def run(x):
-        objective.jac_scaled(x).block_until_ready()
+        objective.jac_scaled(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
-    return None
+    benchmark.pedantic(run, args=(x,), rounds=25, iterations=1)
 
 
 @pytest.mark.slow
@@ -289,11 +214,11 @@ def test_perturb_1(benchmark):
 
     def setup():
         eq = desc.examples.get("SOLOVEV")
-        objective = get_equilibrium_objective()
-        constraints = get_fixed_boundary_constraints()
+        objective = get_equilibrium_objective(eq)
+        objective.build(eq)
+        constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
-        objective.build(eq)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
         deltas = {"p_l": dp}
 
@@ -311,8 +236,7 @@ def test_perturb_1(benchmark):
         }
         return args, kwargs
 
-    benchmark.pedantic(perturb, setup=setup, rounds=5, iterations=1)
-    return None
+    benchmark.pedantic(perturb, setup=setup, rounds=10, iterations=1)
 
 
 @pytest.mark.slow
@@ -322,11 +246,11 @@ def test_perturb_2(benchmark):
 
     def setup():
         eq = desc.examples.get("SOLOVEV")
-        objective = get_equilibrium_objective()
-        constraints = get_fixed_boundary_constraints()
+        objective = get_equilibrium_objective(eq)
+        objective.build(eq)
+        constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
-        objective.build(eq)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
         deltas = {"p_l": dp}
 
@@ -344,5 +268,4 @@ def test_perturb_2(benchmark):
         }
         return args, kwargs
 
-    benchmark.pedantic(perturb, setup=setup, rounds=5, iterations=1)
-    return None
+    benchmark.pedantic(perturb, setup=setup, rounds=10, iterations=1)

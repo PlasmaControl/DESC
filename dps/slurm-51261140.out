@@ -1,0 +1,86 @@
+DESC version 0+untagged.5942.g2ab68ee,using JAX backend, jax version=0.4.2, jaxlib version=0.4.1, dtype=float64
+Using device: NVIDIA A100-SXM4-80GB (id=0), with 80.00 GB available memory
+Time from beginning until here: 26.743419647216797s
+Time to build and compute: 107.73564195632935s
+*************** SOLUTION .compute() ***************
+5.285227425074597
+***************************************************
+Building objective: Particle Tracer
+*************** ObjFunction.compile() ***************
+Compiling objective function and derivatives: ['Particle Tracer']
+*****************************************************
+Time to build and compile: 223.07713913917542s
+Timer: Linear constraint projection build = 37.2 sec
+Building objective: force
+Precomputing transforms
+Timer: Precomputing transforms = 3.17 sec
+Timer: Objective build = 4.10 sec
+Timer: Linear constraint projection build = 14.9 sec
+Compiling objective function and derivatives: ['Particle Tracer']
+Timer: Objective compilation time = 42.6 sec
+Timer: Gradient compilation time = 2.89 min
+Timer: Total compilation time = 3.60 min
+Compiling objective function and derivatives: ['force']
+Timer: Objective compilation time = 2.48 sec
+Timer: Jacobian compilation time = 10.5 sec
+Timer: Total compilation time = 13.0 sec
+Number of parameters: 6319
+Number of objectives: 1
+Number of equality constraints: 20776
+Number of inequality constraints: 0
+Starting optimization
+Using method: fmin-auglag-bfgs
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality    Constr viol.   Penalty param  max(|mltplr|) 
+       0              1          1.397e+01                                    7.789e+05      9.756e-08      1.000e+01      0.000e+00   
+       1              2          1.397e+01      0.000e+00      0.000e+00      7.789e+05      9.756e-08      1.000e+01      0.000e+00   
+       2              3          1.397e+01      0.000e+00      0.000e+00      7.789e+05      9.756e-08      1.000e+01      0.000e+00   
+       3              4          1.397e+01      0.000e+00      0.000e+00      7.789e+05      9.756e-08      1.000e+01      0.000e+00   
+Warning: Maximum number of iterations has been exceeded.
+         Current function value: 1.397e+01
+         Constraint violation: 9.756e-08
+         Total delta_x: 0.000e+00
+         Iterations: 3
+         Function evaluations: 4
+         Gradient evaluations: 1
+         Hessian evaluations: 0
+Timer: Solution time = 14.8 min
+Timer: Avg time per step = 3.70 min
+Start of solver
+Total (sum of squares):  1.397e+01, 
+Maximum absolute System solution for initial conditions
+Minimum absolute System solution for initial conditions
+Average absolute System solution for initial conditions
+Maximum absolute System solution for initial conditions(normalized)
+Minimum absolute System solution for initial conditions(normalized)
+Average absolute System solution for initial conditions(normalized)
+Maximum absolute Force error:  5.811e+02 (N)
+Minimum absolute Force error:  1.643e-03 (N)
+Average absolute Force error:  2.379e+01 (N)
+Maximum absolute Force error:  9.328e-07 (normalized)
+Minimum absolute Force error:  2.637e-12 (normalized)
+Average absolute Force error:  3.820e-08 (normalized)
+R boundary error:  0.000e+00 (m)
+Z boundary error:  0.000e+00 (m)
+Fixed-pressure profile error:  0.000e+00 (Pa)
+Fixed-iota profile error:  0.000e+00 (dimensionless)
+Fixed-Psi error:  0.000e+00 (Wb)
+End of solver
+Total (sum of squares):  1.397e+01, 
+Maximum absolute System solution for initial conditions
+Minimum absolute System solution for initial conditions
+Average absolute System solution for initial conditions
+Maximum absolute System solution for initial conditions(normalized)
+Minimum absolute System solution for initial conditions(normalized)
+Average absolute System solution for initial conditions(normalized)
+Maximum absolute Force error:  5.811e+02 (N)
+Minimum absolute Force error:  1.643e-03 (N)
+Average absolute Force error:  2.379e+01 (N)
+Maximum absolute Force error:  9.328e-07 (normalized)
+Minimum absolute Force error:  2.637e-12 (normalized)
+Average absolute Force error:  3.820e-08 (normalized)
+R boundary error:  1.776e-15 (m)
+Z boundary error:  0.000e+00 (m)
+Fixed-pressure profile error:  0.000e+00 (Pa)
+Fixed-iota profile error:  0.000e+00 (dimensionless)
+Fixed-Psi error:  0.000e+00 (Wb)
+Time to optimize: 1513.847373008728s

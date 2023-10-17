@@ -1,0 +1,9 @@
+DESC version 0+untagged.5938.g4e98eb5.dirty,using JAX backend, jax version=0.4.2, jaxlib version=0.4.1, dtype=float64
+Using device: NVIDIA A100-PCIE-40GB (id=0), with 40.00 GB available memory
+/home/jb8985/DESC/desc/io/hdf5_io.py:125: RuntimeWarning: Save attribute '_anisotropy' was not loaded.
+  warnings.warn(
+Traceback (most recent call last):
+  File "/home/jb8985/DESC/dps/compare_tracing.py", line 22, in <module>
+    opt_eq = desc.io.load(opt_filename)[-1]
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^
+TypeError: 'Equilibrium' object is not subscriptable

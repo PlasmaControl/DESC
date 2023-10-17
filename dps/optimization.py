@@ -15,11 +15,11 @@ initial_time = timet()
 
 # filename = "input.final_freeb_output.h5"
 # filename = "DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5"
-filename = "input.LandremanPaul2021_QA_scaled_output.h5"
+filename = "ellipse_higherPsi.h5"
 savename = "optimized_" + filename
 
 # Load Equilibrium
-eq = desc.io.load(filename)[-1]
+eq = desc.io.load(filename)
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 # eq.solve()

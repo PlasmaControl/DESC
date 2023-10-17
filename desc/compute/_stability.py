@@ -20,8 +20,6 @@ from desc.grid import Grid
 from .data_index import register_compute_fun
 from .utils import dot, surface_integrals_map
 
-from matplotlib import pyplot as plt
-
 
 @register_compute_fun(
     name="D_shear",
@@ -250,7 +248,8 @@ def _gamma_ideal_ballooning_FD1(eq):
 
     kappa = b dot grad b
     g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
-    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi * (b cross kappa) dot grad alpha/ B**2,
+    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
+        * (b cross kappa) dot grad alpha/ B**2,
     f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta)
 
     Parameters
@@ -270,17 +269,17 @@ def _gamma_ideal_ballooning_FD1(eq):
     data_eq = eq.compute(eq_keys)
 
     iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
-    psi  = data_eq["psi"] 
+    psi = data_eq["psi"]
     sign_psi = np.sign(psi[-1])
     sign_iota = np.sign(iota[-1])
 
     a_N = data_eq["a"]
-    B_N = 2*sign_psi*psi[-1]/a_N**2
+    B_N = 2 * sign_psi * psi[-1] / a_N**2
 
     nperiod = 3
     # Number of toroidal turns
     ntor = 2 * nperiod - 1
-    N = (2 * eq.M_grid * eq.N_grid + 1) * ntor
+    N = 2 * (2 * eq.M_grid * eq.N_grid) * ntor + 1
 
     rho_full = np.ones(
         int(N * ns * nalpha),
@@ -319,27 +318,44 @@ def _gamma_ideal_ballooning_FD1(eq):
         "cvdrift",
         "cvdrift0",
         "|B|",
-        "sqrt(g)_PEST",
+        "B^zeta",
         "p_r",
         "psi_r",
     ]
 
     data = eq.compute(data_names, grid)
 
-    # sqrt(g)_PEST is 1/(B dot grad zeta)
-    gradpar = 1/(data["sqrt(g)_PEST"] * data["|B|"])
-    gds2 = rho ** 2 * (data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"])
+    gradpar = data["B^zeta"] / data["|B|"]
+    gds2 = rho**2 * (
+        data["g^aa"]
+        - 2 * sign_iota * zeta_0 * data["g^ra"]
+        + zeta_0**2 * data["g^rr"]
+    )
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
-    f = a_N * B_N**3 * gds2 / data["|B|"] ** 2 * data["sqrt(g)_PEST"]
-    g = a_N ** 3 * B_N * gds2 / data["|B|"] * gradpar
+    f = a_N * B_N**3 * gds2 / data["|B|"] ** 3 * 1 / gradpar
+    g = a_N**3 * B_N * gds2 / data["|B|"] * gradpar
     g_half = (g[1:] + g[:-1]) / 2
-    c = a_N * data["sqrt(g)_PEST"] * 2 * rho * sign_psi * dpdpsi * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
-    h = 2 * ntor * np.pi / N
+    c = (
+        a_N
+        * 2
+        / data["B^zeta"]
+        * rho
+        * sign_psi
+        * dpdpsi
+        * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
+    )
+    h = 2 * ntor * np.pi / (N - 1)
 
-    A = np.diag(g_half[1:-1] / f[2:-1] * 1 / h**2, -1) + np.diag(-(g_half[1:] + g_half[:-1]) / f[1:-1] * 1 / h**2 + c[1:-1] / f[1:-1], 0) + np.diag(g_half[1:-1] / f[1:-2] * 1 / h**2, 1)
+    A = (
+        np.diag(g_half[1:-1] / f[2:-1] * 1 / h**2, -1)
+        + np.diag(
+            -(g_half[1:] + g_half[:-1]) / f[1:-1] * 1 / h**2 + c[1:-1] / f[1:-1], 0
+        )
+        + np.diag(g_half[1:-1] / f[1:-2] * 1 / h**2, 1)
+    )
 
-    w, v = scipy.sparse.linalg.eigs(A, k=1, sigma = 5.0, OPpart='r')
+    w, v = scipy.sparse.linalg.eigs(A, k=1, sigma=2.0, OPpart="r")
 
     # Variational refinement here
     X = np.zeros((N,))
@@ -362,8 +378,6 @@ def _gamma_ideal_ballooning_FD1(eq):
     Y1 = f * X**2
 
     lam = simps(Y0) / simps(Y1)
-    print(f"w = {w}, lam = {lam}")
-    plt.plot(zeta, X); plt.show()
 
     return lam
 
@@ -383,7 +397,8 @@ def _gamma_ideal_ballooning_FD2(eq):
     bmag = B/B_N,
     kappa = b dot grad b
     g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
-    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi * (b cross kappa) dot grad alpha/ B**2,
+    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
+        * (b cross kappa) dot grad alpha/ B**2,
     f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta)
 
     Parameters
@@ -403,18 +418,17 @@ def _gamma_ideal_ballooning_FD2(eq):
     data_eq = eq.compute(eq_keys)
 
     iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
-    psi  = data_eq["psi"] 
+    psi = data_eq["psi"]
     sign_psi = np.sign(psi[-1])
     sign_iota = np.sign(iota[-1])
 
     a_N = data_eq["a"]
-    B_N = 2*sign_psi*psi[-1]/a_N**2
-
+    B_N = 2 * sign_psi * psi[-1] / a_N**2
 
     nperiod = 3
     # Number of toroidal turns
     ntor = 2 * nperiod - 1
-    N = (2 * eq.M_grid * eq.N_grid + 1) * ntor
+    N = 2 * (2 * eq.M_grid * eq.N_grid) * ntor + 1
 
     rho_full = np.ones(
         int(N * ns * nalpha),
@@ -451,60 +465,197 @@ def _gamma_ideal_ballooning_FD2(eq):
         "g^ra",
         "g^rr",
         "g^aa_z",
+        "g^aa_t",
         "g^aa_zz",
+        "g^aa_tt",
+        "g^aa_tz",
         "g^ra_z",
+        "g^ra_t",
         "g^ra_zz",
+        "g^ra_tt",
+        "g^ra_tz",
         "g^rr_z",
+        "g^rr_t",
         "g^rr_zz",
+        "g^rr_tt",
+        "g^rr_tz",
         "cvdrift",
         "cvdrift0",
         "|B|",
         "|B|_z",
+        "|B|_t",
         "|B|_zz",
-        "sqrt(g)_PEST",
-        "sqrt(g)_PEST_z",
-        "sqrt(g)_PEST_zz",
+        "|B|_tt",
+        "|B|_tz",
+        "B^zeta",
+        "B^zeta_t",
+        "B^zeta_z",
+        "B^zeta_tt",
+        "B^zeta_zz",
+        "B^zeta_tz",
         "p_r",
         "psi_r",
     ]
 
     data = eq.compute(data_names, grid)
 
-    # sqrt(g)_PEST is (B dot grad zeta)^-1
-    gradpar = 1/(data["sqrt(g)_PEST"] * data["|B|"])
-    gradpar_z = -(data["sqrt(g)_PEST_z"] * data["|B|"] + data["sqrt(g)_PEST"] * data["|B|_z"])/(data["sqrt(g)_PEST"] * data["|B|"])**2
-    gradpar_zz = 2 * (data["sqrt(g)_PEST_z"] * data["|B|"] + data["sqrt(g)_PEST"] * data["|B|_z"])**2/(data["sqrt(g)_PEST"] * data["|B|"])**3 - (data["sqrt(g)_PEST_zz"] * data["|B|"] + 2 * data["sqrt(g)_PEST_z"] * data["|B|_z"] + data["sqrt(g)_PEST"] * data["|B|_zz"])/(data["sqrt(g)_PEST"] * data["|B|"])**2
+    temp_fac1 = 1 / (1 + data["lambda_t"])
+    temp_fac2 = (iota - data["lambda_z"]) * temp_fac1
 
-    gds2 = rho**2 * data["g^aa"] + zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
-    gds2_z = rho**2 * data["g^aa_z"] + zeta_0 * data["g^ra_z"] + zeta_0**2 * data["g^rr_z"]
-    gds2_zz = rho**2 * data["g^aa_zz"] + zeta_0 * data["g^ra_zz"] + zeta_0**2 * data["g^rr_zz"]
+    g_sup_rr_z0 = data["g^rr_z"] + data["g^rr_t"] * temp_fac2
+    g_sup_rr_zz0 = (
+        data["g^rr_zz"]
+        + 2 * data["g^rr_tz"] * temp_fac2
+        - data["g^rr_t"]
+        * (
+            data["lambda_zz"] * temp_fac1
+            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
+            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
+        )
+        + data["g^rr_tt"] * temp_fac2**2
+    )
+
+    g_sup_ra_z0 = data["g^ra_z"] + data["g^ra_t"] * temp_fac2
+    g_sup_ra_zz0 = (
+        data["g^ra_zz"]
+        + 2 * data["g^ra_tz"] * temp_fac2
+        - data["g^ra_t"]
+        * (
+            data["lambda_zz"] * temp_fac1
+            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
+            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
+        )
+        + data["g^ra_tt"] * temp_fac2**2
+    )
+
+    g_sup_aa_z0 = data["g^aa_z"] + data["g^aa_t"] * temp_fac2
+    g_sup_aa_zz0 = (
+        data["g^aa_zz"]
+        + 2 * data["g^aa_tz"] * temp_fac2
+        - data["g^aa_t"]
+        * (
+            data["lambda_zz"] * temp_fac1
+            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
+            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
+        )
+        + data["g^aa_tt"] * temp_fac2**2
+    )
+
+    modB = data["|B|"]
+    modB_z0 = data["|B|_z"] + data["|B|_t"] * temp_fac2
+    modB_zz0 = (
+        data["|B|_zz"]
+        + 2 * data["|B|_tz"] * temp_fac2
+        - data["|B|_t"]
+        * (
+            data["lambda_zz"] * temp_fac1
+            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
+            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
+        )
+        + data["|B|_tt"] * temp_fac2**2
+    )
+
+    B_sup_zeta = data["B^zeta"]
+    B_sup_zeta_z0 = data["B^zeta_z"] + temp_fac2 * data["B^zeta_t"]
+    B_sup_zeta_zz0 = (
+        data["B^zeta_zz"]
+        + 2 * data["B^zeta_tz"] * temp_fac2
+        - data["B^zeta_t"]
+        * (
+            data["lambda_zz"] * temp_fac1
+            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
+            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
+        )
+        + data["B^zeta_tt"] * temp_fac2**2
+    )
+
+    gradpar = B_sup_zeta / modB
+    gradpar_z = B_sup_zeta_z0 / modB - modB_z0 * B_sup_zeta / modB**2
+    gradpar_zz = (
+        B_sup_zeta_zz0 / modB
+        - 2 * modB_z0 * B_sup_zeta_z0 / modB**2
+        - modB_z0 * B_sup_zeta / modB**2
+        + modB_zz0 * B_sup_zeta / modB**2
+    )
+
+    gds2 = data["g^aa"] + 2 * zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
+    gds2_z = rho**2 * (
+        g_sup_aa_z0 - 2 * sign_iota * zeta_0 * g_sup_ra_z0 + zeta_0**2 * g_sup_rr_z0
+    )
+    gds2_zz = rho**2 * (
+        g_sup_aa_zz0
+        - 2 * sign_iota * zeta_0 * g_sup_ra_zz0
+        + zeta_0**2 * g_sup_rr_zz0
+    )
 
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
-    f = a_N * B_N**3 * gds2 / data["|B|"] ** 2 * data["sqrt(g)_PEST"]
-    g = a_N ** 3 * B_N * gds2 / data["|B|"] * gradpar
-    g_z = a_N ** 3 * B_N * ((gds2_z * gradpar + gds2 * gradpar_z) / data["|B|"] - gds2 * gradpar * data["|B|_z"]/ data["|B|"]**2)
-    g_zz = a_N ** 3 * B_N * ((gds2_zz * gradpar + 2 * gds2_z * gradpar_z + gds2 * gradpar_zz) / data["|B|"] -(gds2_z * gradpar + gds2 * gradpar_z) * data["|B|_z"] / data["|B|"]**2  - (gds2_z * gradpar * data["|B|_z"] + gds2 * gradpar_z * data["|B|_z"] + gds2 * gradpar * data["|B|_zz"]) / data["|B|"]**2  + 2 * (gds2_z * gradpar * data["|B|_z"]**2)/ data["|B|"]**3)
+    f = a_N * B_N**3 * gds2 / modB**3 * 1 / gradpar
+    g = a_N**3 * B_N * gds2 / modB * gradpar
+    g_z = (
+        a_N**3
+        * B_N
+        * (
+            (gds2_z * gradpar + gds2 * gradpar_z) / modB
+            - gds2 * gradpar * modB_z0 / modB**2
+        )
+    )
+    g_zz = (
+        a_N**3
+        * B_N
+        * (
+            (gds2_zz * gradpar + 2 * gds2_z * gradpar_z + gds2 * gradpar_zz) / modB
+            - (gds2_z * gradpar + gds2 * gradpar_z) * modB_z0 / modB**2
+            - (
+                gds2_z * gradpar * modB_z0
+                + gds2 * gradpar_z * modB_z0
+                + gds2 * gradpar * modB_zz0
+            )
+            / modB**2
+            + 2 * (gds2_z * gradpar * modB_z0**2) / modB**3
+        )
+    )
 
-    c = a_N * data["sqrt(g)_PEST"] * 2 * rho * sign_psi * dpdpsi * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
+    c = (
+        a_N
+        * 2
+        / data["B^zeta"]
+        * rho
+        * sign_psi
+        * dpdpsi
+        * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
+    )
 
     V = c / g + 1 / 4 * g_z**2 / g**2 - 1 / 2 * g_zz / g
 
-    # grid spacing
-    h = 2 * ntor * np.pi / N
+    b = f / g
 
-    sub_diag = 1 / h**2 * np.ones(N - 3,)
+    # grid spacing
+    h = 2 * ntor * np.pi / (N - 1)
+
+    sub_diag = (
+        1
+        / h**2
+        * np.ones(
+            N - 3,
+        )
+    )
     sup_diag = sub_diag
-    diag = -2 / h**2 * np.ones(N - 2, )
+    diag = (
+        -2
+        / h**2
+        * np.ones(
+            N - 2,
+        )
+    )
 
     D2 = np.diag(sub_diag, -1) + np.diag(diag + V[1:-1], 0) + np.diag(sup_diag, 1)
-    
 
     b = f / g
     M = np.diag(b[1:-1], 0)
 
-    vguess = np.exp(-np.abs(zeta[1:-1])/2)
-    w, v = scipy.sparse.linalg.eigs(D2, k=1, M=M, sigma = 10.0, v0 = vguess, OPpart='r')
+    vguess = np.exp(-np.abs(zeta[1:-1]) / 2)
+    w, v = scipy.sparse.linalg.eigs(D2, k=1, M=M, sigma=2.0, v0=vguess, OPpart="r")
 
     # variational refinement here
     X = np.zeros((N,))
@@ -526,8 +677,6 @@ def _gamma_ideal_ballooning_FD2(eq):
     Y0 = -1 * dX**2 + V * X**2
     Y1 = b * X**2
     lam = simps(Y0) / simps(Y1)
-    print(f"w = {w}, lam = {lam}")
-    plt.plot(zeta, X); plt.show()
 
     return lam
 
@@ -546,7 +695,8 @@ def _gamma_ideal_ballooning_Fourier(eq):
 
     kappa = b dot grad b
     g = a_N^3 * B_N* (b dot grad zeta) * |grad alpha|^2 / B,
-    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi * (b cross kappa) dot grad alpha/ B**2,
+    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
+        * (b cross kappa) dot grad alpha/ B**2,
     f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta)
 
     Parameters
@@ -567,17 +717,16 @@ def _gamma_ideal_ballooning_Fourier(eq):
     data_eq = eq.compute(eq_keys)
 
     iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
-    psi  = data_eq["psi"] 
+    psi = data_eq["psi"]
     sign_psi = np.sign(psi[-1])
     sign_iota = np.sign(iota[-1])
 
     a_N = data_eq["a"]
-    B_N = 2*sign_psi*psi[-1]/a_N**2
-
+    B_N = 2 * sign_psi * psi[-1] / a_N**2
 
     nperiod = 3
     ntor = 2 * nperiod - 1  # Number of toroidal turns
-    N = int((2 * eq.M_grid * eq.N_grid + 1) * ntor)
+    N = int((2 * eq.M_grid * eq.N_grid) * ntor)
 
     rho_full = np.ones(
         int(N * ns * nalpha),
@@ -614,42 +763,166 @@ def _gamma_ideal_ballooning_Fourier(eq):
         "g^ra",
         "g^rr",
         "g^aa_z",
+        "g^aa_t",
         "g^aa_zz",
+        "g^aa_tt",
+        "g^aa_tz",
         "g^ra_z",
+        "g^ra_t",
         "g^ra_zz",
+        "g^ra_tt",
+        "g^ra_tz",
         "g^rr_z",
+        "g^rr_t",
         "g^rr_zz",
+        "g^rr_tt",
+        "g^rr_tz",
         "cvdrift",
         "cvdrift0",
         "|B|",
         "|B|_z",
+        "|B|_t",
         "|B|_zz",
-        "sqrt(g)_PEST",
-        "sqrt(g)_PEST_z",
-        "sqrt(g)_PEST_zz",
+        "|B|_tt",
+        "|B|_tz",
+        "B^zeta",
+        "B^zeta_t",
+        "B^zeta_z",
+        "B^zeta_tt",
+        "B^zeta_zz",
+        "B^zeta_tz",
         "p_r",
         "psi_r",
     ]
 
     data = eq.compute(data_names, grid)
 
-    # sqrt(g)_PEST is (B dot grad zeta)^-1
-    gradpar = 1/(data["sqrt(g)_PEST"] * data["|B|"])
-    gradpar_z = -(data["sqrt(g)_PEST_z"] * data["|B|"] + data["sqrt(g)_PEST"] * data["|B|_z"])/(data["sqrt(g)_PEST"] * data["|B|"])**2
-    gradpar_zz = 2 * (data["sqrt(g)_PEST_z"] * data["|B|"] + data["sqrt(g)_PEST"] * data["|B|_z"])**2/(data["sqrt(g)_PEST"] * data["|B|"])**3 - (data["sqrt(g)_PEST_zz"] * data["|B|"] + 2 * data["sqrt(g)_PEST_z"] * data["|B|_z"] + data["sqrt(g)_PEST"] * data["|B|_zz"])/(data["sqrt(g)_PEST"] * data["|B|"])**2
+    temp_fac1 = 1 / (1 + data["lambda_t"])
+    temp_fac2 = (iota - data["lambda_z"]) * temp_fac1
 
-    gds2 = data["g^aa"] + 2*zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
-    gds2_z = data["g^aa_z"] + 2*zeta_0 * data["g^ra_z"] + zeta_0**2 * data["g^rr_z"]
-    gds2_zz = data["g^aa_zz"] + 2*zeta_0 * data["g^ra_zz"] + zeta_0**2 * data["g^rr_zz"]
+    g_sup_rr_z0 = data["g^rr_z"] + data["g^rr_t"] * temp_fac2
+    g_sup_rr_zz0 = (
+        data["g^rr_zz"]
+        + 2 * data["g^rr_tz"] * temp_fac2
+        - data["g^rr_t"]
+        * (
+            data["lambda_zz"] * temp_fac1
+            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
+            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
+        )
+        + data["g^rr_tt"] * temp_fac2**2
+    )
+
+    g_sup_ra_z0 = data["g^ra_z"] + data["g^ra_t"] * temp_fac2
+    g_sup_ra_zz0 = (
+        data["g^ra_zz"]
+        + 2 * data["g^ra_tz"] * temp_fac2
+        - data["g^ra_t"]
+        * (
+            data["lambda_zz"] * temp_fac1
+            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
+            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
+        )
+        + data["g^ra_tt"] * temp_fac2**2
+    )
+
+    g_sup_aa_z0 = data["g^aa_z"] + data["g^aa_t"] * temp_fac2
+    g_sup_aa_zz0 = (
+        data["g^aa_zz"]
+        + 2 * data["g^aa_tz"] * temp_fac2
+        - data["g^aa_t"]
+        * (
+            data["lambda_zz"] * temp_fac1
+            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
+            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
+        )
+        + data["g^aa_tt"] * temp_fac2**2
+    )
+
+    modB = data["|B|"]
+    modB_z0 = data["|B|_z"] + data["|B|_t"] * temp_fac2
+    modB_zz0 = (
+        data["|B|_zz"]
+        + 2 * data["|B|_tz"] * temp_fac2
+        - data["|B|_t"]
+        * (
+            data["lambda_zz"] * temp_fac1
+            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
+            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
+        )
+        + data["|B|_tt"] * temp_fac2**2
+    )
+
+    B_sup_zeta = data["B^zeta"]
+    B_sup_zeta_z0 = data["B^zeta_z"] + temp_fac2 * data["B^zeta_t"]
+    B_sup_zeta_zz0 = (
+        data["B^zeta_zz"]
+        + 2 * data["B^zeta_tz"] * temp_fac2
+        - data["B^zeta_t"]
+        * (
+            data["lambda_zz"] * temp_fac1
+            + 2 * temp_fac2 * data["lambda_tz"] * temp_fac1
+            + temp_fac2**2 * temp_fac1 * data["lambda_tt"]
+        )
+        + data["B^zeta_tt"] * temp_fac2**2
+    )
+
+    gradpar = B_sup_zeta / modB
+    gradpar_z = B_sup_zeta_z0 / modB - modB_z0 * B_sup_zeta / modB**2
+    gradpar_zz = (
+        B_sup_zeta_zz0 / modB
+        - 2 * modB_z0 * B_sup_zeta_z0 / modB**2
+        - modB_z0 * B_sup_zeta / modB**2
+        + modB_zz0 * B_sup_zeta / modB**2
+    )
+
+    gds2 = data["g^aa"] + 2 * zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
+    gds2_z = rho**2 * (
+        g_sup_aa_z0 - 2 * sign_iota * zeta_0 * g_sup_ra_z0 + zeta_0**2 * g_sup_rr_z0
+    )
+    gds2_zz = rho**2 * (
+        g_sup_aa_zz0
+        - 2 * sign_iota * zeta_0 * g_sup_ra_zz0
+        + zeta_0**2 * g_sup_rr_zz0
+    )
 
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
-    f = a_N * B_N**3 * gds2 / data["|B|"] ** 2 * data["sqrt(g)_PEST"]
-    g = a_N ** 3 * B_N * gds2 / data["|B|"] * gradpar
-    g_z = a_N ** 3 * B_N * ((gds2_z * gradpar + gds2 * gradpar_z) / data["|B|"] - gds2 * gradpar * data["|B|_z"]/ data["|B|"]**2)
-    g_zz = a_N ** 3 * B_N * ((gds2_zz * gradpar + 2 * gds2_z * gradpar_z + gds2 * gradpar_zz) / data["|B|"] -(gds2_z * gradpar + gds2 * gradpar_z) * data["|B|_z"] / data["|B|"]**2  - (gds2_z * gradpar * data["|B|_z"] + gds2 * gradpar_z * data["|B|_z"] + gds2 * gradpar * data["|B|_zz"]) / data["|B|"]**2  + 2 * (gds2_z * gradpar * data["|B|_z"]**2)/ data["|B|"]**3)
+    f = a_N * B_N**3 * gds2 / modB**3 * 1 / gradpar
+    g = a_N**3 * B_N * gds2 / modB * gradpar
+    g_z = (
+        a_N**3
+        * B_N
+        * (
+            (gds2_z * gradpar + gds2 * gradpar_z) / modB
+            - gds2 * gradpar * modB_z0 / modB**2
+        )
+    )
+    g_zz = (
+        a_N**3
+        * B_N
+        * (
+            (gds2_zz * gradpar + 2 * gds2_z * gradpar_z + gds2 * gradpar_zz) / modB
+            - (gds2_z * gradpar + gds2 * gradpar_z) * modB_z0 / modB**2
+            - (
+                gds2_z * gradpar * modB_z0
+                + gds2 * gradpar_z * modB_z0
+                + gds2 * gradpar * modB_zz0
+            )
+            / modB**2
+            + 2 * (gds2_z * gradpar * modB_z0**2) / modB**3
+        )
+    )
 
-    c = a_N * data["sqrt(g)_PEST"] * 2 * rho * sign_psi * dpdpsi * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
+    c = (
+        a_N
+        * 2
+        / data["B^zeta"]
+        * rho
+        * sign_psi
+        * dpdpsi
+        * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
+    )
 
     V = c / g + 1 / 4 * g_z**2 / g**2 - 1 / 2 * g_zz / g
 
@@ -680,8 +953,8 @@ def _gamma_ideal_ballooning_Fourier(eq):
         col1 = np.concatenate(
             (
                 np.array([-(np.pi**2 / 3) / h**2 + 1 / 12]),
-                -0.5 * ((-1) ** kk1) * topc,
-                0.5 * ((-1) ** kk2) * topc[0:n2][::-1],
+                0.5 * ((-1) ** kk1) * topc,
+                -0.5 * ((-1) ** kk2) * topc[0:n2][::-1],
             )
         )
 
@@ -691,7 +964,4 @@ def _gamma_ideal_ballooning_Fourier(eq):
 
     ## eigvals will be deprecated, replace by subset_by_idx in scipy >= 1.12
     w, v = scipy.linalg.eigh(D2, b=np.diag(b, 0), eigvals=[N - 1, N - 1])
-    print(w)
     return w
-
-

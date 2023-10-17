@@ -1393,7 +1393,11 @@ def _alpha_z(params, transforms, profiles, data, **kwargs):
     data=["theta_PEST_rt", "phi_t", "phi_rt", "iota", "iota_r"],
 )
 def _alpha_rt(params, transforms, profiles, data, **kwargs):
-    data["alpha_rt"] = data["theta_PEST_rt"] - data["iota"] * data["phi_rt"] - data["iota_r"] * data["phi_t"]
+    data["alpha_rt"] = (
+        data["theta_PEST_rt"]
+        - data["iota"] * data["phi_rt"]
+        - data["iota_r"] * data["phi_t"]
+    )
     return data
 
 
@@ -1413,6 +1417,7 @@ def _alpha_rt(params, transforms, profiles, data, **kwargs):
 def _alpha_tz(params, transforms, profiles, data, **kwargs):
     data["alpha_tz"] = data["theta_PEST_tz"] - data["iota"] * data["phi_tz"]
     return data
+
 
 @register_compute_fun(
     name="alpha_rz",
@@ -1434,7 +1439,6 @@ def _alpha_rz(params, transforms, profiles, data, **kwargs):
         - data["iota"] * data["phi_rz"]
     )
     return data
-
 
 
 @register_compute_fun(
@@ -1469,7 +1473,11 @@ def _alpha_tt(params, transforms, profiles, data, **kwargs):
     data=["phi_tt", "phi_rtt", "iota", "iota_r", "lambda_rtt"],
 )
 def _alpha_rtt(params, transforms, profiles, data, **kwargs):
-    data["alpha_rtt"] = data["lambda_rtt"] - data["iota"] * data["phi_rtt"] - data["iota_r"] * data["phi_tt"] 
+    data["alpha_rtt"] = (
+        data["lambda_rtt"]
+        - data["iota"] * data["phi_rtt"]
+        - data["iota_r"] * data["phi_tt"]
+    )
     return data
 
 
@@ -1490,6 +1498,7 @@ def _alpha_zz(params, transforms, profiles, data, **kwargs):
     data["alpha_zz"] = data["theta_PEST_zz"] - data["iota"] * data["phi_zz"]
     return data
 
+
 @register_compute_fun(
     name="alpha_zzz",
     label="\\partial_{\\zeta \\zeta \\zeta} \\alpha",
@@ -1506,6 +1515,7 @@ def _alpha_zz(params, transforms, profiles, data, **kwargs):
 def _alpha_zzz(params, transforms, profiles, data, **kwargs):
     data["alpha_zzz"] = data["theta_PEST_zzz"] - data["iota"] * data["phi_zzz"]
     return data
+
 
 @register_compute_fun(
     name="alpha_rzz",
@@ -1546,6 +1556,7 @@ def _alpha_tzz(params, transforms, profiles, data, **kwargs):
     data["alpha_tzz"] = data["theta_PEST_tzz"] - data["iota"] * data["phi_tzz"]
     return data
 
+
 @register_compute_fun(
     name="alpha_rtz",
     label="\\partial_{\\rho \\theta \\zeta} \\alpha",
@@ -1585,6 +1596,7 @@ def _alpha_ttt(params, transforms, profiles, data, **kwargs):
     data["alpha_ttt"] = data["theta_PEST_ttt"] - data["iota"] * data["phi_ttt"]
     return data
 
+
 @register_compute_fun(
     name="alpha_ttz",
     label="\\partial_{\\theta \\theta \\zeta} \\alpha",
@@ -1599,7 +1611,7 @@ def _alpha_ttt(params, transforms, profiles, data, **kwargs):
     data=["phi_ttz", "iota", "lambda_ttz"],
 )
 def _alpha_ttz(params, transforms, profiles, data, **kwargs):
-    data["alpha_ttz"] = data["lambda_ttz"] - data["iota"] * data["phi_tt"]
+    data["alpha_ttz"] = data["lambda_ttz"] - data["iota"] * data["phi_ttz"]
     return data
 
 
@@ -2704,8 +2716,7 @@ def _phi_rzz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\rho \\theta \\theta} \\phi",
     units="rad",
     units_long="radians",
-    description="Toroidal angle in lab frame, mixed derivative"
-    "coordinate",
+    description="Toroidal angle in lab frame, mixed derivative" "coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2716,7 +2727,6 @@ def _phi_rzz(params, transforms, profiles, data, **kwargs):
 def _phi_rtt(params, transforms, profiles, data, **kwargs):
     data["phi_rtt"] = data["omega_rtt"]
     return data
-
 
 
 @register_compute_fun(
@@ -2775,6 +2785,7 @@ def _phi_tz(params, transforms, profiles, data, **kwargs):
     data["phi_tz"] = data["omega_tz"]
     return data
 
+
 @register_compute_fun(
     name="phi_ttz",
     label="\\partial_{\\theta \\theta \\zeta} \\phi",
@@ -2792,13 +2803,13 @@ def _phi_ttz(params, transforms, profiles, data, **kwargs):
     data["phi_ttz"] = data["omega_ttz"]
     return data
 
+
 @register_compute_fun(
     name="phi_tzz",
     label="\\partial_{\\theta \\zeta \\zeta} \\phi",
     units="rad",
     units_long="radians",
-    description="Toroidal angle in lab frame, mixed derivative"
-    "toroidal coordinate",
+    description="Toroidal angle in lab frame, mixed derivative" "toroidal coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -2809,6 +2820,7 @@ def _phi_ttz(params, transforms, profiles, data, **kwargs):
 def _phi_tzz(params, transforms, profiles, data, **kwargs):
     data["phi_tzz"] = data["omega_tzz"]
     return data
+
 
 @register_compute_fun(
     name="phi_rtz",
@@ -2826,6 +2838,7 @@ def _phi_tzz(params, transforms, profiles, data, **kwargs):
 def _phi_rtz(params, transforms, profiles, data, **kwargs):
     data["phi_rtz"] = data["omega_rtz"]
     return data
+
 
 @register_compute_fun(
     name="phi_z",
@@ -2863,6 +2876,7 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
     data["phi_zz"] = data["omega_zz"]
     return data
 
+
 @register_compute_fun(
     name="phi_zzz",
     label="\\partial_{\\zeta \\zeta \\zeta} \\phi",
@@ -2880,6 +2894,7 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
 def _phi_zzz(params, transforms, profiles, data, **kwargs):
     data["phi_zzz"] = data["omega_zzz"]
     return data
+
 
 @register_compute_fun(
     name="rho",
@@ -3106,12 +3121,16 @@ def _theta_PEST_tz(params, transforms, profiles, data, **kwargs):
     data["theta_PEST_tz"] = data["lambda_tz"]
     return data
 
+
 @register_compute_fun(
     name="theta_PEST_rtz",
     label="\\partial_{\\rho \\theta \\zeta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="PEST straight field line poloidal angular coordinate, mixed derivative wrt ",
+    description=(
+        "PEST straight field line poloidal angular coordinate"
+        "mixed derivative wrt all coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
@@ -3122,6 +3141,7 @@ def _theta_PEST_tz(params, transforms, profiles, data, **kwargs):
 def _theta_PEST_rtz(params, transforms, profiles, data, **kwargs):
     data["theta_PEST_rtz"] = data["lambda_rtz"]
     return data
+
 
 @register_compute_fun(
     name="theta_PEST_tzz",
@@ -3197,6 +3217,7 @@ def _theta_PEST_zz(params, transforms, profiles, data, **kwargs):
 def _theta_PEST_zzz(params, transforms, profiles, data, **kwargs):
     data["theta_PEST_zzz"] = data["lambda_zzz"]
     return data
+
 
 @register_compute_fun(
     name="theta_PEST_rz",

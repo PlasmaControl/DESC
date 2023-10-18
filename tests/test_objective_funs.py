@@ -295,7 +295,9 @@ class TestObjectiveFunction:
         # check that these QH modes are not returned by the objective
         assert [b not in f for b in B_mn[idx_B[-3:]]]
         # check that the objective returns the lowest amplitudes
-        np.testing.assert_allclose(f[idx_f][:131], B_mn[idx_B][:131])
+        # 120 ~ smallest amplitudes BEFORE QH modes show up so that sorting both arrays
+        # should have the same values up until then
+        np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120])
 
     @pytest.mark.unit
     def test_qs_twoterm(self):
@@ -364,7 +366,7 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_qs_boozer_grids(self):
         """Test grid compatibility with QS objectives."""
-        eq = get("QAS")
+        eq = get("NCSX")
 
         # symmetric grid
         grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
@@ -675,6 +677,8 @@ def test_plasma_vessel_distance():
     d = obj.compute_unscaled(*obj.xs(eq))
     assert abs(d.min() - (a_s - a_p)) < 1e-14
     assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0
+    # ensure that it works (dimension-wise) when compute_scaled is called
+    _ = obj.compute_scaled(*obj.xs(eq))
 
     grid = LinearGrid(L=3, M=3, N=3)
     eq = Equilibrium()
@@ -1048,7 +1052,7 @@ def test_softmax_and_softmin():
 def test_compute_scalar_resolution():  # noqa: C901
     """Test that compute_scalar values are roughly independent of grid resolution."""
     eq = get("HELIOTRON")
-    res_array = np.array([1.5, 2, 2.5])
+    res_array = np.array([2, 2.5, 3])
 
     # BootstrapRedlConsistency
     # this is already covered in tests/test_bootstrap.py

@@ -53,8 +53,10 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
     np.testing.assert_allclose(data["|J|"], 0, atol=3e-3)
 
     # test that solving with the continuation method works correctly
-    eqf = _solve_axisym(eq, 0)
-    assert len(eqf) == 1
+    # when eq resolution is lower than the mres_step
+    eq.change_resolution(L=3, M=3)
+    eqf = _solve_axisym(eq, mres_step=6)
+    assert len(eqf) == 2
     assert eqf[-1].L == eq.L
     assert eqf[-1].M == eq.M
     assert eqf[-1].N == eq.N

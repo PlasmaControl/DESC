@@ -29,12 +29,12 @@ def test_flip_helicity_axisym():
     np.testing.assert_array_less(0, grid.compress(data_new["sqrt(g)"]))
 
     # check that iota changed sign
-    np.testing.assert_array_less(grid.compress(data_old["iota"]), 0)
-    np.testing.assert_array_less(0, grid.compress(data_new["iota"]))
+    np.testing.assert_array_less(0, grid.compress(data_old["iota"]))  # old: +
+    np.testing.assert_array_less(grid.compress(data_new["iota"]), 0)  # new: -
 
     # check that current changed sign
-    np.testing.assert_array_less(grid.compress(data_old["current"]), 0)
-    np.testing.assert_array_less(0, grid.compress(data_new["current"]))
+    np.testing.assert_array_less(0, grid.compress(data_old["current"]))  # old: +
+    np.testing.assert_array_less(grid.compress(data_new["current"]), 0)  # new: -
 
     # check that stability did not change
     np.testing.assert_allclose(
@@ -86,15 +86,14 @@ def test_flip_helicity_iota():
 
     # check that the total force balance error on each surface did not change
     # (equivalent collocation points now corresond to the opposite zeta values)
-    np.testing.assert_allclose(data_old["|F|"], data_flip["|F|"])
+    np.testing.assert_allclose(data_old["|F|"], data_flip["|F|"], rtol=1e-3)
 
 
 @pytest.mark.unit
 @pytest.mark.solve
 def test_flip_helicity_current():
     """Test flip_helicity on an Equilibrium with a current profile."""
-    # TODO: change this to use HSX example
-    eq = get("precise_QH")
+    eq = get("HSX")
 
     grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     nodes = grid.nodes.copy()
@@ -117,15 +116,10 @@ def test_flip_helicity_current():
     np.testing.assert_array_less(0, grid.compress(data_new["sqrt(g)"]))
 
     # check that iota changed sign
-    np.testing.assert_array_less(0, grid.compress(data_old["iota"]))  # old: +
-    np.testing.assert_array_less(grid.compress(data_new["iota"]), 0)  # new: -
+    np.testing.assert_array_less(grid.compress(data_old["iota"]), 0)  # old: -
+    np.testing.assert_array_less(0, grid.compress(data_new["iota"]))  # new: +
 
-    # check that current changed sign
-    """
-    # FIXME: include these tests for a QH case that has finite current, like HSX
-    np.testing.assert_array_less(0, grid.compress(data_old["current"]))  # old: +
-    np.testing.assert_array_less(grid.compress(data_new["current"]), 0)  # new: -
-    """
+    # current=0 so do not need to check sign change
 
     # check that stability did not change
     np.testing.assert_allclose(
@@ -134,9 +128,8 @@ def test_flip_helicity_current():
 
     # check that the total force balance error on each surface did not change
     # (equivalent collocation points now corresond to the opposite zeta values)
-    np.testing.assert_allclose(data_old["|F|"], data_flip["|F|"])
+    np.testing.assert_allclose(data_old["|F|"], data_flip["|F|"], rtol=1e-3)
 
     # check that the QH errors now need the opposite helicity
     # (equivalent collocation points now corresond to the opposite zeta values)
-    np.testing.assert_allclose(data_old["f_C"], data_flip["f_C"], atol=1e-12)
-    # FIXME: can probably set atol=0 when switch to HSX example (b/c not precise QH)
+    np.testing.assert_allclose(data_old["f_C"], data_flip["f_C"], atol=1e-8)

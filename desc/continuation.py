@@ -86,7 +86,7 @@ def _solve_axisym(
 
     ii = 0
     stop = False
-    while ii < mres_steps and not stop:
+    while ii <= mres_steps and not stop:
         timer.start("Iteration {} total".format(ii + 1))
 
         if ii > 0:

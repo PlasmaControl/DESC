@@ -10,7 +10,7 @@ from qic import Qic
 from qsc import Qsc
 
 import desc.examples
-from desc.continuation import solve_continuation_automatic
+from desc.continuation import _solve_axisym, solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -51,6 +51,13 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
 
     np.testing.assert_allclose(data["iota"], 0, atol=1e-16)
     np.testing.assert_allclose(data["|J|"], 0, atol=3e-3)
+
+    # test that solving with the continuation method works correctly
+    eqf = _solve_axisym(eq, 0)
+    assert len(eqf) == 1
+    assert eqf[-1].L == eq.L
+    assert eqf[-1].M == eq.M
+    assert eqf[-1].N == eq.N
 
 
 @pytest.mark.regression

@@ -711,6 +711,7 @@ class Equilibrium(IOAble):
         transforms=None,
         profiles=None,
         data=None,
+        override=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -731,6 +732,11 @@ class Equilibrium(IOAble):
             of self
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
+        override : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -786,7 +792,7 @@ class Equilibrium(IOAble):
             if isinstance(grid, LinearGrid):
                 calc1d = False
 
-        if calc0d:
+        if calc0d and override:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d = compute_fun(
                 self,
@@ -801,7 +807,7 @@ class Equilibrium(IOAble):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        if calc1d:
+        if calc1d and override:
             grid1d = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,

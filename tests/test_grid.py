@@ -619,6 +619,7 @@ class TestGrid:
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
         np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 
+    @pytest.mark.unit
     def test_symmetry_volume_integral(self):
         """Test volume integral of a symmetric function."""
         # Currently, midpoint rule is false for LinearGrid made with L=number.

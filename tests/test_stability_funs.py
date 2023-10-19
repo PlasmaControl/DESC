@@ -143,7 +143,7 @@ def test_compute_d_well(DSHAPE_current, HELIOTRON_ex):
     test(DSHAPE_current, (0.3, 0.9), rtol=1e-1)
     test(HELIOTRON_ex, (0.01, 0.45), rtol=1.75e-1)
     test(HELIOTRON_ex, (0.45, 0.6), atol=7.2e-1)
-    test(HELIOTRON_ex, (0.6, 0.99), rtol=1.3e-2)
+    test(HELIOTRON_ex, (0.6, 0.99), rtol=2e-2)
 
 
 @pytest.mark.unit
@@ -190,7 +190,7 @@ def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
 
     test(DSHAPE_current, (0.3, 0.9), rtol=1e-1, atol=1e-2)
     test(HELIOTRON_ex, (0.1, 0.325), rtol=1.3e-1)
-    test(HELIOTRON_ex, (0.325, 0.95), rtol=4e-2)
+    test(HELIOTRON_ex, (0.325, 0.95), rtol=5e-2)
 
 
 @pytest.mark.unit

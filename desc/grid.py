@@ -396,16 +396,16 @@ class Grid(_Grid):
     Parameters
     ----------
     nodes : ndarray of float, size(num_nodes,3)
-        node coordinates, in (rho,theta,zeta)
+        Node coordinates, in (rho,theta,zeta)
     sort : bool
-        whether to sort the nodes for use with FFT method.
+        Whether to sort the nodes for use with FFT method.
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights, symmetry
         etc may be wrong if grid contains duplicate nodes.
     """
 
-    def __init__(self, nodes, sort=True, jitable=False):
+    def __init__(self, nodes, sort=False, jitable=False):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
@@ -500,11 +500,14 @@ class LinearGrid(_Grid):
         Should be False for use with FFT. (Default = False).
         This boolean is ignored if an array is given for theta or zeta.
     rho : ndarray of float, optional
-        Radial coordinates (Default = 1.0).
+        Radial coordinates (Default = 1.0). Note that if supplied the values may be
+        reordered in the resulting grid.
     theta : ndarray of float, optional
-        Poloidal coordinates (Default = 0.0).
+        Poloidal coordinates (Default = 0.0). Note that if supplied the values may be
+        reordered in the resulting grid.
     zeta : ndarray of float, optional
-        Toroidal coordinates (Default = 0.0).
+        Toroidal coordinates (Default = 0.0). Note that if supplied the values may be
+        reordered in the resulting grid.
 
     """
 

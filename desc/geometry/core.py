@@ -174,9 +174,11 @@ class Curve(IOAble, ABC):
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
             If an integer, uses that many equally spaced points.
-        s : ndarray
-            arbitrary curve parameter to use for the fitting. if None, defaults to
-            normalized arclength
+        s : ndarray or "arclength"
+            arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
         name : str
             name for this curve
 
@@ -188,7 +190,7 @@ class Curve(IOAble, ABC):
         """
         from .curve import FourierXYZCurve
 
-        if grid is None and s is not None:
+        if (grid is None) and (s is not None) and (not isinstance(s, str)):
             grid = LinearGrid(zeta=s)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, s=s, basis="xyz", name=name)
@@ -198,14 +200,15 @@ class Curve(IOAble, ABC):
 
         Parameters
         ----------
-        knots : ndarray
+        knots : ndarray or "arclength"
             arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.
             (input length in this case is determined by grid argument, since
-            the input coordinates come from
-            Curve.compute("x",grid=grid))
-            If None, defaults to using an equal-arclength angle as the knots
-            If supplied, will be rescaled to lie in [0,2pi]
+            the input coordinates come from Curve.compute("x",grid=grid))
+            If None, defaults to using an linearly spaced points in [0, 2pi) as the
+            knots. If supplied, should lie in [0,2pi].
+            Alternatively, the string "arclength" can be supplied to use the normalized
+            distance between points.
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with SplineXYZCurve.
             If an integer, uses that many equally spaced points.
@@ -227,7 +230,7 @@ class Curve(IOAble, ABC):
         """
         from .curve import SplineXYZCurve
 
-        if grid is None and knots is not None:
+        if (grid is None) and (knots is not None) and (not isinstance(knots, str)):
             grid = LinearGrid(zeta=knots)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCurve.from_values(

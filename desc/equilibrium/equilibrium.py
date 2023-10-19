@@ -12,6 +12,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
@@ -110,6 +111,10 @@ class Equilibrium(IOAble):
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
         Type of Zernike indexing scheme to use. Default ``'ansi'``
+    check_orientation : bool
+        ensure that this equilibrium has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
     """
 
     _io_attrs_ = [
@@ -166,6 +171,7 @@ class Equilibrium(IOAble):
         axis=None,
         sym=None,
         spectral_indexing=None,
+        check_orientation=True,
         **kwargs,
     ):
         errorif(
@@ -366,6 +372,8 @@ class Equilibrium(IOAble):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
+        if check_orientation:
+            ensure_positive_jacobian(self)
 
     def _set_up(self):
         """Set unset attributes after loading.

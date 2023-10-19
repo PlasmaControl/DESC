@@ -69,7 +69,7 @@ def test_LambdaGauge_asym():
         "NFP": 3,
         "Psi": 1.0,
         "L": 2,
-        "M": 0,
+        "M": 2,
         "N": 1,
         "pressure": np.array([[0, 1e4], [2, -2e4], [4, 1e4]]),
         "iota": np.array([[0, 0.5], [2, 0.5]]),

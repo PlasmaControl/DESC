@@ -289,8 +289,14 @@ def get_params(keys, obj, has_axis=False, **kwargs):
         params = _sort_args(list(set(params)))
     if isinstance(obj, str) or inspect.isclass(obj):
         return params
-    params = {name: np.atleast_1d(getattr(obj, name)).copy() for name in params}
-    return params
+    temp_params = {}
+    for name in params:
+        p = getattr(obj, name)
+        if isinstance(p, dict):
+            temp_params[name] = p.copy()
+        else:
+            temp_params[name] = jnp.atleast_1d(p)
+    return temp_params
 
 
 def get_transforms(keys, obj, grid, jitable=False, **kwargs):
@@ -358,10 +364,8 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c == "rotmat":
-            transforms["rotmat"] = obj.rotmat
-        elif c == "shift":
-            transforms["shift"] = obj.shift
+        elif c not in transforms:
+            transforms[c] = getattr(obj, c)
 
     return transforms
 
@@ -1288,12 +1292,12 @@ arg_order = (
     "ne_l",
     "Ti_l",
     "Zeff_l",
+    "a_lmn",
     "Ra_n",
     "Za_n",
     "Rb_lmn",
     "Zb_lmn",
 )
-
 # map from profile name to equilibrium parameter name
 profile_names = {
     "pressure": "p_l",
@@ -1303,4 +1307,5 @@ profile_names = {
     "electron_density": "ne_l",
     "ion_temperature": "Ti_l",
     "atomic_number": "Zeff_l",
+    "anisotropy": "a_lmn",
 }

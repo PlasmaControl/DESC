@@ -7,6 +7,7 @@ from netCDF4 import Dataset
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
+from desc.io import load
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
     fourier_to_zernike,
@@ -367,6 +368,22 @@ def test_vmec_save_asym(TmpDir):
     """Tests that saving a non-symmetric equilibrium runs without errors."""
     output_path = str(TmpDir.join("output.nc"))
     eq = Equilibrium(L=2, M=2, N=2, NFP=3, pressure=np.array([[2, 0]]), sym=False)
+    VMECIO.save(eq, output_path)
+
+
+@pytest.mark.unit
+def test_vmec_save_kinetic(TmpDir):
+    """Tests that saving an equilibrium with kinetic profiles runs without errors."""
+    output_path = str(TmpDir.join("output.nc"))
+    eq = Equilibrium(
+        L=2,
+        M=2,
+        N=2,
+        NFP=3,
+        electron_density=np.array([[0, 1], [2, -1]]),
+        electron_temperature=np.array([[0, 1], [2, -1]]),
+        sym=True,
+    )
     VMECIO.save(eq, output_path)
 
 
@@ -867,9 +884,7 @@ def test_plot_vmec_comparison(SOLOVEV):
 @pytest.mark.unit
 def test_vmec_boundary_subspace(DummyStellarator):
     """Test VMEC boundary subspace is enforced properly."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     RBC = np.array([[1, 2], [-1, 2], [1, 0], [2, 2]])
     ZBS = np.array([[2, 1], [-2, 1], [0, 2], [-1, 1]])

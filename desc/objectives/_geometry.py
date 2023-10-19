@@ -565,10 +565,20 @@ class PlasmaVesselDistance(_Objective):
             grid=plasma_grid,
             has_axis=plasma_grid.axis.size or surface_grid.axis.size,
         )
+
+        # compute returns points on the grid of the surface
+        # (so size surface_grid.num_nodes)
+        # so set quad_weights to the surface grid
+        # to avoid it being incorrectly set to the plasma_grid size
+        # in the super build
+        w = surface_grid.weights
+        w *= jnp.sqrt(surface_grid.num_nodes)
+
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
             "surface_coords": self._surface_coords,
+            "quad_weights": w,
         }
 
         timer.stop("Precomputing transforms")

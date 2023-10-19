@@ -24,7 +24,9 @@ from desc.objectives import (
     FixIota,
     FixPressure,
     FixPsi,
+    FixSumModesLambda,
     ForceBalance,
+    ForceBalanceAnisotropic,
     HelicalForceBalance,
     ObjectiveFunction,
     QuasisymmetryBoozer,
@@ -34,7 +36,7 @@ from desc.objectives import (
     get_NAE_constraints,
 )
 from desc.optimize import Optimizer
-from desc.profiles import PowerSeriesProfile
+from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
@@ -56,6 +58,27 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
 def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
+
+    np.testing.assert_allclose(rho_err, 0, atol=1e-3)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_SOLOVEV_anisotropic_results(SOLOVEV):
+    """Tests that SOLOVEV with zero anisotropic pressure gives the same result."""
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    # reset to start
+    eq.set_initial_guess()
+    # give it a zero anisotropy profile
+    anisotropy = FourierZernikeProfile()
+    anisotropy.change_resolution(eq.L, eq.M, eq.N)
+    eq.anisotropy = anisotropy
+
+    obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq))
+    constraints = get_fixed_boundary_constraints(eq=eq, anisotropy=True)
+    eq.solve(obj, constraints, verbose=3)
     rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
     np.testing.assert_allclose(rho_err, 0, atol=1e-3)
@@ -131,9 +154,8 @@ def test_force_balance_grids():
 
     def test(iota=False):
         if iota:
-            # pick quad here just to increase code coverage
-            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True, node_pattern="quad")
-            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True, node_pattern="quad")
+            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
+            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
         else:
             eq1 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
             eq2 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
@@ -330,7 +352,6 @@ def test_ATF_results(tmpdir_factory):
         L_grid=eq0.L_grid,
         M_grid=eq0.M_grid,
         N_grid=eq0.N_grid,
-        node_pattern=eq0.node_pattern,
         pressure=eq0.pressure,
         iota=eq0.iota,
         surface=eq0.get_surface_at(rho=1),
@@ -363,7 +384,6 @@ def test_ESTELL_results(tmpdir_factory):
         L_grid=eq0.L_grid,
         M_grid=eq0.M_grid,
         N_grid=eq0.N_grid,
-        node_pattern=eq0.node_pattern,
         pressure=eq0.pressure,
         current=eq0.current,
         surface=eq0.get_surface_at(rho=1),
@@ -501,7 +521,6 @@ def test_simsopt_QH_comparison():
 @pytest.mark.slow
 def test_NAE_QSC_solve():
     """Test O(rho) NAE QSC constraints solve."""
-    # get Qsc example
     qsc = Qsc.from_paper("precise QA")
     ntheta = 75
     r = 0.01
@@ -512,84 +531,77 @@ def test_NAE_QSC_solve():
     orig_Zax_val = eq.axis.Z_n
 
     eq_fit = eq.copy()
+    eq_lambda_fixed_0th_order = eq.copy()
+    eq_lambda_fixed_1st_order = eq.copy()
 
     # this has all the constraints we need,
     #  iota=False specifies we want to fix current instead of iota
-    cs = get_NAE_constraints(eq, qsc, iota=False, order=1, fix_lambda=True, N=eq.N)
+    cs = get_NAE_constraints(eq, qsc, iota=False, order=1, fix_lambda=False, N=eq.N)
+    cs_lambda_fixed_0th_order = get_NAE_constraints(
+        eq_lambda_fixed_0th_order, qsc, iota=False, order=1, fix_lambda=0, N=eq.N
+    )
+    cs_lambda_fixed_1st_order = get_NAE_constraints(
+        eq_lambda_fixed_1st_order, qsc, iota=False, order=1, fix_lambda=True, N=eq.N
+    )
 
-    objectives = ForceBalance(eq=eq)
-    obj = ObjectiveFunction(objectives)
+    for c in cs:
+        # should be no FixSumModeslambda in the fix_lambda=False constraint
+        assert not isinstance(c, FixSumModesLambda)
 
-    eq.solve(verbose=3, ftol=1e-2, objective=obj, maxiter=50, xtol=1e-6, constraints=cs)
+    for eqq, constraints in zip(
+        [eq, eq_lambda_fixed_0th_order, eq_lambda_fixed_1st_order],
+        [cs, cs_lambda_fixed_0th_order, cs_lambda_fixed_1st_order],
+    ):
+        objectives = ForceBalance(eq=eqq)
+        obj = ObjectiveFunction(objectives)
+        print(constraints)
 
-    # Make sure axis is same
-    np.testing.assert_array_almost_equal(orig_Rax_val, eq.axis.R_n)
-    np.testing.assert_array_almost_equal(orig_Zax_val, eq.axis.Z_n)
-
-    # Make sure surfaces of solved equilibrium are similar near axis as QSC
-    rho_err, theta_err = area_difference_desc(eq, eq_fit)
-
-    np.testing.assert_allclose(rho_err[:, 0:-4], 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3)
-
-    # Make sure iota of solved equilibrium is same near axis as QSC
-    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
-    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
-
-    np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5)
-    np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3)
-
-    # check lambda to match near axis
-    grid_2d_05 = LinearGrid(rho=np.array(1e-6), M=50, N=50, NFP=eq.NFP, endpoint=True)
-
-    # Evaluate lambda near the axis
-    data_nae = eq.compute("lambda", grid=grid_2d_05)
-    lam_nae = data_nae["lambda"]
-
-    # Reshape to form grids on theta and phi
-    zeta = (
-        grid_2d_05.nodes[:, 2]
-        .reshape(
-            (grid_2d_05.num_theta, grid_2d_05.num_rho, grid_2d_05.num_zeta), order="F"
+        eqq.solve(
+            verbose=3,
+            ftol=1e-2,
+            objective=obj,
+            maxiter=100,
+            xtol=1e-6,
+            constraints=constraints,
         )
-        .squeeze()
-    )
+    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
+    grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
+    # Make sure axis is same
+    for eqq, string in zip(
+        [eq, eq_lambda_fixed_0th_order, eq_lambda_fixed_1st_order],
+        ["no lambda constraint", "lambda_fixed_0th_order", "lambda_fixed_1st_order"],
+    ):
+        np.testing.assert_array_almost_equal(orig_Rax_val, eqq.axis.R_n, err_msg=string)
+        np.testing.assert_array_almost_equal(orig_Zax_val, eqq.axis.Z_n, err_msg=string)
 
-    lam_nae = lam_nae.reshape(
-        (grid_2d_05.num_theta, grid_2d_05.num_rho, grid_2d_05.num_zeta), order="F"
-    )
+        # Make sure surfaces of solved equilibrium are similar near axis as QSC
+        rho_err, theta_err = area_difference_desc(eqq, eq_fit)
 
-    phi = np.squeeze(zeta[0, :])
-    lam_nae = np.squeeze(lam_nae[:, 0, :])
+        np.testing.assert_allclose(rho_err[:, 0:-4], 0, atol=1e-2, err_msg=string)
+        np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3, err_msg=string)
 
-    lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5)
+        # Make sure iota of solved equilibrium is same near axis as QSC
 
-    # check |B| on axis
+        iota = grid.compress(eqq.compute("iota", grid=grid)["iota"])
 
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(1e-6))
-    # Evaluate B modes near the axis
-    data_nae = eq.compute(["|B|_mn", "B modes"], grid=grid)
-    modes = data_nae["B modes"]
-    B_mn_nae = data_nae["|B|_mn"]
-    # Evaluate B on an angular grid
-    theta = np.linspace(0, 2 * np.pi, 150)
-    phi = np.linspace(0, 2 * np.pi, qsc.nphi)
-    th, ph = np.meshgrid(theta, phi)
-    B_nae = np.zeros((qsc.nphi, 150))
+        np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
+        np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3, err_msg=string)
 
-    for i, (l, m, n) in enumerate(modes):
-        if m >= 0 and n >= 0:
-            B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
-        elif m >= 0 > n:
-            B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
-        elif m < 0 <= n:
-            B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
-        elif m < 0 and n < 0:
-            B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
-    # Eliminate the poloidal angle to focus on the toroidal behavior
-    B_av_nae = np.mean(B_nae, axis=1)
-    np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=1e-4)
+        ### check lambda to match near axis
+        # Evaluate lambda near the axis
+        data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
+        lam_nae = data_nae["lambda"]
+        # Reshape to form grids on theta and phi
+
+        phi = np.squeeze(grid_axis.nodes[:, 2])
+        np.testing.assert_allclose(
+            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5, err_msg=string
+        )
+
+        # check |B| on axis
+        np.testing.assert_allclose(
+            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=1e-4, err_msg=string
+        )
 
 
 @pytest.mark.regression
@@ -732,22 +744,22 @@ class TestGetExample:
     @pytest.mark.unit
     def test_example_get_iota(self):
         """Test getting iota profile."""
-        iota = desc.examples.get("NCSX", "iota")
+        iota = desc.examples.get("W7-X", "iota")
         np.testing.assert_allclose(
             iota.params[:5],
             [
-                -3.49197642e-01,
-                -6.81105159e-01,
-                1.29781695e00,
-                -2.07888586e00,
-                1.15800135e00,
+                -8.56047021e-01,
+                -3.88095412e-02,
+                -6.86795128e-02,
+                -1.86970315e-02,
+                1.90561179e-02,
             ],
         )
 
     @pytest.mark.unit
     def test_example_get_current(self):
         """Test getting current profile."""
-        current = desc.examples.get("QAS", "current")
+        current = desc.examples.get("NCSX", "current")
         np.testing.assert_allclose(
             current.params[:11],
             [

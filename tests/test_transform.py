@@ -588,7 +588,6 @@ class TestTransform:
             NFP=eq.NFP,
             sym=eq.sym,
             axis=False,
-            node_pattern=eq.node_pattern,
         )
         tr = get_transforms(data_keys, eq, grid)
         f = np.ones(grid.num_nodes)

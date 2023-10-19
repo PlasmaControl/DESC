@@ -56,7 +56,7 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
     # when eq resolution is lower than the mres_step
     eq.change_resolution(L=3, M=3)
     eqf = _solve_axisym(eq, mres_step=6)
-    assert len(eqf) == 2
+    assert len(eqf) == 1
     assert eqf[-1].L == eq.L
     assert eqf[-1].M == eq.M
     assert eqf[-1].N == eq.N

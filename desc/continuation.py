@@ -39,7 +39,7 @@ def _solve_axisym(
     L, M, N, L_grid, M_grid, N_grid = eq.L, eq.M, eq.N, eq.L_grid, eq.M_grid, eq.N_grid
     spectral_indexing = eq.spectral_indexing
 
-    Mi = min(M // 2, mres_step) if mres_step > 0 else M
+    Mi = min(M, mres_step) if mres_step > 0 else M
     Li = int(np.ceil(L / M) * Mi)
     Ni = 0
     L_gridi = np.ceil(L_grid / L * Li).astype(int)

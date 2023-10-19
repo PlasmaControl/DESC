@@ -8,6 +8,7 @@ import desc.examples
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
+from desc.io import load
 from desc.objectives import (
     AspectRatio,
     AxisRSelfConsistency,
@@ -52,9 +53,7 @@ from desc.profiles import PowerSeriesProfile
 def test_LambdaGauge_sym(DummyStellarator):
     """Test that lambda is fixed correctly for symmetric equilibrium."""
     # symmetric cases automatically satisfy gauge freedom, no constraint needed.
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
     eq.change_resolution(L=2, M=1, N=1)
     correct_constraint_matrix = np.zeros((0, 5))
     lam_con = FixLambdaGauge(eq)

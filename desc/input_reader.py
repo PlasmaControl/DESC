@@ -792,6 +792,7 @@ class InputReader:
         xtol=1e-6,
         gtol=1e-6,
         maxiter=100,
+        threshold=1e-10,
     ):
         """Generate a DESC input file from a DESC output file.
 
@@ -817,6 +818,8 @@ class InputReader:
             absolute tolerance of the projected gradient g
         maxiter : int
             maximum number of optimizer iterations per continuation step
+        threshold : float
+            Fourier coefficients below this value will be set to 0.
         """
         from desc.grid import LinearGrid
         from desc.io.equilibrium_io import load
@@ -902,20 +905,20 @@ class InputReader:
         # boundary parameters
         if eq.sym:
             for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
-                if abs(eq.Rb_lmn[k]) > 1e-8:
+                if abs(eq.Rb_lmn[k]) > threshold:
                     f.write(
                         "l: {:3d}  m: {:3d}  n: {:3d}  ".format(int(0), m, n)
                         + "R1 = {:15.8E}  Z1 = {:15.8E}\n".format(eq.Rb_lmn[k], 0)
                     )
             for k, (l, m, n) in enumerate(eq.surface.Z_basis.modes):
-                if abs(eq.Zb_lmn[k]) > 1e-8:
+                if abs(eq.Zb_lmn[k]) > threshold:
                     f.write(
                         "l: {:3d}  m: {:3d}  n: {:3d}  ".format(int(0), m, n)
                         + "R1 = {:15.8E}  Z1 = {:15.8E}\n".format(0, eq.Zb_lmn[k])
                     )
         else:
             for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
-                if abs(eq.Rb_lmn[k]) > 1e-8 or abs(eq.Zb_lmn[k]) > 1e-8:
+                if abs(eq.Rb_lmn[k]) > threshold or abs(eq.Zb_lmn[k]) > threshold:
                     f.write(
                         "l: {:3d}  m: {:3d}  n: {:3d}  ".format(int(0), m, n)
                         + "R1 = {:15.8E}  Z1 = {:15.8E}\n".format(

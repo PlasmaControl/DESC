@@ -979,7 +979,7 @@ class InputReader:
 
         # default values
         inputs = {
-            "sym": False,
+            "sym": True,
             "NFP": 1,
             "Psi": 1.0,
             "L": None,

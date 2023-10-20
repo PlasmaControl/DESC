@@ -13,6 +13,14 @@ initial_time = timet()
 # Load Equilibrium
 filename = "input.LandremanPaul2021_QA_scaled_output.h5"
 opt_filename = "optimized_" + filename
+save_text_name = "solution" + opt_filename
+
+
+print("*************** START ***************")
+print("Compare Tracing")
+print(f"Original Equilibrium: {filename}")
+print(f"Optimized Equilibrium: {opt_filename}")
+print("*************************************")
 
 eq = desc.io.load(filename)[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
@@ -99,7 +107,7 @@ print("\n*************** SOLUTION - OPT_SOLUTION ***************")
 print(solution - opt_solution)
 print("***************************************************\n")
 
-output_to_file(solution=opt_solution, name="optimized_tracer.txt")
+output_to_file(solution=opt_solution, name=save_text_name)
 
 # PLOT FUNCTIONS
 
@@ -139,3 +147,11 @@ def Energy_Plot(solution):
 Trajectory_Plot(opt_solution)
 Quantity_Plot(opt_solution)
 Energy_Plot(opt_solution)
+
+print("Compare Tracing Complete")
+if Trajectory_Plot or Quantity_Plot or Energy_Plot:
+    print("Plots Saved")
+print(f"Optimized Equilibrium Solution File Name: {save_text_name}.txt")
+final_time = timet()
+print(f"Total Time: {final_time - initial_time}s")
+print("*************** END ***************")

@@ -14,6 +14,11 @@ initial_time = timet()
 filename = "ellipse_higherPsi.h5"
 save_text_name = "solution" + filename
 
+print("*************** Start ***************")
+print("Particle Tracer")
+print(f"Filename: {filename}")
+print("*************************************")
+
 eq = desc.io.load(filename)[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
@@ -93,15 +98,16 @@ output_to_file(solution=solution, name=save_text_name)
 
 # PLOT FUNCTIONS
 
-def Trajectory_Plot():
+def Trajectory_Plot(solution=solution, save_name="Trajectory_Plot.png"):
     fig, ax = plt.subplots()
     ax.plot(np.sqrt(solution[:, 0]) * np.cos(solution[:, 1]), np.sqrt(solution[:, 0]) * np.sin(solution[:, 1]))
     ax.set_aspect("equal", adjustable='box')
     plt.xlabel(r'$\sqrt{\psi}cos(\theta)$')
     plt.ylabel(r'$\sqrt{\psi}sin(\theta)$')
-    fig.savefig("Trajectory_Plot.png", bbox_inches="tight", dpi=300)
+    fig.savefig(save_name, bbox_inches="tight", dpi=300)
+    print(f"Trajectory Plot Saved: {save_name}")
 
-def Quantity_Plot():
+def Quantity_Plot(solution=solution, save_name="Quantity_Plot.png"):
     fig, axs = plt.subplots(2, 2)
     axs[0, 1].plot(time, solution[:, 0], 'tab:orange')
     axs[0, 1].set_title(r'$\psi$ (t)')
@@ -113,9 +119,10 @@ def Quantity_Plot():
     axs[0, 0].set_title(r"$v_{\parallel}$ (t)")
     fig = plt.gcf()
     fig.set_size_inches(10.5, 10.5)
-    fig.savefig("Quantity_Plot.png", bbox_inches="tight", dpi=300)
+    fig.savefig(save_name, bbox_inches="tight", dpi=300)
+    print(f"Quantity Plot Saved: {save_name}")
 
-def Energy_Plot():
+def Energy_Plot(solution=solution, save_name="Energy_Plot.png"):
     plt.figure()
     grid = Grid(np.vstack((np.sqrt(solution[:, 0]), solution[:, 1], solution[:, 2])).T,sort=False)
     B_field = eq.compute("|B|", grid=grid)
@@ -124,8 +131,17 @@ def Energy_Plot():
     plt.plot(time, (Energy-Energy_SI)/Energy_SI)
     plt.title(r"(E - E$_0$)/E$_0$")
     plt.ticklabel_format(axis="y", style="sci", scilimits=(0,0))
-    plt.savefig("Energy_Plot.png", bbox_inches="tight", dpi=300)
+    plt.savefig(save_name, bbox_inches="tight", dpi=300)
+    print(f"Energy Plot Saved: {save_name}")
 
 Trajectory_Plot()
 Quantity_Plot()
 Energy_Plot()
+
+print("Particle Tracer Complete")
+if Trajectory_Plot or Quantity_Plot or Energy_Plot:
+    print("Plots Saved")
+print(f"Solution File Name: {save_text_name}.txt")
+final_time = timet()
+print(f"Total Time: {final_time - initial_time}s")
+print("*************** END ***************")

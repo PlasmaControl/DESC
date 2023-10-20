@@ -18,6 +18,11 @@ initial_time = timet()
 filename = "ellipse_higherPsi.h5"
 savename = "optimized_" + filename
 
+print("*************** START ***************")
+print("Optimization")
+print(f"Filename: {filename}")
+print("****************************************")
+
 # Load Equilibrium
 eq = desc.io.load(filename)
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
@@ -96,3 +101,9 @@ eq.save(savename)
 
 intermediate_time_4 = timet()
 print(f"Time to optimize: {intermediate_time_4 - intermediate_time_3}s")
+
+print("Optimization Completed")
+print(f"Optimized Filename: {savename}")
+final_time = timet()
+print(f"Total time: {final_time - initial_time}s")
+print("*********************** END ***********************")

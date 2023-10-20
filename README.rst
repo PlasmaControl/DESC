@@ -15,9 +15,9 @@ The theoretical approach and implementation details used by DESC are presented i
 Please cite our work if you use DESC!
 
 .. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. [`Physics of Plasmas <https://doi.org/10.1063/5.0020743>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/dudt2020/dudt2020desc.pdf>`__]
-.. [2] Panici, D. et al (2023). The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations. [`JPP <https://doi.org/10.1017/S0022377823000272 >`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/panici2022/Panici_DESC_Stellarator_suite_part_I_quick_accurate_equilibria.pdf>`__]
-.. [3] Conlin, R. et al. (2023). The DESC Stellarator Code Suite Part II: Perturbation and continuation methods. [`JPP <https://doi.org/10.1017/S0022377823000399 >`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/conlin2022/conlin2022perturbations.pdf>`__]
-.. [4] Dudt, D. et al. (2023). The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization. [`JPP <https://doi.org/10.1017/S0022377823000235 >`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/dudt2022/dudt2022optimization.pdf>`__]
+.. [2] Panici, D. et al (2023). The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations. [`JPP <https://doi.org/10.1017/S0022377823000272>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/panici2022/Panici_DESC_Stellarator_suite_part_I_quick_accurate_equilibria.pdf>`__]
+.. [3] Conlin, R. et al. (2023). The DESC Stellarator Code Suite Part II: Perturbation and continuation methods. [`JPP <https://doi.org/10.1017/S0022377823000399>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/conlin2022/conlin2022perturbations.pdf>`__]
+.. [4] Dudt, D. et al. (2023). The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization. [`JPP <https://doi.org/10.1017/S0022377823000235>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/dudt2022/dudt2022optimization.pdf>`__]
 .. _Theory: https://desc-docs.readthedocs.io/en/latest/theory_general.html
 
 Quick Start

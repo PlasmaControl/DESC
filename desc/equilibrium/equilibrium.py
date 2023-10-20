@@ -11,7 +11,7 @@ from scipy.constants import mu_0
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import FiniteElementBasis, FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
@@ -20,6 +20,7 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     Surface,
     ZernikeRZToroidalSection,
+    convert_coefficients,
 )
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
@@ -124,6 +125,8 @@ class Equilibrium(IOAble):
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
+        "_I",
+        "_J",
         "_R_basis",
         "_Z_basis",
         "_L_basis",
@@ -142,11 +145,14 @@ class Equilibrium(IOAble):
         "_L_grid",
         "_M_grid",
         "_N_grid",
+        "_I_grid",
+        "_J_grid",
     ]
 
     def __init__(
         self,
         Psi=1.0,
+        basis="FourierZernike",
         NFP=None,
         L=None,
         M=None,
@@ -154,6 +160,10 @@ class Equilibrium(IOAble):
         L_grid=None,
         M_grid=None,
         N_grid=None,
+        I=None,
+        J=None,
+        I_grid=None,
+        J_grid=None,
         pressure=None,
         iota=None,
         current=None,
@@ -227,6 +237,10 @@ class Equilibrium(IOAble):
         _assert_nonnegint(L_grid, "L_grid")
         _assert_nonnegint(M_grid, "M_grid")
         _assert_nonnegint(N_grid, "N_grid")
+        _assert_nonnegint(I, "I")
+        _assert_nonnegint(J, "J")
+        _assert_nonnegint(I_grid, "I_grid")
+        _assert_nonnegint(J_grid, "J_grid")
 
         self._N = int(setdefault(N, self.surface.N))
         self._M = int(setdefault(M, self.surface.M))
@@ -242,11 +256,18 @@ class Equilibrium(IOAble):
         self._L_grid = setdefault(L_grid, 2 * self.L)
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
+        self.I = I
+        self.J = J
+        self._I = I
+        self._J = J
+        self._I_grid = setdefault(I_grid, self.I)
+        self._J_grid = setdefault(J_grid, self.J)
 
+        # bases
+        self.basis = basis
         self._surface.change_resolution(self.L, self.M, self.N)
         self._axis.change_resolution(self.N)
 
-        # bases
         self._R_basis = FourierZernikeBasis(
             L=self.L,
             M=self.M,
@@ -360,12 +381,49 @@ class Equilibrium(IOAble):
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
         self.set_initial_guess()
+
         if "R_lmn" in kwargs:
             self.R_lmn = kwargs.pop("R_lmn")
         if "Z_lmn" in kwargs:
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
+
+        # Now that initial guess is initialized, convert to the
+        # FE basis
+        if basis != "FourierZernike":
+            Rprime_basis = FiniteElementBasis(
+                L=self.L,
+                M=self.I,
+                N=self.J,
+            )
+            Zprime_basis = FiniteElementBasis(
+                L=self.L,
+                M=self.I,
+                N=self.J,
+            )
+            Lprime_basis = FiniteElementBasis(
+                L=self.L,
+                M=self.I,
+                N=self.J,
+            )
+            Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_coefficients(
+                self.R_lmn,
+                self.Z_lmn,
+                self.L_lmn,
+                self._R_basis,
+                self._Z_basis,
+                self._L_basis,
+                Rprime_basis,
+                Zprime_basis,
+                Lprime_basis,
+            )
+            self._R_basis = Rprime_basis
+            self._Z_basis = Zprime_basis
+            self._L_basis = Lprime_basis
+            self.R_lmn = Rprime_lmn
+            self.Z_lmn = Zprime_lmn
+            self.L_lmn = Lprime_lmn
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -388,13 +446,19 @@ class Equilibrium(IOAble):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, sym={}, spectral_indexing={})".format(
-                self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
+            + " ("
+            + "L={}, M={}, N={}, I={}, J={}, NFP={}, sym={}".format(
+                self.L, self.M, self.N, self.I, self.J, self.NFP, self.sym
+            )
+            + ", spectral_indexing={})".format(
+                self.spectral_indexing,
             )
         )
 
     def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
+
+        Note that the R_{lmn} can represent the basis elements in any basis.
 
         Parameters
         ----------
@@ -465,13 +529,17 @@ class Equilibrium(IOAble):
         L=None,
         M=None,
         N=None,
+        I=None,
+        J=None,
         L_grid=None,
         M_grid=None,
         N_grid=None,
+        I_grid=None,
+        J_grid=None,
         NFP=None,
         sym=None,
     ):
-        """Set the spectral resolution and real space grid resolution.
+        """Set the spectral (or FE) resolution and real space grid resolution.
 
         Parameters
         ----------
@@ -496,9 +564,13 @@ class Equilibrium(IOAble):
         self._L = setdefault(L, self.L)
         self._M = setdefault(M, self.M)
         self._N = setdefault(N, self.N)
+        self._I = setdefault(I, self.I)
+        self._J = setdefault(J, self.J)
         self._L_grid = setdefault(L_grid, self.L_grid)
         self._M_grid = setdefault(M_grid, self.M_grid)
         self._N_grid = setdefault(N_grid, self.N_grid)
+        self._I_grid = self.I
+        self._J_grid = self.J
         self._NFP = setdefault(NFP, self.NFP)
         self._sym = setdefault(sym, self.sym)
 
@@ -506,16 +578,32 @@ class Equilibrium(IOAble):
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
 
-        self.R_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
-        )
-        self.Z_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
-        )
-        self.L_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
-        )
-
+        if self.basis == "FourierZernike":
+            self.R_basis.change_resolution(
+                self.L,
+                self.M,
+                self.N,
+                NFP=self.NFP,
+                sym="cos" if self.sym else self.sym,
+            )
+            self.Z_basis.change_resolution(
+                self.L,
+                self.M,
+                self.N,
+                NFP=self.NFP,
+                sym="sin" if self.sym else self.sym,
+            )
+            self.L_basis.change_resolution(
+                self.L,
+                self.M,
+                self.N,
+                NFP=self.NFP,
+                sym="sin" if self.sym else self.sym,
+            )
+        else:
+            self.R_basis.change_resolution(self.L, self.I, self.J)
+            self.Z_basis.change_resolution(self.L, self.I, self.J)
+            self.L_basis.change_resolution(self.L, self.I, self.J)
         for profile in [
             "pressure",
             "iota",
@@ -530,11 +618,11 @@ class Equilibrium(IOAble):
             if hasattr(p, "change_resolution"):
                 p.change_resolution(max(p.basis.L, self.L))
 
+        # Keep the initial surface and axis in Fourier representation
         self.surface.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
         )
         self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
-
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)

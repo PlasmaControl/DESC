@@ -4,15 +4,608 @@ import numbers
 import warnings
 
 import numpy as np
+from scipy.sparse.linalg import splu
 
 from desc.backend import jnp, put, sign
-from desc.basis import DoubleFourierSeries, ZernikePolynomial
+from desc.basis import DoubleFiniteElementBasis, DoubleFourierSeries, ZernikePolynomial
 from desc.io import InputReader
 from desc.utils import copy_coeffs
 
 from .core import Surface
 
-__all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
+__all__ = [
+    "FourierRZToroidalSurface",
+    "ZernikeRZToroidalSection",
+    "convert_coefficients",
+    "FiniteElementRZToroidalSurface",
+]
+
+
+def convert_coefficients_2D(R_lmn, Z_lmn, R_basis, Z_basis, Rprime_basis, Zprime_basis):
+    """Converts 2D Fourier to 2D FE representation.
+
+    Parameters
+    ----------
+    R_lmn : ndarray, shape(k, 3)
+        Fourier coefficients of R(1, theta, zeta)
+    Z_lmn : ndarray, shape(k, 3)
+        Fourier coefficients of Z(1, theta, zeta)
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    R_basis : DoubleFourier
+        Basis elements representing the dependence in (1, theta, phi).
+    Z_basis : DoubleFourier
+        Basis elements representing the dependence in (1, theta, phi).
+    Rprime_basis : DoubleFiniteElementBasis
+        Basis elements representing the dependence in (1, theta, phi).
+    Zprime_basis : DoubleFiniteElementBasis
+        Basis elements representing the dependence in (1, theta, phi).
+
+    Returns
+    -------
+    tildeR_lmn : ndarray, shape (kk, 2)
+        Finite element coefficients of R(1, theta, zeta)
+    tildeZ_lmn : ndarray, shape (kk, 2)
+        Finite element coefficients of Z(1, theta, zeta)
+
+    """
+    # Assume uniform grid
+    rho = np.array([1.0])
+    M = R_basis.M
+    N = R_basis.N
+    I = Rprime_basis.M
+    J = Rprime_basis.N
+    theta = np.linspace(0, 2 * np.pi, I)
+    zeta = np.linspace(0, 2 * np.pi, J)
+    nodes = np.array(np.meshgrid(rho, theta, zeta, indexing="ij"))
+    Bjb_Z = np.zeros((I, J, I, J))
+    Aj_Z = np.zeros((I, J))
+    Bjb_R = np.zeros((I, J, I, J))
+    Aj_R = np.zeros((I, J))
+    for i in range(I):
+        for j in range(J):
+            for a in range(I):
+                for b in range(J):
+                    Bjb_Z[i, j, a, b] += np.sum(
+                        np.sum(
+                            Zprime_basis.evaluate(
+                                nodes=nodes, modes=np.array([[0, i, j]])
+                            )
+                            * Zprime_basis.evaluate(
+                                nodes=nodes, modes=np.array([[0, a, b]])
+                            ),
+                            axis=0,
+                        )
+                    )
+                    Bjb_R[i, j, a, b] += np.sum(
+                        np.sum(
+                            Rprime_basis.evaluate(
+                                nodes=nodes, modes=np.array([[0, i, j]])
+                            )
+                            * Rprime_basis.evaluate(
+                                nodes=nodes, modes=np.array([[0, a, b]])
+                            ),
+                            axis=0,
+                        )
+                    )
+    modes_R = R_basis.modes
+    modes_Z = Z_basis.modes
+    for i in range(I):
+        for j in range(J):
+            for m in range(M):
+                for n in range(N):
+                    # Sum over n, m and integrals over theta, zeta
+                    Aj_Z[i, j] += Z_lmn[modes_Z[m + M * n, :]] * np.sum(
+                        np.sum(
+                            Z_basis.evaluate(nodes=nodes, modes=np.array([0, n, m]))
+                            * Zprime_basis.evaluate(
+                                nodes=nodes, modes=np.array([0, i, j])
+                            ),
+                            axis=0,
+                        )
+                    )
+                    Aj_R[i, j] += R_lmn[modes_R[m + M * n, :]] * np.sum(
+                        np.sum(
+                            R_basis.evaluate(nodes=nodes, modes=np.array([0, n, m]))
+                            * Rprime_basis.evaluate(
+                                nodes=nodes, modes=np.array([0, i, j])
+                            ),
+                            axis=0,
+                        )
+                    )
+    # Bjb and Aj should both be scaled by the grid spacing, but this cancels out
+    # if the grid spacing is uniform, so we omit it here.
+    Bjb_R = Bjb_R.reshape(I * J, I * J)
+    Aj_R = Aj_R.reshape(I * J)
+    Bjb_Z = Bjb_Z.reshape(I * J, I * J)
+    Aj_Z = Aj_Z.reshape(I * J)
+
+    # Constructed the matrices such that Bjb * Rprime = Aj and now need to solve
+    # this linear system of equations. Use an LU
+    lu = splu(Bjb_R)
+    Rprime = lu.solve(Aj_R)
+    Rprime_lmn = Rprime.reshape(I, J)
+    lu = splu(Bjb_Z)
+    Zprime = lu.solve(Aj_Z)
+    Zprime_lmn = Zprime.reshape(I, J)
+    return Rprime_lmn, Zprime_lmn
+
+
+def convert_coefficients(
+    R_lmn,
+    Z_lmn,
+    L_lmn,
+    R_basis,
+    Z_basis,
+    L_basis,
+    Rprime_basis,
+    Zprime_basis,
+    Lprime_basis,
+):
+    """Converts between double Fourier and double FE representation.
+
+    Parameters
+    ----------
+    R_lmn : ndarray, shape(k, 3)
+        Fourier coefficients of R(rho, theta, zeta)
+    Z_lmn : ndarray, shape(k, 3)
+        Fourier coefficients of Z(rho, theta, zeta)
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    L_lmn : ndarray, shape(k, 3)
+        Fourier coefficients of Lambda(rho, theta, zeta), Default = None
+    R_basis : DoubleFourier or FourierZernike, shape (I, J) or shape (L, I, J)
+        Basis elements representing the dependence in (rho, theta, phi).
+    Z_basis : DoubleFourier or FourierZernike, shape (I, J) or shape (L, I, J)
+        Basis elements representing the dependence in (rho, theta, phi).
+    L_basis : DoubleFourier or FourierZernike, shape (I, J) or shape (L, I, J)
+        Basis elements representing the dependence in (rho, theta, phi).
+    J : int
+        Number of FE modes to use in toroidal direction.
+
+    Returns
+    -------
+    tildeR_lmn : ndarray, shape (kk, 3)
+        Finite element coefficients of R(rho, theta, zeta)
+    tildeZ_lmn : ndarray, shape (kk, 3)
+        Finite element coefficients of Z(rho, theta, zeta)
+    tildeL_lmn : ndarray, shape (kk, 3)
+        Finite element coefficients of L(rho, theta, zeta)
+
+    """
+    # Assume uniform grid
+    rho = np.array([1.0])
+    M = R_basis.M
+    N = R_basis.N
+    I = max(Rprime_basis.M, 1)
+    J = max(Rprime_basis.N, 1)
+    L = max(Rprime_basis.L, 1)
+    theta = np.linspace(0, 2 * np.pi, I)
+    zeta = np.linspace(0, 2 * np.pi, J)
+    nodes = np.array(np.meshgrid(rho, theta, zeta, indexing="ij")).reshape(3, I * J).T
+    Bjb_Z = np.zeros((I, J, I, J))
+    Aj_Z = np.zeros((I, J, L))
+    Bjb_R = np.zeros((I, J, I, J))
+    Aj_R = np.zeros((I, J, L))
+    Bjb_L = np.zeros((I, J, I, J))
+    Aj_L = np.zeros((I, J, L))
+    for i in range(I):
+        for j in range(J):
+            for a in range(I):
+                for b in range(J):
+                    Bjb_Z[i, j, a, b] += np.sum(
+                        np.sum(
+                            Zprime_basis.evaluate(
+                                nodes=nodes, modes=np.array([[0, i, j]])
+                            )
+                            * Zprime_basis.evaluate(
+                                nodes=nodes, modes=np.array([[0, a, b]])
+                            ),
+                            axis=0,
+                        )
+                    )
+                    Bjb_R[i, j, a, b] += np.sum(
+                        np.sum(
+                            Rprime_basis.evaluate(
+                                nodes=nodes, modes=np.array([[0, i, j]])
+                            )
+                            * Rprime_basis.evaluate(
+                                nodes=nodes, modes=np.array([[0, a, b]])
+                            ),
+                            axis=0,
+                        )
+                    )
+    rho = np.linspace(0, 1.0, L, endpoint=True)
+    nodes = (
+        np.array(np.meshgrid(rho, theta, zeta, indexing="ij")).reshape(3, I * J * L).T
+    )
+    modes_R = R_basis.modes
+    modes_Z = Z_basis.modes
+    modes_L = L_basis.modes
+    for i in range(I):
+        for j in range(J):
+            for k in range(L):
+                for n in range(M):
+                    for m in range(N):
+                        for l in range(L):
+                            # Sum over n, m, l and integrals over theta, zeta, rho
+                            Aj_Z[i, j, k] += (
+                                Z_lmn[modes_Z[l + L * m + L * M * n, :]]
+                                * np.sum(
+                                    np.sum(
+                                        np.sum(
+                                            Z_basis.evaluate(
+                                                nodes=nodes,
+                                                modes=modes_Z[l + L * m + L * M * n, :],
+                                            )
+                                            * Zprime_basis.evaluate(
+                                                nodes=nodes, modes=np.array([0, i, j])
+                                            ),
+                                            axis=0,
+                                        ),
+                                        axis=0,
+                                    )
+                                )
+                                / (k + 1)
+                            )
+                            Aj_R[i, j, k] += (
+                                R_lmn[modes_R[l + L * m + L * M * n, :]]
+                                * np.sum(
+                                    np.sum(
+                                        np.sum(
+                                            R_basis.evaluate(
+                                                nodes=nodes,
+                                                modes=modes_R[l + L * m + L * M * n, :],
+                                            )
+                                            * Rprime_basis.evaluate(
+                                                nodes=nodes, modes=np.array([0, i, j])
+                                            ),
+                                            axis=0,
+                                        ),
+                                        axis=0,
+                                    )
+                                )
+                                / (k + 1)
+                            )
+                            Aj_L[i, j, k] += (
+                                L_lmn[modes_L[l + L * m + L * M * n, :]]
+                                * np.sum(
+                                    np.sum(
+                                        np.sum(
+                                            L_basis.evaluate(
+                                                nodes=nodes,
+                                                modes=modes_L[l + L * m + L * M * n, :],
+                                            )
+                                            * Lprime_basis.evaluate(
+                                                nodes=nodes, modes=np.array([0, i, j])
+                                            ),
+                                            axis=0,
+                                        ),
+                                        axis=0,
+                                    )
+                                )
+                                / (k + 1)
+                            )
+    # Bjb and Aj should both be scaled by the grid spacing, but this cancels out
+    # if the grid spacing is uniform, so we omit it here.
+    # However, factor of pi from the orthonormality of the radial basis functions
+    # being used in the finite element representation.
+    Bjb_R = Bjb_R.reshape(I * J, I * J)
+    print(Bjb_R)
+    Bjb_R_expanded = np.zeros((I * J, L, I * J, L))
+    for ii in range(L):
+        Bjb_R_expanded[:, ii, :, ii] = Bjb_R
+    Bjb_R = np.reshape(Bjb_R_expanded, (I * J * L, I * J * L))
+    print(Bjb_R.shape)
+    Aj_R = Aj_R.reshape(I * J * L) * np.pi
+    Bjb_Z = Bjb_Z.reshape(I * J, I * J)
+    Bjb_Z = np.tile(Bjb_Z, L)  # repeat this matrix L times for the linear solve
+    Aj_Z = Aj_Z.reshape(I * J * L) * np.pi
+    Bjb_L = Bjb_L.reshape(I * J, I * J)
+    Bjb_L = np.tile(Bjb_L, L)  # repeat this matrix L times for the linear solve
+    Aj_L = Aj_L.reshape(I * J * L) * np.pi
+
+    # Constructed the matrices such that Bjb * Rprime = Aj and now need to solve
+    # this linear system of equations. Use an LU
+    lu = splu(Bjb_R)
+    Rprime = lu.solve(Aj_R)
+    Rprime_lmn = Rprime.reshape(L * I * J)
+    lu = splu(Bjb_Z)
+    Zprime = lu.solve(Aj_Z)
+    Zprime_lmn = Zprime.reshape(L * I * J)
+    lu = splu(Bjb_L)
+    Lprime = lu.solve(Aj_L)
+    Lprime_lmn = Lprime.reshape(L * I * J)
+    return Rprime_lmn, Zprime_lmn, Lprime_lmn
+
+
+class FiniteElementRZToroidalSurface(Surface):
+    """Toroidal surface represented by finite elements in poloidal and toroidal angles.
+
+    Parameters
+    ----------
+    R_lmn, Z_lmn : array-like, shape(k,)
+        Finite Element coefficients for R and Z in cylindrical coordinates
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    rho : float [0,1]
+        flux surface label for the toroidal surface
+    name : str
+        name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+
+    """
+
+    _io_attrs_ = Surface._io_attrs_ + [
+        "_R_lmn",
+        "_Z_lmn",
+        "_R_basis",
+        "_Z_basis",
+        "rho",
+        "_NFP",
+    ]
+
+    def __init__(
+        self,
+        R_lmn=None,
+        Z_lmn=None,
+        modes_R=None,
+        modes_Z=None,
+        NFP=1,
+        sym="auto",
+        rho=1,
+        name="",
+        check_orientation=True,
+    ):
+        self.fs = FourierRZToroidalSurface(
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            modes_R=modes_R,
+            modes_Z=modes_Z,
+            NFP=NFP,
+            sym=sym,
+            rho=rho,
+            name=name,
+            check_orientation=check_orientation,
+        )
+        self._R_basis = DoubleFiniteElementBasis(M=32, N=32)
+        self._Z_basis = DoubleFiniteElementBasis(M=32, N=32)
+        R_lmn, Z_lmn = convert_coefficients_2D(
+            self.fs.R_lmn,
+            self.fs.Z_lmn,
+            self.fs.R_basis,
+            self.fs.Z_basis,
+            self._R_basis,
+            self._Z_basis,
+        )
+        I = self.fs._M * 2
+        J = self.fs._N * 2
+        modes_R, modes_Z = np.meshgrid(I, J, indexing="ij")
+        modes_R = modes_R.reshape(-1, 2)
+        modes_Z = modes_Z.reshape(-1, 2)
+        self.R_lmn = R_lmn
+        self.Z_lmn = Z_lmn
+        self.rho = rho
+        self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
+        self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self.fs._NFP
+
+    @NFP.setter
+    def NFP(self, new):
+        assert (
+            isinstance(new, numbers.Real) and int(new) == new and new > 0
+        ), f"NFP should be a positive integer, got {type(new)}"
+        self.fs.change_resolution(NFP=new)
+
+    @property
+    def R_basis(self):
+        """Double finite element basis for R."""
+        return self._R_basis
+
+    @property
+    def Z_basis(self):
+        """Double finite element basis for Z."""
+        return self._Z_basis
+
+    def change_resolution(self, *args, **kwargs):
+        """Change the maximum poloidal and toroidal resolution."""
+        assert (
+            ((len(args) in [2, 3]) and len(kwargs) == 0)
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
+            or (len(args) == 0)
+        ), (
+            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+            + "positional arguments or only keyword arguments."
+        )
+        L = kwargs.pop("L", None)
+        M = kwargs.pop("M", None)
+        N = kwargs.pop("N", None)
+        NFP = kwargs.pop("NFP", None)
+        sym = kwargs.pop("sym", None)
+        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
+        self._NFP = NFP if NFP is not None else self.NFP
+        self._sym = sym if sym is not None else self.sym
+        if L is not None:
+            warnings.warn(
+                "FourierRZToroidalSurface does not have radial resolution, ignoring L"
+            )
+        if len(args) == 2:
+            M, N = args
+        elif len(args) == 3:
+            L, M, N = args
+
+        if (
+            ((N is not None) and (N != self.N))
+            or ((M is not None) and (M != self.M))
+            or (NFP is not None)
+        ):
+            M = M if M is not None else self.M
+            N = N if N is not None else self.N
+            R_modes_old = self.R_basis.modes
+            Z_modes_old = self.Z_basis.modes
+            self.R_basis.change_resolution(I=M, J=N)
+            self.Z_basis.change_resolution(I=M, J=N)
+            self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
+            self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
+            self._M = M
+            self._N = N
+
+    @property
+    def R_lmn(self):
+        """ndarray: Spectral coefficients for R."""
+        return self._R_lmn
+
+    @R_lmn.setter
+    def R_lmn(self, new):
+        if len(new) == self.R_basis.num_modes:
+            self._R_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"R_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
+            )
+
+    @property
+    def Z_lmn(self):
+        """ndarray: Spectral coefficients for Z."""
+        return self._Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, new):
+        if len(new) == self.Z_basis.num_modes:
+            self._Z_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
+            )
+
+    def get_coeffs(self, m, n=0):
+        """Get finite element coefficients for given mode number(s)."""
+        n = np.atleast_1d(n).astype(int)
+        m = np.atleast_1d(m).astype(int)
+
+        m, n = np.broadcast_arrays(m, n)
+        R = np.zeros_like(m).astype(float)
+        Z = np.zeros_like(m).astype(float)
+
+        mn = np.array([m, n]).T
+        idxR = np.where(
+            (mn[:, np.newaxis, :] == self.R_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
+        )
+        idxZ = np.where(
+            (mn[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
+        )
+
+        R[idxR[0]] = self.R_lmn[idxR[1]]
+        Z[idxZ[0]] = self.Z_lmn[idxZ[1]]
+        return R, Z
+
+    def set_coeffs(self, m, n=0, R=None, Z=None):
+        """Set specific finite element coefficients."""
+        m, n, R, Z = (
+            np.atleast_1d(m),
+            np.atleast_1d(n),
+            np.atleast_1d(R),
+            np.atleast_1d(Z),
+        )
+        m, n, R, Z = np.broadcast_arrays(m, n, R, Z)
+        for mm, nn, RR, ZZ in zip(m, n, R, Z):
+            if RR is not None:
+                idxR = self.R_basis.get_idx(0, mm, nn)
+                self.R_lmn = put(self.R_lmn, idxR, RR)
+            if ZZ is not None:
+                idxZ = self.Z_basis.get_idx(0, mm, nn)
+                self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+
+    @classmethod
+    def from_input_file(cls, path):
+        """Create a finite element surface from Fourier coefficients in a file.
+
+        Parameters
+        ----------
+        path : Path-like or str
+            Path to DESC or VMEC input file.
+
+        Returns
+        -------
+        surface : FiniteElementRZToroidalSurface
+            Surface with given finite element coefficients.
+
+        """
+        surf = cls()
+        fs = surf.fs.from_input_file(path=path)
+        R_lmn, Z_lmn = convert_coefficients_2D(
+            fs.R_lmn,
+            fs.Z_lmn,
+            fs.R_basis,
+            fs.Z_basis,
+            surf._R_basis,
+            surf._Z_basis,
+        )
+        I = fs._M * 2
+        J = fs._N * 2
+        modes_R, modes_Z = np.meshgrid(I, J, indexing="ij")
+        modes_R = modes_R.reshape(-1, 2)
+        modes_Z = modes_Z.reshape(-1, 2)
+        surf = cls(R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z)
+        return surf
+
+    @classmethod
+    def from_near_axis(cls, aspect_ratio, elongation, mirror_ratio, axis_Z, NFP=1):
+        """Create a surface from a near-axis model for quasi-poloidal/quasi-isodynamic.
+
+        Parameters
+        ----------
+        aspect_ratio : float
+            Aspect ratio of the geometry = major radius / average cross-sectional area.
+        elongation : float
+            Elongation of the elliptical surface = major axis / minor axis.
+        mirror_ratio : float
+            Mirror ratio generated by toroidal variation of the cross-sectional area.
+            Must be < 2.
+        axis_Z : float
+            Vertical extent of the magnetic axis Z coordinate.
+            Coefficient of sin(2*phi).
+        NFP : int
+            Number of field periods.
+
+        Returns
+        -------
+        surface : FourierRZToroidalSurface
+            Surface with given geometric properties.
+
+        """
+        surf = cls()
+        fs = surf.fs.from_near_axis(aspect_ratio, elongation, mirror_ratio, axis_Z, NFP)
+        R_lmn, Z_lmn = convert_coefficients_2D(
+            fs.R_lmn,
+            fs.Z_lmn,
+            fs.R_basis,
+            fs.Z_basis,
+            surf._R_basis,
+            surf._Z_basis,
+        )
+        I = fs._M * 2
+        J = fs._N * 2
+        modes_R, modes_Z = np.meshgrid(I, J, indexing="ij")
+        modes_R = modes_R.reshape(-1, 2)
+        modes_Z = modes_Z.reshape(-1, 2)
+        surf = cls(R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z)
+        return surf
 
 
 class FourierRZToroidalSurface(Surface):

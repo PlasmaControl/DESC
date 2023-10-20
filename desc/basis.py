@@ -6,6 +6,7 @@ from math import factorial
 
 import mpmath
 import numpy as np
+from scipy.interpolate import BSpline
 
 from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
@@ -14,6 +15,9 @@ from desc.utils import flatten_list
 __all__ = [
     "PowerSeries",
     "FourierSeries",
+    "Bspline",
+    "FiniteElementBasis",
+    "DoubleFiniteElementBasis",
     "DoubleFourierSeries",
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
@@ -219,6 +223,172 @@ class _Basis(IOAble, ABC):
             + str(hex(id(self)))
             + " (L={}, M={}, N={}, NFP={}, sym={}, spectral_indexing={})".format(
                 self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
+            )
+        )
+
+
+class _FE_Basis(IOAble, ABC):
+    """Basis is an abstract base class for finite-element basis sets."""
+
+    _io_attrs_ = [
+        "_L",
+        "_M",
+        "_N",
+        "_NFP",
+        "_modes",
+        "_sym",
+    ]
+
+    def __init__(self):
+        self._enforce_symmetry()
+        self._create_idx()
+
+    def _set_up(self):
+        """Do things after loading or changing resolution."""
+        # Also recreates any attributes not in _io_attrs on load from input file.
+        # See IOAble class docstring for more info.
+        self._enforce_symmetry()
+        self._create_idx()
+
+    def _create_idx(self):
+        """Create index for use with self.get_idx()."""
+        self._idx = {}
+        for idx, (L, M, N) in enumerate(self.modes):
+            if L not in self._idx:
+                self._idx[L] = {}
+            if M not in self._idx[L]:
+                self._idx[L][M] = {}
+            self._idx[L][M][N] = idx
+
+    def get_idx(self, L=0, M=0, N=0, error=True):
+        """Get the index of the ``'modes'`` array corresponding to given mode numbers.
+
+        Parameters
+        ----------
+        L : int
+            Radial mode number.
+        M : int
+            Poloidal basis function index
+        N : int
+            Toroidal basis function index
+        error : bool
+            whether to raise exception if mode is not in basis, or return empty array
+
+        Returns
+        -------
+        idx : ndarray of int
+            Index of given mode numbers.
+
+        """
+        try:
+            return self._idx[L][M][N]
+        except KeyError as e:
+            if error:
+                raise ValueError(
+                    "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
+                ) from e
+            else:
+                return np.array([]).astype(int)
+
+    @abstractmethod
+    def _get_modes(self):
+        """ndarray: Mode numbers for the basis."""
+
+    @abstractmethod
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            node coordinates, in (rho,theta,zeta)
+        derivatives : ndarray of int, shape(3,)
+            order of derivatives to compute in (rho,theta,zeta)
+        modes : ndarray of in, shape(num_modes,3), optional
+            basis modes to evaluate (if None, full basis is used)
+        unique : bool, optional
+            whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            basis functions evaluated at nodes
+
+        """
+
+    @abstractmethod
+    def change_resolution(self):
+        """Change resolution of the basis to the given resolutions."""
+
+    @property
+    def L(self):
+        """int: Maximum radial resolution."""
+        return self.__dict__.setdefault("_L", 0)
+
+    @L.setter
+    def L(self, L):
+        assert int(L) == L, "Basis Resolution must be an integer!"
+        self._L = int(L)
+
+    @property
+    def M(self):
+        """int:  Maximum poloidal index."""
+        return self.__dict__.setdefault("_M", 0)
+
+    @M.setter
+    def M(self, M):
+        assert int(M) == M, "Number of basis functions must be an integer!"
+        self._M = int(M)
+
+    @property
+    def N(self):
+        """int: Maximum toroidal index."""
+        return self.__dict__.setdefault("_N", 0)
+
+    @N.setter
+    def N(self, N):
+        assert int(N) == N, "Number of basis functions must be an integer!"
+        self._N = int(N)
+
+    @property
+    def NFP(self):
+        """int: Number of field periods."""
+        return self.__dict__.setdefault("_NFP", 1)
+
+    @property
+    def sym(self):
+        """str: {``'cos'``, ``'sin'``, ``False``} Type of symmetry."""
+        return self.__dict__.setdefault("_sym", False)
+
+    @property
+    def modes(self):
+        """ndarray: Mode numbers [l,i,j]."""
+        return self.__dict__.setdefault("_modes", np.array([]).reshape((0, 3)))
+
+    @modes.setter
+    def modes(self, modes):
+        self._modes = modes
+
+    @property
+    def num_modes(self):
+        """int: Total number of modes in the finite element basis."""
+        return self.modes.shape[0]
+
+    def __repr__(self):
+        """Get the string form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (L={}, M={}, N={}, NFP={}, sym={})".format(
+                self.L,
+                self.M,
+                self.N,
+                self.NFP,
+                self.sym,
             )
         )
 
@@ -450,6 +620,151 @@ class FourierSeries(_Basis):
             self.N = N
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.N)
+            self._set_up()
+
+
+class DoubleFiniteElementBasis(_Basis):
+    """2D basis set for use on a single flux surface.
+
+    Finite elements (splines) in both the poloidal and toroidal coordinates.
+
+    Parameters
+    ----------
+    M : int
+        Maximum poloidal resolution.
+    N : int
+        Maximum toroidal resolution.
+    NFP : int
+        Number of field periods.
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+
+    """
+
+    def __init__(self, M, N, NFP=1, sym=False):
+        self.L = 0
+        self.M = M
+        self.N = N
+        self._NFP = NFP
+        self._sym = sym
+        self._modes = self._get_modes(M=self.M, N=self.N)
+
+        super().__init__()
+
+    def _get_modes(self, M=0, N=0):
+        """Get mode numbers for double spline representation.
+
+        Parameters
+        ----------
+        M : int
+            Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        dim_pol = M
+        dim_tor = N
+        m = np.arange(dim_pol)
+        n = np.arange(dim_tor)
+        mm, nn = np.meshgrid(m, n)
+        mm = mm.reshape((-1, 1), order="F")
+        nn = nn.reshape((-1, 1), order="F")
+        z = np.zeros_like(mm)
+        y = np.hstack([z, mm, nn])
+        return y
+
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used).
+        unique : bool, optional
+            Whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff.
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            Basis functions evaluated at nodes.
+
+        """
+        if modes is None:
+            modes = self.modes
+        if derivatives[0] != 0:
+            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
+
+        r, t, z = nodes.T
+        l, m, n = modes.T
+
+        if unique:
+            _, tidx, toutidx = np.unique(
+                t, return_index=True, return_inverse=True, axis=0
+            )
+            _, zidx, zoutidx = np.unique(
+                z, return_index=True, return_inverse=True, axis=0
+            )
+            _, midx, moutidx = np.unique(
+                m, return_index=True, return_inverse=True, axis=0
+            )
+            _, nidx, noutidx = np.unique(
+                n, return_index=True, return_inverse=True, axis=0
+            )
+            t = t[tidx]
+            z = z[zidx]
+            m = m[midx]
+            n = n[nidx]
+
+        poloidal = Bspline(t[:, np.newaxis], m, dt=derivatives[1])
+        toroidal = Bspline(z[:, np.newaxis], n, dt=derivatives[2])
+        if unique:
+            poloidal = poloidal[toutidx][:, moutidx]
+            toroidal = toroidal[zoutidx][:, noutidx]
+
+        return poloidal * toroidal
+
+    def change_resolution(self, M, N, NFP=None, sym=None):
+        """Change resolution of the basis to the given resolutions.
+
+        Parameters
+        ----------
+        M : int
+            Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
+
+        """
+        self._NFP = NFP if NFP is not None else self.NFP
+        if M != self.M or N != self.N or sym != self.sym:
+            self.M = M
+            self.N = N
+            self._sym = sym if sym is not None else self.sym
+            self._modes = self._get_modes(self.M, self.N)
             self._set_up()
 
 
@@ -939,6 +1254,166 @@ class ChebyshevDoubleFourierBasis(_Basis):
             self._M = M
             self._N = N
             self._sym = sym if sym is not None else self.sym
+            self._modes = self._get_modes(self.L, self.M, self.N)
+            self._set_up()
+
+
+class FiniteElementBasis(_FE_Basis):
+    """3D finite element basis set for analytic functions in a toroidal volume.
+
+    Jacobi polynomials in the radial coordinate (same as Zernike, with m = 0)
+    and B-spline finite element basis in the toroidal & poloidal coordinates
+
+    Parameters
+    ----------
+    L : int
+        Maximum radial resolution. Use L=-1 for default based on M.
+    M : int
+        Number of grid points poloidally (= number of poloidal basis functions)
+    N : int
+        Number of grid points toroidally ( =number of toroidal basis functions)
+    NFP : int
+        Number of field periods.
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+    """
+
+    def __init__(self, L, M, N, NFP=1, sym=False):
+        self.L = L
+        self.M = M
+        self.N = N
+        self._NFP = NFP
+        self._sym = sym
+
+        self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
+
+        super().__init__()
+
+    def _get_modes(self, L=-1, M=0, N=0):
+        """Get mode numbers for Jacobi-FE basis functions.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+        M : int
+            Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,i,j].
+            Each row is one basis function with modes (l,i,j).
+
+        """
+        if N == 0:
+            N = N + 1
+        if L == 0:
+            L = L + 1
+        if M == 0:
+            M = M + 1
+        lij_mesh = np.meshgrid(np.arange(L), np.arange(M), np.arange(N), indexing="ij")
+        lij_mesh = np.reshape(np.array(lij_mesh, dtype=int), (3, L * M * N)).T
+        return np.unique(lij_mesh, axis=0)
+
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of int, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used).
+        unique : bool, optional
+            Whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff.
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            Basis functions evaluated at nodes.
+
+        """
+        if modes is None:
+            modes = self.modes
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
+
+        # TODO: avoid duplicate calculations when mixing derivatives
+        r, t, z = nodes.T
+        l, i, j = modes.T
+        lm = modes[:, :2]
+
+        if unique:
+            # TODO: can avoid this here by using grid.unique_idx etc
+            # and adding unique_modes attributes to basis
+            _, ridx, routidx = np.unique(
+                r, return_index=True, return_inverse=True, axis=0
+            )
+            _, tidx, toutidx = np.unique(
+                t, return_index=True, return_inverse=True, axis=0
+            )
+            _, zidx, zoutidx = np.unique(
+                z, return_index=True, return_inverse=True, axis=0
+            )
+            _, lmidx, lmoutidx = np.unique(
+                lm, return_index=True, return_inverse=True, axis=0
+            )
+            _, midx, moutidx = np.unique(
+                i, return_index=True, return_inverse=True, axis=0
+            )
+            _, nidx, noutidx = np.unique(
+                j, return_index=True, return_inverse=True, axis=0
+            )
+            r = r[ridx]
+            t = t[tidx]
+            z = z[zidx]
+            lm = lm[lmidx]
+            i = i[midx]
+            j = j[nidx]
+
+        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], 0, dr=derivatives[0])
+        poloidal = Bspline(t[:, np.newaxis], i, dt=derivatives[1])
+        print("pol = ", poloidal)
+        toroidal = Bspline(z[:, np.newaxis], j, dt=derivatives[2])
+        print(toroidal)
+        if unique:
+            radial = radial[routidx][:, lmoutidx]
+            poloidal = poloidal[toutidx][:, moutidx]
+            toroidal = toroidal[zoutidx][:, noutidx]
+
+        return radial * poloidal * toroidal
+
+    def change_resolution(self, L, M, N):
+        """Change resolution of the basis to the given resolutions.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+        M : int
+            Maximum number of poloidal basis functions.
+        N : int
+            Maximum number of toroidal basis functions.
+
+        Returns
+        -------
+        None
+
+        """
+        if L != self.L or M != self.M or N != self.N:
+            self.L = L
+            self.M = M
+            self.N = N
             self._modes = self._get_modes(self.L, self.M, self.N)
             self._set_up()
 
@@ -1553,6 +2028,45 @@ def chebyshev(r, l, dr=0):
             "Analytic radial derivatives of Chebyshev polynomials "
             + "have not been implemented."
         )
+
+
+# @jit
+def Bspline(theta, i, k=1, dt=0):
+    """Bspline in theta coordinate.
+
+    Parameters
+    ----------
+    theta : ndarray, shape(N,)
+        poloidal/toroidal coordinates to evaluate basis
+    i : ndarray of int, shape(K,)
+        Basis element indices for the basis elements we want to compute
+    k : int
+        Order of the B-spline (Default = 1)
+    dt : int
+        order of derivative (Default = 0)
+    resolution: int
+        Resolution of the overall Bspline mesh (Default = 100)
+
+    Returns
+    -------
+    y : ndarray, shape(N, K)
+        basis function(s) evaluated at specified points
+
+    """
+    if np.all(theta == theta[0, 0]):
+        return np.ones((len(theta), len(i)))
+    B = BSpline(theta[:, 0], np.ones(len(theta)), k, extrapolate="periodic")
+    Bderiv = B.derivative(dt)
+    Bderiv_stacked = np.zeros((len(theta), len(i)))
+    q = 0
+    for ii in i:
+        # Get Bderiv basis element ii from associated knots
+        # and then evaluate it throughout the domain
+        Bderiv_stacked[:, q] = (
+            Bderiv.basis_element(theta[ii : ii + k + 2, 0], extrapolate="True")
+        )(theta[:, 0])
+        q = q + 1
+    return Bderiv_stacked
 
 
 @jit

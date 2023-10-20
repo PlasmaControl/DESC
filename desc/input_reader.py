@@ -158,15 +158,20 @@ class InputReader:
 
         # default values
         inputs = {
+            "basis": "FourierZernike",
             "sym": False,
             "NFP": 1,
             "Psi": 1.0,
             "L": np.atleast_1d(None),
             "M": np.atleast_1d(0),
             "N": np.atleast_1d(0),
+            "I": np.atleast_1d(0),
+            "J": np.atleast_1d(0),
             "L_grid": np.atleast_1d(None),
             "M_grid": np.atleast_1d(0),
             "N_grid": np.atleast_1d(0),
+            "I_grid": np.atleast_1d(0),
+            "J_grid": np.atleast_1d(0),
             "pres_ratio": np.atleast_1d(None),
             "curr_ratio": np.atleast_1d(None),
             "bdry_ratio": np.atleast_1d(None),
@@ -297,6 +302,14 @@ class InputReader:
             if match:
                 inputs["N"] = numbers.astype(int)
                 flag = True
+            match = re.search(r"I_pol", argument, re.IGNORECASE)
+            if match:
+                inputs["I"] = numbers.astype(int)
+                flag = True
+            match = re.search(r"J_tor", argument, re.IGNORECASE)
+            if match:
+                inputs["J"] = numbers.astype(int)
+                flag = True
             match = re.search(r"L_grid", argument, re.IGNORECASE)
             if match:
                 inputs["L_grid"] = np.array(numbers).astype(int)
@@ -308,6 +321,14 @@ class InputReader:
             match = re.search(r"N_grid", argument, re.IGNORECASE)
             if match:
                 inputs["N_grid"] = numbers.astype(int)
+                flag = True
+            match = re.search(r"I_grid", argument, re.IGNORECASE)
+            if match:
+                inputs["I_grid"] = numbers.astype(int)
+                flag = True
+            match = re.search(r"J_grid", argument, re.IGNORECASE)
+            if match:
+                inputs["J_grid"] = numbers.astype(int)
                 flag = True
 
             # continuation parameters
@@ -358,6 +379,10 @@ class InputReader:
                 flag = True
 
             # solver methods
+            match = re.search(r"basis", argument, re.IGNORECASE)
+            if match:
+                inputs["basis"] = words[0].lower()
+                flag = True
             match = re.search(r"objective", argument, re.IGNORECASE)
             if match:
                 inputs["objective"] = words[0].lower()
@@ -551,8 +576,14 @@ class InputReader:
                 )
 
         # error handling
-        if np.any(inputs["M"] == 0):
+        if np.any(inputs["M"] == 0) and inputs["basis"] == "FourierZernike":
             raise OSError(colored("M_pol is not assigned.", "red"))
+        if np.any(inputs["I"] == 0) and inputs["basis"] == "FiniteElements":
+            raise OSError(
+                colored(
+                    "I (number of poloidal basis functions) is not assigned.", "red"
+                )
+            )
         if np.sum(inputs["surface"]) == 0:
             raise OSError(colored("Fixed-boundary surface is not assigned.", "red"))
         if curr_flag and iota_flag:
@@ -571,6 +602,17 @@ class InputReader:
             warnings.warn(
                 "Vacuum objective does not use any profiles, "
                 + "ignoring pressure, iota, and current"
+            )
+
+        if inputs["basis"] == "FourierZernike":
+            warnings.warn(
+                "FourierZernike basis does not use I and J indexing, "
+                + "ignoring these numbers in the input file."
+            )
+        else:
+            warnings.warn(
+                "FE basis does not use M and N indexing, "
+                + "ignoring these numbers in the input file."
             )
 
         # sort axis array
@@ -593,6 +635,10 @@ class InputReader:
             "L_grid",
             "M_grid",
             "N_grid",
+            "I",
+            "J",
+            "I_grid",
+            "J_grid",
             "pres_ratio",
             "curr_ratio",
             "bdry_ratio",
@@ -616,6 +662,10 @@ class InputReader:
             inputs["M_grid"] = (2 * inputs["M"]).astype(int)
         if np.sum(inputs["N_grid"]) == 0:
             inputs["N_grid"] = (2 * inputs["N"]).astype(int)
+        if np.sum(inputs["I_grid"]) == 0:
+            inputs["I_grid"] = (inputs["I"]).astype(int)
+        if np.sum(inputs["J_grid"]) == 0:
+            inputs["J_grid"] = (inputs["J"]).astype(int)
         if np.sum(inputs["axis"]) == 0:
             axis_idx = np.where(inputs["surface"][:, 1] == 0)[0]
             inputs["axis"] = inputs["surface"][axis_idx, 2:]
@@ -741,6 +791,7 @@ class InputReader:
         f.write("\n# solver methods\n")
         f.write("optimizer = {}\n".format(inputs[0]["optimizer"]))
         f.write("objective = {}\n".format(inputs[0]["objective"]))
+        f.write("basis = {}\n".format(inputs[0]["basis"]))
         f.write("bdry_mode = {}\n".format(inputs[0]["bdry_mode"]))
         f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
 
@@ -785,6 +836,7 @@ class InputReader:
     def desc_output_to_input(  # noqa: C901 - fxn too complex
         outfile,
         infile,
+        basis="FourierZernike",
         objective="force",
         optimizer="lsq-exact",
         header=None,
@@ -803,6 +855,8 @@ class InputReader:
             name of the DESC input file to create
         infile : str or path-like
             path of the DESC output equilibrium file
+        basis : str
+            Basis to use for the 3D representation. (Default FourierZernike)
         objective : str
             objective type used in the input file
         optimizer : str
@@ -849,6 +903,11 @@ class InputReader:
             "L_grid": "L_grid",
             "M_grid": "M_grid",
             "N_grid": "N_grid",
+            "I_pol": "I",
+            "J_tor": "J",
+            "L_grid": "L_grid",
+            "I_grid": "I_grid",
+            "J_grid": "J_grid",
         }.items():
             f.write(f"{key} = {getattr(eq, val)}\n")
 
@@ -859,6 +918,7 @@ class InputReader:
         f.write("maxiter = {:d}\n".format(maxiter))
 
         f.write("\n# solver methods\n")
+        f.write(f"basis = {basis}\n")
         f.write(f"optimizer = {optimizer}\n")
         f.write(f"objective = {objective}\n")
         f.write("spectral_indexing = {}\n".format(eq._spectral_indexing))
@@ -976,6 +1036,7 @@ class InputReader:
 
         # default values
         inputs = {
+            "basis": "FourierZernike",
             "sym": False,
             "NFP": 1,
             "Psi": 1.0,
@@ -985,6 +1046,10 @@ class InputReader:
             "L_grid": None,
             "M_grid": 0,
             "N_grid": 0,
+            "I": 0,
+            "J": 0,
+            "I_grid": 0,
+            "J_grid": 0,
             "pres_ratio": None,
             "curr_ratio": None,
             "bdry_ratio": None,

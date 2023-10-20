@@ -1179,19 +1179,24 @@ class FourierZernikeBasis(_Basis):
             self._set_up()
 
 class ChebyshevZernikeBasis(_Basis):
-    """3D basis set for analytic functions in a toroidal volume.
+    """
+    Max: Heavily coppied from FourierZernikeBasis. Change Fourier to Chebyshev
+    
+    3D basis set for analytic functions in a cylindrical volume.
 
-    Zernike polynomials in the radial & poloidal coordinates, and a Fourier
-    series in the toroidal coordinate.
+    Zernike polynomials in the radial & azimuthal coordinates, and a Chebyshev
+    series in the axial coordinate.
 
     Parameters
     ----------
     L : int
         Maximum radial resolution. Use L=-1 for default based on M.
     M : int
-        Maximum poloidal resolution.
+        Maximum azimuthal resolution.
     N : int
-        Maximum toroidal resolution.
+        Maximum axial resolution.
+
+        UNEDITED
     NFP : int
         Number of field periods.
     sym : {``'cos'``, ``'sin'``, ``False``}
@@ -1233,16 +1238,16 @@ class ChebyshevZernikeBasis(_Basis):
         super().__init__()
 
     def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="ansi"):
-        """Get mode numbers for Fourier-Zernike basis functions.
+        """Get mode numbers for Chebyshev-Zernike basis functions.
 
         Parameters
         ----------
         L : int
             Maximum radial resolution.
         M : int
-            Maximum poloidal resolution.
+            Maximum azimuthal resolution.
         N : int
-            Maximum toroidal resolution.
+            Maximum axial resolution.
         spectral_indexing : {``'ansi'``, ``'fringe'``}
             Indexing method, default value = ``'ansi'``
 
@@ -1307,8 +1312,11 @@ class ChebyshevZernikeBasis(_Basis):
         num_pol = len(pol)
 
         pol = np.tile(pol, (2 * N + 1, 1))
+
+        # TASK: Must change to Chebyshev
+        # ChebyshevDoubleFourierBasis does l = np.arange(L + 1), so copy
         tor = np.atleast_2d(
-            np.tile(np.arange(-N, N + 1), (num_pol, 1)).flatten(order="f")
+            np.tile(np.arange(N + 1), (num_pol, 1)).flatten(order="f")
         ).T
         return np.unique(np.hstack([pol, tor]), axis=0)
 
@@ -1374,14 +1382,18 @@ class ChebyshevZernikeBasis(_Basis):
             n = n[nidx]
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
-        poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
-        toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
+        poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1]) 
+        # Q: fourer? not zernike_angular?
+        axial = chebyshev(z[:, np.newaxis], n, dr=derivatives[2])
+        #TASK: check toridal and input porpperly. might be dr
+        #Question: is this different because we are dz instead of dr?
+        #ISSUE?: analytic derivatives of chebyshev polynomials not implemented
         if unique:
             radial = radial[routidx][:, lmoutidx]
             poloidal = poloidal[toutidx][:, moutidx]
-            toroidal = toroidal[zoutidx][:, noutidx]
+            axial = axial[zoutidx][:, noutidx]
 
-        return radial * poloidal * toroidal
+        return radial * poloidal * axial
 
     def change_resolution(self, L, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
@@ -1391,7 +1403,7 @@ class ChebyshevZernikeBasis(_Basis):
         L : int
             Maximum radial resolution.
         M : int
-            Maximum poloidal resolution.
+            Maximum azimuthal resolution.
         N : int
             Maximum toroidal resolution.
         NFP : int

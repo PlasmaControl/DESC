@@ -19,7 +19,9 @@ __all__ = [
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
 ]
-
+ # Want FoureirZernikeChebyshev
+ # theta r Z
+ # implement differentiation
 
 class _Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets."""
@@ -186,7 +188,7 @@ class _Basis(IOAble, ABC):
     def NFP(self):
         """int: Number of field periods."""
         return self.__dict__.setdefault("_NFP", 1)
-
+zsh:1: command not found: wq
     @property
     def sym(self):
         """str: {``'cos'``, ``'sin'``, ``False``} Type of symmetry."""

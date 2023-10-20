@@ -13,6 +13,7 @@ def register_compute_fun(
     profiles,
     coordinates,
     data,
+    aliases=[],
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
     axis_limit_data=None,
     **kwargs,
@@ -88,12 +89,10 @@ def register_compute_fun(
                         raise ValueError(
                             f"Already registered function with parameterization {p} and name {name}."
                         )
-                    if isinstance(name, list):
-                        data_index[base_class][name[0]] = d.copy()
-                        for alias in name:
-                            data_index[base_class][alias] = data_index[base_class][name[0]]
-                    else:
-                        data_index[base_class][name] = d.copy()
+                    data_index[base_class][name] = d.copy()
+                    for alias in aliases:
+                        data_index[base_class][alias] = data_index[base_class][name]
+
                     flag = True
             if not flag:
                 raise ValueError(

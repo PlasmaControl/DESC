@@ -2797,7 +2797,7 @@ def _phi_tz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["omega_tt"],
+    data=["omega_ttz"],
 )
 def _phi_ttz(params, transforms, profiles, data, **kwargs):
     data["phi_ttz"] = data["omega_ttz"]
@@ -2833,7 +2833,7 @@ def _phi_tzz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["omega_rt"],
+    data=["omega_rtz"],
 )
 def _phi_rtz(params, transforms, profiles, data, **kwargs):
     data["phi_rtz"] = data["omega_rtz"]

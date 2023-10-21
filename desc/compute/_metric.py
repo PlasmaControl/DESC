@@ -2191,7 +2191,7 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["p_r", "psi_r", "|B|", "gbdrift", "psi"],
+    data=["p_r", "psi_r", "|B|", "gbdrift"],
 )
 def _cvdrift(params, transforms, profiles, data, **kwargs):
     dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]

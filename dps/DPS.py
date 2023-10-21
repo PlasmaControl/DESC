@@ -141,8 +141,8 @@ print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermed
 
 # Optimization
 R_modes = np.array([[0, 0, 0]])
-constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq))#, FixIota(eq), FixPsi(eq))
-eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=100) # Mudar o número de iterações para 3, 10, 100
+constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=None), FixPressure(eq), FixIota(eq), FixPsi(eq))
+eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=100, copy=True) # Mudar o número de iterações para 3, 10, 100
 eq.save(opt_file)
 
 intermediate_time_4 = timet()
@@ -159,10 +159,13 @@ print("\n*************** TRACING ***************")
 tracing_original = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.4e-8)
 
 # Compute tracing original equilibrium
+eq_again = desc.io.load(eq_file)[-1]
+eq_again._iota = eq_again.get_profile("iota").to_powerseries(order=eq_again.L, sym=True)
+eq_again._current = None
 
 intermediate_time_5 = timet()
 objective.build()
-tracer_solution_original = objective.compute(*objective.xs(eq))
+tracer_solution_original = objective.compute(*objective.xs(eq_again))
 intermediate_time_6 = timet()
 print(f"\nTime to build and trace (original): {intermediate_time_6 - intermediate_time_5}s\n")
 

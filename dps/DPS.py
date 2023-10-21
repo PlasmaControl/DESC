@@ -15,8 +15,6 @@ initial_time = timet()
 # Functions
 
 def output_to_file(sol, name):
-    solution = np.ndarray(sol)
-    print(sol)
     print(sol.shape)
     list1 = sol[:, 0]
     list2 = sol[:, 1]

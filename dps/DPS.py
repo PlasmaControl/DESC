@@ -69,10 +69,10 @@ print("*************** START ***************")
 
 # Load Equilibrium
 
-print("Starting Equilibrium")
+print("\nStarting Equilibrium")
 eq_file = "input.LandremanPaul2021_QA_scaled_output.h5"
 opt_file = "optimized_" + eq_file
-print(f"Loaded Equilibrium: {eq_file}")
+print(f"Loaded Equilibrium: {eq_file}\n")
 
 eq = desc.io.load(eq_file)[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
@@ -120,7 +120,7 @@ mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 ini_param = [float(mu), Mass_Charge_Ratio]
 
 intermediate_time = timet()
-print(f"Time from beginning until here: {intermediate_time - initial_time}s")
+print(f"\nTime from beginning until here: {intermediate_time - initial_time}s\n")
 
 # Objective Function
 objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1.4e-8)
@@ -130,31 +130,31 @@ objective.build()
 solution = objective.compute(*objective.xs(eq))
 
 intermediate_time_2 = timet()
-print(f"Time to build and compute solution: {intermediate_time_2 - intermediate_time}s")
+print(f"\nTime to build and compute solution: {intermediate_time_2 - intermediate_time}s\n")
 
 # Objective Object
 ObjFunction = ObjectiveFunction([objective])
 ObjFunction.build()
 
 intermediate_time_3 = timet()
-print(f"Time to build and compile ObjFunction: {intermediate_time_3 - intermediate_time_2}s")
+print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermediate_time_2}s\n")
 
 # Optimization
 R_modes = np.array([[0, 0, 0]])
-constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
+constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq))#, FixIota(eq), FixPsi(eq))
 eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=100) # Mudar o número de iterações para 3, 10, 100
 eq.save(opt_file)
 
 intermediate_time_4 = timet()
-print(f"Time to optimize: {intermediate_time_4 - intermediate_time_3}s")
+print(f"\nTime to optimize: {intermediate_time_4 - intermediate_time_3}s\n")
 
-print("Optimization Completed")
+print("\nOptimization Completed")
 print(f"Optimized Filename: {opt_file}")
 optimization_final_time = timet()
 print(f"Total time: {optimization_final_time - initial_time}s")
-print("*********************** OPTIMIZATION END ***********************")
+print("*********************** OPTIMIZATION END ***********************\n")
 
-print("*************** TRACING ***************")
+print("\n*************** TRACING ***************")
 
 tracing_original = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.4e-8)
 
@@ -163,8 +163,8 @@ tracing_original = ParticleTracer(eq=eq, output_time=time, initial_conditions=in
 intermediate_time_5 = timet()
 objective.build()
 tracer_solution_original = objective.compute(*objective.xs(eq))
-intermediate_time_6 = time()
-print(f"Time to build and trace (original): {intermediate_time_6 - intermediate_time_5}s")
+intermediate_time_6 = timet()
+print(f"\nTime to build and trace (original): {intermediate_time_6 - intermediate_time_5}s\n")
 
 output_to_file(solution=tracer_solution_original, name="tracing_original")
 
@@ -179,7 +179,7 @@ intermediate_time_7 = timet()
 objective.build()
 tracer_solution_optimized = objective.compute(*objective.xs(opt_eq))
 intermediate_time_8 = timet()
-print(f"Time to build and trace (optimized): {intermediate_time_8 - intermediate_time_7}s")
+print(f"\nTime to build and trace (optimized): {intermediate_time_8 - intermediate_time_7}s\n")
 
 output_to_file(solution=tracer_solution_optimized, name="tracing_optimized")
 
@@ -188,9 +188,9 @@ diffence = tracer_solution_original - tracer_solution_optimized
 
 output_to_file(solution=diffence, name="tracing_difference")
 
-print("*********************** TRACING END ***********************")
+print("\n*********************** TRACING END ***********************\n")
 
-print("*************** PLOTTING ***************")
+print("\n*************** PLOTTING ***************\n")
 
 print("Original Equilibrium")
 Trajectory_Plot(solution=tracer_solution_original, save_name="Trajectory_Plot_original.png")
@@ -205,5 +205,5 @@ Energy_Plot(solution=tracer_solution_optimized, save_name="Energy_Plot_optimized
 print("*************** PLOTTING END ***************")
 
 final_time = timet()
-print(f"Total time: {final_time - initial_time}s")
+print(f"\n\nTotal time: {final_time - initial_time}s\n\n")
 print("*************** END ***************")

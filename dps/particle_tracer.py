@@ -19,7 +19,7 @@ print("Particle Tracer")
 print(f"Filename: {filename}")
 print("*************************************")
 
-eq = desc.io.load(filename)[-1]
+eq = desc.io.load(filename)
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 # eq.solve()

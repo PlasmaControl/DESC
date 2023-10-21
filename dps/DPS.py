@@ -14,11 +14,14 @@ initial_time = timet()
 
 # Functions
 
-def output_to_file(solution, name):
-    list1 = solution[:, 0]
-    list2 = solution[:, 1]
-    list3 = solution[:, 2]
-    list4 = solution[:, 3]
+def output_to_file(sol, name):
+    solution = np.ndarray(sol)
+    print(sol)
+    print(sol.shape)
+    list1 = sol[:, 0]
+    list2 = sol[:, 1]
+    list3 = sol[:, 2]
+    list4 = sol[:, 3]
 
     combined_lists = zip(list1, list2, list3, list4)
     
@@ -169,7 +172,7 @@ tracer_solution_original = objective.compute(*objective.xs(eq_again))
 intermediate_time_6 = timet()
 print(f"\nTime to build and trace (original): {intermediate_time_6 - intermediate_time_5}s\n")
 
-output_to_file(solution=tracer_solution_original, name="tracing_original")
+output_to_file(tracer_solution_original, name="tracing_original")
 
 # Compute tracing optimized equilibrium
 opt_eq = desc.io.load(opt_file)[-1]
@@ -184,7 +187,7 @@ tracer_solution_optimized = objective.compute(*objective.xs(opt_eq))
 intermediate_time_8 = timet()
 print(f"\nTime to build and trace (optimized): {intermediate_time_8 - intermediate_time_7}s\n")
 
-output_to_file(solution=tracer_solution_optimized, name="tracing_optimized")
+output_to_file(tracer_solution_optimized, name="tracing_optimized")
 
 # Comparison
 diffence = tracer_solution_original - tracer_solution_optimized

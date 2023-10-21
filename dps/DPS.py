@@ -167,8 +167,8 @@ eq_again._iota = eq_again.get_profile("iota").to_powerseries(order=eq_again.L, s
 eq_again._current = None
 
 intermediate_time_5 = timet()
-objective.build()
-tracer_solution_original = objective.compute(*objective.xs(eq_again))
+tracing_original.build()
+tracer_solution_original = tracing_original.compute(*tracing_original.xs(eq_again))
 intermediate_time_6 = timet()
 print(f"\nTime to build and trace (original): {intermediate_time_6 - intermediate_time_5}s\n")
 
@@ -182,8 +182,8 @@ opt_eq._current = None
 tracing_optimized = ParticleTracer(eq=opt_eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.4e-8)
 
 intermediate_time_7 = timet()
-objective.build()
-tracer_solution_optimized = objective.compute(*objective.xs(opt_eq))
+tracing_optimized.build()
+tracer_solution_optimized = tracing_optimized.compute(*tracing_optimized.xs(opt_eq))
 intermediate_time_8 = timet()
 print(f"\nTime to build and trace (optimized): {intermediate_time_8 - intermediate_time_7}s\n")
 

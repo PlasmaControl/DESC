@@ -15,7 +15,7 @@ initial_time = timet()
 
 # filename = "input.final_freeb_output.h5"
 # filename = "DESC_ellipse.vacuum.0609.a_fixed_bdry_L_15_M_15_N_15_nfev_300_Mgrid_26_ftol_1e-4.h5"
-filename = "ellipse_higherPsi.h5"
+filename = "input.LandremanPaul2021_QA_scaled_output.h5"
 savename = "optimized_" + filename
 
 print("*************** START ***************")
@@ -66,7 +66,7 @@ ini_param = [float(mu), Mass_Charge_Ratio]
 intermediate_time = timet()
 print(f"Time from beginning until here: {intermediate_time - initial_time}s")
 
-objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1e-8)
+objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1.4e-8)
 
 objective.build()
 solution = objective.compute(*objective.xs(eq))
@@ -96,7 +96,7 @@ print(f"Time to build and compile: {intermediate_time_3 - intermediate_time_2}s"
 
 R_modes = np.array([[0, 0, 0]])
 constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixIota(eq), FixPsi(eq))
-eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=3) # Mudar o número de iterações para 3, 10, 100
+eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=100) # Mudar o número de iterações para 3, 10, 100
 eq.save(savename)
 
 intermediate_time_4 = timet()
@@ -107,3 +107,4 @@ print(f"Optimized Filename: {savename}")
 final_time = timet()
 print(f"Total time: {final_time - initial_time}s")
 print("*********************** END ***********************")
+

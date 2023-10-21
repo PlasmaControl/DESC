@@ -566,13 +566,10 @@ def test_ballooning_eigenvalue():
     except TypeError:
         eq = desc.examples.get("W7-X")
 
-    lam1 = _stability._gamma_ideal_ballooning_FD1(eq)
     lam2 = _stability._gamma_ideal_ballooning_FD2(eq)
     lam3 = _stability._gamma_ideal_ballooning_Fourier(eq)
 
-    lam1 = lam1 * (lam1 > 0)
     lam2 = lam2 * (lam2 > 0)
     lam3 = lam3 * (lam3 > 0)
 
-    np.testing.assert_allclose(lam1, lam2, atol=0.01, rtol=0.3)
     np.testing.assert_allclose(lam2, lam3, atol=0.01, rtol=0.3)

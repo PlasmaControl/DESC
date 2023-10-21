@@ -234,84 +234,19 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _gamma_ideal_ballooning_FD1(eq):
-    """
-    Ideal-ballooning growth rate finder.
-
-    This function uses a finite-difference method
-    calculate the maximum growth rate against the infinite-n
-    ideal ballooning mode. The equation being solved is
-
-    d / d z (g d X / d z) + c * X - lam * f * X = 0, g, f > 0
-
-    where
-
-    kappa = b dot grad b
-    g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
-    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
-        * (b cross kappa) dot grad alpha/ B**2,
-    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta)
-
-    Parameters
-    ----------
-    eq :  Input equilibrium object
-    N : resolution
-    """
-    ns = 1
-    nalpha = 1
-    s = np.linspace(0.9, 1.00, ns)
-    rho = np.sqrt(s)
-
-    alpha = np.linspace(0, np.pi, nalpha)
-    zeta_0 = 0.0
-    eq_keys = ["iota", "rho", "psi", "a"]
-
-    data_eq = eq.compute(eq_keys)
-
-    iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
-    psi = data_eq["psi"]
-    sign_psi = np.sign(psi[-1])
-    sign_iota = np.sign(iota[-1])
-
-    a_N = data_eq["a"]
-    B_N = 2 * sign_psi * psi[-1] / a_N**2
-
-    nperiod = 3
-    # Number of toroidal turns
-    ntor = 2 * nperiod - 1
-    N = 2 * (2 * eq.M_grid * eq.N_grid) * ntor + 1
-
-    rho_full = np.ones(
-        int(N * ns * nalpha),
-    )
-    theta_full = np.zeros(
-        int(N * ns * nalpha),
-    )
-    zeta_full = np.zeros(
-        int(N * ns * nalpha),
-    )
-
-    zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
-
-    for i in range(ns):
-        for j in range(nalpha):
-            rho_full[i * N : (i + 1) * N] = rho[i] * np.ones(
-                N,
-            )
-            zeta_full[i * N : (i + 1) * N] = zeta
-            theta_full[i * N : (i + 1) * N] = (
-                alpha[j]
-                * np.ones(
-                    N,
-                )
-                + iota[i] * zeta
-            )
-
-    C0 = np.vstack([rho_full, theta_full, zeta_full]).T
-    coords = eq.compute_theta_coords(C0, tol=1e-10, maxiter=50)
-    grid = Grid(coords, sort=False)
-
-    data_names = [
+@register_compute_fun(
+    name="ideal_ball_gamma",
+    label="\\gamma^2",
+    units=" ",
+    units_long=" ",
+    description="ideal ballooning growth rate" + "requires data along a field line",
+    dim=1,
+    params=["Psi"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "a",
         "g^aa",
         "g^ra",
         "g^rr",
@@ -321,63 +256,108 @@ def _gamma_ideal_ballooning_FD1(eq):
         "B^zeta",
         "p_r",
         "psi_r",
-    ]
+        "phi",
+        "iota",
+        "psi",
+    ],
+)
+def _ideal_ballooning_gamma(params, transforms, profiles, data, *kwargs):
+    """
+    Ideal-ballooning growth rate finder.
 
-    data = eq.compute(data_names, grid)
+    This function uses a finite-difference method
+    to calculate the maximum growth rate against the
+    infinite-n ideal ballooning mode. The equation being solved is
+
+    d / d z (g d X / d z) + c * X - lam * f * X = 0, g, f > 0
+
+    where
+
+    kappa = b dot grad b
+    g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
+    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
+        * (b cross kappa) dot grad alpha/ B**2,
+    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta),
+    are needed along a field line to solve the ballooning equation once.
+
+    To obtain the parameters g, c, and f, we need a set of parameters
+    provided in the list ``data`` above. Here's a description of
+    these parameters:
+
+    - a: minor radius of the device
+    - g^aa: |grad alpha|^2, field line bending term
+    - g^ra: (grad alpha dot grad rho) integrated local shear
+    - g^rr: |grad rho|^2 flux expansion term
+    - cvdrift: geometric factor of the curvature drift
+    - cvdrift0: geoetric factor of curvature drift 2
+    - |B|: magnitude of the magnetic field
+    - B^zeta: inverse of the jacobian
+    - p_r: dp/drho, pressure gradient
+    - psi_r: radial gradient of the toroidal flux
+    - phi: coordinate describing the position in the toroidal angle
+    along a field line
+    """
+    rho = data["rho"]
+
+    psi_b = params["Psi"] / (2 * np.pi)
+    a_N = data["a"]
+    B_N = 2 * psi_b / a_N**2
+
+    N_zeta0 = int(10)
+    # up-down symmetric equilibria only
+    zeta0 = jnp.linspace(0, np.pi, N_zeta0)
+
+    iota = data["iota"]
+    psi = data["psi"]
+    sign_psi = jnp.sign(psi[-1])
+    sign_iota = jnp.sign(iota[-1])
+
+    phi = data["phi"]
+    N = len(phi)
 
     gradpar = data["B^zeta"] / data["|B|"]
+    dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
+
     gds2 = rho**2 * (
-        data["g^aa"]
-        - 2 * sign_iota * zeta_0 * data["g^ra"]
-        + zeta_0**2 * data["g^rr"]
+        data["g^aa"][None, :]
+        - 2 * sign_iota * zeta0[:, None] * data["g^ra"][None, :]
+        + zeta0[:, None] ** 2 * data["g^rr"][None, :]
     )
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
-    f = a_N * B_N**3 * gds2 / data["|B|"] ** 3 * 1 / gradpar
-    g = a_N**3 * B_N * gds2 / data["|B|"] * gradpar
-    g_half = (g[1:] + g[:-1]) / 2
+    f = a_N * B_N**3 * gds2 / data["|B|"][None, :] ** 3 * 1 / gradpar[None, :]
+    g = a_N**3 * B_N * gds2 / data["|B|"][None, :] * gradpar[None, :]
+    g_half = (g[:, 1:] + g[:, :-1]) / 2
     c = (
         a_N
         * 2
-        / data["B^zeta"]
+        / data["B^zeta"][None, :]
         * rho
         * sign_psi
         * dpdpsi
-        * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
+        * (data["cvdrift"][None, :] + zeta0[:, None] * data["cvdrift0"][None, :])
     )
-    h = 2 * ntor * np.pi / (N - 1)
+    h = (phi[-1] - phi[0]) / (N - 1)
 
-    A = (
-        np.diag(g_half[1:-1] / f[2:-1] * 1 / h**2, -1)
-        + np.diag(
-            -(g_half[1:] + g_half[:-1]) / f[1:-1] * 1 / h**2 + c[1:-1] / f[1:-1], 0
+    i = jnp.arange(N_zeta0)[:, None, None]
+    j = jnp.arange(N - 2)[None, :, None]
+    k = jnp.arange(N - 2)[None, None, :]
+
+    A = jnp.zeros((N_zeta0, N - 2, N - 2))
+
+    A = A.at[i, j, k].set(
+        g_half[i, k] / f[i, k] * 1 / h**2 * (j - k == -1)
+        + (
+            -(g_half[i, j + 1] + g_half[i, j]) / f[i, j + 1] * 1 / h**2
+            + c[i, j + 1] / f[i, j + 1]
         )
-        + np.diag(g_half[1:-1] / f[1:-2] * 1 / h**2, 1)
+        * (j - k == 0)
+        + g_half[i, j] / f[i, j + 1] * 1 / h**2 * (j - k == 1)
     )
 
-    w, v = scipy.sparse.linalg.eigs(A, k=1, sigma=2.0, OPpart="r")
+    w = jnp.linalg.eigvals(A)
 
-    # Variational refinement here
-    X = np.zeros((N,))
-    dX = np.zeros((N,))
-
-    X[1:-1] = np.reshape(v[:, 0].real, (-1,)) / np.max(np.abs(v[:, 0].real))
-
-    X[0] = 0.0
-    X[-1] = 0.0
-
-    dX[0] = (-1.5 * X[0] + 2 * X[1] - 0.5 * X[2]) / h
-    dX[1] = (X[2] - X[0]) / (2 * h)
-
-    dX[-2] = (X[-1] - X[-3]) / (2 * h)
-    dX[-1] = (0.5 * X[-3] - 2 * X[-2] + 1.5 * 0.0) / (h)
-
-    dX[2:-2] = 2 / (3 * h) * (X[3:-1] - X[1:-3]) - (X[4:] - X[0:-4]) / (12 * h)
-
-    Y0 = -g * dX**2 + c * X**2
-    Y1 = f * X**2
-
-    lam = simps(Y0) / simps(Y1)
+    lam = jnp.max(w)
 
     return lam
 
@@ -386,20 +366,19 @@ def _gamma_ideal_ballooning_FD2(eq):
     """
     Ideal-ballooning growth rate finder.
 
-    This function uses a finite-difference solver to
-    calculate the maximum growth rate against the infinite-n
-    ideal ballooning mode. The problem is reformulated
+    A finite-difference solver to calculate the maximum
+    growth rate against the infinite-n ideal ballooning mode.
+    The problem to solve is
 
-    d^2 X / d z^2 + V * X - lam * b * X = 0, b > 0
-
-    where
+    d^2 X / d z^2 + V * X - lam * b * X = 0, b > 0.
 
     bmag = B/B_N,
     kappa = b dot grad b
     g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
     c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
         * (b cross kappa) dot grad alpha/ B**2,
-    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta)
+    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3
+        * 1/(b dot grad zeta)
 
     Parameters
     ----------

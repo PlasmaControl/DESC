@@ -188,9 +188,9 @@ print(f"\nTime to build and trace (optimized): {intermediate_time_8 - intermedia
 output_to_file(tracer_solution_optimized, name="tracing_optimized")
 
 # Comparison
-diffence = tracer_solution_original - tracer_solution_optimized
+difference = tracer_solution_original - tracer_solution_optimized
 
-output_to_file(solution=diffence, name="tracing_difference")
+output_to_file(difference, name="tracing_difference")
 
 print("\n*********************** TRACING END ***********************\n")
 

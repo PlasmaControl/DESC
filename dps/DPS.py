@@ -173,7 +173,7 @@ print(f"\nTime to build and trace (original): {intermediate_time_6 - intermediat
 output_to_file(tracer_solution_original, name="tracing_original")
 
 # Compute tracing optimized equilibrium
-opt_eq = desc.io.load(opt_file)[-1]
+opt_eq = desc.io.load(opt_file)
 opt_eq._iota = opt_eq.get_profile("iota").to_powerseries(order=opt_eq.L, sym=True)
 opt_eq._current = None
 

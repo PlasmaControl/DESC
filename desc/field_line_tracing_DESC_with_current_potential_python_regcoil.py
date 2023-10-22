@@ -87,6 +87,8 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
 
     """
     if kwargs.get("use_agg_backend", False):
+        # this may be needed if matplotlib complains
+        # about not having a gui backend available
         matplotlib.use("agg")
     if isinstance(eqname, str):
         eq = desc.io.load(eqname)

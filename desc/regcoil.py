@@ -226,7 +226,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     )
 
     # calculate net enclosed poloidal and toroidal currents
-    G_tot = (
+    G_tot = -(
         eq.compute("G", grid=sgrid)["G"][0] / mu_0 * 2 * np.pi
         if override_G is None
         else override_G

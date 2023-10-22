@@ -10,7 +10,9 @@ from desc.io import load
 from desc.magnetic_fields import SumMagneticField, ToroidalMagneticField, _MagneticField
 
 
-def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None, save=True):
+def calc_BNORM_from_coilset(
+    coils, eqname, alpha, step, external_field=None, save=True, **kwargs
+):
     """Find BNORMAL on surfac given a coilset and plot it, and save to a txt file.
 
     Parameters
@@ -31,7 +33,7 @@ def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None, save=True):
         if higher, less points will be saved
         #TODO: can remove this and replace with something like
         basename to be used for every saved figure
-    B0 : _MagneticField, optional
+    external_field : _MagneticField, optional
         Magnetic field external to the coils given, to
         include when field line tracing.
         for example, a simple TF field
@@ -55,13 +57,22 @@ def calc_BNORM_from_coilset(coils, eqname, alpha, step, B0=None, save=True):
         eq = eqname
     if hasattr(eq, "__len__"):
         eq = eq[-1]
+    B0 = kwargs.get("B0", None)
     if B0:
+        # TODO: go thru scripts and change to use the external_field argument,
+        #  and remove this
+        external_field = B0  # support old way of doing it
+    if external_field:
         R0_ves = 0.7035
-        if not isinstance(B0, _MagneticField):
-            assert float(B0) == B0, "B0 must be a float or a _MagneticField!"
-            TF_field = ToroidalMagneticField(R0=R0_ves, B0=B0)
+        if not isinstance(external_field, _MagneticField):
+            assert (
+                float(external_field) == external_field
+            ), "external_field must be a float or a _MagneticField!"
+            external_field = ToroidalMagneticField(
+                R0=R0_ves, external_field=external_field
+            )
 
-        coils = SumMagneticField(coils, TF_field)
+        coils = SumMagneticField(coils, external_field)
 
     dirname = f"{eqname.split('/')[-1].strip('.h5')}"
     if not os.path.isdir(dirname):

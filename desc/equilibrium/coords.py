@@ -232,8 +232,6 @@ def compute_theta_coords(eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
     rho, theta_star, zeta = flux_coords.T
     if maxiter <= 0:
         raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
-    if jnp.any(rho < 0):
-        raise ValueError("rho values must be positive")
 
     # Note: theta* (also known as vartheta) is the poloidal straight field-line
     # angle in PEST-like flux coordinates

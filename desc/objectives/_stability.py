@@ -412,8 +412,8 @@ class BallooningStability(_Objective):
         normalize_target=True,
         rho=0.5,
         alpha=0.0,
-        zetamax=5 * np.pi,
-        nzeta=1000,
+        zetamax=3 * jnp.pi,
+        nzeta=200,
         name="force",
     ):
         if target is None and bounds is None:
@@ -460,7 +460,8 @@ class BallooningStability(_Objective):
         rho, alpha, zeta = np.broadcast_arrays(self.rho, self.alpha, zeta)
         fieldline_nodes = np.array([rho, alpha, zeta]).T
 
-        self._data_keys = (["ideal_ball_gamma"],)  # or whatever else you need as output
+        self._dim_f = 1
+        self._data_keys = ["ideal_ball_gamma"]  # or whatever else you need as output
 
         self._args = get_params(
             self._iota_keys + self._data_keys,
@@ -472,6 +473,7 @@ class BallooningStability(_Objective):
             "iota_transforms": iota_transforms,
             "iota_profiles": iota_profiles,
             "fieldline_nodes": fieldline_nodes,
+            "quad_weights": 1.0,
         }
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -528,15 +530,15 @@ class BallooningStability(_Objective):
         theta_PEST = alpha + iota * zeta
         theta_coords = jnp.array([rho, theta_PEST, zeta]).T
         desc_coords = compute_theta_coords(
-            self.eq, theta_coords, L_lmn=params["L_lmn"], tol=1e-6, maxiter=20
+            self._eq, theta_coords, L_lmn=params["L_lmn"], tol=1e-6, maxiter=20
         )
 
         sfl_grid = Grid(desc_coords, sort=False, jitable=True)
         transforms = get_transforms(
-            self._data_keys, obj=self.eq, grid=sfl_grid, jitable=True
+            self._data_keys, obj=self._eq, grid=sfl_grid, jitable=True
         )
         profiles = get_profiles(
-            self._data_keys, obj=self.eq, grid=sfl_grid, jitable=True
+            self._data_keys, obj=self._eq, grid=sfl_grid, jitable=True
         )
 
         # we prime the data dict with the correct iota values so we don't recompute them

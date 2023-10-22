@@ -355,11 +355,12 @@ def _ideal_ballooning_gamma(params, transforms, profiles, data, *kwargs):
         + g_half[i, j] / f[i, j + 1] * 1 / h**2 * (j - k == 1)
     )
 
-    w = jnp.linalg.eigvals(A)
+    w = jnp.linalg.eigvals(jnp.where(jnp.isfinite(A), A, 0))
 
-    lam = jnp.max(w)
+    lam = jnp.real(jnp.max(w))
+    data["ideal_ball_gamma"] = lam * (lam >= -0.001)
 
-    return lam
+    return data
 
 
 def _gamma_ideal_ballooning_FD2(eq):

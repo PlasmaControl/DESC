@@ -1305,12 +1305,14 @@ def _g_sup_zz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e^rho", "e^theta"],
-    aliases=["g^" + i + j for i in ["r", "t", "z"] for j in ["r", "t", "z"]],
+    aliases=["g^rt_alias", "g^rt_alias2"],
 )
 def _g_sup_rt(params, transforms, profiles, data):
-    aliases = ["g^" + i + j for i in ["r", "t", "z"] for j in ["r", "t", "z"]]
+    data["g^rt"] = dot(data["e^rho"], data["e^theta"])
+
+    aliases = ["g^rt_alias", "g^rt_alias2"]
     for alias in aliases:
-        data[alias] = dot(data["e^rho"], data["e^theta"])
+        data[alias] = data["g^rt"].copy()
 
     return data
 
@@ -1327,9 +1329,15 @@ def _g_sup_rt(params, transforms, profiles, data):
     profiles=[],
     coordinates="rtz",
     data=["e^rho", "e^zeta"],
+    aliases=["g^rz_alias1", "g^rz_alias2"],
 )
 def _g_sup_rz(params, transforms, profiles, data, **kwargs):
     data["g^rz"] = dot(data["e^rho"], data["e^zeta"])
+
+    aliases = (["g^rz_alias1", "g^rz_alias2"],)
+    for alias in aliases:
+        data[alias] = data["g^rz"].copy()
+
     return data
 
 

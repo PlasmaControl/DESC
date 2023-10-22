@@ -26,7 +26,7 @@ from ._qs import (
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
 )
-from ._stability import MagneticWell, MercierStability
+from ._stability import BallooningStability, MagneticWell, MercierStability
 from .getters import (
     get_equilibrium_objective,
     get_fixed_axis_constraints,

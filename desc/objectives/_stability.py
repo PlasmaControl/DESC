@@ -2,9 +2,11 @@
 
 import numpy as np
 
+from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.grid import LinearGrid
+from desc.equilibrium.coords import compute_theta_coords
+from desc.grid import Grid, LinearGrid
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
@@ -408,12 +410,20 @@ class BallooningStability(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        grid=None,
-        name="Ideal-ballooning Stability",
+        rho=0.5,
+        alpha=0.0,
+        zetamax=5 * np.pi,
+        nzeta=1000,
+        name="force",
     ):
         if target is None and bounds is None:
-            bounds = (0, np.inf)
-        self._grid = grid
+            target = 0
+
+        self.rho = rho
+        self.alpha = alpha
+        self.zetamax = zetamax
+        self.nzeta = nzeta
+
         super().__init__(
             eq=eq,
             target=target,
@@ -438,54 +448,36 @@ class BallooningStability(_Objective):
 
         """
         eq = eq or self._eq
-        if self._grid is None:
-            grid = LinearGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-            )
-        else:
-            grid = self._grid
 
-        self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
-        )
+        # we need a uniform grid to get correct surface averages for iota
+        iota_grid = LinearGrid(rho=self.rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        self._iota_keys = ["iota", "iota_r", "iota_rr"]  # might not need all of these
+        iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
+        iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
 
-        self._dim_f = grid.num_rho
-        self._data_keys = ["ideal_ball_gamma"]
+        # make a set of nodes along a single fieldline
+        zeta = np.linspace(-self.zetamax, self.zetamax, self.nzeta)
+        rho, alpha, zeta = np.broadcast_arrays(self.rho, self.alpha, zeta)
+        fieldline_nodes = np.array([rho, alpha, zeta]).T
+
+        self._data_keys = (["ideal_ball_gamma"],)  # or whatever else you need as output
+
         self._args = get_params(
-            self._data_keys,
+            self._iota_keys + self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
+            has_axis=False,
         )
 
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-
-        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": transforms,
-            "profiles": profiles,
+            "iota_transforms": iota_transforms,
+            "iota_profiles": iota_profiles,
+            "fieldline_nodes": fieldline_nodes,
         }
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["Psi"] ** 2
-
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        """Compute the ideal ballooning growth rate.
+        """
+        Compute the ballooning stability growth rate.
 
         Parameters
         ----------
@@ -515,17 +507,54 @@ class BallooningStability(_Objective):
         Returns
         -------
         ideal_ball_gamma : ndarray
-            ideal ballooning growth rate.
-
+            Ideal ballooning growth rate
         """
         params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
+        # we first compute iota on a uniform grid to get correct averaging etc.
+        iota_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._iota_keys,
+            params=params,
+            transforms=constants["iota_transforms"],
+            profiles=constants["iota_profiles"],
+        )
+        # map_coordinates doesnt work with JIT/AD yet,
+        # so we compute theta_DESC for given theta_PEST
+
+        iota = iota_data["iota"][0]
+        rho, alpha, zeta = constants["fieldline_nodes"].T
+        theta_PEST = alpha + iota * zeta
+        theta_coords = jnp.array([rho, theta_PEST, zeta]).T
+        desc_coords = compute_theta_coords(
+            self.eq, theta_coords, L_lmn=params["L_lmn"], tol=1e-6, maxiter=20
+        )
+
+        sfl_grid = Grid(desc_coords, sort=False, jitable=True)
+        transforms = get_transforms(
+            self._data_keys, obj=self.eq, grid=sfl_grid, jitable=True
+        )
+        profiles = get_profiles(
+            self._data_keys, obj=self.eq, grid=sfl_grid, jitable=True
+        )
+
+        # we prime the data dict with the correct iota values so we don't recompute them
+        # using the wrong grid
+        data = {
+            "iota": iota_data["iota"][0] * jnp.ones_like(zeta),
+            "iota_r": iota_data["iota_r"][0] * jnp.ones_like(zeta),
+            "iota_rr": iota_data["iota_rr"][0] * jnp.ones_like(zeta),
+        }
+
+        # now compute ballooning stuff
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
         )
-        return constants["transforms"]["grid"].compress(data["ideal_ball_gamma"])
+
+        return data["ideal_ball_gamma"]

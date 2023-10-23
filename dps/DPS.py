@@ -98,8 +98,8 @@ ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
-tmax = 1e-4
-nt = 250
+tmax = 1e-2
+nt = 1000
 time = jnp.linspace(tmin, tmax, nt)
 
 # Initial State

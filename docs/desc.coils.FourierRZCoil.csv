@@ -1,0 +1,13 @@
+Name,Label,Units,Description,Module
+``s``,:math:`s`,None,"Curve parameter, on [0, 2pi)",``desc.compute._curve``
+``ds``,:math:`ds`,None,Spacing of curve parameter,``desc.compute._curve``
+``x``,:math:`\mathbf{x}`,meters,Position vector along curve,``desc.compute._curve``
+``x_s``,:math:`\partial_{s} \mathbf{x}`,meters,"Position vector along curve, first derivative",``desc.compute._curve``
+``x_ss``,:math:`\partial_{ss} \mathbf{x}`,meters,"Position vector along curve, second derivative",``desc.compute._curve``
+``x_sss``,:math:`\partial_{sss} \mathbf{x}`,meters,"Position vector along curve, third derivative",``desc.compute._curve``
+``frenet_tangent``,:math:`\mathbf{T}_{\mathrm{Frenet-Serret}}`,None,Tangent unit vector to curve in Frenet-Serret frame,``desc.compute._curve``
+``frenet_normal``,:math:`\mathbf{N}_{\mathrm{Frenet-Serret}}`,None,Normal unit vector to curve in Frenet-Serret frame,``desc.compute._curve``
+``frenet_binormal``,:math:`\mathbf{B}_{\mathrm{Frenet-Serret}}`,None,Binormal unit vector to curve in Frenet-Serret frame,``desc.compute._curve``
+``curvature``,:math:`\kappa`,Inverse meters,Scalar curvature of the curve,``desc.compute._curve``
+``torsion``,:math:`\tau`,Inverse meters,Scalar torsion of the curve,``desc.compute._curve``
+``length``,:math:`L`,meters,Length of the curve,``desc.compute._curve``

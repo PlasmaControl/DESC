@@ -762,7 +762,6 @@ def plot_3d(
     log=False,
     fig=None,
     return_data=False,
-    use_colorbar=True,
     **kwargs,
 ):
     """Plot 3D surfaces.
@@ -795,6 +794,10 @@ def plot_3d(
         * ``cmap``: string denoting colormap to use.
         * ``levels``: array of data values where ticks on colorbar should be placed.
         * ``alpha``: float in [0,1.0], the transparency of the plotted surface
+        * ``showgrid``: bool of whether or not to show gridlines in the plot.
+        * ``zeroline``: bool of whether or not to show the zero gridline in the plot.
+
+
 
     Returns
     -------
@@ -917,18 +920,24 @@ def plot_3d(
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=kwargs.get("showgrid", True),
+                zeroline=kwargs.get("zeroline", True),
             ),
             yaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=kwargs.get("showgrid", True),
+                zeroline=kwargs.get("zeroline", True),
             ),
             zaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=kwargs.get("showgrid", True),
+                zeroline=kwargs.get("zeroline", True),
             ),
         ),
         width=figsize[0] * dpi,

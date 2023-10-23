@@ -7,28 +7,21 @@ from scipy.optimize import minimize
 import desc.io
 from desc.backend import jit, jnp
 from desc.coils import MixedCoilSet
-from desc.compute.utils import cross, dot
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid
 from desc.plotting import plot_3d
-from desc.transform import Transform
 
 # make this a fxn that takes in the phi_MN and does the usual thing
 # does theta convention matter for this?
 
 
 def find_helical_coils(  # noqa: C901 - FIXME: simplify this
-    phi_mn_desc_basis,
-    basis,
+    surface_current_field,
     eqname,
-    net_toroidal_current,
-    net_poloidal_current,
     alpha,
     desirednumcoils=10,
     step=2,
-    ntheta=128,
-    winding_surf=None,
+    ntheta=200,
     coilsFilename="coils.txt",
     maxiter=25,
     dirname=".",
@@ -41,25 +34,13 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
     Parameters
     ----------
-    phi_mn_desc_basis : ndarray
-        The DoubleFourierSeries coefficients for the surface current potential.
-    basis : DoubleFourierSeries
-        Basis corresponding to the phi_mn_desc_basis
+    surface_current_field : FourierCurrentPotentialField or CurrentPotentialField
+        CurrentPotentialField or FourierCurrentPotentialField object to
+        discretize into coils.
     eqname : str or Equilibrium
         The DESC equilibrum the surface current potential was found for
         If str, assumes it is the name of the equilibrium .h5 output and will
         load it
-    net_toroidal_current : float
-        Net current linking the plasma and the coils toroidally
-        Denoted I in the algorithm
-        An output of the run_regcoil function
-        If nonzero, helical coils are sought
-        If 0, then modular coils are sought, and this function is not
-        appropriate for that, and will raise an error
-    net_poloidal_current : float
-        Net current linking the plasma and the coils poloidally
-        Denoted G in the algorithm
-        an output of the run_regcoil function
     alpha : float
         regularization parameter used in run_regcoil
         #TODO: can remove this and replace with something like
@@ -73,10 +54,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     ntheta : int, optional
         number of theta points to use in the integration to find the current
         pertaining to each coil, by default 128
-    winding_surf : _type_, optional
-        Winding surface on which the surface current lies, if None will default
-        to a circular torus of R0=0.7035 and a = 0.0365
-
     coilsFilename : str, optional
         name of txt file to save coils to, by default "coils.txt"
     maxiter : int, optional
@@ -113,6 +90,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     zeta_coil = jnp.linspace(0, 2 * jnp.pi / nfp, ntheta)
     dz = zeta_coil[1] - zeta_coil[0]
     zetal_coil = jnp.arange(0, 2 * jnp.pi, dz)
+    net_toroidal_current = surface_current_field.I
+    net_poloidal_current = surface_current_field.G
 
     if not os.path.isdir(dirname):
         os.mkdir(dirname)
@@ -124,24 +103,12 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     # get
     # rs: source pts R,phi,Z (just from the winding surface)
 
-    if winding_surf is None:
-        R0_ves = 0.7035  # m
-        a_ves = 0.0365  # m
-
-        winding_surf = FourierRZToroidalSurface(
-            R_lmn=jnp.array([R0_ves, -a_ves]),  # boundary coefficients in m
-            Z_lmn=jnp.array([a_ves]),
-            modes_R=jnp.array([[0, 0], [1, 0]]),  # [M, N] boundary Fourier modes
-            modes_Z=jnp.array([[-1, 0]]),
-            NFP=1,  # number of (toroidal) field periods
-        )
+    winding_surf = surface_current_field
 
     ##################################################################################
     ################# get function to calc phi_tot(theta,zeta) #######################
     ##################################################################################
     # fxn will accept phi_mn and its basis
-
-    # TODO:just use fxns imported from regcoil.py
 
     def phi_tot_fun_vec(theta, zeta):
         nodes = jnp.vstack(
@@ -151,12 +118,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 zeta.flatten(order="F"),
             )
         ).T
-        trans_temp = Transform(Grid(nodes, sort=False), basis)
-        return (
-            jnp.asarray(trans_temp.transform(phi_mn_desc_basis))
-            + net_poloidal_current * zeta.flatten(order="F") / 2 / jnp.pi
-            + net_toroidal_current * theta.flatten(order="F") / 2 / jnp.pi
-        )
+        grid = Grid(nodes, sort=False)
+        return surface_current_field.compute("Phi", grid=grid)["Phi"]
 
     def phi_tot_fun_theta_deriv_vec(theta, zeta):
         nodes = jnp.vstack(
@@ -166,38 +129,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 zeta.flatten(order="F"),
             )
         ).T
-        trans_temp = Transform(
-            Grid(nodes, sort=False), basis, derivs=jnp.array([[0, 1, 0]])
-        )
-        return (
-            jnp.asarray(trans_temp.transform(phi_mn_desc_basis, dt=1))
-            + net_toroidal_current / 2 / jnp.pi
-        )
-
-    def surf_current_vec_contravariant_zeta_times_R_times_g_tt(sgrid):
-        data = winding_surf.compute(["x", "e_theta", "e_zeta"], grid=sgrid, basis="rpz")
-        Rs = data["x"][:, 0]
-        rs_t = data["e_theta"]
-        rs_z = data["e_zeta"]
-        ns_mag = jnp.linalg.norm(cross(rs_t, rs_z), axis=1)
-
-        phi_t = phi_tot_fun_theta_deriv_vec(sgrid.nodes[:, 1], sgrid.nodes[:, 2])
-        g_tt = dot(rs_t, rs_t)
-
-        # "vector" is the K vector in terms of grad(theta) and grad(zeta)
-        K_sup_zeta = -phi_t * (1 / ns_mag)
-
-        return K_sup_zeta * Rs * jnp.sqrt(g_tt)
-
-    def phi_tot_fun(theta, zeta):
-        if jnp.shape(theta):
-            theta = theta[0]
-        trans_temp = Transform(Grid(jnp.array([[1, theta, zeta]])), basis)
-        return (
-            jnp.asarray(trans_temp.transform(phi_mn_desc_basis))
-            + net_poloidal_current * zeta / 2 / jnp.pi
-            + net_toroidal_current * theta / 2 / jnp.pi
-        )
+        grid = Grid(nodes, sort=False)
+        return surface_current_field.compute("Phi_t", grid=grid)["Phi_t"]
 
     ##### find helicity naively ######################################################
 
@@ -231,7 +164,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                     endpoint=False,
                 )
             elif (
-                not contours_were_sorted
+                contours_were_sorted
             ):  # if i==0, then must use the last and the first halfway
                 # contour periodicity to find the integration domain
                 thetas = jnp.linspace(
@@ -241,13 +174,13 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                     endpoint=False,
                 )
             elif (
-                contours_were_sorted
+                not contours_were_sorted
             ):  # if i==0, then must use the last and the first halfway contour
                 # periodicity to find the integration domain
                 # here I assume this contour is on the bottom...
                 # when it could be on top too
                 thetas = jnp.linspace(
-                    contour_theta_halfway[i - 1],
+                    contour_theta_halfway[-1] - 2 * jnp.pi,
                     contour_theta_halfway[i],
                     nthetas,
                     endpoint=False,
@@ -255,6 +188,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             dthetas = jnp.abs(thetas[1] - thetas[0]) * jnp.ones_like(thetas)
             coil_nodes.append((thetas, jnp.zeros_like(thetas)))
             coil_dthetas.append(dthetas)
+
         return coil_nodes, coil_dthetas
 
     ################################################################
@@ -281,6 +215,9 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         fp=theta_lookup_grid[conts_sorted_inds],
     )
     theta_of_contour_val = jit(theta_of_contour_val_fun)
+
+    # TODO: also precompute and interpolate Phi_t, so no need
+    # to create grid objects inside the variance function
 
     def find_contours_and_current_variance(
         contours, return_full_info=False, show_plots=False, nthetas=200
@@ -369,25 +306,27 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         ################################################################
 
         # how to do so in a way that is not appending to a list?
-
+        elem_sum = 0
         coil_currents_line = jnp.zeros(N_trial_contours)  # list of the coil currents
         for icoi, (coords, line_elems) in enumerate(
             zip(coil_nodes_line, coil_line_elements)
         ):
-            nodes_surf = jnp.vstack(
-                (
-                    jnp.zeros_like(coords[0].flatten(order="F")),
-                    coords[0].flatten(order="F"),
-                    coords[1].flatten(order="F"),
-                )
-            ).T
-            sgrid = Grid(nodes_surf, sort=False, jitable=True)
-            # TODO: is this only valid for circular winding surfaces?
-            K_sup_z_time_R = surf_current_vec_contravariant_zeta_times_R_times_g_tt(
-                sgrid
+            # only need to integrate Phi_t to find net toroidal current
+            # through a given dtheta
+            Phi_t_vals = phi_tot_fun_theta_deriv_vec(
+                coords[0].flatten(), coords[1].flatten()
             )
-            current = jnp.sum(K_sup_z_time_R * line_elems)
+
+            current = jnp.sum(Phi_t_vals * line_elems)
             coil_currents_line = coil_currents_line.at[icoi].set(current)
+            elem_sum += jnp.sum(line_elems)
+        if not jnp.isclose(jnp.sum(coil_currents_line), net_toroidal_current):
+            print(
+                "net toroidal current of coils does not match I! something went wrong"
+            )
+            print(jnp.sum(coil_currents_line))
+            print(net_toroidal_current)
+            print(f"{elem_sum=}")
 
         variance = jnp.var(coil_currents_line)
 
@@ -434,8 +373,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         N_trial_contours = len(contours) - 1
         contour_zeta = []
         contour_theta = []
-        if not contours[1] - contours[0] > 1:
-            contours = jnp.sort(jnp.asarray(contours))
         plt.figure(figsize=(18, 10))
         cdata = plt.contour(
             zeta_full_2D.T, theta_full_2D.T, jnp.transpose(my_tot_full), contours
@@ -472,23 +409,24 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     # adding extra contour above and below the ones we care about,
     #  so we can then find halfway point btwn them
 
-    theta0s = jnp.flip(
-        jnp.linspace(
-            0,
-            (2 * jnp.pi + 2 * jnp.pi / N_trial_contours) * jnp.sign(phi_slope),
-            N_trial_contours + 1,
-            endpoint=False,
-        )
+    theta0s = jnp.linspace(
+        0,
+        (2 * jnp.pi + 2 * jnp.pi / N_trial_contours) * jnp.sign(phi_slope),
+        N_trial_contours + 1,
+        endpoint=False,
     )
 
     contours = []
     for t in theta0s:
-        contours.append(float(phi_tot_fun(t, 0.0)[0]))  # contour values
+        contours.append(
+            float(phi_tot_fun_vec(jnp.array([t]), jnp.array([0.0]))[0])
+        )  # contour values
     import time
 
     if initial_guess:
         assert len(initial_guess) == len(contours)
         contours = initial_guess
+    contours = jnp.sort(jnp.asarray(contours))
 
     xs = [contours]
     fun_vals = [find_contours_and_current_variance(contours)]
@@ -518,6 +456,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         t_end = time.time()
         print(f"Optimization for coils took {t_end-t_start} s")
         contours = result.x
+    contours = jnp.sort(jnp.asarray(contours))
 
     final_coil_theta0s, coil_currents = find_contours_and_current_variance(
         contours, return_full_info=True, show_plots=True

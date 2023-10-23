@@ -969,6 +969,14 @@ def test_regcoil_ellipse_and_axisym_surface():
     assert np.all(np.asarray(chi_B[0:-10]) < 1e-8)
     surface_current_field.Phi_mn = all_phi_mns[12]
 
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_surf = surface_current_field.compute_magnetic_field(
+        coords, grid=LinearGrid(M=200, N=200)
+    )
+    np.testing.assert_allclose(B, B_from_surf, atol=1e-4)
+
     fieldR, fieldZ = trace_from_curr_pot(
         surface_current_field,
         eq,
@@ -1019,6 +1027,13 @@ def test_regcoil_ellipse_helical():
         helicity_ratio=-1,
     )
     assert np.all(chi_B < 1e-5)
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_surf = surface_current_field.compute_magnetic_field(
+        coords, grid=LinearGrid(M=200, N=200)
+    )
+    np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
 
     fieldR, fieldZ = trace_from_curr_pot(
         surface_current_field,

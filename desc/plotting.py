@@ -836,7 +836,8 @@ def plot_3d(
     title = kwargs.pop("title", "")
     levels = kwargs.pop("levels", None)
     component = kwargs.pop("component", None)
-
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
     errorif(
         len(kwargs) != 0,
         ValueError,
@@ -920,24 +921,24 @@ def plot_3d(
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
-                showgrid=kwargs.get("showgrid", True),
-                zeroline=kwargs.get("zeroline", True),
+                showgrid=showgrid,
+                zeroline=zeroline,
             ),
             yaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
-                showgrid=kwargs.get("showgrid", True),
-                zeroline=kwargs.get("zeroline", True),
+                showgrid=showgrid,
+                zeroline=zeroline,
             ),
             zaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
-                showgrid=kwargs.get("showgrid", True),
-                zeroline=kwargs.get("zeroline", True),
+                showgrid=showgrid,
+                zeroline=zeroline,
             ),
         ),
         width=figsize[0] * dpi,

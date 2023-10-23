@@ -399,19 +399,20 @@ def _get_default_tols(
     )
     stoptol.setdefault(
         "ftol",
-        options.pop("ftol", 1e-6 if optimizers[method]["stochastic"] else 1e-2),
+        options.pop(
+            "ftol",
+            1e-6 if optimizers[method]["stochastic"] or "auglag" in method else 1e-2,
+        ),
     )
     stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
     stoptol.setdefault("ctol", options.pop("ctol", 1e-4))
-    stoptol.setdefault("maxiter", options.pop("maxiter", 100))
+    stoptol.setdefault(
+        "maxiter", options.pop("maxiter", 500 if "auglag" in method else 100)
+    )
 
     # if we define an "iteration" as a successful step, it can take a few function
     # evaluations per iteration
     stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
-    # pretty much all the methods only evaluate derivatives once per iteration
-    stoptol["max_ngev"] = options.pop("max_ngev", stoptol["maxiter"] + 1)
-    stoptol["max_njev"] = options.pop("max_njev", stoptol["maxiter"] + 1)
-    stoptol["max_nhev"] = options.pop("max_nhev", stoptol["maxiter"] + 1)
 
     return stoptol
 
@@ -445,7 +446,7 @@ def register_optimizer(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the sub-method to use.
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable.
     verbose : int
@@ -454,7 +455,7 @@ def register_optimizer(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
         settings.

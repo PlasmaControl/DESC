@@ -294,7 +294,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         # thetas is the decision variable
 
         if not contours[1] - contours[0] > 1:
-            contours = jnp.sort(contours)
+            contours = jnp.sort(jnp.asarray(contours))
             contours_were_sorted = True
         else:
             contours_were_sorted = False
@@ -435,7 +435,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         contour_zeta = []
         contour_theta = []
         if not contours[1] - contours[0] > 1:
-            contours = jnp.sort(contours)
+            contours = jnp.sort(jnp.asarray(contours))
         plt.figure(figsize=(18, 10))
         cdata = plt.contour(
             zeta_full_2D.T, theta_full_2D.T, jnp.transpose(my_tot_full), contours

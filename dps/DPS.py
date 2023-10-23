@@ -80,15 +80,9 @@ eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 
 # Energy and Mass info
-Energy_eV = 3.52e6
+Energy_eV = 1 # eV (3.52e6 eV proton energy)
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
-Energy_SI = Energy_eV*Proton_Charge
-# Energy and Mass info
-Energy_eV = 3.52e6
-Proton_Mass = scipy.constants.proton_mass
-Proton_Charge = scipy.constants.elementary_charge
-
 Energy_SI = Energy_eV*Proton_Charge
 
 # Particle Info

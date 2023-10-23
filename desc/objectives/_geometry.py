@@ -628,7 +628,7 @@ class PlasmaVesselDistance(_Objective):
 
 
 class QuadraticFlux(_Objective):
-    """Compute the minimum value for Bnorm squared."""
+    """Compute Bnorm squared on the equilibrium surface."""
 
     _coordinates = "rtz"
     _units = "(m)"
@@ -759,13 +759,15 @@ class QuadraticFlux(_Objective):
 
         Returns
         -------
-        Bnorm_squared : array
+        Bnorm_squared : ndarray shape(plasma_grid.num_nodes)
             quadratic flux integrand
 
         """
-        Bnorm = self._magnetic_field.compute_Bnorm(self._surface, basis="rpz")
+        surface = self._eq.surface
+        Bnorm = self._magnetic_field.compute_Bnorm(surface, basis="rpz")
+        Bnorm_squared = Bnorm**2
 
-        return Bnorm**2
+        return Bnorm_squared
 
 
 class MeanCurvature(_Objective):

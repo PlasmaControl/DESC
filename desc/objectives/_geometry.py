@@ -627,6 +627,147 @@ class PlasmaVesselDistance(_Objective):
             return d.min(axis=0)
 
 
+class QuadraticFlux(_Objective):
+    """Compute the minimum value for Bnorm squared."""
+
+    _coordinates = "rtz"
+    _units = "(m)"
+    _print_value_fmt = "Plasma-vessel distance: {:10.3e} "
+
+    def __init__(
+        self,
+        surface,
+        magnetic_field,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        surface_grid=None,
+        plasma_grid=None,
+        use_softmin=False,
+        alpha=1.0,
+        name="quadratic flux",
+    ):
+        if target is None and bounds is None:
+            bounds = (1, np.inf)
+        self._surface = surface
+        self._magnetic_field = magnetic_field
+        self._surface_grid = surface_grid
+        self._plasma_grid = plasma_grid
+        self._use_softmin = use_softmin
+        self._alpha = alpha
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq=None, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        if self._surface_grid is None:
+            surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            surface_grid = self._surface_grid
+        if self._plasma_grid is None:
+            plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            plasma_grid = self._plasma_grid
+        if not np.allclose(surface_grid.nodes[:, 0], 1):
+            warnings.warn("Surface grid includes off-surface pts, should be rho=1")
+        if not np.allclose(plasma_grid.nodes[:, 0], 1):
+            warnings.warn("Plasma grid includes interior points, should be rho=1")
+
+        self._dim_f = surface_grid.num_nodes
+        self._data_keys = ["R", "phi", "Z"]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+        )
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._surface_coords = self._surface.compute(
+            "x", grid=surface_grid, basis="xyz"
+        )["x"]
+        profiles = get_profiles(
+            self._data_keys,
+            obj=eq,
+            grid=plasma_grid,
+            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+        )
+        transforms = get_transforms(
+            self._data_keys,
+            obj=eq,
+            grid=plasma_grid,
+            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+        )
+
+        # compute returns points on the grid of the surface
+        # (so size surface_grid.num_nodes)
+        # so set quad_weights to the surface grid
+        # to avoid it being incorrectly set to the plasma_grid size
+        # in the super build
+        w = surface_grid.weights
+        w *= jnp.sqrt(surface_grid.num_nodes)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "surface_coords": self._surface_coords,
+            "quad_weights": w,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute the integrand of quadratic flux.
+
+        Parameters
+        ----------
+        surface : Equilibrium
+        magnetic_field : _MagneticField
+
+        Returns
+        -------
+        Bnorm_squared : array
+            quadratic flux integrand
+
+        """
+        Bnorm = self._magnetic_field.compute_Bnorm(self._surface, basis="rpz")
+
+        return Bnorm**2
+
+
 class MeanCurvature(_Objective):
     """Target a particular value for the mean curvature.
 

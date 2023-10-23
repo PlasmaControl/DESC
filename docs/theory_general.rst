@@ -32,17 +32,30 @@ This is different from the default radial coordinate in VMEC of the normalized t
 The covariant basis vectors of the curvilinear coordinate system are
 
 .. math::
-  \mathbf{e}_\rho = [\partial_\rho R \\ 0 \\ \partial_\rho Z]^T \\ \\ \mathbf{e}_\theta = [\partial_\theta R \\ 0 \\ \partial_\theta Z]^T \\ \\ \mathbf{e}_\zeta = [\partial_\zeta R \\ R \\ \partial_\zeta Z]^T
+  \mathbf{e}_\rho =  \begin{bmatrix}
+      \partial_\rho R \\ 0 \\ \partial_\rho Z
+  \end{bmatrix} \hspace{1cm}
+  \mathbf{e}_\theta =  \begin{bmatrix}
+      \partial_\theta R \\ 0 \\ \partial_\theta Z
+  \end{bmatrix}\hspace{1cm}
+  \mathbf{e}_\zeta =  \begin{bmatrix}
+      \partial_\zeta R \\ R \\ \partial_\zeta Z
+  \end{bmatrix}
 
 and the Jacobian of the curvilinear coordinate system is :math:`\sqrt{g} = e_\rho \cdot e_\theta \times e_\zeta`.
+
+.. math::
+  \sqrt{g} =  R \left( \cfrac{\partial R}{\partial \rho}  \cfrac{\partial Z}{\partial \theta} + \cfrac{\partial R}{\partial \theta}  \cfrac{\partial Z}{\partial \rho} \right)
 
 DESC solves for the map between the cylindrical and flux coordinate systems through the following variables that represent the shapes of the flux surfaces:
 
 .. math::
-  R(\rho, \theta, \zeta) \\ \\ Z(\rho, \theta, \zeta) \\ \\ \lambda(\rho, \theta, \zeta)
+  R(\rho, \theta, \zeta) \\[.2cm]
+  Z(\rho, \theta, \zeta) \\[.2cm]
+  \lambda(\rho, \theta, \zeta)
 
 It assumes the flux functions for the pressure profile :math:`p(\rho)` and either the rotational transform :math:`\iota(\rho)` or toroidal current :math:`I(\rho)` profile are given.
-Additionally, it needs the total toroidal magnetic flux through the plasma volume :math:`\Psi_a`, where :math:`\psi_N = \frac{\Psi}{\Psi_a}` and :math:`\psi = \frac{\Psi}{2\pi}`.
+Additionally, it needs the total toroidal magnetic flux through the plasma volume :math:`\Psi_a`, where :math:`\psi_N = \cfrac{\Psi}{\Psi_a}` and :math:`\psi = \cfrac{\Psi}{2\pi}`.
 The shape of the last closed flux surface :math:`R^b(\theta,\phi)`, :math:`Z^b(\theta,\phi)` is also required to specify the fixed-boundary.
 
 The poloidal angle :math:`\theta` increases clockwise so that the curvilinear coordinate system is always right-handed (:math:`\sqrt{g} > 0`).
@@ -61,8 +74,8 @@ The current density is then calculated from Ampere's Law, :math:`\nabla \times \
 
 .. math::
   \begin{aligned}
-  J^\rho &= \frac{\partial_\theta B_\zeta - \partial_\zeta B_\theta}{\mu_0 \sqrt{g}} \\
-  J^\theta &= \frac{\partial_\zeta B_\rho - \partial_\rho B_\zeta}{\mu_0 \sqrt{g}} \\
+  J^\rho &= \frac{\partial_\theta B_\zeta - \partial_\zeta B_\theta}{\mu_0 \sqrt{g}} \\[.2cm]
+  J^\theta &= \frac{\partial_\zeta B_\rho - \partial_\rho B_\zeta}{\mu_0 \sqrt{g}} \\[.2cm]
   J^\zeta &= \frac{\partial_\rho B_\theta - \partial_\theta B_\rho}{\mu_0 \sqrt{g}}
   \end{aligned}
 
@@ -71,7 +84,7 @@ This allows the magnetic field and current density to be computed from the indep
 
 .. math::
   \begin{aligned}
-  \mathbf{B}(\rho, \theta, \zeta) &= \mathbf{B}(R(\rho, \theta, \zeta), Z(\rho, \theta, \zeta), \lambda(\rho, \theta, \zeta), \iota(\rho)) \\
+  \mathbf{B}(\rho, \theta, \zeta) &= \mathbf{B}(R(\rho, \theta, \zeta), Z(\rho, \theta, \zeta), \lambda(\rho, \theta, \zeta), \iota(\rho)) \\[.2cm]
   \mathbf{J}(\rho, \theta, \zeta) &= \mathbf{J}(R(\rho, \theta, \zeta), Z(\rho, \theta, \zeta), \lambda(\rho, \theta, \zeta), \iota(\rho))
   \end{aligned}
 
@@ -87,10 +100,10 @@ When written in flux coordinates there are only two independent components:
 
 .. math::
   \begin{aligned}
-  \mathbf{F} &= F_\rho \nabla \rho + F_\beta \mathbf{\beta} \\
-  F_\rho &= \sqrt{g} (B^\zeta J^\theta - B^\theta J^\zeta) - \partial_\rho p \\
-  F_\beta &= \sqrt{g} B^\zeta J^\rho \\
-  \mathbf{\beta} &= \nabla \theta - \iota \nabla \zeta
+    \mathbf{F} &= F_\rho \nabla \rho + F_\beta \mathbf{\beta} \\[.2cm]
+    F_\rho &= \sqrt{g} (B^\zeta J^\theta - B^\theta J^\zeta) - \partial_\rho p \\[.2cm]
+    F_\beta &= \sqrt{g} B^\zeta J^\rho \\[.2cm]
+    \mathbf{\beta} &= \nabla \theta - \iota \nabla \zeta
   \end{aligned}
 
 These forces in both the radial and helical directions must vanish in equilibrium.
@@ -98,8 +111,8 @@ DESC solves this force balance locally by evaluating the residual errors at disc
 
 .. math::
   \begin{aligned}
-  f_\rho = F_\rho ||\nabla \rho|| \Delta V \\
-  f_\beta = F_\beta ||\mathbf{\beta}|| \Delta V
+  f_\rho &= F_\rho ||\nabla \rho|| \Delta V \\[.2cm]
+  f_\beta &= F_\beta ||\mathbf{\beta}|| \Delta V
   \end{aligned}
 
 These equations :math:`f_\rho` and :math:`f_\beta` represent the force errors (in Newtons) in the unit of volume :math:`\Delta V = \sqrt{g} \Delta \rho \Delta \theta \Delta \zeta` surrounding a collocation point :math:`(\rho, \theta, \zeta)`.
@@ -110,16 +123,22 @@ In summary, the equilibrium problem is formulated as a system of nonlinear equat
 The state vector :math:`\mathbf{x}` contains the spectral coefficients representing the independent variables:
 
 .. math::
-  \mathbf{x} = [R_{lmn} \\ Z_{lmn} \\ \lambda_{lmn}]^T
+  \mathbf{x} =  \begin{bmatrix}
+      R_{lmn} \\ Z_{lmn} \\ \lambda_{lmn}
+  \end{bmatrix}
 
 The parameter vector :math:`\mathbf{c}` contains the spectral coefficients of the inputs that define a unique equilibrium solution:
 
 .. math::
-  \mathbf{c} = [R^b_{mn} \\ Z^b_{mn} \\ p_l \\ \iota_l \\ \psi_a]^T
+  \mathbf{c} =  \begin{bmatrix}
+      R^b_{mn} \\ Z^b_{mn} \\ p_l \\ \iota_l \\ \psi_a
+  \end{bmatrix}
 
 The equations :math:`\mathbf{f}` are the force error residuals at a series of collocation points:
 
 .. math::
-  \mathbf{f} = [f_\rho \\ f_\beta]^T
+  \mathbf{f} =  \begin{bmatrix}
+      f_\rho \\ f_\beta
+  \end{bmatrix}
 
 DESC allows flexibility in the choice of optimization algorithm used to solve this system of equations; popular approaches include Newton-Raphson methods and least-squares minimization (as the collocation grids are often oversampled, which has been found to improve convergence and robustness).

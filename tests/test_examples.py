@@ -1058,11 +1058,8 @@ def test_regcoil_ellipse_helical():
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
     coilset2 = find_helical_coils(
-        surface_current_field.Phi_mn,
-        surface_current_field.Phi_basis,
+        surface_current_field,
         eqname,
-        surface_current_field.I,
-        surface_current_field.G,
         1e-15,
         desirednumcoils=numCoils,
         coilsFilename=coilsFilename,

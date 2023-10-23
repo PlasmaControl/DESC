@@ -636,7 +636,6 @@ class QuadraticFlux(_Objective):
 
     def __init__(
         self,
-        surface,
         magnetic_field,
         eq=None,
         target=None,
@@ -652,7 +651,6 @@ class QuadraticFlux(_Objective):
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
-        self._surface = surface
         self._magnetic_field = magnetic_field
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
@@ -708,9 +706,6 @@ class QuadraticFlux(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._surface_coords = self._surface.compute(
-            "x", grid=surface_grid, basis="xyz"
-        )["x"]
         profiles = get_profiles(
             self._data_keys,
             obj=eq,
@@ -735,7 +730,6 @@ class QuadraticFlux(_Objective):
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
-            "surface_coords": self._surface_coords,
             "quad_weights": w,
         }
 

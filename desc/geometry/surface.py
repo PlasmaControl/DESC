@@ -273,7 +273,12 @@ class FourierRZToroidalSurface(Surface):
 
         """
         f = open(path)
-        if "&INDATA" in f.readlines()[0].upper():  # vmec input, convert to desc
+        isVMEC = False
+        for line in f.readlines():
+            if "&INDATA" in line.upper():
+                isVMEC = True
+                break
+        if isVMEC:  # vmec input, convert to desc
             inputs = InputReader.parse_vmec_inputs(f)[-1]
         else:
             inputs = InputReader().parse_inputs(f)[-1]

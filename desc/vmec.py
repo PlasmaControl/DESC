@@ -180,11 +180,10 @@ class VMECIO:
         objective = ObjectiveFunction(constraints, verbose=0)
         objective.build()
         _, _, _, _, _, project, recover = factorize_linear_constraints(
-            constraints, objective.args
+            constraints, objective
         )
-        args = objective.unpack_state(recover(project(objective.x(eq))))
-        for key, value in args.items():
-            setattr(eq, key, value)
+        args = objective.unpack_state(recover(project(objective.x(eq))), False)[0]
+        eq.params_dict = args
 
         # now we flip the orientation at the very end
         with warnings.catch_warnings():

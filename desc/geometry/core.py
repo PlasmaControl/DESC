@@ -17,9 +17,10 @@ from desc.compute.utils import (
 )
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
+from desc.optimizable import Optimizable
 
 
-class Curve(IOAble, ABC):
+class Curve(IOAble, Optimizable, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
     _io_attrs_ = ["_name", "shift", "rotmat"]
@@ -241,7 +242,7 @@ class Curve(IOAble, ABC):
     # (might be impossible to parameterize some curves with toroidal angle phi)
 
 
-class Surface(IOAble, ABC):
+class Surface(IOAble, Optimizable, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
     _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]

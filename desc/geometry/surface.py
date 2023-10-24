@@ -113,7 +113,8 @@ class FourierRZToroidalSurface(Surface):
             warnings.warn(
                 "Left handed coordinates detected, switching sign of theta."
                 + " To avoid this warning in the future, switch the sign of all"
-                + " modes with m<0"
+                + " modes with m<0. You may also need to switch the sign of iota or"
+                + " current profiles."
             )
             self._flip_orientation()
             assert self._compute_orientation() == 1

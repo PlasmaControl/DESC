@@ -90,16 +90,14 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                 eq.Rb_lmn,
                 eq.surface.R_basis,
                 axisR,
-                "lcfs",
-                coord,
+                coord=coord,
             )
             eq.Z_lmn = _initial_guess_surface(
                 eq.Z_basis,
                 eq.Zb_lmn,
                 eq.surface.Z_basis,
                 axisZ,
-                "lcfs",
-                coord,
+                coord=coord,
             )
         else:
             raise ValueError(
@@ -295,7 +293,7 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         def body(k, x_lmn):
             l, m, n = b_modes[k]
             mask0 = (x_modes == jnp.array([l, m, n])).all(axis=1)
-            x_lmn = jnp.where(x_lmn, mask0, b_lmn[k], x_lmn)
+            x_lmn = jnp.where(mask0, b_lmn[k], x_lmn)
             return x_lmn
 
         x_lmn = fori_loop(0, b_basis.num_modes, body, x_lmn)

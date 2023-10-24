@@ -368,7 +368,7 @@ class ObjectiveFunction(IOAble):
         Returns
         -------
         params : pytree of dict
-            if per_objective is True, this is a nested list of of parameters for each
+            if per_objective is True, this is a nested list of parameters for each
             sub-Objective, such that self.objectives[i] has parameters params[i].
             Otherwise, it is a list of parameters tied to each optimizable thing
             such that params[i] = self.things[i].params_dict

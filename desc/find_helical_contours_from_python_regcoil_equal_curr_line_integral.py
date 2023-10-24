@@ -1,5 +1,6 @@
 """Find helical coils from surface current potential."""
 import os
+import warnings
 
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
@@ -9,7 +10,7 @@ from desc.backend import jit, jnp
 from desc.coils import MixedCoilSet
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid
-from desc.plotting import plot_3d
+from desc.plotting import plot_3d, plot_coils
 
 # make this a fxn that takes in the phi_MN and does the usual thing
 # does theta convention matter for this?
@@ -84,6 +85,11 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         eq = eqname
     if hasattr(eq, "__len__"):
         eq = eq[-1]
+    if save_figs:
+        warnings.warn(
+            "Not implemented with plotly yet, so 3D figs will show but not save",
+            UserWarning,
+        )
 
     nfp = eq.NFP
     theta_coil = jnp.linspace(0, 2 * jnp.pi, ntheta)
@@ -470,7 +476,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     # Find the XYZ points in real space of the coil contours
     ################################################################
     if save_figs:
-        fig, ax = plot_3d(eq, "|B|", figsize=(12, 12))
+        fig = plot_3d(eq, "|B|", figsize=(12, 12))
     else:
         ax = None
 
@@ -494,15 +500,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             contour_Y.append(coords[:, 1])
             contour_Z.append(coords[:, 2])
             coil_coords.append(jnp.vstack((coords[:, 0], coords[:, 1], coords[:, 2])).T)
-        if save_figs:
-            if ax is None:
-                fig = plt.figure(figsize=(12, 12))
-                ax = fig.add_subplot(projection="3d")
-            for j in range(len(contour_X)):
-                if j == 0:
-                    ax.plot(contour_X[j], contour_Y[j], contour_Z[j], ls, label=label)
-                else:
-                    ax.plot(contour_X[j], contour_Y[j], contour_Z[j], ls)
 
         # Find the point of minimum separation
         if find_min_dist:
@@ -542,13 +539,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         ax=ax,
     )
 
-    if save_figs:
-        ax.legend()
-
-    figfilename = f"coil_3d_ncoil_{desirednumcoils}_alpha_{alpha:1.4e}_{dirname}.png"
-    if save_figs:
-        plt.savefig(f"{dirname}/{figfilename}")
-
     ################
 
     # Write coils file
@@ -582,6 +572,9 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 )
             f.write("end\n")
     final_coilset = MixedCoilSet.from_makegrid_coilfile(coilsFilename)
+
+    if save_figs:
+        fig = plot_coils(final_coilset, fig=fig)
     ###################
     print(f"Coil current average is {jnp.mean(coil_currents):1.4e} A")
     print(f"Coil current variance is {jnp.var(coil_currents):1.4e} A")

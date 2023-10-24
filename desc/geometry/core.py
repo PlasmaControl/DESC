@@ -45,7 +45,7 @@ class Curve(IOAble, ABC):
         params=None,
         transforms=None,
         data=None,
-        override=True,
+        override_grid=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -63,7 +63,7 @@ class Curve(IOAble, ABC):
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
-        override : bool
+        override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested
             grid. If False, uses only the user specified grid, which may lead to
@@ -113,7 +113,7 @@ class Curve(IOAble, ABC):
         if calc0d and (grid.N >= 2 * N + 5) and isinstance(grid, LinearGrid):
             calc0d = False
 
-        if calc0d and override:
+        if calc0d and override_grid:
             grid0d = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=True)
             data0d = compute_fun(
                 self,
@@ -319,7 +319,7 @@ class Surface(IOAble, ABC):
         params=None,
         transforms=None,
         data=None,
-        override=True,
+        override_grid=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -337,7 +337,7 @@ class Surface(IOAble, ABC):
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
-        override : bool
+        override_grid : bool
             If True, override the user supplied grid if necessary and use a full
             resolution grid to compute quantities and then downsample to user requested
             grid. If False, uses only the user specified grid, which may lead to
@@ -384,7 +384,7 @@ class Surface(IOAble, ABC):
         ]
         calc0d = bool(len(dep0d))
         # see if the grid we're already using will work for desired qtys
-        if calc0d and override and hasattr(self, "rho"):  # constant rho surface
+        if calc0d and override_grid and hasattr(self, "rho"):  # constant rho surface
             if (
                 (grid.N >= 2 * self.N + 5)
                 and (grid.M > 2 * self.M + 5)
@@ -398,7 +398,9 @@ class Surface(IOAble, ABC):
                     N=2 * self.N + 5,
                     NFP=self.NFP,
                 )
-        elif calc0d and override and hasattr(self, "zeta"):  # constant zeta surface
+        elif (
+            calc0d and override_grid and hasattr(self, "zeta")
+        ):  # constant zeta surface
             if (
                 (grid.L >= self.L + 1)
                 and (grid.M > 2 * self.M + 5)
@@ -409,7 +411,7 @@ class Surface(IOAble, ABC):
                 grid0d = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
                 grid0d._nodes[:, 2] = self.zeta
 
-        if calc0d and override:
+        if calc0d and override_grid:
             data0d = compute_fun(
                 self,
                 dep0d,

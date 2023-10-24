@@ -12,6 +12,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
+from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
@@ -110,6 +111,10 @@ class Equilibrium(IOAble):
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
         Type of Zernike indexing scheme to use. Default ``'ansi'``
+    check_orientation : bool
+        ensure that this equilibrium has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
     """
 
     _io_attrs_ = [
@@ -168,6 +173,7 @@ class Equilibrium(IOAble):
         axis=None,
         sym=None,
         spectral_indexing=None,
+        check_orientation=True,
         **kwargs,
     ):
         errorif(
@@ -371,6 +377,8 @@ class Equilibrium(IOAble):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
+        if check_orientation:
+            ensure_positive_jacobian(self)
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -724,6 +732,7 @@ class Equilibrium(IOAble):
         transforms=None,
         profiles=None,
         data=None,
+        override_grid=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -744,6 +753,11 @@ class Equilibrium(IOAble):
             of self
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
+        override_grid : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -799,7 +813,7 @@ class Equilibrium(IOAble):
             if isinstance(grid, LinearGrid):
                 calc1d = False
 
-        if calc0d:
+        if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d = compute_fun(
                 self,
@@ -814,7 +828,7 @@ class Equilibrium(IOAble):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        if calc1d:
+        if calc1d and override_grid:
             grid1d = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,

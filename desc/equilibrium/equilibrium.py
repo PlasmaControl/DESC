@@ -421,6 +421,7 @@ class Equilibrium(IOAble, Optimizable):
             "Ti_l",
             "Zeff_l",
             "a_lmn",
+            "IGPhi_mn",
             "Ra_n",
             "Za_n",
             "Rb_lmn",
@@ -1269,6 +1270,7 @@ class Equilibrium(IOAble, Optimizable):
         )
         self._IGPhi_mn = IGPhi_mn
 
+    @optimizable_parameter
     @property
     def Ra_n(self):
         """ndarray: R coefficients for axis Fourier series."""

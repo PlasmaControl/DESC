@@ -1070,9 +1070,13 @@ class Nestor(IOAble):
         maximum poloidal and toroidal mode numbers to use
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions to use
+    field_grid : Grid, optional
+        Grid used to discretize external field.
     """
 
-    def __init__(self, equil, ext_field, M=None, N=None, ntheta=None, nzeta=None):
+    def __init__(
+        self, equil, ext_field, M=None, N=None, ntheta=None, nzeta=None, field_grid=None
+    ):
 
         if M is None:
             M = equil.M + 1
@@ -1084,6 +1088,7 @@ class Nestor(IOAble):
             nzeta = 2 * N + 6
 
         self.ext_field = ext_field
+        self.field_grid = field_grid
         self.signgs = np.sign(np.mean(equil.compute("sqrt(g)")["sqrt(g)"]))
         self.M = M
         self.N = N
@@ -1180,10 +1185,12 @@ class Nestor(IOAble):
         self.tanu = jnp.asarray(self.tanu)
         self.tanv = jnp.asarray(self.tanv)
 
-    def eval_external_field(self, coords, normal):
+    def eval_external_field(self, coords, normal, params=None):
         """Wrapper for handling fields from different coil types."""
-        grid = jnp.array([coords["R"], coords["phi"], coords["Z"]]).T
-        B = self.ext_field.compute_magnetic_field(grid).T
+        surf_coords = jnp.array([coords["R"], coords["phi"], coords["Z"]]).T
+        B = self.ext_field.compute_magnetic_field(
+            surf_coords, params=params, grid=self.field_grid
+        ).T
         B_ex = {}
         B_ex["BR"] = B[0]
         B_ex["Bphi"] = B[1]
@@ -1198,7 +1205,7 @@ class Nestor(IOAble):
 
         return B_ex
 
-    def compute(self, R_lmn, Z_lmn, current):
+    def compute(self, R_lmn, Z_lmn, current, field_params=None):
         """Compute B^2 in the vacuum region and the scalar potential."""
         surface_coords = eval_surface_geometry(
             R_lmn,
@@ -1215,7 +1222,7 @@ class Nestor(IOAble):
         )
         normal = compute_normal(surface_coords, self.signgs)
         jacobian = compute_jacobian(surface_coords, normal, self.NFP)
-        B_extern = self.eval_external_field(surface_coords, normal)
+        B_extern = self.eval_external_field(surface_coords, normal, field_params)
         B_plasma = modelNetToroidalCurrent(
             axis_coords,
             current,

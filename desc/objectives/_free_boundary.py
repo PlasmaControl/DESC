@@ -29,7 +29,7 @@ class BoundaryErrorBIESTSC(_Objective):
     ----------
     ext_field : MagneticField
         External field produced by coils.
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -69,8 +69,8 @@ class BoundaryErrorBIESTSC(_Objective):
     def __init__(
         self,
         ext_field,
-        eq=None,
-        target=0,
+        eq,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -82,6 +82,8 @@ class BoundaryErrorBIESTSC(_Objective):
         field_grid=None,
         name="Boundary error BIEST (SC)",
     ):
+        if target is None and bounds is None:
+            target = 0
         self._src_grid = src_grid
         self._eval_grid = eval_grid
         self._s = s
@@ -89,7 +91,7 @@ class BoundaryErrorBIESTSC(_Objective):
         self._ext_field = ext_field
         self._field_grid = field_grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -98,20 +100,18 @@ class BoundaryErrorBIESTSC(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._src_grid is None:
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
@@ -197,37 +197,20 @@ class BoundaryErrorBIESTSC(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"]
+            self._normalization = scales["B"] * scales["R0"] * scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute boundary force error.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -235,7 +218,6 @@ class BoundaryErrorBIESTSC(_Objective):
             Boundary force error (N).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         src_data = compute_fun(
@@ -296,7 +278,7 @@ class BoundaryErrorBIEST(_Objective):
     ----------
     ext_field : MagneticField
         External field produced by coils.
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -336,8 +318,8 @@ class BoundaryErrorBIEST(_Objective):
     def __init__(
         self,
         ext_field,
-        eq=None,
-        target=0,
+        eq,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -349,6 +331,8 @@ class BoundaryErrorBIEST(_Objective):
         field_grid=None,
         name="Boundary error BIEST",
     ):
+        if target is None and bounds is None:
+            target = 0
         self._src_grid = src_grid
         self._eval_grid = eval_grid
         self._s = s
@@ -356,7 +340,7 @@ class BoundaryErrorBIEST(_Objective):
         self._ext_field = ext_field
         self._field_grid = field_grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -365,20 +349,18 @@ class BoundaryErrorBIEST(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._src_grid is None:
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
@@ -462,37 +444,20 @@ class BoundaryErrorBIEST(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"]
+            self._normalization = scales["B"] * scales["R0"] * scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute boundary force error.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -500,7 +465,6 @@ class BoundaryErrorBIEST(_Objective):
             Boundary force error (N).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         src_data = compute_fun(
@@ -555,7 +519,7 @@ class QuadraticFlux(_Objective):
     ----------
     ext_field : MagneticField
         External field produced by coils.
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -595,8 +559,8 @@ class QuadraticFlux(_Objective):
     def __init__(
         self,
         ext_field,
-        eq=None,
-        target=0,
+        eq,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -608,6 +572,8 @@ class QuadraticFlux(_Objective):
         field_grid=None,
         name="Quadratic flux",
     ):
+        if target is None and bounds is None:
+            target = 0
         self._src_grid = src_grid
         self._eval_grid = eval_grid
         self._s = s
@@ -615,7 +581,7 @@ class QuadraticFlux(_Objective):
         self._ext_field = ext_field
         self._field_grid = field_grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -624,20 +590,18 @@ class QuadraticFlux(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._src_grid is None:
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
@@ -720,35 +684,18 @@ class QuadraticFlux(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute boundary force error.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -756,7 +703,6 @@ class QuadraticFlux(_Objective):
             Boundary force error (N).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         src_data = compute_fun(
@@ -800,7 +746,7 @@ class ToroidalFlux(_Objective):
     ----------
     ext_field : MagneticField
         External field produced by coils.
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -835,7 +781,7 @@ class ToroidalFlux(_Objective):
     def __init__(
         self,
         ext_field,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -845,11 +791,13 @@ class ToroidalFlux(_Objective):
         field_grid=None,
         name="Toroidal flux",
     ):
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         self._ext_field = ext_field
         self._field_grid = field_grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -858,20 +806,18 @@ class ToroidalFlux(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=0)
         else:
@@ -903,42 +849,23 @@ class ToroidalFlux(_Objective):
             timer.disp("Precomputing transforms")
 
         self._dim_f = 1
-        if self.target is None:
-            self.target = eq.Psi
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"] * scales["A"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute boundary force error.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -946,7 +873,6 @@ class ToroidalFlux(_Objective):
             Boundary force error (N).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -962,10 +888,13 @@ class ToroidalFlux(_Objective):
         )
         n = data["e^zeta"] / jnp.linalg.norm(data["e^zeta"], axis=-1)[:, None]
         Bn = jnp.sum(Bext * n, axis=-1)
-        return jnp.sum(
-            Bn
-            * data["|e_rho x e_theta|"]
-            * constants["transforms"]["grid"].spacing[:, :2].prod(axis=-1)
+        return (
+            jnp.sum(
+                Bn
+                * data["|e_rho x e_theta|"]
+                * constants["transforms"]["grid"].spacing[:, :2].prod(axis=-1)
+            )
+            - params["Psi"]
         )
 
 
@@ -982,7 +911,7 @@ class BoundaryErrorNESTOR(_Objective):
     ----------
     ext_field : MagneticField
         External field produced by coils.
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -997,14 +926,14 @@ class BoundaryErrorNESTOR(_Objective):
         maximum poloidal and toroidal mode numbers to use for NESTOR scalar potential.
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions to use in NESTOR.
+    field_grid : Grid, optional
+        Grid used to discretize ext_field.
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
 
@@ -1019,25 +948,29 @@ class BoundaryErrorNESTOR(_Objective):
     def __init__(
         self,
         ext_field,
-        eq=None,
-        target=0,
+        eq,
+        target=None,
         bounds=None,
         weight=1,
         mf=None,
         nf=None,
         ntheta=None,
         nzeta=None,
+        field_grid=None,
         normalize=True,
         normalize_target=True,
         name="NESTOR Boundary",
     ):
+        if target is None and bounds is None:
+            target = 0
         self.mf = mf
         self.nf = nf
         self.ntheta = ntheta
         self.nzeta = nzeta
         self.ext_field = ext_field
+        self.field_grid = field_grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1046,27 +979,33 @@ class BoundaryErrorNESTOR(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         self.mf = eq.M + 1 if self.mf is None else self.mf
         self.nf = eq.N if self.nf is None else self.nf
         self.ntheta = 4 * eq.M + 1 if self.ntheta is None else self.ntheta
         self.nzeta = 4 * eq.N + 1 if self.nzeta is None else self.nzeta
 
         eq._sym = False
-        nest = Nestor(eq, self.ext_field, self.mf, self.nf, self.ntheta, self.nzeta)
+        nest = Nestor(
+            eq,
+            self.ext_field,
+            self.mf,
+            self.nf,
+            self.ntheta,
+            self.nzeta,
+            self.field_grid,
+        )
         eq._sym = True
         self.grid = LinearGrid(rho=1, theta=self.ntheta, zeta=self.nzeta, NFP=eq.NFP)
         self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
@@ -1100,37 +1039,20 @@ class BoundaryErrorNESTOR(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["p"]
+            self._normalization = scales["B"] ** 2 * scales["R0"] * scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute boundary force error.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -1138,7 +1060,6 @@ class BoundaryErrorNESTOR(_Objective):
             Boundary force error (N).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -1157,4 +1078,4 @@ class BoundaryErrorNESTOR(_Objective):
 
         bp = data["|B|^2"] / (2 * mu_0)
         g = data["|e_theta x e_zeta|"]
-        return (bv - bp - data["p"]) * g
+        return (bv - bp - data["p"]) * g * mu_0

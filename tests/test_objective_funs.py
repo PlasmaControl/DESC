@@ -12,6 +12,7 @@ from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
 from desc.backend import jnp
+from desc.coils import CoilSet, FourierXYZCoil
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -19,6 +20,9 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.objectives import (
     AspectRatio,
+    BoundaryErrorBIEST,
+    BoundaryErrorBIESTSC,
+    BoundaryErrorNESTOR,
     BScaleLength,
     CurrentDensity,
     Elongation,
@@ -36,6 +40,7 @@ from desc.objectives import (
     PlasmaVesselDistance,
     Pressure,
     PrincipalCurvature,
+    QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -43,6 +48,7 @@ from desc.objectives import (
     RotationalTransform,
     Shear,
     ToroidalCurrent,
+    ToroidalFlux,
     Volume,
 )
 from desc.objectives.objective_funs import _Objective
@@ -401,6 +407,84 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_boundary_error_biestsc(self):
+        """Test calculation of boundary error using BIEST w/ sheet current."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+        obj = BoundaryErrorBIESTSC(coilset, eq, field_grid=coil_grid)
+        obj.build()
+        f = obj.compute_scaled_error(*obj.xs(eq))
+        n = len(f) // 3
+        # first n should be B*n errors
+        np.testing.assert_allclose(f[:n], 0, atol=5e-5)
+        # next n should be B^2 errors
+        np.testing.assert_allclose(f[n : 2 * n], 0, atol=2e-2)
+        # last n should be K errors
+        np.testing.assert_allclose(f[2 * n :], 0, atol=5e-4)
+
+    @pytest.mark.unit
+    def test_boundary_error_biest(self):
+        """Test calculation of boundary error using BIEST."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+        obj = BoundaryErrorBIEST(coilset, eq, field_grid=coil_grid)
+        obj.build()
+        f = obj.compute_scaled_error(*obj.xs(eq))
+        n = len(f) // 2
+        # first n should be B*n errors
+        np.testing.assert_allclose(f[:n], 0, atol=5e-5)
+        # next n should be B^2 errors
+        np.testing.assert_allclose(f[n : 2 * n], 0, atol=2e-2)
+
+    @pytest.mark.unit
+    def test_boundary_error_nestor(self):
+        """Test calculation of boundary error using NESTOR."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+        obj = BoundaryErrorNESTOR(coilset, eq, field_grid=coil_grid)
+        obj.build()
+        f = obj.compute_scaled_error(*obj.xs(eq))
+        np.testing.assert_allclose(f, 0, atol=1e-3)
+
+    @pytest.mark.unit
+    def test_quadratic_flux(self):
+        """Test calculation of quadratic flux on the boundary."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+        obj = QuadraticFlux(coilset, eq)
+        obj.build()
+        f = obj.compute(*obj.xs(eq))
+        np.testing.assert_allclose(f, 0, atol=1e-3)
+
+    @pytest.mark.unit
+    def test_toroidal_flux(self):
+        """Test calculation of toroidal flux from coils through cross section."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100)
+        # toroid with 100 turns, major radius 10
+        # uniform B = mu_0 * I * N / 2 pi R = 1e-7 * 4pi * 5e5 * 100 / 2pi 10
+        # = 1 T
+        # minor radius is 1m, so area = pi
+        # so total flux = pi Wb
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+        obj = ToroidalFlux(coilset, eq)
+        obj.build()
+        f = obj.compute(*obj.xs(eq))
+        np.testing.assert_allclose(f, 0, atol=1e-2)
 
 
 @pytest.mark.unit
@@ -951,7 +1035,7 @@ def test_objective_fun_things():
     np.testing.assert_allclose(d, a_s2 - a_s)
 
     with pytest.raises(AssertionError):
-        # one of these is not optimizeable, throws error
+        # one of these is not optimizable, throws error
         obj.things = [eq, 2.0]
     with pytest.raises(AssertionError):
         # these are not the expected types

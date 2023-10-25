@@ -185,6 +185,9 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 # periodicity to find the integration domain
                 # here I assume this contour is on the bottom...
                 # when it could be on top too
+                # TODO:
+                # this current method does not seem to work when helicity=1
+                # (so first contour is on top)
                 thetas = jnp.linspace(
                     contour_theta_halfway[-1] - 2 * jnp.pi,
                     contour_theta_halfway[i],
@@ -224,6 +227,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
     # TODO: also precompute and interpolate Phi_t, so no need
     # to create grid objects inside the variance function
+
+    # TODO: constrain contours to lie between 0 and 2pi
 
     def find_contours_and_current_variance(
         contours, return_full_info=False, show_plots=False, nthetas=200

@@ -28,6 +28,7 @@ from desc.objectives import (
     ForceBalance,
     ForceBalanceAnisotropic,
     HelicalForceBalance,
+    MeanCurvature,
     ObjectiveFunction,
     PlasmaVesselDistance,
     QuasisymmetryBoozer,
@@ -757,6 +758,42 @@ def test_multiobject_optimization():
     assert surf.Z_lmn[-1] == -2
     assert eq.Psi == 1.0
     np.testing.assert_allclose(eq.i_l, [2, 0, 0])
+
+
+@pytest.mark.unit
+def test_non_eq_optimization():
+    """Test for optimizing a non-eq object."""
+    eq = desc.examples.get("ATF")
+    surf = FourierRZToroidalSurface(
+        R_lmn=[2.1, 0.75],
+        Z_lmn=[-0.75],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        NFP=eq.NFP,
+    )
+    surf.change_resolution(M=eq.M, N=eq.N)
+    constraints = (
+        FixParameter(eq),
+        MeanCurvature(surf, bounds=(-8, 8), normalize=False),
+    )
+
+    grid = LinearGrid(M=10, N=10, NFP=eq.NFP)
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=0.2,
+        use_softmin=True,
+        surface_grid=grid,
+        plasma_grid=grid,
+        alpha=5000,
+    )
+    objective = ObjectiveFunction((obj,))
+    optimizer = Optimizer("lsq-auglag")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=50
+    )
+
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.2, atol=1e-2)
 
 
 class TestGetExample:

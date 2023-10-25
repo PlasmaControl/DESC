@@ -603,6 +603,8 @@ class PlasmaVesselDistance(_Objective):
             return d.min(axis=0)
 
 
+# FIXME: change docs and varnames in below objective to be general
+# TODO: generalize other geometry targets
 class MeanCurvature(_Objective):
     """Target a particular value for the mean curvature.
 
@@ -614,8 +616,9 @@ class MeanCurvature(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+          will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -677,9 +680,14 @@ class MeanCurvature(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
+        eq_or_surf = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGrid(  # getattr statements in case a surface is passed in
+                M=getattr(eq_or_surf, "M_grid", eq_or_surf.M * 2),
+                N=getattr(eq_or_surf, "N_grid", eq_or_surf.N * 2),
+                NFP=eq_or_surf.NFP,
+                sym=eq_or_surf.sym,
+            )
         else:
             grid = self._grid
 
@@ -691,8 +699,8 @@ class MeanCurvature(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq_or_surf, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq_or_surf, grid=grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -703,7 +711,9 @@ class MeanCurvature(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            scales = compute_scaling_factors(eq)
+            # FIXME: if normalize=True, this fails bc
+            #  compute_scaling_factors expects an equilibrium
+            scales = compute_scaling_factors(eq_or_surf)
             self._normalization = 1 / scales["a"]
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -728,7 +738,7 @@ class MeanCurvature(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

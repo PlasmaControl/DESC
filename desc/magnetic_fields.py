@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.backend import jit, jnp, odeint
+from desc.backend import fori_loop, jit, jnp, odeint
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
@@ -14,7 +14,6 @@ from desc.basis import (
 from desc.compute import rpz2xyz_vec, xyz2rpz
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble

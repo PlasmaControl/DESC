@@ -9,6 +9,13 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
+from ._free_boundary import (
+    BoundaryErrorBIEST,
+    BoundaryErrorBIESTSC,
+    BoundaryErrorNESTOR,
+    QuadraticFlux,
+    ToroidalFlux,
+)
 from ._generic import GenericObjective, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
@@ -54,6 +61,7 @@ from .linear_objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixParameter,
     FixPressure,
     FixPsi,
     FixSumModesLambda,

@@ -26,16 +26,19 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixPsi,
+    FixSurfaceCurrent,
 )
 from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
 
 
-def get_equilibrium_objective(eq=None, mode="force", normalize=True):
+def get_equilibrium_objective(eq, mode="force", normalize=True):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
     ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
     mode : one of {"force", "forces", "energy", "vacuum"}
         which objective to return. "force" computes force residuals on unified grid.
         "forces" uses two different grids for radial and helical forces. "energy" is
@@ -69,12 +72,14 @@ def get_equilibrium_objective(eq=None, mode="force", normalize=True):
 
 
 def get_fixed_axis_constraints(
-    eq=None, profiles=True, iota=True, kinetic=False, anisotropy=False, normalize=True
+    eq, profiles=True, iota=True, kinetic=False, anisotropy=False, normalize=True
 ):
     """Get the constraints necessary for a fixed-axis equilibrium problem.
 
     Parameters
     ----------
+    eq : Equilibrium
+        Equilibrium being constrained.
     profiles : bool
         Whether to also return constraints to fix input profiles.
     iota : bool
@@ -96,6 +101,7 @@ def get_fixed_axis_constraints(
         FixAxisR(eq=eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixSurfaceCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
         if kinetic:
@@ -134,7 +140,7 @@ def get_fixed_axis_constraints(
 
 
 def get_fixed_boundary_constraints(
-    eq=None, profiles=True, iota=True, kinetic=False, anisotropy=False, normalize=True
+    eq, profiles=True, iota=True, kinetic=False, anisotropy=False, normalize=True
 ):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
@@ -163,6 +169,7 @@ def get_fixed_boundary_constraints(
         FixBoundaryR(eq=eq, normalize=normalize, normalize_target=normalize),
         FixBoundaryZ(eq=eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixSurfaceCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
         if kinetic:
@@ -251,6 +258,7 @@ def get_NAE_constraints(
         FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+        FixSurfaceCurrent(eq=desc_eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
         if kinetic:

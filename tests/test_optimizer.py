@@ -32,6 +32,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     Volume,
+    get_fixed_boundary_constraints,
 )
 from desc.objectives.objective_funs import _Objective
 from desc.optimize import (
@@ -325,44 +326,27 @@ def test_overstepping():
     """
 
     class DummyObjective(_Objective):
-
         name = "Dummy"
         _print_value_fmt = "Dummy: {:.3e}"
         _units = "(Foo)"
 
-        def build(self, eq, *args, **kwargs):
-
+        def build(self, *args, **kwargs):
+            eq = self.things[0]
             # objective = just shift x by a lil bit
-            self._args = ["R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi"]
-            self._x0 = (
-                np.concatenate(
-                    [
-                        eq.R_lmn,
-                        eq.Z_lmn,
-                        eq.L_lmn,
-                        eq.p_l,
-                        eq.i_l,
-                        eq.c_l,
-                        np.atleast_1d(eq.Psi),
-                    ]
-                )
-                + 1e-6
-            )
-            self._dim_f = self._x0.size
-            self._check_dimensions()
-            self._set_dimensions(eq)
-            self._set_derivatives()
-            self._built = True
+            self._x0 = {key: val + 1e-6 for key, val in eq.params_dict.items()}
+            self._dim_f = sum(np.asarray(x).size for x in self._x0.values())
+            super().build()
 
-        def compute(self, *args, **kwargs):
-            params, _ = self._parse_args(*args, **kwargs)
-            x = jnp.concatenate([jnp.atleast_1d(params[arg]) for arg in self.args])
-            return x - self._x0
+        def compute(self, params, constants=None):
+            x = jnp.concatenate(
+                [jnp.atleast_1d(params[arg] - self._x0[arg]) for arg in params]
+            )
+            return x
 
     eq = desc.examples.get("DSHAPE")
 
     np.random.seed(0)
-    objective = ObjectiveFunction(DummyObjective(eq=eq), use_jit=False)
+    objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
     # make gradient super noisy so it stalls
     objective.jac_scaled = lambda x, *args: objective._jac_scaled(x) + 1e2 * (
         np.random.random((objective._dim_f, x.size)) - 0.5
@@ -510,7 +494,7 @@ def test_wrappers():
         _ = LinearConstraintProjection(obj, con)
     with pytest.raises(ValueError):
         _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
-    ob = LinearConstraintProjection(ObjectiveFunction(obj), con, eq=eq)
+    ob = LinearConstraintProjection(ObjectiveFunction(obj), con)
     ob.build()
     assert ob.built
 
@@ -574,29 +558,28 @@ def test_all_optimizers():
     eobj = ObjectiveFunction(Energy(eq=eqe))
     fobj.build()
     eobj.build()
-    constraints = (
-        FixBoundaryR(eq=eqe),
-        FixBoundaryZ(eq=eqe),
-        FixIota(eq=eqe),
-        FixPressure(eq=eqe),
-        FixPsi(eq=eqe),
-    )
+    econ = get_fixed_boundary_constraints(eq=eqe)
+    fcon = get_fixed_boundary_constraints(eq=eqf)
+    options = {"sgd": {"alpha": 1e-4}}
 
     for opt in optimizers:
         print("TESTING ", opt)
         if optimizers[opt]["scalar"]:
             obj = eobj
             eq = eqe
+            con = econ
         else:
             obj = fobj
             eq = eqf
+            con = fcon
         eq.solve(
             objective=obj,
-            constraints=constraints,
+            constraints=con,
             optimizer=opt,
-            verbose=3,
             copy=True,
+            verbose=3,
             maxiter=5,
+            options=options.get(opt, None),
         )
 
 
@@ -682,6 +665,7 @@ def test_solve_with_x_scale():
                 + eq.Za_n.size
                 + eq.Rb_lmn.size
                 + eq.Zb_lmn.size
+                + eq.IGPhi_mn.size
                 + 1
             ),
         ]

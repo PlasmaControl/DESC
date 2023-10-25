@@ -519,7 +519,7 @@ class QuadraticFlux(_Objective):
     ----------
     ext_field : MagneticField
         External field produced by coils.
-    eq : Equilibrium
+    eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -559,8 +559,8 @@ class QuadraticFlux(_Objective):
     def __init__(
         self,
         ext_field,
-        eq,
-        target=None,
+        eq=None,
+        target=0,
         bounds=None,
         weight=1,
         normalize=True,
@@ -572,8 +572,6 @@ class QuadraticFlux(_Objective):
         field_grid=None,
         name="Quadratic flux",
     ):
-        if target is None and bounds is None:
-            target = 0
         self._src_grid = src_grid
         self._eval_grid = eval_grid
         self._s = s
@@ -581,7 +579,7 @@ class QuadraticFlux(_Objective):
         self._ext_field = ext_field
         self._field_grid = field_grid
         super().__init__(
-            things=eq,
+            eq=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -590,18 +588,20 @@ class QuadraticFlux(_Objective):
             name=name,
         )
 
-    def build(self, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = self.things[0]
+        eq = eq or self._eq
         if self._src_grid is None:
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
@@ -640,13 +640,10 @@ class QuadraticFlux(_Objective):
             interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
 
         self._data_keys = [
-            "K_vc",
             "R",
             "zeta",
             "Z",
-            "e^rho",
             "n_rho",
-            "|e_theta x e_zeta|",
         ]
         self._args = get_params(
             self._data_keys,
@@ -664,14 +661,45 @@ class QuadraticFlux(_Objective):
         eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
         eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
 
+        src_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=self._args,
+            transforms=src_transforms,
+            profiles=src_profiles,
+        )
+
+        eval_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=self._args,
+            transforms=eval_transforms,
+            profiles=eval_profiles,
+        )
+
+        # don't need extra B/2 since we only care about normal component
+        Bplasma = -singular_integral(
+            eval_data,
+            eval_grid,
+            src_data,
+            src_grid,
+            self._s,
+            self._q,
+            "biot_savart",
+            interpolator,
+        )
+        Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
+
         self._constants = {
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
+            "src_data": src_data,
             "src_transforms": src_transforms,
             "src_profiles": src_profiles,
+            "src_data": src_data,
             "interpolator": interpolator,
-            "ext_field": self._ext_field,
             "quad_weights": eval_transforms["grid"].weights,
+            "Bplasma": Bplasma,
         }
 
         timer.stop("Precomputing transforms")
@@ -684,18 +712,35 @@ class QuadraticFlux(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"]
 
-        super().build(use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, *args, **kwargs):
         """Compute boundary force error.
 
         Parameters
         ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -703,40 +748,25 @@ class QuadraticFlux(_Objective):
             Boundary force error (N).
 
         """
+        _, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
-        src_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=constants["src_transforms"],
-            profiles=constants["src_profiles"],
-        )
-        eval_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=constants["eval_transforms"],
-            profiles=constants["eval_profiles"],
-        )
-        # this is in cartesian
-        Bplasma = -singular_integral(
-            eval_data,
-            constants["eval_transforms"]["grid"],
-            src_data,
-            constants["src_transforms"]["grid"],
-            self._s,
-            self._q,
-            "biot_savart",
-            constants["interpolator"],
-        )
-        # don't need extra B/2 since we only care about normal component
-        Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
-        x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
+
+        x = jnp.array(
+            [
+                constants["eval_data"]["R"],
+                constants["eval_data"]["zeta"],
+                constants["eval_data"]["Z"],
+            ]
+        ).T
+
+        # TODO: ext_field can't be constant
         Bext = constants["ext_field"].compute_magnetic_field(
             x, grid=self._field_grid, basis="rpz"
         )
-        return jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)
+        return jnp.sum(
+            (Bext + constants["Bplasma"]) * constants["eval_data"]["n_rho"], axis=-1
+        )
 
 
 class ToroidalFlux(_Objective):

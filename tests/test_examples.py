@@ -10,7 +10,7 @@ from qic import Qic
 from qsc import Qsc
 
 import desc.examples
-from desc.continuation import solve_continuation_automatic
+from desc.continuation import _solve_axisym, solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -54,6 +54,15 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
 
     np.testing.assert_allclose(data["iota"], 0, atol=1e-16)
     np.testing.assert_allclose(data["|J|"], 0, atol=3e-3)
+
+    # test that solving with the continuation method works correctly
+    # when eq resolution is lower than the mres_step
+    eq.change_resolution(L=3, M=3)
+    eqf = _solve_axisym(eq, mres_step=6)
+    assert len(eqf) == 1
+    assert eqf[-1].L == eq.L
+    assert eqf[-1].M == eq.M
+    assert eqf[-1].N == eq.N
 
 
 @pytest.mark.regression
@@ -785,22 +794,22 @@ class TestGetExample:
     @pytest.mark.unit
     def test_example_get_iota(self):
         """Test getting iota profile."""
-        iota = desc.examples.get("NCSX", "iota")
+        iota = desc.examples.get("W7-X", "iota")
         np.testing.assert_allclose(
             iota.params[:5],
             [
-                -3.49197642e-01,
-                -6.81105159e-01,
-                1.29781695e00,
-                -2.07888586e00,
-                1.15800135e00,
+                -8.56047021e-01,
+                -3.88095412e-02,
+                -6.86795128e-02,
+                -1.86970315e-02,
+                1.90561179e-02,
             ],
         )
 
     @pytest.mark.unit
     def test_example_get_current(self):
         """Test getting current profile."""
-        current = desc.examples.get("QAS", "current")
+        current = desc.examples.get("NCSX", "current")
         np.testing.assert_allclose(
             current.params[:11],
             [

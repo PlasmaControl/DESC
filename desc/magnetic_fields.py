@@ -14,6 +14,7 @@ from desc.basis import (
 from desc.compute import rpz2xyz_vec, xyz2rpz
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
@@ -21,6 +22,40 @@ from desc.optimizable import Optimizable, optimizable_parameter
 from desc.transform import Transform
 from desc.utils import copy_coeffs, isposint, setdefault
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
+
+
+def biot_savart_general(re, rs, J, dV):
+    """Biot-Savart law for arbitrary sources.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in cartesian.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for current density J, in cartesian.
+    J : ndarray, shape(n_src_pts, 3)
+        current density vector at source points, in cartesian.
+    dV : ndarray, shape(n_src_pts)
+        volume element at source points
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+    """
+    re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
+    assert J.shape == rs.shape
+    JdV = J * dV[:, None]
+    B = jnp.zeros_like(re)
+
+    def body(i, B):
+        r = re - rs[i, :]
+        num = jnp.cross(JdV[i, :], r, axis=-1)
+        den = jnp.linalg.norm(r, axis=-1) ** 3
+        B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
+        return B
+
+    return 1e-7 * fori_loop(0, J.shape[0], body, B)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):

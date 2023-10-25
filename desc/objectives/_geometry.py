@@ -539,6 +539,15 @@ class PlasmaVesselDistance(_Objective):
             grid=surface_grid,
             has_axis=surface_grid.axis.size,
         )
+
+        # compute returns points on the grid of the surface
+        # (so size surface_grid.num_nodes)
+        # so set quad_weights to the surface grid
+        # to avoid it being incorrectly set to the plasma_grid size
+        # in the super build
+        w = surface_grid.weights
+        w *= jnp.sqrt(surface_grid.num_nodes)
+
         self._constants = {
             "equil_transforms": equil_transforms,
             "equil_profiles": equil_profiles,

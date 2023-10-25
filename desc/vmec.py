@@ -157,11 +157,7 @@ class VMECIO:
         file.close()
 
         # initialize Equilibrium
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore", message="Left handed coordinates detected"
-            )
-            eq = Equilibrium(**inputs)
+        eq = Equilibrium(**inputs, check_orientation=False)
 
         # R
         m, n, R_mn = ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)
@@ -190,7 +186,11 @@ class VMECIO:
         eq.params_dict = args
 
         # now we flip the orientation at the very end
-        eq = ensure_positive_jacobian(eq)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="Left handed coordinates detected"
+            )
+            eq = ensure_positive_jacobian(eq)
 
         return eq
 

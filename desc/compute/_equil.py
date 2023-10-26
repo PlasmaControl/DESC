@@ -1,11 +1,20 @@
-"""Compute functions for equilibrium objectives, ie Force and MHD energy."""
+"""Compute functions for equilibrium objectives, i.e. Force and MHD energy.
+
+Notes
+-----
+Some quantities require additional work to compute at the magnetic axis.
+A Python lambda function is used to lazily compute the magnetic axis limits
+of these quantities. These lambda functions are evaluated only when the
+computational grid has a node on the magnetic axis to avoid potentially
+expensive computations.
+"""
 
 from scipy.constants import mu_0
 
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import dot, surface_averages
+from .utils import cross, dot, surface_averages
 
 
 @register_compute_fun(
@@ -20,9 +29,39 @@ from .utils import dot, surface_averages
     profiles=[],
     coordinates="rtz",
     data=["sqrt(g)", "B_zeta_t", "B_theta_z"],
+    axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
 )
 def _J_sup_rho(params, transforms, profiles, data, **kwargs):
-    data["J^rho"] = (data["B_zeta_t"] - data["B_theta_z"]) / (mu_0 * data["sqrt(g)"])
+    # At the magnetic axis,
+    # ∂_θ (𝐁 ⋅ 𝐞_ζ) - ∂_ζ (𝐁 ⋅ 𝐞_θ) = 𝐁 ⋅ (∂_θ 𝐞_ζ - ∂_ζ 𝐞_θ) = 0
+    # because the partial derivatives commute. So 𝐉^ρ is of the indeterminate
+    # form 0/0 and we may compute the limit as follows.
+    data["J^rho"] = (
+        transforms["grid"].replace_at_axis(
+            (data["B_zeta_t"] - data["B_theta_z"]) / data["sqrt(g)"],
+            lambda: (data["B_zeta_rt"] - data["B_theta_rz"]) / data["sqrt(g)_r"],
+        )
+    ) / mu_0
+    return data
+
+
+@register_compute_fun(
+    name="J^theta*sqrt(g)",
+    label="J^{\\theta} \\sqrt{g}",
+    units="A",
+    units_long="Amperes",
+    description="Contravariant poloidal component of plasma current density,"
+    " weighted by 3-D volume Jacobian",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B_rho_z", "B_zeta_r"],
+)
+def _J_sup_theta_sqrt_g(params, transforms, profiles, data, **kwargs):
+    data["J^theta*sqrt(g)"] = (data["B_rho_z"] - data["B_zeta_r"]) / mu_0
     return data
 
 
@@ -37,10 +76,10 @@ def _J_sup_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)", "B_rho_z", "B_zeta_r"],
+    data=["sqrt(g)", "J^theta*sqrt(g)"],
 )
 def _J_sup_theta(params, transforms, profiles, data, **kwargs):
-    data["J^theta"] = (data["B_rho_z"] - data["B_zeta_r"]) / (mu_0 * data["sqrt(g)"])
+    data["J^theta"] = data["J^theta*sqrt(g)"] / data["sqrt(g)"]
     return data
 
 
@@ -56,9 +95,19 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["sqrt(g)", "B_theta_r", "B_rho_t"],
+    axis_limit_data=["sqrt(g)_r", "B_theta_rr", "B_rho_rt"],
 )
 def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
-    data["J^zeta"] = (data["B_theta_r"] - data["B_rho_t"]) / (mu_0 * data["sqrt(g)"])
+    # At the magnetic axis,
+    # ∂ᵨ (𝐁 ⋅ 𝐞_θ) - ∂_θ (𝐁 ⋅ 𝐞ᵨ) = 𝐁 ⋅ (∂ᵨ 𝐞_θ - ∂_θ 𝐞ᵨ) = 0
+    # because the partial derivatives commute. So 𝐉^ζ is of the indeterminate
+    # form 0/0 and we may compute the limit as follows.
+    data["J^zeta"] = (
+        transforms["grid"].replace_at_axis(
+            (data["B_theta_r"] - data["B_rho_t"]) / data["sqrt(g)"],
+            lambda: (data["B_theta_rr"] - data["B_rho_rt"]) / data["sqrt(g)_r"],
+        )
+    ) / mu_0
     return data
 
 
@@ -73,14 +122,98 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["J^rho", "J^theta", "J^zeta", "e_rho", "e_theta", "e_zeta"],
+    data=[
+        "J^rho",
+        "J^zeta",
+        "J^theta*sqrt(g)",
+        "e_rho",
+        "e_zeta",
+        "e_theta/sqrt(g)",
+    ],
 )
 def _J(params, transforms, profiles, data, **kwargs):
     data["J"] = (
         data["J^rho"] * data["e_rho"].T
-        + data["J^theta"] * data["e_theta"].T
+        + data["J^theta*sqrt(g)"] * data["e_theta/sqrt(g)"].T
         + data["J^zeta"] * data["e_zeta"].T
     ).T
+    return data
+
+
+@register_compute_fun(
+    name="J*sqrt(g)",
+    label="\\mathbf{J} \\sqrt{g}",
+    units="A m",
+    units_long="Ampere meters",
+    description="Plasma current density weighted by 3-D volume Jacobian",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "B_rho_z",
+        "B_theta_r",
+        "B_zeta_t",
+        "B_rho_t",
+        "B_theta_z",
+        "B_zeta_r",
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+    ],
+)
+def _J_sqrt_g(params, transforms, profiles, data, **kwargs):
+    data["J*sqrt(g)"] = (
+        (data["B_zeta_t"] - data["B_theta_z"]) * data["e_rho"].T
+        + (data["B_rho_z"] - data["B_zeta_r"]) * data["e_theta"].T
+        + (data["B_theta_r"] - data["B_rho_t"]) * data["e_zeta"].T
+    ).T / mu_0
+    return data
+
+
+@register_compute_fun(
+    name="(J*sqrt(g))_r",
+    label="\\partial_{\\rho} (\\mathbf{J} \\sqrt{g})",
+    units="A m",
+    units_long="Ampere meters",
+    description="Plasma current density weighted by 3-D volume Jacobian,"
+    " radial derivative",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "B_rho_z",
+        "B_rho_rz",
+        "B_theta_r",
+        "B_theta_rr",
+        "B_zeta_t",
+        "B_zeta_rt",
+        "B_rho_t",
+        "B_rho_rt",
+        "B_theta_z",
+        "B_theta_rz",
+        "B_zeta_r",
+        "B_zeta_rr",
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+        "e_rho_r",
+        "e_theta_r",
+        "e_zeta_r",
+    ],
+)
+def _J_sqrt_g_r(params, transforms, profiles, data, **kwargs):
+    data["(J*sqrt(g))_r"] = (
+        (data["B_zeta_rt"] - data["B_theta_rz"]) * data["e_rho"].T
+        + (data["B_zeta_t"] - data["B_theta_z"]) * data["e_rho_r"].T
+        + (data["B_rho_rz"] - data["B_zeta_rr"]) * data["e_theta"].T
+        + (data["B_rho_z"] - data["B_zeta_r"]) * data["e_theta_r"].T
+        + (data["B_theta_rr"] - data["B_rho_rt"]) * data["e_zeta"].T
+        + (data["B_theta_r"] - data["B_rho_t"]) * data["e_zeta_r"].T
+    ).T / mu_0
     return data
 
 
@@ -89,7 +222,7 @@ def _J(params, transforms, profiles, data, **kwargs):
     label="J_{R}",
     units="A \\cdot m^{-2}",
     units_long="Amperes / square meter",
-    description="Radial componenet of plasma current density in lab frame",
+    description="Radial component of plasma current density in lab frame",
     dim=1,
     params=[],
     transforms={},
@@ -107,7 +240,7 @@ def _J_R(params, transforms, profiles, data, **kwargs):
     label="J_{\\phi}",
     units="A \\cdot m^{-2}",
     units_long="Amperes / square meter",
-    description="Toroidal componenet of plasma current density in lab frame",
+    description="Toroidal component of plasma current density in lab frame",
     dim=1,
     params=[],
     transforms={},
@@ -125,7 +258,7 @@ def _J_phi(params, transforms, profiles, data, **kwargs):
     label="J_{Z}",
     units="A \\cdot m^{-2}",
     units_long="Amperes / square meter",
-    description="Vertical componenet of plasma current density in lab frame",
+    description="Vertical component of plasma current density in lab frame",
     dim=1,
     params=[],
     transforms={},
@@ -143,7 +276,7 @@ def _J_Z(params, transforms, profiles, data, **kwargs):
     label="|\\mathbf{J}|",
     units="A \\cdot m^{-2}",
     units_long="Amperes / square meter",
-    description="Magnitue of plasma current density",
+    description="Magnitude of plasma current density",
     dim=1,
     params=[],
     transforms={},
@@ -234,19 +367,26 @@ def _J_dot_B(params, transforms, profiles, data, **kwargs):
     label="\\langle \\mathbf{J} \\cdot \\mathbf{B} \\rangle",
     units="N / m^{3}",
     units_long="Newtons / cubic meter",
-    description="Flux surface average of current density dotted into magnetic field",
+    description="Flux surface average of current density dotted into magnetic field "
+    + "(note units are not Amperes)",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["J*B", "sqrt(g)"],
+    data=["J*sqrt(g)", "B", "V_r(r)"],
+    axis_limit_data=["(J*sqrt(g))_r", "V_rr(r)"],
 )
 def _J_dot_B_fsa(params, transforms, profiles, data, **kwargs):
+    J = transforms["grid"].replace_at_axis(
+        data["J*sqrt(g)"], lambda: data["(J*sqrt(g))_r"], copy=True
+    )
     data["<J*B>"] = surface_averages(
         transforms["grid"],
-        data["J*B"],
-        sqrt_g=data["sqrt(g)"],
+        dot(J, data["B"]),  # sqrt(g) factor pushed into J
+        denominator=transforms["grid"].replace_at_axis(
+            data["V_r(r)"], lambda: data["V_rr(r)"], copy=True
+        ),
     )
     return data
 
@@ -280,12 +420,10 @@ def _J_parallel(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["p_r", "sqrt(g)", "B^theta", "B^zeta", "J^theta", "J^zeta"],
+    data=["p_r", "(curl(B)xB)_rho"],
 )
 def _F_rho(params, transforms, profiles, data, **kwargs):
-    data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
-        data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"]
-    )
+    data["F_rho"] = data["(curl(B)xB)_rho"] / mu_0 - data["p_r"]
     return data
 
 
@@ -300,10 +438,10 @@ def _F_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)", "B^zeta", "J^rho"],
+    data=["F_helical", "B^zeta"],
 )
 def _F_theta(params, transforms, profiles, data, **kwargs):
-    data["F_theta"] = -data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
+    data["F_theta"] = -data["B^zeta"] * data["F_helical"]
     return data
 
 
@@ -318,28 +456,28 @@ def _F_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)", "B^theta", "J^rho"],
+    data=["B^theta", "F_helical"],
 )
 def _F_zeta(params, transforms, profiles, data, **kwargs):
-    data["F_zeta"] = data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
+    data["F_zeta"] = data["B^theta"] * data["F_helical"]
     return data
 
 
 @register_compute_fun(
     name="F_helical",
-    label="F_{helical}",
-    units="N \\cdot m^{-2}",
-    units_long="Newtons / square meter",
+    label="F_{\\mathrm{helical}}",
+    units="A",
+    units_long="Amperes",
     description="Covariant helical component of force balance error",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)", "J^rho"],
+    data=["B_zeta_t", "B_theta_z"],
 )
 def _F_helical(params, transforms, profiles, data, **kwargs):
-    data["F_helical"] = data["sqrt(g)"] * data["J^rho"]
+    data["F_helical"] = (data["B_zeta_t"] - data["B_theta_z"]) / mu_0
     return data
 
 
@@ -354,12 +492,13 @@ def _F_helical(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["F_rho", "F_theta", "F_zeta", "e^rho", "e^theta", "e^zeta"],
+    data=["F_rho", "F_zeta", "e^rho", "e^zeta", "B^zeta", "J^rho", "e^theta*sqrt(g)"],
 )
 def _F(params, transforms, profiles, data, **kwargs):
+    # F_theta e^theta refactored as below to resolve indeterminacy at axis.
     data["F"] = (
         data["F_rho"] * data["e^rho"].T
-        + data["F_theta"] * data["e^theta"].T
+        - data["B^zeta"] * data["J^rho"] * data["e^theta*sqrt(g)"].T
         + data["F_zeta"] * data["e^zeta"].T
     ).T
     return data
@@ -398,8 +537,7 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
 )
 def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     data["<|F|>_vol"] = (
-        jnp.sum(data["|F|"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
-        / data["V"]
+        jnp.sum(data["|F|"] * data["sqrt(g)"] * transforms["grid"].weights) / data["V"]
     )
     return data
 
@@ -417,7 +555,7 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["B^theta", "B^zeta", "e^theta", "e^zeta"],
 )
-def _e_helical(params, transforms, profiles, data, **kwargs):
+def _e_sup_helical(params, transforms, profiles, data, **kwargs):
     data["e^helical"] = (
         data["B^zeta"] * data["e^theta"].T - data["B^theta"] * data["e^zeta"].T
     ).T
@@ -437,8 +575,32 @@ def _e_helical(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e^helical"],
 )
-def _helical_mag(params, transforms, profiles, data, **kwargs):
+def _e_sup_helical_mag(params, transforms, profiles, data, **kwargs):
     data["|e^helical|"] = jnp.linalg.norm(data["e^helical"], axis=-1)
+    return data
+
+
+@register_compute_fun(
+    name="F_anisotropic",
+    label="F_{anisotropic}",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="Anisotropic force balance error",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "B", "grad(beta_a)", "beta_a", "grad(|B|^2)", "grad(p)"],
+)
+def _F_anisotropic(params, transforms, profiles, data, **kwargs):
+    data["F_anisotropic"] = (
+        (1 - data["beta_a"]) * cross(data["J"], data["B"]).T
+        - dot(data["B"], data["grad(beta_a)"]) * data["B"].T / mu_0
+        - data["beta_a"] * data["grad(|B|^2)"].T / (2 * mu_0)
+        - data["grad(p)"].T
+    ).T
+
     return data
 
 
@@ -457,7 +619,49 @@ def _helical_mag(params, transforms, profiles, data, **kwargs):
 )
 def _W_B(params, transforms, profiles, data, **kwargs):
     data["W_B"] = jnp.sum(
-        data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
+        data["|B|"] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
+    ) / (2 * mu_0)
+    return data
+
+
+@register_compute_fun(
+    name="W_Bpol",
+    label="W_{B,pol}",
+    units="J",
+    units_long="Joules",
+    description="Plasma magnetic energy in poloidal field",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["B", "sqrt(g)"],
+)
+def _W_Bpol(params, transforms, profiles, data, **kwargs):
+    data["W_Bpol"] = jnp.sum(
+        dot(data["B"][:, (0, 2)], data["B"][:, (0, 2)])
+        * data["sqrt(g)"]
+        * transforms["grid"].weights
+    ) / (2 * mu_0)
+    return data
+
+
+@register_compute_fun(
+    name="W_Btor",
+    label="W_{B,tor}",
+    units="J",
+    units_long="Joules",
+    description="Plasma magnetic energy in toroidal field",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["B", "sqrt(g)"],
+)
+def _W_Btor(params, transforms, profiles, data, **kwargs):
+    data["W_Btor"] = jnp.sum(
+        data["B"][:, 1] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
     ) / (2 * mu_0)
     return data
 
@@ -477,9 +681,9 @@ def _W_B(params, transforms, profiles, data, **kwargs):
     gamma="gamma",
 )
 def _W_p(params, transforms, profiles, data, **kwargs):
-    data["W_p"] = jnp.sum(
-        data["p"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
-    ) / (kwargs.get("gamma", 0) - 1)
+    data["W_p"] = jnp.sum(data["p"] * data["sqrt(g)"] * transforms["grid"].weights) / (
+        kwargs.get("gamma", 0) - 1
+    )
     return data
 
 
@@ -516,4 +720,40 @@ def _W(params, transforms, profiles, data, **kwargs):
 )
 def _beta_vol(params, transforms, profiles, data, **kwargs):
     data["<beta>_vol"] = jnp.abs(data["W_p"] / data["W_B"])
+    return data
+
+
+@register_compute_fun(
+    name="<beta_pol>_vol",
+    label="\\langle \\beta_{pol} \\rangle_{vol}",
+    units="~",
+    units_long="None",
+    description="Normalized poloidal plasma pressure",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["W_p", "W_Bpol"],
+)
+def _beta_volpol(params, transforms, profiles, data, **kwargs):
+    data["<beta_pol>_vol"] = jnp.abs(data["W_p"] / data["W_Bpol"])
+    return data
+
+
+@register_compute_fun(
+    name="<beta_tor>_vol",
+    label="\\langle \\beta_{tor} \\rangle_{vol}",
+    units="~",
+    units_long="None",
+    description="Normalized toroidal plasma pressure",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["W_p", "W_Btor"],
+)
+def _beta_voltor(params, transforms, profiles, data, **kwargs):
+    data["<beta_tor>_vol"] = jnp.abs(data["W_p"] / data["W_Btor"])
     return data

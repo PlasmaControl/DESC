@@ -1,6 +1,7 @@
 """Functions needed by other tests for computing differences between equilibria."""
 
 import os
+import warnings
 
 import numpy as np
 from shapely.geometry import Polygon
@@ -73,7 +74,7 @@ def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
 
     Returns
     -------
-    area_rho : ndarray, shape(Nr, Nz)
+    area_rho : ndarray, shape(Nz, Nr)
         normalized area difference of rho contours, computed as the symmetric
         difference divided by the intersection
     area_theta : ndarray, shape(Nt, Nz)
@@ -115,12 +116,18 @@ def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
             for poly1, poly2 in zip(poly_r1.flat, poly_r2.flat)
         ]
     ).reshape((Rr1.shape[2], Rr1.shape[0]))
-    intersect_rho = np.array(
-        [
-            poly1.intersection(poly2).area
-            for poly1, poly2 in zip(poly_r1.flat, poly_r2.flat)
-        ]
-    ).reshape((Rr1.shape[2], Rr1.shape[0]))
+    # for some reason shapely sometimes throws a warning here on CI but not locally,
+    # see https://github.com/shapely/shapely/issues/1345
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message="invalid value encountered in intersection"
+        )
+        intersect_rho = np.array(
+            [
+                poly1.intersection(poly2).area
+                for poly1, poly2 in zip(poly_r1.flat, poly_r2.flat)
+            ]
+        ).reshape((Rr1.shape[2], Rr1.shape[0]))
     area_rho = np.where(
         diff_rho > 0, diff_rho / np.where(intersect_rho != 0, intersect_rho, 1), 0
     )
@@ -149,7 +156,7 @@ def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, Nz=None, **kwargs):
 
     Returns
     -------
-    area_rho : ndarray, shape(Nr, Nz)
+    area_rho : ndarray, shape(Nz, Nr)
         normalized area difference of rho contours, computed as the symmetric
         difference divided by the intersection
     area_theta : ndarray, shape(Nt, Nz)

@@ -1,9 +1,9 @@
 # A simplistic model tokamak, with circular cross-section, and ITER-like size and field strength.
 
 # global parameters
-sym = 0 
-NFP =   1 
-Psi = 67.86000000 
+sym = 0
+NFP =   1
+Psi = 67.86000000
 
 # spectral resolution
 L_rad = 6, 12
@@ -14,23 +14,22 @@ M_grid = 24, 24
 N_grid = 0, 0
 
 # continuation parameters
-bdry_ratio = 1, 1 
-pres_ratio = 0, 0 
-curr_ratio = 0, 0 
-pert_order = 1, 1 
+bdry_ratio = 1, 1
+pres_ratio = 0, 0
+curr_ratio = 0, 0
+pert_order = 1, 1
 
 # solver tolerances
 ftol = 0.01, 0.01
 xtol = 1e-06, 1e-06
 gtol = 1e-06, 1e-06
-nfev = 50, 50
+maxiter = 50, 50
 
 # solver methods
 optimizer = lsq-exact
 objective = force
 bdry_mode = lcfs
 spectral_indexing = ansi
-node_pattern = jacobi
 
 # pressure and rotational transform/current profiles
 l:   0	p =   0.00000000E+00	i =   9.00000000E-01

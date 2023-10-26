@@ -4,10 +4,10 @@ import os
 
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import fori_loop, jit, jnp, put
 from desc.basis import zernike_radial
 from desc.geometry import FourierRZCurve, Surface
-from desc.grid import Grid
+from desc.grid import Grid, _Grid
 from desc.io import load
 from desc.transform import Transform
 from desc.utils import copy_coeffs
@@ -90,16 +90,14 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                 eq.Rb_lmn,
                 eq.surface.R_basis,
                 axisR,
-                "lcfs",
-                coord,
+                coord=coord,
             )
             eq.Z_lmn = _initial_guess_surface(
                 eq.Z_basis,
                 eq.Zb_lmn,
                 eq.surface.Z_basis,
                 axisZ,
-                "lcfs",
-                coord,
+                coord=coord,
             )
         else:
             raise ValueError(
@@ -149,6 +147,13 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
             eq.R_lmn = copy_coeffs(eq1.R_lmn, eq1.R_basis.modes, eq.R_basis.modes)
             eq.Z_lmn = copy_coeffs(eq1.Z_lmn, eq1.Z_basis.modes, eq.Z_basis.modes)
             eq.L_lmn = copy_coeffs(eq1.L_lmn, eq1.L_basis.modes, eq.L_basis.modes)
+            eq.Ra_n = copy_coeffs(
+                eq1.Ra_n, eq1.axis.R_basis.modes, eq.axis.R_basis.modes
+            )
+            eq.Za_n = copy_coeffs(
+                eq1.Za_n, eq1.axis.Z_basis.modes, eq.axis.Z_basis.modes
+            )
+
         elif isinstance(args[0], (str, os.PathLike)):
             # from file
             path = args[0]
@@ -184,6 +189,12 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
             eq.R_lmn = copy_coeffs(eq1.R_lmn, eq1.R_basis.modes, eq.R_basis.modes)
             eq.Z_lmn = copy_coeffs(eq1.Z_lmn, eq1.Z_basis.modes, eq.Z_basis.modes)
             eq.L_lmn = copy_coeffs(eq1.L_lmn, eq1.L_basis.modes, eq.L_basis.modes)
+            eq.Ra_n = copy_coeffs(
+                eq1.Ra_n, eq1.axis.R_basis.modes, eq.axis.R_basis.modes
+            )
+            eq.Za_n = copy_coeffs(
+                eq1.Za_n, eq1.axis.Z_basis.modes, eq.axis.Z_basis.modes
+            )
 
         elif nargs > 2:  # assume we got nodes and ndarray of points
             grid = args[0]
@@ -207,7 +218,7 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
 
     Parameters
     ----------
-    x_basis : FourierZernikeBais
+    x_basis : FourierZernikeBasis
         basis of the flux surfaces (for R, Z, or Lambda).
     b_lmn : ndarray, shape(b_basis.num_modes,)
         vector of boundary coefficients associated with b_basis.
@@ -229,7 +240,11 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         vector of flux surface coefficients associated with x_basis.
 
     """
-    x_lmn = np.zeros((x_basis.num_modes,))
+    b_modes = jnp.asarray(b_basis.modes)
+    x_modes = jnp.asarray(x_basis.modes)
+    b_lmn = jnp.asarray(b_lmn)
+    x_lmn = jnp.zeros((x_basis.num_modes,))
+
     if mode is None:
         # auto-detect based on mode numbers
         if np.all(b_basis.modes[:, 0] == 0):
@@ -243,28 +258,45 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
             coord = 1.0
         if axis is None:
             axidx = np.where(b_basis.modes[:, 1] == 0)[0]
-            axis = np.array([b_basis.modes[axidx, 2], b_lmn[axidx]]).T
-        for k, (l, m, n) in enumerate(b_basis.modes):
+            axis = jnp.array([b_basis.modes[axidx, 2], b_lmn[axidx]]).T
+
+        # first do all the m != 0 modes, easiest since no special logic needed
+        def body(k, x_lmn):
+            l, m, n = b_modes[k]
             scale = zernike_radial(coord, abs(m), m)
             # index of basis mode with lowest radial power (l = |m|)
-            idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
-            if m == 0:  # magnetic axis only affects m=0 modes
-                # index of basis mode with second lowest radial power (l = |m| + 2)
-                idx2 = np.where((x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1))[0]
-                ax = np.where(axis[:, 0] == n)[0]
-                if ax.size:
-                    a_n = axis[ax[0], 1]  # use provided axis guess
-                else:
-                    a_n = b_lmn[k]  # use boundary centroid as axis
-                x_lmn[idx0] = (b_lmn[k] + a_n) / 2 / scale
-                x_lmn[idx2] = (b_lmn[k] - a_n) / 2 / scale
+            mask0 = (x_modes == jnp.array([abs(m), m, n])).all(axis=1)
+            x_lmn = jnp.where(mask0, b_lmn[k] / scale, x_lmn)
+            return x_lmn
+
+        x_lmn = fori_loop(0, b_basis.num_modes, body, x_lmn)
+
+        # now overwrite stuff to deal with the axis
+        scale = zernike_radial(coord, 0, 0)
+        for k, (l, m, n) in enumerate(b_basis.modes):
+            if m != 0:
+                continue
+            # index of basis mode with lowest radial power (l = |m|)
+            idx0 = np.where((x_basis.modes == [abs(m), m, n]).all(axis=1))[0]
+            # index of basis mode with second lowest radial power (l = |m| + 2)
+            idx2 = np.where((x_basis.modes == [abs(m) + 2, m, n]).all(axis=1))[0]
+            ax = np.where(axis[:, 0] == n)[0]
+            if ax.size:
+                a_n = axis[ax[0], 1]  # use provided axis guess
             else:
-                x_lmn[idx0] = b_lmn[k] / scale
+                a_n = b_lmn[k]  # use boundary centroid as axis
+            x_lmn = jit(put)(x_lmn, idx0, (b_lmn[k] + a_n) / 2 / scale)
+            x_lmn = jit(put)(x_lmn, idx2, (b_lmn[k] - a_n) / 2 / scale)
 
     elif mode == "poincare":
-        for k, (l, m, n) in enumerate(b_basis.modes):
-            idx = np.where((x_basis.modes == [l, m, n]).all(axis=1))[0]
-            x_lmn[idx] = b_lmn[k]
+
+        def body(k, x_lmn):
+            l, m, n = b_modes[k]
+            mask0 = (x_modes == jnp.array([l, m, n])).all(axis=1)
+            x_lmn = jnp.where(mask0, b_lmn[k], x_lmn)
+            return x_lmn
+
+        x_lmn = fori_loop(0, b_basis.num_modes, body, x_lmn)
 
     else:
         raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
@@ -290,7 +322,7 @@ def _initial_guess_points(nodes, x, x_basis):
         Vector of flux surface coefficients associated with x_basis.
 
     """
-    if not isinstance(nodes, Grid):
+    if not isinstance(nodes, _Grid):
         nodes = Grid(nodes, sort=False)
     transform = Transform(nodes, x_basis, build=False, build_pinv=True)
     x_lmn = transform.fit(x)

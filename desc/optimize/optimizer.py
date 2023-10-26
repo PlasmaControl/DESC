@@ -6,7 +6,13 @@ import numpy as np
 from termcolor import colored
 
 from desc.io import IOAble
-from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
+from desc.objectives import (
+    FixCurrent,
+    FixIota,
+    ObjectiveFunction,
+    maybe_add_self_consistency,
+)
+from desc.objectives.utils import combine_args
 from desc.utils import Timer
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
@@ -72,10 +78,11 @@ class Optimizer(IOAble):
         ftol=None,
         xtol=None,
         gtol=None,
+        ctol=None,
         x_scale="auto",
         verbose=1,
         maxiter=None,
-        options={},
+        options=None,
     ):
         """Optimize an objective function.
 
@@ -101,6 +108,10 @@ class Optimizer(IOAble):
             Absolute tolerance for termination by the norm of the gradient.
             Optimizer terminates when ``norm(g) < gtol``, where
             If None, defaults to 1e-8.
+        ctol : float or None, optional
+            Stopping tolerance on infinity norm of the constraint violation.
+            Optimization will stop when ctol and one of the other tolerances
+            are satisfied. If None, defaults to 1e-4.
         x_scale : array_like or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -130,21 +141,61 @@ class Optimizer(IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
+        options = {} if options is None else options
         # TODO: document options
         timer = Timer()
+        options = {} if options is None else options
         wrapper, method = _parse_method(self.method)
 
         linear_constraints, nonlinear_constraint = _parse_constraints(constraints)
         objective, nonlinear_constraint = _maybe_wrap_nonlinear_constraints(
-            objective, nonlinear_constraint, self.method, options
+            eq, objective, nonlinear_constraint, self.method, options
         )
+
+        if not isinstance(objective, ProximalProjection):
+            # need to include self consistency constraints
+            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
         if len(linear_constraints):
-            objective = LinearConstraintProjection(objective, linear_constraints)
+            objective = LinearConstraintProjection(objective, linear_constraints, eq=eq)
+            if nonlinear_constraint is not None:
+                nonlinear_constraint = LinearConstraintProjection(
+                    nonlinear_constraint, linear_constraints, eq=eq
+                )
         if not objective.built:
             objective.build(eq, verbose=verbose)
+        if nonlinear_constraint is not None and not nonlinear_constraint.built:
+            nonlinear_constraint.build(eq, verbose=verbose)
+        if nonlinear_constraint is not None:
+            objective, nonlinear_constraint = combine_args(
+                objective, nonlinear_constraint
+            )
+        if len(linear_constraints) and not isinstance(x_scale, str):
+            # need to project x_scale down to correct size
+            Z = objective._Z
+            x_scale = np.broadcast_to(x_scale, objective._objective.dim_x)
+            x_scale = np.abs(
+                np.diag(Z.T @ np.diag(x_scale[objective._unfixed_idx]) @ Z)
+            )
+            x_scale = np.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
+
         if not objective.compiled:
-            mode = "scalar" if optimizers[method]["scalar"] else "lsq"
-            objective.compile(mode, verbose)
+            if optimizers[method]["scalar"] and optimizers[method]["hessian"]:
+                mode = "scalar"
+            elif optimizers[method]["scalar"]:
+                mode = "bfgs"
+            else:
+                mode = "lsq"
+            try:
+                objective.compile(mode, verbose)
+            except ValueError:
+                objective.build(eq, verbose=verbose)
+                objective.compile(mode, verbose=verbose)
+        if nonlinear_constraint is not None and not nonlinear_constraint.compiled:
+            try:
+                nonlinear_constraint.compile("lsq", verbose)
+            except ValueError:
+                nonlinear_constraint.build(eq, verbose=verbose)
+                nonlinear_constraint.compile("lsq", verbose)
 
         if objective.scalar and (not optimizers[method]["scalar"]):
             warnings.warn(
@@ -163,6 +214,7 @@ class Optimizer(IOAble):
             ftol,
             xtol,
             gtol,
+            ctol,
             maxiter,
             options,
         )
@@ -170,9 +222,22 @@ class Optimizer(IOAble):
         if verbose > 0:
             print("Number of parameters: {}".format(x0.size))
             print("Number of objectives: {}".format(objective.dim_f))
+            if nonlinear_constraint is not None:
+                num_equality = np.count_nonzero(
+                    nonlinear_constraint.bounds_scaled[0]
+                    == nonlinear_constraint.bounds_scaled[1]
+                )
+                print("Number of equality constraints: {}".format(num_equality))
+                print(
+                    "Number of inequality constraints: {}".format(
+                        nonlinear_constraint.dim_f - num_equality
+                    )
+                )
 
         if verbose > 0:
             print("Starting optimization")
+            print("Using method: " + str(self.method))
+
         timer.start("Solution time")
 
         result = optimizers[method]["fun"](
@@ -267,7 +332,9 @@ def _parse_constraints(constraints):
     return linear_constraints, nonlinear_constraints
 
 
-def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, options):
+def _maybe_wrap_nonlinear_constraints(
+    eq, objective, nonlinear_constraint, method, options
+):
     """Use ProximalProjection to handle nonlinear constraints."""
     wrapper, method = _parse_method(method)
     if nonlinear_constraint is None:
@@ -282,14 +349,14 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
                 f"""
                 Nonlinear constraints detected but method {method} does not support
                 nonlinear constraints. Defaulting to method "proximal-{method}"
-                In the future this will raise an error. To ignore this warnging, specify
+                In the future this will raise an error. To ignore this warning, specify
                 a wrapper "proximal-" to convert the nonlinearly constrained problem
                 into an unconstrained one.
                 """
             )
         )
         wrapper = "proximal"
-    if wrapper.lower() in ["prox", "proximal"]:
+    if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
         objective = ProximalProjection(
@@ -297,6 +364,7 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
             constraint=nonlinear_constraint,
             perturb_options=perturb_options,
             solve_options=solve_options,
+            eq=eq,
         )
         nonlinear_constraint = None
     return objective, nonlinear_constraint
@@ -307,6 +375,7 @@ def _get_default_tols(
     ftol=None,
     xtol=None,
     gtol=None,
+    ctol=None,
     maxiter=None,
     options=None,
 ):
@@ -320,6 +389,8 @@ def _get_default_tols(
         stoptol["ftol"] = ftol
     if gtol is not None:
         stoptol["gtol"] = gtol
+    if ctol is not None:
+        stoptol["ctol"] = ctol
     if maxiter is not None:
         stoptol["maxiter"] = maxiter
     stoptol.setdefault(
@@ -328,15 +399,20 @@ def _get_default_tols(
     )
     stoptol.setdefault(
         "ftol",
-        options.pop("ftol", 1e-6 if optimizers[method]["stochastic"] else 1e-2),
+        options.pop(
+            "ftol",
+            1e-6 if optimizers[method]["stochastic"] or "auglag" in method else 1e-2,
+        ),
     )
     stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
-    stoptol.setdefault("maxiter", options.pop("maxiter", 100))
+    stoptol.setdefault("ctol", options.pop("ctol", 1e-4))
+    stoptol.setdefault(
+        "maxiter", options.pop("maxiter", 500 if "auglag" in method else 100)
+    )
 
-    stoptol["max_nfev"] = options.pop("max_nfev", np.inf)
-    stoptol["max_ngev"] = options.pop("max_ngev", np.inf)
-    stoptol["max_njev"] = options.pop("max_njev", np.inf)
-    stoptol["max_nhev"] = options.pop("max_nhev", np.inf)
+    # if we define an "iteration" as a successful step, it can take a few function
+    # evaluations per iteration
+    stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
 
     return stoptol
 
@@ -346,11 +422,13 @@ optimizers = {}
 
 def register_optimizer(
     name,
+    description,
     scalar,
     equality_constraints,
     inequality_constraints,
     stochastic,
     hessian,
+    GPU=False,
     **kwargs,
 ):
     """Decorator to wrap a function for optimization.
@@ -368,7 +446,7 @@ def register_optimizer(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the sub-method to use.
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable.
     verbose : int
@@ -377,17 +455,18 @@ def register_optimizer(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
         settings.
-
 
     Parameters
     ----------
     name : str or array-like of str
         Name of the optimizer method. If one function supports multiple methods,
         provide a list of names.
+    description : str or array-like of str
+        Short description of the optimizer method, with references if possible.
     scalar : bool or array-like of bool
         Whether the method assumes a scalar residual, or a vector of residuals for
         least squares.
@@ -399,45 +478,62 @@ def register_optimizer(
         Whether the method can handle noisy objectives.
     hessian : bool or array-like of bool
         Whether the method requires calculation of the full hessian matrix.
+    GPU : bool or array-like of bool
+        Whether the method supports running on GPU
     """
     (
         name,
+        description,
         scalar,
         equality_constraints,
         inequality_constraints,
         stochastic,
         hessian,
+        GPU,
     ) = map(
         np.atleast_1d,
         (
             name,
+            description,
             scalar,
             equality_constraints,
             inequality_constraints,
             stochastic,
             hessian,
+            GPU,
         ),
     )
     (
         name,
+        description,
         scalar,
         equality_constraints,
         inequality_constraints,
         stochastic,
         hessian,
+        GPU,
     ) = np.broadcast_arrays(
-        name, scalar, equality_constraints, inequality_constraints, stochastic, hessian
+        name,
+        description,
+        scalar,
+        equality_constraints,
+        inequality_constraints,
+        stochastic,
+        hessian,
+        GPU,
     )
 
     def _decorator(func):
 
         for i, nm in enumerate(name):
             d = {
+                "description": description[i % len(name)],
                 "scalar": scalar[i % len(name)],
                 "equality_constraints": equality_constraints[i % len(name)],
                 "inequality_constraints": inequality_constraints[i % len(name)],
                 "stochastic": stochastic[i % len(name)],
                 "hessian": hessian[i % len(name)],
+                "GPU": GPU[i % len(name)],
                 "fun": func,
             }
             optimizers[nm] = d

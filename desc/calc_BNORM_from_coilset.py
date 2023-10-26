@@ -118,16 +118,14 @@ def calc_BNORM_from_coilset(
     plt.xlabel(r"$\theta$")
     plt.ylabel(r"$\zeta$")
 
-    plt.title(f"Bnormal with N={len(coils)} coils")
+    plt.title("Bnormal from coilset")
 
     if save:
         plt.savefig(
-            f"{dirname}/Bnormal_ncoils_{len(coils)}"
-            f"_alpha_{alpha:1.4e}_step_{step}_{dirname}.png"
+            f"{dirname}/Bnormal" f"_alpha_{alpha:1.4e}_step_{step}_{dirname}.png"
         )
         with open(
-            f"{dirname}/Bnormal_info_ncoils_{len(coils)}"
-            f"_alpha_{alpha:1.4e}_step_{step}_{dirname}.txt",
+            f"{dirname}/Bnormal_info" f"_alpha_{alpha:1.4e}_step_{step}_{dirname}.txt",
             "w+",
         ) as f:
             f.write(f"Maximum |Bnormal| on surface: {np.max(np.abs(Bnorm))}\n")

@@ -11,6 +11,7 @@ from scipy.constants import mu_0
 from desc.backend import jit
 from desc.basis import DoubleFourierSeries
 from desc.compute import get_params, rpz2xyz_vec
+from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -288,7 +289,12 @@ def run_regcoil(  # noqa: C901 fxn too complex
         ), "external_TF_fraction must be a float between 0 and 1!"
 
         if external_field:  # calculate by integrating external toroidal field
-            curve_grid = LinearGrid(N=eq.NFP * 1000, endpoint=True)
+            curve_grid = LinearGrid(
+                N=eq.NFP * 1000,
+                theta=jnp.array(jnp.pi),  # TODO: how to ensure this is inboard side
+                rho=jnp.array(1.0),
+                endpoint=True,
+            )
             curve_data = eq.compute(
                 ["R", "phi", "Z", "e_zeta"],
                 grid=curve_grid,
@@ -300,11 +306,10 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 curve_coords, basis="rpz", grid=sgrid
             )
             # calculate covariant B_zeta from external field
-            ext_field_B_zeta = jnp.sum(
-                ext_field_along_curve * curve_data["e_zeta"], axis=-1
-            )
-
-            G_ext = (
+            ext_field_B_zeta = dot(ext_field_along_curve, curve_data["e_zeta"])
+            # negative sign here because negative G makes
+            # positive toroidal B
+            G_ext = -(
                 jnp.trapz(
                     y=ext_field_B_zeta,
                     x=curve_grid.nodes[:, 2],
@@ -348,7 +353,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
             else:
                 # make a surface with just G_ext
                 TF_B = surface_current_field.copy()
-                TF_B.G = float(G_ext / 2 / jnp.pi)
+                TF_B.G = float(G_ext)
                 TF_B.I = float(0)
                 TF_B.Phi_mn = jnp.zeros_like(TF_B.Phi_mn)
                 Bn_ext, _ = TF_B.compute_Bnormal(

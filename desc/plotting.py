@@ -3730,6 +3730,172 @@ def plot_field_lines_real_space(
         return fig, ax
 
 
+def plot_omnigenous_field(
+    field,
+    grid_compute=None,
+    grid_plot=None,
+    rho=1,
+    fill=False,
+    ncontours=30,
+    fieldlines=0,
+    ax=None,
+    return_data=False,
+    **kwargs,
+):
+    """Plot :math:`|B|` on a surface vs the Boozer poloidal and toroidal angles.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Object from which to plot.
+    grid_compute : Grid, optional
+        grid to use for computing boozer spectrum
+    grid_plot : Grid, optional
+        grid to plot on
+    rho : float, optional
+        Radial coordinate of flux surface. Used only if grids are not specified.
+    fill : bool, optional
+        Whether the contours are filled, i.e. whether to use `contourf` or `contour`.
+    ncontours : int, optional
+        Number of contours to plot.
+    fieldlines : int, optional
+        Number of (linearly spaced) magnetic fieldlines to plot. Default is 0 (none).
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+            plot_X(figsize=(4,6),cmap="plasma")
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
+        * ``title_fontsize``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+    plot_data : dict
+        dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/plot_boozer_surface.png
+    .. code-block:: python
+        from desc.plotting import plot_boozer_surface
+        fig, ax = plot_boozer_surface(eq)
+
+    """
+    eq = field
+    if grid_compute is None:
+        grid_kwargs = {
+            "rho": rho,
+            "M": 4 * eq.M,
+            "N": 4 * eq.N,
+            "NFP": eq.NFP,
+            "endpoint": False,
+        }
+        grid_compute = _get_grid(**grid_kwargs)
+    if grid_plot is None:
+        grid_kwargs = {
+            "rho": rho,
+            "theta": 91,
+            "zeta": 91,
+            "NFP": eq.NFP,
+            "endpoint": True,
+        }
+        grid_plot = _get_grid(**grid_kwargs)
+
+    M_booz = kwargs.pop("M_booz", 2 * eq.M)
+    N_booz = kwargs.pop("N_booz", 2 * eq.N)
+    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+
+    transforms_compute = get_transforms(
+        "|B|_mn", obj=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+    )
+    transforms_plot = get_transforms(
+        "|B|_mn", obj=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = eq.compute("|B|_mn", grid=grid_compute, transforms=transforms_compute)
+    iota = grid_compute.compress(data["iota"])
+    data = transforms_plot["B"].transform(data["|B|_mn"])
+    data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
+    divider = make_axes_locatable(ax)
+
+    contourf_kwargs = {
+        "norm": matplotlib.colors.Normalize(),
+        "levels": kwargs.pop(
+            "levels", np.linspace(np.nanmin(data), np.nanmax(data), ncontours)
+        ),
+        "cmap": kwargs.pop("cmap", "jet"),
+        "extend": "both",
+    }
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
+
+    cax_kwargs = {"size": "5%", "pad": 0.05}
+
+    zz = (
+        grid_plot.nodes[:, 2]
+        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+        .squeeze()
+    )
+    tt = (
+        grid_plot.nodes[:, 1]
+        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+        .squeeze()
+    )
+
+    if fill:
+        im = ax.contourf(zz, tt, data, **contourf_kwargs)
+    else:
+        im = ax.contour(zz, tt, data, **contourf_kwargs)
+    cax = divider.append_axes("right", **cax_kwargs)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.update_ticks()
+
+    if fieldlines:
+        theta0 = np.linspace(0, 2 * np.pi, fieldlines, endpoint=False)
+        zeta = np.linspace(0, 2 * np.pi / grid_plot.NFP, 100)
+        alpha = np.atleast_2d(theta0) + iota * np.atleast_2d(zeta).T
+        alpha1 = np.where(np.logical_and(alpha >= 0, alpha <= 2 * np.pi), alpha, np.nan)
+        alpha2 = np.where(
+            np.logical_or(alpha < 0, alpha > 2 * np.pi),
+            alpha % (sign(iota) * 2 * np.pi) + (sign(iota) < 0) * (2 * np.pi),
+            np.nan,
+        )
+        alphas = np.hstack((alpha1, alpha2))
+        ax.plot(zeta, alphas, color="k", ls="-", lw=2)
+
+    ax.set_xlabel(r"$\zeta_{Boozer}$", fontsize=xlabel_fontsize)
+    ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
+    ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
+
+    _set_tight_layout(fig)
+    plot_data = {"zeta_Boozer": zz, "theta_Boozer": tt, "|B|": data}
+
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
+
+
 def _find_idx(rho0, theta0, phi0, grid):
     """Finds the index of the node closest to the given rho0, theta0, phi0.
 

@@ -137,7 +137,7 @@ print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermed
 
 # Optimization
 R_modes = np.array([[0, 0, 0]])
-constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=None), FixPressure(eq), FixIota(eq), FixPsi(eq))
+constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=None), FixBoundaryZ(eq, modes=None), FixPressure(eq), FixIota(eq), FixPsi(eq))
 eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=5, copy=True) # Mudar o número de iterações para 3, 10, 100
 eq.save(opt_file)
 

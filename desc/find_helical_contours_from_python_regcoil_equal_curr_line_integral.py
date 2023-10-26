@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 
 import desc.io
-from desc.backend import jit, jnp
+from desc.backend import jnp
 from desc.coils import MixedCoilSet
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import Grid
+from desc.grid import Grid, LinearGrid
 from desc.plotting import plot_3d, plot_coils
 
 # make this a fxn that takes in the phi_MN and does the usual thing
@@ -30,6 +30,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     equal_current=True,
     initial_guess=None,
     save_figs=True,
+    verbose=0,
 ):
     """Find helical coils from a surface current potential.
 
@@ -203,153 +204,52 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     ################################################################
     # find contours of constant phi
     ################################################################
-    # Phi is linear in theta at zeta=0 (bc is a sin series for phi SV), so can
-    # have theta be the optimization varibale
-    # and theta halfway is literally the theta halfway btwn,
-    #  so no need to call matploltib
 
-    # grids of values to use to approximately find the thetas
-    # corresponding to the contour Phi value halfway between two contours
-    theta_lookup_grid = jnp.linspace(
-        -2 * jnp.pi / eq.NFP, 2 * jnp.pi + 2 * jnp.pi / eq.NFP, 10000
-    )
-    contour_vals_on_theta_lookup_grid = phi_tot_fun_vec(
-        theta_lookup_grid, jnp.zeros_like(theta_lookup_grid)
-    )
-    conts_sorted_inds = jnp.argsort(contour_vals_on_theta_lookup_grid)
-
-    theta_of_contour_val_fun = lambda xx: jnp.interp(
-        xx,
-        xp=contour_vals_on_theta_lookup_grid[conts_sorted_inds],
-        fp=theta_lookup_grid[conts_sorted_inds],
-    )
-    theta_of_contour_val = jit(theta_of_contour_val_fun)
-
-    # TODO: also precompute and interpolate Phi_t, so no need
+    # TODO: also precompute and interpolate Phi, so no need
     # to create grid objects inside the variance function
+    # instead just need to interpolate Phi(theta)
 
-    # TODO: constrain contours to lie between 0 and 2pi
+    # TODO: constrain contours to lie between 0 and 2pi?
 
-    def find_contours_and_current_variance(
-        contours, return_full_info=False, show_plots=False, nthetas=200
-    ):
-        """Accepts a list of current potential contour values of length Ncoils+1.
+    # TODO: make a jittable compute_Phi
+    # though since the theta points we eval at are changing
+    # each time, need to bypass the Grid/Transform
+    # and directly implement the (fast)fourier transform?
 
-        returns variance of current in the coils
+    def get_currents(thetas_halfway):
+        # let thetas_halfway be starting at the contour below the
+        # bottom most contour, and then all the way to the one below the top
+        # so this is desiredNumCoils
+        # with i going from 0 to desiredNumCoils
+        Phis = surface_current_field.compute(
+            "Phi", grid=LinearGrid(rho=0, zeta=0, theta=thetas_halfway)
+        )["Phi"]
+        Phis = jnp.append(Phis, Phis[0] + net_toroidal_current)
+        currents = Phis[1:] - Phis[:-1]
+        return currents
 
-        """
-        N_trial_contours = len(contours) - 1
-        # thetas is the decision variable
+    # FIXME: generalize for diff helicity where last contour is
+    # at bottom of graph (just mult by Phi_slope probably)
+    # or this might work ok we'll see
+    def f(thetas_halfway):
+        # let thetas_halfway be starting at the contour below the
+        # bottom most contour, and then all the way to the one below the top
+        # so this is desiredNumCoils
+        # and I_i = Phi(thetas[i+1])-Phi(thetas[i])
+        # with i going from 0 to desiredNumCoils
+        # we are missing the Phi value at the contour halfway above our last contour
+        # but that is just the Phi[0] + I
+        # since it is Phi(theta+2pi) and Phi_sv is periodic and
+        #  2nd term in theta is linear in theta / 2pi
+        Phis = surface_current_field.compute(
+            "Phi", grid=LinearGrid(rho=0, zeta=0, theta=thetas_halfway)
+        )["Phi"]
+        Phis = jnp.append(Phis, Phis[0] + net_toroidal_current)
+        currents = Phis[1:] - Phis[:-1]
 
-        if not contours[1] - contours[0] > 1:
-            contours = jnp.sort(jnp.asarray(contours))
-            contours_were_sorted = True
-        else:
-            contours_were_sorted = False
+        return jnp.var(currents)
 
-        theta_halfways = []
-        contour_theta = []
-
-        for i in range(N_trial_contours):
-            halfway_contour_val = (contours[i] + contours[i + 1]) / 2
-            theta_halfways.append(theta_of_contour_val(halfway_contour_val))
-            contour_theta.append(theta_of_contour_val(contours[i]))
-
-        ################################################################
-        # Find contours that are halfway between each coil contour,
-        # to set the bounds of integration of surface current for
-        # each coil
-        ################################################################
-
-        # number of theta points at each phi point for integration
-
-        coil_nodes_line, coil_line_elements = get_integration_points_and_line_elems(
-            theta_halfways,
-            contours_were_sorted,
-            nthetas=nthetas,
-        )
-
-        if show_plots:
-            plt.figure(figsize=(10, 10))
-
-            for i in range(N_trial_contours):  # jnp.flip(np.arange(desirednumcoils)):
-                plt.plot(
-                    coil_nodes_line[i][1],
-                    coil_nodes_line[i][0],
-                    label="line integration bound",
-                )
-                plt.plot(
-                    0,
-                    contour_theta[i],
-                    "c.",
-                    label="Theta0 of Coil to integrate current for",
-                )
-                if i != 0:
-                    plt.plot(
-                        0, theta_halfways[i], "k"
-                    )  # , label="bounding contours for integration")
-                    plt.plot(0, theta_halfways[i - 1], "k")
-
-                elif not contours_were_sorted and i == 0:
-                    plt.plot(
-                        0,
-                        theta_halfways[-1] + 2 * jnp.pi * jnp.sign(phi_slope),
-                        "k+",
-                        label="bounds for integration",
-                    )
-                    plt.plot(0, theta_halfways[i], "k-")
-                    plt.legend()
-                elif contours_were_sorted and i == 0:
-                    plt.plot(
-                        0,
-                        theta_halfways[0] + 2 * jnp.pi * jnp.sign(phi_slope),
-                        "m.",
-                        label="bounding contours for integration",
-                    )
-                    plt.plot(0, theta_halfways[i], "k.")
-                    plt.legend()
-            plt.xlabel("zeta")
-            plt.ylabel("theta")
-
-        ################################################################
-        # integrate surface current through the integration bounds for each coil
-        # to find the current for each coil
-        ################################################################
-
-        # how to do so in a way that is not appending to a list?
-        elem_sum = 0
-        coil_currents_line = jnp.zeros(N_trial_contours)  # list of the coil currents
-        for icoi, (coords, line_elems) in enumerate(
-            zip(coil_nodes_line, coil_line_elements)
-        ):
-            # only need to integrate Phi_t to find net toroidal current
-            # through a given dtheta
-            Phi_t_vals = phi_tot_fun_theta_deriv_vec(
-                coords[0].flatten(), coords[1].flatten()
-            )
-
-            current = jnp.sum(Phi_t_vals * line_elems)
-            coil_currents_line = coil_currents_line.at[icoi].set(current)
-            elem_sum += jnp.sum(line_elems)
-        if not jnp.isclose(jnp.sum(coil_currents_line), net_toroidal_current):
-            print(
-                "net toroidal current of coils does not match I! something went wrong"
-            )
-            print(jnp.sum(coil_currents_line))
-            print(net_toroidal_current)
-            print(f"{elem_sum=}")
-
-        variance = jnp.var(coil_currents_line)
-
-        ####### debug #######################
-        # should just check that the net toroidal current is the same
-        # as what we get after integration...?
-        # no it wont be quite that though
-
-        if not return_full_info:
-            return variance
-        else:  # return all info: contour_theta and coil_currents
-            return contour_theta, coil_currents_line
+    # TODO: implement the analytic deriv of above
 
     # TODO: don't need this for the whole zeta/theta domain,
     #  should be able to only use like 2 or 3 repetitions
@@ -361,6 +261,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     # and exiting at zeta = XX
     # then rotate it by repeating it 2pi/(2pi-XX)
     # times over the angle 2pi-XX/something
+    # TODO: change this so that  this fxn only accepts Ncoils length array
     def find_full_coil_contours(contours, show_plots=True, ax=None, label=None, ls="-"):
         """Accepts a list of current potential contour values of length Ncoils+1.
 
@@ -414,64 +315,69 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
         return contour_theta, contour_zeta
 
-    N_trial_contours = desirednumcoils
-    # flip is so the contour levels are increasing
-    #  (this may not be necessary dep. on contour direction)
-    # adding extra contour above and below the ones we care about,
-    #  so we can then find halfway point btwn them
-
     theta0s = jnp.linspace(
         0,
-        (2 * jnp.pi + 2 * jnp.pi / N_trial_contours) * jnp.sign(phi_slope),
-        N_trial_contours + 1,
+        (2 * jnp.pi) * jnp.sign(phi_slope),
+        desirednumcoils,
         endpoint=False,
     )
 
-    contours = []
-    for t in theta0s:
-        contours.append(
-            float(phi_tot_fun_vec(jnp.array([t]), jnp.array([0.0]))[0])
-        )  # contour values
+    # theta positions halfway between contour start points
+    theta0s_halfway = theta0s - theta0s[1] / 2
+
     import time
+
+    contours = phi_tot_fun_vec(theta0s, jnp.zeros_like(theta0s))
 
     if initial_guess:
         assert len(initial_guess) == len(contours)
         contours = initial_guess
     contours = jnp.sort(jnp.asarray(contours))
 
-    xs = [contours]
-    fun_vals = [find_contours_and_current_variance(contours)]
-
+    xs = [theta0s_halfway]
+    fun_vals = [f(theta0s_halfway)]
+    # TODO: this call to find full contours results in things of length(Ncoils-1)?
     contour_theta_initial, contour_zeta_initial = find_full_coil_contours(contours)
 
     if equal_current:
         t_start = time.time()
 
         def callback(x):
-            curr_val = find_contours_and_current_variance(x)
-            print(f"Iteration: {len(xs)} Time elapsed = {time.time()-t_start} s")
-            print(f"Current function value: {curr_val:1.3e}")
-            print(f"Current x: {x}")
+            curr_val = f(x)
+            if verbose > 1:
+                print(f"Iteration: {len(xs)} Time elapsed = {time.time()-t_start} s")
+                print(f"Current function value: {curr_val:1.3e}")
+                print(f"Current x: {x}")
 
             xs.append(x)
             fun_vals.append(curr_val)
             return False
 
         result = minimize(
-            find_contours_and_current_variance,
-            contours,
-            options={"maxiter": maxiter, "disp": True},
+            f,
+            theta0s_halfway,
+            options={"maxiter": maxiter, "disp": False},
             callback=callback,
             method=method,
         )
         t_end = time.time()
         print(f"Optimization for coils took {t_end-t_start} s")
-        contours = result.x
+        thetas_halfway = result.x
+    else:
+        thetas_halfway = theta0s_halfway
+    # TODO: remove the need to add another point at end by
+    # modifying find full contours fxn
+    coil_currents = get_currents(thetas_halfway)
+    thetas_halfway = jnp.append(thetas_halfway, thetas_halfway[0] + 2 * jnp.pi)
+    final_coil_theta0s = (thetas_halfway[0:-1] + thetas_halfway[1:]) / 2
+    final_coil_theta0s = jnp.append(
+        final_coil_theta0s, final_coil_theta0s[-1] + final_coil_theta0s[1]
+    )
+
+    theta0s = jnp.append(theta0s, theta0s[-1] + theta0s[1])
+    contours = phi_tot_fun_vec(final_coil_theta0s, jnp.zeros_like(final_coil_theta0s))
     contours = jnp.sort(jnp.asarray(contours))
 
-    final_coil_theta0s, coil_currents = find_contours_and_current_variance(
-        contours, return_full_info=True, show_plots=True
-    )
     print("initial coil thetas:", theta0s)
     print("final coil thetas:", final_coil_theta0s)
 
@@ -557,7 +463,9 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             for j in range(desirednumcoils):
                 N = len(contour_X[j])
                 thisCurrent = (
-                    jnp.mean(coil_currents) if equal_current else coil_currents[j]
+                    net_toroidal_current / desirednumcoils
+                    if equal_current
+                    else coil_currents[j]
                 )
                 for k in range(0, N, step):
                     f.write(
@@ -583,5 +491,17 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     ###################
     print(f"Coil current average is {jnp.mean(coil_currents):1.4e} A")
     print(f"Coil current variance is {jnp.var(coil_currents):1.4e} A")
+    if equal_current:
+        print(
+            "Coil currents set to be equal to total net tor.current / coils:",
+            f" {net_toroidal_current / desirednumcoils:1.4e}",
+        )
+        print(
+            "Difference between final optimized coils and the set currents:"
+            f"{net_toroidal_current / desirednumcoils - jnp.mean(coil_currents):1.4e} A"
+        )
+
+    print("sum of coil currents", jnp.sum(coil_currents))
+    print("should equal net I :", net_toroidal_current)
 
     return final_coilset

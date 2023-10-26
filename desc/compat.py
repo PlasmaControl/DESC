@@ -1,8 +1,11 @@
 """Utility functions for dealing with older versions of DESC."""
 
+import warnings
+
 import numpy as np
 
 from desc.grid import Grid
+from desc.utils import errorif
 
 
 def ensure_positive_jacobian(eq):
@@ -26,7 +29,18 @@ def ensure_positive_jacobian(eq):
         return eq
 
     sign = np.sign(eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+    errorif(
+        sign == 0,
+        ValueError,
+        "sqrt(g) == 0, are you sure this Equilibrium is not degenerate?",
+    )
     if sign < 0:
+        warnings.warn(
+            "Left handed coordinates detected, switching sign of theta."
+            + " To avoid this warning in the future, switch the sign of all"
+            + " modes with m<0 and iota/current profile."
+        )
+
         if eq.iota is not None:
             eq.i_l *= -1
         else:

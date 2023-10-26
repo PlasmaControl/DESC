@@ -1098,64 +1098,69 @@ class OmnigeneousField(Optimizable, IOAble):
     -----
     Doesn't conform to MagneticField API, as it only knows about |B| in flux
     coordinates, not vector B in lab coordinates.
+
     """
 
     _io_attrs_ = [
         "_L_well",
         "_M_well",
-        "_L_omni",
-        "_M_omni",
-        "_N_omni",
+        "_L",
+        "_M",
+        "_N",
         "_well_basis",
-        "_omni_basis",
-        "_well_l",
-        "_omni_lmn",
+        "_basis",
+        "_helicity",
+        "_B_lm",
+        "_x_lmn",
     ]
 
-    def __init__(self, L_well, M_well, L_omni, M_omni, N_omni, min_well, max_well, NFP):
+    def __init__(
+        self, L_well, M_well, L, M, N, NFP, helicity=(1, 0), B_lm=None, x_lmn=None
+    ):
         self._L_well = int(L_well)
         self._M_well = int(M_well)
-        self._L_omni = int(L_omni)
-        self._M_omni = int(M_omni)
-        self._N_omni = int(N_omni)
+        self._L = int(L)
+        self._M = int(M)
+        self._N = int(N)
         self._NFP = int(NFP)
+        self.helicity = helicity
         self._well_basis = ChebyshevPolynomial(L=self.L_well)
-        self._omni_basis = ChebyshevDoubleFourierBasis(
-            L=self.L_omni,
-            M=self.M_omni,
-            N=self.N_omni,
+        self._basis = ChebyshevDoubleFourierBasis(
+            L=self.L,
+            M=self.M,
+            N=self.N,
             NFP=self.NFP,
             sym="cos(t)",
         )
-        self._well_l = np.concatenate(
+        self._B_lm = B_lm or np.concatenate(
             (
                 np.linspace(
-                    min_well,
-                    max_well,
+                    1,
+                    2,
                     self.M_well,
                 ),
                 np.zeros((self.L_well * self.M_well,)),
             )
         )
-        self._omni_lmn = np.zeros(self.omni_basis.num_modes)
+        self._x_lmn = np.zeros(self.basis.num_modes)
 
     def change_resolution(
-        self, L_well=None, M_well=None, L_omni=None, M_omni=None, N_omni=None, NFP=None
+        self, L_well=None, M_well=None, L=None, M=None, N=None, NFP=None
     ):
         """Set the spectral resolution of well and shift terms.
 
         Parameters
         ----------
         L_well : int
-            Radial resolution of the magnetic well parameters well_l.
+            Radial resolution of the magnetic well parameters B_lm.
         M_well : int
-            Number of spline points in the magnetic well parameters well_l.
-        L_omni : int
-            Radial resolution of omni_lmn.
-        M_omni : int
-            Poloidal resolution of omni_lmn.
-        N_omni : int
-            Toroidal resolution of omni_lmn.
+            Number of spline points in the magnetic well parameters B_lm.
+        L : int
+            Radial resolution of x_lmn.
+        M : int
+            Poloidal resolution of x_lmn.
+        N : int
+            Toroidal resolution of x_lmn.
         NFP : int
             Number of field periods.
 
@@ -1163,29 +1168,25 @@ class OmnigeneousField(Optimizable, IOAble):
         self._NFP = setdefault(NFP, self.NFP)
         self._L_well = setdefault(L_well, self.L_well)
         self._M_well = setdefault(M_well, self.M_well)
-        self._L_omni = setdefault(L_omni, self.L_omni)
-        self._M_omni = setdefault(M_omni, self.M_omni)
-        self._N_omni = setdefault(N_omni, self.N_omni)
+        self._L = setdefault(L, self.L)
+        self._M = setdefault(M, self.M)
+        self._N = setdefault(N, self.N)
 
         old_modes_well = self.well_basis.modes
-        old_modes_omni = self.omni_basis.modes
+        old_modes = self.basis.modes
 
         self.well_basis.change_resolution(self.L_well)
-        self.omni_basis.change_resolution(
-            self.L_omni, self.M_omni, self.N_omni, NFP=self.NFP, sym="cos(t)"
-        )
+        self.basis.change_resolution(self.L, self.M, self.N, NFP=self.NFP, sym="cos(t)")
 
-        self._omni_lmn = copy_coeffs(
-            self.omni_lmn, old_modes_omni, self.omni_basis.modes
-        )
+        self._x_lmn = copy_coeffs(self.x_lmn, old_modes, self.basis.modes)
 
-        old_well = self.well_l.reshape((-1, self.M_well))
+        old_well = self.B_lm.reshape((-1, self.M_well))
         new_well = np.zeros((self.L_well + 1, self.M_well))
         for j in range(self.M_well):
             new_well[:, j] = copy_coeffs(
                 old_well[:, j], old_modes_well, self.well_basis.modes
             )
-        self._well_l = new_well.flatten()
+        self._B_lm = new_well.flatten()
 
     @property
     def NFP(self):
@@ -1208,46 +1209,60 @@ class OmnigeneousField(Optimizable, IOAble):
         return self._M_well
 
     @property
-    def L_omni(self):
-        """int: Radial resolution of omni_lmn."""
-        return self._L_omni
+    def L(self):
+        """int: Radial resolution of x_lmn."""
+        return self._L
 
     @property
-    def M_omni(self):
-        """int: Poloidal resolution of omni_lmn."""
-        return self._M_omni
+    def M(self):
+        """int: Poloidal resolution of x_lmn."""
+        return self._M
 
     @property
-    def N_omni(self):
-        """int: Toroidal resolution of omni_lmn."""
-        return self._N_omni
+    def N(self):
+        """int: Toroidal resolution of x_lmn."""
+        return self._N
 
     @property
     def well_basis(self):
-        """ChebyshevPolynomial: Spectral basis for well_l."""
+        """ChebyshevPolynomial: Spectral basis for B_lm."""
         return self._well_basis
 
     @property
-    def omni_basis(self):
-        """FourierZernikeBasis: Spectral basis for omni_lmn."""
-        return self._omni_basis
+    def basis(self):
+        """FourierZernikeBasis: Spectral basis for x_lmn."""
+        return self._basis
 
     @optimizable_parameter
     @property
-    def well_l(self):
+    def B_lm(self):
         """ndarray: Omnigenity magnetic well shape parameters."""
-        return self._well_l
+        return self._B_lm
 
-    @well_l.setter
-    def well_l(self, well_l):
-        self._well_l[:] = well_l
+    @B_lm.setter
+    def B_lm(self, B_lm):
+        self._B_lm[:] = B_lm
 
     @optimizable_parameter
     @property
-    def omni_lmn(self):
-        """ndarray: Omnigenity magnetic well shift parameters."""
-        return self._omni_lmn
+    def x_lmn(self):
+        """ndarray: Omnigenity coordinate mapping parameters."""
+        return self._x_lmn
 
-    @omni_lmn.setter
-    def omni_lmn(self, omni_lmn):
-        self._omni_lmn[:] = omni_lmn
+    @x_lmn.setter
+    def x_lmn(self, x_lmn):
+        self._x_lmn[:] = x_lmn
+
+    @property
+    def helicity(self):
+        """tuple: Type of omnigenity (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        self._helicity = helicity

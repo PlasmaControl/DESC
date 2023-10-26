@@ -347,26 +347,7 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     return data
 
 
-@register_compute_fun(
-    name="rho",
-    label="\\rho",
-    units="~",
-    units_long="None",
-    description="Radial coordinate, proportional to the square root "
-    + "of the toroidal flux",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="r",
-    data=[],
-    parameterization="desc.magnetic_fields.OmnigeneousField",
-)
-def _rho(params, transforms, profiles, data, **kwargs):
-    data["rho"] = transforms["grid"].nodes[:, 0]
-    return data
-
-
+# TODO: change eta to be from [-1, +1] instead of [-pi/2, +pi/2]
 @register_compute_fun(
     name="eta",
     label="\\eta",
@@ -414,7 +395,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Omnigenity symmetry angle",
     dim=1,
-    params=["omni_lmn"],
+    params=["x_lmn"],
     transforms={"omni": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
@@ -424,7 +405,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
 def _omni_angle(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["eta"], data["alpha"]]).T
     data["h"] = (
-        transforms["omni"].basis.evaluate(nodes) @ params["omni_lmn"]
+        transforms["omni"].basis.evaluate(nodes) @ params["x_lmn"]
         + 2 * data["eta"]
         + jnp.pi
     )
@@ -438,7 +419,7 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="Magnitude of omnigeneous magnetic field",
     dim=1,
-    params=["well_l"],
+    params=["B_lm"],
     transforms={"well": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
@@ -447,9 +428,9 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
 )
 def _B_well(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_well, M_well)
-    well_arr = params["well_l"].reshape((transforms["well"].basis.L + 1, -1))
+    B_lm = params["B_lm"].reshape((transforms["well"].basis.L + 1, -1))
     # assuming single flux surface, so only take first row (single node)
-    B_input = (transforms["well"].matrices["direct1"][0][0][0] @ well_arr)[0, :]
+    B_input = (transforms["well"].matrices["direct1"][0][0][0] @ B_lm)[0, :]
     B_input = jnp.sort(B_input)  # sort to ensure monotonicity
     eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
 

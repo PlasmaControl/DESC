@@ -109,55 +109,89 @@ def flip_helicity(eq):
     return eq
 
 
-def rescale(eq, R0=None, B0=None, verbose=0):
-    """Rescale an Equilibrium to major radius R and magnetic field strength on axis B.
-
-    Assumes the aspect ratio is held constant?
+def rescale(eq, L=("R0", None), B=("B0", None), verbose=0):
+    """Rescale an Equilibrium in size L and magnetic field strength B.
 
     Parameters
     ----------
     eq : Equilibrium or iterable of Equilibrium
         Equilibria to rescale.
-    R0 : float
-        Desired major radius. If None, no change (default).
-    B0 : float
-        Desired magnetic field strength on axis. If None, no change (default).
+    L : tuple, (str, float)
+        First element is a string denoting the length to scale. One of:
+        {"R0", "a", "V"} for major radius, minor radius, or volume.
+        Second element is a float denoting the desired size. Default is no scaling.
+    B : tuple, (str, float)
+        First element is a string denoting the magnetic field strength to scale. One of:
+        {"B0", "<|B|>", "B_max"} for B on axis, volume averaged, or maximum on the LCFS.
+        Second element is a float denoting the desired field. Default is no scaling.
     verbose : int
         Level of output.
 
     Returns
     -------
     eq : Equilibrium or iterable of Equilibrium
-        Same as input, but rescaled to the desired major radius and field strength.
+        Same as input, but rescaled to the desired size and magnetic field strength.
 
     """
     # maybe it's iterable:
     if hasattr(eq, "__len__"):
         for e in eq:
-            rescale(e, R0, B0)
+            rescale(e, L, B)
         return eq
 
-    # compute actual major radius
-    grid_R = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    R = eq.compute("R0", grid=grid_R)["R0"]
-    R0 = R0 or R
+    assert len(L) == 2
+    assert len(B) == 2
 
-    # compute actual |B| on axis
-    grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
-    B = np.mean(eq.compute("|B|", grid=grid_B)["|B|"])
-    B0 = B0 or B
+    L_key = L[0]
+    L_new = L[1]
+    B_key = B[0]
+    B_new = B[1]
+
+    L_keys = ["R0", "a", "V"]
+    B_keys = ["B0", "<|B|>_vol", "B_max"]
+
+    if L_key not in L_keys:
+        raise ValueError("Size scale L must be one of {{'R0', 'a', 'V'}}, got " + L_key)
+    if B_key not in B_keys:
+        raise ValueError(
+            "Field strength scale B must be one of {{'B0', '<|B|>_vol', 'B_max'}}, got "
+            + B_key
+        )
+
+    # size scaling
+    grid_L = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    data_L = eq.compute(L_keys, grid=grid_L)
+    L_old = data_L[L_key]
+    L_new = L_new or L_old
+    cL = L_new / L_old
+    cL = cL ** (1 / 3) if L_key == "V" else cL  # V = 2 π^2 R0 a^2
+
+    # field scaling
+    match B_key:
+        case "B0":
+            grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
+            data_B = eq.compute("|B|", grid=grid_B)
+            B_old = np.mean(data_B["|B|"])
+        case "<|B|>_vol":
+            grid_B = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            data_B = eq.compute("<|B|>_vol", grid=grid_B)
+            B_old = data_B["<|B|>_vol"]
+        case "B_max":
+            grid_B = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
+            data_B = eq.compute("|B|", grid=grid_B)
+            B_old = np.max(data_B["|B|"])
+    B_new = B_new or B_old
+    cB = B_new / B_old
 
     # scaling factor = desired / actual
-    cR = R0 / R
-    cB = B0 / B
     if verbose:
-        print("Major radius scaling factor:   {:.2f}".format(cR))
-        print("Magnetic field scaling factor: {:.2f}".format(cB))
+        print("Size scaling factor:  {:.2f}".format(cL))
+        print("Field scaling factor: {:.2f}".format(cB))
 
     # scale flux surfaces
-    eq.R_lmn *= cR
-    eq.Z_lmn *= cR
-    eq.Psi *= cR**2 * cB
+    eq.R_lmn *= cL
+    eq.Z_lmn *= cL
+    eq.Psi *= cL**2 * cB
 
     # scale pressure profile
     if eq.pressure is not None:
@@ -169,16 +203,6 @@ def rescale(eq, R0=None, B0=None, verbose=0):
 
     # scale current profile
     if eq.current is not None:
-        eq.c_l *= cR * cB
-
-    # check new major radius
-    grid_R = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    R = eq.compute("R0", grid=grid_R)["R0"]
-    # TODO: assert R == R0
-
-    # check new |B| on axis
-    grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
-    B = np.mean(eq.compute("|B|", grid=grid_B)["|B|"])
-    # TODO: assert B == B0
+        eq.c_l *= cL * cB
 
     return eq

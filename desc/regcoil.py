@@ -344,7 +344,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
             Bn_ext, _ = external_field.compute_Bnormal(
                 eq.surface, eval_grid=egrid, source_grid=sgrid
             )
-            TF_B = None
+            TF_B = external_field
 
         if not external_field:
             if external_TF_fraction == 0:

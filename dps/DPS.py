@@ -71,17 +71,17 @@ print("*************** START ***************")
 # Load Equilibrium
 
 print("\nStarting Equilibrium")
-# eq_file = "input.LandremanPaul2021_QA_scaled_output.h5"
-eq_file = "test_equilibrium.h5"
+eq_file = "input.LandremanPaul2021_QA_scaled_output.h5"
+#eq_file = "test_equilibrium.h5"
 opt_file = "optimized_" + eq_file
 print(f"Loaded Equilibrium: {eq_file}\n")
 
-eq = desc.io.load(eq_file)
+eq = desc.io.load(eq_file)[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 
 # Energy and Mass info
-Energy_eV = 1 # eV (3.52e6 eV proton energy)
+Energy_eV = 3.52e6 #1 # eV (3.52e6 eV proton energy)
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
 Energy_SI = Energy_eV*Proton_Charge
@@ -169,7 +169,7 @@ print("\n*************** TRACING ***************")
 tracing_original = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.4e-8)
 
 # Compute tracing original equilibrium
-eq_again = desc.io.load(eq_file)
+eq_again = desc.io.load(eq_file)[-1]
 eq_again._iota = eq_again.get_profile("iota").to_powerseries(order=eq_again.L, sym=True)
 eq_again._current = None
 

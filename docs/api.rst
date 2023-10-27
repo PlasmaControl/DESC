@@ -191,6 +191,7 @@ Objective Functions
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
+    desc.objectives.Shear
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 

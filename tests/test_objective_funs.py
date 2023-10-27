@@ -466,7 +466,7 @@ class TestObjectiveFunction:
         eq.solve()
         obj = QuadraticFlux(coilset, eq)
         obj.build()
-        f = obj.compute(*obj.xs(eq))
+        f = obj.compute(*obj.xs(coilset))
         np.testing.assert_allclose(f, 0, atol=1e-3)
 
     @pytest.mark.unit

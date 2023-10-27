@@ -691,14 +691,7 @@ class QuadraticFlux(_Objective):
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
 
         self._constants = {
-            "eval_transforms": eval_transforms,
-            "eval_profiles": eval_profiles,
-            "src_data": src_data,
-            "src_transforms": src_transforms,
-            "src_profiles": src_profiles,
-            "src_data": src_data,
-            "interpolator": interpolator,
-            "quad_weights": eval_transforms["grid"].weights,
+            "eval_data": eval_data,
             "Bplasma": Bplasma,
         }
 
@@ -760,8 +753,9 @@ class QuadraticFlux(_Objective):
             ]
         ).T
 
-        # TODO: ext_field can't be constant
-        Bext = constants["ext_field"].compute_magnetic_field(
+        # TODO: how is Bext? is self._ext_field changing?
+        # is self._ext_field of type CoilSet?
+        Bext = self._ext_field.compute_magnetic_field(
             x, grid=self._field_grid, basis="rpz"
         )
         return jnp.sum(

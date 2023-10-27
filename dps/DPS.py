@@ -135,9 +135,17 @@ ObjFunction.build()
 intermediate_time_3 = timet()
 print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermediate_time_2}s\n")
 
-# Optimization
-R_modes = np.array([[0, 0, 0]])
-constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=None), FixBoundaryZ(eq, modes=None), FixPressure(eq), FixIota(eq), FixPsi(eq))
+################################################################################################################
+################################################################################################################
+################################################# Optimization #################################################
+################################################################################################################
+################################################################################################################
+
+R_modes = np.vstack(([0, 0, 0], eq.surface.R_basis.modes[np.max(np.abs(eq.surface.R_basis.modes), 1), :]))
+Z_modes = eq.surface.Z_basis.modes[np.max(np.abs(eq.surface.Z_basis.modes), 1), :]
+
+# R_modes = np.array([[0, 0, 0]])
+constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=Z_modes), FixPressure(eq), FixPsi(eq)) #FixIota(eq)
 eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=5, copy=True) # Mudar o número de iterações para 3, 10, 100
 eq.save(opt_file)
 
@@ -151,6 +159,12 @@ print(f"Total time: {optimization_final_time - initial_time}s")
 print("*********************** OPTIMIZATION END ***********************\n")
 
 print("\n*************** TRACING ***************")
+
+################################################################################################################
+################################################################################################################
+################################################## Tracing ####################################################
+################################################################################################################
+################################################################################################################
 
 tracing_original = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.4e-8)
 

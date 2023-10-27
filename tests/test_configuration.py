@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import pytest
 
+from desc.backend import put
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.initial_guess import _initial_guess_surface
 from desc.geometry import (
@@ -85,7 +86,12 @@ class TestConstructor:
             "sym": False,
             "spectral_indexing": "ansi",
             "surface": np.array(
-                [[0, 0, 0, 10, 0], [0, 1, 0, 1, 1], [0, -1, 1, 0.1, 0.1]]
+                [
+                    [0, 0, 0, 10, 0],
+                    [0, 1, 0, 1, 0],
+                    [0, -1, 0, 0, -1],
+                    [0, -1, 1, 0.1, 0.1],
+                ]
             ),
             "axis": np.array([[0, 10, 0]]),
             "pressure": np.array([[0, 10], [2, 5]]),
@@ -145,9 +151,9 @@ class TestConstructor:
                 0.0,
                 0.0,
                 0.0,
+                -1.0,
                 0.0,
                 0.0,
-                1.0,
                 0.0,
                 0.0,
                 0.1,
@@ -162,11 +168,21 @@ class TestConstructor:
             ],
         )
 
-        inputs["surface"] = np.array([[0, 0, 0, 10, 0], [1, 1, 0, 1, 1]])
+        inputs["surface"] = np.array(
+            [
+                [0, 0, 0, 10, 0],
+                [1, 1, 0, 1, 0.1],
+                [1, -1, 0, 0.2, -1],
+            ]
+        )
+
         eq = Equilibrium(**inputs)
         assert eq.bdry_mode == "poincare"
         np.testing.assert_allclose(
-            eq.Rb_lmn, [10.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            eq.Rb_lmn, [10.0, 0.2, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        )
+        np.testing.assert_allclose(
+            eq.Zb_lmn, [0.0, -1.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         )
 
     @pytest.mark.unit
@@ -194,7 +210,7 @@ class TestConstructor:
             eq = Equilibrium(iota="def")
         with pytest.raises(TypeError):
             eq = Equilibrium(current="def")
-        with pytest.raises(ValueError):  # change to typeeror if allow both
+        with pytest.raises(ValueError):  # change to TypeError if allow both
             eq = Equilibrium(iota="def", current="def")
         with pytest.raises(ValueError):
             eq = Equilibrium(iota=None)
@@ -209,7 +225,7 @@ class TestConstructor:
         R_lmn = np.random.random(3)
         Z_lmn = np.random.random(3)
         L_lmn = np.random.random(3)
-        eq = Equilibrium(R_lmn=R_lmn, Z_lmn=Z_lmn, L_lmn=L_lmn)
+        eq = Equilibrium(R_lmn=R_lmn, Z_lmn=Z_lmn, L_lmn=L_lmn, check_orientation=False)
         np.testing.assert_allclose(R_lmn, eq.R_lmn)
         np.testing.assert_allclose(Z_lmn, eq.Z_lmn)
         np.testing.assert_allclose(L_lmn, eq.L_lmn)
@@ -419,9 +435,7 @@ class TestGetSurfaces:
         rho = 0.5
         surf = eq.get_surface_at(rho=rho)
         assert surf.rho == rho
-        np.testing.assert_allclose(
-            surf.compute_surface_area(), 4 * np.pi**2 * R0 * rho
-        )
+        np.testing.assert_allclose(surf.compute("S")["S"], 4 * np.pi**2 * R0 * rho)
 
     @pytest.mark.unit
     def test_get_zeta_surface(self):
@@ -430,7 +444,7 @@ class TestGetSurfaces:
         surf = eq.get_surface_at(zeta=np.pi)
         assert surf.zeta == np.pi
         rho = 1
-        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * rho**2)
+        np.testing.assert_allclose(surf.compute("A")["A"], np.pi * rho**2)
 
     @pytest.mark.unit
     def test_get_theta_surface(self):
@@ -458,7 +472,7 @@ def test_magnetic_axis(HELIOTRON_vac):
     grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))
 
     data = eq.compute(["R", "Z"], grid=grid)
-    coords = axis.compute_coordinates(grid=grid)
+    coords = axis.compute("x", grid=grid)["x"]
 
     np.testing.assert_allclose(coords[:, 0], data["R"])
     np.testing.assert_allclose(coords[:, 2], data["Z"])
@@ -472,9 +486,9 @@ def test_is_nested():
     assert eq.is_nested(grid=grid)
 
     eq.change_resolution(L=2, M=2)
-    eq.R_lmn[eq.R_basis.get_idx(L=1, M=1, N=0)] = 1
+    eq.R_lmn = put(eq.R_lmn, eq.R_basis.get_idx(L=1, M=1, N=0), 1)
     # make unnested by setting higher order mode to same amplitude as lower order mode
-    eq.R_lmn[eq.R_basis.get_idx(L=2, M=2, N=0)] = 1
+    eq.R_lmn = put(eq.R_lmn, eq.R_basis.get_idx(L=2, M=2, N=0), 1)
 
     assert not eq.is_nested(grid=grid)
     with pytest.warns(Warning) as record:

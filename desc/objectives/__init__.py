@@ -5,15 +5,11 @@ from ._equilibrium import (
     CurrentDensity,
     Energy,
     ForceBalance,
+    ForceBalanceAnisotropic,
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import (
-    GenericObjective,
-    ObjectiveFromUser,
-    RotationalTransform,
-    ToroidalCurrent,
-)
+from ._generic import GenericObjective, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
     BScaleLength,
@@ -23,6 +19,7 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
+from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._qs import (
     Isodynamicity,
     QuasisymmetryBoozer,
@@ -30,11 +27,19 @@ from ._qs import (
     QuasisymmetryTwoTerm,
 )
 from ._stability import MagneticWell, MercierStability
+from .getters import (
+    get_equilibrium_objective,
+    get_fixed_axis_constraints,
+    get_fixed_boundary_constraints,
+    get_NAE_constraints,
+    maybe_add_self_consistency,
+)
 from .linear_objectives import (
     AxisRSelfConsistency,
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    FixAnisotropy,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
@@ -46,18 +51,14 @@ from .linear_objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixModeLambda,
     FixModeR,
     FixModeZ,
     FixPressure,
     FixPsi,
+    FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
 )
 from .objective_funs import ObjectiveFunction
-from .utils import (
-    get_equilibrium_objective,
-    get_fixed_axis_constraints,
-    get_fixed_boundary_constraints,
-    get_NAE_constraints,
-)

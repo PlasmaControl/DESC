@@ -1,7 +1,5 @@
 """data_index contains all the quantities calculated by the compute functions."""
 
-data_index = {}
-
 
 def register_compute_fun(
     name,
@@ -15,8 +13,9 @@ def register_compute_fun(
     profiles,
     coordinates,
     data,
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
     axis_limit_data=None,
-    **kwargs
+    **kwargs,
 ):
     """Decorator to wrap a function and add it to the list of things we can compute.
 
@@ -47,6 +46,9 @@ def register_compute_fun(
         a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty.
+    parameterization: str or list of str
+        Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
+        or `desc.equilibrium.Equilibrium`.
     axis_limit_data : list of str
         Names of other items in the data index needed to compute axis limit of qty.
 
@@ -55,6 +57,9 @@ def register_compute_fun(
     Should only list *direct* dependencies. The full dependencies will be built
     recursively at runtime using each quantity's direct dependencies.
     """
+    if not isinstance(parameterization, (tuple, list)):
+        parameterization = [parameterization]
+
     deps = {
         "params": params,
         "transforms": transforms,
@@ -75,7 +80,76 @@ def register_compute_fun(
             "coordinates": coordinates,
             "dependencies": deps,
         }
-        data_index[name] = d
+        for p in parameterization:
+            flag = False
+            for base_class, superclasses in _class_inheritance.items():
+                if p in superclasses or p == base_class:
+                    if name in data_index[base_class]:
+                        raise ValueError(
+                            f"Already registered function with parameterization {p} and name {name}."
+                        )
+                    data_index[base_class][name] = d.copy()
+                    flag = True
+            if not flag:
+                raise ValueError(
+                    f"Can't register function with unknown parameterization: {p}"
+                )
         return func
 
     return _decorator
+
+
+# This allows us to handle subclasses whose data_index stuff should inherit
+# from parent classes.
+# This is the least bad solution I've found, since everything else requires
+# crazy circular imports
+# could maybe make this fancier with a registry of compute-able objects?
+_class_inheritance = {
+    "desc.equilibrium.equilibrium.Equilibrium": [],
+    "desc.geometry.curve.FourierRZCurve": [
+        "desc.geometry.core.Curve",
+    ],
+    "desc.geometry.curve.FourierXYZCurve": [
+        "desc.geometry.core.Curve",
+    ],
+    "desc.geometry.curve.FourierPlanarCurve": [
+        "desc.geometry.core.Curve",
+    ],
+    "desc.geometry.curve.SplineXYZCurve": [
+        "desc.geometry.core.Curve",
+    ],
+    "desc.geometry.surface.FourierRZToroidalSurface": [
+        "desc.geometry.core.Surface",
+    ],
+    "desc.geometry.surface.ZernikeRZToroidalSection": [
+        "desc.geometry.core.Surface",
+    ],
+    "desc.coils.FourierRZCoil": [
+        "desc.geometry.curve.FourierRZCurve",
+        "desc.geometry.core.Curve",
+    ],
+    "desc.coils.FourierXYZCoil": [
+        "desc.geometry.curve.FourierXYZCurve",
+        "desc.geometry.core.Curve",
+    ],
+    "desc.coils.FourierPlanarCoil": [
+        "desc.geometry.curve.FourierPlanarCurve",
+        "desc.geometry.core.Curve",
+    ],
+    "desc.magnetic_fields.CurrentPotentialField": [
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
+        "desc.magnetic_fields.MagneticField",
+    ],
+    "desc.magnetic_fields.FourierCurrentPotentialField": [
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
+        "desc.magnetic_fields.MagneticField",
+    ],
+    "desc.coils.SplineXYZCoil": [
+        "desc.geometry.curve.SplineXYZCurve",
+        "desc.geometry.core.Curve",
+    ],
+}
+
+data_index = {p: {} for p in _class_inheritance.keys()}

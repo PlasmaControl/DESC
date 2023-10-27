@@ -2,118 +2,196 @@
 
 import numpy as np
 import pytest
+from tests.test_axis_limits import not_implemented_limits
 
 import desc.io
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import data_index, get_params, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
 
 class _ExactValueProfile:
     """Monkey patches the compute method of desc.Profile for testing."""
 
-    def __init__(self, eq, grid):
-        self.eq = eq
-        self.grid = grid
-        self.transforms = get_transforms("current_rr", eq=eq, grid=grid)
-        self.profiles = get_profiles("current_rr", eq=eq, grid=grid)
-        self.params = get_params("current_rr", eq=eq, has_axis=grid.axis.size)
+    def __init__(self, eq, grid, profile_name):
+        names = []
+        dr = 0
+        while (
+            profile_name + "_" * bool(dr) + "r" * dr
+            in data_index["desc.equilibrium.equilibrium.Equilibrium"]
+        ):
+            names += [profile_name + "_" * bool(dr) + "r" * dr]
+            dr += 1
+        data = compute_fun(
+            parameterization="desc.equilibrium.equilibrium.Equilibrium",
+            names=names,
+            params=get_params(keys=names, obj=eq, has_axis=grid.axis.size),
+            transforms=get_transforms(keys=names, obj=eq, grid=grid),
+            profiles=get_profiles(keys=names, obj=eq, grid=grid),
+        )
+        self.output = {dr: data[name] for dr, name in enumerate(names)}
 
-    def compute(self, params, dr, *args, **kwargs):
-        if dr == 0:
-            # returns the surface average of B_theta in amperes
-            return compute_fun(
-                "current",
-                params=self.params,
-                transforms=self.transforms,
-                profiles=self.profiles,
-            )["current"]
-        if dr == 1:
-            # returns the surface average of B_theta_r in amperes
-            return compute_fun(
-                "current_r",
-                params=self.params,
-                transforms=self.transforms,
-                profiles=self.profiles,
-            )["current_r"]
-        if dr == 2:
-            # returns the surface average of B_theta_rr in amperes
-            return compute_fun(
-                "current_rr",
-                params=self.params,
-                transforms=self.transforms,
-                profiles=self.profiles,
-            )["current_rr"]
+    def compute(self, grid, params, dr, *args, **kwargs):
+        return self.output.get(dr, np.nan)
 
 
 class TestConstrainCurrent:
-    """Tests for running DESC with a fixed current profile."""
+    """Tests for computing iota from fixed current profile and vice versa.
+
+    The equations referenced in the descriptions below refer to the document
+    attached to the description of GitHub pull request #556.
+    """
 
     @pytest.mark.unit
     @pytest.mark.solve
-    def test_compute_rotational_transform(self, DSHAPE, HELIOTRON_vac):
-        """Test that compute functions recover iota and radial derivatives.
+    def test_iota_to_current_and_back(self, DSHAPE):
+        """Test we can recover the rotational transform in simple cases.
 
-        When the current is fixed to the current computed on an equilibrium
-        solved with iota fixed.
+        Given ``iota``, compute ``I(iota)`` as defined in equation 6.
+        Use that ``I(iota)`` to compute ``iota(I)`` as defined in equation 18.
+        Check that this output matches the input.
 
-        This tests that rotational transform computations from fixed-current profiles
-        are correct, among other things. For example, this test will fail if
-        the compute functions for iota from a current profile are incorrect.
+        Cross-validates the computation of the rotational transform by feeding
+        the resulting enclosed net toroidal current of an equilibrium with a
+        known rotational transform to a method which computes the rotational
+        transform as a function of enclosed net toroidal current.
+
+        This tests that rotational transform computations from known toroidal
+        current profiles are correct, among other things. For example, this test
+        will fail if the compute functions for iota given a current profile are
+        incorrect.
         """
+        names = ["iota", "iota_r"]
+        while names[-1] + "r" in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
+            names += [names[-1] + "r"]
 
         def test(stellarator, grid_type):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            if grid_type == "Quadrature":
-                grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-            elif grid_type == "Concentric":
-                grid = ConcentricGrid(
-                    L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
-                )
-            else:
-                # Todo: set axis to true when every quantity's limit at the axis
-                #  can be computed.
-                grid = LinearGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                )
+            kwargs = {"L": eq.L_grid, "M": eq.M_grid, "N": eq.N_grid, "NFP": eq.NFP}
+            if grid_type != QuadratureGrid:
+                kwargs["sym"] = eq.sym
+            if grid_type == LinearGrid:
+                kwargs["axis"] = True
+            grid = grid_type(**kwargs)
 
-            params = {
-                "R_lmn": eq.R_lmn,
-                "Z_lmn": eq.Z_lmn,
-                "L_lmn": eq.L_lmn,
-                "i_l": None,
-                "c_l": None,
-                "Psi": eq.Psi,
+            params = get_params(keys=names, obj=eq, has_axis=grid.axis.size)
+            transforms = get_transforms(keys=names, obj=eq, grid=grid)
+            profiles = get_profiles(keys=names, obj=eq, grid=grid)
+            # Compute rotational transform directly from the power series which
+            # defines it.
+            desired = {
+                name: profiles[names[0]].compute(grid, params=params["i_l"], dr=dr)
+                for dr, name in enumerate(names)
             }
-            transforms = get_transforms("iota_rr", eq=eq, grid=grid)
-            profiles = {"iota": None, "current": _ExactValueProfile(eq, grid)}
-            # compute rotational transform from the above current profile, which
-            # is monkey patched to return a surface average of B_theta in amps
-            data = compute_fun(
-                ["iota", "iota_r", "iota_rr"],
-                params=params,
-                transforms=transforms,
-                profiles=profiles,
+            # Compute rotational transform using the below toroidal current,
+            # which is monkey patched to return equation 6 in amps.
+            monkey_patched_profile = _ExactValueProfile(
+                eq=eq, grid=grid, profile_name="current"
             )
-            # compute rotational transform using the equilibrium's default
-            # profile (directly from the power series which defines iota
-            # if the equilibrium fixes iota)
-            benchmark_data = compute_fun(
-                ["iota", "iota_r", "iota_rr"],
-                params=get_params("iota_rr", eq=eq, has_axis=grid.axis.size),
+            actual = compute_fun(
+                parameterization="desc.equilibrium.equilibrium.Equilibrium",
+                names=names,
+                params=dict(params, c_l=None, i_l=None),
                 transforms=transforms,
-                profiles=get_profiles("iota_rr", eq=eq, grid=grid),
+                profiles=dict(profiles, current=monkey_patched_profile, iota=None),
             )
-            np.testing.assert_allclose(data["iota"], benchmark_data["iota"])
-            np.testing.assert_allclose(data["iota_r"], benchmark_data["iota_r"])
-            np.testing.assert_allclose(data["iota_rr"], benchmark_data["iota_rr"])
 
-        for e in ("Quadrature", "Concentric", "Linear"):
-            # works with any stellarators in desc/examples with fixed iota profiles
-            test(DSHAPE, e)
-            test(HELIOTRON_vac, e)
+            # Evaluating the order n derivative of the rotational transform at
+            # the magnetic axis using a given toroidal current profile requires
+            # the order n + 2 derivative of that toroidal current profile.
+            # Computing the order n derivative of the resulting toroidal current
+            # as a function of rotational transform requires the order n
+            # derivative of the rotational transform.
+            # Therefore, this test cannot be used to cross-validate the magnetic
+            # axis limit of the two highest order derivatives of the rotational
+            # transform in data_index.
+            at_axis = grid.nodes[:, 0] == 0
+            for index, name in enumerate(names):
+                # don't try to validate if we can't compute axis limit yet
+                validate_axis = (
+                    index < len(names) - 2
+                ) and name not in not_implemented_limits
+                mask = (validate_axis & at_axis) | ~at_axis
+                np.testing.assert_allclose(
+                    actual=actual[name][mask],
+                    desired=desired[name][mask],
+                    equal_nan=False,
+                    err_msg=name,
+                )
+
+        # Only makes sense to test on configurations with fixed iota profiles.
+        test(DSHAPE, QuadratureGrid)
+        test(DSHAPE, ConcentricGrid)
+        test(DSHAPE, LinearGrid)
+
+    @pytest.mark.unit
+    @pytest.mark.solve
+    def test_current_to_iota_and_back(self, HELIOTRON_vac):
+        """Test we can recover the enclosed net toroidal current in simple cases.
+
+        Given ``I``, compute ``iota(I)`` as defined in equation 18.
+        Use that ``iota(I)`` to compute ``I(iota)`` as defined in equation 6.
+        Check that this output matches the input.
+
+        Cross-validates the computation of the enclosed net toroidal current by
+        feeding the resulting rotational transform of an equilibrium with a
+        known toroidal current profile to a method which computes the enclosed
+        net toroidal current as a function of rotational transform.
+
+        This tests that toroidal current computations from known rotational
+        transform profiles are correct, among other things. For example, this
+        test will fail if the compute functions for current as a function of
+        iota are incorrect.
+        """
+        names = ["current", "current_r"]
+        while names[-1] + "r" in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
+            names += [names[-1] + "r"]
+
+        def test(stellarator, grid_type):
+            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+            kwargs = {"L": eq.L_grid, "M": eq.M_grid, "N": eq.N_grid, "NFP": eq.NFP}
+            if grid_type != QuadratureGrid:
+                kwargs["sym"] = eq.sym
+            if grid_type == LinearGrid:
+                kwargs["axis"] = True
+            grid = grid_type(**kwargs)
+
+            params = get_params(keys=names, obj=eq, has_axis=grid.axis.size)
+            transforms = get_transforms(keys=names, obj=eq, grid=grid)
+            profiles = get_profiles(keys=names, obj=eq, grid=grid)
+            # Compute toroidal current directly from the power series which
+            # defines it. Recall that vacuum objective sets a current profile.
+            desired = {
+                name: profiles[names[0]].compute(grid, params=params["c_l"], dr=dr)
+                for dr, name in enumerate(names)
+            }
+            # Compute toroidal current using the below rotational transform,
+            # which is monkey patched to return equation 18.
+            monkey_patched_profile = _ExactValueProfile(
+                eq=eq, grid=grid, profile_name="iota"
+            )
+            actual = compute_fun(
+                parameterization="desc.equilibrium.equilibrium.Equilibrium",
+                names=names,
+                params=dict(params, c_l=None, i_l=None),
+                transforms=transforms,
+                profiles=dict(profiles, current=None, iota=monkey_patched_profile),
+            )
+
+            at_axis = grid.nodes[:, 0] == 0
+            for name in names:
+                # don't try to validate if we can't compute axis limit yet
+                validate_axis = name not in not_implemented_limits
+                mask = (validate_axis & at_axis) | ~at_axis
+                np.testing.assert_allclose(
+                    actual=actual[name][mask],
+                    desired=desired[name][mask],
+                    atol=1e-7,
+                    equal_nan=False,
+                    err_msg=name,
+                )
+
+        # Only makes sense to test on configurations with fixed current profiles.
+        test(HELIOTRON_vac, QuadratureGrid)
+        test(HELIOTRON_vac, ConcentricGrid)
+        test(HELIOTRON_vac, LinearGrid)

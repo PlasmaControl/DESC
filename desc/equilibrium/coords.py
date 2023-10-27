@@ -1,5 +1,6 @@
 """Functions for mapping between flux, sfl, and real space coordinates."""
 
+import functools
 import warnings
 
 import numpy as np
@@ -7,7 +8,7 @@ from termcolor import colored
 
 from desc.backend import fori_loop, jit, jnp, put, while_loop
 from desc.compute import compute as compute_fun
-from desc.compute import data_index, get_transforms
+from desc.compute import data_index, get_params, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Index
@@ -29,6 +30,9 @@ def map_coordinates(  # noqa: C901
     First solves for the computational coordinates that correspond to inbasis, then
     evaluates outbasis at those locations.
 
+    Speed can often be significantly improved by providing a reasonable initial guess.
+    The default is a nearest neighbor search on a coarse grid.
+
     NOTE: this function cannot be JIT compiled or differentiated with AD.
 
     Parameters
@@ -44,7 +48,7 @@ def map_coordinates(  # noqa: C901
         same as the compute function data key
     guess : None or ndarray, shape(k,3)
         Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
-        coresponding to coords in inbasis. If None, heuristics are used based on
+        corresponding to coords in inbasis. If None, heuristics are used based on
         in basis and a nearest neighbor search on a coarse grid.
     period : tuple of float
         Assumed periodicity for each quantity in inbasis.
@@ -62,17 +66,17 @@ def map_coordinates(  # noqa: C901
         coordinate is not in the plasma volume.
 
     """
-    inbasis = list(inbasis)
-    outbasis = list(outbasis)
+    inbasis = tuple(inbasis)
+    outbasis = tuple(outbasis)
     assert (
         np.isfinite(maxiter) and maxiter > 0
     ), f"maxiter must be a positive integer, got {maxiter}"
     assert np.isfinite(tol) and tol > 0, f"tol must be a positive float, got {tol}"
 
-    basis_derivs = [f"{X}_{d}" for X in inbasis for d in ("r", "t", "z")]
+    basis_derivs = tuple([f"{X}_{d}" for X in inbasis for d in ("r", "t", "z")])
     for key in basis_derivs:
         assert (
-            key in data_index.keys()
+            key in data_index["desc.equilibrium.equilibrium.Equilibrium"]
         ), f"don't have recipe to compute partial derivative {key}"
 
     rhomin = kwargs.pop("rhomin", tol / 10)
@@ -82,17 +86,27 @@ def map_coordinates(  # noqa: C901
     period = np.asarray(period)
     coords = coords % period
 
-    # can't use AD or jit compile this because of grid stuff
+    params = get_params(inbasis + basis_derivs, eq)
+
+    @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
-        data = eq.compute(basis, grid=Grid(y, sort=False))
+        grid = Grid(y, sort=False, jitable=True)
+        profiles = get_profiles(inbasis + basis_derivs, eq, grid, jitable=True)
+        # do surface average to get iota once
+        if "current" in profiles and profiles["current"] is not None:
+            profiles["iota"] = eq.get_profile("iota")
+        transforms = get_transforms(inbasis + basis_derivs, eq, grid, jitable=True)
+        data = compute_fun(eq, basis, params, transforms, profiles)
         x = jnp.stack([data[k] for k in basis], axis=-1)
         return x
 
+    @jit
     def residual(y):
         xk = compute(y, inbasis)
         r = xk % period - coords % period
         return jnp.where(r > period / 2, -period + r, r)
 
+    @jit
     def jac(y):
         J = compute(y, basis_derivs)
         J = J.reshape((-1, 3, 3))
@@ -118,25 +132,7 @@ def map_coordinates(  # noqa: C901
     yk = guess
     if yk is None:
         # nearest neighbor search on coarse grid for initial guess
-        rho_g = theta_g = zeta_g = None
-        if "rho" in inbasis:
-            rho_g = np.unique(coords[:, inbasis.index("rho")])
-        else:
-            rho_g = np.linspace(0, 1, eq.L_grid + 1)
-        if "theta" in inbasis:
-            theta_g = np.unique(coords[:, inbasis.index("theta")])
-        elif "theta_PEST" in inbasis:  # lambda is usually small
-            theta_g = np.unique(coords[:, inbasis.index("theta_PEST")])
-        else:
-            theta_g = np.linspace(0, 2 * np.pi, 2 * eq.M_grid + 1)
-        if "zeta" in inbasis:
-            zeta_g = np.unique(coords[:, inbasis.index("zeta")])
-        elif "phi" in inbasis:
-            zeta_g = np.unique(coords[:, inbasis.index("phi")])
-        else:
-            zeta_g = np.linspace(0, 2 * np.pi, 2 * eq.N_grid * eq.NFP + 1)
-
-        yg = LinearGrid(rho=rho_g, theta=theta_g, zeta=zeta_g).nodes
+        yg = ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP).nodes
         xg = compute(yg, inbasis)
         idx = jnp.zeros(len(coords)).astype(int)
         coords = jnp.asarray(coords)
@@ -151,6 +147,18 @@ def map_coordinates(  # noqa: C901
 
         idx = fori_loop(0, len(coords), _distance_body, idx)
         yk = yg[idx]
+
+        # apply some heuristics based on common patterns
+        if "rho" in inbasis:
+            yk = put(yk.T, 0, coords[:, inbasis.index("rho")]).T
+        if "theta" in inbasis:
+            yk = put(yk.T, 1, coords[:, inbasis.index("theta")]).T
+        elif "theta_PEST" in inbasis:  # lambda is usually small
+            yk = put(yk.T, 1, coords[:, inbasis.index("theta_PEST")]).T
+        if "zeta" in inbasis:
+            yk = put(yk.T, 2, coords[:, inbasis.index("zeta")]).T
+        elif "phi" in inbasis:
+            yk = put(yk.T, 2, coords[:, inbasis.index("phi")]).T
 
     yk = fixup(yk)
     resk = residual(yk)
@@ -190,8 +198,7 @@ def map_coordinates(  # noqa: C901
 
     yk = jnp.vstack([r, t, z]).T
 
-    data = eq.compute(outbasis, grid=Grid(yk, sort=False))
-    out = jnp.stack([data[k] for k in outbasis], axis=-1)
+    out = compute(yk, outbasis)
 
     return out
 
@@ -406,8 +413,9 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-    transforms = get_transforms("sqrt(g)_PEST", eq=eq, grid=grid)
+    transforms = get_transforms("sqrt(g)_PEST", obj=eq, grid=grid)
     data = compute_fun(
+        "desc.equilibrium.equilibrium.Equilibrium",
         "sqrt(g)_PEST",
         params={
             "R_lmn": R_lmn,

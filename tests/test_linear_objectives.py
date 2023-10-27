@@ -9,6 +9,7 @@ from desc.compute import arg_order
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
+from desc.io import load
 from desc.objectives import (
     AspectRatio,
     AxisRSelfConsistency,
@@ -26,10 +27,12 @@ from desc.objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixModeLambda,
     FixModeR,
     FixModeZ,
     FixPressure,
     FixPsi,
+    FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
@@ -49,9 +52,7 @@ from desc.profiles import PowerSeriesProfile
 def test_LambdaGauge_sym(DummyStellarator):
     """Test that lambda is fixed correctly for symmetric equilibrium."""
     # symmetric cases automatically satisfy gauge freedom, no constraint needed.
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
     eq.change_resolution(L=2, M=1, N=1)
     correct_constraint_matrix = np.zeros((0, 5))
     lam_con = FixLambdaGauge(eq)
@@ -68,7 +69,7 @@ def test_LambdaGauge_asym():
         "NFP": 3,
         "Psi": 1.0,
         "L": 2,
-        "M": 0,
+        "M": 2,
         "N": 1,
         "pressure": np.array([[0, 1e4], [2, -2e4], [4, 1e4]]),
         "iota": np.array([[0, 0.5], [2, 0.5]]),
@@ -217,6 +218,10 @@ def test_fixed_modes_solve():
     fixZ = FixSumModesZ(
         eq=eq, modes=modes_Z, sum_weights=np.array([1, 2])
     )  # no target supplied, so defaults to the eq's current sum
+    fixLambda = FixSumModesLambda(
+        eq=eq, modes=modes_Z, sum_weights=np.array([1, 2])
+    )  # no target supplied, so defaults to the eq's current sum
+
     orig_R_val = (
         eq.R_lmn[eq.R_basis.get_idx(L=modes_R[0, 0], M=modes_R[0, 1], N=0)]
         + 2 * eq.R_lmn[eq.R_basis.get_idx(L=modes_R[1, 0], M=modes_R[1, 1], N=0)]
@@ -225,7 +230,10 @@ def test_fixed_modes_solve():
         eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[0, 0], M=modes_Z[0, 1], N=0)]
         + 2 * eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[1, 0], M=modes_Z[1, 1], N=0)]
     )
-
+    orig_Lambda_val = (
+        eq.L_lmn[eq.L_basis.get_idx(L=modes_Z[0, 0], M=modes_Z[0, 1], N=0)]
+        + 2 * eq.L_lmn[eq.L_basis.get_idx(L=modes_Z[1, 0], M=modes_Z[1, 1], N=0)]
+    )
     constraints = (
         FixLambdaGauge(eq=eq),
         FixPressure(eq=eq),
@@ -235,6 +243,7 @@ def test_fixed_modes_solve():
         FixBoundaryZ(eq=eq),
         fixR,
         fixZ,
+        fixLambda,
     )
 
     eq.solve(
@@ -254,9 +263,14 @@ def test_fixed_modes_solve():
         eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[0, 0], M=modes_Z[0, 1], N=0)]
         + 2 * eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[1, 0], M=modes_Z[1, 1], N=0)]
     )
+    new_Lambda_val = (
+        eq.L_lmn[eq.L_basis.get_idx(L=modes_Z[0, 0], M=modes_Z[0, 1], N=0)]
+        + 2 * eq.L_lmn[eq.L_basis.get_idx(L=modes_Z[1, 0], M=modes_Z[1, 1], N=0)]
+    )
 
     np.testing.assert_almost_equal(orig_R_val, new_R_val)
     np.testing.assert_almost_equal(orig_Z_val, new_Z_val)
+    np.testing.assert_almost_equal(orig_Lambda_val, new_Lambda_val)
 
 
 @pytest.mark.regression
@@ -535,6 +549,7 @@ def test_correct_indexing_passed_modes_axis():
         AxisZSelfConsistency(eq=eq),
         FixModeR(eq=eq, modes=np.array([[1, 1, 1], [2, 2, 2]]), normalize=False),
         FixModeZ(eq=eq, modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
+        FixModeLambda(eq=eq, modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
         FixSumModesR(
             eq=eq,
             modes=np.array([[3, 3, 3], [4, 4, 4]]),
@@ -629,6 +644,17 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             ),
             normalize=False,
         ),
+        FixModeLambda(
+            eq=eq,
+            modes=np.array([[1, 1, -1], [2, 2, -2]]),
+            target=np.array(
+                [
+                    eq.L_lmn[eq.L_basis.get_idx(*(1, 1, -1))],
+                    eq.L_lmn[eq.L_basis.get_idx(*(2, 2, -2))],
+                ]
+            ),
+            normalize=False,
+        ),
         FixSumModesR(
             eq=eq,
             modes=np.array([[3, 3, 3], [4, 4, 4]]),
@@ -647,6 +673,17 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
                 [
                     eq.Z_lmn[eq.Z_basis.get_idx(*(3, 3, -3))]
                     + eq.Z_lmn[eq.Z_basis.get_idx(*(4, 4, -4))]
+                ]
+            ),
+            normalize=False,
+        ),
+        FixSumModesLambda(
+            eq=eq,
+            modes=np.array([[3, 3, -3], [4, 4, -4]]),
+            target=np.array(
+                [
+                    eq.L_lmn[eq.L_basis.get_idx(*(3, 3, -3))]
+                    + eq.L_lmn[eq.L_basis.get_idx(*(4, 4, -4))]
                 ]
             ),
             normalize=False,
@@ -734,7 +771,10 @@ def test_FixMode_passed_target_no_passed_modes_error():
         FixZ.build()
     FixR = FixModeR(eq=eq, modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
-        FixR.build()
+        FixR.build(eq)
+    FixL = FixModeLambda(eq=eq, modes=True, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixL.build(eq)
 
 
 @pytest.mark.unit
@@ -746,6 +786,10 @@ def test_FixSumModes_passed_target_too_long():
         FixSumModesZ(modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
         FixSumModesR(modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixSumModesLambda(
+            modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]])
+        )
 
 
 @pytest.mark.unit
@@ -759,6 +803,10 @@ def test_FixMode_False_or_None_modes():
         FixModeZ(modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
         FixModeZ(modes=None, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixModeLambda(modes=False, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixModeLambda(modes=None, target=np.array([[0, 1]]))
 
 
 @pytest.mark.unit
@@ -772,6 +820,10 @@ def test_FixSumModes_False_or_None_modes():
         FixSumModesR(modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
         FixSumModesR(modes=None, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixSumModesLambda(modes=False, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixSumModesLambda(modes=None, target=np.array([[0, 1]]))
 
 
 def _is_any_instance(things, cls):

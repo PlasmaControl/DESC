@@ -51,6 +51,7 @@ def calc_BNORM_from_coilset(
 
 
     """
+    plt.rcParams.update({"font.size": 24})
     if isinstance(eqname, str):
         eq = load(eqname)
     elif isinstance(eqname, EquilibriaFamily) or isinstance(eqname, Equilibrium):
@@ -107,7 +108,10 @@ def calc_BNORM_from_coilset(
     print(f"eq average |B| on axis: {np.mean(np.abs(data_ax['|B|']))}\n")
     print("|B| on axis eq / |B| on axis coil :" f"{axis_B_ratio}\n")
 
-    plt.rcParams.update({"font.size": 22})
+    plt.rcParams.update({"font.size": 30})
+    plt.rcParams.update({"ytick.labelsize": 22})
+    plt.rcParams.update({"xtick.labelsize": 22})
+
     plt.figure(figsize=(8, 8))
     plt.contourf(
         grid.nodes[grid.unique_theta_idx, 1],
@@ -118,7 +122,7 @@ def calc_BNORM_from_coilset(
     plt.xlabel(r"$\theta$")
     plt.ylabel(r"$\zeta$")
 
-    plt.title("Bnormal from coilset")
+    plt.title(kwargs.get("title", "Bnormal from coilset"))
 
     if save:
         plt.savefig(

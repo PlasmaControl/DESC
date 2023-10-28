@@ -76,6 +76,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     verbose=1,
     dirname=".",
     override_G=None,
+    sym_Phi="sin",
 ):
     """Python regcoil to find single-valued current potential.
 
@@ -135,6 +136,9 @@ def run_regcoil(  # noqa: C901 fxn too complex
             should not include the trailing '/'
     override_G : float
         if given, use this G instead of that calculated from the equilibrium
+    sym_Phi: {"sin","cos",False}
+        one of "sin","cos" or False, the symmetry to use for the current potential
+        basis
 
     Returns
     -------
@@ -223,7 +227,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         winding_surf,
         Phi_mn=jnp.zeros(curr_pot_basis.num_modes),
         modes_Phi=curr_pot_basis.modes[:, 1:],
-        sym_Phi="sin",
+        sym_Phi=sym_Phi,
     )
 
     # calculate net enclosed poloidal and toroidal currents

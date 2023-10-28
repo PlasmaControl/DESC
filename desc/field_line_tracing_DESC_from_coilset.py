@@ -83,9 +83,10 @@ def field_trace_from_coilset(
     else:
         assert isinstance(coils, _MagneticField)
         dirname = dirname if dirname else eqname
-
-    N_grid = coils[0].X.size
-
+    if hasattr(coils[0], "X"):
+        N_grid = coils[0].X.size * 2 + 5
+    else:
+        N_grid = coils[0].N * 2 + 5
     if external_TF:
         coils = SumMagneticField(coils, external_TF)
     else:
@@ -100,7 +101,7 @@ def field_trace_from_coilset(
     # set initial Z positions to zero
     print("Beginning Field Line Integration")
 
-    grid = LinearGrid(N=2 * N_grid + 5, NFP=1, endpoint=True)
+    grid = LinearGrid(N=N_grid, NFP=1, endpoint=True)
 
     # integrate field lines
     field_R, field_Z = field_line_integrate(

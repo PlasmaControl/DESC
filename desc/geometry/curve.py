@@ -9,6 +9,7 @@ from desc.basis import FourierSeries
 from desc.compute import rpz2xyz
 from desc.grid import LinearGrid
 from desc.io import InputReader
+from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
 from desc.utils import copy_coeffs, errorif
 
@@ -170,6 +171,7 @@ class FourierRZCurve(Curve):
                 idxZ = self.Z_basis.get_idx(0, 0, nn)
                 self.Z_n = put(self.Z_n, idxZ, ZZ)
 
+    @optimizable_parameter
     @property
     def R_n(self):
         """Spectral coefficients for R."""
@@ -185,6 +187,7 @@ class FourierRZCurve(Curve):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_n(self):
         """Spectral coefficients for Z."""
@@ -369,6 +372,7 @@ class FourierXYZCurve(Curve):
             if ZZ is not None:
                 self.Z_n = put(self.Z_n, idx, ZZ)
 
+    @optimizable_parameter
     @property
     def X_n(self):
         """Spectral coefficients for X."""
@@ -384,6 +388,7 @@ class FourierXYZCurve(Curve):
                 + f"basis with {self.X_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Y_n(self):
         """Spectral coefficients for Y."""
@@ -399,6 +404,7 @@ class FourierXYZCurve(Curve):
                 + f"basis with {self.Y_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_n(self):
         """Spectral coefficients for Z."""
@@ -550,6 +556,7 @@ class FourierPlanarCurve(Curve):
             self.r_basis.change_resolution(N=N)
             self.r_n = copy_coeffs(self.r_n, modes_old, self.r_basis.modes)
 
+    @optimizable_parameter
     @property
     def center(self):
         """Center of planar curve polar coordinates."""
@@ -564,6 +571,7 @@ class FourierPlanarCurve(Curve):
                 "center should be a 3 element vector [cx, cy, cz], got {}".format(new)
             )
 
+    @optimizable_parameter
     @property
     def normal(self):
         """Normal vector to plane."""
@@ -578,6 +586,7 @@ class FourierPlanarCurve(Curve):
                 "normal should be a 3 element vector [nx, ny, nz], got {}".format(new)
             )
 
+    @optimizable_parameter
     @property
     def r_n(self):
         """Spectral coefficients for r."""

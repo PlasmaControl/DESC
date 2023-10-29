@@ -375,6 +375,17 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
                     f"m btwn start point and endpoint",
                     RuntimeWarning,
                 )
+            trace = go.Scatter3d(
+                x=coords[:, 0],
+                y=coords[:, 1],
+                z=coords[:, 2],
+                marker=dict(size=0, opacity=0),
+                line=dict(color=color, width=6, dash=ls),
+                showlegend=False,
+                name=label,
+                hovertext=label,
+            )
+            fig.add_trace(trace)
 
         # Find the point of minimum separation
         if find_min_dist:
@@ -393,46 +404,9 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
                     this_minSeparation2 = jnp.min(d)
                     if this_minSeparation2 < minSeparation2:
                         minSeparation2 = this_minSeparation2
-                trace = go.Scatter3d(
-                    x=coords1[:, 0],
-                    y=coords1[:, 1],
-                    z=coords1[:, 2],
-                    marker=dict(
-                        size=8,
-                    ),
-                    line=dict(
-                        color=color,
-                        width=8,
-                        dash=ls,
-                    ),
-                    showlegend=False,
-                    name=label,
-                    hovertext=label,
-                )
-                fig.add_trace(trace)
 
             print(f"Minimum coil-coil separation: {minSeparation2*1000:3.2f} mm")
         return contour_X, contour_Y, contour_Z, fig
-
-    plt.figure()
-    plt.plot(contour_zeta[0], contour_theta[0])
-    plt.scatter(contour_zeta[0][0], contour_theta[0][0], c="r", label="start")
-    plt.scatter(contour_zeta[0][-1], contour_theta[0][-1], c="b", label="end")
-    plt.legend()
-
-    plt.xlabel("zeta")
-    plt.ylabel("theta")
-    plt.title("first coil theta,zeta curve")
-    index = 1
-    plt.figure()
-    plt.plot(contour_zeta[index], contour_theta[index])
-    plt.scatter(contour_zeta[index][0], contour_theta[index][0], c="r", label="start")
-    plt.scatter(contour_zeta[index][-1], contour_theta[index][-1], c="b", label="end")
-    plt.legend()
-
-    plt.xlabel("zeta")
-    plt.ylabel("theta")
-    plt.title("2nd coil theta,zeta curve")
 
     contour_X, contour_Y, contour_Z, fig = find_XYZ_points(
         contour_theta,
@@ -450,23 +424,12 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
         find_min_dist=False,
         label="Initial",
         color="tomato",
-        ls="dash",
+        ls="dashdot",
         fig=fig,
     )
     if fig and save_figs:
         fig.show()
-    fig2 = plot_3d(eq, "|B|", figsize=(12, 12))
-    _, _, _, fig2 = find_XYZ_points(
-        contour_theta_initial,
-        contour_zeta_initial,
-        winding_surf,
-        find_min_dist=False,
-        label="Initial",
-        color="tomato",
-        ls="dashdot",
-        fig=fig2,
-    )
-    fig2.show()
+
     # TODO: update deps to include kaleido so can save 3D figs
     # needs kaleido:fig.write_image("3D_coils" + coilsFilename.strip(".txt") + ".png")
 

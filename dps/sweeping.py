@@ -44,7 +44,7 @@ time = jnp.linspace(tmin, tmax, nt)
 initial_conditions = ini_cond
 Mass_Charge_Ratio = Mass/Charge
 
-r01 = np.arange(-0.2, 0.2, 0.01)
+r01 = np.arange(-0.2, 0.2, 0.05)
 
 f_values = []
 

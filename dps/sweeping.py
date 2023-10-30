@@ -72,7 +72,7 @@ for R01 in r01:
 
     intermediate_time = timet()
 
-    objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1.4e-8)
+    objective = ParticleTracer(eq=eq, weight=10e8, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1.4e-8)
 
     objective.build()
     solution = objective.compute(*objective.xs(eq))

@@ -18,7 +18,7 @@ initial_time = timet()
 
 # INITIAL STATE AND PARAMETERS
 # Energy and Mass info
-Energy_eV = 3.52e6
+Energy_eV = 1 #3.52e6
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
 
@@ -44,7 +44,7 @@ time = jnp.linspace(tmin, tmax, nt)
 initial_conditions = ini_cond
 Mass_Charge_Ratio = Mass/Charge
 
-r01 = np.arange(-0.2, 0.2, 0.05)
+r01 = np.arange(-0.2, 0.2, 0.025)
 
 f_values = []
 
@@ -85,11 +85,13 @@ for R01 in r01:
     print("***************************************************")
     f_values.append(solution)
 
-plt.plot(r01, f_values, 'o', color='red', label='F function values for R01')
+f = np.asarray(f_values)
+plt.plot(r01, f, 'o', color='red', label='F function values for R01')
 plt.xlabel('R01')
 plt.ylabel('F function values')
 plt.savefig('f_values.png')
 
+np.savetxt('r01_f_values.txt', np.c_[r01, f], delimiter=' ')
 final_time = timet()
 print(f"Total time: {final_time - initial_time}s")
 print("*********************** END ***********************")

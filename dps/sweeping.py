@@ -49,6 +49,7 @@ r01 = np.arange(-0.2, 0.2, 0.05)
 f_values = []
 
 for R01 in r01:
+    print(f"R01: {R01}; Tteration: {r01.tolist().index(R01)} of {len(r01)}")
     surf = FourierRZToroidalSurface(
         R_lmn=[1, 0.125, R01], #alterar 0.1
         Z_lmn=[-0.125, -0.1],

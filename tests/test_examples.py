@@ -1259,7 +1259,7 @@ def test_regcoil_ellipse_modular():
 
     # test finding coils
 
-    numCoils = 90
+    numCoils = 60
     coilsFilename = "./coilsfile_160.txt"
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
@@ -1276,6 +1276,8 @@ def test_regcoil_ellipse_modular():
         step=6,
         save_figs=False,
     )
+
+    coilset2 = coilset2.to_FourierXYZ(N=60)
 
     fieldR, fieldZ = field_trace_from_coilset(
         coilset2, eq, 15, only_return_data=True, Rs=np.linspace(0.685, 0.715, 10)

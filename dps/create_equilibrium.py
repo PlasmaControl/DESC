@@ -14,7 +14,7 @@ surf = FourierRZToroidalSurface(
     modes_Z=[[-1, 0], [0, -1]],
     NFP=3,
 )
-eq = Equilibrium(M=2, N=2, Psi=1, surface=surf)
+eq = Equilibrium(M=1, N=1, Psi=1, surface=surf)
 eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[-1]
 #eq.Psi = eq.Psi/19
 

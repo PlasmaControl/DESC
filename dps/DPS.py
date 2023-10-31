@@ -9,6 +9,10 @@ import numpy as np
 from time import time as timet
 import desc.equilibrium
 from desc.objectives import ParticleTracer, ObjectiveFunction, ForceBalance, FixBoundaryR, FixBoundaryZ, FixPressure, FixIota, FixPsi
+from desc.geometry import FourierRZToroidalSurface
+from desc.equilibrium import Equilibrium
+from desc.continuation import solve_continuation_automatic
+
 
 initial_time = timet()
 
@@ -71,8 +75,22 @@ print("*************** START ***************")
 # Load Equilibrium
 
 print("\nStarting Equilibrium")
-eq_file = "input.LandremanPaul2021_QA_scaled_output.h5"
+# eq_file = "input.LandremanPaul2021_QA_scaled_output.h5"
 #eq_file = "test_equilibrium.h5"
+
+surf = FourierRZToroidalSurface(
+    R_lmn=[1, 0.125, 0.1], #alterar 0.1
+    Z_lmn=[-0.125, -0.1],
+    modes_R=[[0, 0], [1, 0], [0, 1]],
+    modes_Z=[[-1, 0], [0, -1]],
+    NFP=3,
+)
+eq = Equilibrium(M=2, N=2, Psi=1, surface=surf)
+eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[-1]
+eq.save("DPS_eq.h5")
+
+eq_file = "DPS_eq.h5"
+
 opt_file = "optimized_" + eq_file
 print(f"Loaded Equilibrium: {eq_file}\n")
 
@@ -99,7 +117,7 @@ ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
-tmax = 1e-5
+tmax = 1e-4
 nt = 1000
 time = jnp.linspace(tmin, tmax, nt)
 

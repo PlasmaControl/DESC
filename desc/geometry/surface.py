@@ -18,7 +18,178 @@ __all__ = [
     "ZernikeRZToroidalSection",
     "convert_coefficients",
     "FiniteElementRZToroidalSurface",
+    "TriangleFiniteElement",
 ]
+
+
+class TriangleFiniteElement:
+    """Class representing a triangle in a 2D grid of finite elements.
+
+    Parameters
+    ----------
+    vertices: array-like, shape(3, 2)
+        The three vertices of the triangle in (theta_i, zeta_i)
+    K: integer
+        The order of the finite elements to use, which gives (K+1)(K+2) / 2
+        basis functions.
+    """
+
+    def __init__(self, vertices, K=1):
+        self.vertices = vertices
+        a1 = vertices[1, 0] * vertices[2, 1] - vertices[2, 0] * vertices[1, 1]
+        a2 = vertices[2, 0] * vertices[0, 1] - vertices[0, 0] * vertices[2, 1]
+        a3 = vertices[0, 0] * vertices[1, 1] - vertices[1, 0] * vertices[0, 1]
+        self.a = np.array([a1, a2, a3])
+        b1 = vertices[1, 1] - vertices[2, 1]
+        b2 = vertices[2, 1] - vertices[0, 1]
+        b3 = vertices[0, 1] - vertices[1, 1]
+        self.b = np.array([b1, b2, b3])
+        c1 = vertices[2, 0] - vertices[1, 0]
+        c2 = vertices[0, 0] - vertices[2, 0]
+        c3 = vertices[1, 0] - vertices[0, 0]
+        self.c = np.array([c1, c2, c3])
+        self.area = self.vertices[:, 0] @ self.b
+        self.N_k = int((K + 1) * (K + 2) / 2)
+        self.K = K
+
+        # Going to construct equally spaced nodes for order K triangle,
+        # which gives N_k such nodes.
+        nodes = []
+
+        # Start with the vertices of the triangle
+        for i in range(3):
+            nodes.append(vertices[i, :])
+
+        # If K = 1, the vertices are the only nodes for basis functions
+        if K > 1:
+            # Add (K-1) equally spaced nodes on each triangle edge
+            # for total of 3(K - 1) more nodes
+            for i in range(3):
+                for j in range(i + 1, 3):
+                    for k in range(K - 1):
+                        edge_node = (vertices[i, :] + vertices[j, :]) / K * (k + 1)
+                        nodes.append(edge_node)
+
+                # Fill in any nodes within the triangle by drawing rays between
+                # the edge nodes that are more than 1 spacing away'
+                if i == 0 and K > 2:
+                    for k in range(1, K - 1):
+                        edge_node1 = (vertices[i, :] + vertices[1, :]) / K * (k + 1)
+                        edge_node2 = (vertices[i, :] + vertices[2, :]) / K * (k + 1)
+                        center_node = (edge_node1 + edge_node2) / (K - 1) * k
+                        nodes.append(center_node)
+
+        self.nodes = nodes
+        self.eta_nodes = self.get_barycentric_coordinates(self.nodes)
+        assert nodes.shape[-1] == self.N_k
+
+    def get_basis_functions(self, theta_zeta):
+        """
+        Gets the barycentric basis functions.
+
+        Return the triangle basis functions, evaluated at the 2D theta
+        and zeta mesh points provided to the function.
+
+        Parameters
+        ----------
+        theta_zeta : 2D ndarray, shape (ntheta * nzeta, 2)
+            Coordinates of the original grid, lying inside this triangle.
+
+        Returns
+        -------
+        psi_q : (theta_zeta, N_k)
+
+        """
+        eta = self.get_barycentric_coordinates(theta_zeta)
+        K = self.K
+        basis_functions = np.zeros((theta_zeta.shape[0], self.N_k))
+        q = 0
+        for i in range(K):
+            for j in range(K):
+                for k in range(K):
+                    if (i + j + k) == K:
+                        basis_functions[:, q] = (
+                            self.lagrange_polynomial(
+                                eta[:, 0], self.eta_nodes[:, 0], i + 1, q
+                            )
+                            * self.lagrange_polynomial(
+                                eta[:, 1], self.eta_nodes[:, 1], j + 1, q
+                            )
+                            * self.lagrange_polynomial(
+                                eta[:, 2], self.eta_nodes[:, 2], k + 1, q
+                            )
+                        )
+                        q += 1
+        return basis_functions
+
+    def lagrange_polynomial(self, eta_i, eta_nodes_i, order, q):
+        """
+        Computes lagrange polynomials.
+
+        Computes the lagrange polynomial given the ith component of the
+        Barycentric coordinates on a (theta, zeta) mesh, the ith component
+        of the triangle nodes defined for the basis functions, the order
+        of the polynomial, and the index q of which node this is.
+
+        Parameters
+        ----------
+        eta_i : 1D ndarray, shape(ntheta * nzeta)
+            The barycentric coordinate i defined at (theta, zeta) points.
+        eta_nodes_i : 1D ndarray, shape(N_k)
+            The barycentric coordinate i defined at the triangle nodes.
+        order : integer
+            Order of the polynomial.
+        q : integer
+            The index of the node we are using to define the basis function.
+            Options are 0, ..., N_k - 1
+
+        Returns
+        -------
+        lp : 1D ndarray, shape(ntheta * nzeta)
+            The lagrange polynomial associated with the barycentric
+            coordinate i, the polynomial order (order), and the node q.
+
+        """
+        denom = 1
+        numerator = np.ones(len(eta_i))
+        for i in range(len(eta_nodes_i)):
+            denom *= eta_nodes_i[q] - eta_nodes_i[i]
+            if i != q:
+                numerator *= eta_i - eta_nodes_i[i]
+        lp = numerator / denom
+        return lp
+
+    def get_barycentric_coordinates(self, theta_zeta):
+        """
+        Gets the barycentric coordinates, given a mesh in theta, zeta.
+
+        Parameters
+        ----------
+        theta_zeta : 2D ndarray, shape (ntheta * nzeta, 2)
+            Coordinates of the original grid, lying inside this triangle.
+
+        Returns
+        -------
+        eta_u: 2D array, shape (ntheta * nzeta, 3)
+            Barycentric coordinates defined by the triangle and evaluated
+            at the points (theta, zeta).
+        """
+        # Get the Barycentric coordinates
+        eta1 = self.a[0] + self.b[0] * theta_zeta + self.c[0] * theta_zeta
+        eta2 = self.a[1] + self.b[1] * theta_zeta + self.c[1] * theta_zeta
+        eta3 = self.a[2] + self.b[2] * theta_zeta + self.c[2] * theta_zeta
+        eta = np.array([eta1, eta2, eta3]).reshape(-1, 3)
+
+        # Check that all the points are indeed inside the triangle
+        for i in range(eta.shape[0]):
+            if eta1[i] < 0 or eta2[i] < 0 or eta3[i] < 0:
+                warnings.warn(
+                    "Found theta_zeta points outside the triangle ... "
+                    "Not using these points to evaluate the barycentric "
+                    "coordinates."
+                )
+            eta = np.delete(eta, i, 0)
+        return eta
 
 
 def convert_coefficients_2D(R_lmn, Z_lmn, R_basis, Z_basis, Rprime_basis, Zprime_basis):

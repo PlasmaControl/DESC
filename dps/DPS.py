@@ -87,7 +87,7 @@ eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 
 # Energy and Mass info
-Energy_eV = 1 #1 # eV (3.52e6 eV proton energy)
+Energy_eV = 3.52e6 #1 # eV (3.52e6 eV proton energy)
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
 Energy_SI = Energy_eV*Proton_Charge
@@ -105,7 +105,7 @@ ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
-tmax = 1e-2
+tmax = 1e-4
 nt = 1000
 time = jnp.linspace(tmin, tmax, nt)
 

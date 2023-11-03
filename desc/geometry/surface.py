@@ -4,6 +4,8 @@ import numbers
 import warnings
 
 import numpy as np
+from matplotlib import pyplot as plt
+from scipy.interpolate import griddata
 from scipy.sparse.linalg import splu
 
 from desc.backend import jnp, put, sign
@@ -52,24 +54,55 @@ class TriangleFiniteElement:
         self.N_k = int((K + 1) * (K + 2) / 2)
         self.K = K
 
+        # Compute the edge lengths and then the angles in the triangle
+        d1 = np.sqrt(
+            (vertices[1, 0] - vertices[0, 0]) ** 2
+            + (vertices[1, 1] - vertices[0, 1]) ** 2
+        )
+        d2 = np.sqrt(
+            (vertices[2, 0] - vertices[0, 0]) ** 2
+            + (vertices[2, 1] - vertices[0, 1]) ** 2
+        )
+        d3 = np.sqrt(
+            (vertices[1, 0] - vertices[2, 0]) ** 2
+            + (vertices[1, 1] - vertices[2, 1]) ** 2
+        )
+        angle1 = np.arccos((d2**2 + d3**2 - d1**2) / (2 * d2 * d3))
+        angle2 = np.arccos((d1**2 + d3**2 - d2**2) / (2 * d1 * d3))
+        angle3 = np.arccos((d2**2 + d1**2 - d3**2) / (2 * d2 * d1))
+        self.angles = np.array([angle1, angle2, angle3]).T
+
         # Going to construct equally spaced nodes for order K triangle,
         # which gives N_k such nodes.
         nodes = []
 
         # Start with the vertices of the triangle
+        node_mapping = []
         for i in range(3):
             nodes.append(vertices[i, :])
+            node_tuple = [0, 0, 0]
+            node_tuple[i] = K
+            node_mapping.append(node_tuple)
 
         # If K = 1, the vertices are the only nodes for basis functions
         if K > 1:
-            # Add (K-1) equally spaced nodes on each triangle edge
-            # for total of 3(K - 1) more nodes
+            # Add (k-1) equally spaced nodes on each triangle edge
+            # for k = 1, ..., K - 1
+            # for total of 3(K - 1)K / 2 more nodes
+            # This is certainly incorrect for K = 3 !!!!
             for i in range(3):
                 for j in range(i + 1, 3):
                     for k in range(K - 1):
                         edge_node = (vertices[i, :] + vertices[j, :]) / K * (k + 1)
                         nodes.append(edge_node)
+                        node_tuple = [0, 0, 0]
+                        node_tuple[i] = k + 1
+                        node_tuple[j] = k + 1
+                        node_mapping.append(node_tuple)
 
+            # Once all the edge nodes are placed, place the interior nodes
+            # This is certainly incorrect for K = 3 !!!!
+            for i in range(3):
                 # Fill in any nodes within the triangle by drawing rays between
                 # the edge nodes that are more than 1 spacing away'
                 if i == 0 and K > 2:
@@ -78,10 +111,28 @@ class TriangleFiniteElement:
                         edge_node2 = (vertices[i, :] + vertices[2, :]) / K * (k + 1)
                         center_node = (edge_node1 + edge_node2) / (K - 1) * k
                         nodes.append(center_node)
+                        node_tuple = [0, 0, 0]
+                        node_tuple[i] = 1
+                        node_tuple[j] = 1
+                        node_mapping.append(node_tuple)
 
-        self.nodes = nodes
-        self.eta_nodes = self.get_barycentric_coordinates(self.nodes)
-        assert nodes.shape[-1] == self.N_k
+        self.node_mapping = np.array(node_mapping)
+        self.nodes = np.array(nodes)
+        self.eta_nodes, _ = self.get_barycentric_coordinates(self.nodes)
+        self.basis_functions_nodes, _ = self.get_basis_functions(self.nodes)
+
+        if K == 1:
+            assert np.allclose(self.eta_nodes, self.basis_functions_nodes)
+
+        # Check basis functions vanish at all nodes except the associated node.
+        for i in range(self.N_k):
+            assert np.allclose(self.basis_functions_nodes[i, i], 1.0)
+            for j in range(self.N_k):
+                if i != j:
+                    assert np.allclose(self.basis_functions_nodes[i, j], 0.0)
+
+        # Check we have the same number of basis functions as nodes.
+        assert self.nodes.shape[0] == self.N_k
 
     def get_basis_functions(self, theta_zeta):
         """
@@ -100,29 +151,147 @@ class TriangleFiniteElement:
         psi_q : (theta_zeta, N_k)
 
         """
-        eta = self.get_barycentric_coordinates(theta_zeta)
+        eta, theta_zeta_in_triangle = self.get_barycentric_coordinates(theta_zeta)
+        theta_zeta = theta_zeta_in_triangle
         K = self.K
-        basis_functions = np.zeros((theta_zeta.shape[0], self.N_k))
-        q = 0
-        for i in range(K):
-            for j in range(K):
-                for k in range(K):
-                    if (i + j + k) == K:
-                        basis_functions[:, q] = (
-                            self.lagrange_polynomial(
-                                eta[:, 0], self.eta_nodes[:, 0], i + 1, q
-                            )
-                            * self.lagrange_polynomial(
-                                eta[:, 1], self.eta_nodes[:, 1], j + 1, q
-                            )
-                            * self.lagrange_polynomial(
-                                eta[:, 2], self.eta_nodes[:, 2], k + 1, q
-                            )
-                        )
-                        q += 1
-        return basis_functions
 
-    def lagrange_polynomial(self, eta_i, eta_nodes_i, order, q):
+        # Compute the vertex basis functions first
+        basis_functions = np.zeros((theta_zeta.shape[0], self.N_k))
+        for i in range(3):
+            inds_x0 = np.ravel(
+                np.where(
+                    np.logical_not(
+                        np.isclose(self.eta_nodes[:, 0], self.eta_nodes[i, 0])
+                    )
+                )
+            )
+            inds_y0 = np.ravel(
+                np.where(
+                    np.logical_not(
+                        np.isclose(self.eta_nodes[:, 1], self.eta_nodes[i, 1])
+                    )
+                )
+            )
+            inds_z0 = np.ravel(
+                np.where(
+                    np.logical_not(
+                        np.isclose(self.eta_nodes[:, 2], self.eta_nodes[i, 2])
+                    )
+                )
+            )
+
+            # take appropriate intersections of the indices depending on
+            # which vertex we have.
+            if len(inds_x0) >= len(inds_y0) and len(inds_x0) >= len(inds_z0):
+                inds_x0_prime = np.setdiff1d(inds_x0, inds_z0)
+                inds_y0_prime = np.setdiff1d(inds_y0, inds_x0)
+                inds_z0_prime = np.setdiff1d(inds_z0, inds_x0)
+            elif len(inds_y0) >= len(inds_x0) and len(inds_y0) >= len(inds_z0):
+                inds_y0_prime = np.setdiff1d(inds_y0, inds_z0)
+                inds_x0_prime = np.setdiff1d(inds_x0, inds_y0)
+                inds_z0_prime = np.setdiff1d(inds_z0, inds_y0)
+            elif len(inds_z0) >= len(inds_y0) and len(inds_z0) >= len(inds_x0):
+                inds_z0_prime = np.setdiff1d(inds_z0, inds_x0)
+                inds_y0_prime = np.setdiff1d(inds_y0, inds_z0)
+                inds_x0_prime = np.setdiff1d(inds_x0, inds_z0)
+            # Subtract off the node i from this list of indices
+            inds_x0 = np.setdiff1d(inds_x0_prime, [0])
+            inds_y0 = np.setdiff1d(inds_y0_prime, [1])
+            inds_z0 = np.setdiff1d(inds_z0_prime, [2])
+
+            # Now use these nodes to define the basis function
+            node_indices = [0, 0, 0]
+            node_indices[i] = K
+
+            basis_functions[:, i] = (
+                self.lagrange_polynomial(
+                    eta[:, 0], self.eta_nodes[:, 0], node_indices[0], inds_x0, i
+                )
+                * self.lagrange_polynomial(
+                    eta[:, 1], self.eta_nodes[:, 1], node_indices[1], inds_y0, i
+                )
+                * self.lagrange_polynomial(
+                    eta[:, 2], self.eta_nodes[:, 2], node_indices[2], inds_z0, i
+                )
+            )
+            if K == 1:
+                assert np.allclose(basis_functions[:, i], eta[:, i])
+            elif K == 2:
+                assert np.allclose(
+                    basis_functions[:, i], eta[:, i] * (2 * eta[:, i] - 1)
+                )
+
+        # Now we repeat the basis function calculation for the edge nodes
+        # Note that this probably only works for K = 1 and K = 2
+        # and we have not dealt with interior nodes when K = 3
+        q = 3
+        for node in self.node_mapping[3:, :]:
+            inds_x0 = np.ravel(
+                np.where(
+                    np.logical_not(
+                        np.isclose(self.eta_nodes[:, 0], self.eta_nodes[q, 0])
+                    )
+                )
+            )
+            inds_y0 = np.ravel(
+                np.where(
+                    np.logical_not(
+                        np.isclose(self.eta_nodes[:, 1], self.eta_nodes[q, 1])
+                    )
+                )
+            )
+            inds_z0 = np.ravel(
+                np.where(
+                    np.logical_not(
+                        np.isclose(self.eta_nodes[:, 2], self.eta_nodes[q, 2])
+                    )
+                )
+            )
+
+            # take appropriate intersections of the indices depending on
+            # which vertex we have.
+            if len(inds_x0) <= len(inds_y0) and len(inds_x0) <= len(inds_z0):
+                inds_z0_prime = np.setdiff1d(inds_z0, inds_x0)
+                inds_y0_prime = np.setdiff1d(inds_y0, inds_x0)
+                inds_y0_prime = np.setdiff1d(inds_y0_prime, [1])
+                inds_z0_prime = np.setdiff1d(inds_z0_prime, [2])
+                inds_x0_prime = []
+            elif len(inds_y0) <= len(inds_x0) and len(inds_y0) <= len(inds_z0):
+                inds_z0_prime = np.setdiff1d(inds_z0, inds_y0)
+                inds_x0_prime = np.setdiff1d(inds_x0, inds_y0)
+                inds_x0_prime = np.setdiff1d(inds_x0_prime, [0])
+                inds_z0_prime = np.setdiff1d(inds_z0_prime, [2])
+                inds_y0_prime = []
+            elif len(inds_z0) <= len(inds_y0) and len(inds_z0) <= len(inds_x0):
+                inds_y0_prime = np.setdiff1d(inds_y0, inds_z0)
+                inds_x0_prime = np.setdiff1d(inds_x0, inds_z0)
+                inds_x0_prime = np.setdiff1d(inds_x0_prime, [0])
+                inds_y0_prime = np.setdiff1d(inds_y0_prime, [1])
+                inds_z0_prime = []
+            inds_x0 = inds_x0_prime
+            inds_y0 = inds_y0_prime
+            inds_z0 = inds_z0_prime
+
+            # Now use these nodes to define the basis function
+            basis_functions[:, q] = (
+                self.lagrange_polynomial(
+                    eta[:, 0], self.eta_nodes[:, 0], node[0], inds_x0, q
+                )
+                * self.lagrange_polynomial(
+                    eta[:, 1], self.eta_nodes[:, 1], node[1], inds_y0, q
+                )
+                * self.lagrange_polynomial(
+                    eta[:, 2], self.eta_nodes[:, 2], node[2], inds_z0, q
+                )
+            )
+            q += 1
+        if K == 2:
+            assert np.allclose(basis_functions[:, 3], 4 * eta[:, 0] * eta[:, 1])
+            assert np.allclose(basis_functions[:, 4], 4 * eta[:, 2] * eta[:, 0])
+            assert np.allclose(basis_functions[:, 5], 4 * eta[:, 1] * eta[:, 2])
+        return basis_functions, theta_zeta_in_triangle
+
+    def lagrange_polynomial(self, eta_i, eta_nodes_i, order, inds_minus_q, q):
         """
         Computes lagrange polynomials.
 
@@ -150,12 +319,12 @@ class TriangleFiniteElement:
             coordinate i, the polynomial order (order), and the node q.
 
         """
-        denom = 1
+        denom = 1.0
         numerator = np.ones(len(eta_i))
-        for i in range(len(eta_nodes_i)):
+        # Avoid choosing the node q associated with this basis function
+        for i in inds_minus_q:
+            numerator *= eta_i - eta_nodes_i[i]
             denom *= eta_nodes_i[q] - eta_nodes_i[i]
-            if i != q:
-                numerator *= eta_i - eta_nodes_i[i]
         lp = numerator / denom
         return lp
 
@@ -175,12 +344,31 @@ class TriangleFiniteElement:
             at the points (theta, zeta).
         """
         # Get the Barycentric coordinates
-        eta1 = self.a[0] + self.b[0] * theta_zeta + self.c[0] * theta_zeta
-        eta2 = self.a[1] + self.b[1] * theta_zeta + self.c[1] * theta_zeta
-        eta3 = self.a[2] + self.b[2] * theta_zeta + self.c[2] * theta_zeta
-        eta = np.array([eta1, eta2, eta3]).reshape(-1, 3)
+        eta1 = (
+            self.a[0] * np.ones(len(theta_zeta[:, 0]))
+            + self.b[0] * theta_zeta[:, 0]
+            + self.c[0] * theta_zeta[:, 1]
+        ) / self.area
+        eta2 = (
+            self.a[1] * np.ones(len(theta_zeta[:, 0]))
+            + self.b[1] * theta_zeta[:, 0]
+            + self.c[1] * theta_zeta[:, 1]
+        ) / self.area
+        eta3 = (
+            self.a[2] * np.ones(len(theta_zeta[:, 0]))
+            + self.b[2] * theta_zeta[:, 0]
+            + self.c[2] * theta_zeta[:, 1]
+        ) / self.area
+
+        # zero out numerical errors or weird minus signs like -0
+        eta1[np.isclose(eta1, 0.0)] = 0.0
+        eta2[np.isclose(eta2, 0.0)] = 0.0
+        eta3[np.isclose(eta3, 0.0)] = 0.0
+        eta = np.array([eta1, eta2, eta3]).T
 
         # Check that all the points are indeed inside the triangle
+        eta_final = []
+        theta_zeta_in_triangle = []
         for i in range(eta.shape[0]):
             if eta1[i] < 0 or eta2[i] < 0 or eta3[i] < 0:
                 warnings.warn(
@@ -188,8 +376,76 @@ class TriangleFiniteElement:
                     "Not using these points to evaluate the barycentric "
                     "coordinates."
                 )
-            eta = np.delete(eta, i, 0)
-        return eta
+            else:
+                eta_final.append(eta[i, :])
+                theta_zeta_in_triangle.append(theta_zeta[i, :])
+        return np.array(eta_final), np.array(theta_zeta_in_triangle)
+
+    def plot_triangle(self):
+        """
+        Plot the triangle in (theta, zeta) and (eta1, eta2, eta3) coordinates.
+
+        Also plots all of the basis functions.
+        """
+        # Define uniform grid in (theta, zeta)
+        theta = np.linspace(
+            np.min(self.vertices[:, 0]), np.max(self.vertices[:, 0]), endpoint=True
+        )
+        zeta = np.linspace(
+            np.min(self.vertices[:, 1]), np.max(self.vertices[:, 1]), endpoint=True
+        )
+        Theta, Zeta = np.meshgrid(theta, zeta)
+        Theta_Zeta = np.array([np.ravel(Theta), np.ravel(Zeta)]).T
+
+        # Get the basis functions in the triangle
+        psi_q, theta_zeta_in_triangle = self.get_basis_functions(Theta_Zeta)
+
+        # Optionally interpolate the theta and zeta points in the triangle
+        # onto something we can use with griddata function to make some
+        # contours of the basis functions.
+        contours = False
+        if contours:
+            resX = 100
+            resY = resX
+            xi = np.linspace(
+                min(theta_zeta_in_triangle[:, 0]),
+                max(theta_zeta_in_triangle[:, 0]),
+                resX,
+            )
+            yi = np.linspace(
+                min(theta_zeta_in_triangle[:, 1]),
+                max(theta_zeta_in_triangle[:, 1]),
+                resY,
+            )
+            X, Y = np.meshgrid(xi, yi)
+
+        for i in range(self.N_k):
+            plt.subplot(1, self.N_k, i + 1)
+            plt.grid()
+
+            # Plot the nodes of the triangle
+            plt.plot(self.nodes[:, 0], self.nodes[:, 1], "ro", markersize=1)
+
+            # Plot the ith basis function
+            if contours:
+                Z = griddata(
+                    (theta_zeta_in_triangle[:, 0], theta_zeta_in_triangle[:, 1]),
+                    psi_q[:, i],
+                    (X, Y),
+                    method="cubic",
+                ).reshape(resX, resY)
+                plt.contourf(X, Y, Z)
+                plt.colorbar()
+            else:
+                plt.scatter(
+                    theta_zeta_in_triangle[:, 0],
+                    theta_zeta_in_triangle[:, 1],
+                    c=psi_q[:, i],
+                )
+            tstring = r"$\psi_{" + str(i) + r"}(\theta, \zeta)$"
+            plt.xlabel(r"$\theta$")
+            plt.xlabel(r"$\zeta$")
+            plt.title(tstring)
 
 
 def convert_coefficients_2D(R_lmn, Z_lmn, R_basis, Z_basis, Rprime_basis, Zprime_basis):

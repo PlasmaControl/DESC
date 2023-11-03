@@ -2,21 +2,17 @@
 General
 =======
 
-The theoretical approach and numerical methods used by DESC are explained in this publication_ [1]_.
+The theoretical approach and numerical methods used by DESC are explained in this publication [1]_.
 The code is constantly evolving and may differ from the implementation presented in the original paper.
 This documentation aims to reflect the latest version of the code, and major discrepancies from the publication will be noted when relevant.
 
-.. [1] D.W. Dudt and E. Kolemen (2020). DESC: A Stellarator Equilibrium Solver. *Physics of Plasmas*.
-.. _publication: https://github.com/PlasmaControl/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf
+See also our recent pre-prints on comparisons to VMEC [2]_ perturbation and continuation methods [3]_ and quasi-symmetry optimization [4]_:
 
-See also our recent pre-prints [2-4]:
 
-.. [2] D. Panici, R. Conlin, D.W. Dudt and E. Kolemen. “The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations.” pre-print.
-.. _publication: https://arxiv.org/abs/2203.17173
-.. [3] R. Conlin, D.W. Dudt, D. Panici and E. Kolemen. “The DESC Stellarator Code Suite Part II: Perturbation and continuation methods.” pre-print.
-.. _publication: https://arxiv.org/abs/2203.15927
-.. [4] D.W. Dudt, R. Conlin, D. Panici and E. Kolemen. “The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization.” pre-print.
-.. _publication: https://arxiv.org/abs/2204.00078
+.. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. [`Physics of Plasmas <https://doi.org/10.1063/5.0020743>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/dudt2020/dudt2020desc.pdf>`__]
+.. [2] Panici, D. et al (2022). The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations. [`JPP <https://doi.org/10.1017/S0022377823000272>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/panici2022/Panici_DESC_Stellarator_suite_part_I_quick_accurate_equilibria.pdf>`__]
+.. [3] Conlin, R. et al. (2022). The DESC Stellarator Code Suite Part II: Perturbation and continuation methods. [`JPP <https://doi.org/10.1017/S0022377823000399>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/conlin2022/conlin2022perturbations.pdf>`__]
+.. [4] Dudt, D. et al. (2022). The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization. [`JPP <https://doi.org/10.1017/S0022377823000235>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/dudt2022/dudt2022optimization.pdf>`__]
 
 Flux coordinates
 ****************
@@ -26,7 +22,7 @@ The computational domain is the curvilinear coordinate system :math:`(\rho, \the
 These curvilinear coordinates are related to the straight field-line coordinates :math:`(\rho, \vartheta, \zeta)` through the stream function :math:`\lambda(\rho,\theta,\zeta)`.
 [Note: the original publication used :math:`\zeta=-\phi` and used :math:`\vartheta` in the computational domain instead of introducing :math:`\lambda` on all flux surfaces.]
 This particular choice of flux coordinates is also used by the PEST code, and should not be confused with other choices such as Boozer or Hamada coordinates.
-The flux surface label :math:`\rho` is chosen to be the square root of the normalized toroidal flux, which is proportional to the minor radius.
+The flux surface label :math:`\rho` is chosen to be the square root of the normalized toroidal flux :math:`\psi_N`, which is proportional to the minor radius.
 This is different from the default radial coordinate in VMEC of the normalized toroidal flux.
 
 .. image:: _static/images/coordinates.png
@@ -36,17 +32,35 @@ This is different from the default radial coordinate in VMEC of the normalized t
 The covariant basis vectors of the curvilinear coordinate system are
 
 .. math::
-  \mathbf{e}_\rho = [\partial_\rho R \\ 0 \\ \partial_\rho Z]^T \\ \\ \mathbf{e}_\theta = [\partial_\theta R \\ 0 \\ \partial_\theta Z]^T \\ \\ \mathbf{e}_\zeta = [\partial_\zeta R \\ R \\ \partial_\zeta Z]^T
+  \mathbf{e}_\rho =  \begin{bmatrix}
+      \partial_\rho R \\ 0 \\ \partial_\rho Z
+  \end{bmatrix} \hspace{1cm}
+  \mathbf{e}_\theta =  \begin{bmatrix}
+      \partial_\theta R \\ 0 \\ \partial_\theta Z
+  \end{bmatrix}\hspace{1cm}
+  \mathbf{e}_\zeta =  \begin{bmatrix}
+      \partial_\zeta R \\ R \\ \partial_\zeta Z
+  \end{bmatrix}
 
 and the Jacobian of the curvilinear coordinate system is :math:`\sqrt{g} = e_\rho \cdot e_\theta \times e_\zeta`.
+
+.. math::
+  \sqrt{g} =  R \left( \cfrac{\partial R}{\partial \rho}  \cfrac{\partial Z}{\partial \theta} + \cfrac{\partial R}{\partial \theta}  \cfrac{\partial Z}{\partial \rho} \right)
 
 DESC solves for the map between the cylindrical and flux coordinate systems through the following variables that represent the shapes of the flux surfaces:
 
 .. math::
-  R(\rho, \theta, \zeta) \\ \\ Z(\rho, \theta, \zeta) \\ \\ \lambda(\rho, \theta, \zeta)
+  R(\rho, \theta, \zeta) \\[.2cm]
+  Z(\rho, \theta, \zeta) \\[.2cm]
+  \lambda(\rho, \theta, \zeta)
 
-It assumes the flux functions for the pressure :math:`p(\rho)` and rotational transform :math:`\iota(\rho)` profiles are given, in addition to the total toroidal flux through the plasma volume :math:`\psi_a`.
+It assumes the flux functions for the pressure profile :math:`p(\rho)` and either the rotational transform :math:`\iota(\rho)` or toroidal current :math:`I(\rho)` profile are given.
+Additionally, it needs the total toroidal magnetic flux through the plasma volume :math:`\Psi_a`, where :math:`\psi_N = \cfrac{\Psi}{\Psi_a}` and :math:`\psi = \cfrac{\Psi}{2\pi}`.
 The shape of the last closed flux surface :math:`R^b(\theta,\phi)`, :math:`Z^b(\theta,\phi)` is also required to specify the fixed-boundary.
+
+The poloidal angle :math:`\theta` increases clockwise so that the curvilinear coordinate system is always right-handed (:math:`\sqrt{g} > 0`).
+If boundary conditions are input with the opposite convention, DESC will internally flip the orientation to ensure a positive Jacobian.
+[Note: older versions of the code did not check the input orientation and allowed solutions with a negative Jacobian.]
 
 Magnetic Field & Current Density
 ********************************
@@ -60,8 +74,8 @@ The current density is then calculated from Ampere's Law, :math:`\nabla \times \
 
 .. math::
   \begin{aligned}
-  J^\rho &= \frac{\partial_\theta B_\zeta - \partial_\zeta B_\theta}{\mu_0 \sqrt{g}} \\
-  J^\theta &= \frac{\partial_\zeta B_\rho - \partial_\rho B_\zeta}{\mu_0 \sqrt{g}} \\
+  J^\rho &= \frac{\partial_\theta B_\zeta - \partial_\zeta B_\theta}{\mu_0 \sqrt{g}} \\[.2cm]
+  J^\theta &= \frac{\partial_\zeta B_\rho - \partial_\rho B_\zeta}{\mu_0 \sqrt{g}} \\[.2cm]
   J^\zeta &= \frac{\partial_\rho B_\theta - \partial_\theta B_\rho}{\mu_0 \sqrt{g}}
   \end{aligned}
 
@@ -70,7 +84,7 @@ This allows the magnetic field and current density to be computed from the indep
 
 .. math::
   \begin{aligned}
-  \mathbf{B}(\rho, \theta, \zeta) &= \mathbf{B}(R(\rho, \theta, \zeta), Z(\rho, \theta, \zeta), \lambda(\rho, \theta, \zeta), \iota(\rho)) \\
+  \mathbf{B}(\rho, \theta, \zeta) &= \mathbf{B}(R(\rho, \theta, \zeta), Z(\rho, \theta, \zeta), \lambda(\rho, \theta, \zeta), \iota(\rho)) \\[.2cm]
   \mathbf{J}(\rho, \theta, \zeta) &= \mathbf{J}(R(\rho, \theta, \zeta), Z(\rho, \theta, \zeta), \lambda(\rho, \theta, \zeta), \iota(\rho))
   \end{aligned}
 
@@ -86,10 +100,10 @@ When written in flux coordinates there are only two independent components:
 
 .. math::
   \begin{aligned}
-  \mathbf{F} &= F_\rho \nabla \rho + F_\beta \mathbf{\beta} \\
-  F_\rho &= \sqrt{g} (B^\zeta J^\theta - B^\theta J^\zeta) - \partial_\rho p \\
-  F_\beta &= \sqrt{g} B^\zeta J^\rho \\
-  \mathbf{\beta} &= \nabla \theta - \iota \nabla \zeta
+    \mathbf{F} &= F_\rho \nabla \rho + F_\beta \mathbf{\beta} \\[.2cm]
+    F_\rho &= \sqrt{g} (B^\zeta J^\theta - B^\theta J^\zeta) - \partial_\rho p \\[.2cm]
+    F_\beta &= \sqrt{g} B^\zeta J^\rho \\[.2cm]
+    \mathbf{\beta} &= \nabla \theta - \iota \nabla \zeta
   \end{aligned}
 
 These forces in both the radial and helical directions must vanish in equilibrium.
@@ -97,8 +111,8 @@ DESC solves this force balance locally by evaluating the residual errors at disc
 
 .. math::
   \begin{aligned}
-  f_\rho = F_\rho ||\nabla \rho|| \Delta V \\
-  f_\beta = F_\beta ||\mathbf{\beta}|| \Delta V
+  f_\rho &= F_\rho ||\nabla \rho|| \Delta V \\[.2cm]
+  f_\beta &= F_\beta ||\mathbf{\beta}|| \Delta V
   \end{aligned}
 
 These equations :math:`f_\rho` and :math:`f_\beta` represent the force errors (in Newtons) in the unit of volume :math:`\Delta V = \sqrt{g} \Delta \rho \Delta \theta \Delta \zeta` surrounding a collocation point :math:`(\rho, \theta, \zeta)`.
@@ -109,16 +123,22 @@ In summary, the equilibrium problem is formulated as a system of nonlinear equat
 The state vector :math:`\mathbf{x}` contains the spectral coefficients representing the independent variables:
 
 .. math::
-  \mathbf{x} = [R_{lmn} \\ Z_{lmn} \\ \lambda_{lmn}]^T
+  \mathbf{x} =  \begin{bmatrix}
+      R_{lmn} \\ Z_{lmn} \\ \lambda_{lmn}
+  \end{bmatrix}
 
 The parameter vector :math:`\mathbf{c}` contains the spectral coefficients of the inputs that define a unique equilibrium solution:
 
 .. math::
-  \mathbf{c} = [R^b_{mn} \\ Z^b_{mn} \\ p_l \\ \iota_l \\ \psi_a]^T
+  \mathbf{c} =  \begin{bmatrix}
+      R^b_{mn} \\ Z^b_{mn} \\ p_l \\ \iota_l \\ \psi_a
+  \end{bmatrix}
 
 The equations :math:`\mathbf{f}` are the force error residuals at a series of collocation points:
 
 .. math::
-  \mathbf{f} = [f_\rho \\ f_\beta]^T
+  \mathbf{f} =  \begin{bmatrix}
+      f_\rho \\ f_\beta
+  \end{bmatrix}
 
 DESC allows flexibility in the choice of optimization algorithm used to solve this system of equations; popular approaches include Newton-Raphson methods and least-squares minimization (as the collocation grids are often oversampled, which has been found to improve convergence and robustness).

@@ -16,7 +16,7 @@ Notes on installing DESC v0.5.0: It is recommended to make a new environment as 
 conda install pip
 conda install python=3.8
 ```
-now split the requirements.txt into pip_only_req.txt containing the nvgpu, jax, jaxlib lines (deleting those lines from requirements.txt
+now split the requirements.txt into pip_only_req.txt containing the nvgpu, jax, jaxlib lines (deleting those lines from requirements.txt)
 ```
 conda install --file requirements.txt
 pip install -r pip_only_req.txt

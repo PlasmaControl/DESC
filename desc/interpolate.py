@@ -8,6 +8,100 @@ import numpy as np
 from desc.backend import jnp
 
 
+def fft_interp1d(f, n, sx=None, dx=1):
+    """Interpolation of a 1d periodic function via FFT.
+
+    Parameters
+    ----------
+    f : ndarray, shape(nx, ...)
+        Source data. Assumed to cover 1 full period, excluding the endpoint.
+    n : int
+        Number of desired interpolation points.
+    sx : ndarray or None
+        Shift in x to evaluate at. If original data is f(x), interpolates to f(x + sx)
+    dx : float
+        Spacing of source points
+
+    Returns
+    -------
+    fi : ndarray, shape(n, ..., len(sx))
+        Interpolated (and possibly shifted) data points
+    """
+    c = jnp.fft.ifft(f, axis=0)
+    nx = c.shape[0]
+    if sx is not None:
+        sx = jnp.exp(-1j * 2 * jnp.pi * jnp.fft.fftfreq(nx)[:, None] * sx / dx)
+        c = (c[None].T * sx).T
+        c = jnp.moveaxis(c, 0, -1)
+    pad = ((n - nx) // 2, n - nx - (n - nx) // 2)
+    if nx % 2 != 0:
+        pad = pad[::-1]
+    c = jnp.fft.ifftshift(_pad_along_axis(jnp.fft.fftshift(c, axes=0), pad, axis=0))
+    return jnp.fft.fft(c, axis=0).real
+
+
+def fft_interp2d(f, n1, n2, sx=None, sy=None, dx=1, dy=1):
+    """Interpolation of a 2d periodic function via FFT.
+
+    Parameters
+    ----------
+    f : ndarray, shape(nx, ny, ...)
+        Source data. Assumed to cover 1 full period, excluding the endpoint.
+    n1, n2 : int
+        Number of desired interpolation points in x and y directions
+    sx, sy : ndarray or None
+        Shift in x and y to evaluate at. If original data is f(x,y), interpolates to
+        f(x + sx, y + sy). Both must be provided or None
+    dx, dy : float
+        Spacing of source points in x and y
+
+    Returns
+    -------
+    fi : ndarray, shape(n1, n2, ..., len(sx))
+        Interpolated (and possibly shifted) data points
+    """
+    c = jnp.fft.ifft2(f, axes=(0, 1))
+    nx, ny = c.shape[:2]
+    if (sx is not None) and (sy is not None):
+        sx = jnp.exp(-1j * 2 * jnp.pi * jnp.fft.fftfreq(nx)[:, None] * sx / dx)
+        sy = jnp.exp(-1j * 2 * jnp.pi * jnp.fft.fftfreq(ny)[:, None] * sy / dy)
+        c = (c[None].T * sx[None, :, :] * sy[:, None, :]).T
+        c = jnp.moveaxis(c, 0, -1)
+    padx = ((n1 - nx) // 2, n1 - nx - (n1 - nx) // 2)
+    pady = ((n2 - ny) // 2, n2 - ny - (n2 - ny) // 2)
+    if nx % 2 != 0:
+        padx = padx[::-1]
+    if ny % 2 != 0:
+        pady = pady[::-1]
+
+    c = jnp.fft.ifftshift(
+        _pad_along_axis(jnp.fft.fftshift(c, axes=0), padx, axis=0), axes=0
+    )
+    c = jnp.fft.ifftshift(
+        _pad_along_axis(jnp.fft.fftshift(c, axes=1), pady, axis=1), axes=1
+    )
+
+    return jnp.fft.fft2(c, axes=(0, 1)).real
+
+
+def _pad_along_axis(array, pad=(0, 0), axis=0):
+    """Pad with zeros or truncate a given dimension."""
+    array = jnp.moveaxis(array, axis, 0)
+
+    if pad[0] < 0:
+        array = array[abs(pad[0]) :]
+        pad = (0, pad[1])
+    if pad[1] < 0:
+        array = array[: -abs(pad[1])]
+        pad = (pad[0], 0)
+
+    npad = [(0, 0)] * array.ndim
+    npad[0] = pad
+
+    array = jnp.pad(array, pad_width=npad, mode="constant", constant_values=0)
+    return jnp.moveaxis(array, 0, axis)
+
+
 def interp1d(
     xq, x, f, method="cubic", derivative=0, extrap=False, period=None, fx=None, **kwargs
 ):
@@ -28,8 +122,12 @@ def interp1d(
         - `'cubic'`: C1 cubic splines (aka local splines)
         - `'cubic2'`: C2 cubic splines (aka natural splines)
         - `'catmull-rom'`: C1 cubic centripetal "tension" splines
-        - `'cardinal'`: c1 cubic general tension splines. If used, can also pass keyword
+        - `'cardinal'`: C1 cubic general tension splines. If used, can also pass keyword
             parameter `c` in float[0,1] to specify tension
+        - `'monotonic'`: C1 cubic splines that attempt to preserve monotonicity in the
+            data, and will not introduce new extrema in the interpolated points
+        - `'monotonic-0'`: same as `'monotonic'` but with 0 first derivatives at both
+            endpoints
     derivative : int
         derivative order to calculate
     extrap : bool, float, array-like
@@ -89,7 +187,14 @@ def interp1d(
         else:
             fq = jnp.zeros((xq.size, *f.shape[1:]))
 
-    elif method in ["cubic", "cubic2", "cardinal", "catmull-rom"]:
+    elif method in [
+        "cubic",
+        "cubic2",
+        "cardinal",
+        "catmull-rom",
+        "monotonic",
+        "monotonic-0",
+    ]:
         i = jnp.clip(jnp.searchsorted(x, xq, side="right"), 1, len(x) - 1)
         if fx is None:
             fx = _approx_df(x, f, method, axis, **kwargs)
@@ -581,6 +686,7 @@ def _make_periodic(xq, x, period, axis, *arrs):
 
 def _get_t_der(t, derivative, dxi):
     """Get arrays of [1,t,t^2,t^3] for cubic interpolation."""
+    assert int(derivative) == derivative, "derivative must be an integer"
     if derivative == 0 or derivative is None:
         tt = jnp.array([jnp.ones_like(t), t, t**2, t**3]).T
     elif derivative == 1:
@@ -649,7 +755,7 @@ def _approx_df(x, f, method, axis, **kwargs):
             axis=axis,
         )
         return fx
-    if method == "cubic2":
+    elif method == "cubic2":
         dx = jnp.diff(x)
         df = jnp.diff(f, axis=axis)
         if df.ndim > dx.ndim:
@@ -692,7 +798,7 @@ def _approx_df(x, f, method, axis, **kwargs):
         fx = jnp.linalg.solve(A, b)
         fx = jnp.moveaxis(fx.reshape(f.shape), 0, axis)
         return fx
-    if method in ["cardinal", "catmull-rom"]:
+    elif method in ["cardinal", "catmull-rom"]:
         dx = x[2:] - x[:-2]
         df = jnp.take(f, jnp.arange(2, f.shape[axis]), axis, mode="wrap") - jnp.take(
             f, jnp.arange(0, f.shape[axis] - 2), axis, mode="wrap"
@@ -726,6 +832,69 @@ def _approx_df(x, f, method, axis, **kwargs):
             c = 0
         fx = (1 - c) * jnp.concatenate([fx0, df, fx1], axis=axis)
         return fx
+    elif method in ["monotonic", "monotonic-0"]:
+        f = jnp.moveaxis(f, axis, 0)
+        fshp = f.shape
+        if f.ndim == 1:
+            # So that _edge_case doesn't end up assigning to scalars
+            x = x[:, None]
+            f = f[:, None]
+        hk = x[1:] - x[:-1]
+        df = jnp.diff(f, axis=axis)
+        hki = jnp.where(hk == 0, 0, 1 / hk)
+        if df.ndim > hki.ndim:
+            hki = jnp.expand_dims(hki, tuple(range(1, df.ndim)))
+            hki = jnp.moveaxis(hki, 0, axis)
+
+        mk = hki * df
+
+        smk = jnp.sign(mk)
+        condition = (smk[1:, :] != smk[:-1, :]) | (mk[1:, :] == 0) | (mk[:-1, :] == 0)
+
+        w1 = 2 * hk[1:] + hk[:-1]
+        w2 = hk[1:] + 2 * hk[:-1]
+
+        if df.ndim > w1.ndim:
+            w1 = jnp.expand_dims(w1, tuple(range(1, df.ndim)))
+            w1 = jnp.moveaxis(w1, 0, axis)
+            w2 = jnp.expand_dims(w2, tuple(range(1, df.ndim)))
+            w2 = jnp.moveaxis(w2, 0, axis)
+
+        whmean = (w1 / mk[:-1, :] + w2 / mk[1:, :]) / (w1 + w2)
+
+        dk = jnp.where(condition, 0, 1.0 / whmean)
+
+        if method == "monotonic-0":
+            d0 = jnp.zeros((1, dk.shape[1]))
+            d1 = jnp.zeros((1, dk.shape[1]))
+
+        else:
+            # special case endpoints, as suggested in
+            # Cleve Moler, Numerical Computing with MATLAB, Chap 3.6 (pchiptx.m)
+            def _edge_case(h0, h1, m0, m1):
+                # one-sided three-point estimate for the derivative
+                d = ((2 * h0 + h1) * m0 - h0 * m1) / (h0 + h1)
+
+                # try to preserve shape
+                mask = jnp.sign(d) != jnp.sign(m0)
+                mask2 = (jnp.sign(m0) != jnp.sign(m1)) & (
+                    jnp.abs(d) > 3.0 * jnp.abs(m0)
+                )
+                mmm = (~mask) & mask2
+
+                d = jnp.where(mask, 0.0, d)
+                d = jnp.where(mmm, 3.0 * m0, d)
+                return d
+
+            hk = 1 / hki
+            d0 = _edge_case(hk[0, :], hk[1, :], mk[0, :], mk[1, :])[None]
+            d1 = _edge_case(hk[-1, :], hk[-2, :], mk[-1, :], mk[-2, :])[None]
+
+        dk = np.concatenate([d0, dk, d1])
+        dk = dk.reshape(fshp)
+        return dk.reshape(fshp)
+    else:  # method passed in does not use df from this function, just return 0
+        return jnp.zeros_like(f)
 
 
 # fmt: off

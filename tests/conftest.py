@@ -1,9 +1,6 @@
 """Test fixtures for computing equilibria etc."""
 
 import os
-import sys
-import traceback
-import warnings
 
 import h5py
 import numpy as np
@@ -13,17 +10,6 @@ from netCDF4 import Dataset
 from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.vmec import VMECIO
-
-
-# print full tracebacks to help find sources of warnings
-def _warn_with_traceback(message, category, filename, lineno, file=None, line=None):
-
-    log = file if hasattr(file, "write") else sys.stderr
-    traceback.print_stack(file=log)
-    log.write(warnings.formatwarning(message, category, filename, lineno, line))
-
-
-warnings.showwarning = _warn_with_traceback
 
 
 @pytest.fixture(scope="session")
@@ -52,7 +38,8 @@ def SOLOVEV_vac(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
-    main(args)
+    with pytest.warns(UserWarning, match="Left handed coordinates"):
+        main(args)
 
     SOLOVEV_vac_out = {
         "input_path": input_path,
@@ -225,7 +212,8 @@ def HELIOTRON_vac(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    main(args)
+    with pytest.warns(UserWarning, match="Vacuum objective does not use any profiles"):
+        main(args)
 
     HELIOTRON_vacuum_out = {
         "input_path": input_path,
@@ -269,33 +257,6 @@ def HELIOTRON_vac2(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def precise_QH(tmpdir_factory):
-    """Fun initial condition for precise QH optimization."""
-    input_path = ".//tests//inputs//precise_QH"
-    output_dir = tmpdir_factory.mktemp("result")
-    initial_h5_path = output_dir.join("precise_QH_output.h5")
-    truth_path = ".//tests//inputs//precise_QH_step0.h5"
-
-    cwd = os.path.dirname(__file__)
-    exec_dir = os.path.join(cwd, "..")
-    input_filename = os.path.join(exec_dir, input_path)
-
-    print("Running precise QH test.")
-    print("exec_dir=", exec_dir)
-    print("cwd=", cwd)
-
-    args = ["-o", str(initial_h5_path), input_filename, "-vv"]
-    main(args)
-
-    precise_QH_out = {
-        "input_path": input_path,
-        "desc_h5_path": initial_h5_path,
-        "output_path": truth_path,
-    }
-    return precise_QH_out
-
-
-@pytest.fixture(scope="session")
 def DummyStellarator(tmpdir_factory):
     """Create and save a dummy stellarator configuration for testing."""
     output_dir = tmpdir_factory.mktemp("result")
@@ -314,11 +275,11 @@ def DummyStellarator(tmpdir_factory):
             [
                 [0, 0, 0, 3, 0],
                 [0, 1, 0, 1, 0],
-                [0, -1, 0, 0, 1],
+                [0, -1, 0, 0, -1],
                 [0, 1, 1, 0.3, 0],
-                [0, -1, -1, -0.3, 0],
+                [0, -1, -1, 0.3, 0],
                 [0, 1, -1, 0, -0.3],
-                [0, -1, 1, 0, -0.3],
+                [0, -1, 1, 0, 0.3],
             ],
         ),
         "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
@@ -328,9 +289,7 @@ def DummyStellarator(tmpdir_factory):
     eq = Equilibrium(**inputs)
     eq.save(output_path)
 
-    DummyStellarator_out = {
-        "output_path": output_path,
-    }
+    DummyStellarator_out = {"output_path": output_path}
     return DummyStellarator_out
 
 
@@ -363,7 +322,6 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
     vmec = Dataset(str(SOLOVEV["vmec_nc_path"]), mode="r")
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
-    eq._solved = True
     VMECIO.save(
         eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
     )

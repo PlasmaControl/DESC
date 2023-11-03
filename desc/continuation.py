@@ -1,153 +1,90 @@
 """Functions for solving for equilibria with multigrid continuation method."""
 
 import copy
+import warnings
 
 import numpy as np
+from termcolor import colored
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.optimize import Optimizer
 from desc.perturbations import get_deltas
-from desc.utils import Timer
+from desc.utils import Timer, errorif
+
+MIN_MRES_STEP = 1
+MIN_PRES_STEP = 0.1
+MIN_BDRY_STEP = 0.05
 
 
-def solve_continuation_automatic(  # noqa: C901
+def _solve_axisym(
     eq,
+    mres_step,
     objective="force",
     optimizer="lsq-exact",
     pert_order=2,
-    ftol=1e-2,
-    xtol=1e-4,
-    gtol=1e-6,
-    nfev=100,
+    ftol=None,
+    xtol=None,
+    gtol=None,
+    maxiter=100,
     verbose=1,
     checkpoint_path=None,
-    **kwargs,
 ):
-    """Solve for an equilibrium using an automatic continuation method.
-
-    By default, the method first solves for a no pressure tokamak, then a finite beta
-    tokamak, then a finite beta stellarator. Currently hard coded to take a fixed
-    number of perturbation steps based on conservative estimates and testing. In the
-    future, continuation stepping will be done adaptively.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Unsolved Equilibrium with the final desired boundary, profiles, resolution.
-    objective : {"force", "energy", "vacuum"}
-        function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
-        optimizer to use
-    pert_order : int
-        order of perturbations to use.
-    ftol, xtol, gtol : float
-        stopping tolerances for subproblem at each step.
-    nfev : int
-        maximum number of function evaluations in each equilibrium subproblem.
-    verbose : integer
-        * 0: no output
-        * 1: summary of each iteration
-        * 2: as above plus timing information
-        * 3: as above plus detailed solver output
-    checkpoint_path : str or path-like
-        file to save checkpoint data (Default value = None)
-    **kwargs : control continuation step sizes
-
-        Valid keyword arguments are:
-
-        mres_step: int, the amount to increase Mpol by at each continuation step
-        pres_step: float, 0<=pres_step<=1, the amount to increase pres_ratio by
-                          at each continuation step
-        bdry_step: float, 0<=bdry_step<=1, the amount to increase pres_ratio by
-                          at each continuation step
-    Returns
-    -------
-    eqfam : EquilibriaFamily
-        family of equilibria for the intermediate steps, where the last member is the
-        final desired configuration,
-
-    """
+    """Solve initial axisymmetric case with adaptive step sizing."""
     timer = Timer()
-    timer.start("Total time")
 
     surface = eq.surface
     pressure = eq.pressure
     L, M, N, L_grid, M_grid, N_grid = eq.L, eq.M, eq.N, eq.L_grid, eq.M_grid, eq.N_grid
     spectral_indexing = eq.spectral_indexing
 
-    mres_step = kwargs.pop("mres_step", 6)
-    pres_step = kwargs.pop("pres_step", 1 / 2)
-    bdry_step = kwargs.pop("bdry_step", 1 / 4)
-    assert len(kwargs) == 0, "Got an unexpected kwarg {}".format(kwargs.keys())
-
-    Mi = min(M // 2, mres_step) if mres_step > 0 else M
+    Mi = min(M, mres_step) if mres_step > 0 else M
     Li = int(np.ceil(L / M) * Mi)
-    Ni = 0 if bdry_step > 0 else N
+    Ni = 0
     L_gridi = np.ceil(L_grid / L * Li).astype(int)
     M_gridi = np.ceil(M_grid / M * Mi).astype(int)
     N_gridi = np.ceil(N_grid / max(N, 1) * Ni).astype(int)
 
     # first we solve vacuum until we reach full L,M
-    # then pressure
-    # then 3d shaping
     mres_steps = int(max(np.ceil(M / mres_step), 1)) if mres_step > 0 else 0
-    pres_steps = (
-        0
-        if (abs(pressure(np.linspace(0, 1, 20))) < 1e-14).all() or pres_step == 0
-        else int(np.ceil(1 / pres_step))
-    )
-    bdry_steps = 0 if N == 0 or bdry_step == 0 else int(np.ceil(1 / bdry_step))
-    pres_ratio = 0 if pres_steps else 1
-    bdry_ratio = 0 if N else 1
-    curr_ratio = 1
     deltas = {}
 
     surf_axisym = surface.copy()
     pres_vac = pressure.copy()
     surf_axisym.change_resolution(L, M, Ni)
     # start with zero pressure
-    pres_vac.params *= 0 if pres_step else 1
+    pres_vac.params *= 0
 
     eqi = Equilibrium(
-        eq.Psi,
-        eq.NFP,
-        Li,
-        Mi,
-        Ni,
-        L_gridi,
-        M_gridi,
-        N_gridi,
-        eq.node_pattern,
-        pres_vac.copy(),
-        copy.copy(eq.iota),  # have to use copy.copy here since may be None
-        copy.copy(eq.current),
-        surf_axisym.copy(),
-        None,
-        eq.sym,
-        spectral_indexing,
+        Psi=eq.Psi,
+        NFP=eq.NFP,
+        L=Li,
+        M=Mi,
+        N=Ni,
+        L_grid=L_gridi,
+        M_grid=M_gridi,
+        N_grid=N_gridi,
+        pressure=pres_vac.copy(),
+        iota=copy.copy(eq.iota),  # have to use copy.copy here since may be None
+        current=copy.copy(eq.current),
+        surface=surf_axisym.copy(),
+        sym=eq.sym,
+        spectral_indexing=spectral_indexing,
     )
 
     if not isinstance(optimizer, Optimizer):
         optimizer = Optimizer(optimizer)
-    constraints_i = get_fixed_boundary_constraints(
-        iota=objective != "vacuum" and eq.iota is not None
-    )
-    objective_i = get_equilibrium_objective(objective)
 
     eqfam = EquilibriaFamily()
 
     ii = 0
-    nn = mres_steps + pres_steps + bdry_steps
     stop = False
-    while ii < nn and not stop:
+    while ii < mres_steps and not stop:
         timer.start("Iteration {} total".format(ii + 1))
 
         if ii > 0:
             eqi = eqfam[-1].copy()
-
-        if ii < mres_steps and ii > 0:
-            # increase resolution of vacuum soln
+            # increase resolution of vacuum solution
             Mi = min(Mi + mres_step, M)
             Li = int(np.ceil(L / M) * Mi)
             L_gridi = np.ceil(L_grid / L * Li).astype(int)
@@ -161,64 +98,41 @@ def solve_continuation_automatic(  # noqa: C901
             deltas = get_deltas({"surface": surf_i}, {"surface": surf_i2})
             surf_i = surf_i2
 
-        if ii >= mres_steps and ii < mres_steps + pres_steps:
-            # make sure its at full radial/poloidal resolution
-            eqi.change_resolution(L=L, M=M, L_grid=L_grid, M_grid=M_grid)
-            # increase pressure
-            deltas = get_deltas(
-                {"pressure": eqfam[mres_steps - 1].pressure}, {"pressure": pressure}
-            )
-            deltas["dp"] *= pres_step
-            pres_ratio += pres_step
-
-        elif ii >= mres_steps + pres_steps:
-            # otherwise do boundary perturbations to get 3d shape from tokamak
-            eqi.change_resolution(L, M, N, L_grid, M_grid, N_grid)
-            surf_axisym.change_resolution(L, M, N)
-            deltas = get_deltas({"surface": surf_axisym}, {"surface": surface})
-            if "dRb" in deltas:
-                deltas["dRb"] *= bdry_step
-            if "dZb" in deltas:
-                deltas["dZb"] *= bdry_step
-            bdry_ratio += bdry_step
+        constraints_i = get_fixed_boundary_constraints(
+            eq=eqi,
+            iota=eqi.iota,
+            kinetic=eqi.electron_temperature,
+        )
+        objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
 
         if verbose:
             _print_iteration_summary(
                 ii,
-                nn,
+                None,
                 eqi,
-                bdry_ratio,
-                pres_ratio,
-                curr_ratio,
+                0,
+                0,
+                1,
                 pert_order,
                 objective_i,
                 optimizer,
-                ftol,
-                gtol,
-                xtol,
-                nfev,
             )
 
-        if len(eqfam) == 0 or (eqfam[-1].resolution != eqi.resolution):
-            constraints_i = get_fixed_boundary_constraints(
-                iota=objective != "vacuum" and eq.iota is not None
-            )
-            objective_i = get_equilibrium_objective(objective)
         if len(deltas) > 0:
             if verbose > 0:
                 print("Perturbing equilibrium")
             eqi.perturb(
                 objective=objective_i,
                 constraints=constraints_i,
-                **deltas,
+                deltas=deltas,
                 order=pert_order,
                 verbose=verbose,
                 copy=False,
             )
             deltas = {}
 
-        if not eqi.is_nested(msg="auto"):
-            stop = True
+        stop = not eqi.is_nested()
+
         if not stop:
             eqi.solve(
                 optimizer=optimizer,
@@ -228,10 +142,9 @@ def solve_continuation_automatic(  # noqa: C901
                 xtol=xtol,
                 gtol=gtol,
                 verbose=verbose,
-                maxiter=nfev,
+                maxiter=maxiter,
             )
-        if not eqi.is_nested(msg="auto"):
-            stop = True
+        stop = stop or not eqi.is_nested()
         eqfam.append(eqi)
 
         if checkpoint_path is not None:
@@ -243,9 +156,423 @@ def solve_continuation_automatic(  # noqa: C901
             timer.disp("Iteration {} total".format(ii + 1))
         ii += 1
 
-    eq.R_lmn = eqi.R_lmn
-    eq.Z_lmn = eqi.Z_lmn
-    eq.L_lmn = eqi.L_lmn
+    if stop:
+        if mres_step == MIN_MRES_STEP:
+            raise RuntimeError(
+                "Automatic continuation failed with mres_step=1, "
+                + "something is probably very wrong with your desired equilibrium."
+            )
+        else:
+            warnings.warn(
+                colored(
+                    "WARNING: Automatic continuation failed with "
+                    + f"mres_step={mres_step}, retrying with mres_step={mres_step//2}",
+                    "yellow",
+                )
+            )
+            return _solve_axisym(
+                eq,
+                mres_step // 2,
+                objective,
+                optimizer,
+                pert_order,
+                ftol,
+                xtol,
+                gtol,
+                maxiter,
+                verbose,
+                checkpoint_path,
+            )
+
+    return eqfam
+
+
+def _add_pressure(
+    eq,
+    eqfam,
+    pres_step,
+    objective="force",
+    optimizer="lsq-exact",
+    pert_order=2,
+    ftol=None,
+    xtol=None,
+    gtol=None,
+    maxiter=100,
+    verbose=1,
+    checkpoint_path=None,
+):
+    """Add pressure with adaptive step sizing."""
+    timer = Timer()
+
+    eqi = eqfam[-1].copy()
+    eqfam_temp = eqfam.copy()
+    # make sure its at full radial/poloidal resolution
+    eqi.change_resolution(L=eq.L, M=eq.M, L_grid=eq.L_grid, M_grid=eq.M_grid)
+
+    pres_steps = (
+        0
+        if (abs(eq.pressure(np.linspace(0, 1, 20))) < 1e-14).all() or pres_step == 0
+        else int(np.ceil(1 / pres_step))
+    )
+    pres_ratio = 0 if pres_steps else 1
+
+    ii = len(eqfam_temp)
+    stop = False
+    while ii - len(eqfam_temp) < pres_steps and not stop:
+        timer.start("Iteration {} total".format(ii + 1))
+        # increase pressure
+        deltas = get_deltas(
+            {"pressure": eqfam_temp[-1].pressure}, {"pressure": eq.pressure}
+        )
+        deltas["p_l"] *= pres_step
+        pres_ratio += pres_step
+
+        constraints_i = get_fixed_boundary_constraints(
+            eq=eqi,
+            iota=eqi.iota,
+            kinetic=eqi.electron_temperature,
+        )
+        objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
+
+        if verbose:
+            _print_iteration_summary(
+                ii,
+                None,
+                eqi,
+                0,
+                pres_ratio,
+                1,
+                pert_order,
+                objective_i,
+                optimizer,
+            )
+
+        if len(deltas) > 0:
+            if verbose > 0:
+                print("Perturbing equilibrium")
+            eqi.perturb(
+                objective=objective_i,
+                constraints=constraints_i,
+                deltas=deltas,
+                order=pert_order,
+                verbose=verbose,
+                copy=False,
+            )
+            deltas = {}
+
+        stop = not eqi.is_nested()
+
+        if not stop:
+            eqi.solve(
+                optimizer=optimizer,
+                objective=objective_i,
+                constraints=constraints_i,
+                ftol=ftol,
+                xtol=xtol,
+                gtol=gtol,
+                verbose=verbose,
+                maxiter=maxiter,
+            )
+        stop = stop or not eqi.is_nested()
+        eqfam.append(eqi)
+        eqi = eqi.copy()
+
+        if checkpoint_path is not None:
+            if verbose > 0:
+                print("Saving latest iteration")
+            eqfam.save(checkpoint_path)
+        timer.stop("Iteration {} total".format(ii + 1))
+        if verbose > 1:
+            timer.disp("Iteration {} total".format(ii + 1))
+        ii += 1
+
+    if stop:
+        if pres_step <= MIN_PRES_STEP:
+            raise RuntimeError(
+                "Automatic continuation failed with "
+                + f"pres_step={pres_step}, something is probably very wrong with your "
+                + "desired equilibrium."
+            )
+        else:
+            warnings.warn(
+                colored(
+                    "WARNING: Automatic continuation failed with "
+                    + f"pres_step={pres_step}, retrying with pres_step={pres_step/2}",
+                    "yellow",
+                )
+            )
+            return _add_pressure(
+                eq,
+                eqfam_temp,
+                pres_step / 2,
+                objective,
+                optimizer,
+                pert_order,
+                ftol,
+                xtol,
+                gtol,
+                maxiter,
+                verbose,
+                checkpoint_path,
+            )
+
+    return eqfam
+
+
+def _add_shaping(
+    eq,
+    eqfam,
+    bdry_step,
+    objective="force",
+    optimizer="lsq-exact",
+    pert_order=2,
+    ftol=None,
+    xtol=None,
+    gtol=None,
+    maxiter=100,
+    verbose=1,
+    checkpoint_path=None,
+):
+    """Add 3D shaping with adaptive step sizing."""
+    timer = Timer()
+
+    eqi = eqfam[-1].copy()
+    eqfam_temp = eqfam.copy()
+    # make sure its at full resolution
+    eqi.change_resolution(eq.L, eq.M, eq.N, eq.L_grid, eq.M_grid, eq.N_grid)
+
+    bdry_steps = 0 if eq.N == 0 or bdry_step == 0 else int(np.ceil(1 / bdry_step))
+    bdry_ratio = 0 if eq.N else 1
+
+    surf_axisym = eq.surface.copy()
+    surf_axisym.change_resolution(eq.L, eq.M, 0)
+    surf_axisym.change_resolution(eq.L, eq.M, eq.N)
+
+    ii = len(eqfam_temp)
+    stop = False
+    while ii - len(eqfam_temp) < bdry_steps and not stop:
+        timer.start("Iteration {} total".format(ii + 1))
+        # increase shaping
+        deltas = get_deltas({"surface": surf_axisym}, {"surface": eq.surface})
+        if "Rb_lmn" in deltas:
+            deltas["Rb_lmn"] *= bdry_step
+        if "Zb_lmn" in deltas:
+            deltas["Zb_lmn"] *= bdry_step
+        bdry_ratio += bdry_step
+
+        constraints_i = get_fixed_boundary_constraints(
+            eq=eqi,
+            iota=eqi.iota,
+            kinetic=eqi.electron_temperature,
+        )
+        objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
+
+        if verbose:
+            _print_iteration_summary(
+                ii,
+                None,
+                eqi,
+                bdry_ratio,
+                1,
+                1,
+                pert_order,
+                objective_i,
+                optimizer,
+            )
+
+        if len(deltas) > 0:
+            if verbose > 0:
+                print("Perturbing equilibrium")
+            eqi.perturb(
+                objective=objective_i,
+                constraints=constraints_i,
+                deltas=deltas,
+                order=pert_order,
+                verbose=verbose,
+                copy=False,
+            )
+            deltas = {}
+
+        stop = not eqi.is_nested()
+
+        if not stop:
+            eqi.solve(
+                optimizer=optimizer,
+                objective=objective_i,
+                constraints=constraints_i,
+                ftol=ftol,
+                xtol=xtol,
+                gtol=gtol,
+                verbose=verbose,
+                maxiter=maxiter,
+            )
+        stop = stop or not eqi.is_nested()
+        eqfam.append(eqi)
+        eqi = eqi.copy()
+
+        if checkpoint_path is not None:
+            if verbose > 0:
+                print("Saving latest iteration")
+            eqfam.save(checkpoint_path)
+        timer.stop("Iteration {} total".format(ii + 1))
+        if verbose > 1:
+            timer.disp("Iteration {} total".format(ii + 1))
+        ii += 1
+
+    if stop:
+        if bdry_step <= MIN_BDRY_STEP:
+            raise RuntimeError(
+                "Automatic continuation failed with "
+                + f"bdry_step={bdry_step}, something is probably very wrong with your "
+                + "desired equilibrium."
+            )
+        else:
+            warnings.warn(
+                colored(
+                    "WARNING: Automatic continuation failed with "
+                    + f"bdry_step={bdry_step}, retrying with bdry_step={bdry_step/2}",
+                    "yellow",
+                )
+            )
+            return _add_shaping(
+                eq,
+                eqfam_temp,
+                bdry_step / 2,
+                objective,
+                optimizer,
+                pert_order,
+                ftol,
+                xtol,
+                gtol,
+                maxiter,
+                verbose,
+                checkpoint_path,
+            )
+
+    return eqfam
+
+
+def solve_continuation_automatic(  # noqa: C901
+    eq,
+    objective="force",
+    optimizer="lsq-exact",
+    pert_order=2,
+    ftol=None,
+    xtol=None,
+    gtol=None,
+    maxiter=100,
+    verbose=1,
+    checkpoint_path=None,
+    **kwargs,
+):
+    """Solve for an equilibrium using an automatic continuation method.
+
+    By default, the method first solves for a no pressure tokamak, then a finite beta
+    tokamak, then a finite beta stellarator. Steps in resolution, pressure, and 3D
+    shaping are determined adaptively, and the method may backtrack to use smaller steps
+    if the initial steps are too large.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Unsolved Equilibrium with the final desired boundary, profiles, resolution.
+    objective : {"force", "energy", "vacuum"}
+        function to solve for equilibrium solution
+    optimizer : str or Optimizer (optional)
+        optimizer to use
+    pert_order : int
+        order of perturbations to use.
+    ftol, xtol, gtol : float
+        stopping tolerances for subproblem at each step. `None` will use defaults
+        for given optimizer.
+    maxiter : int
+        maximum number of iterations in each equilibrium subproblem.
+    verbose : integer
+        * 0: no output
+        * 1: summary of each iteration
+        * 2: as above plus timing information
+        * 3: as above plus detailed solver output
+    checkpoint_path : str or path-like
+        file to save checkpoint data (Default value = None)
+    **kwargs : dict, optional
+        * ``mres_step``: int, default 6. The amount to increase Mpol by at each
+          continuation step
+        * ``pres_step``: float, ``0<=pres_step<=1``, default 0.5. The amount to
+          increase pres_ratio by at each continuation step
+        * ``bdry_step``: float, ``0<=bdry_step<=1``, default 0.25. The amount to
+          increase bdry_ratio by at each continuation step
+
+    Returns
+    -------
+    eqfam : EquilibriaFamily
+        family of equilibria for the intermediate steps, where the last member is the
+        final desired configuration,
+
+    """
+    errorif(
+        eq.electron_temperature is not None,
+        NotImplementedError,
+        "Continuation method with kinetic profiles is not currently supported",
+    )
+    errorif(
+        eq.anisotropy is not None,
+        NotImplementedError,
+        "Continuation method with anisotropic pressure is not currently supported",
+    )
+    timer = Timer()
+    timer.start("Total time")
+
+    mres_step = kwargs.pop("mres_step", 6)
+    pres_step = kwargs.pop("pres_step", 1 / 2)
+    bdry_step = kwargs.pop("bdry_step", 1 / 4)
+    assert len(kwargs) == 0, "Got an unexpected kwarg {}".format(kwargs.keys())
+    if not isinstance(optimizer, Optimizer):
+        optimizer = Optimizer(optimizer)
+
+    eqfam = _solve_axisym(
+        eq,
+        mres_step,
+        objective,
+        optimizer,
+        pert_order,
+        ftol,
+        xtol,
+        gtol,
+        maxiter,
+        verbose,
+        checkpoint_path,
+    )
+
+    eqfam = _add_pressure(
+        eq,
+        eqfam,
+        pres_step,
+        objective,
+        optimizer,
+        pert_order,
+        ftol,
+        xtol,
+        gtol,
+        maxiter,
+        verbose,
+        checkpoint_path,
+    )
+
+    eqfam = _add_shaping(
+        eq,
+        eqfam,
+        bdry_step,
+        objective,
+        optimizer,
+        pert_order,
+        ftol,
+        xtol,
+        gtol,
+        maxiter,
+        verbose,
+        checkpoint_path,
+    )
+    eq.params_dict = eqfam[-1].params_dict
     eqfam[-1] = eq
     timer.stop("Total time")
     if verbose > 0:
@@ -268,16 +595,16 @@ def solve_continuation(  # noqa: C901
     objective="force",
     optimizer="lsq-exact",
     pert_order=2,
-    ftol=1e-2,
-    xtol=1e-4,
-    gtol=1e-6,
-    nfev=100,
+    ftol=None,
+    xtol=None,
+    gtol=None,
+    maxiter=100,
     verbose=1,
     checkpoint_path=None,
 ):
     """Solve for an equilibrium by continuation method.
 
-    Steps through an EquilibriaFamily, solving each equilibrium, and uses pertubations
+    Steps through an EquilibriaFamily, solving each equilibrium, and uses perturbations
     to step between different profiles/boundaries.
 
     Uses the previous step as an initial guess for each solution.
@@ -288,15 +615,16 @@ def solve_continuation(  # noqa: C901
         Equilibria to solve for at each step.
     objective : {"force", "energy", "vacuum"}
         function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
+    optimizer : str or Optimizer (optional)
         optimizer to use
     pert_order : int or array of int
         order of perturbations to use. If array-like, should be same length as eqfam
         to specify different values for each step.
     ftol, xtol, gtol : float or array-like of float
-        stopping tolerances for subproblem at each step.
-    nfev : int or array-like of int
-        maximum number of function evaluations in each equilibrium subproblem.
+        stopping tolerances for subproblem at each step. `None` will use defaults
+        for given optimizer.
+    maxiter : int or array-like of int
+        maximum number of iterations in each equilibrium subproblem.
     verbose : integer
         * 0: no output
         * 1: summary of each iteration
@@ -312,19 +640,32 @@ def solve_continuation(  # noqa: C901
         final desired configuration,
 
     """
+    errorif(
+        not all([eq.electron_temperature is None for eq in eqfam]),
+        NotImplementedError,
+        "Continuation method with kinetic profiles is not currently supported",
+    )
+    errorif(
+        not all([eq.anisotropy is None for eq in eqfam]),
+        NotImplementedError,
+        "Continuation method with anisotropic pressure is not currently supported",
+    )
+
     timer = Timer()
     timer.start("Total time")
-    pert_order, ftol, xtol, gtol, nfev, _ = np.broadcast_arrays(
-        pert_order, ftol, xtol, gtol, nfev, eqfam
+    pert_order, ftol, xtol, gtol, maxiter, _ = np.broadcast_arrays(
+        pert_order, ftol, xtol, gtol, maxiter, eqfam
     )
     if isinstance(eqfam, (list, tuple)):
         eqfam = EquilibriaFamily(*eqfam)
 
     if not isinstance(optimizer, Optimizer):
         optimizer = Optimizer(optimizer)
-    objective_i = get_equilibrium_objective(objective)
+    objective_i = get_equilibrium_objective(eq=eqfam[0], mode=objective)
     constraints_i = get_fixed_boundary_constraints(
-        iota=objective != "vacuum" and eqfam[0].iota is not None
+        eq=eqfam[0],
+        iota=objective != "vacuum" and eqfam[0].iota is not None,
+        kinetic=eqfam[0].electron_temperature is not None,
     )
 
     ii = 0
@@ -344,10 +685,6 @@ def solve_continuation(  # noqa: C901
                 pert_order[ii],
                 objective_i,
                 optimizer,
-                ftol[ii],
-                gtol[ii],
-                xtol[ii],
-                nfev[ii],
             )
             deltas = {}
 
@@ -370,30 +707,27 @@ def solve_continuation(  # noqa: C901
             }
             deltas = get_deltas(things1, things2)
 
-            # maybe rebuild objective if resolution changed.
-            if eqfam[ii - 1].resolution != eqi.resolution:
-                objective_i = get_equilibrium_objective(objective)
-                constraints_i = get_fixed_boundary_constraints(
-                    iota=objective != "vacuum" and eqfam[ii].iota is not None
-                )
-
         if len(deltas) > 0:
             if verbose > 0:
                 print("Perturbing equilibrium")
             # TODO: pass Jx if available
             eqp = eqfam[ii - 1].copy()
+            objective_i = get_equilibrium_objective(eq=eqp, mode=objective)
+            constraints_i = get_fixed_boundary_constraints(
+                eq=eqp,
+                iota=eqp.iota,
+                kinetic=eqp.electron_temperature,
+            )
             eqp.change_resolution(**eqi.resolution)
             eqp.perturb(
                 objective=objective_i,
                 constraints=constraints_i,
-                **deltas,
+                deltas=deltas,
                 order=pert_order[ii],
                 verbose=verbose,
                 copy=False,
             )
-            eqi.R_lmn = eqp.R_lmn
-            eqi.Z_lmn = eqp.Z_lmn
-            eqi.L_lmn = eqp.L_lmn
+            eqi.params_dict = eqp.params_dict
             deltas = {}
             del eqp
 
@@ -401,6 +735,13 @@ def solve_continuation(  # noqa: C901
             stop = True
 
         if not stop:
+            # TODO: add ability to rebind objectives
+            objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
+            constraints_i = get_fixed_boundary_constraints(
+                eq=eqi,
+                iota=eqi.iota,
+                kinetic=eqi.electron_temperature,
+            )
             eqi.solve(
                 optimizer=optimizer,
                 objective=objective_i,
@@ -409,7 +750,7 @@ def solve_continuation(  # noqa: C901
                 xtol=xtol[ii],
                 gtol=gtol[ii],
                 verbose=verbose,
-                maxiter=nfev[ii],
+                maxiter=maxiter[ii],
             )
 
         if not eqi.is_nested(msg="manual"):
@@ -468,14 +809,10 @@ def _print_iteration_summary(
     pert_order,
     objective,
     optimizer,
-    ftol,
-    gtol,
-    xtol,
-    nfev,
     **kwargs,
 ):
     print("================")
-    print("Step {}/{}".format(ii + 1, nn))
+    print(f"Step {ii+1}" + ("" if nn is None else f"/{nn}"))
     print("================")
     eq.resolution_summary()
     print("Boundary ratio = {}".format(bdry_ratio))
@@ -493,8 +830,4 @@ def _print_iteration_summary(
             optimizer if isinstance(optimizer, str) else optimizer.method
         )
     )
-    print("Function tolerance = {}".format(ftol))
-    print("Gradient tolerance = {}".format(gtol))
-    print("State vector tolerance = {}".format(xtol))
-    print("Max function evaluations = {}".format(nfev))
     print("================")

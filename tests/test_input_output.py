@@ -1,4 +1,4 @@
-"""Tests for reading/writing intput/output, both ascii and binary."""
+"""Tests for reading/writing input/output, both ascii and binary."""
 
 import os
 import pathlib
@@ -13,6 +13,7 @@ from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.io import InputReader, hdf5Reader, hdf5Writer, load
 from desc.io.ascii_io import read_ascii, write_ascii
+from desc.magnetic_fields import SplineMagneticField, ToroidalMagneticField
 from desc.transform import Transform
 from desc.utils import equals
 
@@ -20,12 +21,19 @@ from desc.utils import equals
 @pytest.mark.unit
 def test_vmec_input(tmpdir_factory):
     """Test converting VMEC to DESC input file."""
+    # input.DSHAPE has multi-line inputs and
+    # a duplicate AXIS input line as well, so
+    # exercises full VMEC capability of input reader
     input_path = "./tests/inputs/input.DSHAPE"
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("input.DSHAPE")
     shutil.copyfile(input_path, tmp_path)
-    ir = InputReader(cl_args=[str(tmp_path)])
+    with pytest.warns(UserWarning):
+        ir = InputReader(cl_args=[str(tmp_path)])
     vmec_inputs = ir.inputs
+    # ir makes a VMEC file automatically
+    path_converted_file = tmpdir.join("input.DSHAPE_desc")
+    # also test making a DESC file from the ir.inputs manually
     path = tmpdir.join("desc_from_vmec")
     ir.write_desc_input(path, ir.inputs)
     ir2 = InputReader(cl_args=[str(path)])
@@ -35,26 +43,194 @@ def test_vmec_input(tmpdir_factory):
         v.pop("output_path")
     assert all([equals(in1, in2) for in1, in2 in zip(vmec_inputs, desc_inputs)])
 
+    correct_file_path = ".//tests//inputs//input.DSHAPE_desc"
+
+    # check DESC input file matches known correct one line-by-line
+    with open(correct_file_path) as f:
+        lines_correct = f.readlines()
+    with open(path) as f:
+        lines_direct = f.readlines()
+    with open(path_converted_file) as f:
+        lines_converted = f.readlines()
+    # skip first 3 lines as they have date and pwd info
+    for line1, line2 in zip(lines_correct[3:], lines_converted[4:]):
+        assert line1.strip() == line2.strip()
+    for line1, line2 in zip(lines_correct[3:], lines_direct):
+        assert line1.strip() == line2.strip()
+
+
+@pytest.mark.unit
+def test_write_desc_input_Nones(tmpdir_factory):
+    """Test converting writing DESC input file when an input tol is None."""
+    # tests how None is handled as a passed-in input to the input writer
+    # if None is passed for one of the elements of an input item
+    # such as ftol, gtol, xtol or nfev,
+    # then that will not be written
+    # for example if inputs['ftol'] = [1e-2,None,1e-3]
+    # the written file will have ftol = 0.01,0.001
+    # and the None will have not been written
+
+    # if only Nones are passed for just one of the tolerances, only that one will not
+    # be written. gtol is used here as that test
+
+    input_path = "./tests/inputs/DSHAPE"
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    tmp_path = tmpdir.join("DSHAPE")
+    shutil.copyfile(input_path, tmp_path)
+    ir = InputReader(cl_args=[str(tmp_path)])
+
+    ftols_input_with_none = [1e-2, None, 1e-3]
+    for i, inp in enumerate(ir.inputs):
+        inp["ftol"] = ftols_input_with_none[i]
+        inp["gtol"] = None
+
+    path = tmpdir.join("desc_with_None")
+    ir.write_desc_input(path, ir.inputs)
+    ir2 = InputReader(cl_args=[str(path)])
+    correct_ftols = [1e-2, 1e-3, 1e-3]
+    for i, inp in enumerate(ir2.inputs):
+        assert inp["ftol"] == correct_ftols[i]
+
+    # now check that the written line is
+    # the correct "ftol = 1e-2, 1e-3"
+    # and that gtol is NOT written anywhere,
+    # since only None was passed in for that input
+    no_gtol = True
+    with open(path) as f:
+        lines = f.readlines()
+    for line in lines:
+        if line.find("ftol") != -1:
+            # line is like "ftol = 0.01, 0.001\n"
+            line = line.strip().split("=")[1]
+            # now we have [" 0.01, 0.001"]
+            line = line.strip().split(",")
+            for i, string_num in enumerate(line):
+                assert float(string_num) == correct_ftols[i]
+        elif line.find("gtol") != -1:
+            no_gtol = False
+    assert no_gtol  # fail test if gtol line is written
+
+
+@pytest.mark.unit
+def test_desc_output_to_input(tmpdir_factory):
+    """
+    Test converting DESC output to a DESC input file.
+
+    To do that, we convert a DESC output file to a DESC input file
+    named desc_input_converted. We compare the boundary Fourier
+    coefficients of this file with the true values of the Fourier
+    coefficients given in desc_input_truth.
+    """
+    outfile_path = "./tests/inputs/LandremanPaul2022_QA_reactorScale_lowRes.h5"
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    tmp_path = tmpdir.join("input_LandremanPaul_QA")
+    tmpout_path = tmpdir.join("LandremanPaul2022_QA_reactorScale_lowRes.h5")
+    shutil.copyfile(outfile_path, tmpout_path)
+
+    ir1 = InputReader()
+    ir1.desc_output_to_input(str(tmp_path), str(tmpout_path))
+    ir1 = InputReader(cl_args=[str(tmp_path)])
+    arr1 = ir1.parse_inputs()[-1]["surface"]
+    arr1 = arr1[arr1[:, 1].argsort()]
+    arr1mneg = arr1[arr1[:, 1] < 0]
+    arr1mpos = arr1[arr1[:, 1] >= 0]
+    pres1 = ir1.parse_inputs()[-1]["pressure"]
+
+    desc_input_truth = "./tests/inputs/LandremanPaul2022_QA_reactorScale_lowRes"
+    with pytest.warns(UserWarning):
+        ir2 = InputReader(cl_args=[str(desc_input_truth)])
+        arr2 = ir2.parse_inputs()[-1]["surface"]
+        pres2 = ir2.parse_inputs()[-1]["pressure"]
+    arr2 = arr2[arr2[:, 1].argsort()]
+    arr2mneg = arr2[arr2[:, 1] < 0]
+    arr2mpos = arr2[arr2[:, 1] >= 0]
+
+    np.testing.assert_allclose(
+        np.minimum(
+            np.linalg.norm(arr1mneg[:, 3:] - arr2mneg[:, 3:]),
+            np.linalg.norm(arr1mneg[:, 3:] + arr2mneg[:, 3:]),
+        ),
+        0,
+        atol=1e-8,
+    )
+    np.testing.assert_allclose(
+        np.minimum(
+            np.linalg.norm(arr1mpos[:, 3:] - arr2mpos[:, 3:]),
+            np.linalg.norm(arr1mpos[:, 3:] + arr2mpos[:, 3:]),
+        ),
+        0,
+        atol=1e-8,
+    )
+
+    if np.linalg.norm(pres1[:, 1]) > 0:
+        np.testing.assert_allclose(pres1(pres1[:, 1] > 0), pres2(pres2[:, 1] > 0))
+
+    outfile_path = "./tests/inputs/iotest_HELIOTRON.h5"
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    tmp_path = tmpdir.join("input_iotest_HELIOTRON")
+    tmpout_path = tmpdir.join("iotest_HELIOTRON.h5")
+    shutil.copyfile(outfile_path, tmpout_path)
+
+    ir1 = InputReader()
+    ir1.desc_output_to_input(str(tmp_path), str(tmpout_path))
+    ir1 = InputReader(cl_args=[str(tmp_path)])
+    arr1 = ir1.parse_inputs()[-1]["surface"]
+    arr1 = arr1[arr1[:, 1].argsort()]
+    arr1mneg = arr1[arr1[:, 1] < 0]
+    arr1mpos = arr1[arr1[:, 1] >= 0]
+
+    desc_input_truth = "./tests/inputs/iotest_HELIOTRON"
+    ir2 = InputReader(cl_args=[str(desc_input_truth)])
+    arr2 = ir2.parse_inputs()[-1]["surface"]
+    arr2 = arr2[arr2[:, 1].argsort()]
+    arr2mneg = arr2[arr2[:, 1] < 0]
+    arr2mpos = arr2[arr2[:, 1] >= 0]
+
+    np.testing.assert_allclose(
+        np.minimum(
+            np.linalg.norm(arr1mneg[:, 3:] - arr2mneg[:, 3:]),
+            np.linalg.norm(arr1mneg[:, 3:] + arr2mneg[:, 3:]),
+        ),
+        0,
+        atol=1e-8,
+    )
+
+    np.testing.assert_allclose(
+        np.minimum(
+            np.linalg.norm(arr1mpos[:, 3:] - arr2mpos[:, 3:]),
+            np.linalg.norm(arr1mpos[:, 3:] + arr2mpos[:, 3:]),
+        ),
+        0,
+        atol=1e-8,
+    )
+
+    if np.linalg.norm(pres1[:, 1]) > 0:
+        np.testing.assert_allclose(pres1(pres1[:, 1] > 0), pres2(pres2[:, 1] > 0))
+
 
 @pytest.mark.unit
 def test_near_axis_input_files():
     """Test that DESC and VMEC input files generated by pyQSC give the same inputs."""
     vmec_path = ".//tests//inputs//input.QSC_r2_5.5_vmec"
     desc_path = ".//tests//inputs//input.QSC_r2_5.5_desc"
-    inputs_vmec = InputReader(vmec_path).inputs[-1]
+    with pytest.warns(UserWarning):
+        inputs_vmec = InputReader(vmec_path).inputs[-1]
     inputs_desc = InputReader(desc_path).inputs[-1]
     for arg in ["sym", "NFP", "Psi", "pressure", "current", "surface", "axis"]:
         np.testing.assert_allclose(
             inputs_desc[arg], inputs_vmec[arg], rtol=1e-6, atol=1e-8
         )
+    if os.path.exists(".//tests//inputs//input.QSC_r2_5.5_vmec_desc"):
+        os.remove(".//tests//inputs//input.QSC_r2_5.5_vmec_desc")
 
 
 @pytest.mark.unit
 def test_vmec_input_surface_threshold():
     """Test ."""
     path = ".//tests//inputs//input.QSC_r2_5.5_vmec"
-    surf_full = InputReader.parse_vmec_inputs(path)[-1]["surface"]
-    surf_trim = InputReader.parse_vmec_inputs(path, threshold=1e-6)[-1]["surface"]
+    with pytest.warns(UserWarning, match="Detected multiple inputs"):
+        surf_full = InputReader.parse_vmec_inputs(path)[-1]["surface"]
+        surf_trim = InputReader.parse_vmec_inputs(path, threshold=1e-6)[-1]["surface"]
     assert surf_full.shape[0] > surf_trim.shape[0]
     assert surf_full.shape[1] == surf_trim.shape[1] == 5
 
@@ -63,7 +239,7 @@ class TestInputReader:
     """Tests for the InputReader class."""
 
     argv0 = []
-    argv1 = ["nonexistant_input_file"]
+    argv1 = ["nonexistent_input_file"]
     argv2 = ["./tests/inputs/MIN_INPUT"]
 
     @pytest.mark.unit
@@ -96,7 +272,7 @@ class TestInputReader:
         ), "numpy environment variable incorrect with default argument"
         assert ir.args.version is False, "version is not default False"
         assert (
-            len(ir.inputs[0]) == 28
+            len(ir.inputs[0]) == 26
         ), "number of inputs does not match number expected in MIN_INPUT"
         # test equality of arguments
 
@@ -133,13 +309,6 @@ class TestInputReader:
         ), "value of inputs['verbose'] incorrect on quiet argument"
 
     @pytest.mark.unit
-    def test_vmec_to_desc_input(self):
-        """Test that we correctly convert a VMEC input file to DESC input file."""
-        # FIXME: maybe just store a file we know is converted correctly,
-        #  and checksum compare a live conversion to it
-        pass
-
-    @pytest.mark.unit
     def test_vacuum_objective_with_iota_yields_current(self):
         """Test that input file with vacuum objective always uses zero current."""
         input_path = ".//tests//inputs//HELIOTRON_vacuum"
@@ -149,6 +318,15 @@ class TestInputReader:
         # ensure that a current profile instead of an iota profile is used
         assert "iota" not in ir.inputs[0].keys()
         assert "current" in ir.inputs[0].keys()
+
+    @pytest.mark.unit
+    def test_node_pattern_warning(self):
+        """Test that a warning is thrown when trying to use a custom node pattern."""
+        input_path = ".//tests//inputs//SOLOVEV_poincare"
+        # load an input file with vacuum obj but also an iota profile specified
+        with pytest.warns(UserWarning):
+            ir = InputReader(input_path)
+        assert "node_pattern" not in ir.inputs[0]
 
 
 class MockObject:
@@ -370,3 +548,37 @@ def test_load_eq_without_current():
     with pytest.warns(RuntimeWarning):
         eq = load(desc_no_current_path)[-1]
     assert eq.current is None
+
+
+@pytest.mark.unit
+def test_io_SplineMagneticField(tmpdir_factory):
+    """Test saving/loading a SplineMagneticField works (tests dict saving)."""
+    tmpdir = tmpdir_factory.mktemp("save_spline_field_test")
+    tmp_path = tmpdir.join("spline_test.h5")
+
+    R = np.linspace(1, 2, 2)
+    Z = np.linspace(1, 2, 2)
+    phi = np.linspace(1, 2, 2)
+
+    field = SplineMagneticField.from_field(
+        ToroidalMagneticField(R0=1, B0=1), R, phi, Z, period=2 * np.pi
+    )
+
+    field.save(tmp_path)
+    field2 = load(tmp_path)
+
+    for attr in field._io_attrs_:
+        attr1 = getattr(field, attr)
+        attr2 = getattr(field2, attr)
+
+        if isinstance(attr1, str) or isinstance(attr1, bool):
+            assert attr1 == attr2
+        elif isinstance(attr1, dict):
+            continue
+        else:
+            np.testing.assert_allclose(attr1, attr2, err_msg=attr)
+    derivs1 = field._derivs
+    derivs2 = field2._derivs
+    for key in derivs1.keys():
+        for key2 in derivs1[key].keys():
+            np.testing.assert_allclose(derivs1[key][key2], derivs2[key][key2])

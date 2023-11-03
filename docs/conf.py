@@ -42,7 +42,7 @@ extensions = [
     "sphinx.ext.coverage",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
-    "sphinx.ext.viewcode",
+    "sphinx_github_style",
     "sphinx.ext.githubpages",
     "nbsphinx",
     "sphinx.ext.napoleon",
@@ -50,6 +50,12 @@ extensions = [
     "sphinxarg.ext",
     "sphinx_copybutton",
 ]
+# options for sphinx_github_style
+top_level = "desc"
+linkcode_blob = "head"
+linkcode_url = r"https://github.com/PlasmaControl/DESC"
+linkcode_link_text = "Source"
+
 # numpydoc_class_members_toctree = False
 # Napoleon settings
 napoleon_google_docstring = False
@@ -88,7 +94,7 @@ master_doc = "index"
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = "en"
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -116,9 +122,9 @@ html_theme_options = {
     "style_external_links": False,
     "style_nav_header_background": "#3c4142",
     # Toc options
-    "collapse_navigation": False,
+    "collapse_navigation": True,
     "sticky_navigation": True,
-    "navigation_depth": 4,
+    "navigation_depth": 2,
     "includehidden": True,
     "titles_only": False,
 }

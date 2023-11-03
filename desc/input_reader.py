@@ -165,13 +165,10 @@ class InputReader:
             "L": np.atleast_1d(None),
             "M": np.atleast_1d(0),
             "N": np.atleast_1d(0),
-            "I": np.atleast_1d(0),
-            "J": np.atleast_1d(0),
+            "K": np.atleast_1d(1),
             "L_grid": np.atleast_1d(None),
             "M_grid": np.atleast_1d(0),
             "N_grid": np.atleast_1d(0),
-            "I_grid": np.atleast_1d(0),
-            "J_grid": np.atleast_1d(0),
             "pres_ratio": np.atleast_1d(None),
             "curr_ratio": np.atleast_1d(None),
             "bdry_ratio": np.atleast_1d(None),
@@ -302,13 +299,9 @@ class InputReader:
             if match:
                 inputs["N"] = numbers.astype(int)
                 flag = True
-            match = re.search(r"I_pol", argument, re.IGNORECASE)
+            match = re.search(r"K", argument, re.IGNORECASE)
             if match:
-                inputs["I"] = numbers.astype(int)
-                flag = True
-            match = re.search(r"J_tor", argument, re.IGNORECASE)
-            if match:
-                inputs["J"] = numbers.astype(int)
+                inputs["K"] = numbers.astype(int)
                 flag = True
             match = re.search(r"L_grid", argument, re.IGNORECASE)
             if match:
@@ -321,14 +314,6 @@ class InputReader:
             match = re.search(r"N_grid", argument, re.IGNORECASE)
             if match:
                 inputs["N_grid"] = numbers.astype(int)
-                flag = True
-            match = re.search(r"I_grid", argument, re.IGNORECASE)
-            if match:
-                inputs["I_grid"] = numbers.astype(int)
-                flag = True
-            match = re.search(r"J_grid", argument, re.IGNORECASE)
-            if match:
-                inputs["J_grid"] = numbers.astype(int)
                 flag = True
 
             # continuation parameters
@@ -578,11 +563,9 @@ class InputReader:
         # error handling
         if np.any(inputs["M"] == 0) and inputs["basis"] == "FourierZernike":
             raise OSError(colored("M_pol is not assigned.", "red"))
-        if np.any(inputs["I"] == 0) and inputs["basis"] == "FiniteElements":
+        if np.any(inputs["K"] == 0) and inputs["basis"] == "FiniteElements":
             raise OSError(
-                colored(
-                    "I (number of poloidal basis functions) is not assigned.", "red"
-                )
+                colored("K (order of finite elements) is not assigned.", "red")
             )
         if np.sum(inputs["surface"]) == 0:
             raise OSError(colored("Fixed-boundary surface is not assigned.", "red"))
@@ -606,13 +589,8 @@ class InputReader:
 
         if inputs["basis"] == "FourierZernike":
             warnings.warn(
-                "FourierZernike basis does not use I and J indexing, "
-                + "ignoring these numbers in the input file."
-            )
-        else:
-            warnings.warn(
-                "FE basis does not use M and N indexing, "
-                + "ignoring these numbers in the input file."
+                "FourierZernike basis does not use parameter K, "
+                + "ignoring this number in the input file."
             )
 
         # sort axis array
@@ -632,13 +610,10 @@ class InputReader:
             "L",
             "M",
             "N",
+            "K",
             "L_grid",
             "M_grid",
             "N_grid",
-            "I",
-            "J",
-            "I_grid",
-            "J_grid",
             "pres_ratio",
             "curr_ratio",
             "bdry_ratio",
@@ -662,10 +637,6 @@ class InputReader:
             inputs["M_grid"] = (2 * inputs["M"]).astype(int)
         if np.sum(inputs["N_grid"]) == 0:
             inputs["N_grid"] = (2 * inputs["N"]).astype(int)
-        if np.sum(inputs["I_grid"]) == 0:
-            inputs["I_grid"] = (inputs["I"]).astype(int)
-        if np.sum(inputs["J_grid"]) == 0:
-            inputs["J_grid"] = (inputs["J"]).astype(int)
         if np.sum(inputs["axis"]) == 0:
             axis_idx = np.where(inputs["surface"][:, 1] == 0)[0]
             inputs["axis"] = inputs["surface"][axis_idx, 2:]
@@ -903,11 +874,7 @@ class InputReader:
             "L_grid": "L_grid",
             "M_grid": "M_grid",
             "N_grid": "N_grid",
-            "I_pol": "I",
-            "J_tor": "J",
             "L_grid": "L_grid",
-            "I_grid": "I_grid",
-            "J_grid": "J_grid",
         }.items():
             f.write(f"{key} = {getattr(eq, val)}\n")
 
@@ -1043,13 +1010,10 @@ class InputReader:
             "L": None,
             "M": 0,
             "N": 0,
+            "K": 1,
             "L_grid": None,
             "M_grid": 0,
             "N_grid": 0,
-            "I": 0,
-            "J": 0,
-            "I_grid": 0,
-            "J_grid": 0,
             "pres_ratio": None,
             "curr_ratio": None,
             "bdry_ratio": None,

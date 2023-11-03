@@ -9,12 +9,9 @@ Psi = 1.0
 # spectral resolution
 M_pol  =  6, 10, 13
 N_tor  =  0
-I_pol  =  10
-J_tor  =  0
 M_grid = 12, 20, 26
 N_grid =  0
-I_grid = 12
-J_grid =  0
+K = 1
 
 # continuation parameters
 bdry_ratio = 1

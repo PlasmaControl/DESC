@@ -13,7 +13,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import combine_args
-from desc.utils import Timer, get_instance
+from desc.utils import Timer, flatten_list, get_instance
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 
@@ -40,7 +40,6 @@ class Optimizer(IOAble):
     _wrappers = [None, "prox", "proximal"]
 
     def __init__(self, method):
-
         self.method = method
 
     def __repr__(self):
@@ -83,6 +82,7 @@ class Optimizer(IOAble):
         verbose=1,
         maxiter=None,
         options=None,
+        copy=False,
     ):
         """Optimize an objective function.
 
@@ -130,6 +130,9 @@ class Optimizer(IOAble):
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
             settings. See the code for more details.
+        copy : bool
+            Whether to return the current things or a copy (leaving the original
+            unchanged).
 
         Returns
         -------
@@ -141,12 +144,12 @@ class Optimizer(IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
-        if not isinstance(things, (list, tuple)):
-            things = [things]
+        things = flatten_list(things, flatten_tuple=True)
 
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
 
+        # eq may be None
         eq = get_instance(things, Equilibrium)
 
         options = {} if options is None else options
@@ -160,23 +163,32 @@ class Optimizer(IOAble):
             eq, objective, nonlinear_constraint, self.method, options
         )
 
-        if not isinstance(objective, ProximalProjection) and eq is not None:
-            # need to include self consistency constraints
-            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
-        if nonlinear_constraint is not None:
-            objective, nonlinear_constraint = combine_args(
-                objective, nonlinear_constraint
-            )
-        if len(linear_constraints):
-            objective = LinearConstraintProjection(objective, linear_constraints)
-            if nonlinear_constraint is not None:
-                nonlinear_constraint = LinearConstraintProjection(
-                    nonlinear_constraint, linear_constraints
-                )
+        # make sure everything is built
         if not objective.built:
             objective.build(verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
             nonlinear_constraint.build(verbose=verbose)
+
+        if nonlinear_constraint is not None:
+            objective, nonlinear_constraint = combine_args(
+                objective, nonlinear_constraint
+            )
+            assert set(objective.things) == set(nonlinear_constraint.things)
+        assert set(objective.things) == set(things)
+
+        # wrap to handle linear constraints
+        if not isinstance(objective, ProximalProjection) and eq is not None:
+            # need to include self consistency constraints
+            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
+        if len(linear_constraints):
+            objective = LinearConstraintProjection(objective, linear_constraints)
+            objective.build(verbose=verbose)
+            if nonlinear_constraint is not None:
+                nonlinear_constraint = LinearConstraintProjection(
+                    nonlinear_constraint, linear_constraints
+                )
+                nonlinear_constraint.build(verbose=verbose)
+
         if len(linear_constraints) and not isinstance(x_scale, str):
             # need to project x_scale down to correct size
             Z = objective._Z
@@ -266,8 +278,11 @@ class Optimizer(IOAble):
 
         if isinstance(objective, ProximalProjection):
             result["history"] = objective.history
+            objective = objective._objective
         else:
-            result["history"] = [objective.unpack_state(xi) for xi in result["allx"]]
+            result["history"] = [
+                objective.unpack_state(xi, False) for xi in result["allx"]
+            ]
 
         timer.stop("Solution time")
 
@@ -280,10 +295,25 @@ class Optimizer(IOAble):
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)
 
-        # TODO: do we want to update the objects and return them here?
-        # or at least separate out the "optimal" result from the history?
+        if verbose > 0:
+            print("Start of solver")
+            objective.print_value(objective.x())
+            for con in constraints:
+                con.print_value(*con.xs())
 
-        return result
+        if copy:
+            things = [thing.copy() for thing in things]
+
+        for thing, params in zip(things, result["history"][-1]):
+            thing.params_dict = params
+
+        if verbose > 0:
+            print("End of solver")
+            objective.print_value(objective.x())
+            for con in constraints:
+                con.print_value(*con.xs())
+
+        return things, result
 
 
 def _parse_method(method):
@@ -410,19 +440,20 @@ def _get_default_tols(
     )
     stoptol.setdefault(
         "ftol",
-        options.pop("ftol", 1e-6 if optimizers[method]["stochastic"] else 1e-2),
+        options.pop(
+            "ftol",
+            1e-6 if optimizers[method]["stochastic"] or "auglag" in method else 1e-2,
+        ),
     )
     stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
     stoptol.setdefault("ctol", options.pop("ctol", 1e-4))
-    stoptol.setdefault("maxiter", options.pop("maxiter", 100))
+    stoptol.setdefault(
+        "maxiter", options.pop("maxiter", 500 if "auglag" in method else 100)
+    )
 
     # if we define an "iteration" as a successful step, it can take a few function
     # evaluations per iteration
     stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
-    # pretty much all the methods only evaluate derivatives once per iteration
-    stoptol["max_ngev"] = options.pop("max_ngev", stoptol["maxiter"] + 1)
-    stoptol["max_njev"] = options.pop("max_njev", stoptol["maxiter"] + 1)
-    stoptol["max_nhev"] = options.pop("max_nhev", stoptol["maxiter"] + 1)
 
     return stoptol
 
@@ -456,7 +487,7 @@ def register_optimizer(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the sub-method to use.
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable.
     verbose : int
@@ -465,11 +496,10 @@ def register_optimizer(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
         settings.
-
 
     Parameters
     ----------
@@ -535,7 +565,6 @@ def register_optimizer(
     )
 
     def _decorator(func):
-
         for i, nm in enumerate(name):
             d = {
                 "description": description[i % len(name)],

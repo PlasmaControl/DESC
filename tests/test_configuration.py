@@ -86,7 +86,12 @@ class TestConstructor:
             "sym": False,
             "spectral_indexing": "ansi",
             "surface": np.array(
-                [[0, 0, 0, 10, 0], [0, 1, 0, 1, 1], [0, -1, 1, 0.1, 0.1]]
+                [
+                    [0, 0, 0, 10, 0],
+                    [0, 1, 0, 1, 0],
+                    [0, -1, 0, 0, -1],
+                    [0, -1, 1, 0.1, 0.1],
+                ]
             ),
             "axis": np.array([[0, 10, 0]]),
             "pressure": np.array([[0, 10], [2, 5]]),
@@ -146,9 +151,9 @@ class TestConstructor:
                 0.0,
                 0.0,
                 0.0,
+                -1.0,
                 0.0,
                 0.0,
-                1.0,
                 0.0,
                 0.0,
                 0.1,
@@ -163,11 +168,21 @@ class TestConstructor:
             ],
         )
 
-        inputs["surface"] = np.array([[0, 0, 0, 10, 0], [1, 1, 0, 1, 1]])
+        inputs["surface"] = np.array(
+            [
+                [0, 0, 0, 10, 0],
+                [1, 1, 0, 1, 0.1],
+                [1, -1, 0, 0.2, -1],
+            ]
+        )
+
         eq = Equilibrium(**inputs)
         assert eq.bdry_mode == "poincare"
         np.testing.assert_allclose(
-            eq.Rb_lmn, [10.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            eq.Rb_lmn, [10.0, 0.2, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        )
+        np.testing.assert_allclose(
+            eq.Zb_lmn, [0.0, -1.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         )
 
     @pytest.mark.unit
@@ -195,7 +210,7 @@ class TestConstructor:
             eq = Equilibrium(iota="def")
         with pytest.raises(TypeError):
             eq = Equilibrium(current="def")
-        with pytest.raises(ValueError):  # change to typeeror if allow both
+        with pytest.raises(ValueError):  # change to TypeError if allow both
             eq = Equilibrium(iota="def", current="def")
         with pytest.raises(ValueError):
             eq = Equilibrium(iota=None)
@@ -210,7 +225,7 @@ class TestConstructor:
         R_lmn = np.random.random(3)
         Z_lmn = np.random.random(3)
         L_lmn = np.random.random(3)
-        eq = Equilibrium(R_lmn=R_lmn, Z_lmn=Z_lmn, L_lmn=L_lmn)
+        eq = Equilibrium(R_lmn=R_lmn, Z_lmn=Z_lmn, L_lmn=L_lmn, check_orientation=False)
         np.testing.assert_allclose(R_lmn, eq.R_lmn)
         np.testing.assert_allclose(Z_lmn, eq.Z_lmn)
         np.testing.assert_allclose(L_lmn, eq.L_lmn)

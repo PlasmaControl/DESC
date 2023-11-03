@@ -923,7 +923,7 @@ class TestBootstrapCompute:
         fig = plt.figure()
         helicity = (1, 0)
         filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
-        eq = desc.io.load(filename)
+        eq = desc.io.load(filename)[-1]
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )
@@ -1012,7 +1012,7 @@ class TestBootstrapCompute:
         fig = plt.figure()
         helicity = (1, 4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
-        eq = desc.io.load(filename)
+        eq = desc.io.load(filename)[-1]
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )
@@ -1192,7 +1192,7 @@ class TestBootstrapObjectives:
         integrand = (data["<J*B>"] - data["<J*B> Redl"]) / (scales["B"] * scales["J"])
         expected = 0.5 * sum(grid.weights * integrand**2) / (4 * np.pi**2)
         print(
-            "boostrap objectives for scaled configs:", results, " expected:", expected
+            "bootstrap objectives for scaled configs:", results, " expected:", expected
         )
 
         # Results are not perfectly identical because ln(Lambda) is not quite invariant.
@@ -1563,10 +1563,12 @@ def test_bootstrap_objective_build():
     obj = BootstrapRedlConsistency(eq=eq)
     obj.build()
     # make sure default grid has the right nodes
-    assert obj._transforms["grid"].num_theta == 17
-    assert obj._transforms["grid"].num_zeta == 17
-    assert obj._transforms["grid"].num_rho == 4
+    assert obj.constants["transforms"]["grid"].num_theta == 17
+    assert obj.constants["transforms"]["grid"].num_zeta == 17
+    assert obj.constants["transforms"]["grid"].num_rho == 4
     np.testing.assert_allclose(
-        obj._transforms["grid"].nodes[obj._transforms["grid"].unique_rho_idx, 0],
+        obj.constants["transforms"]["grid"].nodes[
+            obj.constants["transforms"]["grid"].unique_rho_idx, 0
+        ],
         np.array([0.125, 0.375, 0.625, 0.875]),
     )

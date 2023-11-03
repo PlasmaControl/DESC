@@ -7,7 +7,7 @@ import numpy as np
 from desc.backend import fori_loop, jit, jnp, put
 from desc.basis import zernike_radial
 from desc.geometry import FourierRZCurve, Surface
-from desc.grid import Grid
+from desc.grid import Grid, _Grid
 from desc.io import load
 from desc.transform import Transform
 from desc.utils import copy_coeffs
@@ -90,16 +90,14 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                 eq.Rb_lmn,
                 eq.surface.R_basis,
                 axisR,
-                "lcfs",
-                coord,
+                coord=coord,
             )
             eq.Z_lmn = _initial_guess_surface(
                 eq.Z_basis,
                 eq.Zb_lmn,
                 eq.surface.Z_basis,
                 axisZ,
-                "lcfs",
-                coord,
+                coord=coord,
             )
         else:
             raise ValueError(
@@ -295,7 +293,7 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         def body(k, x_lmn):
             l, m, n = b_modes[k]
             mask0 = (x_modes == jnp.array([l, m, n])).all(axis=1)
-            x_lmn = jnp.where(x_lmn, mask0, b_lmn[k], x_lmn)
+            x_lmn = jnp.where(mask0, b_lmn[k], x_lmn)
             return x_lmn
 
         x_lmn = fori_loop(0, b_basis.num_modes, body, x_lmn)
@@ -324,7 +322,7 @@ def _initial_guess_points(nodes, x, x_basis):
         Vector of flux surface coefficients associated with x_basis.
 
     """
-    if not isinstance(nodes, Grid):
+    if not isinstance(nodes, _Grid):
         nodes = Grid(nodes, sort=False)
     transform = Transform(nodes, x_basis, build=False, build_pinv=True)
     x_lmn = transform.fit(x)

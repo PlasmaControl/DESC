@@ -332,7 +332,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="a_major/a_minor",
-    label="a_{major} / a_{minor}",
+    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
     units="~",
     units_long="None",
     description="Maximum elongation",

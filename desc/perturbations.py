@@ -202,7 +202,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dx2_reduced = jnp.zeros_like(x_reduced)
     dx3_reduced = jnp.zeros_like(x_reduced)
 
-    xz = objective.unpack_state(jnp.zeros_like(x))[0]
+    xz = objective.unpack_state(jnp.zeros_like(x), False)[0]
     # tangent vectors
     tangents = jnp.zeros((eq.dim_x,))
     if "Rb_lmn" in deltas.keys():
@@ -396,7 +396,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
     x_new = recover(x_reduced + dx_reduced)
-    params = objective.unpack_state(x_new)[0]
+    params = objective.unpack_state(x_new, False)[0]
     for key, value in params.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0
@@ -495,45 +495,23 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if not objective_g.built:
         objective_g.build(eq, verbose=verbose)
 
+    argmap = {
+        "R_lmn": dR,
+        "Z_lmn": dZ,
+        "L_lmn": dL,
+        "p_l": dp,
+        "i_l": di,
+        "Psi": dPsi,
+        "Rb_lmn": dRb,
+        "Zb_lmn": dZb,
+    }
     deltas = {}
-    if type(dR) is bool or dR is None:
-        if dR is True:
-            deltas["R_lmn"] = jnp.ones((eq.dimensions["R_lmn"],), dtype=bool)
-    elif jnp.any(dR):
-        deltas["R_lmn"] = dR
-    if type(dZ) is bool or dZ is None:
-        if dZ is True:
-            deltas["Z_lmn"] = jnp.ones((eq.dimensions["Z_lmn"],), dtype=bool)
-    elif jnp.any(dZ):
-        deltas["Z_lmn"] = dZ
-    if type(dL) is bool or dL is None:
-        if dL is True:
-            deltas["L_lmn"] = jnp.ones((eq.dimensions["L_lmn"],), dtype=bool)
-    elif jnp.any(dL):
-        deltas["L_lmn"] = dL
-    if type(dp) is bool or dp is None:
-        if dp is True:
-            deltas["p_l"] = jnp.ones((eq.dimensions["p_l"],), dtype=bool)
-    elif jnp.any(dp):
-        deltas["p_l"] = dp
-    if type(di) is bool or di is None:
-        if di is True:
-            deltas["i_l"] = jnp.ones((eq.dimensions["i_l"],), dtype=bool)
-    elif jnp.any(di):
-        deltas["i_l"] = di
-    if type(dPsi) is bool or dPsi is None:
-        if dPsi is True:
-            deltas["Psi"] = jnp.ones((eq.dimensions["Psi"],), dtype=bool)
-    if type(dRb) is bool or dRb is None:
-        if dRb is True:
-            deltas["Rb_lmn"] = jnp.ones((eq.dimensions["Rb_lmn"],), dtype=bool)
-    elif jnp.any(dRb):
-        deltas["Rb_lmn"] = dRb
-    if type(dZb) is bool or dZb is None:
-        if dZb is True:
-            deltas["Zb_lmn"] = jnp.ones((eq.dimensions["Zb_lmn"],), dtype=bool)
-    elif jnp.any(dZb):
-        deltas["Zb_lmn"] = dZb
+    for name, arg in argmap.items():
+        if type(arg) is bool or arg is None:
+            if arg is True:
+                deltas[name] = jnp.ones((eq.dimensions[name],), dtype=bool)
+        elif jnp.any(arg):
+            deltas[name] = arg
 
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
@@ -600,7 +578,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # dx/dc
     dxdc = []
-    xz = objective_f.unpack_state(jnp.zeros_like(xf))[0]
+    xz = objective_f.unpack_state(jnp.zeros_like(xf), False)[0]
 
     for arg in deltas:
         if arg not in ["Rb_lmn", "Zb_lmn"]:
@@ -791,7 +769,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced
     x_new = recover(x_reduced + dx_reduced)
-    params = objective_f.unpack_state(x_new)[0]
+    params = objective_f.unpack_state(x_new, False)[0]
     for key, value in params.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0

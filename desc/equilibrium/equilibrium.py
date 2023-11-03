@@ -12,6 +12,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
@@ -21,7 +22,7 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -74,8 +75,6 @@ class Equilibrium(IOAble, Optimizable):
         resolution of real space nodes in poloidal direction
     N_grid : int (optional)
         resolution of real space nodes in toroidal direction
-    node_pattern : str (optional)
-        pattern of nodes in real space. Default is ``'jacobi'``
     pressure : Profile or ndarray shape(k,2) (optional)
         Pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero pressure
@@ -98,6 +97,9 @@ class Equilibrium(IOAble, Optimizable):
     atomic_number : Profile or ndarray shape(k,2) (optional)
         Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral
         coefficients. Default is 1
+    anisotropy : Profile or ndarray
+        Anisotropic pressure profile or array of mode numbers and spectral coefficients.
+        Default is a PowerSeriesProfile with zero anisotropic pressure.
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
@@ -110,6 +112,10 @@ class Equilibrium(IOAble, Optimizable):
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
         Type of Zernike indexing scheme to use. Default ``'ansi'``
+    check_orientation : bool
+        ensure that this equilibrium has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
     """
 
     _io_attrs_ = [
@@ -136,12 +142,12 @@ class Equilibrium(IOAble, Optimizable):
         "_electron_density",
         "_ion_temperature",
         "_atomic_number",
+        "_anisotropy",
         "_spectral_indexing",
         "_bdry_mode",
         "_L_grid",
         "_M_grid",
         "_N_grid",
-        "_node_pattern",
     ]
 
     def __init__(
@@ -154,7 +160,6 @@ class Equilibrium(IOAble, Optimizable):
         L_grid=None,
         M_grid=None,
         N_grid=None,
-        node_pattern=None,
         pressure=None,
         iota=None,
         current=None,
@@ -162,13 +167,14 @@ class Equilibrium(IOAble, Optimizable):
         electron_density=None,
         ion_temperature=None,
         atomic_number=None,
+        anisotropy=None,
         surface=None,
         axis=None,
         sym=None,
         spectral_indexing=None,
+        check_orientation=True,
         **kwargs,
     ):
-        super().__init__()
         errorif(
             not isinstance(Psi, numbers.Real),
             ValueError,
@@ -243,7 +249,6 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = setdefault(L_grid, 2 * self.L)
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
-        self._node_pattern = setdefault(node_pattern, "jacobi")
 
         self._surface.change_resolution(self.L, self.M, self.N)
         self._axis.change_resolution(self.N)
@@ -294,7 +299,7 @@ class Equilibrium(IOAble, Optimizable):
             "Cannot specify both iota and current profiles.",
         )
         errorif(
-            pressure is not None and use_kinetic,
+            ((pressure is not None) or (anisotropy is not None)) and use_kinetic,
             ValueError,
             "Cannot specify both pressure and kinetic profiles.",
         )
@@ -318,6 +323,7 @@ class Equilibrium(IOAble, Optimizable):
         self._ion_temperature = parse_profile(ion_temperature, "ion temperature")
         self._atomic_number = parse_profile(atomic_number, "atomic number")
         self._pressure = parse_profile(pressure, "pressure")
+        self._anisotropy = parse_profile(anisotropy, "anisotropy")
         self._iota = parse_profile(iota, "iota")
         self._current = parse_profile(current, "current")
 
@@ -330,6 +336,7 @@ class Equilibrium(IOAble, Optimizable):
             "electron_density",
             "ion_temperature",
             "atomic_number",
+            "anisotropy",
         ]:
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
@@ -366,6 +373,8 @@ class Equilibrium(IOAble, Optimizable):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
+        if check_orientation:
+            ensure_positive_jacobian(self)
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -381,6 +390,33 @@ class Equilibrium(IOAble, Optimizable):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
+
+    def _sort_args(self, args):
+        """Put arguments in a canonical order. Returns unique sorted elements.
+
+        For Equilibrium, alphabetical order seems to lead to some numerical instability
+        so we enforce a particular order that has worked well.
+        """
+        arg_order = (
+            "R_lmn",
+            "Z_lmn",
+            "L_lmn",
+            "p_l",
+            "i_l",
+            "c_l",
+            "Psi",
+            "Te_l",
+            "ne_l",
+            "Ti_l",
+            "Zeff_l",
+            "a_lmn",
+            "Ra_n",
+            "Za_n",
+            "Rb_lmn",
+            "Zb_lmn",
+        )
+        assert sorted(args) == sorted(arg_order)
+        return [arg for arg in arg_order if arg in args]
 
     def __repr__(self):
         """String form of the object."""
@@ -524,6 +560,7 @@ class Equilibrium(IOAble, Optimizable):
             "electron_density",
             "ion_temperature",
             "atomic_number",
+            "anisotropy",
         ]:
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
@@ -658,9 +695,7 @@ class Equilibrium(IOAble, Optimizable):
         data = self.compute(name, grid=grid, **kwargs)
         x = data[name]
         x = grid.compress(x, surface_label="rho")
-        return SplineProfile(
-            x, grid.nodes[grid.unique_rho_idx, 0], grid=grid, name=name
-        )
+        return SplineProfile(x, grid.nodes[grid.unique_rho_idx, 0], name=name)
 
     def get_axis(self):
         """Return a representation for the magnetic axis.
@@ -704,6 +739,7 @@ class Equilibrium(IOAble, Optimizable):
         transforms=None,
         profiles=None,
         data=None,
+        override_grid=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -724,6 +760,11 @@ class Equilibrium(IOAble, Optimizable):
             of self
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
+        override_grid : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -735,6 +776,11 @@ class Equilibrium(IOAble, Optimizable):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
 
         if params is None:
             params = get_params(names, obj=self, has_axis=grid.axis.size)
@@ -774,7 +820,7 @@ class Equilibrium(IOAble, Optimizable):
             if isinstance(grid, LinearGrid):
                 calc1d = False
 
-        if calc0d:
+        if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d = compute_fun(
                 self,
@@ -789,7 +835,7 @@ class Equilibrium(IOAble, Optimizable):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        if calc1d:
+        if calc1d and override_grid:
             grid1d = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,
@@ -1230,6 +1276,30 @@ class Equilibrium(IOAble, Optimizable):
         self.pressure.params = p_l
 
     @property
+    def anisotropy(self):
+        """Profile: Anisotropy profile."""
+        return self._anisotropy
+
+    @anisotropy.setter
+    def anisotropy(self, new):
+        self._anisotropy = parse_profile(new, "anisotropy")
+
+    @optimizable_parameter
+    @property
+    def a_lmn(self):
+        """ndarray: Coefficients of anisotropy profile."""
+        return np.empty(0) if self.anisotropy is None else self.anisotropy.params
+
+    @a_lmn.setter
+    def a_lmn(self, a_lmn):
+        errorif(
+            self.anisotropy is None,
+            ValueError,
+            "Attempt to set anisotropy on an equilibrium without anisotropy profile",
+        )
+        self.anisotropy.params = a_lmn
+
+    @property
     def electron_temperature(self):
         """Profile: Electron temperature (eV) profile."""
         return self._electron_temperature
@@ -1431,11 +1501,6 @@ class Equilibrium(IOAble, Optimizable):
             self._N_grid = N_grid
 
     @property
-    def node_pattern(self):
-        """str: Pattern for placement of nodes in curvilinear coordinates."""
-        return self._node_pattern
-
-    @property
     def resolution(self):
         """dict: Spectral and real space resolution parameters of the Equilibrium."""
         return {
@@ -1451,7 +1516,6 @@ class Equilibrium(IOAble, Optimizable):
         """Print a summary of the spectral and real space resolution."""
         print("Spectral indexing: {}".format(self.spectral_indexing))
         print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
-        print("Node pattern: {}".format(self.node_pattern))
         print(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid
@@ -1638,7 +1702,6 @@ class Equilibrium(IOAble, Optimizable):
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
 
-
         """
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
@@ -1653,12 +1716,7 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
 
-        if copy:
-            eq = self.copy()
-        else:
-            eq = self
-
-        if eq.N > eq.N_grid or eq.M > eq.M_grid or eq.L > eq.L_grid:
+        if self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid:
             warnings.warn(
                 colored(
                     "Equilibrium has one or more spectral resolutions "
@@ -1669,18 +1727,14 @@ class Equilibrium(IOAble, Optimizable):
                     "yellow",
                 )
             )
-        if eq.bdry_mode == "poincare":
+        if self.bdry_mode == "poincare":
             raise NotImplementedError(
                 "Solving equilibrium with poincare XS as BC is not supported yet "
                 + "on master branch."
             )
 
-        objective.things = eq
-        for con in constraints:
-            con.things = eq
-
-        result = optimizer.optimize(
-            eq,
+        things, result = optimizer.optimize(
+            self,
             objective,
             constraints,
             ftol=ftol,
@@ -1692,16 +1746,7 @@ class Equilibrium(IOAble, Optimizable):
             options=options,
         )
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x(eq))
-        eq.params_dict = result["history"][-1][0]
-
-        if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x(eq))
-
-        return eq, result
+        return things[0], result
 
     def optimize(
         self,
@@ -1773,17 +1818,8 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
 
-        if copy:
-            eq = self.copy()
-        else:
-            eq = self
-
-        objective.things = eq
-        for con in constraints:
-            con.things = eq
-
-        result = optimizer.optimize(
-            eq,
+        things, result = optimizer.optimize(
+            self,
             objective,
             constraints,
             ftol=ftol,
@@ -1794,23 +1830,10 @@ class Equilibrium(IOAble, Optimizable):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
+            copy=copy,
         )
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x(eq))
-            for con in constraints:
-                con.print_value(*con.xs(eq))
-
-        eq.params_dict = result["history"][-1][0]
-
-        if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x(eq))
-            for con in constraints:
-                con.print_value(*con.xs(eq))
-
-        return eq, result
+        return things[0], result
 
     def _optimize(  # noqa: C901
         self,
@@ -1869,13 +1892,12 @@ class Equilibrium(IOAble, Optimizable):
         timer = Timer()
         timer.start("Total time")
 
-        eq = self
         if not objective.built:
-            objective.build(eq)
+            objective.build()
         if not constraint.built:
-            constraint.build(eq)
+            constraint.build()
 
-        cost = objective.compute_scalar(objective.x(eq))
+        cost = objective.compute_scalar(objective.x(self))
         perturb_options = deepcopy(perturb_options)
         tr_ratio = perturb_options.get(
             "tr_ratio",
@@ -1883,7 +1905,9 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         if verbose > 0:
-            objective.print_value(objective.x(eq))
+            objective.print_value(objective.x(self))
+
+        params = orig_params = self.params_dict.copy()
 
         iteration = 1
         success = None
@@ -1894,30 +1918,19 @@ class Equilibrium(IOAble, Optimizable):
                 print("Optimization Step {}".format(iteration))
                 print("====================")
                 print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
-            objective.things = eq
-            constraint.things = eq
 
             # perturb + solve
-            (
-                eq_new,
-                predicted_reduction,
-                dc_opt,
-                dc,
-                c_norm,
-                bound_hit,
-            ) = optimal_perturb(
-                eq,
+            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit,) = optimal_perturb(
+                self,
                 constraint,
                 objective,
-                copy=True,
+                copy=False,
                 **perturb_options,
             )
-            objective.things = eq_new
-            constraint.things = eq_new
-            eq_new.solve(objective=constraint, **solve_options)
+            self.solve(objective=constraint, **solve_options)
 
             # update trust region radius
-            cost_new = objective.compute_scalar(objective.x(eq_new))
+            cost_new = objective.compute_scalar(objective.x(self))
             actual_reduction = cost - cost_new
             trust_radius, ratio = update_tr_radius(
                 tr_ratio[0] * c_norm,
@@ -1931,7 +1944,7 @@ class Equilibrium(IOAble, Optimizable):
 
             timer.stop("Step {} time".format(iteration))
             if verbose > 0:
-                objective.print_value(objective.x(eq_new))
+                objective.print_value(objective.x(self))
                 print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
                 print("Reduction Ratio = {:+.3f}".format(ratio))
             if verbose > 1:
@@ -1952,14 +1965,13 @@ class Equilibrium(IOAble, Optimizable):
                 maxiter,
                 0,
                 np.inf,
-                0,
-                np.inf,
-                0,
-                np.inf,
             )
             if actual_reduction > 0:
-                eq = eq_new
+                params = self.params_dict.copy()
                 cost = cost_new
+            else:
+                # reset equilibrium to last good params
+                self.params_dict = params
             if success is not None:
                 break
 
@@ -1974,12 +1986,11 @@ class Equilibrium(IOAble, Optimizable):
             timer.disp("Total time")
 
         if copy:
-            return eq
+            eq = self.copy()
+            self.params = orig_params
         else:
-            for attr in self._io_attrs_:
-                val = getattr(eq, attr)
-                setattr(self, attr, val)
-            return self
+            eq = self
+        return eq
 
     def perturb(
         self,
@@ -2259,8 +2270,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )
         self._equilibria = list(equil)
-
-    # dunder methods required by MutableSequence
 
     def __getitem__(self, i):
         return self._equilibria[i]

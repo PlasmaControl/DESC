@@ -1,4 +1,9 @@
-"""Tests for compute functions evaluated at limits."""
+"""Tests for compute functions evaluated at limits.
+
+If a new quantity is added to the compute functions whose limit is not finite
+(or does not exist), simply add it to the ``not_finite_limits`` set below.
+If the limit has yet to be derived, add it to the ``not_implemented_limits`` set.
+"""
 
 import numpy as np
 import pytest
@@ -55,6 +60,24 @@ not_implemented_limits = {
     "iota_num_rrr",
     "iota_den_rrr",
     "D_current",
+    "e^rho_rr",
+    "e^theta_rr",
+    "e^zeta_rr",
+    "e^rho_rt",
+    "e^rho_tt",
+    "e^theta_rt",
+    "e^theta_tt",
+    "e^zeta_rt",
+    "e^zeta_tt",
+    "e^rho_rz",
+    "e^rho_tz",
+    "e^rho_zz",
+    "e^theta_rz",
+    "e^theta_tz",
+    "e^theta_zz",
+    "e^zeta_rz",
+    "e^zeta_tz",
+    "e^zeta_zz",
 }
 
 
@@ -91,7 +114,6 @@ not_implemented_limits = grow_seeds(
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
 )
-not_implemented_limits.discard("D_Mercier")
 
 
 def _skip_this(eq, name):
@@ -101,8 +123,9 @@ def _skip_this(eq, name):
         or (eq.electron_temperature is None and "Te" in name)
         or (eq.electron_density is None and "ne" in name)
         or (eq.ion_temperature is None and "Ti" in name)
+        or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
-        or (eq.current is None and ("iota_num" in name or "iota_den" in name))
+        or (eq.current is None and "iota_num" in name)
     )
 
 
@@ -249,7 +272,7 @@ class TestAxisLimits:
         # fixed iota
         assert_is_continuous(get("W7-X"), kwargs=kwargs)
         # fixed current
-        assert_is_continuous(get("QAS"), kwargs=kwargs)
+        assert_is_continuous(get("NCSX"), kwargs=kwargs)
 
     @pytest.mark.unit
     def test_magnetic_field_is_physical(self):
@@ -283,4 +306,4 @@ class TestAxisLimits:
                 np.testing.assert_allclose(B[:, 2], B[0, 2])
 
         test(get("W7-X"))
-        test(get("QAS"))
+        test(get("NCSX"))

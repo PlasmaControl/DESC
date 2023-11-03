@@ -107,7 +107,7 @@ class TestDerivative:
 
     @pytest.mark.unit
     def test_block_jacobian(self):
-        """Test calculation of jacoiban using blocked method."""
+        """Test calculation of jacobian using blocked method."""
         rando = default_rng(seed=0)
         A = rando.random((19, 17))
 

@@ -579,7 +579,7 @@ class QuadraticFlux(_Objective):
         self._ext_field = ext_field
         self._field_grid = field_grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -622,7 +622,7 @@ class QuadraticFlux(_Objective):
                 sym=False,
             )
         else:
-            src_grid = self._src_grid
+            eval_grid = self._eval_grid
         if self._s is None:
             k = min(src_grid.num_theta, src_grid.num_zeta)
             self._s = k // 2 + int(np.sqrt(k))
@@ -644,12 +644,14 @@ class QuadraticFlux(_Objective):
             "zeta",
             "Z",
             "n_rho",
+            "K_vc",
         ]
         self._args = get_params(
             self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
             has_axis=False,
         )
+        params = eq.params_dict
 
         timer = Timer()
         if verbose > 0:
@@ -664,7 +666,7 @@ class QuadraticFlux(_Objective):
         src_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
-            params=self._args,
+            params=params,
             transforms=src_transforms,
             profiles=src_profiles,
         )
@@ -672,7 +674,7 @@ class QuadraticFlux(_Objective):
         eval_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
-            params=self._args,
+            params=params,
             transforms=eval_transforms,
             profiles=eval_profiles,
         )
@@ -690,7 +692,11 @@ class QuadraticFlux(_Objective):
         )
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
 
+        w = src_grid.weights
+        w *= jnp.sqrt(src_grid.num_nodes)
+
         self._constants = {
+            "quad_weights": w,
             "eval_data": eval_data,
             "Bplasma": Bplasma,
         }
@@ -705,46 +711,23 @@ class QuadraticFlux(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params=None, constants=None):
         """Compute boundary force error.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params :
 
         Returns
         -------
         f : ndarray
-            Boundary force error (N).
+            Bnorm
 
         """
-        _, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
-
         x = jnp.array(
             [
                 constants["eval_data"]["R"],
@@ -753,14 +736,13 @@ class QuadraticFlux(_Objective):
             ]
         ).T
 
-        # TODO: how is Bext? is self._ext_field changing?
-        # is self._ext_field of type CoilSet?
         Bext = self._ext_field.compute_magnetic_field(
             x, grid=self._field_grid, basis="rpz"
         )
-        return jnp.sum(
+        Bnorm = jnp.sum(
             (Bext + constants["Bplasma"]) * constants["eval_data"]["n_rho"], axis=-1
         )
+        return Bnorm
 
 
 class ToroidalFlux(_Objective):

@@ -1351,7 +1351,7 @@ class FixModeR(_FixedObjective):
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
-                f"modes kwarg must be specified or True with FixModeR! got {modes}"
+                f"modes kwarg must be specified or True with FixModeR got {modes}"
             )
         self._target_from_user = setdefault(bounds, target)
         super().__init__(
@@ -1480,7 +1480,7 @@ class FixModeZ(_FixedObjective):
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
-                f"modes kwarg must be specified or True with FixModeZ! got {modes}"
+                f"modes kwarg must be specified or True with FixModeZ got {modes}"
             )
         self._target_from_user = setdefault(bounds, target)
         super().__init__(
@@ -1610,7 +1610,7 @@ class FixModeLambda(_FixedObjective):
         if modes is None or modes is False:
             raise ValueError(
                 "modes kwarg must be specified"
-                + f" or True with FixModeLambda! got {modes}"
+                + f" or True with FixModeLambda got {modes}"
             )
         self._target_from_user = target
         super().__init__(
@@ -1662,18 +1662,9 @@ class FixModeLambda(_FixedObjective):
 
         self._dim_f = modes_idx.size
 
-        # use current eq's coefficients as target if needed
-        if self._target_from_user is None:
-            self.target = eq.L_lmn[self._idx]
-        else:  # rearrange given target to match modes order
-            if self._modes is True or self._modes is False:
-                raise RuntimeError(
-                    "Attempting to provide target for lambda fixed modes without "
-                    + "providing modes array!"
-                    + "You must pass in the modes corresponding to the"
-                    + "provided target modes"
-                )
-            self.target = self._target_from_user[modes_idx]
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.L_lmn[idx], None, modes_idx
+        )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1754,21 +1745,21 @@ class FixSumModesR(_FixedObjective):
         errorif(
             modes is None or modes is False,
             ValueError,
-            f"modes kwarg must be specified or True with FixSumModesR! got {modes}",
+            f"modes kwarg must be specified or True with FixSumModesR got {modes}",
         )
         errorif(
             target is not None and np.asarray(target).size > 1,
             ValueError,
             "FixSumModesR only accepts 1 target value, please use multiple"
             + " FixSumModesR objectives if you wish to have multiple"
-            + " sets of constrained mode sums!",
+            + " sets of constrained mode sums",
         )
         errorif(
             bounds is not None and np.asarray(bounds)[0].size > 1,
             ValueError,
             "FixSumModesR only accepts 1 target value, please use multiple"
             + " FixSumModesR objectives if you wish to have multiple"
-            + " sets of constrained mode sums!",
+            + " sets of constrained mode sums",
         )
         self._modes = modes
         self._sum_weights = sum_weights
@@ -1921,21 +1912,21 @@ class FixSumModesZ(_FixedObjective):
         errorif(
             modes is None or modes is False,
             ValueError,
-            f"modes kwarg must be specified or True with FixSumModesZ! got {modes}",
+            f"modes kwarg must be specified or True with FixSumModesZ got {modes}",
         )
         errorif(
             target is not None and np.asarray(target).size > 1,
             ValueError,
             "FixSumModesZ only accepts 1 target value, please use multiple"
             + " FixSumModesZ objectives if you wish to have multiple"
-            + " sets of constrained mode sums!",
+            + " sets of constrained mode sums",
         )
         errorif(
             bounds is not None and np.asarray(bounds)[0].size > 1,
             ValueError,
             "FixSumModesZ only accepts 1 target value, please use multiple"
             + " FixSumModesZ objectives if you wish to have multiple"
-            + " sets of constrained mode sums!",
+            + " sets of constrained mode sums",
         )
         self._modes = modes
         self._sum_weights = sum_weights
@@ -2088,22 +2079,28 @@ class FixSumModesLambda(_FixedObjective):
         modes=True,
         name="Fix Sum Modes lambda",
     ):
+        errorif(
+            modes is None or modes is False,
+            ValueError,
+            f"modes kwarg must be specified or True with FixSumModesLambda got {modes}",
+        )
+        errorif(
+            target is not None and np.asarray(target).size > 1,
+            ValueError,
+            "FixSumModesLambda only accepts 1 target value, please use multiple"
+            + " FixSumModesLambda objectives if you wish to have multiple"
+            + " sets of constrained mode sums",
+        )
+        errorif(
+            bounds is not None and np.asarray(bounds)[0].size > 1,
+            ValueError,
+            "FixSumModesLambda only accepts 1 target value, please use multiple"
+            + " FixSumModesLambda objectives if you wish to have multiple"
+            + " sets of constrained mode sums",
+        )
         self._modes = modes
-        if modes is None or modes is False:
-            raise ValueError(
-                "modes kwarg must be specified or True with"
-                + f" FixSumModesLambda! got {modes}"
-            )
         self._sum_weights = sum_weights
-        if target is not None:
-            if target.size > 1:
-                raise ValueError(
-                    "FixSumModesLambda only accepts 1 target value, please use"
-                    + " multiple FixSumModesLambda objectives if you wish"
-                    + " to have multiple sets of"
-                    + " constrained mode sums!"
-                )
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
             target=target,
@@ -2168,9 +2165,12 @@ class FixSumModesLambda(_FixedObjective):
             j = eq.L_basis.get_idx(L=l, M=m, N=n)
             self._A[0, j] = sum_weights[i]
 
-        # use current sum as target if needed
-        if self._target_from_user is None:
-            self.target = np.dot(sum_weights.T, eq.L_lmn[self._idx])
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user,
+            np.dot(sum_weights.T, eq.L_lmn[self._idx]),
+            None,
+            np.array([0]),
+        )
 
         super().build(use_jit=use_jit, verbose=verbose)
 

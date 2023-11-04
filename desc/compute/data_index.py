@@ -1,4 +1,5 @@
 """data_index contains all the quantities calculated by the compute functions."""
+from desc.utils import find_permutations
 
 
 def register_compute_fun(
@@ -69,6 +70,10 @@ def register_compute_fun(
         "axis_limit_data": [] if axis_limit_data is None else axis_limit_data,
         "kwargs": list(kwargs.values()),
     }
+
+    permutable_names = ["R_", "Z_", "phi_", "lambda_", "omega_", "sqrt(g)_"]
+    if not aliases and "".join(name.split("_")[:-1]) + "_" in permutable_names:
+        aliases = find_permutations(name)
 
     def _decorator(func):
         d = {

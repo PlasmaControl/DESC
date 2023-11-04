@@ -196,6 +196,22 @@ copied from jax.ops.index to work with either backend
 Index = _Indexable()
 
 
+def find_permutations(name, separator="_"):
+    """Finds permutations of quantity names for aliases."""
+    split_name = name.split(separator)
+    original_permutation = split_name[-1]
+
+    new_permutations = list(permutations(original_permutation))
+    aliases = [
+        "".join(split_name[:-1]) + separator + "".join(perm)
+        for perm in new_permutations
+    ]
+    aliases = np.unique(aliases)
+    aliases = np.delete(aliases, np.where(aliases == name))
+
+    return aliases
+
+
 def equals(a, b):
     """Compare (possibly nested) objects, such as dicts and lists.
 

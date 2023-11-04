@@ -48,14 +48,20 @@ def myconvolve_2d(arr_1d, stencil, shape):
 
 @pytest.mark.unit
 def test_aliases():
-    eq = Equilibrium()  # torus
-    rho = np.linspace(0, 1, 64)
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-    aliases = ["g^" + i + j for i in ['r', 't', 'z'] for j in ['r', 't', 'z']]
-    data = eq.compute(aliases, grid=grid)              
-    np.testing.assert_allclose([data[alias] for alias in aliases])
+    """Tests that data_index aliases are equal."""
+    n = 10
+    surface = FourierRZToroidalSurface(
+        R_lmn=np.array([10, 1, 0.5]),
+        Z_lmn=np.array([0, -1, -0.5]),
+        modes_R=np.array([[0, 0], [1, 0], [1, n]]),
+        modes_Z=np.array([[0, 0], [-1, 0], [-1, n]]),
+    )
+    eq = Equilibrium(surface=surface)
+    data_1 = eq.compute("R_tz")
+    data_2 = eq.compute("R_zt")
+    np.testing.assert_allclose(data_1["R_tz"], data_2["R_tz"])
 
-    
+
 @pytest.mark.unit
 def test_total_volume(DummyStellarator):
     """Test that the volume enclosed by the LCFS is equal to the total volume."""

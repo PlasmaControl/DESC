@@ -20,7 +20,7 @@ from desc.transform import Transform
 from desc.utils import copy_coeffs, warnif
 
 
-def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
+def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: simplify
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
     Parameters
@@ -38,6 +38,10 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
             optionally lambda) at fixed flux coordinates. All arrays should have the
             same length. Optionally, an ndarray of shape(k,3) may be passed instead
             of a grid.
+    ensure_nested : bool
+        If True, and the default initial guess does not produce nested surfaces,
+        run a small optimization problem to attempt to refine initial guess to improve
+        coordinate mapping.
 
     Examples
     --------
@@ -218,9 +222,9 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
         else:
             raise ValueError("Can't initialize equilibrium from args {}.".format(args))
 
-    if not eq.is_nested():
+    if ensure_nested and not eq.is_nested():
         warnings.warn(
-            "Surfaces from initial guess is not nested, attempting to refine "
+            "Surfaces from initial guess are not nested, attempting to refine "
             + "coordinates. This may take a few moments."
         )
         obj = ObjectiveFunction(GoodCoordinates(eq))

@@ -9,6 +9,7 @@ from desc.basis import FourierSeries
 from desc.compute import rpz2xyz
 from desc.grid import LinearGrid
 from desc.io import InputReader
+from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
 from desc.utils import copy_coeffs, errorif
 
@@ -170,6 +171,7 @@ class FourierRZCurve(Curve):
                 idxZ = self.Z_basis.get_idx(0, 0, nn)
                 self.Z_n = put(self.Z_n, idxZ, ZZ)
 
+    @optimizable_parameter
     @property
     def R_n(self):
         """Spectral coefficients for R."""
@@ -185,6 +187,7 @@ class FourierRZCurve(Curve):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_n(self):
         """Spectral coefficients for Z."""
@@ -369,6 +372,7 @@ class FourierXYZCurve(Curve):
             if ZZ is not None:
                 self.Z_n = put(self.Z_n, idx, ZZ)
 
+    @optimizable_parameter
     @property
     def X_n(self):
         """Spectral coefficients for X."""
@@ -384,6 +388,7 @@ class FourierXYZCurve(Curve):
                 + f"basis with {self.X_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Y_n(self):
         """Spectral coefficients for Y."""
@@ -399,6 +404,7 @@ class FourierXYZCurve(Curve):
                 + f"basis with {self.Y_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_n(self):
         """Spectral coefficients for Z."""
@@ -425,11 +431,11 @@ class FourierXYZCurve(Curve):
         N : int
             Fourier resolution of the new X,Y,Z representation.
             default is 10
-        s : ndarray
+        s : ndarray or "arclength"
             arbitrary curve parameter to use for the fitting.
             Should be monotonic, 1D array of same length as
-            coords
-            if None, defaults to normalized arclength
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
         Returns
@@ -448,7 +454,8 @@ class FourierXYZCurve(Curve):
 
         X, Y, Z, closedX, closedY, closedZ, _ = _unclose_curve(X, Y, Z)
 
-        if s is None:
+        if isinstance(s, str):
+            assert s == "arclength", f"got unknown specification for s {s}"
             # find equal arclength angle-like variable, and use that as theta
             # L_along_curve / L = theta / 2pi
             lengths = np.sqrt(
@@ -457,7 +464,8 @@ class FourierXYZCurve(Curve):
             thetas = 2 * np.pi * np.cumsum(lengths) / np.sum(lengths)
             thetas = np.insert(thetas, 0, 0)
             s = thetas[:-1]
-
+        elif s is None:
+            s = np.linspace(0, 2 * np.pi, X.size, endpoint=False)
         else:
             s = np.atleast_1d(s)
             errorif(
@@ -548,6 +556,7 @@ class FourierPlanarCurve(Curve):
             self.r_basis.change_resolution(N=N)
             self.r_n = copy_coeffs(self.r_n, modes_old, self.r_basis.modes)
 
+    @optimizable_parameter
     @property
     def center(self):
         """Center of planar curve polar coordinates."""
@@ -562,6 +571,7 @@ class FourierPlanarCurve(Curve):
                 "center should be a 3 element vector [cx, cy, cz], got {}".format(new)
             )
 
+    @optimizable_parameter
     @property
     def normal(self):
         """Normal vector to plane."""
@@ -576,6 +586,7 @@ class FourierPlanarCurve(Curve):
                 "normal should be a 3 element vector [nx, ny, nz], got {}".format(new)
             )
 
+    @optimizable_parameter
     @property
     def r_n(self):
         """Spectral coefficients for r."""
@@ -619,11 +630,13 @@ class SplineXYZCurve(Curve):
     X, Y, Z: array-like
         Points for X, Y, Z describing the curve. If the endpoint is included
         (ie, X[0] == X[-1]), then the final point will be dropped.
-    knots : ndarray
+    knots : ndarray or "arclength"
         arbitrary curve parameter values to use for spline knots,
         should be a monotonic, 1D ndarray of same length as the input X,Y,Z.
-        If None, defaults to using an equal-arclength angle as the knots
-        If supplied, should lie in [0,2pi]
+        If None, defaults to using an linearly spaced points in [0, 2pi) as the knots.
+        If supplied, should lie in [0,2pi].
+        Alternatively, the string "arclength" can be supplied to use the normalized
+        distance between points.
     method : str
         method of interpolation
 
@@ -665,7 +678,8 @@ class SplineXYZCurve(Curve):
         self._Y = Y
         self._Z = Z
 
-        if knots is None:
+        if isinstance(knots, str):
+            assert knots == "arclength", f"got unknown arclength specification {knots}"
             # find equal arclength angle-like variable, and use that as theta
             # L_along_curve / L = theta / 2pi
             lengths = np.sqrt(
@@ -674,7 +688,8 @@ class SplineXYZCurve(Curve):
             thetas = 2 * np.pi * np.cumsum(lengths) / np.sum(lengths)
             thetas = np.insert(thetas, 0, 0)
             knots = thetas[:-1]
-
+        elif knots is None:
+            knots = np.linspace(0, 2 * np.pi, len(self._X), endpoint=False)
         else:
             knots = np.atleast_1d(knots)
             errorif(

@@ -10,7 +10,7 @@ from qic import Qic
 from qsc import Qsc
 
 import desc.examples
-from desc.continuation import solve_continuation_automatic
+from desc.continuation import _solve_axisym, solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -22,6 +22,7 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
+    FixParameter,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
@@ -29,9 +30,11 @@ from desc.objectives import (
     ForceBalanceAnisotropic,
     HelicalForceBalance,
     ObjectiveFunction,
+    PlasmaVesselDistance,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
+    Volume,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
 )
@@ -51,6 +54,15 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
 
     np.testing.assert_allclose(data["iota"], 0, atol=1e-16)
     np.testing.assert_allclose(data["|J|"], 0, atol=3e-3)
+
+    # test that solving with the continuation method works correctly
+    # when eq resolution is lower than the mres_step
+    eq.change_resolution(L=3, M=3)
+    eqf = _solve_axisym(eq, mres_step=6)
+    assert len(eqf) == 1
+    assert eqf[-1].L == eq.L
+    assert eqf[-1].M == eq.M
+    assert eqf[-1].N == eq.N
 
 
 @pytest.mark.regression
@@ -708,6 +720,44 @@ def test_NAE_QIC_solve():
     np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qic.B0, atol=2e-2)
 
 
+@pytest.mark.unit
+def test_multiobject_optimization():
+    """Test for optimizing multiple objects at once."""
+    eq = Equilibrium(L=4, M=4, N=0, iota=2)
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 2.1],
+        Z_lmn=[-2],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+    )
+    surf.change_resolution(M=4, N=0)
+    constraints = (
+        ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
+        FixPressure(eq=eq),
+        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
+        FixParameter(eq, ["Psi", "i_l"]),
+        FixBoundaryR(eq, modes=[[0, 0, 0]]),
+        PlasmaVesselDistance(surface=surf, eq=eq, target=1),
+    )
+
+    objective = ObjectiveFunction((Volume(eq=eq, target=eq.compute("V")["V"] * 2),))
+
+    eq.solve(verbose=3)
+
+    optimizer = Optimizer("fmin-auglag")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=500
+    )
+
+    np.testing.assert_allclose(
+        constraints[-1].compute(*constraints[-1].xs(eq, surf)), 1, atol=1e-3
+    )
+    assert surf.R_lmn[0] == 10
+    assert surf.Z_lmn[-1] == -2
+    assert eq.Psi == 1.0
+    np.testing.assert_allclose(eq.i_l, [2, 0, 0])
+
+
 class TestGetExample:
     """Tests for desc.examples.get."""
 
@@ -744,22 +794,22 @@ class TestGetExample:
     @pytest.mark.unit
     def test_example_get_iota(self):
         """Test getting iota profile."""
-        iota = desc.examples.get("NCSX", "iota")
+        iota = desc.examples.get("W7-X", "iota")
         np.testing.assert_allclose(
             iota.params[:5],
             [
-                -3.49197642e-01,
-                -6.81105159e-01,
-                1.29781695e00,
-                -2.07888586e00,
-                1.15800135e00,
+                -8.56047021e-01,
+                -3.88095412e-02,
+                -6.86795128e-02,
+                -1.86970315e-02,
+                1.90561179e-02,
             ],
         )
 
     @pytest.mark.unit
     def test_example_get_current(self):
         """Test getting current profile."""
-        current = desc.examples.get("QAS", "current")
+        current = desc.examples.get("NCSX", "current")
         np.testing.assert_allclose(
             current.params[:11],
             [

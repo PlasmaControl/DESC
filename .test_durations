@@ -65,7 +65,7 @@
     "tests/test_compute_funs.py::test_compute_everything": 416.05528950691223,
     "tests/test_compute_funs.py::test_compute_averages": 14.273451089859009,
     "tests/test_compute_funs.py::test_covariant_basis_vectors": 35.97991585731506,
-    "tests/test_compute_utils.py::TestDataIndex::test_data_index_deps": 12.303489208221436,
+    "tests/test_data_index.py::TestDataIndex::test_data_index_deps": 12.303489208221436,
     "tests/test_compute_utils.py::TestComputeUtils::test_surface_integrals": 44.133379101753235,
     "tests/test_compute_utils.py::TestComputeUtils::test_surface_integrals_transform": 1.8601322174072266,
     "tests/test_compute_utils.py::TestComputeUtils::test_surface_averages_vector_functions": 4.124471187591553,

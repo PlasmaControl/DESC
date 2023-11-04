@@ -175,7 +175,7 @@ class VMECIO:
 
         constraints = get_fixed_axis_constraints(
             profiles=False, eq=eq
-        ) + get_fixed_boundary_constraints(iota=eq.iota, eq=eq)
+        ) + get_fixed_boundary_constraints(eq=eq)
         constraints = maybe_add_self_consistency(eq, constraints)
         objective = ObjectiveFunction(constraints, verbose=0)
         objective.build()

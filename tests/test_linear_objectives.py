@@ -312,7 +312,7 @@ def test_fixed_axis_and_theta_SFL_solve():
 def test_factorize_linear_constraints_asserts():
     """Test error checking for factorize_linear_constraints."""
     eq = Equilibrium()
-    constraints = get_fixed_boundary_constraints(eq=eq, iota=False)
+    constraints = get_fixed_boundary_constraints(eq=eq)
     for con in constraints:
         con.build(verbose=0)
     constraints[3].bounds = (0, 1)  # bounds on FixPsi
@@ -824,14 +824,15 @@ def _is_any_instance(things, cls):
 def test_FixAxis_util_correct_objectives():
     """Test util for fix axis constraints."""
     eq = Equilibrium()
-    cs = get_fixed_axis_constraints(eq, iota=False)
+    cs = get_fixed_axis_constraints(eq)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)
     assert _is_any_instance(cs, FixPressure)
     assert _is_any_instance(cs, FixCurrent)
 
-    cs = get_fixed_axis_constraints(eq, iota=True, kinetic=True)
+    eq = Equilibrium(electron_temperature=1, electron_density=1, iota=1)
+    cs = get_fixed_axis_constraints(eq)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)
@@ -847,7 +848,7 @@ def test_FixNAE_util_correct_objectives():
     """Test util for fix NAE constraints."""
     eq = Equilibrium()
     qsc = Qsc.from_paper("precise QA")
-    cs = get_NAE_constraints(eq, qsc, iota=False)
+    cs = get_NAE_constraints(eq, qsc)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)
@@ -856,7 +857,8 @@ def test_FixNAE_util_correct_objectives():
     assert _is_any_instance(cs, FixPressure)
     assert _is_any_instance(cs, FixCurrent)
 
-    cs = get_NAE_constraints(eq, qsc, iota=True, kinetic=True)
+    eq = Equilibrium(electron_temperature=1, electron_density=1, iota=1)
+    cs = get_NAE_constraints(eq, qsc)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)

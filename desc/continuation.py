@@ -98,11 +98,7 @@ def _solve_axisym(
             deltas = get_deltas({"surface": surf_i}, {"surface": surf_i2})
             surf_i = surf_i2
 
-        constraints_i = get_fixed_boundary_constraints(
-            eq=eqi,
-            iota=eqi.iota,
-            kinetic=eqi.electron_temperature,
-        )
+        constraints_i = get_fixed_boundary_constraints(eq=eqi)
         objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
 
         if verbose:
@@ -227,11 +223,7 @@ def _add_pressure(
         deltas["p_l"] *= pres_step
         pres_ratio += pres_step
 
-        constraints_i = get_fixed_boundary_constraints(
-            eq=eqi,
-            iota=eqi.iota,
-            kinetic=eqi.electron_temperature,
-        )
+        constraints_i = get_fixed_boundary_constraints(eq=eqi)
         objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
 
         if verbose:
@@ -360,11 +352,7 @@ def _add_shaping(
             deltas["Zb_lmn"] *= bdry_step
         bdry_ratio += bdry_step
 
-        constraints_i = get_fixed_boundary_constraints(
-            eq=eqi,
-            iota=eqi.iota,
-            kinetic=eqi.electron_temperature,
-        )
+        constraints_i = get_fixed_boundary_constraints(eq=eqi)
         objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
 
         if verbose:
@@ -662,11 +650,7 @@ def solve_continuation(  # noqa: C901
     if not isinstance(optimizer, Optimizer):
         optimizer = Optimizer(optimizer)
     objective_i = get_equilibrium_objective(eq=eqfam[0], mode=objective)
-    constraints_i = get_fixed_boundary_constraints(
-        eq=eqfam[0],
-        iota=objective != "vacuum" and eqfam[0].iota is not None,
-        kinetic=eqfam[0].electron_temperature is not None,
-    )
+    constraints_i = get_fixed_boundary_constraints(eq=eqfam[0])
 
     ii = 0
     nn = len(eqfam)
@@ -713,11 +697,7 @@ def solve_continuation(  # noqa: C901
             # TODO: pass Jx if available
             eqp = eqfam[ii - 1].copy()
             objective_i = get_equilibrium_objective(eq=eqp, mode=objective)
-            constraints_i = get_fixed_boundary_constraints(
-                eq=eqp,
-                iota=eqp.iota,
-                kinetic=eqp.electron_temperature,
-            )
+            constraints_i = get_fixed_boundary_constraints(eq=eqp)
             eqp.change_resolution(**eqi.resolution)
             eqp.perturb(
                 objective=objective_i,
@@ -737,11 +717,7 @@ def solve_continuation(  # noqa: C901
         if not stop:
             # TODO: add ability to rebind objectives
             objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
-            constraints_i = get_fixed_boundary_constraints(
-                eq=eqi,
-                iota=eqi.iota,
-                kinetic=eqi.electron_temperature,
-            )
+            constraints_i = get_fixed_boundary_constraints(eq=eqi)
             eqi.solve(
                 optimizer=optimizer,
                 objective=objective_i,

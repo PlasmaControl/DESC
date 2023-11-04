@@ -1,4 +1,6 @@
 """High order method for singular surface integrals, from Malhotra 2019."""
+from abc import ABC, abstractmethod
+
 import numpy as np
 import scipy
 
@@ -44,7 +46,59 @@ def _get_quadrature_nodes(q):
     return r, w, dr, dw
 
 
-class FFTInterpolator(IOAble):
+class _BIESTInterpolator(IOAble, ABC):
+    """Base class for interpolators from cartesian to polar domain.
+
+    Used for singular integral calculations.
+
+    Parameters
+    ----------
+    eval_grid, src_grid : Grid
+        Evaluation and source points for the integral transform.
+        src_grid should be a LinearGrid
+    s : int
+        Extent of polar grid in number of src grid points. Same as "M" in the
+        original Malhotra papers.
+    q : int
+        Order of quadrature in polar domain
+
+    """
+
+    _io_attrs_ = ["_eval_grid", "_src_grid", "_q", "_s"]
+
+    @abstractmethod
+    def __init__(self, eval_grid, src_grid, s, q):
+        pass
+
+    @property
+    def s(self):
+        """int: Extent of polar grid in number of src grid points."""
+        return self._s
+
+    @property
+    def q(self):
+        """int: Order of quadrature in polar domain."""
+        return self._q
+
+    @abstractmethod
+    def __call__(self, f, i):
+        """Interpolate data to polar grid points.
+
+        Parameters
+        ----------
+        f : ndarray
+            Data at source grid points to interpolate.
+        i : int
+            Index of polar node.
+
+        Returns
+        -------
+        fi : ndarray
+            Source data interpolated to ith polar node.
+        """
+
+
+class FFTInterpolator(_BIESTInterpolator):
     """FFT interpolation operator required for high order singular integration.
 
     Parameters
@@ -60,7 +114,7 @@ class FFTInterpolator(IOAble):
 
     """
 
-    _io_attrs_ = ["_eval_grid", "_src_grid", "_h_t", "_h_z", "_st", "_sz", "_q", "_s"]
+    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_h_t", "_h_z", "_st", "_sz"]
 
     def __init__(self, eval_grid, src_grid, s, q):
         # need src_grid to be linearly spaced in theta, zeta,
@@ -131,16 +185,6 @@ class FFTInterpolator(IOAble):
         self._st = s / 2 * self._h_t * r * jnp.sin(w)
         self._sz = s / 2 * self._h_z * r * jnp.cos(w)
 
-    @property
-    def s(self):
-        """int: Extent of polar grid in number of src grid points."""
-        return self._s
-
-    @property
-    def q(self):
-        """int: Order of quadrature in polar domain."""
-        return self._q
-
     def __call__(self, f, i):
         """Interpolate data to polar grid points.
 
@@ -172,7 +216,7 @@ class FFTInterpolator(IOAble):
         return g.reshape((self._eval_grid.num_nodes, *shp), order="F")
 
 
-class DFTInterpolator(IOAble):
+class DFTInterpolator(_BIESTInterpolator):
     """Fourier interpolation matrix required for high order singular integration.
 
     Parameters
@@ -187,6 +231,8 @@ class DFTInterpolator(IOAble):
         Order of quadrature in polar domain
 
     """
+
+    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_mat"]
 
     def __init__(self, eval_grid, src_grid, s, q):
         # need src_grid to be linearly spaced in theta, zeta,
@@ -252,16 +298,6 @@ class DFTInterpolator(IOAble):
 
         B = fori_loop(0, B.shape[0], body, B)
         self._mat = B @ Ainv
-
-    @property
-    def s(self):
-        """int:  Extent of polar grid in number of src grid points."""
-        return self._s
-
-    @property
-    def q(self):
-        """int: Order of quadrature in polar domain."""
-        return self._q
 
     def __call__(self, f, i):
         """Interpolate data to polar grid points.

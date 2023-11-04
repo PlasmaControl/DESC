@@ -11,7 +11,11 @@ from desc.compute import get_params, get_profiles, get_transforms, xyz2rpz_vec
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective
-from desc.singularities import DFTInterpolator, FFTInterpolator, singular_integral
+from desc.singularities import (
+    DFTInterpolator,
+    FFTInterpolator,
+    virtual_casing_biot_savart,
+)
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
@@ -236,14 +240,11 @@ class BoundaryErrorBIESTSC(_Objective):
         )
         src_data["K_vc"] += src_data["K_sc"]
         # this is in cartesian
-        Bplasma = -singular_integral(
+        Bplasma = -virtual_casing_biot_savart(
             eval_data,
             constants["eval_transforms"]["grid"],
             src_data,
             constants["src_transforms"]["grid"],
-            self._s,
-            self._q,
-            "biot_savart",
             constants["interpolator"],
         )
         # need extra factor of B/2 bc we're evaluating on plasma surface
@@ -482,14 +483,11 @@ class BoundaryErrorBIEST(_Objective):
             profiles=constants["eval_profiles"],
         )
         # this is in cartesian
-        Bplasma = -singular_integral(
+        Bplasma = -virtual_casing_biot_savart(
             eval_data,
             constants["eval_transforms"]["grid"],
             src_data,
             constants["src_transforms"]["grid"],
-            self._s,
-            self._q,
-            "biot_savart",
             constants["interpolator"],
         )
         # need extra factor of B/2 bc we're evaluating on plasma surface
@@ -720,14 +718,11 @@ class QuadraticFlux(_Objective):
             profiles=constants["eval_profiles"],
         )
         # this is in cartesian
-        Bplasma = -singular_integral(
+        Bplasma = -virtual_casing_biot_savart(
             eval_data,
             constants["eval_transforms"]["grid"],
             src_data,
             constants["src_transforms"]["grid"],
-            self._s,
-            self._q,
-            "biot_savart",
             constants["interpolator"],
         )
         # don't need extra B/2 since we only care about normal component

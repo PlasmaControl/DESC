@@ -131,6 +131,16 @@ class FFTInterpolator(IOAble):
         self._st = s / 2 * self._h_t * r * jnp.sin(w)
         self._sz = s / 2 * self._h_z * r * jnp.cos(w)
 
+    @property
+    def s(self):
+        """int: Extent of polar grid in number of src grid points."""
+        return self._s
+
+    @property
+    def q(self):
+        """int: Order of quadrature in polar domain."""
+        return self._q
+
     def __call__(self, f, i):
         """Interpolate data to polar grid points.
 
@@ -242,6 +252,16 @@ class DFTInterpolator(IOAble):
 
         B = fori_loop(0, B.shape[0], body, B)
         self._mat = B @ Ainv
+
+    @property
+    def s(self):
+        """int:  Extent of polar grid in number of src grid points."""
+        return self._s
+
+    @property
+    def q(self):
+        """int: Order of quadrature in polar domain."""
+        return self._q
 
     def __call__(self, f, i):
         """Interpolate data to polar grid points.
@@ -384,9 +404,7 @@ def _singular_part(
     return vmap(polar_pt_loop)(jnp.arange(v.size)).sum(axis=0)
 
 
-def singular_integral(
-    eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator
-):
+def singular_integral(eval_data, eval_grid, src_data, src_grid, kernel, interpolator):
     """Evaluate a singular integral transform on a surface.
 
     eg f(θ, ζ) = ∫ ∫ K(θ, ζ, θ', ζ') g(θ', ζ') dθ' dζ'
@@ -404,11 +422,6 @@ def singular_integral(
     src_grid : LinearGrid
         Source points for integral (eg primed coordinates). Should be linearly spaced
         rectangular grid in both theta, zeta.
-    s : int
-        Extent of polar grid in number of src grid points. Same as "M" in the
-        original Malhotra papers.
-    q : int
-        Order of quadrature in polar domain.
     kernel : str or callable
         Kernel function to evaluate. Should take 3 arguments:
             eval_data : dict of data at evaluation points
@@ -438,6 +451,8 @@ def singular_integral(
 
     if isinstance(kernel, str):
         kernel = kernels[kernel]
+
+    s, q = interpolator.s, interpolator.q
 
     out2 = _singular_part(
         eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator
@@ -545,3 +560,46 @@ kernels = {
     "biot_savart": _kernel_biot_savart,
     "biot_savart_A": _kernel_biot_savart_A,
 }
+
+
+def virtual_casing_biot_savart(eval_data, eval_grid, src_data, src_grid, interpolator):
+    """Evaluate magnetic field on surface due to sheet current on surface.
+
+    Parameters
+    ----------
+    eval_data : dict
+        Dictionary of data at evaluation points. Keys should be those required by
+        kernel as kernel.keys
+    eval_grid : Grid
+        Points where integral transform is to be evaluated (eg unprimed coordinates).
+    src_data : dict
+        Dictionary of data at source points. Keys should be those required by
+        kernel as kernel.keys
+    src_grid : LinearGrid
+        Source points for integral (eg primed coordinates). Should be linearly spaced
+        rectangular grid in both theta, zeta.
+    interpolator : callable
+        Function to interpolate from rectangular source grid to polar
+        source grid around each singular point. See ``FFTInterpolator`` or
+        ``DFTInterpolator``
+
+    Returns
+    -------
+    f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
+        Integral transform evaluated at eval_grid.
+
+    """
+    # sanitize inputs, we need everything as jax arrays so they can be indexed
+    # properly in the loops
+    src_data = {key: jnp.asarray(val) for key, val in src_data.items()}
+    eval_data = {key: jnp.asarray(val) for key, val in eval_data.items()}
+
+    kernel = _kernel_biot_savart
+
+    s, q = interpolator.s, interpolator.q
+
+    out2 = _singular_part(
+        eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator
+    )
+    out1 = _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel)
+    return out1 + out2

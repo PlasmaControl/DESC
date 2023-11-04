@@ -230,7 +230,7 @@ class TestConstructor:
         np.testing.assert_allclose(Z_lmn, eq.Z_lmn)
         np.testing.assert_allclose(L_lmn, eq.L_lmn)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(AssertionError):
             eq = Equilibrium(L=4, R_lmn=R_lmn)
 
 

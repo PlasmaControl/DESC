@@ -153,7 +153,10 @@ On Clusters with IBM Power Architecture
 If pre-built JAX binaries are not available, you will first need to build JAX from source.
 More info can be found here: https://jax.readthedocs.io/en/latest/developer.html
 
-These instructions were tested and confirmed to work on the Traverse supercomputer at Princeton as of 7-10-2023.
+These instructions were tested and confirmed to work on the Traverse supercomputer at Princeton as of 11-6-2023.
+
+NOTE: You must use an older version of DESC in order to use Traverse, as there are some compatibility issues with JAX and the architecture.
+Commit `a2fe711ffa3f` (an older version of the `master` branch) was tested to work fine on Traverse with these instructions.
 
 .. code-block:: sh
 

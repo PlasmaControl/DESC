@@ -1160,7 +1160,7 @@ def test_regcoil_ellipse_helical():
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
-        coords, grid=LinearGrid(M=200, N=200)
+        coords, grid=LinearGrid(M=200, N=200), basis="rpz"
     )
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
 
@@ -1194,7 +1194,7 @@ def test_regcoil_ellipse_helical():
         step=6,
         save_figs=False,
     )
-    B_from_coils = coilset2.compute_magnetic_field(coords)
+    B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_coils, atol=1e-3)
 
     fieldR, fieldZ = field_trace_from_coilset(

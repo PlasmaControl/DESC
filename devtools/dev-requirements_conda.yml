@@ -16,6 +16,8 @@ dependencies:
   - pip:
     - jax[cpu] >= 0.3.2, <= 0.4.14
     - nvgpu
+    - plotly >= 5.16, <= 6.0
+    - pylatexenc >= 2.0, <= 3.0
     # testing and benchmarking
     - qsc
     - qicna @ git+https://github.com/rogeriojorge/pyQIC/
@@ -27,6 +29,8 @@ dependencies:
   - sphinx-argparse
   - sphinx-copybutton
   - sphinx_rtd_theme >= 1.0, < 2.0
+  - pip:
+    - sphinx-github-style >= 1.0, <= 1.1
 
   # linting
   - black = 22.10.0

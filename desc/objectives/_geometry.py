@@ -6,7 +6,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms, rpz2xyz
+from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
 
@@ -20,27 +20,27 @@ class AspectRatio(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: Has no effect for this objective.
-    normalize_target : bool
+        Has no effect for this objective.
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect for this objective.
-    grid : Grid, ndarray, optional
+        this should also be set to True. Has no effect for this objective.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -51,7 +51,7 @@ class AspectRatio(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -64,7 +64,7 @@ class AspectRatio(_Objective):
             target = 2
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -73,20 +73,18 @@ class AspectRatio(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -94,11 +92,6 @@ class AspectRatio(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["R0/a"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -116,17 +109,18 @@ class AspectRatio(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute aspect ratio.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -134,7 +128,6 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -152,27 +145,27 @@ class Elongation(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: Has no effect for this objective.
-    normalize_target : bool
+        Has no effect for this objective.
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect for this objective.
-    grid : Grid, ndarray, optional
+        this should also be set to True. Has no effect for this objective.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -183,7 +176,7 @@ class Elongation(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -196,7 +189,7 @@ class Elongation(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -205,20 +198,18 @@ class Elongation(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -226,11 +217,6 @@ class Elongation(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["a_major/a_minor"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -248,17 +234,18 @@ class Elongation(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute elongation.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -266,7 +253,6 @@ class Elongation(_Objective):
             Elongation, dimensionless.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -284,27 +270,26 @@ class Volume(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-        be set to True.
-    grid : Grid, ndarray, optional
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -315,7 +300,7 @@ class Volume(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -328,7 +313,7 @@ class Volume(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -337,20 +322,18 @@ class Volume(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -358,11 +341,6 @@ class Volume(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["V"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -384,17 +362,18 @@ class Volume(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["V"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute plasma volume.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -402,7 +381,6 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -437,37 +415,39 @@ class PlasmaVesselDistance(_Objective):
 
     Parameters
     ----------
-    surface : Surface
-        Bounding surface to penalize distance to.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+    surface : Surface
+        Bounding surface to penalize distance to.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    surface_grid : Grid, ndarray, optional
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    surface_grid : Grid, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
-    plasma_grid : Grid, ndarray, optional
+    plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
-    use_softmin: Bool, use softmin or hard min.
-    alpha: float, parameter used for softmin. The larger alpha, the closer the softmin
+    use_softmin: bool, optional
+        Use softmin or hard min.
+    alpha: float, optional
+        Parameter used for softmin. The larger alpha, the closer the softmin
         approximates the hardmin. softmin -> hardmin as alpha -> infinity.
         if alpha*array < 1, the underlying softmin will automatically multiply
         the array by 2/min_val to ensure that alpha*array>1. Making alpha larger
         than this minimum value will make the softmin a more accurate approximation
         of the true min.
-    name : str
+    name : str, optional
         Name of the objective function.
     """
 
@@ -477,8 +457,8 @@ class PlasmaVesselDistance(_Objective):
 
     def __init__(
         self,
+        eq,
         surface,
-        eq=None,
         target=None,
         bounds=None,
         weight=1,
@@ -498,7 +478,7 @@ class PlasmaVesselDistance(_Objective):
         self._use_softmin = use_softmin
         self._alpha = alpha
         super().__init__(
-            eq=eq,
+            things=[eq, self._surface],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -507,20 +487,22 @@ class PlasmaVesselDistance(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
+        surface = self.things[1]
+        # if things[1] is different than self._surface, update self._surface
+        if surface != self._surface:
+            self._surface = surface
         if self._surface_grid is None:
             surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -535,37 +517,46 @@ class PlasmaVesselDistance(_Objective):
             warnings.warn("Plasma grid includes interior points, should be rho=1")
 
         self._dim_f = surface_grid.num_nodes
-        self._data_keys = ["R", "phi", "Z"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
-        )
+        self._equil_data_keys = ["R", "phi", "Z"]
+        self._surface_data_keys = ["x"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._surface_coords = self._surface.compute(
-            "x", grid=surface_grid, basis="xyz"
-        )["x"]
-        profiles = get_profiles(
-            self._data_keys,
+        equil_profiles = get_profiles(
+            self._equil_data_keys,
             obj=eq,
             grid=plasma_grid,
-            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+            has_axis=plasma_grid.axis.size,
         )
-        transforms = get_transforms(
-            self._data_keys,
+        equil_transforms = get_transforms(
+            self._equil_data_keys,
             obj=eq,
             grid=plasma_grid,
-            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+            has_axis=plasma_grid.axis.size,
         )
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface,
+            grid=surface_grid,
+            has_axis=surface_grid.axis.size,
+        )
+
+        # compute returns points on the grid of the surface
+        # (so size surface_grid.num_nodes)
+        # so set quad_weights to the surface grid
+        # to avoid it being incorrectly set to the plasma_grid size
+        # in the super build
+        w = surface_grid.weights
+        w *= jnp.sqrt(surface_grid.num_nodes)
+
         self._constants = {
-            "transforms": transforms,
-            "profiles": profiles,
-            "surface_coords": self._surface_coords,
+            "equil_transforms": equil_transforms,
+            "equil_profiles": equil_profiles,
+            "surface_transforms": surface_transforms,
+            "quad_weights": w,
         }
 
         timer.stop("Precomputing transforms")
@@ -576,17 +567,20 @@ class PlasmaVesselDistance(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, equil_params, surface_params, constants=None):
         """Compute plasma-surface distance.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        equil_params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        surface_params : dict
+            Dictionary of surface degrees of freedom, eg Surface.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -594,20 +588,28 @@ class PlasmaVesselDistance(_Objective):
             For each point in the surface grid, approximate distance to plasma.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
+            self._equil_data_keys,
+            params=equil_params,
+            transforms=constants["equil_transforms"],
+            profiles=constants["equil_profiles"],
         )
         plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+        surface_coords = compute_fun(
+            self._surface,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
+            basis="xyz",
+        )["x"]
         d = jnp.linalg.norm(
-            plasma_coords[:, None, :] - constants["surface_coords"][None, :, :], axis=-1
+            plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1
         )
+
         if self._use_softmin:  # do softmin
             return jnp.apply_along_axis(softmin, 0, d, self._alpha)
         else:  # do hardmin
@@ -625,26 +627,26 @@ class MeanCurvature(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    grid : Grid, ndarray, optional
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -655,7 +657,7 @@ class MeanCurvature(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -668,7 +670,7 @@ class MeanCurvature(_Objective):
             bounds = (-np.inf, 0)
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -677,20 +679,18 @@ class MeanCurvature(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -698,11 +698,6 @@ class MeanCurvature(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_H_rho"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -724,17 +719,18 @@ class MeanCurvature(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute mean curvature.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -742,7 +738,6 @@ class MeanCurvature(_Objective):
             Mean curvature at each point (m^-1).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -769,26 +764,26 @@ class PrincipalCurvature(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    grid : Grid, ndarray, optional
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -799,7 +794,7 @@ class PrincipalCurvature(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -812,7 +807,7 @@ class PrincipalCurvature(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -821,20 +816,18 @@ class PrincipalCurvature(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -842,11 +835,6 @@ class PrincipalCurvature(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_k1_rho", "curvature_k2_rho"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -868,17 +856,18 @@ class PrincipalCurvature(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute max absolute principal curvature.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -886,7 +875,6 @@ class PrincipalCurvature(_Objective):
             Max absolute principal curvature at each point (m^-1).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -910,26 +898,26 @@ class BScaleLength(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    grid : Grid, ndarray, optional
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
@@ -940,7 +928,7 @@ class BScaleLength(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -953,7 +941,7 @@ class BScaleLength(_Objective):
             bounds = (1, np.inf)
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -962,20 +950,18 @@ class BScaleLength(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -983,11 +969,6 @@ class BScaleLength(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["L_grad(B)"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -1009,25 +990,18 @@ class BScaleLength(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["R0"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute magnetic field scale length.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -1035,7 +1009,6 @@ class BScaleLength(_Objective):
             Magnetic field scale length at each point (m).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(

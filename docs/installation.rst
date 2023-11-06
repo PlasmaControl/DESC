@@ -123,15 +123,16 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 Della and Stellar Clusters (Princeton)
 ++++++++++++++++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Della and Stellar clusters at Princeton as of 8-26-2023.
+These instructions were tested and confirmed to work on the Della and Stellar clusters at Princeton as of 11-6-2023.
 
 First, install JAX (check `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters):
 
 .. code-block:: sh
 
     module load anaconda3/2023.3
-    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.10=cuda112*" -c conda-forge
+    conda create --name desc-env python=3.9
     conda activate desc-env
+    pip install --upgrade "jax[cuda11_pip]<0.4.15" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 Then, install DESC:
 

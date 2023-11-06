@@ -4,7 +4,6 @@ import warnings
 
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from scipy.optimize import minimize
 
 import desc.io
 from desc.backend import jnp
@@ -17,18 +16,12 @@ from desc.plotting import plot_3d, plot_coils
 def find_modular_coils(  # noqa: C901 - FIXME: simplify this
     surface_current_field,
     eqname,
-    alpha,
     desirednumcoils=10,
     step=2,
-    ntheta=200,
     coilsFilename="coils.txt",
-    maxiter=25,
     dirname=".",
-    method="Nelder-Mead",
-    equal_current=True,
-    initial_guess=None,
     save_figs=True,
-    verbose=0,
+    **kwargs,
 ):
     """Find modular coils from a surface current potential.
 
@@ -41,34 +34,16 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
         The DESC equilibrum the surface current potential was found for
         If str, assumes it is the name of the equilibrium .h5 output and will
         load it
-    alpha : float
-        regularization parameter used in run_regcoil
-        #TODO: can remove this and replace with something like
-        basename to be used for every saved figure
     desirednumcoils : int, optional
         number of coils to discretize the surface current with, by default 10
     step : int, optional
         Amount of points to step when saving the coil geometry
         by default 2, meaning that every other point will be saved
         if higher, less points will be saved
-    ntheta : int, optional
-        number of theta points to use in the integration to find the current
-        pertaining to each coil, by default 128
     coilsFilename : str, optional
         name of txt file to save coils to, by default "coils.txt"
-    maxiter : int, optional
-        max iterations to use in equal current optimization, by default 25
     dirname : str, optional
         directory to save files to, by default "."
-    method : str, optional
-        scipy minimization method to use for equal current algorithm,
-        by default "Nelder-Mead"
-    equal_current : bool, optional
-        Whether to optimize the contour positions to find
-        coils which have equal currents, by default True
-    initial_guess : array-like, optional
-        initial guess to use for the contour values in the minimization
-        by default None
     save_figs : bool, optional
         whether to save figures, by default True
 
@@ -90,9 +65,10 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
             UserWarning,
         )
 
+    # TODO: make this go only to 1 FP
     nfp = eq.NFP
-    theta_coil = jnp.linspace(0, 2 * jnp.pi, ntheta)
-    zeta_coil = jnp.linspace(0, 2 * jnp.pi / nfp, ntheta)
+    theta_coil = jnp.linspace(0, 2 * jnp.pi, 128)
+    zeta_coil = jnp.linspace(0, 2 * jnp.pi / nfp, 128)
     dz = zeta_coil[1] - zeta_coil[0]
     # add a buffer around zeta=0 and zeta=2pi to catch contours that may go past
     # those lines
@@ -125,19 +101,6 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
         grid = Grid(nodes, sort=False)
         return surface_current_field.compute("Phi", grid=grid)["Phi"]
 
-    def phi_tot_fun_theta_deriv_vec(theta, zeta):
-        nodes = jnp.vstack(
-            (
-                jnp.zeros_like(theta.flatten(order="F")),
-                theta.flatten(order="F"),
-                zeta.flatten(order="F"),
-            )
-        ).T
-        grid = Grid(nodes, sort=False)
-        return surface_current_field.compute("Phi_t", grid=grid)["Phi_t"]
-
-    ##### find helicity naively ######################################################
-
     if not jnp.isclose(net_toroidal_current, 0):
         raise ValueError("this function only works for modular coils! Got nonzero I")
 
@@ -145,64 +108,11 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
     # find contours of constant phi
     ################################################################
 
-    # TODO: also precompute and interpolate Phi, so no need
-    # to create grid objects inside the variance function
-    # instead just need to interpolate Phi(theta)
-
-    # TODO: make a jittable compute_Phi
-    # though since the theta points we eval at are changing
-    # each time, need to bypass the Grid/Transform
-    # and directly implement the (fast)fourier transform?
-
     # TODO: only calc for one Field period, should be easy
     # with modular coils
 
-    def get_currents(zetas_halfway, return_variance=True):
-        # TODO: if G is negative... then larger zeta is more negative potential right?
-        # so that matters...
-        # let zetas_halfway be starting at the leftmost contour
-        # and G_i = Phi(zetas[i+1])-Phi(zetas[i])
-        # with i going from 0 to desiredNumCoils
-        # we are missing the Phi value at the contour halfway above our last contour
-        # but that is just the Phi[0] + G
-        # since it is Phi(zeta+2pi) and Phi_sv is periodic and
-        #  2nd term in zeta is linear in zeta i.e. is G * zeta / 2pi
-
-        # let zetas_halfway be starting at the leftmost contour
-        # and G_i = Phi(zetas[i+1])-Phi(zetas[i])
-        # with i going from 0 to desiredNumCoils
-        # TODO: check sign (should it maybe be negative?)
-        # sign should be entirely determined by G and the contours
-        # if G is pos, grad(Phi) pts right, K points down
-        # and so if sign(contour_theta[-1] - contour_theta[0]) < 0
-        # then current is pos
-        # else if > 0, current is neg
-        # so current sign should be =-sign(G)(sign(contour_theta[-1]-contour_theta[0]))
-        # and current = sign * abs(current) (to be robust against sorting in zeta?)
-        # CHECK THIS
-        Phis = surface_current_field.compute(
-            "Phi",
-            grid=Grid(
-                jnp.vstack(
-                    (
-                        jnp.zeros_like(zetas_halfway),
-                        jnp.zeros_like(zetas_halfway),
-                        zetas_halfway,
-                    )
-                ).T,
-                jitable=True,
-                sort=False,
-            ),
-        )["Phi"]
-        Phis = jnp.append(Phis, Phis[0] + net_poloidal_current)
-        currents = Phis[1:] - Phis[:-1]
-        if return_variance:
-            return jnp.var(currents)
-        return currents
-
-    # TODO: implement the analytic deriv of above
-
     # TODO: don't need this for the whole zeta domain, just do 1 FP
+    # TODO: if stell sym, only need 1/2 FP
 
     # TODO: change this so that  this fxn only accepts Ncoils length array
     def find_full_coil_contours(contours, show_plots=True, ax=None, label=None, ls="-"):
@@ -260,84 +170,22 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
         return contour_theta, contour_zeta
 
     # TODO: this shold go to just 2pi/NFP
-    zeta0s = jnp.linspace(
-        0,
-        (2 * jnp.pi),
-        desirednumcoils,
-        endpoint=False,
-    )
 
-    # theta positions halfway between contour start points
-    zeta0s_halfway = zeta0s - zeta0s[1] / 2
-
-    import time
-
-    contours = phi_tot_fun_vec(jnp.zeros_like(zeta0s), zeta0s)
-
-    if initial_guess:
-        assert len(initial_guess) == len(contours)
-        contours = initial_guess
+    # make linspace contour
+    contours = jnp.linspace(
+        0, jnp.abs(net_poloidal_current), desirednumcoils + 1, endpoint=True
+    ) * jnp.sign(net_poloidal_current)
     contours = jnp.sort(jnp.asarray(contours))
 
-    # TODO: this call to find full contours results in things of length(Ncoils-1)?
-    contour_theta_initial, contour_zeta_initial = find_full_coil_contours(contours)
-
-    if equal_current:
-        xs = [zeta0s_halfway]
-        fun_vals = [get_currents(zeta0s_halfway)]
-        t_start = time.time()
-
-        def callback(x):
-            curr_val = get_currents(x)
-            if verbose > 1:
-                print(f"Iteration: {len(xs)} Time elapsed = {time.time()-t_start} s")
-                print(f"Current function value: {curr_val:1.3e}")
-                print(f"Current x: {x}")
-
-            xs.append(x)
-            fun_vals.append(curr_val)
-            return False
-
-        result = minimize(
-            get_currents,
-            zeta0s_halfway,
-            options={"maxiter": maxiter, "disp": False},
-            callback=callback,
-            method=method,
-        )
-        t_end = time.time()
-        print(f"Optimization for coils took {t_end-t_start} s")
-        zetas_halfway = result.x
-    else:
-        zetas_halfway = zeta0s_halfway
-    # TODO: remove the need to add another point at end by
-    # modifying find full contours fxn
-    coil_currents = get_currents(zetas_halfway, return_variance=False)
-    # TODO: this shold go to just 2pi/NFP
-
-    zetas_halfway = jnp.append(zetas_halfway, zetas_halfway[0] + 2 * jnp.pi)
-    final_coil_zeta0s = (zetas_halfway[0:-1] + zetas_halfway[1:]) / 2
-    final_coil_zeta0s = jnp.append(
-        final_coil_zeta0s, final_coil_zeta0s[-1] + final_coil_zeta0s[1]
-    )
-
-    zeta0s = jnp.append(zeta0s, zeta0s[-1] + zeta0s[1])
-    contours = phi_tot_fun_vec(jnp.zeros_like(final_coil_zeta0s), final_coil_zeta0s)
-    contours = jnp.sort(jnp.asarray(contours))
-
-    print("initial coil zetas:", zeta0s)
-    print("final coil zetas:", final_coil_zeta0s)
+    coil_current = net_poloidal_current / desirednumcoils
 
     contour_theta, contour_zeta = find_full_coil_contours(contours)
+    # TODO: make sure sign of current is correct
     sign_of_theta_contours = jnp.sign(contour_theta[0][-1] - contour_theta[0][0])
 
     ################################################################
     # Find the XYZ points in real space of the coil contours
     ################################################################
-    if save_figs:
-        fig = plot_3d(eq, "|B|", figsize=(12, 12))
-    else:
-        fig = None
 
     def find_XYZ_points(
         theta_pts,
@@ -408,6 +256,11 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
             print(f"Minimum coil-coil separation: {minSeparation2*1000:3.2f} mm")
         return contour_X, contour_Y, contour_Z, fig
 
+    if save_figs:
+        fig = plot_3d(eq, "|B|", figsize=(12, 12))
+    else:
+        fig = None
+
     contour_X, contour_Y, contour_Z, fig = find_XYZ_points(
         contour_theta,
         contour_zeta,
@@ -415,16 +268,6 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
         find_min_dist=True,
         label="Final",
         color="black",
-        fig=fig,
-    )
-    _, _, _, fig = find_XYZ_points(
-        contour_theta_initial,
-        contour_zeta_initial,
-        winding_surf,
-        find_min_dist=False,
-        label="Initial",
-        color="tomato",
-        ls="dashdot",
         fig=fig,
     )
     if fig and save_figs:
@@ -452,11 +295,7 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
                 N = len(contour_X[j])
                 # TODO: here is where we mult by the sign
                 current_sign = -sign_of_theta_contours * jnp.sign(net_poloidal_current)
-                thisCurrent = (
-                    net_poloidal_current / desirednumcoils
-                    if equal_current
-                    else coil_currents[j]
-                )
+                thisCurrent = net_poloidal_current / desirednumcoils
                 thisCurrent = jnp.abs(thisCurrent) * current_sign
                 for k in range(0, N, step):
                     f.write(
@@ -480,22 +319,9 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
     if save_figs:
         fig = plot_coils(final_coilset, fig=fig)
     ###################
-    print(f"Coil current average is {jnp.mean(coil_currents):1.4e} A")
-    print(f"Coil current variance is {jnp.var(coil_currents):1.4e} A")
-    if equal_current:
-        print(
-            "Coil currents set to be equal to total net pol.current / coils:",
-            f" {net_poloidal_current / desirednumcoils:1.4e}",
-        )
-        avg_abs_diff = jnp.mean(
-            jnp.abs(net_poloidal_current / desirednumcoils - jnp.asarray(coil_currents))
-        )
-        print(
-            "Avg difference between optimized coil currents and the set current:"
-            f"{avg_abs_diff:1.4e} A"
-        )
-
-    print("sum of coil currents", jnp.sum(coil_currents))
-    print("should equal net G :", net_poloidal_current)
+    print(
+        f"Current per coil is {coil_current*current_sign:1.4e}"
+        f" A for {desirednumcoils} coils"
+    )
 
     return final_coilset

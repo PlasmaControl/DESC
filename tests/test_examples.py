@@ -1266,13 +1266,8 @@ def test_regcoil_ellipse_modular():
     coilset2 = find_modular_coils(
         surface_current_field,
         eqname,
-        1e-15,
         desirednumcoils=numCoils,
         coilsFilename=coilsFilename,
-        maxiter=1500,
-        method="Nelder-Mead",
-        equal_current=True,
-        initial_guess=None,
         step=6,
         save_figs=False,
     )

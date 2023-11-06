@@ -216,16 +216,19 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     # each time, need to bypass the Grid/Transform
     # and directly implement the (fast)fourier transform?
 
-    def get_currents(thetas_halfway):
+    def get_currents(thetas_halfway, use_Phis=False):
         # let thetas_halfway be starting at the contour below the
         # bottom most contour, and then all the way to the one below the top
         # so this is desiredNumCoils
         # with i going from 0 to desiredNumCoils
         # TODO: check sign (should it maybe be negative?)
-        Phis = surface_current_field.compute(
-            "Phi", grid=LinearGrid(rho=0, zeta=0, theta=thetas_halfway)
-        )["Phi"]
-        Phis = jnp.append(Phis, Phis[0] + net_toroidal_current)
+        if not use_Phis:
+            Phis = surface_current_field.compute(
+                "Phi", grid=LinearGrid(rho=0, zeta=0, theta=thetas_halfway)
+            )["Phi"]
+            Phis = jnp.append(Phis, Phis[0] + net_toroidal_current)
+        else:
+            Phis = thetas_halfway
         currents = Phis[1:] - Phis[:-1]
         return currents
 
@@ -381,6 +384,14 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
     print("initial coil thetas:", theta0s)
     print("final coil thetas:", final_coil_theta0s)
+
+    # make linspace contour
+    contours = jnp.linspace(
+        0, jnp.abs(net_toroidal_current), desirednumcoils + 1, endpoint=True
+    ) * jnp.sign(net_toroidal_current)
+    contours = jnp.sort(jnp.asarray(contours))
+
+    coil_currents = get_currents(contours, use_Phis=True)
 
     contour_theta, contour_zeta = find_full_coil_contours(contours)
 

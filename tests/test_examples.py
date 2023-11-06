@@ -1189,16 +1189,13 @@ def test_regcoil_ellipse_helical():
     coilset2 = find_helical_coils(
         surface_current_field,
         eqname,
-        1e-15,
         desirednumcoils=numCoils,
         coilsFilename=coilsFilename,
-        maxiter=1500,
-        method="Nelder-Mead",
-        equal_current=True,
-        initial_guess=None,
         step=6,
         save_figs=False,
     )
+    B_from_coils = coilset2.compute_magnetic_field(coords)
+    np.testing.assert_allclose(B, B_from_coils, atol=1e-3)
 
     fieldR, fieldZ = field_trace_from_coilset(
         coilset2, eq, 15, only_return_data=True, Rs=np.linspace(0.685, 0.715, 10)
@@ -1273,6 +1270,9 @@ def test_regcoil_ellipse_modular():
     )
 
     coilset2 = coilset2.to_FourierXYZ(N=60)
+
+    B_from_coils = coilset2.compute_magnetic_field(coords)
+    np.testing.assert_allclose(B, B_from_coils, atol=1e-3)
 
     fieldR, fieldZ = field_trace_from_coilset(
         coilset2, eq, 15, only_return_data=True, Rs=np.linspace(0.685, 0.715, 10)

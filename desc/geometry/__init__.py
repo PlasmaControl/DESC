@@ -5,5 +5,5 @@ from .curve import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve, SplineXY
 from .surface import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
-    convert_coefficients,
+    convert_spectral_to_FE,
 )

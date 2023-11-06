@@ -326,6 +326,9 @@ class _FE_Basis(IOAble, ABC):
 
         """
 
+    def _enforce_symmetry(self):
+        """Do nothing for now."""
+
     @abstractmethod
     def change_resolution(self):
         """Change resolution of the basis to the given resolutions."""
@@ -1305,7 +1308,7 @@ class FiniteElementBasis(_FE_Basis):
         self._sym = sym
 
         self._modes = self._get_modes(L=self.L, I=self.I_2MN, Q=self.Q)
-
+        self.mesh = FiniteElementMesh2D(M, N, K=K)
         super().__init__()
 
     def _get_modes(self, L=-1, I=0, Q=0):
@@ -2295,11 +2298,35 @@ class FiniteElementMesh2D:
         self.vertices = vertices
         self.triangles = triangles
 
-    def plot_triangles(self):
+        # Setup quadrature points and weights for numerical integration
+        integration_points = []
+        weights = []
+        if self.K == 1:
+            integration_points.append([1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0])
+            weights.append([1])
+        elif self.K == 2:
+            integration_points.append([1.0 / 2.0, 1.0 / 2.0, 0.0])
+            integration_points.append([1.0 / 2.0, 0.0, 1.0 / 2.0])
+            integration_points.append([0.0, 1.0 / 2.0, 1.0 / 2.0])
+            weights.append([1.0 / 3.0])
+            weights.append([1.0 / 3.0])
+            weights.append([1.0 / 3.0])
+
+        self.integration_points = np.array(integration_points)
+        self.weights = np.ravel(np.array(weights))
+        self.nquad = len(self.integration_points)
+
+    def plot_triangles(self, plot_quadrature_points=False):
         """Plot all the triangles in the 2D mesh tessellation."""
         plt.figure(100)
         for i, triangle in enumerate(self.triangles):
             triangle.plot_triangle()
+
+        if plot_quadrature_points:
+            quadpoints = self.return_quadrature_points()
+            for i in range(self.Q):
+                plt.subplot(1, self.Q, i + 1)
+                plt.plot(quadpoints[:, 0], quadpoints[:, 1], "ko")
         plt.show()
 
     def find_triangles_corresponding_to_points(self, theta_zeta):
@@ -2333,6 +2360,70 @@ class FiniteElementMesh2D:
                     triangle_indices[i] = j
                     basis_functions[i, :] = triangle.get_basis_functions(v)
         return triangle_indices, basis_functions
+
+    def return_quadrature_points(self):
+        """Get quadrature points for numerical integration over the mesh.
+
+        Returns
+        -------
+        quadrature points: 2D ndarray, shape (nquad * 2NM, 2)
+            Points in (theta, zeta) representing the quadrature point
+            locations for integration in barycentric coordinates.
+
+        """
+        nquad = self.nquad
+        quadrature_points = np.zeros((self.I_2MN * nquad, 2))
+        q = 0
+        for triangle in self.triangles:
+            for i in range(nquad):
+                A = np.array(
+                    [
+                        [triangle.b[0], triangle.c[0]],
+                        [triangle.b[1], triangle.c[1]],
+                        [
+                            triangle.b[0] + triangle.b[1] + triangle.b[2],
+                            triangle.c[0] + triangle.c[1] + triangle.c[2],
+                        ],
+                    ]
+                )
+                b = np.zeros(3)
+                b[:2] = triangle.area2 * self.integration_points[i, :2] - triangle.a[:2]
+                b[2] = triangle.area2 - triangle.a[0] - triangle.a[1] - triangle.a[2]
+                quadrature_points[q, :], _, _, _ = np.linalg.lstsq(A, b)
+                q = q + 1
+        return quadrature_points
+
+    def integrate(self, f):
+        """Integrates a function over the 2D mesh in (theta, zeta).
+
+        This function allows one to integrate any set of functions of theta,
+        zeta over the full 2D N x M mesh. Uses numerical quadrature
+        formula for triangles in the barycentric coordinates. Note that
+        for K = 1, a single-point quadrature in the triangle is adequate.
+
+        Parameters
+        ----------
+        f : 2D ndarray, shape (nquad * 2NM, num_functions)
+            Vector function defined on the N x M mesh in (theta, zeta)
+            that we would like to integrate component-wise with respect
+            to the basis functions. For integration over the barycentric
+            coordinates, we need f to be prescribed at the quadrature points
+            in a barycentric coordinate system.
+
+        Returns
+        -------
+        integral: 1D ndarray, shape (num_functions)
+            Value of the integral over the mesh for each component of f.
+
+        """
+        nquad = self.nquad
+        integral = np.zeros(f.shape[1])
+        for i, triangle in enumerate(self.triangles):
+            integral += np.dot(
+                triangle.area2 * self.weights,
+                f[i * nquad : (i + 1) * nquad, :],
+            )
+        return integral / 2.0
 
 
 class TriangleFiniteElement:
@@ -2697,6 +2788,12 @@ class TriangleFiniteElement:
         Plot the triangle in (theta, zeta) and (eta1, eta2, eta3) coordinates.
 
         Also plots all of the basis functions.
+
+        Parameters
+        ----------
+        plot_quadrature_points : bool
+            Flag to indicate whether or not the quadrature points for
+            integration should also be plotted on the mesh.
         """
         # Define uniform grid in (theta, zeta)
         theta = np.linspace(

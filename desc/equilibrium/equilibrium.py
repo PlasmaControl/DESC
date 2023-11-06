@@ -20,7 +20,7 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     Surface,
     ZernikeRZToroidalSection,
-    convert_coefficients,
+    convert_spectral_to_FE,
 )
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
@@ -125,8 +125,6 @@ class Equilibrium(IOAble):
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
-        "_I",
-        "_J",
         "_R_basis",
         "_Z_basis",
         "_L_basis",
@@ -145,8 +143,6 @@ class Equilibrium(IOAble):
         "_L_grid",
         "_M_grid",
         "_N_grid",
-        "_I_grid",
-        "_J_grid",
     ]
 
     def __init__(
@@ -160,10 +156,6 @@ class Equilibrium(IOAble):
         L_grid=None,
         M_grid=None,
         N_grid=None,
-        I=None,
-        J=None,
-        I_grid=None,
-        J_grid=None,
         pressure=None,
         iota=None,
         current=None,
@@ -237,10 +229,6 @@ class Equilibrium(IOAble):
         _assert_nonnegint(L_grid, "L_grid")
         _assert_nonnegint(M_grid, "M_grid")
         _assert_nonnegint(N_grid, "N_grid")
-        _assert_nonnegint(I, "I")
-        _assert_nonnegint(J, "J")
-        _assert_nonnegint(I_grid, "I_grid")
-        _assert_nonnegint(J_grid, "J_grid")
 
         self._N = int(setdefault(N, self.surface.N))
         self._M = int(setdefault(M, self.surface.M))
@@ -256,12 +244,6 @@ class Equilibrium(IOAble):
         self._L_grid = setdefault(L_grid, 2 * self.L)
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
-        self.I = I
-        self.J = J
-        self._I = I
-        self._J = J
-        self._I_grid = setdefault(I_grid, self.I)
-        self._J_grid = setdefault(J_grid, self.J)
 
         # bases
         self.basis = basis
@@ -394,20 +376,20 @@ class Equilibrium(IOAble):
         if basis != "FourierZernike":
             Rprime_basis = FiniteElementBasis(
                 L=self.L,
-                M=self.I,
-                N=self.J,
+                M=self.M,
+                N=self.N,
             )
             Zprime_basis = FiniteElementBasis(
                 L=self.L,
-                M=self.I,
-                N=self.J,
+                M=self.M,
+                N=self.N,
             )
             Lprime_basis = FiniteElementBasis(
                 L=self.L,
-                M=self.I,
-                N=self.J,
+                M=self.M,
+                N=self.N,
             )
-            Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_coefficients(
+            Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
                 self.R_lmn,
                 self.Z_lmn,
                 self.L_lmn,
@@ -529,13 +511,9 @@ class Equilibrium(IOAble):
         L=None,
         M=None,
         N=None,
-        I=None,
-        J=None,
         L_grid=None,
         M_grid=None,
         N_grid=None,
-        I_grid=None,
-        J_grid=None,
         NFP=None,
         sym=None,
     ):
@@ -564,13 +542,9 @@ class Equilibrium(IOAble):
         self._L = setdefault(L, self.L)
         self._M = setdefault(M, self.M)
         self._N = setdefault(N, self.N)
-        self._I = setdefault(I, self.I)
-        self._J = setdefault(J, self.J)
         self._L_grid = setdefault(L_grid, self.L_grid)
         self._M_grid = setdefault(M_grid, self.M_grid)
         self._N_grid = setdefault(N_grid, self.N_grid)
-        self._I_grid = self.I
-        self._J_grid = self.J
         self._NFP = setdefault(NFP, self.NFP)
         self._sym = setdefault(sym, self.sym)
 

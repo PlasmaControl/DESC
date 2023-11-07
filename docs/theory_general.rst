@@ -68,7 +68,19 @@ Magnetic Field & Current Density
 By assuming nested flux surfaces, :math:`\mathbf{B} \cdot \nabla \rho = 0`, and invoking Gauss's Law, :math:`\nabla \cdot \mathbf{B} = 0`, the magnetic field is written in flux coordinates as
 
 .. math::
-  \mathbf{B} = B^\theta \mathbf{e}_\theta + B^\zeta \mathbf{e}_\zeta = \frac{\partial_\rho \psi}{2 \pi \sqrt{g}} \cdot ((\iota - \partial_\zeta \lambda) \mathbf{e}_\theta + (1 + \partial_\theta \lambda) \mathbf{e}_\zeta)
+  \begin{aligned}
+    \mathbf{B} &= B^\theta \mathbf{e}_\theta + B^\zeta \mathbf{e}_\zeta \\[.3cm]
+    &= \frac{\partial_\rho \psi}{2 \pi \sqrt{g}} \left((\iota - \cfrac{\partial \lambda}{\partial \zeta}) \mathbf{e}_\theta + (1 + \cfrac{\partial \lambda}{\partial \theta}) \mathbf{e}_\zeta \right)
+  \end{aligned}
+
+So,
+
+.. math::
+  \begin{aligned}
+    B^\rho &= 0 \\[.2cm]
+    B^\theta &= \frac{\partial_\rho \psi}{2 \pi \sqrt{g}} \left(\iota - \cfrac{\partial \lambda}{\partial \zeta}\right)\\[.2cm]
+    B^\zeta &= \frac{\partial_\rho \psi}{2 \pi \sqrt{g}} \left(1 + \cfrac{\partial \lambda}{\partial \theta}\right)
+  \end{aligned}
 
 The current density is then calculated from Ampere's Law, :math:`\nabla \times \mathbf{B} = \mu_0 \mathbf{J}`,
 
@@ -94,19 +106,25 @@ Equilibrium Force Balance
 The ideal magnetohydrodynamic equilibrium force balance is defined as
 
 .. math::
-  \mathbf{F} \equiv \mathbf{J} \times \mathbf{B} - \nabla p = \mathbf{0}
+  \mathbf{F} \equiv \nabla p - \mathbf{J} \times \mathbf{B} = \mathbf{0}
+
+Using cross product in curvilinear coordinates, we can write
+
+.. math::
+  \mathbf{J} \times \mathbf{B} = \sqrt{g} (J^\theta B^\zeta - J^\zeta B^\theta)\mathbf{e}^\rho  \hspace{.2cm}-\hspace{.2cm}
+       \sqrt{g} J^\rho (B^\zeta\mathbf{e}^\theta - B^\theta\mathbf{e}^\zeta)
 
 When written in flux coordinates there are only two independent components:
 
 .. math::
   \begin{aligned}
-    \mathbf{F} &= F_\rho \nabla \rho + F_\beta \mathbf{\beta} \\[.2cm]
-    F_\rho &= \sqrt{g} (B^\zeta J^\theta - B^\theta J^\zeta) - \partial_\rho p \\[.2cm]
-    F_\beta &= \sqrt{g} B^\zeta J^\rho \\[.2cm]
-    \mathbf{\beta} &= \nabla \theta - \iota \nabla \zeta
+    \mathbf{F} &= F_\rho \mathbf{e}^\rho + F_\beta \mathbf{\beta}_{DESC} \\[.3cm]
+    F_\rho &=  \frac{\partial p}{\partial \rho} + \sqrt{g} (J^\zeta B^\theta - J^\theta B^\zeta)\\[.3cm]
+    F_\beta &=  \sqrt{g} J^\rho \\[.3cm]
+    \mathbf{\beta_{DESC}} &=  (B^\zeta\mathbf{e}^\theta - B^\theta\mathbf{e}^\zeta)
   \end{aligned}
 
-These forces in both the radial and helical directions must vanish in equilibrium.
+where :math:`\mathbf{e}^u = \nabla u` is the contravariant basis vector of parameter u. These forces in both the radial and helical directions must vanish in equilibrium.
 DESC solves this force balance locally by evaluating the residual errors at discrete points in real space:
 
 .. math::

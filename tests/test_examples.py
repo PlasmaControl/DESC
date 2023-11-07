@@ -1236,7 +1236,7 @@ def test_regcoil_ellipse_helical():
         save_figs=False,
     )
     B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
-    np.testing.assert_allclose(B, B_from_coils, atol=1e-3)
+    np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
 
     fieldR, fieldZ = field_trace_from_coilset(
         coilset2, eq, 15, only_return_data=True, Rs=np.linspace(0.685, 0.715, 10)

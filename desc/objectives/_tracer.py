@@ -2,8 +2,6 @@
 
 import warnings
 
-import numpy as np
-
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms

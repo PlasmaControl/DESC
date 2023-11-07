@@ -135,7 +135,7 @@ intermediate_time_2 = timet()
 print(f"\nTime to build and compute solution: {intermediate_time_2 - intermediate_time}s\n")
 
 # Objective Object
-ObjFunction = ObjectiveFunction([objective])
+ObjFunction = ObjectiveFunction([objective], deriv_mode="looped")
 ObjFunction.build()
 
 intermediate_time_3 = timet()

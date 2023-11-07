@@ -5,7 +5,6 @@ import scipy.linalg
 from qsc import Qsc
 
 import desc.examples
-from desc.compute import arg_order
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -38,10 +37,12 @@ from desc.objectives import (
     FixThetaSFL,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
+    get_equilibrium_objective,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
 )
+from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile
 
 # TODO: check for all bdryR things if work when False is passed in
@@ -316,11 +317,11 @@ def test_factorize_linear_constraints_asserts():
         con.build(verbose=0)
     constraints[3].bounds = (0, 1)  # bounds on FixPsi
 
-    from desc.objectives.utils import factorize_linear_constraints
-
+    objective = get_equilibrium_objective(eq, "force")
+    objective.build()
     with pytest.raises(ValueError):
         xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            constraints, arg_order
+            constraints, objective
         )
 
 
@@ -338,28 +339,14 @@ def test_build_init():
     for obj in (fbR1, fbZ1):
         obj.build()
 
-    arg = fbR1.args[0]
-    A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
+    xz = {key: np.zeros_like(val) for key, val in eq.params_dict.items()}
+    arg = "Rb_lmn"
+    A = fbR1.jac_scaled(xz)[arg]
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
-    arg = fbZ1.args[0]
-    A = fbZ1.derivatives["jac_scaled"][arg](np.zeros(fbZ1.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
-
-    fbR1 = FixBoundaryR(eq=eq)
-    fbZ1 = FixBoundaryZ(eq=eq)
-    for obj in (fbR1, fbZ1):
-        obj.build()
-
-    arg = fbR1.args[0]
-    A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
-
-    arg = fbZ1.args[0]
-    A = fbZ1.derivatives["jac_scaled"][arg](np.zeros(fbZ1.dimensions[arg]))
+    arg = "Zb_lmn"
+    A = fbZ1.jac_scaled(xz)[arg]
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
 
@@ -424,27 +411,26 @@ def test_correct_indexing_passed_modes():
         FixBoundaryZ(eq=eq, modes=Z_modes, normalize=False),
         BoundaryRSelfConsistency(eq=eq),
         BoundaryZSelfConsistency(eq=eq),
+        FixPressure(eq=eq),
     )
     for con in constraints:
         con.build(verbose=0)
     objective.build()
-    objective.set_args("Rb_lmn", "Zb_lmn")
-    from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
-        objective.args,
+        objective,
     )
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
+    np.testing.assert_allclose(x1, x2, atol=atol)
+    np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -490,27 +476,26 @@ def test_correct_indexing_passed_modes_and_passed_target():
         FixBoundaryZ(eq=eq, modes=Z_modes, normalize=False, target=target_Z),
         BoundaryRSelfConsistency(eq=eq),
         BoundaryZSelfConsistency(eq=eq),
+        FixPressure(eq=eq),
     )
     for con in constraints:
         con.build(eq, verbose=0)
     objective.build(eq)
-    objective.set_args("Rb_lmn", "Zb_lmn")
-    from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
-        objective.args,
+        objective,
     )
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
+    np.testing.assert_allclose(x1, x2, atol=atol)
+    np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -557,27 +542,26 @@ def test_correct_indexing_passed_modes_axis():
             sum_weights=np.ones(2),
         ),
         FixSumModesZ(eq=eq, modes=np.array([[3, 3, -3], [4, 4, -4]]), normalize=False),
+        FixPressure(eq=eq),
     )
     for con in constraints:
         con.build(verbose=0)
     objective.build()
-    objective.set_args("Ra_n", "Za_n")
-    from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
-        objective.args,
+        objective,
     )
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
+    np.testing.assert_allclose(x1, x2, atol=atol)
+    np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -677,6 +661,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             ),
             normalize=False,
         ),
+        FixPressure(eq=eq),
         FixSumModesLambda(
             eq=eq,
             modes=np.array([[3, 3, -3], [4, 4, -4]]),
@@ -692,23 +677,21 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     for con in constraints:
         con.build(verbose=0)
     objective.build()
-    objective.set_args("Ra_n", "Za_n")
-    from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
-        objective.args,
+        objective,
     )
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
+    np.testing.assert_allclose(x1, x2, atol=atol)
+    np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -782,48 +765,55 @@ def test_FixSumModes_passed_target_too_long():
     """Test Fixing Modes with more than a size-1 target."""
     # TODO: remove this test if FixSumModes is generalized
     # to accept multiple targets and sets of modes at a time
+    eq = Equilibrium(L=3, M=4)
     with pytest.raises(ValueError):
-        FixSumModesZ(modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]]))
+        FixSumModesZ(
+            eq, modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]])
+        )
     with pytest.raises(ValueError):
-        FixSumModesR(modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]]))
+        FixSumModesR(
+            eq, modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]])
+        )
     with pytest.raises(ValueError):
         FixSumModesLambda(
-            modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]])
+            eq, modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]])
         )
 
 
 @pytest.mark.unit
 def test_FixMode_False_or_None_modes():
     """Test Fixing Modes without specifying modes or All modes."""
+    eq = Equilibrium(L=3, M=4)
     with pytest.raises(ValueError):
-        FixModeR(modes=False, target=np.array([[0, 1]]))
+        FixModeR(eq, modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixModeR(modes=None, target=np.array([[0, 1]]))
+        FixModeR(eq, modes=None, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixModeZ(modes=False, target=np.array([[0, 1]]))
+        FixModeZ(eq, modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixModeZ(modes=None, target=np.array([[0, 1]]))
+        FixModeZ(eq, modes=None, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixModeLambda(modes=False, target=np.array([[0, 1]]))
+        FixModeLambda(eq, modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixModeLambda(modes=None, target=np.array([[0, 1]]))
+        FixModeLambda(eq, modes=None, target=np.array([[0, 1]]))
 
 
 @pytest.mark.unit
 def test_FixSumModes_False_or_None_modes():
     """Test Fixing Sum Modes without specifying modes or All modes."""
+    eq = Equilibrium(L=3, M=4)
     with pytest.raises(ValueError):
-        FixSumModesZ(modes=False, target=np.array([[0, 1]]))
+        FixSumModesZ(eq, modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixSumModesZ(modes=None, target=np.array([[0, 1]]))
+        FixSumModesZ(eq, modes=None, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixSumModesR(modes=False, target=np.array([[0, 1]]))
+        FixSumModesR(eq, modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixSumModesR(modes=None, target=np.array([[0, 1]]))
+        FixSumModesR(eq, modes=None, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixSumModesLambda(modes=False, target=np.array([[0, 1]]))
+        FixSumModesLambda(eq, modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
-        FixSumModesLambda(modes=None, target=np.array([[0, 1]]))
+        FixSumModesLambda(eq, modes=None, target=np.array([[0, 1]]))
 
 
 def _is_any_instance(things, cls):
@@ -833,16 +823,15 @@ def _is_any_instance(things, cls):
 @pytest.mark.unit
 def test_FixAxis_util_correct_objectives():
     """Test util for fix axis constraints."""
-    with pytest.warns(FutureWarning):
-        cs = get_fixed_axis_constraints(iota=False)
+    eq = Equilibrium()
+    cs = get_fixed_axis_constraints(eq, iota=False)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)
     assert _is_any_instance(cs, FixPressure)
     assert _is_any_instance(cs, FixCurrent)
 
-    with pytest.warns(FutureWarning):
-        cs = get_fixed_axis_constraints(iota=True, kinetic=True)
+    cs = get_fixed_axis_constraints(eq, iota=True, kinetic=True)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)

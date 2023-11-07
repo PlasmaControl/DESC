@@ -16,6 +16,7 @@ from desc.geometry import (
 )
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
+from desc.optimizable import Optimizable, optimizable_parameter
 from desc.utils import equals, errorif, flatten_list
 
 
@@ -110,7 +111,7 @@ def biot_savart_quad(eval_pts, coil_pts, tangents, current):
     return B
 
 
-class _Coil(_MagneticField, ABC):
+class _Coil(_MagneticField, Optimizable, ABC):
     """Base class representing a magnetic field coil.
 
     Represents coils as a combination of a Curve and current
@@ -134,6 +135,7 @@ class _Coil(_MagneticField, ABC):
         self._current = float(current)
         super().__init__(*args, **kwargs)
 
+    @optimizable_parameter
     @property
     def current(self):
         """float: Current passing through the coil, in Amperes."""

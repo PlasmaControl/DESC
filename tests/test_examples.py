@@ -33,6 +33,7 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
+    FixParameter,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
@@ -40,9 +41,11 @@ from desc.objectives import (
     ForceBalanceAnisotropic,
     HelicalForceBalance,
     ObjectiveFunction,
+    PlasmaVesselDistance,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
+    Volume,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
 )
@@ -727,6 +730,44 @@ def test_NAE_QIC_solve():
     # Eliminate the poloidal angle to focus on the toroidal behavior
     B_av_nae = np.mean(B_nae, axis=1)
     np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qic.B0, atol=2e-2)
+
+
+@pytest.mark.unit
+def test_multiobject_optimization():
+    """Test for optimizing multiple objects at once."""
+    eq = Equilibrium(L=4, M=4, N=0, iota=2)
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 2.1],
+        Z_lmn=[-2],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+    )
+    surf.change_resolution(M=4, N=0)
+    constraints = (
+        ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
+        FixPressure(eq=eq),
+        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
+        FixParameter(eq, ["Psi", "i_l"]),
+        FixBoundaryR(eq, modes=[[0, 0, 0]]),
+        PlasmaVesselDistance(surface=surf, eq=eq, target=1),
+    )
+
+    objective = ObjectiveFunction((Volume(eq=eq, target=eq.compute("V")["V"] * 2),))
+
+    eq.solve(verbose=3)
+
+    optimizer = Optimizer("fmin-auglag")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=500
+    )
+
+    np.testing.assert_allclose(
+        constraints[-1].compute(*constraints[-1].xs(eq, surf)), 1, atol=1e-3
+    )
+    assert surf.R_lmn[0] == 10
+    assert surf.Z_lmn[-1] == -2
+    assert eq.Psi == 1.0
+    np.testing.assert_allclose(eq.i_l, [2, 0, 0])
 
 
 class TestGetExample:

@@ -1,6 +1,15 @@
 Changelog
 =========
 
+- Adds ``desc.compat.rescale`` for rescaling equilibria to a specified size and field
+strength.
+
+
+v0.10.2
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.10.1...v0.10.2)
+
 - Updates `desc.examples`:
     * `NCSX` now has a fixed current profile. Previously it used a fixed iota based on a
     fit, but this was somewhat inaccurate.

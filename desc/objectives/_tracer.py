@@ -109,7 +109,7 @@ class ParticleTracer(_Objective):
         self.charge = 1.6e-19
         self.mass = 1.673e-27 # CHECK VALUES
         self.Energy = 3.52e6*self.charge 
-        eq = eq or self._eq
+        eq = eq or self._things[0]
 
         if self.compute_option == "optimization":
             self._dim_f = 1
@@ -124,14 +124,12 @@ class ParticleTracer(_Objective):
         elif self.compute_option == "average vpar":
            self._dim_f = 1
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
 
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
-        
         
         def system(initial_conditions = self.initial_conditions, t = self.output_time, initial_parameters = self.initial_parameters):
             #initial conditions
@@ -141,8 +139,8 @@ class ParticleTracer(_Objective):
             vpar = initial_conditions[3]
             
             grid = Grid(jnp.array([jnp.sqrt(psi), theta, zeta]).T, jitable=True, sort=False)
-            transforms = get_transforms(self._data_keys, self._eq, grid, jitable=True)
-            profiles = get_profiles(self._data_keys, self._eq, grid, jitable=True)
+            transforms = get_transforms(self._data_keys, self._things[0], grid, jitable=True)
+            profiles = get_profiles(self._data_keys, self._things[0], grid, jitable=True)
             
             data = compute_fun("desc.equilibrium.equilibrium.Equilibrium", self._data_keys, params, transforms, profiles, mu=initial_parameters[0], m_q=initial_parameters[1], vpar=vpar)
             

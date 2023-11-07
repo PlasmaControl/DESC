@@ -13,6 +13,48 @@ from desc.io import IOAble
 from desc.utils import isalmostequal, islinspaced
 
 
+def safediv(a, b, fill=0, threshold=0):
+    """Divide a/b with guards for division by zero.
+
+    Parameters
+    ----------
+    a, b : ndarray
+        Numerator and denominator.
+    fill : float, ndarray, optional
+        Value to return where b is zero.
+    threshold : float >= 0
+        How small is b allowed to be.
+    """
+    mask = jnp.abs(b) <= threshold
+    num = jnp.where(mask, fill, a)
+    den = jnp.where(mask, 1, b)
+    return num / den
+
+
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+    """Like jnp.linalg.norm, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, ‘fro’, ‘nuc’}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    x = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = jnp.linalg.norm(x, ord=ord, axis=axis)
+    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    return n
+
+
 def _get_quadrature_nodes(q):
     """Polar nodes for quadrature around singular point.
 
@@ -588,8 +630,8 @@ def _kernel_nr_over_r3(eval_data, src_data, diag=False):
         dx = eval_x[:, None] - src_x[None]
     n = rpz2xyz_vec(src_data["e^rho"], phi=src_data["zeta"])
     n = n / jnp.linalg.norm(n, axis=-1)[:, None]
-    r = jnp.linalg.norm(dx, axis=-1)
-    return jnp.where(r < np.finfo(r.dtype).eps, 0, jnp.sum(n * dx, axis=-1) / r**3)
+    r = safenorm(dx, axis=-1)
+    return safediv(jnp.sum(n * dx, axis=-1), r**3)
 
 
 _kernel_nr_over_r3.ndim = 1
@@ -608,8 +650,8 @@ def _kernel_1_over_r(eval_data, src_data, diag=False):
         dx = eval_x - src_x
     else:
         dx = eval_x[:, None] - src_x[None]
-    r = jnp.linalg.norm(dx, axis=-1)
-    return jnp.where(r < np.finfo(r.dtype).eps, 0, 1 / r)
+    r = safenorm(dx, axis=-1)
+    return safediv(1, r)
 
 
 _kernel_1_over_r.ndim = 1
@@ -630,12 +672,12 @@ def _kernel_biot_savart(eval_data, src_data, diag=False):
         dx = eval_x[:, None] - src_x[None]
     K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["zeta"])
     num = jnp.cross(K, dx, axis=-1)
-    r = jnp.linalg.norm(dx, axis=-1)
+    r = safenorm(dx, axis=-1)
     if diag:
         r = r[:, None]
     else:
         r = r[:, :, None]
-    return 1e-7 * jnp.where(r < np.finfo(r.dtype).eps, 0, num / (r * r * r))
+    return 1e-7 * safediv(num, r**3)
 
 
 _kernel_biot_savart.ndim = 3
@@ -655,12 +697,12 @@ def _kernel_biot_savart_A(eval_data, src_data, diag=False):
     else:
         dx = eval_x[:, None] - src_x[None]
     K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["zeta"])
-    r = jnp.linalg.norm(dx, axis=-1)
+    r = safenorm(dx, axis=-1)
     if diag:
         r = r[:, None]
     else:
         r = r[:, :, None]
-    return 1e-7 * jnp.where(r < np.finfo(r.dtype).eps, 0, K / r)
+    return 1e-7 * safediv(K, r)
 
 
 _kernel_biot_savart_A.ndim = 3

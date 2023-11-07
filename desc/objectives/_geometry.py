@@ -629,9 +629,9 @@ class MeanCurvature(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium or FourierRZToroidalSurface
+    eq_or_surf : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
-          will be optimized to satisfy the Objective.
+        will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -660,7 +660,7 @@ class MeanCurvature(_Objective):
 
     def __init__(
         self,
-        eq,
+        eq_or_surf,
         target=None,
         bounds=None,
         weight=1,
@@ -673,7 +673,7 @@ class MeanCurvature(_Objective):
             bounds = (-np.inf, 0)
         self._grid = grid
         super().__init__(
-            things=eq,
+            things=eq_or_surf,
             target=target,
             bounds=bounds,
             weight=weight,

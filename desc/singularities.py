@@ -1,10 +1,11 @@
 """High order method for singular surface integrals, from Malhotra 2019."""
 from abc import ABC, abstractmethod
+from functools import partial
 
 import numpy as np
 import scipy
 
-from desc.backend import fori_loop, jnp, put, vmap
+from desc.backend import custom_jvp, fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec
 from desc.interpolate import fft_interp2d
@@ -331,7 +332,9 @@ def _rho(theta, zeta, theta0, zeta0, dtheta, dzeta, s):
     return 2 / s * jnp.sqrt((dt / dtheta) ** 2 + (dz / dzeta) ** 2)
 
 
-def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
+def _nonsingular_part(
+    eval_data, eval_grid, src_data, src_grid, s, kernel, mask=True, loop=False
+):
     """Integrate kernel over non-singular points."""
     assert isinstance(src_grid.NFP, int)
     src_theta = src_grid.nodes[:, 1]
@@ -354,31 +357,65 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
 
         # nest this def to avoid having to pass the modified src_data around the loop
         # easier to just close over it and let JAX figure it out
-        def eval_pt_loop(i):
+        def eval_pt_vmap(i):
             # this calculates the effect at a single evaluation point, from all others
-            # in a single field period
+            # in a single field period. vmap this to get all pts
             k = kernel(
                 {key: val[i] for key, val in eval_data.items() if key in keys},
                 src_data,
             )
-            rho = _rho(
-                src_theta,
-                src_data["zeta"],  # to account for different field periods
-                eval_theta[i],
-                eval_zeta[i],
-                h_t,
-                h_z,
-                s,
+            if kernel.ndim == 1:  # so that broadcasting works correctly
+                k = k[:, :, None]
+
+            if mask:
+                rho = _rho(
+                    src_theta,
+                    src_data["zeta"],  # to account for different field periods
+                    eval_theta[i],
+                    eval_zeta[i],
+                    h_t,
+                    h_z,
+                    s,
+                )
+
+                eta = _chi(rho)
+                k = (1 - eta)[None, :, None] * k
+            f_temp = jnp.sum(k * w[None, :, None], axis=1)
+            return f_temp.squeeze()
+
+        def eval_pt_loop(i, fj):
+            # this calculates the effect at a single evaluation point, from all others
+            # in a single field period. loop this to get all pts
+            k = kernel(
+                {key: val[i] for key, val in eval_data.items() if key in keys},
+                src_data,
             )
             if kernel.ndim == 1:  # so that broadcasting works correctly
                 k = k[:, :, None]
-            eta = _chi(rho)
-            A = (1 - eta)[None, :, None] * k
-            f_temp = jnp.sum(A * w[None, :, None], axis=1)
-            return f_temp.squeeze()
 
-        # vmap for inner part found more efficient than fori_loop, especially on gpu
-        fj = vmap(eval_pt_loop)(jnp.arange(eval_grid.num_nodes))
+            if mask:
+                rho = _rho(
+                    src_theta,
+                    src_data["zeta"],  # to account for different field periods
+                    eval_theta[i],
+                    eval_zeta[i],
+                    h_t,
+                    h_z,
+                    s,
+                )
+
+                eta = _chi(rho)
+                k = (1 - eta)[None, :, None] * k
+            f_temp = jnp.sum(k * w[None, :, None], axis=1)
+            return put(fj, i, f_temp.squeeze())
+
+        # vmap for inner part found more efficient than fori_loop, especially on gpu,
+        # but for jacobian looped seems to be better and less memory
+        if loop:
+            fj = fori_loop(0, eval_grid.num_nodes, eval_pt_loop, jnp.zeros_like(f))
+        else:
+            fj = vmap(eval_pt_vmap)(jnp.arange(eval_grid.num_nodes))
+
         f += fj
         return f, src_data
 
@@ -440,7 +477,43 @@ def _singular_part(
     return vmap(polar_pt_loop)(jnp.arange(v.size)).sum(axis=0)
 
 
-def singular_integral(eval_data, eval_grid, src_data, src_grid, kernel, interpolator):
+def _singular_integral_exact(
+    eval_data, eval_grid, src_data, src_grid, kernel, interpolator
+):
+
+    s, q = interpolator.s, interpolator.q
+
+    out2 = _singular_part(
+        eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator
+    )
+    out1 = _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel)
+    return out1 + out2
+
+
+@partial(custom_jvp, nondiff_argnums=(4, 5))
+def _singular_integral_approx(
+    eval_data, eval_grid, src_data, src_grid, kernel, interpolator
+):
+    return _singular_integral_exact(
+        eval_data, eval_grid, src_data, src_grid, kernel, interpolator
+    )
+
+
+@_singular_integral_approx.defjvp
+def _singular_integral_jvp(kernel, interpolator, primals, tangents):
+    import jax
+
+    def foo(*args):
+        return _nonsingular_part(
+            *args, s=interpolator.s, kernel=kernel, mask=False, loop=True
+        )
+
+    return jax.jvp(foo, primals, tangents)
+
+
+def singular_integral(
+    eval_data, eval_grid, src_data, src_grid, kernel, interpolator, approxdf=True
+):
     """Evaluate a singular integral transform on a surface.
 
     eg f(θ, ζ) = ∫ ∫ K(θ, ζ, θ', ζ') g(θ', ζ') dθ' dζ'
@@ -473,6 +546,9 @@ def singular_integral(eval_data, eval_grid, src_data, src_grid, kernel, interpol
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
         ``DFTInterpolator``
+    approxdf : bool
+        Whether to use approximate derivative when calculating jacobian. Use of an
+        approximate derivative is significantly faster
 
     Returns
     -------
@@ -488,13 +564,14 @@ def singular_integral(eval_data, eval_grid, src_data, src_grid, kernel, interpol
     if isinstance(kernel, str):
         kernel = kernels[kernel]
 
-    s, q = interpolator.s, interpolator.q
-
-    out2 = _singular_part(
-        eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator
-    )
-    out1 = _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel)
-    return out1 + out2
+    if approxdf:
+        return _singular_integral_approx(
+            eval_data, eval_grid, src_data, src_grid, kernel, interpolator
+        )
+    else:
+        return _singular_integral_exact(
+            eval_data, eval_grid, src_data, src_grid, kernel, interpolator
+        )
 
 
 def _kernel_nr_over_r3(eval_data, src_data, diag=False):
@@ -598,7 +675,9 @@ kernels = {
 }
 
 
-def virtual_casing_biot_savart(eval_data, eval_grid, src_data, src_grid, interpolator):
+def virtual_casing_biot_savart(
+    eval_data, eval_grid, src_data, src_grid, interpolator, approxdf=True
+):
     """Evaluate magnetic field on surface due to sheet current on surface.
 
     Parameters
@@ -618,6 +697,9 @@ def virtual_casing_biot_savart(eval_data, eval_grid, src_data, src_grid, interpo
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
         ``DFTInterpolator``
+    approxdf : bool
+        Whether to use approximate derivative when calculating jacobian. Use of an
+        approximate derivative is significantly faster
 
     Returns
     -------
@@ -625,17 +707,12 @@ def virtual_casing_biot_savart(eval_data, eval_grid, src_data, src_grid, interpo
         Integral transform evaluated at eval_grid.
 
     """
-    # sanitize inputs, we need everything as jax arrays so they can be indexed
-    # properly in the loops
-    src_data = {key: jnp.asarray(val) for key, val in src_data.items()}
-    eval_data = {key: jnp.asarray(val) for key, val in eval_data.items()}
-
-    kernel = _kernel_biot_savart
-
-    s, q = interpolator.s, interpolator.q
-
-    out2 = _singular_part(
-        eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator
+    return singular_integral(
+        eval_data,
+        eval_grid,
+        src_data,
+        src_grid,
+        _kernel_biot_savart,
+        interpolator,
+        approxdf,
     )
-    out1 = _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel)
-    return out1 + out2

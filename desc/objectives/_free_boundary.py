@@ -59,6 +59,9 @@ class BoundaryErrorBIESTSC(_Objective):
         to evaluate errors.
     field_grid : Grid, optional
         Grid used to discretize ext_field.
+    approxdf : bool
+        Whether to use approximate derivative when calculating jacobian. Use of an
+        approximate derivative is significantly faster
     name : str
         Name of the objective function.
 
@@ -84,6 +87,7 @@ class BoundaryErrorBIESTSC(_Objective):
         src_grid=None,
         eval_grid=None,
         field_grid=None,
+        approxdf=True,
         name="Boundary error BIEST (SC)",
     ):
         if target is None and bounds is None:
@@ -94,6 +98,8 @@ class BoundaryErrorBIESTSC(_Objective):
         self._q = q
         self._ext_field = ext_field
         self._field_grid = field_grid
+        self._approxdf = approxdf
+
         super().__init__(
             things=eq,
             target=target,
@@ -246,6 +252,7 @@ class BoundaryErrorBIESTSC(_Objective):
             src_data,
             constants["src_transforms"]["grid"],
             constants["interpolator"],
+            approxdf=self._approxdf,
         )
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"]) + eval_data["B"] / 2
@@ -305,6 +312,9 @@ class BoundaryErrorBIEST(_Objective):
         to evaluate errors.
     field_grid : Grid, optional
         Grid used to discretize ext_field.
+    approxdf : bool
+        Whether to use approximate derivative when calculating jacobian. Use of an
+        approximate derivative is significantly faster
     name : str
         Name of the objective function.
 
@@ -330,6 +340,7 @@ class BoundaryErrorBIEST(_Objective):
         src_grid=None,
         eval_grid=None,
         field_grid=None,
+        approxdf=True,
         name="Boundary error BIEST",
     ):
         if target is None and bounds is None:
@@ -340,6 +351,7 @@ class BoundaryErrorBIEST(_Objective):
         self._q = q
         self._ext_field = ext_field
         self._field_grid = field_grid
+        self._approxdf = approxdf
         super().__init__(
             things=eq,
             target=target,
@@ -489,6 +501,7 @@ class BoundaryErrorBIEST(_Objective):
             src_data,
             constants["src_transforms"]["grid"],
             constants["interpolator"],
+            approxdf=self._approxdf,
         )
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"]) + eval_data["B"] / 2
@@ -543,6 +556,9 @@ class QuadraticFlux(_Objective):
         to evaluate errors.
     field_grid : Grid, optional
         Grid used to discretize ext_field.
+    approxdf : bool
+        Whether to use approximate derivative when calculating jacobian. Use of an
+        approximate derivative is significantly faster
     name : str
         Name of the objective function.
 
@@ -568,6 +584,7 @@ class QuadraticFlux(_Objective):
         src_grid=None,
         eval_grid=None,
         field_grid=None,
+        approxdf=True,
         name="Quadratic flux",
     ):
         if target is None and bounds is None:
@@ -578,6 +595,7 @@ class QuadraticFlux(_Objective):
         self._q = q
         self._ext_field = ext_field
         self._field_grid = field_grid
+        self._approxdf = approxdf
         super().__init__(
             things=eq,
             target=target,
@@ -724,6 +742,7 @@ class QuadraticFlux(_Objective):
             src_data,
             constants["src_transforms"]["grid"],
             constants["interpolator"],
+            approxdf=self._approxdf,
         )
         # don't need extra B/2 since we only care about normal component
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])

@@ -16,7 +16,7 @@ from desc.singularities import (
     FFTInterpolator,
     virtual_casing_biot_savart,
 )
-from desc.utils import Timer
+from desc.utils import Timer, errorif
 
 from .normalization import compute_scaling_factors
 
@@ -141,10 +141,16 @@ class BoundaryErrorBIESTSC(_Objective):
                 M=M_grid,
                 N=N_grid,
                 NFP=int(eq.NFP),
-                sym=False,
+                sym=eq.sym,
             )
         else:
-            src_grid = self._src_grid
+            eval_grid = self._eval_grid
+
+        errorif(
+            src_grid.sym,
+            ValueError,
+            "Source grids for singular integrals must be non-symmetric",
+        )
         if self._s is None:
             k = min(src_grid.num_theta, src_grid.num_zeta)
             self._s = k // 2 + int(np.sqrt(k))
@@ -395,10 +401,17 @@ class BoundaryErrorBIEST(_Objective):
                 M=M_grid,
                 N=N_grid,
                 NFP=int(eq.NFP),
-                sym=False,
+                sym=eq.sym,
             )
         else:
-            src_grid = self._src_grid
+            eval_grid = self._eval_grid
+
+        errorif(
+            src_grid.sym,
+            ValueError,
+            "Source grids for singular integrals must be non-symmetric",
+        )
+
         if self._s is None:
             k = min(src_grid.num_theta, src_grid.num_zeta)
             self._s = k // 2 + int(np.sqrt(k))
@@ -641,10 +654,17 @@ class QuadraticFlux(_Objective):
                 M=M_grid,
                 N=N_grid,
                 NFP=int(eq.NFP),
-                sym=False,
+                sym=eq.sym,
             )
         else:
-            src_grid = self._src_grid
+            eval_grid = self._eval_grid
+
+        errorif(
+            src_grid.sym,
+            ValueError,
+            "Source grids for singular integrals must be non-symmetric",
+        )
+
         if self._s is None:
             k = min(src_grid.num_theta, src_grid.num_zeta)
             self._s = k // 2 + int(np.sqrt(k))

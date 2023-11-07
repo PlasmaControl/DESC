@@ -75,7 +75,7 @@ def test_perturbation_orders(SOLOVEV):
 
     # solve for "true" high-beta solution
     eqS = eq3.copy()
-    eqS.solve(objective=objective, ftol=1e-2, verbose=3)
+    eqS.solve(ftol=1e-2, verbose=3)
 
     # evaluate equilibrium force balance
     grid = ConcentricGrid(2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, node_pattern="jacobi")

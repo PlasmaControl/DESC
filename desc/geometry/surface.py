@@ -8,6 +8,7 @@ import numpy as np
 from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.io import InputReader
+from desc.optimizable import optimizable_parameter
 from desc.utils import copy_coeffs
 
 from .core import Surface
@@ -112,7 +113,8 @@ class FourierRZToroidalSurface(Surface):
             warnings.warn(
                 "Left handed coordinates detected, switching sign of theta."
                 + " To avoid this warning in the future, switch the sign of all"
-                + " modes with m<0"
+                + " modes with m<0. You may also need to switch the sign of iota or"
+                + " current profiles."
             )
             self._flip_orientation()
             assert self._compute_orientation() == 1
@@ -188,6 +190,7 @@ class FourierRZToroidalSurface(Surface):
             self._M = M
             self._N = N
 
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients for R."""
@@ -203,6 +206,7 @@ class FourierRZToroidalSurface(Surface):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients for Z."""
@@ -536,6 +540,7 @@ class ZernikeRZToroidalSection(Surface):
             self._L = L
             self._M = M
 
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients for R."""
@@ -551,6 +556,7 @@ class ZernikeRZToroidalSection(Surface):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients for Z."""

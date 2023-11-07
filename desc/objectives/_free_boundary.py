@@ -122,11 +122,13 @@ class BoundaryErrorBIESTSC(_Objective):
 
         """
         eq = self.things[0]
+        M_grid = eq.M_grid
+        N_grid = eq.N_grid if eq.N > 0 else M_grid
         if self._src_grid is None:
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
+                M=M_grid,
+                N=N_grid,
                 NFP=int(eq.NFP),
                 sym=False,
             )
@@ -136,8 +138,8 @@ class BoundaryErrorBIESTSC(_Objective):
         if self._eval_grid is None:
             eval_grid = LinearGrid(
                 rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
+                M=M_grid,
+                N=N_grid,
                 NFP=int(eq.NFP),
                 sym=False,
             )
@@ -374,11 +376,13 @@ class BoundaryErrorBIEST(_Objective):
 
         """
         eq = self.things[0]
+        M_grid = eq.M_grid
+        N_grid = eq.N_grid if eq.N > 0 else M_grid
         if self._src_grid is None:
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
+                M=M_grid,
+                N=N_grid,
                 NFP=int(eq.NFP),
                 sym=False,
             )
@@ -388,8 +392,8 @@ class BoundaryErrorBIEST(_Objective):
         if self._eval_grid is None:
             eval_grid = LinearGrid(
                 rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
+                M=M_grid,
+                N=N_grid,
                 NFP=int(eq.NFP),
                 sym=False,
             )
@@ -618,11 +622,13 @@ class QuadraticFlux(_Objective):
 
         """
         eq = self.things[0]
+        M_grid = eq.M_grid
+        N_grid = eq.N_grid if eq.N > 0 else M_grid
         if self._src_grid is None:
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
+                M=M_grid,
+                N=N_grid,
                 NFP=int(eq.NFP),
                 sym=False,
             )
@@ -632,8 +638,8 @@ class QuadraticFlux(_Objective):
         if self._eval_grid is None:
             eval_grid = LinearGrid(
                 rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
+                M=M_grid,
+                N=N_grid,
                 NFP=int(eq.NFP),
                 sym=False,
             )

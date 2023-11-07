@@ -38,7 +38,7 @@ def _solve_axisym(
     L, M, N, L_grid, M_grid, N_grid = eq.L, eq.M, eq.N, eq.L_grid, eq.M_grid, eq.N_grid
     spectral_indexing = eq.spectral_indexing
 
-    Mi = min(M // 2, mres_step) if mres_step > 0 else M
+    Mi = min(M, mres_step) if mres_step > 0 else M
     Li = int(np.ceil(L / M) * Mi)
     Ni = 0
     L_gridi = np.ceil(L_grid / L * Li).astype(int)
@@ -64,7 +64,6 @@ def _solve_axisym(
         L_grid=L_gridi,
         M_grid=M_gridi,
         N_grid=N_gridi,
-        node_pattern=eq.node_pattern,
         pressure=pres_vac.copy(),
         iota=copy.copy(eq.iota),  # have to use copy.copy here since may be None
         current=copy.copy(eq.current),

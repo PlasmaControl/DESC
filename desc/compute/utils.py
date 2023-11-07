@@ -292,8 +292,14 @@ def get_params(keys, obj, has_axis=False, **kwargs):
         params += data_index[p][key]["dependencies"]["params"]
     if isinstance(obj, str) or inspect.isclass(obj):
         return params
-    params = {name: np.atleast_1d(getattr(obj, name)).copy() for name in params}
-    return params
+    temp_params = {}
+    for name in params:
+        p = getattr(obj, name)
+        if isinstance(p, dict):
+            temp_params[name] = p.copy()
+        else:
+            temp_params[name] = jnp.atleast_1d(p)
+    return temp_params
 
 
 def get_transforms(keys, obj, grid, jitable=False, **kwargs):
@@ -361,10 +367,8 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c == "rotmat":
-            transforms["rotmat"] = obj.rotmat
-        elif c == "shift":
-            transforms["shift"] = obj.shift
+        elif c not in transforms:
+            transforms[c] = getattr(obj, c)
 
     return transforms
 

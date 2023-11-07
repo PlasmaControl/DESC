@@ -16,6 +16,8 @@ dependencies:
   - pip:
     - jax[cpu] >= 0.3.2, <= 0.4.14
     - nvgpu
+    - plotly >= 5.16, <= 6.0
+    - pylatexenc >= 2.0, <= 3.0
     # testing and benchmarking
     - qsc
     - qicna @ git+https://github.com/rogeriojorge/pyQIC/

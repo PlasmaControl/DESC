@@ -368,7 +368,7 @@ class ObjectiveFunction(IOAble):
         Returns
         -------
         params : pytree of dict
-            if per_objective is True, this is a nested list of of parameters for each
+            if per_objective is True, this is a nested list of parameters for each
             sub-Objective, such that self.objectives[i] has parameters params[i].
             Otherwise, it is a list of parameters tied to each optimizable thing
             such that params[i] = self.things[i].params_dict
@@ -703,6 +703,8 @@ class ObjectiveFunction(IOAble):
         things = self._unflatten(new)
         for obj, t in zip(self.objectives, things[: -len(self._extra_things)]):
             obj.things = t
+            # can maybe improve this later to not rebuild if resolution is the same
+            obj._built = False
 
 
 class _Objective(IOAble, ABC):
@@ -1127,3 +1129,5 @@ class _Objective(IOAble, ABC):
         assert all(isinstance(x, Optimizable) for x in new)
         assert all(type(a) == type(b) for a, b in zip(new, self.things))
         self._things = list(new)
+        # can maybe improve this later to not rebuild if resolution is the same
+        self._built = False

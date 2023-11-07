@@ -499,6 +499,10 @@ class PlasmaVesselDistance(_Objective):
 
         """
         eq = self.things[0]
+        surface = self.things[1]
+        # if things[1] is different than self._surface, update self._surface
+        if surface != self._surface:
+            self._surface = surface
         if self._surface_grid is None:
             surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -535,15 +539,24 @@ class PlasmaVesselDistance(_Objective):
         )
         surface_transforms = get_transforms(
             self._surface_data_keys,
-            obj=self._surface,
+            obj=surface,
             grid=surface_grid,
             has_axis=surface_grid.axis.size,
         )
+
+        # compute returns points on the grid of the surface
+        # (so size surface_grid.num_nodes)
+        # so set quad_weights to the surface grid
+        # to avoid it being incorrectly set to the plasma_grid size
+        # in the super build
+        w = surface_grid.weights
+        w *= jnp.sqrt(surface_grid.num_nodes)
+
         self._constants = {
             "equil_transforms": equil_transforms,
             "equil_profiles": equil_profiles,
             "surface_transforms": surface_transforms,
-            "quad_weights": surface_grid.weights * jnp.sqrt(surface_grid.num_nodes),
+            "quad_weights": w,
         }
 
         timer.stop("Precomputing transforms")

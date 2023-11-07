@@ -12,6 +12,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
@@ -74,8 +75,6 @@ class Equilibrium(IOAble, Optimizable):
         resolution of real space nodes in poloidal direction
     N_grid : int (optional)
         resolution of real space nodes in toroidal direction
-    node_pattern : str (optional)
-        pattern of nodes in real space. Default is ``'jacobi'``
     pressure : Profile or ndarray shape(k,2) (optional)
         Pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero pressure
@@ -113,6 +112,10 @@ class Equilibrium(IOAble, Optimizable):
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
         Type of Zernike indexing scheme to use. Default ``'ansi'``
+    check_orientation : bool
+        ensure that this equilibrium has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
     """
 
     _io_attrs_ = [
@@ -145,7 +148,6 @@ class Equilibrium(IOAble, Optimizable):
         "_L_grid",
         "_M_grid",
         "_N_grid",
-        "_node_pattern",
     ]
 
     def __init__(
@@ -158,7 +160,6 @@ class Equilibrium(IOAble, Optimizable):
         L_grid=None,
         M_grid=None,
         N_grid=None,
-        node_pattern=None,
         pressure=None,
         iota=None,
         current=None,
@@ -171,6 +172,7 @@ class Equilibrium(IOAble, Optimizable):
         axis=None,
         sym=None,
         spectral_indexing=None,
+        check_orientation=True,
         **kwargs,
     ):
         errorif(
@@ -247,7 +249,6 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = setdefault(L_grid, 2 * self.L)
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
-        self._node_pattern = setdefault(node_pattern, "jacobi")
 
         self._surface.change_resolution(self.L, self.M, self.N)
         self._axis.change_resolution(self.N)
@@ -372,6 +373,8 @@ class Equilibrium(IOAble, Optimizable):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
+        if check_orientation:
+            ensure_positive_jacobian(self)
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -736,6 +739,7 @@ class Equilibrium(IOAble, Optimizable):
         transforms=None,
         profiles=None,
         data=None,
+        override_grid=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -756,6 +760,11 @@ class Equilibrium(IOAble, Optimizable):
             of self
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
+        override_grid : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -811,7 +820,7 @@ class Equilibrium(IOAble, Optimizable):
             if isinstance(grid, LinearGrid):
                 calc1d = False
 
-        if calc0d:
+        if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d = compute_fun(
                 self,
@@ -826,7 +835,7 @@ class Equilibrium(IOAble, Optimizable):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        if calc1d:
+        if calc1d and override_grid:
             grid1d = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,
@@ -1492,11 +1501,6 @@ class Equilibrium(IOAble, Optimizable):
             self._N_grid = N_grid
 
     @property
-    def node_pattern(self):
-        """str: Pattern for placement of nodes in curvilinear coordinates."""
-        return self._node_pattern
-
-    @property
     def resolution(self):
         """dict: Spectral and real space resolution parameters of the Equilibrium."""
         return {
@@ -1512,7 +1516,6 @@ class Equilibrium(IOAble, Optimizable):
         """Print a summary of the spectral and real space resolution."""
         print("Spectral indexing: {}".format(self.spectral_indexing))
         print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
-        print("Node pattern: {}".format(self.node_pattern))
         print(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid

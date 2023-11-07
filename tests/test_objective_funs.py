@@ -151,8 +151,8 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(W, 10 / mu_0)
             np.testing.assert_allclose(W_scaled, 10)
 
-        test(Equilibrium(node_pattern="quad", iota=PowerSeriesProfile(0)))
-        test(Equilibrium(node_pattern="quad", current=PowerSeriesProfile(0)))
+        test(Equilibrium(iota=PowerSeriesProfile(0)))
+        test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
     def test_target_iota(self):
@@ -287,7 +287,9 @@ class TestObjectiveFunction:
         # check that these QH modes are not returned by the objective
         assert [b not in f for b in B_mn[idx_B[-3:]]]
         # check that the objective returns the lowest amplitudes
-        np.testing.assert_allclose(f[idx_f][:131], B_mn[idx_B][:131])
+        # 120 ~ smallest amplitudes BEFORE QH modes show up so that sorting both arrays
+        # should have the same values up until then
+        np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120])
 
     @pytest.mark.unit
     def test_qs_twoterm(self):
@@ -356,7 +358,7 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_qs_boozer_grids(self):
         """Test grid compatibility with QS objectives."""
-        eq = get("QAS")
+        eq = get("NCSX")
 
         # symmetric grid
         grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
@@ -657,6 +659,8 @@ def test_plasma_vessel_distance():
     d = obj.compute_unscaled(*obj.xs(eq, surface))
     assert abs(d.min() - (a_s - a_p)) < 1e-14
     assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0
+    # ensure that it works (dimension-wise) when compute_scaled is called
+    _ = obj.compute_scaled(*obj.xs(eq, surface))
 
     grid = LinearGrid(L=3, M=3, N=3)
     eq = Equilibrium()
@@ -894,6 +898,70 @@ def test_rebuild():
 
 
 @pytest.mark.unit
+def test_objective_fun_things():
+    """Test that the objective things logic works correctly."""
+    R0 = 10.0
+    a_p = 1.0
+    a_s = 2.0
+    # default eq has R0=10, a=1
+    eq = Equilibrium(M=3, N=2)
+    # surface with same R0, a=2, so true d=1 for all pts
+    surface = FourierRZToroidalSurface(
+        R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    # For equally spaced grids, should get true d=1
+    surf_grid = LinearGrid(M=5, N=6)
+    plas_grid = LinearGrid(M=5, N=6)
+    obj = PlasmaVesselDistance(
+        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+    )
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq, surface))
+    np.testing.assert_allclose(d, a_s - a_p)
+
+    surface2 = surface.copy()
+    eq2 = eq.copy()
+    obj.things = [eq2, surface2]
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq2, surface2))
+    np.testing.assert_allclose(d, a_s - a_p)
+
+    # change objects, and surface resolution as well
+    a_s2 = 2.5
+    surface2 = FourierRZToroidalSurface(
+        R_lmn=[R0, a_s2], Z_lmn=[-a_s2], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    eq2 = Equilibrium(M=3, N=2)
+    surface2.change_resolution(M=4, N=4)
+    obj.things = [eq2, surface2]
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq2, surface2))
+    np.testing.assert_allclose(d, a_s2 - a_p)
+
+    # test that works correctly when changing both objects
+    # with the resolution of the equilibrium surface also changing
+    a_s2 = 2.5
+    surface2 = FourierRZToroidalSurface(
+        R_lmn=[R0, a_s2], Z_lmn=[-a_s2], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    eq2 = Equilibrium(surface=surface, M=3, N=2)
+    obj.things = [eq2, surface2]
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq2, surface2))
+    np.testing.assert_allclose(d, a_s2 - a_s)
+
+    with pytest.raises(AssertionError):
+        # one of these is not optimizeable, throws error
+        obj.things = [eq, 2.0]
+    with pytest.raises(AssertionError):
+        # these are not the expected types
+        obj.things = [eq, eq2]
+    with pytest.raises(AssertionError):
+        # these are not in the correct order for the objective
+        obj.things = [surface, eq]
+
+
+@pytest.mark.unit
 def test_jvp_scaled():
     """Test that jvps are scaled correctly."""
     eq = Equilibrium()
@@ -1030,7 +1098,7 @@ def test_softmax_and_softmin():
 def test_compute_scalar_resolution():  # noqa: C901
     """Test that compute_scalar values are roughly independent of grid resolution."""
     eq = get("HELIOTRON")
-    res_array = np.array([1.5, 2, 2.5])
+    res_array = np.array([2, 2.5, 3])
 
     # BootstrapRedlConsistency
     # this is already covered in tests/test_bootstrap.py

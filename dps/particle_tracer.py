@@ -11,7 +11,7 @@ from time import time as timet
 
 initial_time = timet()
 # Load Equilibrium
-filename = "ellipse_higherPsi.h5"
+filename = "input.LandremanPaul2021_QA_scaled_output.h5"
 save_text_name = "solution" + filename
 
 print("*************** Start ***************")
@@ -19,7 +19,7 @@ print("Particle Tracer")
 print(f"Filename: {filename}")
 print("*************************************")
 
-eq = desc.io.load(filename)
+eq = desc.io.load(filename)[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 # eq.solve()
@@ -55,13 +55,13 @@ Charge = 2*Proton_Charge
 psi_i = 0.2
 zeta_i = 0
 theta_i = 0
-vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)
+vpar_i = 0.2*jnp.sqrt(2*Energy_SI/Mass)
 ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
 tmax = 1e-4
-nt = 1000
+nt = 250
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond

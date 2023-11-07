@@ -100,7 +100,7 @@ Charge = 2*Proton_Charge
 psi_i = 0.2
 zeta_i = 0
 theta_i = 0
-vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)
+vpar_i = 0.2*jnp.sqrt(2*Energy_SI/Mass)
 ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
@@ -147,11 +147,11 @@ print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermed
 ################################################################################################################
 ################################################################################################################
 
-R_modes = np.vstack(([0, 0, 0], eq.surface.R_basis.modes[np.max(np.abs(eq.surface.R_basis.modes), 1), :]))
-Z_modes = eq.surface.Z_basis.modes[np.max(np.abs(eq.surface.Z_basis.modes), 1), :]
+# R_modes = np.vstack(([0, 0, 0], eq.surface.R_basis.modes[np.max(np.abs(eq.surface.R_basis.modes), 1), :]))
+# Z_modes = eq.surface.Z_basis.modes[np.max(np.abs(eq.surface.Z_basis.modes), 1), :]
 
-# R_modes = np.array([[0, 0, 0]])
-constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=Z_modes), FixPressure(eq), FixPsi(eq), FixIota(eq))
+R_modes = np.array([[0, 0, 0]])
+constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixPsi(eq), FixIota(eq))
 eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=5, copy=True) # Mudar o número de iterações para 3, 10, 100
 eq.save(opt_file)
 
@@ -168,7 +168,7 @@ print("\n*************** TRACING ***************")
 
 ################################################################################################################
 ################################################################################################################
-################################################## Tracing ####################################################
+################################################## Tracing #####################################################
 ################################################################################################################
 ################################################################################################################
 

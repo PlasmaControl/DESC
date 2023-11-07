@@ -1131,7 +1131,7 @@ def test_regcoil_ellipse_and_axisym_surface():
         eval_grid_N=20,
         source_grid_M=40,
         source_grid_N=80,
-        alpha=1e-19,
+        alpha=1e-15,
         scan=True,
         verbose=3,
     )

@@ -84,7 +84,7 @@ class ParticleTracer(_Objective):
             target = 0
         
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,

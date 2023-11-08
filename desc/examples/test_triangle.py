@@ -18,7 +18,7 @@ from desc.basis import FiniteElementMesh2D
 M = 4
 N = 4
 mesh = FiniteElementMesh2D(M, N, K=2)
-mesh.plot_triangles(plot_quadrature_points=True)
+mesh.plot_triangles(plot_quadrature_points=False)
 integral = mesh.integrate(np.ones((2 * M * N * mesh.nquad, 10000)))
 area2_total = 0.0
 for triangle in mesh.triangles:

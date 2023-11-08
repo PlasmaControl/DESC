@@ -17,11 +17,14 @@ __all__ = [
     "FourierRZToroidalSurface",
     "ZernikeRZToroidalSection",
     "convert_spectral_to_FE",
+    "convert_spectral_to_FE_2D",
     "FiniteElementRZToroidalSurface",
 ]
 
 
-def convert_coefficients_2D(R_lmn, Z_lmn, R_basis, Z_basis, Rprime_basis, Zprime_basis):
+def convert_spectral_to_FE_2D(
+    R_lmn, Z_lmn, R_basis, Z_basis, Rprime_basis, Zprime_basis
+):
     """Converts 2D Fourier to 2D FE representation.
 
     Parameters
@@ -69,7 +72,7 @@ def convert_coefficients_2D(R_lmn, Z_lmn, R_basis, Z_basis, Rprime_basis, Zprime
         for j in range(Q):
             for a in range(I):
                 for b in range(Q):
-                    Bjb_Z[:, i, j, a, b] = mesh.integrate(
+                    Bjb_Z[i, j, a, b] = mesh.integrate(
                         (
                             Zprime_basis.evaluate(
                                 nodes=quadpoints, modes=np.array([[0, i, j]])
@@ -188,11 +191,26 @@ def convert_spectral_to_FE(
     M = R_basis.M
     N = R_basis.N
     I = Rprime_basis.I_2MN
+    K = Rprime_basis.K
     Q = Rprime_basis.Q
     L = Rprime_basis.L
     assert L == R_basis.L
     mesh = Rprime_basis.mesh
-    quadpoints = mesh.return_quadrature_points()
+    quadpoints = np.array(mesh.return_quadrature_points())
+    print(quadpoints)
+    if N == 0:
+        quadpoints = (
+            np.array(
+                np.meshgrid(np.ones(1), quadpoints, np.zeros(1), indexing="ij")
+            ).reshape(3, I * K)
+        ).T
+    else:
+        quadpoints = (
+            np.array(np.meshgrid(np.ones(1), quadpoints, indexing="ij")).reshape(
+                3, I * K
+            )
+        ).T
+
     nquad = mesh.nquad
     Bjb_Z = np.zeros((I, Q, I, Q))
     Aj_Z = np.zeros((I, Q, L))
@@ -205,40 +223,61 @@ def convert_spectral_to_FE(
     # as in the 2D case.
     for i in range(I):
         for j in range(Q):
-            for a in range(I):
-                for b in range(Q):
-                    Bjb_Z[i, j, a, b] += mesh.integrate(
-                        (
-                            Zprime_basis.evaluate(
-                                nodes=quadpoints, modes=np.array([[0, i, j]])
-                            )
-                            * Zprime_basis.evaluate(
-                                nodes=quadpoints, modes=np.array([[0, a, b]])
-                            )
-                        ).reshape(2 * N * M * nquad, 1)
-                    )
-                    Bjb_R[i, j, a, b] += mesh.integrate(
-                        (
-                            Rprime_basis.evaluate(
-                                nodes=quadpoints, modes=np.array([[0, i, j]])
-                            )
-                            * Rprime_basis.evaluate(
-                                nodes=quadpoints, modes=np.array([[0, a, b]])
-                            )
-                        ).reshape(2 * N * M * nquad, 1)
-                    )
-    rho = np.linspace(0, 1, L, endpoint=True)
+            for b in range(Q):
+                Bjb_Z[i, j, i, b] += mesh.integrate(
+                    (
+                        Zprime_basis.evaluate(
+                            nodes=quadpoints, modes=np.array([[0, i, j]])
+                        )
+                        * Zprime_basis.evaluate(
+                            nodes=quadpoints, modes=np.array([[0, i, b]])
+                        )
+                    ).reshape(I * nquad, 1)
+                )
+                Bjb_R[i, j, i, b] += mesh.integrate(
+                    (
+                        Rprime_basis.evaluate(
+                            nodes=quadpoints, modes=np.array([[0, i, j]])
+                        )
+                        * Rprime_basis.evaluate(
+                            nodes=quadpoints, modes=np.array([[0, i, b]])
+                        )
+                    ).reshape(I * nquad, 1)
+                )
+                Bjb_L[i, j, i, b] += mesh.integrate(
+                    (
+                        Lprime_basis.evaluate(
+                            nodes=quadpoints, modes=np.array([[0, i, j]])
+                        )
+                        * Lprime_basis.evaluate(
+                            nodes=quadpoints, modes=np.array([[0, i, b]])
+                        )
+                    ).reshape(I * nquad, 1)
+                )
+    Nrho = 100
+    rho = np.linspace(0, 1, Nrho, endpoint=True)
     delta_rho = rho[1] - rho[0]
-    nodes = np.meshgrid(rho, quadpoints[:, 0], quadpoints[:, 1], indexing="ij")
-    nodes = np.reshape(nodes, (L * 2 * M * N * nquad, 3))
+    quadpoints = np.array(mesh.return_quadrature_points())
+    if N == 0:
+        quadpoints = (
+            np.array(np.meshgrid(rho, quadpoints, np.zeros(1), indexing="ij")).reshape(
+                3, I * K * Nrho
+            )
+        ).T
+    else:
+        quadpoints = (
+            np.array(np.meshgrid(rho, quadpoints, indexing="ij")).reshape(
+                3, I * K * Nrho
+            )
+        ).T
     modes_R = R_basis.modes
     modes_Z = Z_basis.modes
     modes_L = L_basis.modes
     for i in range(I):
         for j in range(Q):
             for k in range(L):
-                for n in range(M):
-                    for m in range(N):
+                for m in range(M):
+                    for n in range(N):
                         for l in range(L):
                             # Sum over n, m, l and integrals over theta, zeta, rho
                             Aj_Z[i, j, k] += (
@@ -247,13 +286,14 @@ def convert_spectral_to_FE(
                                     np.sum(
                                         (
                                             Z_basis.evaluate(
-                                                nodes=nodes,
+                                                nodes=quadpoints,
                                                 modes=modes_Z[l + L * m + L * M * n, :],
                                             )
                                             * Zprime_basis.evaluate(
-                                                nodes=nodes, modes=np.array([k, i, j])
+                                                nodes=quadpoints,
+                                                modes=np.array([k, i, j]),
                                             )
-                                        ).reshape(L, 2 * M * N * nquad, 3),
+                                        ).reshape(Nrho, I * nquad, 3),
                                         axis=0,
                                     )
                                 )
@@ -265,13 +305,14 @@ def convert_spectral_to_FE(
                                     np.sum(
                                         (
                                             R_basis.evaluate(
-                                                nodes=nodes,
+                                                nodes=quadpoints,
                                                 modes=modes_R[l + L * m + L * M * n, :],
                                             )
                                             * Rprime_basis.evaluate(
-                                                nodes=nodes, modes=np.array([k, i, j])
+                                                nodes=quadpoints,
+                                                modes=np.array([k, i, j]),
                                             )
-                                        ).reshape(L, 2 * M * N * nquad, 3),
+                                        ).reshape(Nrho, I * nquad, 3),
                                         axis=0,
                                     )
                                 )
@@ -283,13 +324,14 @@ def convert_spectral_to_FE(
                                     np.sum(
                                         (
                                             L_basis.evaluate(
-                                                nodes=nodes,
+                                                nodes=quadpoints,
                                                 modes=modes_L[l + L * m + L * M * n, :],
                                             )
                                             * Lprime_basis.evaluate(
-                                                nodes=nodes, modes=np.array([k, i, j])
+                                                nodes=quadpoints,
+                                                modes=np.array([k, i, j]),
                                             )
-                                        ).reshape(L, 2 * M * N * nquad, 3),
+                                        ).reshape(Nrho, I * nquad, 3),
                                         axis=0,
                                     )
                                 )
@@ -306,7 +348,6 @@ def convert_spectral_to_FE(
     for ii in range(L):
         Bjb_R_expanded[:, ii, :, ii] = Bjb_R
     Bjb_R = np.reshape(Bjb_R_expanded, (I * Q * L, I * Q * L))
-    print(Bjb_R.shape)
     Aj_R = Aj_R.reshape(I * Q * L) * np.pi * delta_rho
     Bjb_Z = Bjb_Z.reshape(I * Q, I * Q)
     Bjb_Z = np.tile(Bjb_Z, L)  # repeat this matrix L times for the linear solve
@@ -366,12 +407,14 @@ class FiniteElementRZToroidalSurface(Surface):
         Z_lmn=None,
         modes_R=None,
         modes_Z=None,
+        K=1,
         NFP=1,
         sym="auto",
         rho=1,
         name="",
         check_orientation=True,
     ):
+        # Initialize a FourierRZToroidalSurface
         self.fs = FourierRZToroidalSurface(
             R_lmn=R_lmn,
             Z_lmn=Z_lmn,
@@ -383,9 +426,10 @@ class FiniteElementRZToroidalSurface(Surface):
             name=name,
             check_orientation=check_orientation,
         )
-        self._R_basis = DoubleFiniteElementBasis(M=32, N=32)
-        self._Z_basis = DoubleFiniteElementBasis(M=32, N=32)
-        R_lmn, Z_lmn = convert_coefficients_2D(
+        # Convert coefficients to a FE representation
+        self._R_basis = DoubleFiniteElementBasis(M=self.fs._M, N=self.fs._N)
+        self._Z_basis = DoubleFiniteElementBasis(M=self.fs._M, N=self.fs._N)
+        R_lmn, Z_lmn = convert_spectral_to_FE_2D(
             self.fs.R_lmn,
             self.fs.Z_lmn,
             self.fs.R_basis,
@@ -393,9 +437,10 @@ class FiniteElementRZToroidalSurface(Surface):
             self._R_basis,
             self._Z_basis,
         )
-        I = self.fs._M * 2
-        J = self.fs._N * 2
-        modes_R, modes_Z = np.meshgrid(I, J, indexing="ij")
+        I = 2 * self.fs._M * self.fs._N
+        self.K = K
+        Q = int((K + 1) * (K + 2) / 2.0)
+        modes_R, modes_Z = np.meshgrid(I, Q, indexing="ij")
         modes_R = modes_R.reshape(-1, 2)
         modes_Z = modes_Z.reshape(-1, 2)
         self.R_lmn = R_lmn
@@ -554,7 +599,7 @@ class FiniteElementRZToroidalSurface(Surface):
         """
         surf = cls()
         fs = surf.fs.from_input_file(path=path)
-        R_lmn, Z_lmn = convert_coefficients_2D(
+        R_lmn, Z_lmn = convert_spectral_to_FE_2D(
             fs.R_lmn,
             fs.Z_lmn,
             fs.R_basis,
@@ -597,7 +642,7 @@ class FiniteElementRZToroidalSurface(Surface):
         """
         surf = cls()
         fs = surf.fs.from_near_axis(aspect_ratio, elongation, mirror_ratio, axis_Z, NFP)
-        R_lmn, Z_lmn = convert_coefficients_2D(
+        R_lmn, Z_lmn = convert_spectral_to_FE_2D(
             fs.R_lmn,
             fs.Z_lmn,
             fs.R_basis,

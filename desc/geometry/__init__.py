@@ -6,4 +6,5 @@ from .surface import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
     convert_spectral_to_FE,
+    convert_spectral_to_FE_2D,
 )

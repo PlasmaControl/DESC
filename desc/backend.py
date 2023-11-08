@@ -64,106 +64,6 @@ print(
     )
 )
 
-if desc_config.get("device") == "METAL":
-    # import functools
-    # import jax
-    # import jax.numpy as jnp
-    # def jaxify(func, return_shape, return_dtype=np.float64, fd_step=1e-4, vectorized=False):
-    #     """Make an external (python) function work with JAX AD etc.
-        
-    #     func must take only ndarrays as positional arguments and return a single ndarray as output.
-        
-    #     Positional arguments to func can be differentiated, use keyword args for static values and
-    #     non-differentiable stuff.
-        
-    #     Note: Only forward mode differentiation is supported currently.
-        
-    #     Parameters
-    #     ----------
-    #     func : callable
-    #         function to wrap. Should be a "pure" function, in that it has no side effects
-    #         and doesn't maintain state. 
-    #     return_shape : tuple
-    #         shape of the output of func
-    #     return_dtype: numpy dtype
-    #         data type of the output of func
-    #     fd_step : float
-    #         step size for finite differences (first order forward difference)
-    #     vectorized : bool
-    #         whether or not func is vectorized, meaning it can handle arrays with additional leading dimensions
-            
-    #     Returns
-    #     -------
-    #     func : callable
-    #         new function that behaves as func but works with jit/vmap/forward mode AD etc.
-            
-    #     """
-
-    #     def wrap_pure_callback(func):
-    #         @functools.wraps(func)
-    #         def wrapper(*args, **kwargs):
-    #             args = [jnp.asarray(arg) for arg in args]
-    #             func_ = lambda *args, **kwargs: jnp.asarray(func(*args, **kwargs)).astype(return_dtype)
-    #             result_shape_dtype = jax.ShapeDtypeStruct(
-    #                 shape=return_shape,
-    #                 dtype=return_dtype,
-    #             )
-    #             return jax.pure_callback(
-    #                 func_, result_shape_dtype, *args, **kwargs, vectorized=vectorized
-    #             )
-
-    #         return wrapper
-
-
-    #     def define_fd_jvp(func):
-    #         func = jax.custom_jvp(func)
-
-    #         @func.defjvp
-    #         def func_jvp(primals, tangents):
-    #             primal_out = func(*primals)
-    #             zeros = jnp.zeros_like(primal_out)
-                
-    #             def _fd_jvp_1arg(argnum, vi):
-    #                 normv = jnp.linalg.norm(vi)
-    #                 vh = jnp.where(normv==0, vi, vi/normv)
-    #                 x = primals[argnum]
-    #                 h = fd_step
-
-    #                 def f(x):
-    #                     tempargs = primals[0:argnum] + (x,) + primals[argnum + 1 :]
-    #                     return func(*tempargs)
-
-    #                 truefun = lambda vh: (f(x + h * vh) - primal_out) / h * normv
-    #                 falsefun = lambda vh: zeros
-    #                 df = jax.lax.cond(normv!=0, truefun, falsefun, vh)
-    #                 return df 
-                
-    #             tangent_out = 0
-    #             for i, vi in enumerate(tangents):
-    #                 tangent_out += _fd_jvp_1arg(i, vi)
-    #             return jnp.array(primal_out), jnp.array(tangent_out)
-
-    #         return func
-        
-
-    #     return define_fd_jvp(wrap_pure_callback(func))
-    from scipy.special import gammaln as scipy_gammaln
-    @jnp.vectorize
-    def gammaln(x):
-        
-        def body(i, xy):
-            x, y = xy
-            y *= x
-            x -= 1
-            return x, y
-        
-        return jnp.log(jax.lax.fori_loop(1, jnp.asarray(x).astype(int), body, (x-1, 1.0))[1])
-    from scipy.special import logsumexp as scipy_logsumexp
-    @jnp.vectorize
-    def logsumexp(x):
-        # return jaxify(lambda x: scipy_logsumexp(x).astype(np.float32), return_shape=(), return_dtype=np.float32, vectorized=True)(x)
-        return scipy_logsumexp(x).astype(np.float32)
-
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
     jit = jax.jit
     fori_loop = jax.lax.fori_loop
@@ -177,6 +77,20 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     if desc_config.get("device") != "METAL":
         from jax.scipy.special import gammaln, logsumexp
+    else:
+        @jnp.vectorize
+        def gammaln(x):
+            def body(i, xy):
+                x, y = xy
+                y *= x
+                x -= 1
+                return x, y
+            return jnp.log(jax.lax.fori_loop(1, jnp.asarray(x).astype(int), body, (x-1, 1.0))[1])
+        from scipy.special import logsumexp as scipy_logsumexp
+        @jnp.vectorize
+        def logsumexp(x):
+            return scipy_logsumexp(x).astype(np.float32)
+        
     from jax.tree_util import register_pytree_node
 
     def put(arr, inds, vals):

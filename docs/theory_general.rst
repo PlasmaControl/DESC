@@ -120,8 +120,8 @@ When written in flux coordinates there are only two independent components:
   \begin{aligned}
     \mathbf{F} &= F_\rho \mathbf{e}^\rho + F_\beta \mathbf{\beta}_{DESC} \\[.3cm]
     F_\rho &=  -\frac{\partial p}{\partial \rho} + \sqrt{g} (J^\theta B^\zeta - J^\zeta B^\theta)\\[.3cm]
-    F_\beta &=  J^\rho \\[.3cm]
-    \mathbf{\beta_{DESC}} &=  \sqrt{g} (B^\zeta\mathbf{e}^\theta - B^\theta\mathbf{e}^\zeta)
+    F_\beta &=  \sqrt{g} J^\rho \\[.3cm]
+    \mathbf{\beta_{DESC}} &=  B^\zeta\mathbf{e}^\theta - B^\theta\mathbf{e}^\zeta
   \end{aligned}
 
 where :math:`\mathbf{e}^u = \nabla u` is the contravariant basis vector of parameter u. These forces in both the radial and helical directions must vanish in equilibrium.

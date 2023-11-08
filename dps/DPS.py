@@ -86,19 +86,19 @@ print("*************** START ***************")
 # Load Equilibrium
 
 print("\nStarting Equilibrium")
-eq_file = "input.LandremanPaul2021_QA_scaled_output.h5"
-# eq_file = "test_equilibrium.h5"
+# eq_file = "input.LandremanPaul2021_QA_scaled_output.h5"
+eq_file = "test_equilibrium.h5"
 # eq_file = "DPS_eq.h5"
 
 opt_file = "optimized_" + eq_file
 print(f"Loaded Equilibrium: {eq_file}\n")
 
-eq = desc.io.load(eq_file)[-1]
+eq = desc.io.load(eq_file)
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 
 # Energy and Mass info
-Energy_eV = 3.52e6 #1 # eV (3.52e6 eV proton energy)
+Energy_eV = 1 #1 # eV (3.52e6 eV proton energy)
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
 Energy_SI = Energy_eV*Proton_Charge
@@ -153,91 +153,91 @@ jacobian = ObjFunction.grad(ObjFunction.x(eq))
 
 savetxt(jacobian, "jacobian")
 
-# intermediate_time_3 = timet()
-# print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermediate_time_2}s\n")
+intermediate_time_3 = timet()
+print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermediate_time_2}s\n")
 
-# ################################################################################################################
-# ################################################################################################################
-# ################################################# Optimization #################################################
-# ################################################################################################################
-# ################################################################################################################
+################################################################################################################
+################################################################################################################
+################################################# Optimization #################################################
+################################################################################################################
+################################################################################################################
 
-# # R_modes = jnp.vstack(([0, 0, 0], eq.surface.R_basis.modes[jnp.max(jnp.abs(eq.surface.R_basis.modes), 1), :]))
-# # Z_modes = eq.surface.Z_basis.modes[jnp.max(jnp.abs(eq.surface.Z_basis.modes), 1), :]
+# R_modes = jnp.vstack(([0, 0, 0], eq.surface.R_basis.modes[jnp.max(jnp.abs(eq.surface.R_basis.modes), 1), :]))
+# Z_modes = eq.surface.Z_basis.modes[jnp.max(jnp.abs(eq.surface.Z_basis.modes), 1), :]
 
-# R_modes = jnp.array([[0, 0, 0]])
-# constraints = (ForceBalance(eq), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixPsi(eq), FixIota(eq)) #ForceBalance(eq, bounds=(-1e-3, 1e-3))
-# eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=5, copy=True) # Mudar o número de iterações para 3, 10, 100
-# eq.save(opt_file)
+R_modes = jnp.array([[0, 0, 0]])
+constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixPsi(eq), FixIota(eq)) #ForceBalance(eq, bounds=(-1e-3, 1e-3))
+eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=5, copy=True) # Mudar o número de iterações para 3, 10, 100
+eq.save(opt_file)
 
-# intermediate_time_4 = timet()
-# print(f"\nTime to optimize: {intermediate_time_4 - intermediate_time_3}s\n")
+intermediate_time_4 = timet()
+print(f"\nTime to optimize: {intermediate_time_4 - intermediate_time_3}s\n")
 
-# print("\nOptimization Completed")
-# print(f"Optimized Filename: {opt_file}")
-# optimization_final_time = timet()
-# print(f"Total time: {optimization_final_time - initial_time}s")
-# print("*********************** OPTIMIZATION END ***********************\n")
+print("\nOptimization Completed")
+print(f"Optimized Filename: {opt_file}")
+optimization_final_time = timet()
+print(f"Total time: {optimization_final_time - initial_time}s")
+print("*********************** OPTIMIZATION END ***********************\n")
 
-# print("\n*************** TRACING ***************")
+print("\n*************** TRACING ***************")
 
-# ################################################################################################################
-# ################################################################################################################
-# ################################################## Tracing #####################################################
-# ################################################################################################################
-# ################################################################################################################
+################################################################################################################
+################################################################################################################
+################################################## Tracing #####################################################
+################################################################################################################
+################################################################################################################
 
-# tracing_original = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.4e-8)
+tracing_original = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.4e-8)
 
-# # Compute tracing original equilibrium
-# eq_again = desc.io.load(eq_file)[-1]
-# eq_again._iota = eq_again.get_profile("iota").to_powerseries(order=eq_again.L, sym=True)
-# eq_again._current = None
+# Compute tracing original equilibrium
+eq_again = desc.io.load(eq_file)
+eq_again._iota = eq_again.get_profile("iota").to_powerseries(order=eq_again.L, sym=True)
+eq_again._current = None
 
-# intermediate_time_5 = timet()
-# tracing_original.build()
-# tracer_solution_original = tracing_original.compute(*tracing_original.xs(eq_again))
-# intermediate_time_6 = timet()
-# print(f"\nTime to build and trace (original): {intermediate_time_6 - intermediate_time_5}s\n")
+intermediate_time_5 = timet()
+tracing_original.build()
+tracer_solution_original = tracing_original.compute(*tracing_original.xs(eq_again))
+intermediate_time_6 = timet()
+print(f"\nTime to build and trace (original): {intermediate_time_6 - intermediate_time_5}s\n")
 
-# output_to_file(tracer_solution_original, name="tracing_original")
+output_to_file(tracer_solution_original, name="tracing_original")
 
-# # Compute tracing optimized equilibrium
-# opt_eq = desc.io.load(opt_file)
-# opt_eq._iota = opt_eq.get_profile("iota").to_powerseries(order=opt_eq.L, sym=True)
-# opt_eq._current = None
+# Compute tracing optimized equilibrium
+opt_eq = desc.io.load(opt_file)
+opt_eq._iota = opt_eq.get_profile("iota").to_powerseries(order=opt_eq.L, sym=True)
+opt_eq._current = None
 
-# tracing_optimized = ParticleTracer(eq=opt_eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.4e-8)
+tracing_optimized = ParticleTracer(eq=opt_eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.4e-8)
 
-# intermediate_time_7 = timet()
-# tracing_optimized.build()
-# tracer_solution_optimized = tracing_optimized.compute(*tracing_optimized.xs(opt_eq))
-# intermediate_time_8 = timet()
-# print(f"\nTime to build and trace (optimized): {intermediate_time_8 - intermediate_time_7}s\n")
+intermediate_time_7 = timet()
+tracing_optimized.build()
+tracer_solution_optimized = tracing_optimized.compute(*tracing_optimized.xs(opt_eq))
+intermediate_time_8 = timet()
+print(f"\nTime to build and trace (optimized): {intermediate_time_8 - intermediate_time_7}s\n")
 
-# output_to_file(tracer_solution_optimized, name="tracing_optimized")
+output_to_file(tracer_solution_optimized, name="tracing_optimized")
 
-# # Comparison
-# difference = tracer_solution_original - tracer_solution_optimized
+# Comparison
+difference = tracer_solution_original - tracer_solution_optimized
 
-# output_to_file(difference, name="tracing_difference")
+output_to_file(difference, name="tracing_difference")
 
-# print("\n*********************** TRACING END ***********************\n")
+print("\n*********************** TRACING END ***********************\n")
 
-# print("\n*************** PLOTTING ***************\n")
+print("\n*************** PLOTTING ***************\n")
 
-# print("Original Equilibrium")
-# Trajectory_Plot(solution=tracer_solution_original, save_name="Trajectory_Plot_original.png")
-# Quantity_Plot(solution=tracer_solution_original, save_name="Quantity_Plot_original.png")
-# Energy_Plot(solution=tracer_solution_original, save_name="Energy_Plot_original.png")
+print("Original Equilibrium")
+Trajectory_Plot(solution=tracer_solution_original, save_name="Trajectory_Plot_original.png")
+Quantity_Plot(solution=tracer_solution_original, save_name="Quantity_Plot_original.png")
+Energy_Plot(solution=tracer_solution_original, save_name="Energy_Plot_original.png")
 
-# print("Optimized Equilibrium")
-# Trajectory_Plot(solution=tracer_solution_optimized, save_name="Trajectory_Plot_optimized.png")
-# Quantity_Plot(solution=tracer_solution_optimized, save_name="Quantity_Plot_optimized.png")
-# Energy_Plot(solution=tracer_solution_optimized, save_name="Energy_Plot_optimized.png")
+print("Optimized Equilibrium")
+Trajectory_Plot(solution=tracer_solution_optimized, save_name="Trajectory_Plot_optimized.png")
+Quantity_Plot(solution=tracer_solution_optimized, save_name="Quantity_Plot_optimized.png")
+Energy_Plot(solution=tracer_solution_optimized, save_name="Energy_Plot_optimized.png")
 
-# print("*************** PLOTTING END ***************")
+print("*************** PLOTTING END ***************")
 
-# final_time = timet()
-# print(f"\n\nTotal time: {final_time - initial_time}s\n\n")
-# print("*************** END ***************")
+final_time = timet()
+print(f"\n\nTotal time: {final_time - initial_time}s\n\n")
+print("*************** END ***************")

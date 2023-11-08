@@ -4,11 +4,11 @@ from functools import partial
 
 import numpy as np
 import scipy
+from interpax import fft_interp2d
 
 from desc.backend import custom_jvp, fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec
-from desc.interpolate import fft_interp2d
 from desc.io import IOAble
 from desc.utils import isalmostequal, islinspaced
 

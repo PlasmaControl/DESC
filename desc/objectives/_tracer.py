@@ -155,7 +155,7 @@ class ParticleTracer(_Objective):
         solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax, rtol = self.tolerance)
 
         if self.compute_option == "optimization":
-            return jnp.sum((solution[:, 0] - solution[0, 0]) * (solution[:, 0] - solution[0, 0]), axis=-1)
+            return jnp.sum((solution[:, 0] - solution[0, 0]) * (solution[:, 0] - solution[0, 0]), axis=-1)*1e8
         elif self.compute_option == "tracer":
             return solution
         elif self.compute_option == "average psi":

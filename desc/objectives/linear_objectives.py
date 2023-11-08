@@ -74,7 +74,7 @@ class FixParameter(_Objective):
 
     _scalar = False
     _linear = True
-    _fixes = True
+    _fixed = True
     _units = "(~)"
     _print_value_fmt = "Fixed parameter error: {:10.3e} "
 

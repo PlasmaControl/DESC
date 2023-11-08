@@ -119,7 +119,11 @@ def test_map_coordinates():
     out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
 
     out = eq.map_coordinates(
-        in_coords, inbasis, outbasis, period=(2 * np.pi, 2 * np.pi, np.inf)
+        in_coords,
+        inbasis,
+        outbasis,
+        period=(2 * np.pi, 2 * np.pi, np.inf),
+        maxiter=40,
     )
     np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
 
@@ -317,12 +321,22 @@ def test_poincare_solve_not_implemented():
         "axis": np.array([[0, 10, 0]]),
         "pressure": np.array([[0, 10], [2, 5]]),
         "iota": np.array([[0, 1], [2, 3]]),
-        "surface": np.array([[0, 0, 0, 10, 0], [1, 1, 0, 1, 1]]),
+        "surface": np.array(
+            [
+                [0, 0, 0, 10, 0],
+                [1, 1, 0, 1, 0.1],
+                [1, -1, 0, 0.2, -1],
+            ]
+        ),
     }
 
     eq = Equilibrium(**inputs)
+    assert eq.bdry_mode == "poincare"
     np.testing.assert_allclose(
-        eq.Rb_lmn, [10.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        eq.Rb_lmn, [10.0, 0.2, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    )
+    np.testing.assert_allclose(
+        eq.Zb_lmn, [0.0, -1.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     )
     with pytest.raises(NotImplementedError):
         eq.solve()

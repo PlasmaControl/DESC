@@ -1,3 +1,6 @@
+! a comment
+another poorly formatted comment that we also ignore
+# a third comment
 periods 1
 begin filament
 mirror NIL

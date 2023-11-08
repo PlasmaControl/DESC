@@ -135,6 +135,19 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(data["curvature_k1_rho"], 0)
         np.testing.assert_allclose(data["curvature_k2_rho"], -1)
 
+    @pytest.mark.unit
+    def test_position(self):
+        """Tests for position on surface."""
+        s = FourierRZToroidalSurface()
+        grid = LinearGrid(theta=0, zeta=np.pi)
+        data = s.compute(["x", "R", "phi", "Z"], grid=grid, basis="xyz")
+        np.testing.assert_allclose(data["R"], 11)
+        np.testing.assert_allclose(data["x"][0, 0], -11)
+        np.testing.assert_allclose(data["phi"], np.pi)
+        np.testing.assert_allclose(data["x"][0, 1], 0, atol=1e-14)  # this is y
+        np.testing.assert_allclose(data["Z"], 0)
+        np.testing.assert_allclose(data["x"][0, 2], 0)
+
 
 class TestZernikeRZToroidalSection:
     """Tests for ZernikeRZToroidalSection class."""
@@ -213,7 +226,7 @@ def test_surface_orientation():
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
     assert surf._compute_orientation() == -1
-    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf, check_orientation=False)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == -1
 
     # same surface but flipped to have positive orientation
@@ -223,7 +236,7 @@ def test_surface_orientation():
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
     assert surf._compute_orientation() == 1
-    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf, check_orientation=False)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == 1
 
     # this has theta=0 on inboard side and positive orientation
@@ -233,7 +246,7 @@ def test_surface_orientation():
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
     assert surf._compute_orientation() == 1
-    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf, check_orientation=False)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == 1
 
     # same but with negative orientation
@@ -243,5 +256,5 @@ def test_surface_orientation():
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
     assert surf._compute_orientation() == -1
-    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf, check_orientation=False)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == -1

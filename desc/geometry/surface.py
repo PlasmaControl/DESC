@@ -8,6 +8,7 @@ import numpy as np
 from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.io import InputReader
+from desc.optimizable import optimizable_parameter
 from desc.utils import copy_coeffs
 
 from .core import Surface
@@ -60,7 +61,6 @@ class FourierRZToroidalSurface(Surface):
         NFP=1,
         sym="auto",
         rho=1,
-        grid=None,
         name="",
         check_orientation=True,
     ):
@@ -113,7 +113,8 @@ class FourierRZToroidalSurface(Surface):
             warnings.warn(
                 "Left handed coordinates detected, switching sign of theta."
                 + " To avoid this warning in the future, switch the sign of all"
-                + " modes with m<0"
+                + " modes with m<0. You may also need to switch the sign of iota or"
+                + " current profiles."
             )
             self._flip_orientation()
             assert self._compute_orientation() == 1
@@ -189,6 +190,7 @@ class FourierRZToroidalSurface(Surface):
             self._M = M
             self._N = N
 
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients for R."""
@@ -204,6 +206,7 @@ class FourierRZToroidalSurface(Surface):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients for Z."""
@@ -273,7 +276,12 @@ class FourierRZToroidalSurface(Surface):
 
         """
         f = open(path)
-        if "&INDATA" in f.readlines()[0]:  # vmec input, convert to desc
+        isVMEC = False
+        for line in f.readlines():
+            if "&INDATA" in line.upper():
+                isVMEC = True
+                break
+        if isVMEC:  # vmec input, convert to desc
             inputs = InputReader.parse_vmec_inputs(f)[-1]
         else:
             inputs = InputReader().parse_inputs(f)[-1]
@@ -409,7 +417,6 @@ class ZernikeRZToroidalSection(Surface):
         spectral_indexing="ansi",
         sym="auto",
         zeta=0.0,
-        grid=None,
         name="",
         check_orientation=True,
     ):
@@ -533,6 +540,7 @@ class ZernikeRZToroidalSection(Surface):
             self._L = L
             self._M = M
 
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients for R."""
@@ -548,6 +556,7 @@ class ZernikeRZToroidalSection(Surface):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients for Z."""

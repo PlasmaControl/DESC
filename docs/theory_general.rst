@@ -106,7 +106,7 @@ Equilibrium Force Balance
 The ideal magnetohydrodynamic equilibrium force balance is defined as
 
 .. math::
-  \mathbf{F} \equiv \nabla p - \mathbf{J} \times \mathbf{B} = \mathbf{0}
+  \mathbf{F} \equiv \mathbf{J} \times \mathbf{B} - \nabla p = \mathbf{0}
 
 Using cross product in curvilinear coordinates, we can write
 
@@ -119,7 +119,7 @@ When written in flux coordinates there are only two independent components:
 .. math::
   \begin{aligned}
     \mathbf{F} &= F_\rho \mathbf{e}^\rho + F_\beta \mathbf{\beta}_{DESC} \\[.3cm]
-    F_\rho &=  \frac{\partial p}{\partial \rho} + \sqrt{g} (J^\zeta B^\theta - J^\theta B^\zeta)\\[.3cm]
+    F_\rho &=  -\frac{\partial p}{\partial \rho} + \sqrt{g} (J^\theta B^\zeta - J^\zeta B^\theta)\\[.3cm]
     F_\beta &=  J^\rho \\[.3cm]
     \mathbf{\beta_{DESC}} &=  \sqrt{g} (B^\zeta\mathbf{e}^\theta - B^\theta\mathbf{e}^\zeta)
   \end{aligned}

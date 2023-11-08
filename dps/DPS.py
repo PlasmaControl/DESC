@@ -138,7 +138,7 @@ print(f"\nTime to build and compute solution: {intermediate_time_2 - intermediat
 ObjFunction = ObjectiveFunction([objective], deriv_mode="looped")
 ObjFunction.build()
 
-jacobian = ObjFunction.jac_unscaled(ObjFunction.x(eq))
+jacobian = ObjFunction.grad(ObjFunction.x(eq))
 
 print(jacobian)
 

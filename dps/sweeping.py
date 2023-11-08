@@ -38,13 +38,13 @@ ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 # Time
 tmin = 0
 tmax = 1e-4
-nt = 250
+nt = 200
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond
 Mass_Charge_Ratio = Mass/Charge
 
-r01 = np.arange(-0.2, 0.2, 0.025)
+r01 = np.arange(0.0, 0.5, 0.025)
 
 f_values = []
 

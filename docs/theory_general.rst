@@ -118,23 +118,24 @@ When written in flux coordinates there are only two independent components:
 
 .. math::
   \begin{aligned}
-    \mathbf{F} &= F_\rho \mathbf{e}^\rho + F_\beta \mathbf{\beta}_{DESC} \\[.3cm]
-    F_\rho &=  -\frac{\partial p}{\partial \rho} + \sqrt{g} (J^\theta B^\zeta - J^\zeta B^\theta)\\[.3cm]
-    F_\beta &=  \sqrt{g} J^\rho \\[.3cm]
-    \mathbf{\beta_{DESC}} &=  B^\zeta\mathbf{e}^\theta - B^\theta\mathbf{e}^\zeta
+    \mathbf{F} &= F_\rho \mathbf{e}^\rho + F_{helical} \mathbf{e}^{helical} \\[.3cm]
+    F_\rho &= \sqrt{g} (J^\theta B^\zeta - J^\zeta B^\theta) - \frac{\partial p}{\partial \rho} \\[.3cm]
+    F_{helical} &= \sqrt{g} J^\rho \\[.3cm]
+    \mathbf{e}^{helical} &= B^\zeta\mathbf{e}^\theta - B^\theta\mathbf{e}^\zeta
   \end{aligned}
 
-where :math:`\mathbf{e}^u = \nabla u` is the contravariant basis vector of parameter u. These forces in both the radial and helical directions must vanish in equilibrium.
+where :math:`\mathbf{e}^x = \nabla x` is the contravariant basis vector of parameter x.
+These forces in both the radial and helical directions must vanish in equilibrium.
 DESC solves this force balance locally by evaluating the residual errors at discrete points in real space:
 
 .. math::
   \begin{aligned}
   f_\rho &= F_\rho ||\nabla \rho|| \Delta V \\[.2cm]
-  f_\beta &= F_\beta ||\mathbf{\beta}|| \Delta V
+  f_{helical} &= F_{helical} ||\mathbf{e}^{helical}|| \Delta V
   \end{aligned}
 
-These equations :math:`f_\rho` and :math:`f_\beta` represent the force errors (in Newtons) in the unit of volume :math:`\Delta V = \sqrt{g} \Delta \rho \Delta \theta \Delta \zeta` surrounding a collocation point :math:`(\rho, \theta, \zeta)`.
-[Note: this definition of :math:`\mathbf{\beta}` is slightly different from that given in the original paper, but the resulting equation for :math:`f_\beta` is equivalent.
+These equations :math:`f_\rho` and :math:`f_{helical}` represent the force errors (in Newtons) in the unit of volume :math:`\Delta V = \sqrt{g} \Delta \rho \Delta \theta \Delta \zeta` surrounding a collocation point :math:`(\rho, \theta, \zeta)`.
+[Note: this definition of :math:`\mathbf{e}^{helical}` is slightly different from that of :math:`\mathbf{\beta}` given in the original paper, but the resulting equation for :math:`f_{helical}` is equivalent to the original :math:`f_\beta`.
 The publication also included an additional sign term in the equations for :math:`f_\rho` and :math:`f_\beta` that has been dropped.]
 
 In summary, the equilibrium problem is formulated as a system of nonlinear equations :math:`\mathbf{f}(\mathbf{x}, \mathbf{c}) = \mathbf{0}`.
@@ -156,7 +157,7 @@ The equations :math:`\mathbf{f}` are the force error residuals at a series of co
 
 .. math::
   \mathbf{f} =  \begin{bmatrix}
-      f_\rho \\ f_\beta
+      f_\rho \\ f_{helical}
   \end{bmatrix}
 
 DESC allows flexibility in the choice of optimization algorithm used to solve this system of equations; popular approaches include Newton-Raphson methods and least-squares minimization (as the collocation grids are often oversampled, which has been found to improve convergence and robustness).

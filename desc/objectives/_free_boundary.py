@@ -692,8 +692,10 @@ class QuadraticFlux(_Objective):
         )
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
 
-        w = src_grid.weights
-        w *= jnp.sqrt(src_grid.num_nodes)
+        # I'm not sure where these weights
+        # are applied so I don't know what grid to use
+        w = eval_grid.weights
+        w *= jnp.sqrt(eval_grid.num_nodes)
 
         self._constants = {
             "quad_weights": w,
@@ -739,6 +741,7 @@ class QuadraticFlux(_Objective):
         Bext = self._ext_field.compute_magnetic_field(
             x, grid=self._field_grid, basis="rpz"
         )
+
         Bnorm = jnp.sum(
             (Bext + constants["Bplasma"]) * constants["eval_data"]["n_rho"], axis=-1
         )

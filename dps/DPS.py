@@ -138,6 +138,11 @@ print(f"\nTime to build and compute solution: {intermediate_time_2 - intermediat
 ObjFunction = ObjectiveFunction([objective], deriv_mode="looped")
 ObjFunction.build()
 
+jacobian = ObjFunction.jac_unscaled(ObjectiveFunction.x(eq))
+
+print(jacobian)
+
+quit()
 intermediate_time_3 = timet()
 print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermediate_time_2}s\n")
 

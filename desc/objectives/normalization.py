@@ -40,9 +40,9 @@ def compute_scaling_factors(thing):
         scales["n"] = 1e19
         scales["T"] = scales["p"] / (scales["n"] * elementary_charge)
     elif isinstance(thing, FourierRZToroidalSurface):
-        R10 = thing.Rb_lmn[thing.R_basis.get_idx(M=1, N=0)]
-        Z10 = thing.Zb_lmn[thing.Z_basis.get_idx(M=-1, N=0)]
-        R00 = thing.Rb_lmn[thing.R_basis.get_idx(M=0, N=0)]
+        R10 = thing.R_lmn[thing.R_basis.get_idx(M=1, N=0)]
+        Z10 = thing.Z_lmn[thing.Z_basis.get_idx(M=-1, N=0)]
+        R00 = thing.R_lmn[thing.R_basis.get_idx(M=0, N=0)]
 
         scales["R0"] = R00
         scales["a"] = np.sqrt(np.abs(R10 * Z10))

@@ -32,6 +32,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     PlasmaVesselDistance,
+    PrincipalCurvature,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
@@ -762,25 +763,33 @@ def test_multiobject_optimization():
 @pytest.mark.unit
 def test_non_eq_optimization():
     """Test for optimizing a non-eq object."""
-    eq = desc.examples.get("ATF")
+    eq = desc.examples.get("DSHAPE")
+    Rmax = 4
+    Rmin = 2
+
+    a = 2
+    R0 = (Rmax + Rmin) / 2
     surf = FourierRZToroidalSurface(
-        R_lmn=[2.1, 0.75],
-        Z_lmn=[-0.75],
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
         modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[-1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
         NFP=eq.NFP,
     )
+
     surf.change_resolution(M=eq.M, N=eq.N)
     constraints = (
         FixParameter(eq),
-        MeanCurvature(surf, bounds=(-8, 8), normalize=False),
+        MeanCurvature(surf, bounds=(-8, 8)),
+        PrincipalCurvature(surf, bounds=(0, 15)),
     )
 
-    grid = LinearGrid(M=10, N=10, NFP=eq.NFP)
+    grid = LinearGrid(M=18, N=0, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
-        target=0.2,
+        target=0.5,
         use_softmin=True,
         surface_grid=grid,
         plasma_grid=grid,
@@ -789,10 +798,10 @@ def test_non_eq_optimization():
     objective = ObjectiveFunction((obj,))
     optimizer = Optimizer("lsq-auglag")
     (eq, surf), result = optimizer.optimize(
-        (eq, surf), objective, constraints, verbose=3, maxiter=50
+        (eq, surf), objective, constraints, verbose=3, maxiter=100
     )
 
-    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.2, atol=1e-2)
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.5, atol=1e-5)
 
 
 class TestGetExample:

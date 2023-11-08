@@ -762,7 +762,7 @@ def test_multiobject_optimization():
 
 @pytest.mark.unit
 def test_non_eq_optimization():
-    """Test for optimizing a non-eq object."""
+    """Test for optimizing a non-eq object by fixing all eq parameters."""
     eq = desc.examples.get("DSHAPE")
     Rmax = 4
     Rmin = 2
@@ -802,6 +802,28 @@ def test_non_eq_optimization():
     )
 
     np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.5, atol=1e-5)
+
+
+@pytest.mark.unit
+def test_only_non_eq_optimization():
+    """Test for optimizing only a non-eq object."""
+    eq = desc.examples.get("DSHAPE")
+    surf = eq.surface
+
+    surf.change_resolution(M=eq.M, N=eq.N)
+    constraints = (
+        FixParameter(surf, params="R_lmn", indices=surf.R_basis.get_idx(0, 0, 0)),
+    )
+
+    obj = PrincipalCurvature(surf, target=1)
+
+    objective = ObjectiveFunction((obj,))
+    optimizer = Optimizer("lsq-exact")
+    (surf), result = optimizer.optimize(
+        (surf), objective, constraints, verbose=3, maxiter=100
+    )
+    surf = surf[0]
+    np.testing.assert_allclose(obj.compute(*obj.xs(surf)), 1, atol=1e-5)
 
 
 class TestGetExample:

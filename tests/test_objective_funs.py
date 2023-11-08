@@ -702,14 +702,14 @@ def test_mean_curvature():
     """Test for mean curvature objective function."""
     # torus should have mean curvature negative everywhere
     eq = Equilibrium()
-    obj = MeanCurvature(eq=eq)
+    obj = MeanCurvature(eq_or_surf=eq)
     obj.build()
     H = obj.compute_unscaled(*obj.xs(eq))
     assert np.all(H <= 0)
 
     # more shaped case like NCSX should have some positive curvature
     eq = get("NCSX")
-    obj = MeanCurvature(eq=eq)
+    obj = MeanCurvature(eq_or_surf=eq)
     obj.build()
     H = obj.compute_unscaled(*obj.xs(eq))
     assert np.any(H > 0)
@@ -720,10 +720,10 @@ def test_principal_curvature():
     """Test for principal curvature objective function."""
     eq1 = get("DSHAPE")
     eq2 = get("NCSX")
-    obj1 = PrincipalCurvature(eq=eq1, normalize=False)
+    obj1 = PrincipalCurvature(eq_or_surf=eq1, normalize=False)
     obj1.build()
     K1 = obj1.compute_unscaled(*obj1.xs(eq1))
-    obj2 = PrincipalCurvature(eq=eq2, normalize=False)
+    obj2 = PrincipalCurvature(eq_or_surf=eq2, normalize=False)
     obj2.build()
     K2 = obj2.compute_unscaled(*obj2.xs(eq2))
 
@@ -1274,7 +1274,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(MeanCurvature(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(MeanCurvature(eq_or_surf=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1300,7 +1300,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(PrincipalCurvature(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(PrincipalCurvature(eq_or_surf=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)

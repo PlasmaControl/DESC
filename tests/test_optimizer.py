@@ -616,7 +616,7 @@ def test_scipy_constrained_solve():
     constraints += (
         Volume(eq=eq, bounds=Vbounds),
         AspectRatio(eq=eq, bounds=ARbounds),
-        MeanCurvature(eq=eq, bounds=Hbounds),
+        MeanCurvature(eq_or_surf=eq, bounds=Hbounds),
     )
     obj = ObjectiveFunction(ForceBalance(eq=eq))
     eq2, result = eq.optimize(
@@ -882,7 +882,7 @@ def test_constrained_AL_lsq():
         "curvature_H_rho",
         grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
     )["curvature_H_rho"]
-    obj = ObjectiveFunction(MeanCurvature(eq=eq, target=H))
+    obj = ObjectiveFunction(MeanCurvature(eq_or_surf=eq, target=H))
     ctol = 1e-4
     eq2, result = eq.optimize(
         objective=obj,

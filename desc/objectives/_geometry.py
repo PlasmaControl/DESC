@@ -1026,7 +1026,7 @@ class GoodCoordinates(_Objective):
 
     Uses a method by Z. Tecchiolli et al, minimizing
 
-    1/ρ² |√g|² + ω |𝐞ᵨ|²
+    1/ρ² |√g|² + σ |𝐞ᵨ|²
 
     where √g is the jacobian of the coordinate system and 𝐞ᵨ is the covariant radial
     basis vector.
@@ -1035,7 +1035,7 @@ class GoodCoordinates(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    omega : float
+    sigma : float
         Relative weight between the Jacobian and radial terms.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -1066,7 +1066,7 @@ class GoodCoordinates(_Objective):
     def __init__(
         self,
         eq,
-        omega=1,
+        sigma=1,
         target=None,
         bounds=None,
         weight=1,
@@ -1078,7 +1078,7 @@ class GoodCoordinates(_Objective):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self._omega = omega
+        self._sigma = sigma
         super().__init__(
             things=eq,
             target=target,
@@ -1120,7 +1120,7 @@ class GoodCoordinates(_Objective):
             "transforms": transforms,
             "profiles": profiles,
             "quad_weights": np.sqrt(np.concatenate([grid.weights, grid.weights])),
-            "omega": self._omega,
+            "sigma": self._sigma,
         }
 
         timer.stop("Precomputing transforms")
@@ -1163,4 +1163,4 @@ class GoodCoordinates(_Objective):
         g = jnp.where(data["rho"] == 0, 0, data["sqrt(g)"] ** 2 / data["rho"] ** 2)
         f = data["g_rr"]
 
-        return jnp.concatenate([g, constants["omega"] * f])
+        return jnp.concatenate([g, constants["sigma"] * f])

@@ -2562,6 +2562,10 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.magnetic_fields.OmnigeneousField",
+    ],
 )
 def _rho(params, transforms, profiles, data, **kwargs):
     data["rho"] = transforms["grid"].nodes[:, 0]

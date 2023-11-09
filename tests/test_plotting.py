@@ -17,6 +17,7 @@ from desc.compute.utils import surface_averages
 from desc.examples import get
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import load
+from desc.magnetic_fields import OmnigeneousField
 from desc.plotting import (
     _find_idx,
     plot_1d,
@@ -34,6 +35,7 @@ from desc.plotting import (
     plot_fsa,
     plot_grid,
     plot_logo,
+    plot_omnigenous_field,
     plot_qs_error,
     plot_section,
     plot_surfaces,
@@ -935,4 +937,23 @@ def test_plot_b_mag():
 def test_plot_surfaces_HELIOTRON():
     """Test plot surfaces of equilibrium for correctness of vartheta lines."""
     fig, ax = plot_surfaces(get("HELIOTRON"))
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_omnigenous_field():
+    """Test plot omnigenous magnetic field."""
+    field = OmnigeneousField(
+        L_well=0,
+        M_well=4,
+        L=0,
+        M=1,
+        N=1,
+        NFP=2,
+        helicity=(0, 2),
+        B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
+        x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
+    )
+    fig, ax = plot_omnigenous_field(field, iota=0.25, fieldlines=4)
     return fig

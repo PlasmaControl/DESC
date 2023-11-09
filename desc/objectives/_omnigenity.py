@@ -627,8 +627,6 @@ class Omnigenity(_Objective):
             self._field_data_keys,
             obj=field,
             grid=grid,
-            M_booz=M_booz,
-            N_booz=N_booz,
         )
         self._constants = {
             "equil_transforms": self._eq_transforms,
@@ -642,9 +640,8 @@ class Omnigenity(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            self._normalization = jnp.mean(
-                field.well_l[: field.M_well]
-            )  # average |B| on axis
+            # average |B| on axis
+            self._normalization = jnp.mean(field.B_lm[: field.M_well])
 
         super().build(things=(eq, field), use_jit=use_jit, verbose=verbose)
 
@@ -684,6 +681,8 @@ class Omnigenity(_Objective):
             profiles={},
         )
 
+        # TODO: move to a compute function?
+        # would need to add iota as an OmnigeneousField attribute
         M, N = constants["helicity"]
         iota = eq_data["iota"][0]  # FIXME: assumes a single flux surface
         matrix = jnp.where(

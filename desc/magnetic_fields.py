@@ -1,5 +1,6 @@
 """Classes for magnetic fields."""
 
+import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -15,7 +16,7 @@ from desc.compute import rpz2xyz_vec, xyz2rpz
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
-from desc.interpolate import _approx_df, interp2d, interp3d
+from desc.interpolate import _approx_df, interp1d, interp2d, interp3d
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.transform import Transform
@@ -1115,7 +1116,7 @@ class OmnigeneousField(Optimizable, IOAble):
     ]
 
     def __init__(
-        self, L_well, M_well, L, M, N, NFP, helicity=(1, 0), B_lm=None, x_lmn=None
+        self, L_well, M_well, L, M, N, NFP, helicity=(0, 1), B_lm=None, x_lmn=None
     ):
         self._L_well = int(L_well)
         self._M_well = int(M_well)
@@ -1123,7 +1124,7 @@ class OmnigeneousField(Optimizable, IOAble):
         self._M = int(M)
         self._N = int(N)
         self._NFP = int(NFP)
-        self.helicity = helicity
+        self._helicity = helicity
         self._well_basis = ChebyshevPolynomial(L=self.L_well)
         self._basis = ChebyshevDoubleFourierBasis(
             L=self.L,
@@ -1132,17 +1133,28 @@ class OmnigeneousField(Optimizable, IOAble):
             NFP=self.NFP,
             sym="cos(t)",
         )
-        self._B_lm = B_lm or np.concatenate(
-            (
-                np.linspace(
-                    1,
-                    2,
-                    self.M_well,
-                ),
-                np.zeros((self.L_well * self.M_well,)),
+        if B_lm is None:
+            self._B_lm = np.concatenate(
+                (
+                    np.linspace(
+                        1,
+                        2,
+                        self.M_well,
+                    ),
+                    np.zeros((self.L_well * self.M_well,)),
+                )
             )
-        )
-        self._x_lmn = np.zeros(self.basis.num_modes)
+        else:
+            self._B_lm = B_lm
+        if x_lmn is None:
+            self._x_lmn = np.zeros(self.basis.num_modes)
+        else:
+            self._x_lmn = x_lmn
+
+        if self.helicity != (0, self.NFP) and self.helicity[0] != 1:
+            warnings.warn("Typical helicity (M,N) has M=1.")
+        if self.helicity != (1, 0) and self.helicity[1] != self.NFP:
+            warnings.warn("Typical helicity (M,N) has N=NFP.")
 
     def change_resolution(
         self, L_well=None, M_well=None, L=None, M=None, N=None, NFP=None
@@ -1187,6 +1199,77 @@ class OmnigeneousField(Optimizable, IOAble):
                 old_well[:, j], old_modes_well, self.well_basis.modes
             )
         self._B_lm = new_well.flatten()
+
+    # TODO: reuse compute function?
+    def compute_well(self, rho, eta):
+        """Compute well shape from B_lm.
+
+        Parameters
+        ----------
+        rho : ndarray
+            Radial coordinates.
+        eta : ndarray
+            Coordinates along the field line.
+
+        Returns
+        -------
+        B : ndarray
+            Magnetic field strength.
+
+        """
+        alpha = np.zeros_like(rho)
+        nodes = np.array([rho, eta, alpha]).T
+
+        # reshaped to size (L_well, M_well)
+        B_lm = self.B_lm.reshape((self.well_basis.L + 1, -1))
+        # assuming single flux surface, so only take first row (single node)
+        B_input = (self.well_basis.evaluate(nodes) @ B_lm)[0, :]
+        B_input = np.sort(B_input)  # sort to ensure monotonicity
+        eta_input = np.linspace(0, jnp.pi / 2, num=B_input.size)
+
+        # |B|_omnigeneous is an even function so B(-eta) = B(+eta) = B(|eta|)
+        B = interp1d(np.abs(eta), eta_input, B_input, method="monotonic-0")
+        return B
+
+    # TODO: move to compute function?
+    def compute_boozer_angles(self, rho, eta, alpha, iota):
+        """Compute corresponding Boozer angles from x_lmn.
+
+        Parameters
+        ----------
+        rho : ndarray
+            Radial coordinates.
+        eta : ndarray
+            Coordinates along the field line.
+        alpha : ndarray
+            Field line label.
+        iota : float
+            Rotational transform.
+
+        Returns
+        -------
+        theta_B : ndarray
+            Boozer poloidal angle.
+        zeta_B : ndarray
+            Boozer toroidal angle.
+
+        """
+        nodes = np.array([rho, eta, alpha]).T
+
+        # helicity matrix
+        M, N = self.helicity
+        matrix = np.where(
+            M == 0,
+            np.array([N - M * iota, iota / N, 0, 1 / N]),
+            np.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),
+        ).reshape((2, 2))
+
+        # evaluate h(rho,eta,alpha)
+        h = self.basis.evaluate(nodes) @ self.x_lmn + 2 * eta + np.pi
+
+        # solve for (rho,theta_B,zeta_B) corresponding to (rho,eta,alpha)
+        booz = matrix @ np.vstack((alpha, h))
+        return booz[0, :], booz[1, :]
 
     @property
     def NFP(self):

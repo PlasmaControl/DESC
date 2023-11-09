@@ -1000,3 +1000,66 @@ def test_make_boozmn_output(TmpDir):
                 rtol=5e-4,
                 err_msg=f"{name} at surf index {surf_index}",
             )
+
+
+@pytest.mark.unit
+def test_make_boozmn_output_against_hiddden_symmetries_booz_xform(TmpDir):
+    """Test that booz_xform-style outputs compare well against C++ implementation."""
+    # testing against https://github.com/hiddenSymmetries/booz_xform/tree/main
+    # commit 881907058ece03
+    # load in HELIOTRON equilibrium
+    eq = get("HELIOTRON")
+    output_path = str(TmpDir.join("boozmn_out.nc"))
+
+    boozer_res = 20
+    # compare against a 100 surface Mboz=Nboz=20 run of HELIOTRON
+    # with the hidden symmetries C++ booz_xform implementation
+    # (ran on a wout created with VMECIO.save of HELIOTRON example with 100 surfs)
+    surfs = 100
+    Cpp_booz_output_path = (
+        f"./tests/inputs/boozmn_{surfs}_surfs_heliotron_sims_booz_{boozer_res}.nc"
+    )
+
+    # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
+    make_boozmn_output(
+        eq, output_path, surfs=surfs, verbose=2, M_booz=boozer_res, N_booz=boozer_res
+    )
+    # load in the .nc file
+    file = Dataset(output_path, mode="r")
+
+    R_mnc = file.variables["rmnc_b"][:].filled()
+    Z_mns = file.variables["zmns_b"][:].filled()
+    B_mnc = file.variables["bmnc_b"][:].filled()
+    nu_mns = file.variables["pmns_b"][:].filled()
+    g_mnc = file.variables["gmn_b"][:].filled()
+
+    quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_mns]
+    quant_names = ["R", "Z", "|B|", "sqrt(g)_B", "nu"]
+    quant_atols = [1e-4, 7e-5, 9e-6, 5e-3, 2e-7]
+
+    xm = file.variables["ixm_b"][:].filled()
+    xn = file.variables["ixn_b"][:].filled()
+
+    # load in the .nc from the cpp version
+
+    file_cpp = Dataset(Cpp_booz_output_path, mode="r")
+
+    R_mnc_cpp = file_cpp.variables["rmnc_b"][:].filled()
+    Z_mns_cpp = file_cpp.variables["zmns_b"][:].filled()
+    B_mnc_cpp = file_cpp.variables["bmnc_b"][:].filled()
+    nu_mns_cpp = file_cpp.variables["pmns_b"][:].filled()
+    g_mnc_cpp = file_cpp.variables["gmn_b"][:].filled()
+
+    xm_cpp = file_cpp.variables["ixm_b"][:].filled()
+    xn_cpp = file_cpp.variables["ixn_b"][:].filled()
+
+    quantities_cpp = [R_mnc_cpp, Z_mns_cpp, B_mnc_cpp, g_mnc_cpp, nu_mns_cpp]
+
+    np.testing.assert_allclose(xm_cpp, xm, atol=1e-16)
+    np.testing.assert_allclose(xn_cpp, xn, atol=1e-16)
+
+    # compare coefficients
+    for i, (quant_DESC, quant_cpp) in enumerate(zip(quantities, quantities_cpp)):
+        np.testing.assert_allclose(
+            quant_DESC, quant_cpp, atol=quant_atols[i], err_msg=quant_names[i]
+        )

@@ -571,6 +571,9 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
     Sqrt_g_B_mn = np.array([[]])
 
     for i, r in enumerate(r_half):
+        if verbose > 0:
+            printstring = f"Calculating Surf {i} at rho={r}"
+            print("#" * len(printstring) + "\n" + printstring + "\n")
         grid = LinearGrid(M=3 * M_booz, N=3 * N_booz, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(
             ["|B|_mn", "sqrt(g)_B_mn"],

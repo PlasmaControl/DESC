@@ -69,7 +69,7 @@ for filename in filenames:
         ftol=0,
         objective=objective,
         constraints=constraints,
-        maxiter=1,
+        maxiter=1000,
         xtol=0,
     )
     plot_comparison(

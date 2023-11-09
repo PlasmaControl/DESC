@@ -575,14 +575,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     # precompute the needed data for the boozer surface computations
     # (except those which have to be computed on a single surface only,
     # like theta_B, zeta_B or nu)
-    keys = [
-        "|B|",
-        "R",
-        "Z",
-        "sqrt(g)",
-        "rho",
-        "psi_r",
-    ]
+    keys = ["|B|", "R", "Z", "sqrt(g)", "rho", "psi_r", "lambda", "B_zeta", "B_theta"]
     data_vol = eq.compute(
         keys,
         grid=vol_grid,
@@ -597,7 +590,6 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             printstring = f"Calculating Surf {i} at rho={r:1.3f}"
             print("#" * len(printstring) + "\n" + printstring + "\n")
         grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=np.array(r))
-
         transforms = get_transforms(
             ["|B|_mn", "sqrt(g)_B_mn"],
             obj=eq,
@@ -605,7 +597,6 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             M_booz=M_booz - 1,
             N_booz=N_booz,
         )
-
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = eq.compute(
@@ -633,6 +624,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
                 N_booz=N_booz,
                 sym="sin",
             )
+
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 data_sin = eq.compute(
@@ -698,6 +690,12 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
 
     # dimensions
+    # a few of these are redundant, but are included for sake
+    # of matching the convention of the original booz_xform outputs
+    # and the hidden symmetries implementation:
+    # (below two lines are a single link)
+    # https://github.com/hiddenSymmetries/booz_xform/blob/main/src/...
+    # _booz_xform/write_boozmn.cpp
     file.createDimension("radius", s_full.size)  # number of flux surfaces plus 1
     file.createDimension("comput_surfs", surfs - 1)  # number of flux surfaces
     file.createDimension("pack_rad", surfs)  # number of flux surfaces

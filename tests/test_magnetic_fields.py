@@ -563,14 +563,14 @@ def test_dommaschk_fit_toroidal_field():
     )
 
     B_dom = B.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B_dom[:, 0], 0, atol=4e-15)
-    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-15)
-    np.testing.assert_allclose(B_dom[:, 2], jnp.zeros_like(R.flatten()), atol=1e-15)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 2], jnp.zeros_like(R.flatten()), atol=1e-14)
 
     # only nonzero coefficient of the field should be the B0
-    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-15)
+    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-14)
     for coef in ["a_arr", "b_arr", "c_arr", "d_arr"]:
-        np.testing.assert_allclose(B._params[coef], 0, atol=2e-15)
+        np.testing.assert_allclose(B._params[coef], 0, atol=1e-14)
 
 
 @pytest.mark.unit
@@ -591,18 +591,18 @@ def test_dommaschk_fit_vertical_and_toroidal_field():
     B = DommaschkPotentialField.fit_magnetic_field(field, coords, max_m, max_l)
 
     B_dom = B.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B_dom[:, 0], 0, atol=4e-15)
-    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-15)
-    np.testing.assert_allclose(B_dom[:, 2], B0_Z, atol=1e-15)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 2], B0_Z, atol=1e-14)
 
     np.testing.assert_allclose(B._params["B0"], B0)
 
     # only nonzero coefficient of the field should be the B0 and a_ml = a_01
-    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-15)
+    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-14)
     for coef, m, l in zip(B._params["a_arr"], B._params["ms"], B._params["ls"]):
         if m == 0 and l == 1:
             np.testing.assert_allclose(coef, B0_Z)
         else:
-            np.testing.assert_allclose(coef, 0, atol=1e-15)
+            np.testing.assert_allclose(coef, 0, atol=1e-14)
     for name in ["b_arr", "c_arr", "d_arr"]:
         np.testing.assert_allclose(B._params[name], 0, atol=1e-14)

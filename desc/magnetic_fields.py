@@ -1531,10 +1531,7 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
     return fori_loop(0, len(ms), body, value)
 
 
-def read_mgrid(
-    mgrid_file,
-    extcur=1,
-):
+def read_mgrid(mgrid_file, extcur=1):
     """Read an "mgrid" file from MAKEGRID and return the grid and magnetic field.
 
     Parameters
@@ -1582,7 +1579,7 @@ def read_mgrid(
     Zgrid = np.linspace(zMin, zMax, jz)
     pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
 
-    return Rgrid, Zgrid, pgrid, br, bp, bz, nfp
+    return Rgrid, pgrid, Zgrid, br, bp, bz, nfp
 
 
 class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):

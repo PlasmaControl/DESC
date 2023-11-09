@@ -87,9 +87,9 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium being constrained.
+        Equilibrium to constrain.
     profiles : bool
-        Whether to also return constraints to fix input profiles.
+        If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -120,9 +120,9 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium to constraint.
+        Equilibrium to constrain.
     profiles : bool
-        Whether to also return constraints to fix input profiles.
+        If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -168,7 +168,7 @@ def get_NAE_constraints(
     order : int
         order (in rho) of near-axis behavior to constrain
     profiles : bool
-        Whether to also return constraints to fix input profiles.
+        If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
     N : int

@@ -1026,7 +1026,7 @@ class GoodCoordinates(_Objective):
 
     Uses a method by Z. Tecchiolli et al, minimizing
 
-    1/ρ² |√g|² + σ |𝐞ᵨ|²
+    1/ρ² ||√g||² + σ ||𝐞ᵨ||²
 
     where √g is the jacobian of the coordinate system and 𝐞ᵨ is the covariant radial
     basis vector.

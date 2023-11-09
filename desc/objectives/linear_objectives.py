@@ -59,7 +59,7 @@ class _FixedObjective(_Objective):
 
 
 # TODO: make this work with above, but for multiple target args?
-class FixParameter(_Objective):
+class FixParameter(_FixedObjective):
     """Fix specific degrees of freedom associated with a given Optimizable object.
 
     Parameters
@@ -167,14 +167,24 @@ class FixParameter(_Objective):
                 idx = np.arange(thing.dimensions[par])
             indices[par] = np.atleast_1d(idx)
         self._indices = indices
-
-        target = setdefault(
-            self._target_from_user,
-            {par: thing.params_dict[par][self._indices[par]] for par in params},
-        )
         self._dim_f = sum(t.size for t in self._indices.values())
-        self.target = jnp.concatenate([target[par] for par in params])
 
+        default_target = {
+            par: thing.params_dict[par][self._indices[par]] for par in params
+        }
+        default_bounds = None
+        target, bounds = self._parse_target_from_user(
+            self._target_from_user, default_target, default_bounds, indices
+        )
+        if target:
+            self.target = jnp.concatenate([target[par] for par in params])
+            self.bounds = None
+        else:
+            self.target = None
+            self.bounds = (
+                jnp.concatenate([bounds[0][par] for par in params]),
+                jnp.concatenate([bounds[1][par] for par in params]),
+            )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):

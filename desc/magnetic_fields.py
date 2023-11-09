@@ -1278,11 +1278,13 @@ def field_line_integrate(
 true_fun = lambda m_n: 0.0  # used for returning 0 when conditionals evaluate to True
 
 
+@jit
 def gamma(n):
     """Gamma function, only implemented for integers (equiv to factorial of (n-1))."""
     return jnp.exp(gammaln(n))
 
 
+@jit
 def alpha(m, n):
     """Alpha of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
     # modified for eqns 31 and 32
@@ -1305,6 +1307,7 @@ def alpha(m, n):
     )
 
 
+@jit
 def alphastar(m, n):
     """Alphastar of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
     # modified for eqns 31 and 32
@@ -1315,6 +1318,7 @@ def alphastar(m, n):
     return cond(jnp.any(n < 0), true_fun, false_fun, (m, n))
 
 
+@jit
 def beta(m, n):
     """Beta of eq 28, modified for eqns 31 and 32."""
 
@@ -1325,6 +1329,7 @@ def beta(m, n):
     return cond(jnp.any(jnp.logical_or(n < 0, n >= m)), true_fun, false_fun, (m, n))
 
 
+@jit
 def betastar(m, n):
     """Beta* of eq 28, modified for eqns 31 and 32."""
 
@@ -1335,6 +1340,7 @@ def betastar(m, n):
     return cond(jnp.any(jnp.logical_or(n < 0, n >= m)), true_fun, false_fun, (m, n))
 
 
+@jit
 def gamma_n(m, n):
     """gamma_n of eq 33."""
 
@@ -1348,6 +1354,7 @@ def gamma_n(m, n):
     return cond(jnp.any(n <= 0), true_fun, false_fun, (m, n))
 
 
+@jit
 def gamma_nstar(m, n):
     """gamma_n star of eq 33."""
 
@@ -1358,6 +1365,7 @@ def gamma_nstar(m, n):
     return cond(jnp.any(n <= 0), true_fun, false_fun, (m, n))
 
 
+@jit
 def CD_m_k(R, m, k):
     """Eq 31 of Dommaschk paper."""
 
@@ -1384,6 +1392,7 @@ def CD_m_k(R, m, k):
     return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
 
 
+@jit
 def CN_m_k(R, m, k):
     """Eq 32 of Dommaschk paper."""
 
@@ -1406,6 +1415,7 @@ def CN_m_k(R, m, k):
     return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
 
 
+@jit
 def D_m_n(R, Z, m, n):
     """D_m_n term in eqn 8 of Dommaschk paper."""
     # the sum comes from fact that D_mn = I_mn and the def of I_mn in eq 2 of the paper
@@ -1416,6 +1426,7 @@ def D_m_n(R, Z, m, n):
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
 
+@jit
 def N_m_n(R, Z, m, n):
     """N_m_n term in eqn 9 of Dommaschk paper."""
     # the sum comes from fact that N_mn = I_mn and the def of I_mn in eq 2 of the paper
@@ -1426,6 +1437,7 @@ def N_m_n(R, Z, m, n):
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
 
+@jit
 def V_m_l(R, phi, Z, m, l, a, b, c, d):
     """Eq 12 of Dommaschk paper.
 
@@ -1459,6 +1471,7 @@ def V_m_l(R, phi, Z, m, l, a, b, c, d):
     ) * N_m_n(R, Z, m, l - 1)
 
 
+@jit
 def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
     """Eq 1 of Dommaschk paper.
 

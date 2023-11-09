@@ -1,5 +1,5 @@
 from desc import set_device
-set_device("gpu")
+set_device("cpu")
 from desc.objectives import ParticleTracer
 from desc.grid import Grid
 import desc.io
@@ -11,7 +11,10 @@ from time import time as timet
 
 initial_time = timet()
 # Load Equilibrium
-filename = "input.LandremanPaul2021_QA_scaled_output.h5"
+# filename = "input.LandremanPaul2021_QA_scaled_output.h5"
+# eq = desc.io.load(filename)[-1]
+filename = "eq_M1_N1.h5"
+eq = desc.io.load(filename)
 save_text_name = "solution" + filename
 
 print("*************** Start ***************")
@@ -19,7 +22,6 @@ print("Particle Tracer")
 print(f"Filename: {filename}")
 print("*************************************")
 
-eq = desc.io.load(filename)[-1]
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 # eq.solve()
@@ -42,7 +44,7 @@ def output_to_file(solution, name):
 
 
 # Energy and Mass info
-Energy_eV = 3.52e6
+Energy_eV = 1
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
 Energy_SI = Energy_eV*Proton_Charge
@@ -60,8 +62,8 @@ ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
-tmax = 1e-4
-nt = 250
+tmax = 1e-0
+nt = 1000
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond
@@ -74,7 +76,7 @@ mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 
 ini_param = [float(mu), Mass_Charge_Ratio]
 
-objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.4e-8)
+objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.e-7)
 
 print(f"Initial Velocity (parallel component): {vpar_i}")
 print(f"Radius: {data['R']}")

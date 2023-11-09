@@ -1514,19 +1514,21 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
         at the given R,phi,Z points
         (same size as the size of the given R,phi, Z arrays).
     """
+    ms, ls, a_arr, b_arr, c_arr, d_arr = map(
+        jnp.atleast_1d, (ms, ls, a_arr, b_arr, c_arr, d_arr)
+    )
+    R, phi, Z = map(jnp.atleast_1d, (R, phi, Z))
+    R, phi, Z = jnp.broadcast_arrays(R, phi, Z)
+    ms, ls, a_arr, b_arr, c_arr, d_arr = jnp.broadcast_arrays(
+        ms, ls, a_arr, b_arr, c_arr, d_arr
+    )
     value = B0 * phi  # phi term
 
-    # make sure all are 1D arrays
-    ms = jnp.atleast_1d(ms)
-    ls = jnp.atleast_1d(ls)
-    a_arr = jnp.atleast_1d(a_arr)
-    b_arr = jnp.atleast_1d(b_arr)
-    c_arr = jnp.atleast_1d(c_arr)
-    d_arr = jnp.atleast_1d(d_arr)
-    for m, l, a, b, c, d in zip(ms, ls, a_arr, b_arr, c_arr, d_arr):
-        value += V_m_l(R, phi, Z, m, l, a, b, c, d)
+    def body(i, val):
+        val += V_m_l(R, phi, Z, ms[i], ls[i], a_arr[i], b_arr[i], c_arr[i], d_arr[i])
+        return val
 
-    return value
+    return fori_loop(0, len(ms), body, value)
 
 
 def read_mgrid(

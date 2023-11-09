@@ -81,5 +81,3 @@ for filename in filenames:
 
     plt.savefig(img_name, format="pdf", dpi=1200)
     eq_poin.save(out_name)
-
-plt.show()

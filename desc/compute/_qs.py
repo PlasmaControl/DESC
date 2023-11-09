@@ -297,7 +297,8 @@ def _jac_Boozer_DESC(params, transforms, profiles, data, **kwargs):
     label="\\sqrt{g}_B",
     units="~",
     units_long="None",
-    description="Jacobian determinant from Boozer coordinates to lab frame.",
+    description="Jacobian determinant from (rho, theta_B, zeta_B)"
+    " Boozer coordinates to (R,phi,Z) lab frame.",
     dim=1,
     params=[],
     transforms={},
@@ -315,8 +316,8 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     label="\\sqrt{g}_{B,mn}",
     units="~",
     units_long="None",
-    description="Boozer harmonics of Jacobian determinant from Boozer"
-    " coordinates to lab frame.",
+    description="Boozer harmonics of Jacobian determinant from (rho, theta_B, zeta_B)"
+    " Boozer coordinates to (R,phi,Z) lab frame.",
     dim=1,
     params=[],
     transforms={},

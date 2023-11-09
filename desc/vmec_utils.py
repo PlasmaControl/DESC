@@ -490,6 +490,10 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
         File path of output data.
     surfs: int
         Number of flux surfaces to calculate Boozer transform at (Default = 128).
+        NOTE: because this is performed on the so-called "half-grid", this will
+        result in an output of size surfs-1, since for surfs number of surfaces
+        there is only surfs-1 surfaces on the half-grid, the first one being
+        the surface at rho=0.5 / surfs
     M_booz : int, optional
         poloidal resolution to use for Boozer transform.
     N_booz : int, optional
@@ -515,9 +519,14 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
     if N_booz is None:
         N_booz = 2 * eq.N
 
+    # calculations are done on a "half-grid" of size surfs-1
+    # which starts at s =  psi = 0.5/(surfs-1)
+    # and increments by 1 / (surfs-1)
+    # until it reaches 1-0.5/(surfs-1)
     # VMEC radial coordinate: s = rho^2 = Psi / Psi(LCFS)
-    s_full = np.linspace(0, 1, surfs + 1)
-    s_half = s_full[0:-1] + 0.5 / (surfs)
+    s_full = np.linspace(0, 1, surfs)
+    hs = 1 / (surfs - 1)
+    s_half = np.arange(hs / 2, 1, hs)
     r_full = np.sqrt(s_full)
     r_half = np.sqrt(s_half)
 
@@ -553,9 +562,6 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
         matrix_sin = matrix
         modes_sin = modes
 
-    # FIXME: do we do transform on half grid, or on first surface after the axis
-    # on full grid?
-
     timer.start("Boozer Transform")
 
     B_mn = np.array([[]])
@@ -565,7 +571,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
     Sqrt_g_B_mn = np.array([[]])
 
     for i, r in enumerate(r_half):
-        grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=np.array(r))
+        grid = LinearGrid(M=3 * M_booz, N=3 * N_booz, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(
             ["|B|_mn", "sqrt(g)_B_mn"],
             obj=eq,
@@ -576,7 +582,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = eq.compute(
-                ["|B|_mn", "R_mn", "Z_mn", "nu_mn", "sqrt(g)_B_mn"],
+                ["|B|_mn", "R_mn", "Z_mn", "nu_mn", "sqrt(g)_B_mn", "psi_r"],
                 grid=grid,
                 transforms=transforms,
             )
@@ -607,28 +613,54 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
                     transforms=transforms_sin,
                     data=data_sin,
                 )
-            # insert the 0,0 mode so it matches the ptolemy matrix for
-            # the sin basis
-            data_sin["Z_mn"] = np.insert(data_sin["Z_mn"], 0, 0)
-            data_sin["nu_mn"] = np.insert(data_sin["nu_mn"], 0, 0)
 
         else:
             data_sin = data
-        b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
+        b_mn = np.where(
+            transforms["B"].basis.modes[:, 1] < 0, -data["|B|_mn"], data["|B|_mn"]
+        )
+        b_mn = np.atleast_2d(matrix @ b_mn)
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
 
-        r_mn = np.atleast_2d(matrix @ data["R_mn"])
+        r_mn = np.where(
+            transforms["B"].basis.modes[:, 1] < 0, -data["R_mn"], data["R_mn"]
+        )
+        r_mn = np.atleast_2d(matrix @ r_mn)
         R_mn = np.vstack((R_mn, r_mn)) if R_mn.size else r_mn
 
-        z_mn = np.atleast_2d(matrix_sin @ data_sin["Z_mn"])
-        Z_mn = np.vstack((Z_mn, z_mn)) if Z_mn.size else z_mn
+        # must divide by dpsi/drho so that the jacobian is
+        # for (psi,theta_B, zeta_B) -> (R,phi,Z)
+        # instead of (rho,theta_B, zeta_B)
 
-        sqrt_g_B_mn = np.atleast_2d(matrix @ data["sqrt(g)_B_mn"])
+        sqrt_g_B_mn = np.where(
+            transforms["B"].basis.modes[:, 1] < 0,
+            -data["sqrt(g)_B_mn"],
+            data["sqrt(g)_B_mn"],
+        )
+        sqrt_g_B_mn = np.atleast_2d(matrix @ sqrt_g_B_mn) / data["psi_r"][0]
         Sqrt_g_B_mn = (
             np.vstack((Sqrt_g_B_mn, sqrt_g_B_mn)) if Sqrt_g_B_mn.size else sqrt_g_B_mn
         )
 
-        nu_mn = np.atleast_2d(matrix_sin @ data_sin["nu_mn"])
+        # insert the 0,0 mode so it matches the ptolemy matrix for
+        # the sin basis
+        z_mn = np.where(
+            transforms_sin["B"].basis.modes[:, 1] < 0,
+            -data_sin["Z_mn"],
+            data_sin["Z_mn"],
+        )
+        z_mn = np.insert(z_mn, 0, 0) if eq.sym else z_mn
+
+        z_mn = np.atleast_2d(matrix_sin @ z_mn)
+        Z_mn = np.vstack((Z_mn, z_mn)) if Z_mn.size else z_mn
+
+        nu_mn = np.where(
+            transforms_sin["B"].basis.modes[:, 1] < 0,
+            -data_sin["nu_mn"],
+            data_sin["nu_mn"],
+        )
+        nu_mn = np.insert(nu_mn, 0, 0) if eq.sym else nu_mn
+        nu_mn = np.atleast_2d(matrix_sin @ nu_mn)
         Nu_mn = np.vstack((Nu_mn, nu_mn)) if Nu_mn.size else nu_mn
 
     timer.stop("Boozer Transform")
@@ -639,7 +671,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
 
     # dimensions
     file.createDimension("radius", s_full.size)  # number of flux surfaces plus 1
-    file.createDimension("comput_surfs", surfs)  # number of flux surfaces
+    file.createDimension("comput_surfs", surfs - 1)  # number of flux surfaces
     file.createDimension("pack_rad", surfs)  # number of flux surfaces
 
     file.createDimension("mn_mode", num_modes)  # number of Fourier modes
@@ -712,14 +744,14 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
 
     ## 1D Arrays
 
-    jlist = file.createVariable("jlist", np.int32, ("comput_surfs",))
+    jlist = file.createVariable("jlist", np.int32, ("radius",))
     jlist.long_name = (
         "1-based radial indices of the surfaces for which the "
         "transformation to Boozer coordinates was computed. 2 corresponds to the "
         "first half-grid point."
     )
     jlist.units = "None"
-    jlist[:] = np.arange(0, s_half.size) + 2
+    jlist[:] = np.arange(0, s_half.size + 1) + 1
 
     ixm_b = file.createVariable("ixm_b", np.int32, ("mn_modes",))
     ixm_b.long_name = (
@@ -737,11 +769,16 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
     ixn_b.units = "None"
     ixn_b[:] = modes[:, 2] * eq.NFP
 
-    iotas = file.createVariable("iota_b", np.float64, ("comput_surfs",))
-    iotas.long_name = "rotational transform on half mesh"
+    iotas = file.createVariable("iota_b", np.float64, ("radius",))
+    iotas.long_name = (
+        "Rotational transform. The radial grid corresponds to the"
+        "requested surfaces, and a 0 is prepended"
+    )
     iotas.units = "None"
     if eq.iota is not None:
-        iotas[0:] = -eq.iota(r_half)  # negative sign for negative Jacobian in VMEC
+        iotas[0:] = np.insert(
+            -eq.iota(r_half), 0, 0
+        )  # negative sign for negative Jacobian in VMEC
     else:
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
         iotas[0:] = -grid.compress(eq.compute("iota", grid=grid)["iota"])
@@ -781,12 +818,12 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
 
     phipf = file.createVariable("phip_b", np.float64, ("radius",))
     phipf.long_name = "d(phi)/ds: toroidal flux derivative, not normalized by 2pi"
-    phipf[:] = Psi * np.ones((surfs + 1,))
+    phipf[:] = Psi * np.ones((surfs,))
 
     phi = file.createVariable("phi_b", np.float64, ("radius",))
     phi.long_name = "toroidal flux"
     phi.units = "Wb"
-    phi[:] = np.linspace(0, Psi, surfs + 1)
+    phi[:] = np.linspace(0, Psi, surfs)
 
     # multi-dim arrays
 

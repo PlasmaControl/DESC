@@ -929,8 +929,9 @@ def test_make_boozmn_output(TmpDir):
     # load in the .nc file
     file = Dataset(output_path, mode="r")
 
-    s_full = np.linspace(0, 1, surfs + 1)
-    s_half = s_full[0:-1] + 0.5 / (surfs)
+    # make half grid in s
+    hs = 1 / (surfs - 1)
+    s_half = np.arange(hs / 2, 1, hs)
 
     R_mnc = file.variables["rmnc_b"][:].filled()
     Z_mns = file.variables["zmns_b"][:].filled()

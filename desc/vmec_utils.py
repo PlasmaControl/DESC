@@ -553,9 +553,8 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
         matrix_sin, modes_sin = ptolemy_linear_transform(
             np.insert(basis_sin.modes, 0, np.array([0, 0, 0]), axis=0)
         )
-        modes_sin[
-            0, 0
-        ] = -1  # make the first mode a "sin" mode, even though it is m=n=0
+        modes_sin[0, 0] = -1
+        # make the first mode a "sin" mode, even though it is m=n=0
         # because in the VMEC style outputs it includes this mode
 
     else:
@@ -572,7 +571,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
 
     for i, r in enumerate(r_half):
         if verbose > 0:
-            printstring = f"Calculating Surf {i} at rho={r}"
+            printstring = f"Calculating Surf {i} at rho={r:1.3f}"
             print("#" * len(printstring) + "\n" + printstring + "\n")
         grid = LinearGrid(M=3 * M_booz, N=3 * N_booz, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(

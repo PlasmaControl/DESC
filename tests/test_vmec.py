@@ -919,8 +919,8 @@ def test_make_boozmn_output(TmpDir):
     eq = get("HELIOTRON")
     output_path = str(TmpDir.join("boozmn_out.nc"))
 
-    boozer_res = 35
-    surfs = 3
+    boozer_res = 50
+    surfs = 4
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
     # on 3 surfaces using boozer resolutions of 15
     make_boozmn_output(
@@ -951,10 +951,10 @@ def test_make_boozmn_output(TmpDir):
     M = 40
     N = 40
 
-    for surf_index in range(surfs):
+    for surf_index in range(surfs - 1):
         rho = np.sqrt(s_half[surf_index])
         grid = LinearGrid(rho=rho, M=M, N=N, NFP=eq.NFP)
-        data = eq.compute(["theta_B", "zeta_B"] + quant_names, grid=grid)
+        data = eq.compute(["theta_B", "zeta_B", "psi_r"] + quant_names, grid=grid)
         # make the grid in Boozer angles corresponding
         # to the DESC theta,zeta angles that our quantities
         # are computed on
@@ -979,13 +979,17 @@ def test_make_boozmn_output(TmpDir):
             # negate nu since we save it as negative of what our convention is
             # to comply with booz_xform notation
             quant_mn = -quant_mn if name == "nu" else quant_mn
+            # mutliply by psi_r because the saved jacobian is
+            # from (psi,theta_B,zeta_B) to lab frame, and we in DESC
+            # calculate the jacobian for (rho, theta_B, zeta_B) to lab frame
+            quant_mn = quant_mn * data["psi_r"][0] if name == "sqrt(g)_B" else quant_mn
 
-            # TODO: I find I must use sym=False even if eq.sym=True
+            # Must use sym=False even if eq.sym=True
             # because otherwise it claims that certain modes are not in the basis...
-            # these modes are symmetric I think...
             basis = DoubleFourierSeries(
                 np.max(m), round(np.max(n) / eq.NFP), sym=False, NFP=eq.NFP
             )
+            quant_mn = np.where(basis.modes[:, 1] < 0, -quant_mn, quant_mn)
             quant_mn_desc_basis = np.zeros((basis.num_modes,))
             for i, (mm, nn) in enumerate(zip(m, n / eq.NFP)):
                 idx = basis.get_idx(L=0, M=mm, N=nn)
@@ -997,8 +1001,8 @@ def test_make_boozmn_output(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                atol=5e-5,
-                rtol=5e-4,
+                atol=5e-4,
+                rtol=1e-4,
                 err_msg=f"{name} at surf index {surf_index}",
             )
 

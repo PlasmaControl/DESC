@@ -90,7 +90,7 @@ def iteration_function(R01):
     print(f'for r01 = {R01} solution = {solution}')
     print("***************************************************")
     f_values.append(solution)
-    return solution
+    return [solution]
 
 if __name__ == '__main__':
     # freeze_support()

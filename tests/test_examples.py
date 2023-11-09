@@ -547,7 +547,6 @@ def test_NAE_QSC_solve():
     eq_lambda_fixed_1st_order = eq.copy()
 
     # this has all the constraints we need,
-    #  iota=False specifies we want to fix current instead of iota
     cs = get_NAE_constraints(eq, qsc, order=1, fix_lambda=False, N=eq.N)
     cs_lambda_fixed_0th_order = get_NAE_constraints(
         eq_lambda_fixed_0th_order, qsc, order=1, fix_lambda=0, N=eq.N
@@ -635,7 +634,6 @@ def test_NAE_QIC_solve():
     eq_fit = eq.copy()
 
     # this has all the constraints we need,
-    #  iota=False specifies we want to fix current instead of iota
     cs = get_NAE_constraints(eq, qic, order=1)
 
     objectives = ForceBalance(eq=eq)

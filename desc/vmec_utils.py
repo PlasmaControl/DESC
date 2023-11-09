@@ -477,7 +477,9 @@ def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa:
     return opt_subspace
 
 
-def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0):
+def make_boozmn_output(  # noqa: 16 fxn too complex
+    eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0
+):
     """Create a booz_xform-style .nc output file.
 
     based strongly off of https://github.com/hiddenSymmetries/booz_xform/tree/main
@@ -569,7 +571,28 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
     Nu_mn = np.array([[]])
     Sqrt_g_B_mn = np.array([[]])
 
+    vol_grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=r_half)
+    # precompute the needed data for the boozer surface computations
+    # (except those which have to be computed on a single surface only,
+    # like theta_B, zeta_B or nu)
+    keys = [
+        "|B|",
+        "R",
+        "Z",
+        "sqrt(g)",
+        "rho",
+        "psi_r",
+    ]
+    data_vol = eq.compute(
+        keys,
+        grid=vol_grid,
+    )
+
     for i, r in enumerate(r_half):
+        data = {}
+        for key in keys:
+            # populate the pre-computed data for this surface
+            data[key] = data_vol[key][np.where(vol_grid.nodes[:, 0] == r)]
         if verbose > 0:
             printstring = f"Calculating Surf {i} at rho={r:1.3f}"
             print("#" * len(printstring) + "\n" + printstring + "\n")
@@ -589,6 +612,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
                 ["|B|_mn", "R_mn", "Z_mn", "nu_mn", "sqrt(g)_B_mn", "psi_r"],
                 grid=grid,
                 transforms=transforms,
+                data=data,
             )
         if eq.sym:
             # Z and nu are sin-symmetric, but the transforms used

@@ -1008,7 +1008,7 @@ def test_make_boozmn_output(TmpDir):
 
 
 @pytest.mark.unit
-def test_make_boozmn_output_against_hiddden_symmetries_booz_xform(TmpDir):
+def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     """Test that booz_xform-style outputs compare well against C++ implementation."""
     # testing against https://github.com/hiddenSymmetries/booz_xform/tree/main
     # commit 881907058ece03

@@ -49,17 +49,17 @@ def myconvolve_2d(arr_1d, stencil, shape):
 @pytest.mark.unit
 def test_aliases():
     """Tests that data_index aliases are equal."""
-    n = 10
-    surface = FourierRZToroidalSurface(
-        R_lmn=np.array([10, 1, 0.5]),
-        Z_lmn=np.array([0, -1, -0.5]),
-        modes_R=np.array([[0, 0], [1, 0], [1, n]]),
-        modes_Z=np.array([[0, 0], [-1, 0], [-1, n]]),
-    )
-    eq = Equilibrium(surface=surface)
+    eq = Equilibrium()
+
+    # automatic case
     data_1 = eq.compute("R_tz")
     data_2 = eq.compute("R_zt")
     np.testing.assert_allclose(data_1["R_tz"], data_2["R_tz"])
+
+    # manual case
+    data_1 = eq.compute("x_rrt")
+    data_2 = eq.compute("e_rho_rt")
+    np.testing.assert_allclose(data_1["e_rho_rt"], data_2["e_rho_rt"])
 
 
 @pytest.mark.unit

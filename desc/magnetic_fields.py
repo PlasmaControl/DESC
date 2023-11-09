@@ -1,26 +1,26 @@
 """Classes for magnetic fields."""
 
-import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.backend import fori_loop, jit, jnp, odeint
+from desc.backend import fori_loop, jit, jnp, odeint, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
     DoubleFourierSeries,
 )
-from desc.compute import rpz2xyz_vec, xyz2rpz
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.interpolate import _approx_df, interp1d, interp2d, interp3d
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, isposint, setdefault
+from desc.utils import copy_coeffs, errorif, isposint, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -56,6 +56,129 @@ def biot_savart_general(re, rs, J, dV):
         return B
 
     return 1e-7 * fori_loop(0, J.shape[0], body, B)
+
+
+def _compute_magnetic_field_from_CurrentPotentialField(
+    field, coords, params=None, basis="rpz", grid=None
+):
+    """Compute magnetic field at a set of points.
+
+    Parameters
+    ----------
+    field : CurrentPotentialField or FourierCurrentPotentialField
+        current potential field object from which to compute magnetic field.
+    coords : array-like shape(N,3) or Grid
+        cylindrical or cartesian coordinates
+    params : dict, optional
+        parameters to pass to compute function
+        should include the potential
+    basis : {"rpz", "xyz"}
+        basis for input coordinates and returned magnetic field
+    grid : Grid,
+        source grid upon which to evaluate the surface current density K
+
+    Returns
+    -------
+    field : ndarray, shape(N,3)
+        magnetic field at specified points
+
+    """
+    assert basis.lower() in ["rpz", "xyz"]
+    if hasattr(coords, "nodes"):
+        coords = coords.nodes
+    coords = jnp.atleast_2d(coords)
+    if basis == "rpz":
+        coords = rpz2xyz(coords)
+    surface_grid = grid or LinearGrid(M=30, N=30, NFP=field.NFP)
+
+    # compute surface current, and store grid quantities
+    # needed for integration in class
+    # TODO: does this have to be xyz, or can it be computed in rpz as well?
+    data = field.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
+
+    _rs = xyz2rpz(data["x"])
+    _K = xyz2rpz_vec(data["K"], phi=surface_grid.nodes[:, 2])
+
+    # surface element, must divide by NFP to remove the NFP multiple on the
+    # surface grid weights, as we account for that when doing the for loop
+    # over NFP
+    _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
+
+    def nfp_loop(j, f):
+        # calculate (by rotating) rs, rs_t, rz_t
+        phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
+            2 * jnp.pi
+        )
+        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
+        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
+        rs = rpz2xyz(rs)
+        K = rpz2xyz_vec(_K, phi=phi)
+        fj = biot_savart_general(
+            coords,
+            rs,
+            K,
+            _dV,
+        )
+        f += fj
+        return f
+
+    B = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+    if basis == "rpz":
+        B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+    return B
+
+
+def field_line_integrate(
+    r0, z0, phis, field, params=None, grid=None, rtol=1e-8, atol=1e-8, maxstep=1000
+):
+    """Trace field lines by integration.
+
+    Parameters
+    ----------
+    r0, z0 : array-like
+        initial starting coordinates for r,z on phi=phis[0] plane
+    phis : array-like
+        strictly increasing array of toroidal angles to output r,z at
+        Note that phis is the geometric toroidal angle for positive Bphi,
+        and the negative toroidal angle for negative Bphi
+    field : MagneticField
+        source of magnetic field to integrate
+    params: dict
+        parameters passed to field
+    grid : Grid, optional
+        Collocation points used to discretize source field.
+    rtol, atol : float
+        relative and absolute tolerances for ode integration
+    maxstep : int
+        maximum number of steps between different phis
+
+    Returns
+    -------
+    r, z : ndarray
+        arrays of r, z coordinates at specified phi angles
+
+    """
+    r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
+    assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
+    rshape = r0.shape
+    r0 = r0.flatten()
+    z0 = z0.flatten()
+    x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
+
+    @jit
+    def odefun(rpz, s):
+        rpz = rpz.reshape((3, -1)).T
+        r = rpz[:, 0]
+        br, bp, bz = field.compute_magnetic_field(rpz, params, basis="rpz", grid=grid).T
+        return jnp.array(
+            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
+        ).squeeze()
+
+    intfun = lambda x: odeint(odefun, x, phis, rtol=rtol, atol=atol, mxstep=maxstep)
+    x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
+    r = x[:, :, 0].T.reshape((len(phis), *rshape))
+    z = x[:, :, 2].T.reshape((len(phis), *rshape))
+    return r, z
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
@@ -372,31 +495,162 @@ class _MagneticField(IOAble, ABC):
         return None
 
 
-class ScaledMagneticField(_MagneticField):
-    """Magnetic field scaled by a scalar value.
+class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
+    """Magnetic field due to a surface current potential on a toroidal surface.
 
-    ie B_new = scalar * B_old
+        surface current K is assumed given by
+         K = n x ∇ Φ
+        where:
+               n is the winding surface unit normal.
+               Phi is the current potential function,
+                which is a function of theta and zeta.
+        This function then uses biot-savart to find the
+        B field from this current density K on the surface.
 
     Parameters
     ----------
-    scalar : float, int
-        scaling factor for magnetic field
-    field : MagneticField
-        base field to be scaled
+    potential : callable
+        function to compute the current potential. Should have a signature of
+        the form potential(theta,zeta,**params) -> ndarray.
+        theta,zeta are poloidal and toroidal angles on the surface
+    potential_dtheta: callable
+        function to compute the theta derivative of the current potential
+    potential_dzeta: callable
+        function to compute the zeta derivative of the current potential
+    params : dict, optional
+        default parameters to pass to potential function (and its derivatives)
+    R_lmn, Z_lmn : array-like, shape(k,)
+        Fourier coefficients for winding surface R and Z in cylindrical coordinates
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry for the surface geometry.
+        Default is "auto" which enforces if modes are symmetric. If True,
+        non-symmetric modes will be truncated.
+    name : str
+        name for this field
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
 
     """
 
-    _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
+    _io_attrs_ = (
+        _MagneticField._io_attrs_
+        + FourierRZToroidalSurface._io_attrs_
+        + [
+            "_surface_grid",
+            "_params",
+        ]
+    )
 
-    def __init__(self, scalar, field):
-        assert np.isscalar(scalar), "scalar must actually be a scalar value"
-        assert isinstance(
-            field, _MagneticField
-        ), "field should be a subclass of MagneticField, got type {}".format(
-            type(field)
+    def __init__(
+        self,
+        potential,
+        potential_dtheta,
+        potential_dzeta,
+        params=None,
+        R_lmn=None,
+        Z_lmn=None,
+        modes_R=None,
+        modes_Z=None,
+        NFP=1,
+        sym="auto",
+        name="",
+        check_orientation=True,
+    ):
+        assert callable(potential), "Potential must be callable!"
+        assert callable(potential_dtheta), "Potential derivative must be callable!"
+        assert callable(potential_dzeta), "Potential derivative must be callable!"
+
+        self._potential = potential
+        self._potential_dtheta = potential_dtheta
+        self._potential_dzeta = potential_dzeta
+        self._params = params
+
+        super().__init__(
+            R_lmn,
+            Z_lmn,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            name=name,
+            check_orientation=check_orientation,
         )
-        self._scalar = scalar
-        self._field = field
+
+    @property
+    def params(self):
+        """Dict of parameters to pass to potential function and its derivatives."""
+        return self._params
+
+    @params.setter
+    def params(self, new):
+        warnif(
+            len(new) != len(self._params),
+            UserWarning,
+            "Length of new params is different from length of current params! "
+            "May cause errors unless potential function is also changed.",
+        )
+        self._params = new
+
+    @property
+    def potential(self):
+        """Potential function, signature (theta,zeta,**params) -> potential value."""
+        return self._potential
+
+    @potential.setter
+    def potential(self, new):
+        if new != self._potential:
+            assert callable(new), "Potential must be callable!"
+            self._potential = new
+
+    @property
+    def potential_dtheta(self):
+        """Phi poloidal deriv. function, signature (theta,zeta,**params) -> value."""
+        return self._potential_dtheta
+
+    @potential_dtheta.setter
+    def potential_dtheta(self, new):
+        if new != self._potential_dtheta:
+            assert callable(new), "Potential derivative must be callable!"
+            self._potential_dtheta = new
+
+    @property
+    def potential_dzeta(self):
+        """Phi toroidal deriv. function, signature (theta,zeta,**params) -> value."""
+        return self._potential_dzeta
+
+    @potential_dzeta.setter
+    def potential_dzeta(self, new):
+        if new != self._potential_dzeta:
+            assert callable(new), "Potential derivative must be callable!"
+            self._potential_dzeta = new
+
+    def save(self, file_name, file_format=None, file_mode="w"):
+        """Save the object.
+
+        **Not supported for this object!
+
+        Parameters
+        ----------
+        file_name : str file path OR file instance
+            location to save object
+        file_format : str (Default hdf5)
+            format of save file. Only used if file_name is a file path
+        file_mode : str (Default w - overwrite)
+            mode for save file. Only used if file_name is a file path
+
+        """
+        raise OSError(
+            "Saving CurrentPotentialField is not supported,"
+            " as the potential function cannot be serialized."
+        )
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
@@ -405,101 +659,291 @@ class ScaledMagneticField(_MagneticField):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : tuple, optional
-            parameters to pass to underlying field
+        params : dict, optional
+            parameters to pass to compute function
+            should include the potential
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
+        grid : Grid,
+            source grid upon which to evaluate the surface current density K
 
         Returns
         -------
         field : ndarray, shape(N,3)
-            scaled magnetic field at specified points
+            magnetic field at specified points
+
         """
-        return self._scalar * self._field.compute_magnetic_field(
-            coords, params, basis, grid
+        return _compute_magnetic_field_from_CurrentPotentialField(
+            field=self, coords=coords, params=params, basis=basis, grid=grid
         )
 
-
-class SumMagneticField(_MagneticField):
-    """Sum of two or more magnetic field sources.
-
-    Parameters
-    ----------
-    fields : MagneticField
-        two or more MagneticFields to add together
-    """
-
-    _io_attrs = _MagneticField._io_attrs_ + ["_fields"]
-
-    def __init__(self, *fields):
-        assert all(
-            [isinstance(field, _MagneticField) for field in fields]
-        ), "fields should each be a subclass of MagneticField, got {}".format(
-            [type(field) for field in fields]
-        )
-        self._fields = fields
-
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
-        """Compute magnetic field at a set of points.
+    @classmethod
+    def from_surface(
+        cls,
+        surface,
+        potential,
+        potential_dtheta,
+        potential_dzeta,
+        params=None,
+    ):
+        """Create CurrentPotentialField using geometry provided by given surface.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : list or tuple of dict, optional
-            parameters to pass to underlying fields. If None,
-            uses the default parameters for each field. If a list or tuple, should have
-            one entry for each component field.
-        basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
+        surface: FourierRZToroidalSurface, optional, default None
+            Existing FourierRZToroidalSurface object to create a
+            CurrentPotentialField with.
+        potential : callable
+            function to compute the current potential. Should have a signature of
+            the form potential(theta,zeta,**params) -> ndarray.
+            theta,zeta are poloidal and toroidal angles on the surface
+        potential_dtheta: callable
+            function to compute the theta derivative of the current potential
+        potential_dzeta: callable
+            function to compute the zeta derivative of the current potential
+        params : dict, optional
+            default parameters to pass to potential function (and its derivatives)
 
-        Returns
-        -------
-        field : ndarray, shape(N,3)
-            scaled magnetic field at specified points
         """
-        if params is None:
-            params = [None] * len(self._fields)
-        if isinstance(params, dict):
-            params = [params]
-        B = 0
-        for i, field in enumerate(self._fields):
-            B += field.compute_magnetic_field(
-                coords, params[i % len(params)], basis, grid=grid
+        errorif(
+            not isinstance(surface, FourierRZToroidalSurface),
+            TypeError,
+            "Expected type FourierRZToroidalSurface for argument surface, "
+            f"instead got type {type(surface)}",
+        )
+
+        R_lmn = surface.R_lmn
+        Z_lmn = surface.Z_lmn
+        modes_R = surface._R_basis.modes[:, 1:]
+        modes_Z = surface._Z_basis.modes[:, 1:]
+        NFP = surface.NFP
+        sym = surface.sym
+        name = surface.name
+
+        return cls(
+            potential,
+            potential_dtheta,
+            potential_dzeta,
+            params,
+            R_lmn,
+            Z_lmn,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            name=name,
+            check_orientation=False,
+        )
+
+
+class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
+    """Magnetic field due to a surface current potential on a toroidal surface.
+
+        surface current K is assumed given by
+
+        K = n x ∇ Φ
+        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+        where:
+              n is the winding surface unit normal.
+              Phi is the current potential function,
+                which is a function of theta and zeta,
+                and is given as a secular linear term in theta/zeta
+                and a double Fourier series in theta/zeta.
+        This function then uses biot-savart to find the
+        B field from this current density K on the surface.
+
+    Parameters
+    ----------
+    Phi_mn : ndarray
+        Fourier coefficients of the double FourierSeries part of the current potential.
+    modes_Phi : array-like, shape(k,2)
+        Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn coefficients
+    I : float
+        Net current linking the plasma and the surface toroidally
+        Denoted I in the algorithm
+    G : float
+        Net current linking the plasma and the surface poloidally
+        Denoted G in the algorithm
+        NOTE: a negative G will tend to produce a positive toroidal magnetic field
+        B in DESC, as in DESC the poloidal angle is taken to be positive
+        and increasing when going in the clockwise direction, which with the
+        convention n x grad(phi) will result in a toroidal field in the negative
+        toroidal direction.
+    sym_Phi :  {"auto","cos","sin",False}
+        whether to enforce a given symmetry for the DoubleFourierSeries part of the
+        current potential. Default is "auto" which enforces if modes are symmetric.
+        If True, non-symmetric modes will be truncated.
+    R_lmn, Z_lmn : array-like, shape(k,)
+        Fourier coefficients for winding surface R and Z in cylindrical coordinates
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry for the surface geometry.
+        Default is "auto" which enforces if modes are symmetric. If True,
+        non-symmetric modes will be truncated.
+    name : str
+        name for this field
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+
+    """
+
+    _io_attrs_ = (
+        _MagneticField._io_attrs_
+        + FourierRZToroidalSurface._io_attrs_
+        + ["_surface_grid", "_Phi_mn", "_I", "_G"]
+    )
+
+    def __init__(
+        self,
+        Phi_mn=np.array([0.0]),
+        modes_Phi=np.array([[0, 0]]),
+        I=0,
+        G=0,
+        sym_Phi="auto",
+        R_lmn=None,
+        Z_lmn=None,
+        modes_R=None,
+        modes_Z=None,
+        NFP=1,
+        sym="auto",
+        name="",
+        check_orientation=True,
+    ):
+        self._Phi_mn = Phi_mn
+
+        Phi_mn, modes_Phi = map(np.asarray, (Phi_mn, modes_Phi))
+
+        assert np.issubdtype(modes_Phi.dtype, np.integer)
+
+        M_Phi = np.max(abs(modes_Phi[:, 0]))
+        N_Phi = np.max(abs(modes_Phi[:, 1]))
+
+        self._M_Phi = M_Phi
+        self._N_Phi = N_Phi
+
+        if sym_Phi == "auto":
+            if np.all(
+                Phi_mn[np.where(sign(modes_Phi[:, 0]) == sign(modes_Phi[:, 1]))] == 0
+            ):
+                sym_Phi = "sin"
+            elif np.all(
+                Phi_mn[np.where(sign(modes_Phi[:, 0]) != sign(modes_Phi[:, 1]))] == 0
+            ):
+                sym_Phi = "cos"
+            else:
+                sym_Phi = False
+            # catch case where only (0,0) mode is given as 0
+            if np.all(Phi_mn == 0.0) and np.all(modes_Phi == 0):
+                sym_Phi = "cos"
+        self._sym_Phi = sym_Phi
+        self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
+
+        assert np.isscalar(I), "I must be a scalar"
+        assert np.isscalar(G), "G must be a scalar"
+        self._I = float(I)
+        self._G = float(G)
+
+        super().__init__(
+            R_lmn,
+            Z_lmn,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            name=name,
+            check_orientation=check_orientation,
+        )
+
+    @property
+    def I(self):  # noqa: E743
+        """Net current linking the plasma and the surface toroidally."""
+        return self._I
+
+    @I.setter
+    def I(self, new):  # noqa: E743
+        assert np.isscalar(new), "I must be a scalar"
+        self._I = float(new)
+
+    @property
+    def G(self):
+        """Net current linking the plasma and the surface poloidally."""
+        return self._G
+
+    @G.setter
+    def G(self, new):
+        assert np.isscalar(new), "G must be a scalar"
+        self._G = float(new)
+
+    @property
+    def Phi_mn(self):
+        """Fourier coefficients describing single-valued part of potential."""
+        return self._Phi_mn
+
+    @Phi_mn.setter
+    def Phi_mn(self, new):
+        if len(new) == self.Phi_basis.num_modes:
+            self._Phi_mn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Phi_mn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.Phi_basis.num_modes} modes."
             )
 
-        return B
+    @property
+    def Phi_basis(self):
+        """DoubleFourierSeries: Spectral basis for Phi."""
+        return self._Phi_basis
 
+    @property
+    def sym_Phi(self):
+        """str: Type of symmetry of periodic part of Phi (no symmetry if False)."""
+        return self._sym_Phi
 
-class ToroidalMagneticField(_MagneticField):
-    """Magnetic field purely in the toroidal (phi) direction.
+    def change_Phi_resolution(self, M=None, N=None, NFP=None, sym_Phi=None):
+        """Change the maximum poloidal and toroidal resolution for Phi.
 
-    Magnitude is B0*R0/R where R0 is the major radius of the axis and B0
-    is the field strength on axis
+        Parameters
+        ----------
+        M : int
+            Poloidal resolution to change Phi basis to.
+            If None, defaults to current self.Phi_basis poloidal resolution
+        N : int
+            Toroidal resolution to change Phi basis to.
+            If None, defaults to current self.Phi_basis toroidal resolution
+        NFP : int
+            Number of field periods for surface and Phi basis.
+            If None, defaults to current NFP.
+            Note: will change the NFP of the surface geometry as well as the
+            Phi basis.
+        sym_Phi :  {"auto","cos","sin",False}
+            whether to enforce a given symmetry for the DoubleFourierSeries part of the
+            current potential. Default is "auto" which enforces if modes are symmetric.
+            If True, non-symmetric modes will be truncated.
 
-    Parameters
-    ----------
-    B0 : float
-        field strength on axis
-    R0 : major radius of axis
+        """
+        M = self._M_Phi or M
+        N = self._M_Phi or N
+        NFP = NFP or self.NFP
+        sym_Phi = sym_Phi or self.sym_Phi
 
-    """
+        Phi_modes_old = self.Phi_basis.modes
+        self.Phi_basis.change_resolution(M=M, N=N, NFP=self.NFP, sym=sym_Phi)
 
-    _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0"]
-
-    def __init__(self, B0, R0):
-        assert float(B0) == B0, "B0 must be a scalar"
-        assert float(R0) == R0, "R0 must be a scalar"
-        self._B0 = float(B0)
-        self._R0 = float(R0)
+        self._Phi_mn = copy_coeffs(self.Phi_mn, Phi_modes_old, self.Phi_basis.modes)
+        self._M_Phi = M
+        self._N_Phi = N
+        self._sym_Phi = sym_Phi
+        self.change_resolution(
+            NFP=NFP
+        )  # make sure surface and Phi basis NFP are the same
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
@@ -508,88 +952,362 @@ class ToroidalMagneticField(_MagneticField):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : tuple, optional
-            unused by this method
+        params : dict, optional
+            parameters to pass to compute function
+            should include the potential
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
-            Unused by this MagneticField class
+        grid : Grid,
+            grid upon which to evaluate the surface current density K
+
         Returns
         -------
         field : ndarray, shape(N,3)
             magnetic field at specified points
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        if hasattr(coords, "nodes"):
-            coords = coords.nodes
-        coords = jnp.atleast_2d(coords)
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
-        bp = self._B0 * self._R0 / coords[:, 0]
-        brz = jnp.zeros_like(bp)
-        B = jnp.array([brz, bp, brz]).T
-        if basis == "xyz":
-            B = rpz2xyz_vec(B, phi=coords[:, 1])
+        grid = grid or LinearGrid(
+            M=self._M_Phi * 3 + 1, N=self._N_Phi * 3 + 1, NFP=self.NFP
+        )
+        return _compute_magnetic_field_from_CurrentPotentialField(
+            field=self, coords=coords, params=params, basis=basis, grid=grid
+        )
 
-        return B
-
-
-class VerticalMagneticField(_MagneticField):
-    """Uniform magnetic field purely in the vertical (Z) direction.
-
-    Parameters
-    ----------
-    B0 : float
-        field strength
-
-    """
-
-    _io_attrs_ = _MagneticField._io_attrs_ + ["_B0"]
-
-    def __init__(self, B0):
-        assert np.isscalar(B0), "B0 must be a scalar"
-        self._B0 = B0
-
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
-        """Compute magnetic field at a set of points.
+    @classmethod
+    def from_surface(
+        cls,
+        surface,
+        Phi_mn=np.array([0.0]),
+        modes_Phi=np.array([[0, 0]]),
+        I=0,
+        G=0,
+        sym_Phi="auto",
+    ):
+        """Create FourierCurrentPotentialField using geometry of given surface.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : tuple, optional
-            unused by this method
-        basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
-            Unused by this MagneticField class
+        surface: FourierRZToroidalSurface, optional, default None
+            Existing FourierRZToroidalSurface object to create a
+            CurrentPotentialField with.
+        Phi_mn : ndarray
+            Fourier coefficients of the double FourierSeries of the current potential.
+            Should correspond to the given DoubleFourierSeries basis object passed in.
+        modes_Phi : array-like, shape(k,2)
+            Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn
+            coefficients
+        I : float
+            Net current linking the plasma and the surface toroidally
+            Denoted I in the algorithm
+        G : float
+            Net current linking the plasma and the surface poloidally
+            Denoted G in the algorithm
+            NOTE: a negative G will tend to produce a positive toroidal magnetic field
+            B in DESC, as in DESC the poloidal angle is taken to be positive
+            and increasing when going in the clockwise direction, which with the
+            convention n x grad(phi) will result in a toroidal field in the negative
+            toroidal direction.
+        name : str
+            name for this field
+        check_orientation : bool
+            ensure that this surface has a right handed orientation. Do not set to False
+            unless you are sure the parameterization you have given is right handed
+            (ie, e_theta x e_zeta points outward from the surface).
+
+        """
+        if not isinstance(surface, FourierRZToroidalSurface):
+            raise TypeError(
+                "Expected type FourierRZToroidalSurface for argument surface, "
+                f"instead got type {type(surface)}"
+            )
+        R_lmn = surface.R_lmn
+        Z_lmn = surface.Z_lmn
+        modes_R = surface._R_basis.modes[:, 1:]
+        modes_Z = surface._Z_basis.modes[:, 1:]
+        NFP = surface.NFP
+        sym = surface.sym
+        name = surface.name
+
+        return cls(
+            Phi_mn,
+            modes_Phi,
+            I,
+            G,
+            sym_Phi,
+            R_lmn,
+            Z_lmn,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            name=name,
+            check_orientation=False,
+        )
+
+
+class OmnigeneousField(Optimizable, IOAble):
+    """Model field with perfect omnigenity.
+
+    Notes
+    -----
+    Doesn't conform to MagneticField API, as it only knows about |B| in flux
+    coordinates, not vector B in lab coordinates.
+
+    """
+
+    _io_attrs_ = [
+        "_L_well",
+        "_M_well",
+        "_L",
+        "_M",
+        "_N",
+        "_well_basis",
+        "_basis",
+        "_helicity",
+        "_B_lm",
+        "_x_lmn",
+    ]
+
+    def __init__(
+        self, L_well, M_well, L, M, N, NFP, helicity=(0, 1), B_lm=None, x_lmn=None
+    ):
+        self._L_well = int(L_well)
+        self._M_well = int(M_well)
+        self._L = int(L)
+        self._M = int(M)
+        self._N = int(N)
+        self._NFP = int(NFP)
+        self._helicity = helicity
+        self._well_basis = ChebyshevPolynomial(L=self.L_well)
+        self._basis = ChebyshevDoubleFourierBasis(
+            L=self.L,
+            M=self.M,
+            N=self.N,
+            NFP=self.NFP,
+            sym="cos(t)",
+        )
+        if B_lm is None:
+            self._B_lm = np.concatenate(
+                (
+                    np.linspace(
+                        1,
+                        2,
+                        self.M_well,
+                    ),
+                    np.zeros((self.L_well * self.M_well,)),
+                )
+            )
+        else:
+            self._B_lm = B_lm
+        if x_lmn is None:
+            self._x_lmn = np.zeros(self.basis.num_modes)
+        else:
+            self._x_lmn = x_lmn
+
+        warnif(
+            self.helicity != (0, self.NFP) and self.helicity[0] != 1,
+            UserWarning,
+            "Typical helicity (M,N) has M=1.",
+        )
+        warnif(
+            self.helicity != (1, 0) and self.helicity[1] != self.NFP,
+            UserWarning,
+            "Typical helicity (M,N) has N=NFP.",
+        )
+
+    def change_resolution(
+        self, L_well=None, M_well=None, L=None, M=None, N=None, NFP=None
+    ):
+        """Set the spectral resolution of well and shift terms.
+
+        Parameters
+        ----------
+        L_well : int
+            Radial resolution of the magnetic well parameters B_lm.
+        M_well : int
+            Number of spline points in the magnetic well parameters B_lm.
+        L : int
+            Radial resolution of x_lmn.
+        M : int
+            Poloidal resolution of x_lmn.
+        N : int
+            Toroidal resolution of x_lmn.
+        NFP : int
+            Number of field periods.
+
+        """
+        self._NFP = setdefault(NFP, self.NFP)
+        self._L_well = setdefault(L_well, self.L_well)
+        self._M_well = setdefault(M_well, self.M_well)
+        self._L = setdefault(L, self.L)
+        self._M = setdefault(M, self.M)
+        self._N = setdefault(N, self.N)
+
+        old_modes_well = self.well_basis.modes
+        old_modes = self.basis.modes
+
+        self.well_basis.change_resolution(self.L_well)
+        self.basis.change_resolution(self.L, self.M, self.N, NFP=self.NFP, sym="cos(t)")
+
+        self._x_lmn = copy_coeffs(self.x_lmn, old_modes, self.basis.modes)
+
+        old_well = self.B_lm.reshape((-1, self.M_well))
+        new_well = np.zeros((self.L_well + 1, self.M_well))
+        for j in range(self.M_well):
+            new_well[:, j] = copy_coeffs(
+                old_well[:, j], old_modes_well, self.well_basis.modes
+            )
+        self._B_lm = new_well.flatten()
+
+    # TODO: reuse compute function?
+    def compute_well(self, rho, eta):
+        """Compute well shape from B_lm.
+
+        Parameters
+        ----------
+        rho : ndarray
+            Radial coordinates.
+        eta : ndarray
+            Coordinates along the field line.
 
         Returns
         -------
-        field : ndarray, shape(N,3)
-            magnetic field at specified points
+        B : ndarray
+            Magnetic field strength.
 
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        if hasattr(coords, "nodes"):
-            coords = coords.nodes
-        coords = jnp.atleast_2d(coords)
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
-        bz = self._B0 * jnp.ones_like(coords[:, 2])
-        brp = jnp.zeros_like(bz)
-        B = jnp.array([brp, brp, bz]).T
-        if basis == "xyz":
-            B = rpz2xyz_vec(B, phi=coords[:, 1])
+        alpha = np.zeros_like(rho)
+        nodes = np.array([rho, eta, alpha]).T
 
+        # reshaped to size (L_well, M_well)
+        B_lm = self.B_lm.reshape((self.well_basis.L + 1, -1))
+        # assuming single flux surface, so only take first row (single node)
+        B_input = (self.well_basis.evaluate(nodes) @ B_lm)[0, :]
+        B_input = np.sort(B_input)  # sort to ensure monotonicity
+        eta_input = np.linspace(0, jnp.pi / 2, num=B_input.size)
+
+        # |B|_omnigeneous is an even function so B(-eta) = B(+eta) = B(|eta|)
+        B = interp1d(np.abs(eta), eta_input, B_input, method="monotonic-0")
         return B
+
+    # TODO: move to compute function?
+    def compute_boozer_angles(self, rho, eta, alpha, iota):
+        """Compute corresponding Boozer angles from x_lmn.
+
+        Parameters
+        ----------
+        rho : ndarray
+            Radial coordinates.
+        eta : ndarray
+            Coordinates along the field line.
+        alpha : ndarray
+            Field line label.
+        iota : float
+            Rotational transform.
+
+        Returns
+        -------
+        theta_B : ndarray
+            Boozer poloidal angle.
+        zeta_B : ndarray
+            Boozer toroidal angle.
+
+        """
+        nodes = np.array([rho, eta, alpha]).T
+
+        # helicity matrix
+        M, N = self.helicity
+        matrix = np.where(
+            M == 0,
+            np.array([N - M * iota, iota / N, 0, 1 / N]),
+            np.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),
+        ).reshape((2, 2))
+
+        # evaluate h(rho,eta,alpha)
+        h = self.basis.evaluate(nodes) @ self.x_lmn + 2 * eta + np.pi
+
+        # solve for (rho,theta_B,zeta_B) corresponding to (rho,eta,alpha)
+        booz = matrix @ np.vstack((alpha, h))
+        return booz[0, :], booz[1, :]
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @NFP.setter
+    def NFP(self, NFP):
+        assert isposint(NFP), f"NFP should be a positive integer, got {type(NFP)}"
+        self.change_resolution(NFP=NFP)
+
+    @property
+    def L_well(self):
+        """int: Radial resolution of the magnetic well parameters well_l."""
+        return self._L_well
+
+    @property
+    def M_well(self):
+        """int: Number of spline points in the magnetic well parameters well_l."""
+        return self._M_well
+
+    @property
+    def L(self):
+        """int: Radial resolution of x_lmn."""
+        return self._L
+
+    @property
+    def M(self):
+        """int: Poloidal resolution of x_lmn."""
+        return self._M
+
+    @property
+    def N(self):
+        """int: Toroidal resolution of x_lmn."""
+        return self._N
+
+    @property
+    def well_basis(self):
+        """ChebyshevPolynomial: Spectral basis for B_lm."""
+        return self._well_basis
+
+    @property
+    def basis(self):
+        """FourierZernikeBasis: Spectral basis for x_lmn."""
+        return self._basis
+
+    @optimizable_parameter
+    @property
+    def B_lm(self):
+        """ndarray: Omnigenity magnetic well shape parameters."""
+        return self._B_lm
+
+    @B_lm.setter
+    def B_lm(self, B_lm):
+        self._B_lm[:] = B_lm
+
+    @optimizable_parameter
+    @property
+    def x_lmn(self):
+        """ndarray: Omnigenity coordinate mapping parameters."""
+        return self._x_lmn
+
+    @x_lmn.setter
+    def x_lmn(self, x_lmn):
+        self._x_lmn[:] = x_lmn
+
+    @property
+    def helicity(self):
+        """tuple: Type of omnigenity (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        self._helicity = helicity
 
 
 class PoloidalMagneticField(_MagneticField):
@@ -668,6 +1386,122 @@ class PoloidalMagneticField(_MagneticField):
             B = rpz2xyz_vec(B, phi=coords[:, 1])
 
         return B
+
+
+class ScalarPotentialField(_MagneticField):
+    """Magnetic field due to a scalar magnetic potential in cylindrical coordinates.
+
+    Parameters
+    ----------
+    potential : callable
+        function to compute the scalar potential. Should have a signature of
+        the form potential(R,phi,Z,*params) -> ndarray.
+        R,phi,Z are arrays of cylindrical coordinates.
+    params : dict, optional
+        default parameters to pass to potential function
+
+    """
+
+    def __init__(self, potential, params=None):
+        self._potential = potential
+        self._params = params
+
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical or cartesian coordinates
+        params : dict, optional
+            parameters to pass to scalar potential function
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
+            Unused by this MagneticField class
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        assert basis.lower() in ["rpz", "xyz"]
+        if hasattr(coords, "nodes"):
+            coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+        Rq, phiq, Zq = coords.T
+
+        if params is None:
+            params = self._params
+        r, p, z = coords.T
+        funR = lambda x: self._potential(x, p, z, **params)
+        funP = lambda x: self._potential(r, x, z, **params)
+        funZ = lambda x: self._potential(r, p, x, **params)
+        br = Derivative.compute_jvp(funR, 0, (jnp.ones_like(r),), r)
+        bp = Derivative.compute_jvp(funP, 0, (jnp.ones_like(p),), p)
+        bz = Derivative.compute_jvp(funZ, 0, (jnp.ones_like(z),), z)
+        B = jnp.array([br, bp / r, bz]).T
+        if basis == "xyz":
+            B = rpz2xyz_vec(B, phi=coords[:, 1])
+        return B
+
+
+class ScaledMagneticField(_MagneticField):
+    """Magnetic field scaled by a scalar value.
+
+    ie B_new = scalar * B_old
+
+    Parameters
+    ----------
+    scalar : float, int
+        scaling factor for magnetic field
+    field : MagneticField
+        base field to be scaled
+
+    """
+
+    _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
+
+    def __init__(self, scalar, field):
+        assert np.isscalar(scalar), "scalar must actually be a scalar value"
+        assert isinstance(
+            field, _MagneticField
+        ), "field should be a subclass of MagneticField, got type {}".format(
+            type(field)
+        )
+        self._scalar = scalar
+        self._field = field
+
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical or cartesian coordinates
+        params : tuple, optional
+            parameters to pass to underlying field
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            scaled magnetic field at specified points
+        """
+        return self._scalar * self._field.compute_magnetic_field(
+            coords, params, basis, grid
+        )
 
 
 class SplineMagneticField(_MagneticField):
@@ -975,23 +1809,24 @@ class SplineMagneticField(_MagneticField):
         )
 
 
-class ScalarPotentialField(_MagneticField):
-    """Magnetic field due to a scalar magnetic potential in cylindrical coordinates.
+class SumMagneticField(_MagneticField):
+    """Sum of two or more magnetic field sources.
 
     Parameters
     ----------
-    potential : callable
-        function to compute the scalar potential. Should have a signature of
-        the form potential(R,phi,Z,*params) -> ndarray.
-        R,phi,Z are arrays of cylindrical coordinates.
-    params : dict, optional
-        default parameters to pass to potential function
-
+    fields : MagneticField
+        two or more MagneticFields to add together
     """
 
-    def __init__(self, potential, params=None):
-        self._potential = potential
-        self._params = params
+    _io_attrs = _MagneticField._io_attrs_ + ["_fields"]
+
+    def __init__(self, *fields):
+        assert all(
+            [isinstance(field, _MagneticField) for field in fields]
+        ), "fields should each be a subclass of MagneticField, got {}".format(
+            [type(field) for field in fields]
+        )
+        self._fields = fields
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
@@ -1000,8 +1835,119 @@ class ScalarPotentialField(_MagneticField):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : dict, optional
-            parameters to pass to scalar potential function
+        params : list or tuple of dict, optional
+            parameters to pass to underlying fields. If None,
+            uses the default parameters for each field. If a list or tuple, should have
+            one entry for each component field.
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            scaled magnetic field at specified points
+        """
+        if params is None:
+            params = [None] * len(self._fields)
+        if isinstance(params, dict):
+            params = [params]
+        B = 0
+        for i, field in enumerate(self._fields):
+            B += field.compute_magnetic_field(
+                coords, params[i % len(params)], basis, grid=grid
+            )
+
+        return B
+
+
+class ToroidalMagneticField(_MagneticField):
+    """Magnetic field purely in the toroidal (phi) direction.
+
+    Magnitude is B0*R0/R where R0 is the major radius of the axis and B0
+    is the field strength on axis
+
+    Parameters
+    ----------
+    B0 : float
+        field strength on axis
+    R0 : major radius of axis
+
+    """
+
+    _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0"]
+
+    def __init__(self, B0, R0):
+        assert float(B0) == B0, "B0 must be a scalar"
+        assert float(R0) == R0, "R0 must be a scalar"
+        self._B0 = float(B0)
+        self._R0 = float(R0)
+
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical or cartesian coordinates
+        params : tuple, optional
+            unused by this method
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
+        grid : Grid, int or None
+            Grid used to discretize MagneticField object if calculating
+            B from biot savart. If an integer, uses that many equally spaced
+            points.
+            Unused by this MagneticField class
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        assert basis.lower() in ["rpz", "xyz"]
+        if hasattr(coords, "nodes"):
+            coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+        bp = self._B0 * self._R0 / coords[:, 0]
+        brz = jnp.zeros_like(bp)
+        B = jnp.array([brz, bp, brz]).T
+        if basis == "xyz":
+            B = rpz2xyz_vec(B, phi=coords[:, 1])
+
+        return B
+
+
+class VerticalMagneticField(_MagneticField):
+    """Uniform magnetic field purely in the vertical (Z) direction.
+
+    Parameters
+    ----------
+    B0 : float
+        field strength
+
+    """
+
+    _io_attrs_ = _MagneticField._io_attrs_ + ["_B0"]
+
+    def __init__(self, B0):
+        assert np.isscalar(B0), "B0 must be a scalar"
+        self._B0 = B0
+
+    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical or cartesian coordinates
+        params : tuple, optional
+            unused by this method
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None
@@ -1022,330 +1968,10 @@ class ScalarPotentialField(_MagneticField):
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
             coords = xyz2rpz(coords)
-        Rq, phiq, Zq = coords.T
-
-        if params is None:
-            params = self._params
-        r, p, z = coords.T
-        funR = lambda x: self._potential(x, p, z, **params)
-        funP = lambda x: self._potential(r, x, z, **params)
-        funZ = lambda x: self._potential(r, p, x, **params)
-        br = Derivative.compute_jvp(funR, 0, (jnp.ones_like(r),), r)
-        bp = Derivative.compute_jvp(funP, 0, (jnp.ones_like(p),), p)
-        bz = Derivative.compute_jvp(funZ, 0, (jnp.ones_like(z),), z)
-        B = jnp.array([br, bp / r, bz]).T
+        bz = self._B0 * jnp.ones_like(coords[:, 2])
+        brp = jnp.zeros_like(bz)
+        B = jnp.array([brp, brp, bz]).T
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])
+
         return B
-
-
-def field_line_integrate(
-    r0, z0, phis, field, params=None, grid=None, rtol=1e-8, atol=1e-8, maxstep=1000
-):
-    """Trace field lines by integration.
-
-    Parameters
-    ----------
-    r0, z0 : array-like
-        initial starting coordinates for r,z on phi=phis[0] plane
-    phis : array-like
-        strictly increasing array of toroidal angles to output r,z at
-        Note that phis is the geometric toroidal angle for positive Bphi,
-        and the negative toroidal angle for negative Bphi
-    field : MagneticField
-        source of magnetic field to integrate
-    params: dict
-        parameters passed to field
-    grid : Grid, optional
-        Collocation points used to discretize source field.
-    rtol, atol : float
-        relative and absolute tolerances for ode integration
-    maxstep : int
-        maximum number of steps between different phis
-
-    Returns
-    -------
-    r, z : ndarray
-        arrays of r, z coordinates at specified phi angles
-
-    """
-    r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
-    assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
-    rshape = r0.shape
-    r0 = r0.flatten()
-    z0 = z0.flatten()
-    x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
-
-    @jit
-    def odefun(rpz, s):
-        rpz = rpz.reshape((3, -1)).T
-        r = rpz[:, 0]
-        br, bp, bz = field.compute_magnetic_field(rpz, params, basis="rpz", grid=grid).T
-        return jnp.array(
-            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
-        ).squeeze()
-
-    intfun = lambda x: odeint(odefun, x, phis, rtol=rtol, atol=atol, mxstep=maxstep)
-    x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
-    r = x[:, :, 0].T.reshape((len(phis), *rshape))
-    z = x[:, :, 2].T.reshape((len(phis), *rshape))
-    return r, z
-
-
-class OmnigeneousField(Optimizable, IOAble):
-    """Model field with perfect omnigenity.
-
-    Notes
-    -----
-    Doesn't conform to MagneticField API, as it only knows about |B| in flux
-    coordinates, not vector B in lab coordinates.
-
-    """
-
-    _io_attrs_ = [
-        "_L_well",
-        "_M_well",
-        "_L",
-        "_M",
-        "_N",
-        "_well_basis",
-        "_basis",
-        "_helicity",
-        "_B_lm",
-        "_x_lmn",
-    ]
-
-    def __init__(
-        self, L_well, M_well, L, M, N, NFP, helicity=(0, 1), B_lm=None, x_lmn=None
-    ):
-        self._L_well = int(L_well)
-        self._M_well = int(M_well)
-        self._L = int(L)
-        self._M = int(M)
-        self._N = int(N)
-        self._NFP = int(NFP)
-        self._helicity = helicity
-        self._well_basis = ChebyshevPolynomial(L=self.L_well)
-        self._basis = ChebyshevDoubleFourierBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
-            NFP=self.NFP,
-            sym="cos(t)",
-        )
-        if B_lm is None:
-            self._B_lm = np.concatenate(
-                (
-                    np.linspace(
-                        1,
-                        2,
-                        self.M_well,
-                    ),
-                    np.zeros((self.L_well * self.M_well,)),
-                )
-            )
-        else:
-            self._B_lm = B_lm
-        if x_lmn is None:
-            self._x_lmn = np.zeros(self.basis.num_modes)
-        else:
-            self._x_lmn = x_lmn
-
-        if self.helicity != (0, self.NFP) and self.helicity[0] != 1:
-            warnings.warn("Typical helicity (M,N) has M=1.")
-        if self.helicity != (1, 0) and self.helicity[1] != self.NFP:
-            warnings.warn("Typical helicity (M,N) has N=NFP.")
-
-    def change_resolution(
-        self, L_well=None, M_well=None, L=None, M=None, N=None, NFP=None
-    ):
-        """Set the spectral resolution of well and shift terms.
-
-        Parameters
-        ----------
-        L_well : int
-            Radial resolution of the magnetic well parameters B_lm.
-        M_well : int
-            Number of spline points in the magnetic well parameters B_lm.
-        L : int
-            Radial resolution of x_lmn.
-        M : int
-            Poloidal resolution of x_lmn.
-        N : int
-            Toroidal resolution of x_lmn.
-        NFP : int
-            Number of field periods.
-
-        """
-        self._NFP = setdefault(NFP, self.NFP)
-        self._L_well = setdefault(L_well, self.L_well)
-        self._M_well = setdefault(M_well, self.M_well)
-        self._L = setdefault(L, self.L)
-        self._M = setdefault(M, self.M)
-        self._N = setdefault(N, self.N)
-
-        old_modes_well = self.well_basis.modes
-        old_modes = self.basis.modes
-
-        self.well_basis.change_resolution(self.L_well)
-        self.basis.change_resolution(self.L, self.M, self.N, NFP=self.NFP, sym="cos(t)")
-
-        self._x_lmn = copy_coeffs(self.x_lmn, old_modes, self.basis.modes)
-
-        old_well = self.B_lm.reshape((-1, self.M_well))
-        new_well = np.zeros((self.L_well + 1, self.M_well))
-        for j in range(self.M_well):
-            new_well[:, j] = copy_coeffs(
-                old_well[:, j], old_modes_well, self.well_basis.modes
-            )
-        self._B_lm = new_well.flatten()
-
-    # TODO: reuse compute function?
-    def compute_well(self, rho, eta):
-        """Compute well shape from B_lm.
-
-        Parameters
-        ----------
-        rho : ndarray
-            Radial coordinates.
-        eta : ndarray
-            Coordinates along the field line.
-
-        Returns
-        -------
-        B : ndarray
-            Magnetic field strength.
-
-        """
-        alpha = np.zeros_like(rho)
-        nodes = np.array([rho, eta, alpha]).T
-
-        # reshaped to size (L_well, M_well)
-        B_lm = self.B_lm.reshape((self.well_basis.L + 1, -1))
-        # assuming single flux surface, so only take first row (single node)
-        B_input = (self.well_basis.evaluate(nodes) @ B_lm)[0, :]
-        B_input = np.sort(B_input)  # sort to ensure monotonicity
-        eta_input = np.linspace(0, jnp.pi / 2, num=B_input.size)
-
-        # |B|_omnigeneous is an even function so B(-eta) = B(+eta) = B(|eta|)
-        B = interp1d(np.abs(eta), eta_input, B_input, method="monotonic-0")
-        return B
-
-    # TODO: move to compute function?
-    def compute_boozer_angles(self, rho, eta, alpha, iota):
-        """Compute corresponding Boozer angles from x_lmn.
-
-        Parameters
-        ----------
-        rho : ndarray
-            Radial coordinates.
-        eta : ndarray
-            Coordinates along the field line.
-        alpha : ndarray
-            Field line label.
-        iota : float
-            Rotational transform.
-
-        Returns
-        -------
-        theta_B : ndarray
-            Boozer poloidal angle.
-        zeta_B : ndarray
-            Boozer toroidal angle.
-
-        """
-        nodes = np.array([rho, eta, alpha]).T
-
-        # helicity matrix
-        M, N = self.helicity
-        matrix = np.where(
-            M == 0,
-            np.array([N - M * iota, iota / N, 0, 1 / N]),
-            np.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),
-        ).reshape((2, 2))
-
-        # evaluate h(rho,eta,alpha)
-        h = self.basis.evaluate(nodes) @ self.x_lmn + 2 * eta + np.pi
-
-        # solve for (rho,theta_B,zeta_B) corresponding to (rho,eta,alpha)
-        booz = matrix @ np.vstack((alpha, h))
-        return booz[0, :], booz[1, :]
-
-    @property
-    def NFP(self):
-        """int: Number of (toroidal) field periods."""
-        return self._NFP
-
-    @NFP.setter
-    def NFP(self, NFP):
-        assert isposint(NFP), f"NFP should be a positive integer, got {type(NFP)}"
-        self.change_resolution(NFP=NFP)
-
-    @property
-    def L_well(self):
-        """int: Radial resolution of the magnetic well parameters well_l."""
-        return self._L_well
-
-    @property
-    def M_well(self):
-        """int: Number of spline points in the magnetic well parameters well_l."""
-        return self._M_well
-
-    @property
-    def L(self):
-        """int: Radial resolution of x_lmn."""
-        return self._L
-
-    @property
-    def M(self):
-        """int: Poloidal resolution of x_lmn."""
-        return self._M
-
-    @property
-    def N(self):
-        """int: Toroidal resolution of x_lmn."""
-        return self._N
-
-    @property
-    def well_basis(self):
-        """ChebyshevPolynomial: Spectral basis for B_lm."""
-        return self._well_basis
-
-    @property
-    def basis(self):
-        """FourierZernikeBasis: Spectral basis for x_lmn."""
-        return self._basis
-
-    @optimizable_parameter
-    @property
-    def B_lm(self):
-        """ndarray: Omnigenity magnetic well shape parameters."""
-        return self._B_lm
-
-    @B_lm.setter
-    def B_lm(self, B_lm):
-        self._B_lm[:] = B_lm
-
-    @optimizable_parameter
-    @property
-    def x_lmn(self):
-        """ndarray: Omnigenity coordinate mapping parameters."""
-        return self._x_lmn
-
-    @x_lmn.setter
-    def x_lmn(self, x_lmn):
-        self._x_lmn[:] = x_lmn
-
-    @property
-    def helicity(self):
-        """tuple: Type of omnigenity (M, N)."""
-        return self._helicity
-
-    @helicity.setter
-    def helicity(self, helicity):
-        assert (
-            (len(helicity) == 2)
-            and (int(helicity[0]) == helicity[0])
-            and (int(helicity[1]) == helicity[1])
-        )
-        self._helicity = helicity

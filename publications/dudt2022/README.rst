@@ -1,21 +1,23 @@
 This folder contains the files necessary to reproduce the figures in the paper "The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization".
 A copy of this paper is included as `dudt2022optimization.pdf`.
 
-In order to run the following code, checkout version `0fcc708` of desc.
+`driver.py` is a Python file that performs the optimizations in Section 3.2 of the paper.
+In order to run this script, checkout version `0fcc708` of the DESC code.
+There are two optimization parameters that can be set in lines 48 and 49 of the script.
+`qs` is a character that sets the quasi-symmetry objective function, and can be either `"B"`, `"C"`, or `"T"`.
+These correspond to the options detailed in Section 2.3 of the paper.
+`order` is an integer that specifies the order of the perturbation used, and can be either `1` or `2`.
+This corresponds to the theory explained in Section 2.2 of the paper.
 
-`driver.py` is a Python script that performs the optimizations in Section III B.
-There are two optimization parameters that can be set in lines 46 and 47 of the script.
-`qs` is a character that sets the quasi-symmetry objective function, and can be either "B"`, `"C"`, or `"T"`.
-These correspond to the options detailed in Section II C.
-`order` is an integer that specifies the order of the perturbation used, according to the theory explained in Section II B. It can be either `1` or `2`.
-
-`plotter.py` is a Python script that generates the plots shown in Figures 1-5.
+`plotter.py` is a Python file that generates the plots shown in Figures 1-6.
+In order to run this script, checkout version `v0.7.2` of the DESC code.
 The following plots are all saved in the `data` sub-folder:
 - `f_B.png` corresponds to Figure 1
 - `f_C.png` corresponds to Figure 2
 - `f_T.png` corresponds to Figure 3
-- `Booz.png` corresponds to Figure 4
-- `errors.png` corresponds to Figure 5
+- `boundaries.png` corresponds to Figure 4
+- `Booz.png` corresponds to Figure 5
+- `errors.png` corresponds to Figure 6
 
 The `data` sub-folder also contains the following data used to generate the plots:
 - `initial_input` is the DESC input file used to generate the initial equilibrium solution.

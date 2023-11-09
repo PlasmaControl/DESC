@@ -582,3 +582,58 @@ def test_io_SplineMagneticField(tmpdir_factory):
     for key in derivs1.keys():
         for key2 in derivs1[key].keys():
             np.testing.assert_allclose(derivs1[key][key2], derivs2[key][key2])
+
+
+@pytest.mark.unit
+def test_efit_to_desc(tmpdir_factory):
+    """
+    Test EFIT equilibrium to DESC input conversion.
+
+    Test the efit to desc converted by comparing the
+    converted input DESC file with the correct desc input file
+    """
+    efit_file_path = "./tests/inputs/eqdsk_coscos.out"
+    tmpdir = tmpdir_factory.mktemp("desc_inputs_dir")
+    tmp_path = tmpdir.join("eqdsk_to_desc_converted_file")
+    tmpout_path = tmpdir.join("eqdsk_coscos.out")
+    shutil.copyfile(efit_file_path, tmpout_path)
+
+    ir1 = InputReader()
+    with pytest.warns(RuntimeWarning):
+        eq = ir1.efit_io(str(tmpout_path))[-1]
+
+    ir1 = InputReader(cl_args=[str(tmp_path)])
+    arr1 = eq["surface"]
+    arr1 = arr1[arr1[:, 1].argsort()]
+    arr1mneg = arr1[arr1[:, 1] < 0]
+    arr1mpos = arr1[arr1[:, 1] >= 0]
+    pres1 = ir1.parse_inputs()[-1]["pressure"]
+
+    desc_input_truth = "./tests/inputs/desc_from_eqdsk_coscos"
+    with pytest.warns(UserWarning):
+        ir2 = InputReader(cl_args=[str(desc_input_truth)])
+        arr2 = ir2.parse_inputs()[-1]["surface"]
+        pres2 = ir2.parse_inputs()[-1]["pressure"]
+    arr2 = arr2[arr2[:, 1].argsort()]
+    arr2mneg = arr2[arr2[:, 1] < 0]
+    arr2mpos = arr2[arr2[:, 1] >= 0]
+
+    np.testing.assert_allclose(
+        np.minimum(
+            np.linalg.norm(arr1mneg[:, 3:] - arr2mneg[:, 3:]),
+            np.linalg.norm(arr1mneg[:, 3:] + arr2mneg[:, 3:]),
+        ),
+        0,
+        atol=1e-8,
+    )
+    np.testing.assert_allclose(
+        np.minimum(
+            np.linalg.norm(arr1mpos[:, 3:] - arr2mpos[:, 3:]),
+            np.linalg.norm(arr1mpos[:, 3:] + arr2mpos[:, 3:]),
+        ),
+        0,
+        atol=1e-8,
+    )
+
+    if np.linalg.norm(pres1[:, 1]) > 0:
+        np.testing.assert_allclose(pres1(pres1[:, 1] > 0), pres2(pres2[:, 1] > 0))

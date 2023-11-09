@@ -573,7 +573,8 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
         if verbose > 0:
             printstring = f"Calculating Surf {i} at rho={r:1.3f}"
             print("#" * len(printstring) + "\n" + printstring + "\n")
-        grid = LinearGrid(M=3 * M_booz, N=3 * N_booz, NFP=eq.NFP, rho=np.array(r))
+        grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=np.array(r))
+
         transforms = get_transforms(
             ["|B|_mn", "sqrt(g)_B_mn"],
             obj=eq,
@@ -581,6 +582,7 @@ def make_boozmn_output(eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0)
             M_booz=M_booz - 1,
             N_booz=N_booz,
         )
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = eq.compute(

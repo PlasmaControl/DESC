@@ -44,7 +44,7 @@ time = jnp.linspace(tmin, tmax, nt)
 initial_conditions = ini_cond
 Mass_Charge_Ratio = Mass/Charge
 
-r01 = np.arange(0.0, 0.5, 0.025)
+r01 = np.arange(0.0, 0.5, 0.04)
 
 f_values = []
 
@@ -57,7 +57,7 @@ for R01 in r01:
         modes_Z=[[-1, 0], [0, -1]],
         NFP=3,
     )
-    eq = desc.equilibrium.Equilibrium(M=2, N=2, Psi=1, surface=surf)
+    eq = desc.equilibrium.Equilibrium(M=1, N=1, Psi=1, surface=surf)
     eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[-1]
     eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
     eq._current = None

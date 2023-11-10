@@ -505,6 +505,10 @@ class QuasisymmetryTripleProduct(_Objective):
 class Omnigenity(_Objective):
     """Omnigenity error.
 
+    This objective assumes that the collocation point (θ=0,ζ=0) lies on the contour of
+    maximum field strength. If this is not the case, the equilibrium geometry should be
+    re-parameterized by flipping the sign of all coefficients with m≠0.
+
     Parameters
     ----------
     eq : Equilibrium, optional
@@ -526,8 +530,13 @@ class Omnigenity(_Objective):
        Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at.
+    grid_eq : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at for equilibrium data.
+    grid_field : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at for omnigenous field data.
+    rho : float, optional
+        Flux surface coordinate to use for the default grids.
+        Only used if `grid_eq` or `grid_field` is not supplied.
     helicity : tuple, optional
         Type of omnigenity (M, N). Default = quasi-isodynamic (0, 1).
     M_booz : int, optional
@@ -558,6 +567,7 @@ class Omnigenity(_Objective):
         normalize_target=True,
         grid_eq=None,
         grid_field=None,
+        rho=1.0,
         M_booz=None,
         N_booz=None,
         well_weight=1,
@@ -565,6 +575,7 @@ class Omnigenity(_Objective):
     ):
         self._grid_eq = grid_eq
         self._grid_field = grid_field
+        self._rho = rho
         self.helicity = field.helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
@@ -598,12 +609,19 @@ class Omnigenity(_Objective):
         N_booz = self.N_booz or 2 * eq.N
 
         if self._grid_eq is None:
-            grid_eq = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False)
+            grid_eq = LinearGrid(
+                rho=self._rho, M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False
+            )
         else:
             grid_eq = self._grid_eq
 
         if self._grid_field is None:
-            grid_field = LinearGrid(M=2 * field.M_well, N=8, sym=False)
+            # TODO: is this a good default grid?
+            # oversamples in eta by a factor of 2, including points at B_min & B_max
+            # 8 field lines, including alpha=0 and alpha=pi
+            grid_field = LinearGrid(
+                rho=self._rho, theta=2 * field.M_well, zeta=8, sym=False
+            )
         else:
             grid_field = self._grid_field
 

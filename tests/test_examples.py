@@ -766,19 +766,24 @@ def test_multiobject_optimization():
 @pytest.mark.unit
 def test_omnigenity_qa():
     """Test optimizing omnigenity parameters to match an axisymmetric equilibrium."""
-    eq = desc.examples.get("DSHAPE")
+    eq = desc.examples.get("SOLOVEV")
     eq.Psi *= 5  # B0 = 1 T
     field = OmnigeneousField(
-        L_well=0,
-        M_well=8,
-        L_omni=0,
+        L_well=1,
+        M_well=4,
+        L_omni=1,
         M_omni=1,
-        N_omni=0,
+        N_omni=1,
         NFP=eq.NFP,
         helicity=(1, 0),
     )
 
-    objective = ObjectiveFunction((Omnigenity(field=field, eq=eq),))
+    objective = ObjectiveFunction(
+        (
+            Omnigenity(field=field, eq=eq, rho=1e-2),
+            Omnigenity(field=field, eq=eq, rho=1.0),
+        )
+    )
     constraints = (
         FixModeR(eq=eq),
         FixModeZ(eq=eq),
@@ -787,9 +792,6 @@ def test_omnigenity_qa():
         FixIota(eq=eq),
         FixPsi(eq=eq),
     )
-
-    B = field.compute_well(np.ones((8,)), np.linspace(0, np.pi / 2, 8))
-    print(B)  # TODO: remove print statement
 
     optimizer = Optimizer("lsq-exact")
     (eq, field), result = optimizer.optimize(
@@ -802,17 +804,23 @@ def test_omnigenity_qa():
         verbose=3,
     )
 
-    B = field.compute_well(np.ones((8,)), np.linspace(0, np.pi / 2, 8))
-    print(B)  # TODO: remove print statement
+    B_lm = field.B_lm.reshape((field.well_basis.L + 1, -1))
+    B0 = field.well_basis.evaluate(np.array([[0, 0, 0]])) @ B_lm
+    B1 = field.well_basis.evaluate(np.array([[1, 0, 0]])) @ B_lm
 
     # x_lmn=0 because the equilibrium is QS
-    np.testing.assert_allclose(field.x_lmn, 0, atol=1e-8)  # FIXME: decrease tolerance
+    np.testing.assert_allclose(field.x_lmn, 0, atol=1e-12)
 
-    # check that well gets |B| on axis correct
+    # check that magnetic well parameters get |B| on axis correct
     grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
     data = eq.compute("|B|", grid=grid)
-    B0 = np.mean(data["|B|"])  # FIXME: objective default grid is rho=1, not rho=0
-    np.testing.assert_allclose(field.B_lm, B0)  # FIXME: this does not pass
+    np.testing.assert_allclose(B0, np.mean(data["|B|"]), rtol=1e-3)
+
+    # check that magnetic well parameters get |B| min & max on LCFS correct
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
+    data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=grid)
+    np.testing.assert_allclose(np.min(B1), data["min_tz |B|"][0], rtol=1e-3)
+    np.testing.assert_allclose(np.max(B1), data["max_tz |B|"][0], rtol=2e-3)
 
 
 class TestGetExample:

@@ -620,7 +620,7 @@ class Omnigenity(_Objective):
             # oversamples in eta by a factor of 2, including points at B_min & B_max
             # 8 field lines, including alpha=0 and alpha=pi
             grid_field = LinearGrid(
-                rho=self._rho, theta=2 * field.M_well, zeta=8, sym=False
+                rho=self._rho, theta=2 * field.M_well, zeta=8, NFP=field.NFP, sym=False
             )
         else:
             grid_field = self._grid_field

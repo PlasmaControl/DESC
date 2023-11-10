@@ -384,7 +384,7 @@ def _eta(params, transforms, profiles, data, **kwargs):
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
     # zeta is used as a placeholder for alpha (field line label)
-    data["alpha"] = transforms["grid"].nodes[:, 2]
+    data["alpha"] = transforms["grid"].nodes[:, 2] * transforms["grid"].NFP
     return data
 
 

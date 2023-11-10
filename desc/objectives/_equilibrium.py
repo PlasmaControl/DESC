@@ -1,12 +1,8 @@
 """Objectives for solving equilibrium problems."""
 
-import warnings
-
-from termcolor import colored
-
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import get_profiles, get_transforms
 from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.utils import Timer
 
@@ -35,20 +31,20 @@ class ForceBalance(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
@@ -67,20 +63,19 @@ class ForceBalance(_Objective):
         the scaled objective function values, after the target is applied.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Total force: {:10.3e} "
+    _print_value_fmt = "Force error: {:10.3e} "
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -95,7 +90,7 @@ class ForceBalance(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -106,44 +101,27 @@ class ForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
-            if eq.node_pattern is None or eq.node_pattern in [
-                "jacobi",
-                "cheb1",
-                "cheb2",
-                "ocs",
-                "linear",
-            ]:
-                grid = ConcentricGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
-                )
-            elif eq.node_pattern == "quad":
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
         else:
             grid = self._grid
 
@@ -155,23 +133,18 @@ class ForceBalance(_Objective):
             "F_helical",
             "|e^helical|",
         ]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -180,38 +153,20 @@ class ForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute MHD force balance errors.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -219,7 +174,6 @@ class ForceBalance(_Objective):
             MHD force balance error at each node (N).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -229,14 +183,182 @@ class ForceBalance(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-
-        fr = data["F_rho"] * data["|grad(rho)|"]
-        fr = fr * data["sqrt(g)"] * constants["transforms"]["grid"].weights
-
-        fb = data["F_helical"] * data["|e^helical|"]
-        fb = fb * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+        fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
+        fb = data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
 
         return jnp.concatenate([fr, fb])
+
+
+class ForceBalanceAnisotropic(_Objective):
+    """Force balance for anisotropic pressure equilibria.
+
+    Solves for F = J × B − ∇ ⋅ Π = 0
+
+    Where Π is the anisotropic pressure tensor of the form Π = (p_∥ - p_⊥)𝐛𝐛 + p_⊥𝕀
+
+    Expanded out, this gives:
+
+    F =  (1−βₐ)J × B − 1/μ₀ (B ⋅ ∇ βₐ)B − βₐ ∇(B²/2μ₀) − ∇(p_⊥)
+
+    where βₐ is the anisotropy term: βₐ = μ₀ (p_∥ − p_⊥)/B²
+
+    For this objective, the standard ``Equilibrium.pressure`` profile is used for p_⊥,
+    and ``Equilibrium.anisotropy`` is used for βₐ. To get fully 3D anisotropy, these
+    should be ``FourierZernikeProfile``, not the standard ``PowerSeriesProfile`` (which
+    is only a function of rho).
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    loss_function : callable, optional
+        User-defined loss function to apply to the objective values once computed.
+        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
+    where_apply_loss : str
+        where to apply the user defined loss function. One of "unscaled"
+        or "scaled"
+        If "unscaled", the loss function will apply to
+        the raw objective function values, before the target is applied.
+        If "scaled", the loss function will apply to
+        the scaled objective function values, after the target is applied.
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _units = "(N)"
+    _coordinates = "rtz"
+    _equilibrium = True
+    _print_value_fmt = "Anisotropic force error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        where_apply_loss="unscaled",
+        grid=None,
+        name="force-anisotropic",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            where_apply_loss=where_apply_loss,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
+        else:
+            grid = self._grid
+
+        self._dim_f = 3 * grid.num_nodes
+        self._data_keys = ["F_anisotropic", "sqrt(g)"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["f"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute MHD force balance errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            MHD force balance error at each node (N).
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        f = (data["sqrt(g)"] * data["F_anisotropic"].T).T
+
+        return f.flatten(order="F")  # to line up with quad weights
 
 
 class RadialForceBalance(_Objective):
@@ -248,21 +370,21 @@ class RadialForceBalance(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-       Whether target and bounds should be normalized before comparing to computed
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
     loss_function : callable, optional
@@ -280,20 +402,19 @@ class RadialForceBalance(_Objective):
         the scaled objective function values, after the target is applied.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Radial force: {:10.3e} "
+    _print_value_fmt = "Radial force error: {:10.3e} "
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -308,7 +429,7 @@ class RadialForceBalance(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -319,66 +440,44 @@ class RadialForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
-            if eq.node_pattern is None or eq.node_pattern in [
-                "jacobi",
-                "cheb1",
-                "cheb2",
-                "ocs",
-                "linear",
-            ]:
-                grid = ConcentricGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
-                )
-            elif eq.node_pattern == "quad":
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
         else:
             grid = self._grid
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -387,38 +486,20 @@ class RadialForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute radial MHD force balance errors.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -426,7 +507,6 @@ class RadialForceBalance(_Objective):
             Radial MHD force balance error at each node (N).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -436,8 +516,7 @@ class RadialForceBalance(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        f = data["F_rho"] * data["|grad(rho)|"]
-        return f * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+        return data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
 
 
 class HelicalForceBalance(_Objective):
@@ -451,20 +530,20 @@ class HelicalForceBalance(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
@@ -483,20 +562,19 @@ class HelicalForceBalance(_Objective):
         the scaled objective function values, after the target is applied.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Helical force: {:10.3e}, "
+    _print_value_fmt = "Helical force error: {:10.3e}, "
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -511,7 +589,7 @@ class HelicalForceBalance(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -522,66 +600,44 @@ class HelicalForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
-            if eq.node_pattern is None or eq.node_pattern in [
-                "jacobi",
-                "cheb1",
-                "cheb2",
-                "ocs",
-                "linear",
-            ]:
-                grid = ConcentricGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
-                )
-            elif eq.node_pattern == "quad":
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
         else:
             grid = self._grid
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -590,38 +646,20 @@ class HelicalForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute helical MHD force balance errors.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -629,7 +667,6 @@ class HelicalForceBalance(_Objective):
             Helical MHD force balance error at each node (N).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -639,8 +676,7 @@ class HelicalForceBalance(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        f = data["F_helical"] * data["|e^helical|"]
-        return f * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+        return data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
 
 
 class Energy(_Objective):
@@ -650,20 +686,20 @@ class Energy(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
@@ -682,24 +718,23 @@ class Energy(_Objective):
         the scaled objective function values, after the target is applied.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        This will default to a QuadratureGrid
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
 
-    _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
     _scalar = True
-    _linear = False
+    _coordinates = ""
     _equilibrium = True
     _units = "(J)"
     _print_value_fmt = "Total MHD energy: {:10.3e} "
+    _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -716,7 +751,7 @@ class Energy(_Objective):
         self._grid = grid
         self.gamma = gamma
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -727,75 +762,42 @@ class Energy(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
-            if eq.node_pattern in [
-                "jacobi",
-                "cheb1",
-                "cheb2",
-                "ocs",
-                "linear",
-            ]:
-                warnings.warn(
-                    colored(
-                        "Energy objective built using grid "
-                        + "that is not the quadrature grid! "
-                        + "This is not recommended and may result in poor convergence. "
-                        "yellow",
-                    )
-                )
-                grid = ConcentricGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
-                )
-
-            else:
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
+            grid = QuadratureGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+            )
         else:
             grid = self._grid
 
         self._dim_f = 1
         self._data_keys = ["W"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
             "gamma": self._gamma,
         }
 
@@ -807,35 +809,18 @@ class Energy(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["W"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute MHD energy.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -843,7 +828,6 @@ class Energy(_Objective):
             Total MHD energy in the plasma volume (J).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -873,20 +857,20 @@ class CurrentDensity(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
+    normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
@@ -905,20 +889,19 @@ class CurrentDensity(_Objective):
         the scaled objective function values, after the target is applied.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
+    name : str, optional
         Name of the objective function.
 
     """
 
-    _scalar = False
-    _linear = False
     _equilibrium = True
+    _coordinates = "rtz"
     _units = "(A*m)"
-    _print_value_fmt = "Total current density: {:10.3e} "
+    _print_value_fmt = "Current density: {:10.3e} "
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -933,7 +916,7 @@ class CurrentDensity(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -944,66 +927,44 @@ class CurrentDensity(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
-            if eq.node_pattern is None or eq.node_pattern in [
-                "jacobi",
-                "cheb1",
-                "cheb2",
-                "ocs",
-                "linear",
-            ]:
-                grid = ConcentricGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
-                )
-            elif eq.node_pattern == "quad":
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
+            grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
         else:
             grid = self._grid
 
         self._dim_f = 3 * grid.num_nodes
         self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -1012,28 +973,20 @@ class CurrentDensity(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["J"] * scales["V"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["J"] * scales["V"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute toroidal current density.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -1041,7 +994,6 @@ class CurrentDensity(_Objective):
             Toroidal current at each node (A*m).
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -1051,8 +1003,8 @@ class CurrentDensity(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        jr = data["J^rho"] * data["sqrt(g)"] * constants["transforms"]["grid"].weights
-        jt = data["J^theta"] * data["sqrt(g)"] * constants["transforms"]["grid"].weights
-        jz = data["J^zeta"] * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+        jr = data["J^rho"] * data["sqrt(g)"]
+        jt = data["J^theta"] * data["sqrt(g)"]
+        jz = data["J^zeta"] * data["sqrt(g)"]
 
         return jnp.concatenate([jr, jt, jz])

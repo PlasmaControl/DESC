@@ -8,7 +8,7 @@ from desc.backend import cond, jit, jnp, put
 from desc.utils import Index
 
 
-def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
+def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds, *args):
     """Convert inequality constraints to bounds using slack variables.
 
     We do this by introducing slack variables s
@@ -45,7 +45,7 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
         and slack variables x and s
 
     """
-    c0 = constraint.fun(x0)
+    c0 = constraint.fun(x0, *args)
     ncon = c0.size
     bounds = tuple(jnp.broadcast_to(bi, x0.shape) for bi in bounds)
     cbounds = (constraint.lb, constraint.ub)
@@ -265,6 +265,7 @@ def chol(A):
     return L
 
 
+@jit
 def evaluate_quadratic_form_hess(H, g, x, diag=None):
     """Compute values of a quadratic function arising in trust region subproblem.
 
@@ -295,6 +296,7 @@ def evaluate_quadratic_form_hess(H, g, x, diag=None):
     return l + 1 / 2 * q
 
 
+@jit
 def evaluate_quadratic_form_jac(J, g, s, diag=None):
     """Compute values of a quadratic function arising in least squares.
 
@@ -407,8 +409,6 @@ STATUS_MESSAGES = {
     "ftol": "`ftol` condition satisfied.",
     "gtol": "`gtol` condition satisfied.",
     "max_nfev": "Maximum number of function evaluations has been exceeded.",
-    "max_ngev": "Maximum number of gradient evaluations has been exceeded.",
-    "max_nhev": "Maximum number of Jacobian/Hessian evaluations has been exceeded.",
     "maxiter": "Maximum number of iterations has been exceeded.",
     "pr_loss": "Desired error not necessarily achieved due to precision loss.",
     "nan": "NaN result encountered.",
@@ -434,14 +434,10 @@ def check_termination(
     maxiter,
     nfev,
     max_nfev,
-    ngev,
-    max_ngev,
-    nhev,
-    max_nhev,
     **kwargs,
 ):
     """Check termination condition and get message."""
-    ftol_satisfied = dF < abs(ftol * F) and reduction_ratio > 0.25
+    ftol_satisfied = 0 < dF < abs(ftol * F) and reduction_ratio > 0.25
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
     gtol_satisfied = g_norm < gtol
     ctol_satisfied = kwargs.get("constr_violation", 0) < kwargs.get("ctol", np.inf)
@@ -461,12 +457,6 @@ def check_termination(
     elif nfev >= max_nfev:
         success = False
         message = STATUS_MESSAGES["max_nfev"]
-    elif ngev >= max_ngev:
-        success = False
-        message = STATUS_MESSAGES["max_ngev"]
-    elif nhev >= max_nhev:
-        success = False
-        message = STATUS_MESSAGES["max_nhev"]
     elif dx_norm < kwargs.get("min_trust_radius", np.finfo(x_norm.dtype).eps):
         success = False
         message = STATUS_MESSAGES["approx"]
@@ -480,11 +470,12 @@ def check_termination(
     return success, message
 
 
+@jit
 def compute_jac_scale(A, prev_scale_inv=None):
     """Compute scaling factor based on column norm of Jacobian matrix."""
     scale_inv = jnp.sum(A**2, axis=0) ** 0.5
     scale_inv = jnp.where(
-        scale_inv < np.finfo(A.dtype).eps * max(A.shape), 1, scale_inv
+        scale_inv < jnp.finfo(A.dtype).eps * max(A.shape), 1, scale_inv
     )
 
     if prev_scale_inv is not None:
@@ -492,11 +483,12 @@ def compute_jac_scale(A, prev_scale_inv=None):
     return 1 / scale_inv, scale_inv
 
 
+@jit
 def compute_hess_scale(H, prev_scale_inv=None):
     """Compute scaling factors based on diagonal of Hessian matrix."""
     scale_inv = jnp.abs(jnp.diag(H))
     scale_inv = jnp.where(
-        scale_inv < np.finfo(H.dtype).eps * max(H.shape), 1, scale_inv
+        scale_inv < jnp.finfo(H.dtype).eps * max(H.shape), 1, scale_inv
     )
 
     if prev_scale_inv is not None:

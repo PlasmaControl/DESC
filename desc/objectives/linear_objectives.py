@@ -399,7 +399,6 @@ class AxisRSelfConsistency(_Objective):
         eq,
         name="axis R self consistency",
     ):
-
         super().__init__(
             things=eq,
             target=0,
@@ -486,7 +485,6 @@ class AxisZSelfConsistency(_Objective):
         eq,
         name="axis Z self consistency",
     ):
-
         super().__init__(
             things=eq,
             target=0,
@@ -976,7 +974,6 @@ class FixThetaSFL(_Objective):
     _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
     def __init__(self, eq, name="Theta SFL"):
-
         super().__init__(things=eq, target=0, weight=1, name=name)
 
     def build(self, use_jit=False, verbose=1):
@@ -1393,21 +1390,20 @@ class FixModeR(_FixedObjective):
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
-            idx = np.arange(eq.R_basis.num_modes)
-            modes_idx = idx
+            self._idx = np.arange(eq.R_basis.num_modes)
+            modes_idx = self._idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
-            _, idx, modes_idx = np.intersect1d(
+            _, self._idx, modes_idx = np.intersect1d(
                 eq.R_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
-            self._idx = idx
-            if idx.size < modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the basis, "
@@ -1418,7 +1414,7 @@ class FixModeR(_FixedObjective):
 
         self._dim_f = modes_idx.size
 
-        # use current eq's coefficients as target if needed
+        # use the Equilibrium's coefficients as target if needed
         if self._target_from_user is None:
             self.target = eq.R_lmn[self._idx]
         else:  # rearrange given target to match modes order
@@ -1531,21 +1527,20 @@ class FixModeZ(_FixedObjective):
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
-            idx = np.arange(eq.Z_basis.num_modes)
-            modes_idx = idx
+            self._idx = np.arange(eq.Z_basis.num_modes)
+            modes_idx = self._idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
-            _, idx, modes_idx = np.intersect1d(
+            _, self._idx, modes_idx = np.intersect1d(
                 eq.Z_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
-            self._idx = idx
-            if idx.size < modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the basis, "
@@ -1556,7 +1551,7 @@ class FixModeZ(_FixedObjective):
 
         self._dim_f = modes_idx.size
 
-        # use current eq's coefficients as target if needed
+        # use the Equilibrium's coefficients as target if needed
         if self._target_from_user is None:
             self.target = eq.Z_lmn[self._idx]
         else:  # rearrange given target to match modes order
@@ -1670,21 +1665,20 @@ class FixModeLambda(_FixedObjective):
         eq = self.things[0]
         if self._modes is True:  # all modes
             modes = eq.L_basis.modes
-            idx = np.arange(eq.L_basis.num_modes)
-            modes_idx = idx
+            self._idx = np.arange(eq.L_basis.num_modes)
+            modes_idx = self._idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
-            _, idx, modes_idx = np.intersect1d(
+            _, self._idx, modes_idx = np.intersect1d(
                 eq.L_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
-            self._idx = idx
-            if idx.size < modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the basis, "
@@ -1695,7 +1689,7 @@ class FixModeLambda(_FixedObjective):
 
         self._dim_f = modes_idx.size
 
-        # use current eq's coefficients as target if needed
+        # use the Equilibrium's coefficients as target if needed
         if self._target_from_user is None:
             self.target = eq.L_lmn[self._idx]
         else:  # rearrange given target to match modes order

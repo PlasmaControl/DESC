@@ -7,9 +7,10 @@ from netCDF4 import Dataset, stringtochar
 from scipy.linalg import block_diag, null_space
 
 from desc.backend import sign
-from desc.basis import zernike_radial
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis, zernike_radial
 from desc.compute import get_transforms
 from desc.grid import Grid, LinearGrid
+from desc.transform import Transform
 from desc.utils import Timer
 
 
@@ -317,7 +318,7 @@ def fourier_to_zernike(m, n, x_mn, basis):
     return x_lmn
 
 
-def zernike_to_fourier(x_lmn, basis, rho):
+def zernike_to_fourier(x_lmn, basis, rho, return_full=True):
     """Convert from a Fourier-Zernike basis to a double Fourier series.
 
     Parameters
@@ -328,6 +329,11 @@ def zernike_to_fourier(x_lmn, basis, rho):
         Basis set for x_lmn.
     rho : ndarray
         Radial coordinates of flux surfaces, rho = sqrt(psi).
+    return_full : bool
+        whether or not to return the full doubler Fourier basis, if False
+        will instead only return the Fourier basis corresponding to the
+        input FourierZernike basis (with the same symmetry)
+        defaults to True.
 
     Returns
     -------
@@ -344,8 +350,13 @@ def zernike_to_fourier(x_lmn, basis, rho):
     # FIXME: this always returns the full double Fourier basis regardless of symmetry
     M = basis.M
     N = basis.N
-
-    mn = np.array([[m - M, n - N] for m in range(2 * M + 1) for n in range(2 * N + 1)])
+    if return_full:
+        fourier_basis = DoubleFourierSeries(M=M, N=N, sym=basis.sym, NFP=basis.NFP)
+        mn = fourier_basis.modes[:, 1:]
+    else:
+        mn = np.array(
+            [[m - M, n - N] for m in range(2 * M + 1) for n in range(2 * N + 1)]
+        )
     m = mn[:, 0]
     n = mn[:, 1]
 
@@ -581,15 +592,43 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         grid=vol_grid,
     )
 
+    # FourierZernike fit the B_theta and B_zeta, then at each surface
+    # just evaluate the fit at the rho to get the B_theta_mn and B_zeta_mn
+    # so this we only only do a single fit
+    transform = Transform(
+        grid=vol_grid,
+        basis=FourierZernikeBasis(
+            L=2 * eq.L, M=M_booz - 1, N=N_booz, sym="cos", NFP=eq.NFP
+        ),
+        build_pinv=True,
+    )
+    B_zeta_lmn = transform.fit(data_vol["B_zeta"])
+    B_theta_lmn = transform.fit(data_vol["B_theta"])
+    # compute the fourier coeffs of the B_zeta and B_theta at each rho
+    _, _, B_zeta_mn = zernike_to_fourier(
+        B_zeta_lmn, transform.basis, rho=r_half, return_full=False
+    )
+    _, _, B_theta_mn = zernike_to_fourier(
+        B_theta_lmn, transform.basis, rho=r_half, return_full=False
+    )
+
     for i, r in enumerate(r_half):
+        if verbose > 0:
+            printstring = f"Calculating Surf {i} at rho={r:1.3f}"
+            print("#" * len(printstring) + "\n" + printstring + "\n")
+
         data = {}
         for key in keys:
             # populate the pre-computed data for this surface
             data[key] = data_vol[key][np.where(vol_grid.nodes[:, 0] == r)]
-        if verbose > 0:
-            printstring = f"Calculating Surf {i} at rho={r:1.3f}"
-            print("#" * len(printstring) + "\n" + printstring + "\n")
+
+        # are of shape [num_rhos,num_modes], so index into the first axis
+        data["B_zeta_mn"] = B_zeta_mn[i, :]
+        data["B_theta_mn"] = B_theta_mn[i, :]
+
+        ## calculate boozer transform for this surface
         grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=np.array(r))
+        # cos symmetric terms
         transforms = get_transforms(
             ["|B|_mn", "sqrt(g)_B_mn"],
             obj=eq,

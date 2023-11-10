@@ -34,19 +34,10 @@ class QuasisymmetryBoozer(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : callable, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc.
-        This loss function is called on the raw compute value, before any shifting,
-        scaling, or normalization.
-    where_apply_loss : str
-        where to apply the user defined loss function. One of "unscaled"
-        or "scaled"
-        If "unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Must be a LinearGrid with a single flux surface and sym=False.
@@ -73,7 +64,6 @@ class QuasisymmetryBoozer(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="unscaled",
         grid=None,
         helicity=(1, 0),
         M_booz=None,
@@ -94,7 +84,6 @@ class QuasisymmetryBoozer(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -246,19 +235,10 @@ class QuasisymmetryTwoTerm(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : callable, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc.
-        This loss function is called on the raw compute value, before any shifting,
-        scaling, or normalization.
-    where_apply_loss : str
-        where to apply the user defined loss function. One of "unscaled"
-        or "scaled"
-        If "unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
@@ -281,7 +261,6 @@ class QuasisymmetryTwoTerm(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="unscaled",
         grid=None,
         helicity=(1, 0),
         name="QS two-term",
@@ -298,7 +277,6 @@ class QuasisymmetryTwoTerm(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -429,19 +407,10 @@ class QuasisymmetryTripleProduct(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : callable, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc.
-        This loss function is called on the raw compute value, before any shifting,
-        scaling, or normalization.
-    where_apply_loss : str
-        where to apply the user defined loss function. One of "unscaled"
-        or "scaled"
-        If "unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -462,7 +431,6 @@ class QuasisymmetryTripleProduct(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="unscaled",
         grid=None,
         name="QS triple product",
     ):
@@ -477,7 +445,6 @@ class QuasisymmetryTripleProduct(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -579,19 +546,10 @@ class Isodynamicity(_Objective):
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
         Has no effect for this objective.
-    loss_function : callable, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc.
-        This loss function is called on the raw compute value, before any shifting,
-        scaling, or normalization.
-    where_apply_loss : str
-        where to apply the user defined loss function. One of "unscaled"
-        or "scaled"
-        If "unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -612,7 +570,6 @@ class Isodynamicity(_Objective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
-        where_apply_loss="unscaled",
         grid=None,
         name="Isodynamicity",
     ):
@@ -627,7 +584,6 @@ class Isodynamicity(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            where_apply_loss=where_apply_loss,
             name=name,
         )
 

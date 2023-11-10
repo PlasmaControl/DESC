@@ -410,13 +410,15 @@ class TestObjectiveFunction:
             grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
             mean_iota = jnp.mean(eq.compute("iota", grid=grid)["iota"])
             obj = RotationalTransform(
-                target=mean_iota, weight=1, eq=eq, loss_function=jnp.mean, grid=grid
+                target=mean_iota, weight=1, eq=eq, loss_function="mean", grid=grid
             )
             obj.build()
-            mean_iota_obj = obj.compute_unscaled(*obj.xs(eq))
+            mean_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
             mean_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
-            np.testing.assert_allclose(mean_iota, mean_iota_obj, atol=1e-16)
+            mean_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(mean_iota, mean_iota_unscaled, atol=1e-16)
             np.testing.assert_allclose(mean_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(mean_iota_scaled, mean_iota, atol=5e-16)
 
         test(get("DSHAPE"))
         test(get("HELIOTRON"))
@@ -429,13 +431,15 @@ class TestObjectiveFunction:
             grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
             max_iota = jnp.max(eq.compute("iota", grid=grid)["iota"])
             obj = RotationalTransform(
-                target=max_iota, weight=1, eq=eq, loss_function=jnp.max, grid=grid
+                target=max_iota, weight=1, eq=eq, loss_function="max", grid=grid
             )
             obj.build()
-            max_iota_obj = obj.compute_unscaled(*obj.xs(eq))
+            max_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
             max_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
-            np.testing.assert_allclose(max_iota, max_iota_obj, atol=1e-16)
+            max_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(max_iota, max_iota_unscaled, atol=1e-16)
             np.testing.assert_allclose(max_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(max_iota_scaled, max_iota, atol=5e-16)
 
         test(get("DSHAPE"))
         test(get("HELIOTRON"))
@@ -448,13 +452,15 @@ class TestObjectiveFunction:
             grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
             min_iota = jnp.min(eq.compute("iota", grid=grid)["iota"])
             obj = RotationalTransform(
-                target=min_iota, weight=1, eq=eq, loss_function=jnp.min, grid=grid
+                target=min_iota, weight=1, eq=eq, loss_function="min", grid=grid
             )
             obj.build()
-            min_iota_obj = obj.compute_unscaled(*obj.xs(eq))
+            min_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
             min_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
-            np.testing.assert_allclose(min_iota, min_iota_obj, atol=1e-16)
+            min_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(min_iota, min_iota_unscaled, atol=1e-16)
             np.testing.assert_allclose(min_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(min_iota_scaled, min_iota, atol=5e-16)
 
         test(get("DSHAPE"))
         test(get("HELIOTRON"))

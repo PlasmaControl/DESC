@@ -729,19 +729,10 @@ class _Objective(IOAble, ABC):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : callable, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc.
-        This loss function is called on the raw compute value, before any shifting,
-        scaling, or normalization.
-    where_apply_loss : str
-        where to apply the user defined loss function. One of "unscaled"
-        or "scaled"
-        If "unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     name : str, optional
         Name of the objective function.
 
@@ -770,21 +761,8 @@ class _Objective(IOAble, ABC):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="unscaled",
         name=None,
     ):
-        assert where_apply_loss in ["unscaled", "scaled"], (
-            "where_apply_loss must be 'unscaled' or" f"'scaled', got {where_apply_loss}"
-        )
-
-        if loss_function is None:
-            loss_function = lambda x: x
-        loss_function_on_unscaled = (
-            loss_function if where_apply_loss == "unscaled" else lambda x: x
-        )
-        loss_function_on_scaled = (
-            loss_function if where_apply_loss == "scaled" else lambda x: x
-        )
 
         if self._scalar:
             assert self._coordinates == ""
@@ -793,20 +771,7 @@ class _Objective(IOAble, ABC):
         assert normalize_target in {True, False}
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
-        assert callable(loss_function), "Loss function must be callable!"
-        # function should be able to handle input of this type and shape
-        try:
-            _test_output_loss = loss_function(jnp.ones((2,)))
-        except Exception as e:
-            raise Exception(
-                "Loss function should be able"
-                + " to accept a single array as argument! "
-                + "Instead, threw following: ",
-                e,
-            )
-        assert (
-            isinstance(_test_output_loss, jnp.ndarray) and _test_output_loss.ndim <= 1
-        ), "Loss Function must return a single 0D or 1D array!"
+        assert loss_function in [None, "mean", "min", "max"]
 
         self._target = target
         self._bounds = bounds
@@ -817,9 +782,13 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        self._loss_function_on_unscaled = loss_function_on_unscaled
-        self._loss_function_on_scaled = loss_function_on_scaled
-        self._where_apply_loss = where_apply_loss
+        self._loss_function = {
+            "mean": jnp.mean,
+            "max": jnp.max,
+            "min": jnp.min,
+            None: None,
+        }[loss_function]
+
         self._things = flatten_list([things], True)
 
     def _set_derivatives(self):
@@ -922,6 +891,11 @@ class _Objective(IOAble, ABC):
                 w = jnp.tile(w, self.dim_f // w.size)
             self._constants["quad_weights"] = w
 
+        if self._loss_function is not None:
+            self._dim_f = 1
+            if hasattr(self, "_constants"):
+                self._constants["quad_weights"] = 1.0
+
         if use_jit is not None:
             self._use_jit = use_jit
         if self._use_jit:
@@ -935,19 +909,24 @@ class _Objective(IOAble, ABC):
 
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
-        return self._loss_function_on_unscaled(
-            jnp.atleast_1d(self.compute(*args, **kwargs))
-        )
+        f = self.compute(*args, **kwargs)
+        if self._loss_function is not None:
+            f = self._loss_function(f)
+        return jnp.atleast_1d(f)
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
-        f = self._loss_function_on_unscaled(self.compute(*args, **kwargs))
-        return self._loss_function_on_scaled(self._scale(f, **kwargs))
+        f = self.compute(*args, **kwargs)
+        if self._loss_function is not None:
+            f = self._loss_function(f)
+        return jnp.atleast_1d(self._scale(f, **kwargs))
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        f = self._loss_function_on_unscaled(self.compute(*args, **kwargs))
-        return self._loss_function_on_scaled(self._scale(self._shift(f), **kwargs))
+        f = self.compute(*args, **kwargs)
+        if self._loss_function is not None:
+            f = self._loss_function(f)
+        return jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
 
     def _shift(self, f):
         """Subtract target or clamp to bounds."""

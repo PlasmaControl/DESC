@@ -48,19 +48,10 @@ class ForceBalance(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : callable, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc.
-        This loss function is called on the raw compute value, before any shifting,
-        scaling, or normalization.
-    where_apply_loss : str
-        where to apply the user defined loss function. One of "unscaled"
-        or "scaled"
-        If "unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -82,7 +73,6 @@ class ForceBalance(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="unscaled",
         grid=None,
         name="force",
     ):
@@ -97,7 +87,6 @@ class ForceBalance(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -227,19 +216,10 @@ class ForceBalanceAnisotropic(_Objective):
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.    grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    loss_function : callable, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc.
-        This loss function is called on the raw compute value, before any shifting,
-        scaling, or normalization.
-    where_apply_loss : str
-        where to apply the user defined loss function. One of "unscaled"
-        or "scaled"
-        If "unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -261,7 +241,6 @@ class ForceBalanceAnisotropic(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="unscaled",
         grid=None,
         name="force-anisotropic",
     ):
@@ -276,7 +255,6 @@ class ForceBalanceAnisotropic(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -387,19 +365,10 @@ class RadialForceBalance(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : callable, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc.
-        This loss function is called on the raw compute value, before any shifting,
-        scaling, or normalization.
-    where_apply_loss : str
-        where to apply the user defined loss function. One of "unscaled"
-        or "scaled"
-        If "unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -421,7 +390,6 @@ class RadialForceBalance(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="unscaled",
         grid=None,
         name="radial force",
     ):
@@ -436,7 +404,6 @@ class RadialForceBalance(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -547,19 +514,10 @@ class HelicalForceBalance(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : callable, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc.
-        This loss function is called on the raw compute value, before any shifting,
-        scaling, or normalization.
-    where_apply_loss : str
-        where to apply the user defined loss function. One of "unscaled"
-        or "scaled"
-        If "unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -581,7 +539,6 @@ class HelicalForceBalance(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="unscaled",
         grid=None,
         name="helical force",
     ):
@@ -596,7 +553,6 @@ class HelicalForceBalance(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -703,19 +659,10 @@ class Energy(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : callable, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc.
-        This loss function is called on the raw compute value, before any shifting,
-        scaling, or normalization.
-    where_apply_loss : str
-        where to apply the user defined loss function. One of "unscaled"
-        or "scaled"
-        If "unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     gamma : float, optional
@@ -741,7 +688,6 @@ class Energy(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="unscaled",
         grid=None,
         gamma=0,
         name="energy",
@@ -758,7 +704,6 @@ class Energy(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            where_apply_loss=where_apply_loss,
             name=name,
         )
 
@@ -874,19 +819,10 @@ class CurrentDensity(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : callable, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc.
-        This loss function is called on the raw compute value, before any shifting,
-        scaling, or normalization.
-    where_apply_loss : str
-        where to apply the user defined loss function. One of "unscaled"
-        or "scaled"
-        If "unscaled", the loss function will apply to
-        the raw objective function values, before the target is applied.
-        If "scaled", the loss function will apply to
-        the scaled objective function values, after the target is applied.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -908,7 +844,6 @@ class CurrentDensity(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        where_apply_loss="unscaled",
         grid=None,
         name="current density",
     ):
@@ -923,7 +858,6 @@ class CurrentDensity(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            where_apply_loss=where_apply_loss,
             name=name,
         )
 

@@ -1336,8 +1336,10 @@ class FiniteElementBasis(_FE_Basis):
             Each row is one basis function with modes (l,i,j).
 
         """
-        lij_mesh = np.meshgrid(np.arange(L), np.arange(I), np.arange(Q), indexing="ij")
-        lij_mesh = np.reshape(np.array(lij_mesh, dtype=int), (3, L * I * Q)).T
+        lij_mesh = np.meshgrid(
+            np.arange(L + 1), np.arange(I), np.arange(Q), indexing="ij"
+        )
+        lij_mesh = np.reshape(np.array(lij_mesh, dtype=int), (3, (L + 1) * I * Q)).T
         return np.unique(lij_mesh, axis=0)
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
@@ -1368,7 +1370,7 @@ class FiniteElementBasis(_FE_Basis):
         l, i, j = modes.T
         lm = np.array([l, np.zeros(len(l))]).T
 
-        radial = zernike_radial(r[:, np.newaxis], lm, 0, dr=derivatives[0])
+        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         if self.N > 0:
             # Tessellate the domain and find the basis functions for theta, zeta
             Theta, Zeta = np.meshgrid(t, z, indexing="ij")

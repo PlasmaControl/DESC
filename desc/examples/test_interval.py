@@ -16,9 +16,9 @@ from matplotlib import pyplot as plt
 from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBasis
 from desc.geometry import convert_spectral_to_FE
 
-M = 10  # Note M > 2 required
+M = 3  # Note M > 2 required
 N = 0
-L = 1
+L = 0
 K = 2
 mesh = FiniteElementMesh1D(M, K=K)
 mesh.plot_intervals(plot_quadrature_points=True)
@@ -33,12 +33,14 @@ integral = mesh.integrate(np.array([np.cos(quadpoints)]).T)
 assert np.allclose(integral, 0.0)
 
 # Make a surface in (R, phi=0, Z) plane.
-R_lmn = np.zeros((L, M, 1))
+
+## Number of modes for l here is probably wrong for the FourierZernike basis
+R_lmn = np.zeros((L + 1, 2 * M + 1, 2 * N + 1))
 R_lmn[0, 1, 0] = 1.0
-Z_lmn = np.zeros((L, M, 1))
+Z_lmn = np.zeros((L + 1, 2 * M + 1, 2 * N + 1))
 Z_lmn[0, 1, 0] = 5.0
-R_lmn = R_lmn.reshape(L * M)
-Z_lmn = Z_lmn.reshape(L * M)
+R_lmn = R_lmn.reshape((L + 1) * (2 * M + 1) * (2 * N + 1))
+Z_lmn = Z_lmn.reshape((L + 1) * (2 * M + 1) * (2 * N + 1))
 L_lmn = np.zeros(R_lmn.shape)
 
 # Plot original boundary
@@ -46,7 +48,6 @@ fz = FourierZernikeBasis(L, M, N)
 theta = np.linspace(0, 2 * np.pi, endpoint=True)
 plt.figure()
 plt.plot(np.cos(theta), 5 * np.sin(theta))
-plt.show()
 
 # Define the bases
 Rprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
@@ -68,8 +69,20 @@ L_basis = FourierZernikeBasis(
     N=N,
 )
 R_basis.R_lmn = R_lmn
-Z_basis.R_lmn = R_lmn
+Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
+
+# Replot original boundary using the Zernike polynomials
+print(R_basis.R_lmn, Z_basis.Z_lmn)
+nodes = (
+    np.array(np.meshgrid(np.ones(1), theta, np.zeros(1), indexing="ij"))
+    .reshape(3, len(theta))
+    .T
+)
+R = R_basis.R_lmn[1] * R_basis.evaluate(nodes=nodes, modes=np.array([[1, 1, 0]]))
+Z = Z_basis.Z_lmn[1] * Z_basis.evaluate(nodes=nodes, modes=np.array([[1, -1, 0]]))
+plt.plot(R, Z, "ro")
+
 Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
     R_lmn,
     Z_lmn,
@@ -83,6 +96,10 @@ Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
 )
 Rprime_basis.R_lmn = Rprime_lmn
 Zprime_basis.Z_lmn = Zprime_lmn
-_, bfs = Rprime_basis.mesh.find_intervals_corresponding_to_points(theta)
-print(bfs.shape)
-print(Rprime_lmn, Rprime_lmn.shape)
+
+print(R_basis.evaluate(nodes=nodes).shape)
+print(Rprime_basis.evaluate(nodes=nodes))
+R = np.sum(Rprime_basis.R_lmn * Rprime_basis.evaluate(nodes=nodes), axis=-1)
+Z = np.sum(Zprime_basis.Z_lmn * Zprime_basis.evaluate(nodes=nodes), axis=-1)
+plt.plot(R, Z, "ko")
+plt.show()

@@ -197,7 +197,6 @@ def convert_spectral_to_FE(
     assert L == R_basis.L
     mesh = Rprime_basis.mesh
     quadpoints = np.array(mesh.return_quadrature_points())
-    print(quadpoints)
     if N == 0:
         quadpoints = (
             np.array(
@@ -213,11 +212,11 @@ def convert_spectral_to_FE(
 
     nquad = mesh.nquad
     Bjb_Z = np.zeros((I, Q, I, Q))
-    Aj_Z = np.zeros((I, Q, L))
+    Aj_Z = np.zeros((I, Q, L + 1))
     Bjb_R = np.zeros((I, Q, I, Q))
-    Aj_R = np.zeros((I, Q, L))
+    Aj_R = np.zeros((I, Q, L + 1))
     Bjb_L = np.zeros((I, Q, I, Q))
-    Aj_L = np.zeros((I, Q, L))
+    Aj_L = np.zeros((I, Q, L + 1))
 
     # Compute the A matrix in Ax = b, should be exactly the same
     # as in the 2D case.
@@ -254,7 +253,7 @@ def convert_spectral_to_FE(
                         )
                     ).reshape(I * nquad, 1)
                 )
-    Nrho = 100
+    Nrho = 10
     rho = np.linspace(0, 1, Nrho, endpoint=True)
     delta_rho = rho[1] - rho[0]
     quadpoints = np.array(mesh.return_quadrature_points())
@@ -275,63 +274,86 @@ def convert_spectral_to_FE(
     modes_L = L_basis.modes
     for i in range(I):
         for j in range(Q):
-            for k in range(L):
-                for m in range(M):
-                    for n in range(N):
-                        for l in range(L):
+            for k in range(L + 1):
+                for m in range(2 * M + 1):
+                    for n in range(2 * N + 1):
+                        for l in [
+                            abs(-m + M)
+                        ]:  # must be fixed if using ANSI indexing instead of spectral
                             # Sum over n, m, l and integrals over theta, zeta, rho
+                            ind = np.array(
+                                [
+                                    int(x)
+                                    for x in range(len(modes_R))
+                                    if np.allclose(modes_R[x, :], [l, -m + M, -n + N])
+                                ]
+                            )[0]
                             Aj_Z[i, j, k] += (
-                                Z_lmn[modes_Z[l + L * m + L * M * n, :]]
+                                Z_lmn[ind]
                                 * mesh.integrate(
                                     np.sum(
                                         (
                                             Z_basis.evaluate(
                                                 nodes=quadpoints,
-                                                modes=modes_Z[l + L * m + L * M * n, :],
+                                                modes=modes_Z[ind : ind + 1, :],
                                             )
                                             * Zprime_basis.evaluate(
                                                 nodes=quadpoints,
-                                                modes=np.array([k, i, j]),
+                                                modes=np.array([[k, i, j]]),
                                             )
-                                        ).reshape(Nrho, I * nquad, 3),
+                                        ).reshape(Nrho, I * nquad, 1),
                                         axis=0,
                                     )
                                 )
                                 / (k + 1)
                             )
+                            ind = np.array(
+                                [
+                                    int(x)
+                                    for x in range(len(modes_Z))
+                                    if np.allclose(modes_Z[x, :], [l, -m + M, -n + N])
+                                ]
+                            )[0]
                             Aj_R[i, j, k] += (
-                                R_lmn[modes_R[l + L * m + L * M * n, :]]
+                                R_lmn[ind]
                                 * mesh.integrate(
                                     np.sum(
                                         (
                                             R_basis.evaluate(
                                                 nodes=quadpoints,
-                                                modes=modes_R[l + L * m + L * M * n, :],
+                                                modes=modes_R[ind : ind + 1, :],
                                             )
                                             * Rprime_basis.evaluate(
                                                 nodes=quadpoints,
-                                                modes=np.array([k, i, j]),
+                                                modes=np.array([[k, i, j]]),
                                             )
-                                        ).reshape(Nrho, I * nquad, 3),
+                                        ).reshape(Nrho, I * nquad, 1),
                                         axis=0,
                                     )
                                 )
                                 / (k + 1)
                             )
+                            ind = np.array(
+                                [
+                                    int(x)
+                                    for x in range(len(modes_L))
+                                    if np.allclose(modes_L[x, :], [l, -m + M, -n + N])
+                                ]
+                            )[0]
                             Aj_L[i, j, k] += (
-                                L_lmn[modes_L[l + L * m + L * M * n, :]]
+                                L_lmn[ind]
                                 * mesh.integrate(
                                     np.sum(
                                         (
                                             L_basis.evaluate(
                                                 nodes=quadpoints,
-                                                modes=modes_L[l + L * m + L * M * n, :],
+                                                modes=modes_L[ind : ind + 1, :],
                                             )
                                             * Lprime_basis.evaluate(
                                                 nodes=quadpoints,
-                                                modes=np.array([k, i, j]),
+                                                modes=np.array([[k, i, j]]),
                                             )
-                                        ).reshape(Nrho, I * nquad, 3),
+                                        ).reshape(Nrho, I * nquad, 1),
                                         axis=0,
                                     )
                                 )
@@ -342,31 +364,32 @@ def convert_spectral_to_FE(
     # if the grid spacing is uniform, so we omit it here.
     # However, factor of pi from the orthonormality of the radial basis functions
     # being used in the finite element representation.
+    print(Bjb_R[1, :, 1, :])
     Bjb_R = Bjb_R.reshape(I * Q, I * Q)
-    print(Bjb_R)
-    Bjb_R_expanded = np.zeros((I * Q, L, I * Q, L))
+    print(Bjb_R, Aj_R)
+    Bjb_R_expanded = np.zeros((I * Q, L + 1, I * Q, L + 1))
     for ii in range(L):
         Bjb_R_expanded[:, ii, :, ii] = Bjb_R
-    Bjb_R = np.reshape(Bjb_R_expanded, (I * Q * L, I * Q * L))
-    Aj_R = Aj_R.reshape(I * Q * L) * np.pi * delta_rho
+    Bjb_R = np.reshape(Bjb_R_expanded, (I * Q * (L + 1), I * Q * (L + 1)))
+    Aj_R = Aj_R.reshape(I * Q * (L + 1)) * np.pi * delta_rho
     Bjb_Z = Bjb_Z.reshape(I * Q, I * Q)
-    Bjb_Z = np.tile(Bjb_Z, L)  # repeat this matrix L times for the linear solve
-    Aj_Z = Aj_Z.reshape(I * Q * L) * np.pi * delta_rho
+    Bjb_Z = np.tile(Bjb_Z, (L + 1))  # repeat this matrix L times for the linear solve
+    Aj_Z = Aj_Z.reshape(I * Q * (L + 1)) * np.pi * delta_rho
     Bjb_L = Bjb_L.reshape(I * Q, I * Q)
-    Bjb_L = np.tile(Bjb_L, L)  # repeat this matrix L times for the linear solve
-    Aj_L = Aj_L.reshape(I * Q * L) * np.pi * delta_rho
+    Bjb_L = np.tile(Bjb_L, (L + 1))  # repeat this matrix L times for the linear solve
+    Aj_L = Aj_L.reshape(I * Q * (L + 1)) * np.pi * delta_rho
 
     # Constructed the matrices such that Bjb * Rprime = Aj and now need to solve
     # this linear system of equations. Use an LU
     lu = splu(Bjb_R)
     Rprime = lu.solve(Aj_R)
-    Rprime_lmn = Rprime.reshape(L * I * Q)
+    Rprime_lmn = Rprime.reshape((L + 1) * I * Q)
     lu = splu(Bjb_Z)
     Zprime = lu.solve(Aj_Z)
-    Zprime_lmn = Zprime.reshape(L * I * Q)
+    Zprime_lmn = Zprime.reshape((L + 1) * I * Q)
     lu = splu(Bjb_L)
     Lprime = lu.solve(Aj_L)
-    Lprime_lmn = Lprime.reshape(L * I * Q)
+    Lprime_lmn = Lprime.reshape((L + 1) * I * Q)
     return Rprime_lmn, Zprime_lmn, Lprime_lmn
 
 

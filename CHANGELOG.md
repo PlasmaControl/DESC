@@ -3,6 +3,8 @@ Changelog
 
 - Adds ``desc.compat.rescale`` for rescaling equilibria to a specified size and field
 strength.
+- Adds ``desc.vmec_utils.make_boozmn_output `` for writing boozmn.nc style output files
+for compatibility with other codes which expect such files from the Booz_Xform code.
 
 
 v0.10.2

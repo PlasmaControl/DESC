@@ -15,6 +15,7 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.magnetic_fields import OmnigeneousField
 from desc.objectives import (
     AspectRatio,
     CurrentDensity,
@@ -22,6 +23,9 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
+    FixModeLambda,
+    FixModeR,
+    FixModeZ,
     FixParameter,
     FixPressure,
     FixPsi,
@@ -30,6 +34,7 @@ from desc.objectives import (
     ForceBalanceAnisotropic,
     HelicalForceBalance,
     ObjectiveFunction,
+    Omnigenity,
     PlasmaVesselDistance,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
@@ -756,6 +761,58 @@ def test_multiobject_optimization():
     assert surf.Z_lmn[-1] == -2
     assert eq.Psi == 1.0
     np.testing.assert_allclose(eq.i_l, [2, 0, 0])
+
+
+@pytest.mark.unit
+def test_omnigenity_qa():
+    """Test optimizing omnigenity parameters to match an axisymmetric equilibrium."""
+    eq = desc.examples.get("DSHAPE")
+    eq.Psi *= 5  # B0 = 1 T
+    field = OmnigeneousField(
+        L_well=0,
+        M_well=8,
+        L_omni=0,
+        M_omni=1,
+        N_omni=0,
+        NFP=eq.NFP,
+        helicity=(1, 0),
+    )
+
+    objective = ObjectiveFunction((Omnigenity(field=field, eq=eq),))
+    constraints = (
+        FixModeR(eq=eq),
+        FixModeZ(eq=eq),
+        FixModeLambda(eq=eq),
+        FixPressure(eq=eq),
+        FixIota(eq=eq),
+        FixPsi(eq=eq),
+    )
+
+    B = field.compute_well(np.ones((8,)), np.linspace(0, np.pi / 2, 8))
+    print(B)  # TODO: remove print statement
+
+    optimizer = Optimizer("lsq-exact")
+    (eq, field), result = optimizer.optimize(
+        (eq, field),
+        objective,
+        constraints,
+        maxiter=100,
+        ftol=1e-6,
+        xtol=1e-6,
+        verbose=3,
+    )
+
+    B = field.compute_well(np.ones((8,)), np.linspace(0, np.pi / 2, 8))
+    print(B)  # TODO: remove print statement
+
+    # x_lmn=0 because the equilibrium is QS
+    np.testing.assert_allclose(field.x_lmn, 0, atol=1e-8)  # FIXME: decrease tolerance
+
+    # check that well gets |B| on axis correct
+    grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
+    data = eq.compute("|B|", grid=grid)
+    B0 = np.mean(data["|B|"])  # FIXME: objective default grid is rho=1, not rho=0
+    np.testing.assert_allclose(field.B_lm, B0)  # FIXME: this does not pass
 
 
 class TestGetExample:

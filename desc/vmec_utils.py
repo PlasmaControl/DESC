@@ -350,7 +350,7 @@ def zernike_to_fourier(x_lmn, basis, rho, return_full=True):
     # FIXME: this always returns the full double Fourier basis regardless of symmetry
     M = basis.M
     N = basis.N
-    if return_full:
+    if not return_full:
         fourier_basis = DoubleFourierSeries(M=M, N=N, sym=basis.sym, NFP=basis.NFP)
         mn = fourier_basis.modes[:, 1:]
     else:
@@ -361,6 +361,7 @@ def zernike_to_fourier(x_lmn, basis, rho, return_full=True):
     n = mn[:, 1]
 
     x_mn = np.zeros((rho.size, m.size))
+    # TODO: this is a bit slow, could be sped up by further vectorization
     for k in range(len(m)):
         idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
         if len(idx):

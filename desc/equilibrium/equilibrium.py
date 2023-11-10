@@ -1712,11 +1712,7 @@ class Equilibrium(IOAble, Optimizable):
 
         """
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(
-                eq=self,
-                iota=objective != "vacuum" and self.iota is not None,
-                kinetic=self.electron_temperature is not None,
-            )
+            constraints = get_fixed_boundary_constraints(eq=self)
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(eq=self, mode=objective)
         if not isinstance(optimizer, Optimizer):
@@ -1817,11 +1813,7 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(
-                eq=self,
-                iota=self.iota is not None,
-                kinetic=self.electron_temperature is not None,
-            )
+            constraints = get_fixed_boundary_constraints(eq=self)
             constraints = (ForceBalance(eq=self), *constraints)
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
@@ -2055,17 +2047,9 @@ class Equilibrium(IOAble, Optimizable):
             objective = get_equilibrium_objective(eq=self)
         if constraints is None:
             if "Ra_n" in deltas or "Za_n" in deltas:
-                constraints = get_fixed_axis_constraints(
-                    eq=self,
-                    iota=self.iota is not None,
-                    kinetic=self.electron_temperature is not None,
-                )
+                constraints = get_fixed_axis_constraints(eq=self)
             else:
-                constraints = get_fixed_boundary_constraints(
-                    eq=self,
-                    iota=self.iota is not None,
-                    kinetic=self.electron_temperature is not None,
-                )
+                constraints = get_fixed_boundary_constraints(eq=self)
 
         eq = perturb(
             self,

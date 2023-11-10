@@ -478,11 +478,7 @@ class ProximalProjection(ObjectiveFunction):
         timer.start("Proximal projection build")
 
         self._eq = eq
-        self._linear_constraints = get_fixed_boundary_constraints(
-            eq=eq,
-            iota=self._eq.iota,
-            kinetic=self._eq.electron_temperature,
-        )
+        self._linear_constraints = get_fixed_boundary_constraints(eq=eq)
         self._linear_constraints = maybe_add_self_consistency(
             self._eq, self._linear_constraints
         )

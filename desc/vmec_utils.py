@@ -492,7 +492,7 @@ def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa:
 def make_boozmn_output(  # noqa: 16 fxn too complex
     eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0
 ):
-    """Create a booz_xform-style .nc output file.
+    """Create and save a booz_xform-style .nc output file.
 
     based strongly off of https://github.com/hiddenSymmetries/booz_xform/tree/main
 
@@ -507,7 +507,8 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         NOTE: because this is performed on the so-called "half-grid", this will
         result in an output of size surfs-1, since for surfs number of surfaces
         there is only surfs-1 surfaces on the half-grid, the first one being
-        the surface at rho=0.5 / surfs
+        the surface at s = 0.5 / surfs
+        where s = rho**2 is the normalized toroidal flux coordinate
     M_booz : int, optional
         poloidal resolution to use for Boozer transform.
     N_booz : int, optional

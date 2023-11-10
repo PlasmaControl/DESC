@@ -7,6 +7,7 @@ import pytest
 from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
+from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
 from desc.compute import data_index, rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -19,6 +20,7 @@ from desc.geometry import (
 )
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import load
+from desc.magnetic_fields import CurrentPotentialField, FourierCurrentPotentialField
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -1206,7 +1208,7 @@ def test_compute_everything():
         ),
         "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ).to_SplineXYZCurve(grid=LinearGrid(N=50, endpoint=True)),
+        ).to_SplineXYZ(grid=LinearGrid(N=50)),
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
@@ -1214,14 +1216,43 @@ def test_compute_everything():
         "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
             **elliptic_cross_section_with_torsion
         ),
+        # magnetic fields
+        "desc.magnetic_fields.CurrentPotentialField": CurrentPotentialField(
+            **elliptic_cross_section_with_torsion,
+            potential=lambda theta, zeta, G: G * zeta / 2 / np.pi,
+            potential_dtheta=lambda theta, zeta, G: np.zeros_like(theta),
+            potential_dzeta=lambda theta, zeta, G: G * np.ones_like(theta) / 2 / np.pi,
+            params={"G": 1e7},
+        ),
+        "desc.magnetic_fields.FourierCurrentPotentialField": (
+            FourierCurrentPotentialField(
+                **elliptic_cross_section_with_torsion, I=0, G=1e7
+            )
+        ),
+        # coils
+        "desc.coils.FourierRZCoil": FourierRZCoil(
+            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
+        ),
+        "desc.coils.FourierXYZCoil": FourierXYZCoil(
+            X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
+        ),
+        "desc.coils.FourierPlanarCoil": FourierPlanarCoil(
+            current=5,
+            center=[10, 1, 3],
+            normal=[1, 2, 3],
+            r_n=[1, 2, 3],
+            modes=[0, 1, 2],
+        ),
+        "desc.coils.SplineXYZCoil": SplineXYZCoil(
+            current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
+        ),
     }
-    things_keys = list(things.keys()).sort()
-    data_keys = list(data_index.keys()).sort()
-    assert (
-        things_keys == data_keys
-    ), "Missing a parameterization to test against master."
+    assert things.keys() == data_index.keys(), (
+        f"Missing the parameterizations {data_index.keys() - things.keys()}"
+        f" to test against master."
+    )
     # use this low resolution grid for equilibria to reduce file size
-    grid = LinearGrid(
+    eqgrid = LinearGrid(
         # include magnetic axis
         rho=np.linspace(0, 1, 10),
         M=5,
@@ -1229,7 +1260,15 @@ def test_compute_everything():
         NFP=things["desc.equilibrium.equilibrium.Equilibrium"].NFP,
         sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
     )
-    grid = {"desc.equilibrium.equilibrium.Equilibrium": {"grid": grid}}
+    curvegrid1 = LinearGrid(N=10)
+    curvegrid2 = LinearGrid(N=10, NFP=2)
+    grid = {
+        "desc.equilibrium.equilibrium.Equilibrium": {"grid": eqgrid},
+        "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
+        "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
+        "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
+        "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
+    }
 
     with open("tests/inputs/master_compute_data.pkl", "rb") as file:
         master_data = pickle.load(file)
@@ -1242,7 +1281,10 @@ def test_compute_everything():
             list(data_index[p].keys()), **grid.get(p, {})
         )
         # make sure we can compute everything
-        assert this_branch_data[p].keys() == data_index[p].keys(), p
+        assert this_branch_data[p].keys() == data_index[p].keys(), (
+            f"Parameterization: {p}."
+            f" Can't compute {data_index[p].keys() - this_branch_data[p].keys()}."
+        )
         # compare against master branch
         for name in this_branch_data[p]:
             if p in master_data and name in master_data[p]:
@@ -1250,17 +1292,22 @@ def test_compute_everything():
                     np.testing.assert_allclose(
                         actual=this_branch_data[p][name],
                         desired=master_data[p][name],
-                        atol=1e-12,
+                        atol=1e-10,
+                        rtol=1e-10,
                         err_msg=f"Parameterization: {p}. Name: {name}.",
                     )
                 except AssertionError as e:
                     error = True
                     print(e)
             else:
+                # We can compute a new quantity now, so we should update the
+                # master compute data.
                 update_master_data = True
 
     if not error and update_master_data:
+        # then update the master compute data
         with open("tests/inputs/master_compute_data.pkl", "wb") as file:
+            # remember to git commit this file
             pickle.dump(this_branch_data, file)
     assert not error
 

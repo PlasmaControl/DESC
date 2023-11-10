@@ -210,9 +210,8 @@ class InputReader:
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
 
         for line in lines:
-
             # check if VMEC input file format
-            isVMEC = re.search(r"&INDATA", line)
+            isVMEC = re.search(r"&INDATA", line, re.IGNORECASE)
             if isVMEC:
                 print("Converting VMEC input to DESC input")
                 path = self.input_path + "_desc"
@@ -769,7 +768,7 @@ class InputReader:
             )
 
         f.write("\n# fixed-boundary surface shape\n")
-        for (l, m, n, R1, Z1) in inputs[-1]["surface"]:
+        for l, m, n, R1, Z1 in inputs[-1]["surface"]:
             f.write(
                 "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
                     int(l), int(m), int(n), R1, Z1
@@ -777,22 +776,23 @@ class InputReader:
             )
 
         f.write("\n# magnetic axis initial guess\n")
-        for (n, R0, Z0) in inputs[0]["axis"]:
+        for n, R0, Z0 in inputs[0]["axis"]:
             f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
 
         f.close()
 
     @staticmethod
-    def descout_to_input(  # noqa: C901 - fxn too complex
+    def desc_output_to_input(  # noqa: C901 - fxn too complex
         outfile,
         infile,
         objective="force",
         optimizer="lsq-exact",
-        header="#DESC-generated input file",
+        header=None,
         ftol=1e-2,
         xtol=1e-6,
         gtol=1e-6,
         maxiter=100,
+        threshold=1e-10,
     ):
         """Generate a DESC input file from a DESC output file.
 
@@ -818,25 +818,31 @@ class InputReader:
             absolute tolerance of the projected gradient g
         maxiter : int
             maximum number of optimizer iterations per continuation step
+        threshold : float
+            Fourier coefficients below this value will be set to 0.
         """
+        from desc.grid import LinearGrid
+        from desc.io.equilibrium_io import load
+        from desc.profiles import PowerSeriesProfile
+
         f = open(outfile, "w+")
 
         f.seek(0)
 
-        from desc.io.equilibrium_io import load
-
-        eq = load(infile)
+        fam = load(infile)
         try:
-            eq0 = eq[-1]
+            eq = fam[-1]
         except TypeError:
-            eq0 = eq
+            eq = fam
 
+        if header is None:
+            header = "# DESC input file generated from the output file:\n# " + infile
         f.write(header + "\n")
 
-        f.write("# global parameters\n")
-        f.write("sym = {:1d} \n".format(eq0.sym))
-        f.write("NFP = {:3d} \n".format(int(eq0.NFP)))
-        f.write("Psi = {:.8f} \n".format(eq0.Psi))
+        f.write("\n# global parameters\n")
+        f.write("sym = {:d}\n".format(eq.sym))
+        f.write("NFP = {:d}\n".format(int(eq.NFP)))
+        f.write("Psi = {:.8E}\n".format(eq.Psi))
 
         f.write("\n# spectral resolution\n")
         for key, val in {
@@ -847,90 +853,76 @@ class InputReader:
             "M_grid": "M_grid",
             "N_grid": "N_grid",
         }.items():
-            f.write(f"{key} = {getattr(eq0, val)}\n")
+            f.write(f"{key} = {getattr(eq, val)}\n")
 
-        f.write("\n\n# solver tolerances\n")
-        f.write(f"ftol = {ftol}\n")
-        f.write(f"xtol = {xtol}\n")
-        f.write(f"gtol = {gtol}\n")
-        f.write(f"maxiter = {maxiter}\n")
+        f.write("\n# solver tolerances\n")
+        f.write("ftol = {:.3E}\n".format(ftol))
+        f.write("xtol = {:.3E}\n".format(xtol))
+        f.write("gtol = {:.3E}\n".format(gtol))
+        f.write("maxiter = {:d}\n".format(maxiter))
 
-        f.write("\n\n# solver methods\n")
+        f.write("\n# solver methods\n")
         f.write(f"optimizer = {optimizer}\n")
         f.write(f"objective = {objective}\n")
-        f.write("spectral_indexing = {}\n".format(eq0._spectral_indexing))
+        f.write("spectral_indexing = {}\n".format(eq._spectral_indexing))
 
         f.write("\n# pressure and rotational transform/current profiles\n")
 
-        if eq0.iota:
-            assert (
-                eq0.pressure.__class__.__name__ == "PowerSeriesProfile"
-                and eq0.iota.__class__.__name__ == "PowerSeriesProfile"
-            ), "Equilibrium must have power series profiles for ascii io"
+        grid = LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        rho = grid.nodes[grid._unique_rho_idx, 0]
+
+        pressure = grid.compress(eq.compute("p", grid=grid)["p"])
+        iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
+        current = grid.compress(eq.compute("current", grid=grid)["current"])
+
+        pres_profile = PowerSeriesProfile.from_values(
+            rho, pressure, order=10, sym=False
+        ).params
+        iota_profile = PowerSeriesProfile.from_values(
+            rho, iota, order=eq.L, sym=False
+        ).params
+        curr_profile = PowerSeriesProfile.from_values(
+            rho, current, order=eq.L, sym=False
+        ).params
+
+        if eq.iota:
             char = "i"
-            iseven_pres = int(eq0._pressure.basis.sym == "even") + 1
-            iseven_iota = int(eq0._iota.basis.sym == "even") + 1
-            pres_profile = np.zeros((eq0.L + 1,))
-            iota_profile = np.zeros((eq0.L + 1,))
-            pres_profile[: eq0.L + 1 : iseven_pres] = eq0._pressure.params
-            iota_profile[: eq0.L + 1 : iseven_iota] = eq0._iota.params
-
-            idxs = np.linspace(0, eq0.L - 1, eq0.L, dtype=int)
-            for l in idxs:
-                f.write(
-                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                        int(l), pres_profile[l], char, iota_profile[l]
-                    )
-                )
+            profile = iota_profile
         else:
-            assert (
-                eq0.pressure.__class__.__name__ == "PowerSeriesProfile"
-                and eq0.current.__class__.__name__ == "PowerSeriesProfile"
-            ), "Equilibrium must have power series profiles for ascii io"
             char = "c"
-            iseven_pres = int(eq0._pressure.basis.sym == "even") + 1
-            iseven_curr = int(eq0._current.basis.sym == "even") + 1
-            pres_profile = np.zeros((eq0.L + 1,))
-            curr_profile = np.zeros((eq0.L + 1,))
-            pres_profile[: eq0.L + 1 : iseven_pres] = eq0._pressure.params
-            curr_profile[: eq0.L + 1 : iseven_curr] = eq0._current.params
+            profile = curr_profile
 
-            idxs = np.linspace(0, eq0.L - 1, eq0.L, dtype=int)
-            for l in idxs:
-                f.write(
-                    "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(
-                        int(l), pres_profile[l], char, curr_profile[l]
-                    )
+        idxs = np.linspace(0, eq.L - 1, eq.L, dtype=int)
+        for l in idxs:
+            f.write(
+                "l: {:3d}  p = {:15.8E}  {} = {:15.8E}\n".format(
+                    int(l), pres_profile[l], char, profile[l]
                 )
-
-        f.write("\n")
+            )
 
         f.write("\n# fixed-boundary surface shape\n")
+
         # boundary parameters
-        if eq0.sym:
-            for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
-                if abs(eq0.Rb_lmn[k]) > 1e-8:
+        if eq.sym:
+            for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
+                if abs(eq.Rb_lmn[k]) > threshold:
                     f.write(
-                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
-                            Z1 = {:16.8E}\n".format(
-                            int(0), m, n, eq0.Rb_lmn[k], 0
-                        )
+                        "l: {:3d}  m: {:3d}  n: {:3d}  ".format(int(0), m, n)
+                        + "R1 = {:15.8E}  Z1 = {:15.8E}\n".format(eq.Rb_lmn[k], 0)
                     )
-            for k, (l, m, n) in enumerate(eq0.surface.Z_basis.modes):
-                if abs(eq0.Zb_lmn[k]) > 1e-8:
+            for k, (l, m, n) in enumerate(eq.surface.Z_basis.modes):
+                if abs(eq.Zb_lmn[k]) > threshold:
                     f.write(
-                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
-                            Z1 = {:16.8E}\n".format(
-                            int(0), m, n, 0, eq0.Zb_lmn[k]
-                        )
+                        "l: {:3d}  m: {:3d}  n: {:3d}  ".format(int(0), m, n)
+                        + "R1 = {:15.8E}  Z1 = {:15.8E}\n".format(0, eq.Zb_lmn[k])
                     )
         else:
-            for k, (l, m, n) in enumerate(eq0.surface.R_basis.modes):
-                if abs(eq0.Rb_lmn[k]) > 1e-8 or abs(eq0.Zb_lmn[k]) > 1e-8:
+            for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
+                if abs(eq.Rb_lmn[k]) > threshold or abs(eq.Zb_lmn[k]) > threshold:
                     f.write(
-                        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\t\
-                            Z1 = {:16.8E}\n".format(
-                            int(0), m, n, eq0.Rb_lmn[k], eq0.Zb_lmn[k]
+                        "l: {:3d}  m: {:3d}  n: {:3d}  ".format(int(0), m, n)
+                        + "R1 = {:15.8E}  Z1 = {:15.8E}\n".format(
+                            eq.Rb_lmn[k], eq.Zb_lmn[k]
                         )
                     )
 
@@ -987,7 +979,7 @@ class InputReader:
 
         # default values
         inputs = {
-            "sym": False,
+            "sym": True,
             "NFP": 1,
             "Psi": 1.0,
             "L": None,
@@ -1022,7 +1014,7 @@ class InputReader:
         # find start of namelist (&INDATA)
         vmeclines = vmec_file.readlines()
         for i, line in enumerate(vmeclines):
-            if line.find("&INDATA") != -1:
+            if line.upper().find("&INDATA") != -1:
                 start_ind = i
                 continue
             elif line.find("&") != -1:  # only care about the INDATA section

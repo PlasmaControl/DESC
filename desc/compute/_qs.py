@@ -182,14 +182,15 @@ def _nu(params, transforms, profiles, data, **kwargs):
         "theta_B",
         "zeta_B",
         "jac_Boozer_DESC",
+        "Boozer transform prefactor",
     ],
 )
 def _nu_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
-    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    norm = data["Boozer transform prefactor"]
     data["nu_mn"] = (
-        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (
+        norm
+        * (  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
             transforms["B"].basis.evaluate(nodes).T
             @ (data["jac_Boozer_DESC"] * data["nu"])
         )
@@ -329,14 +330,15 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
         "jac_Boozer_DESC",
         "theta_B",
         "zeta_B",
+        "Boozer transform prefactor",
     ],
 )
 def _sqrtg_B_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
-    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    norm = data["Boozer transform prefactor"]
     data["sqrt(g)_B_mn"] = (
-        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (
+        norm
+        * (  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
             transforms["B"].basis.evaluate(nodes).T
             @ (data["jac_Boozer_DESC"] * data["sqrt(g)_B"])
         )
@@ -356,14 +358,21 @@ def _sqrtg_B_mn(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["jac_Boozer_DESC", "|B|", "rho", "theta_B", "zeta_B"],
+    data=[
+        "jac_Boozer_DESC",
+        "|B|",
+        "rho",
+        "theta_B",
+        "zeta_B",
+        "Boozer transform prefactor",
+    ],
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
-    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    norm = data["Boozer transform prefactor"]
     data["|B|_mn"] = (
-        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (
+        norm
+        * (  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
             transforms["B"].basis.evaluate(nodes).T
             @ (data["jac_Boozer_DESC"] * data["|B|"])
         )
@@ -383,14 +392,21 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["jac_Boozer_DESC", "R", "rho", "theta_B", "zeta_B"],
+    data=[
+        "jac_Boozer_DESC",
+        "R",
+        "rho",
+        "theta_B",
+        "zeta_B",
+        "Boozer transform prefactor",
+    ],
 )
 def _R_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
-    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    norm = data["Boozer transform prefactor"]
     data["R_mn"] = (
-        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (
+        norm
+        * (  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
             transforms["B"].basis.evaluate(nodes).T
             @ (data["jac_Boozer_DESC"] * data["R"])
         )
@@ -410,14 +426,21 @@ def _R_mn(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["jac_Boozer_DESC", "Z", "rho", "theta_B", "zeta_B"],
+    data=[
+        "jac_Boozer_DESC",
+        "Z",
+        "rho",
+        "theta_B",
+        "zeta_B",
+        "Boozer transform prefactor",
+    ],
 )
 def _Z_mn(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
-    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    norm = data["Boozer transform prefactor"]
     data["Z_mn"] = (
-        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * (
+        norm
+        * (  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
             transforms["B"].basis.evaluate(nodes).T
             @ (data["jac_Boozer_DESC"] * data["Z"])
         )
@@ -441,6 +464,27 @@ def _Z_mn(params, transforms, profiles, data, **kwargs):
 )
 def _B_modes(params, transforms, profiles, data, **kwargs):
     data["B modes"] = transforms["B"].basis.modes
+    return data
+
+
+@register_compute_fun(
+    name="Boozer transform prefactor",
+    label="\\nu_{mn} = (\\zeta_{B} - \\zeta)_{mn}",
+    units="rad",
+    units_long="radians",
+    description="Prefactor in front of the boozer transform",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+)
+def _boozer_prefactor(params, transforms, profiles, data, **kwargs):
+    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    data[
+        "Boozer transform prefactor"
+    ] = norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
     return data
 
 

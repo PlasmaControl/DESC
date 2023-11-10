@@ -545,30 +545,34 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     r_full = np.sqrt(s_full)
     r_half = np.sqrt(s_half)
 
-    basis = get_transforms(
+    transforms = get_transforms(
         "|B|_mn",
         obj=eq,
         grid=Grid(np.array([])),
         M_booz=M_booz - 1,
         N_booz=N_booz,
-    )["B"].basis
+    )
+    basis = transforms["B"].basis
+    boozer_prefactor = 2 ** (3 - np.sum((basis.modes == 0), axis=1))
 
     matrix, modes = ptolemy_linear_transform(basis.modes)
     num_modes = modes.shape[0]
 
     if eq.sym:  # need a separate sin basis for Z (maybe nu)
-        basis_sin = get_transforms(
+        transforms_sin = get_transforms(
             "|B|_mn",
             obj=eq,
             grid=Grid(np.array([])),
             M_booz=M_booz - 1,
             N_booz=N_booz,
             sym="sin",
-        )["B"].basis
+        )
+        basis_sin = transforms_sin["B"].basis
         matrix_sin, modes_sin = ptolemy_linear_transform(
             np.insert(basis_sin.modes, 0, np.array([0, 0, 0]), axis=0)
         )
         modes_sin[0, 0] = -1
+        boozer_prefactor_sin = 2 ** (3 - np.sum((basis_sin.modes == 0), axis=1))
         # make the first mode a "sin" mode, even though it is m=n=0
         # because in the VMEC style outputs it includes this mode
 
@@ -588,11 +592,26 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     # precompute the needed data for the boozer surface computations
     # (except those which have to be computed on a single surface only,
     # like theta_B, zeta_B or nu)
-    keys = ["|B|", "R", "Z", "sqrt(g)", "rho", "psi_r", "lambda", "B_zeta", "B_theta"]
+    keys = [
+        "|B|",
+        "R",
+        "Z",
+        "sqrt(g)",
+        "rho",
+        "psi_r",
+        "lambda",
+        "B_zeta",
+        "B_theta",
+        "G",
+        "I",
+        "lambda_t",
+        "lambda_z",
+    ]
     data_vol = eq.compute(
         keys,
         grid=vol_grid,
     )
+    data_vol["Boozer transform prefactor"] = boozer_prefactor
 
     # FourierZernike fit the B_theta and B_zeta, then at each surface
     # just evaluate the fit at the rho to get the B_theta_mn and B_zeta_mn
@@ -653,9 +672,10 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             # but remove the incorrectly calculated Z_mn,nu_mn from the
             # dictionary first
             data.pop("nu_mn")
-            data.pop("nu")
+            data.pop("Boozer transform prefactor")
             data.pop("Z_mn")
             data_sin = data
+            data_sin["Boozer transform prefactor"] = boozer_prefactor_sin
 
             transforms_sin = get_transforms(
                 ["Z_mn", "nu_mn"],

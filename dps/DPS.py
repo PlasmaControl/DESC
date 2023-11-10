@@ -88,7 +88,7 @@ print("*************** START ***************")
 print("\nStarting Equilibrium")
 # eq_file = "input.LandremanPaul2021_QA_scaled_output.h5"
 # eq_file = "test_equilibrium.h5"
-eq_file = "ellipse_higherPsi.h5"
+eq_file = "rot_ellipse_M1_N1.h5"
 
 opt_file = "optimized_" + eq_file
 print(f"Loaded Equilibrium: {eq_file}\n")

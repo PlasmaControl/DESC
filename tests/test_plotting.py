@@ -947,9 +947,9 @@ def test_plot_omnigenous_field():
     field = OmnigeneousField(
         L_well=0,
         M_well=4,
-        L=0,
-        M=1,
-        N=1,
+        L_omni=0,
+        M_omni=1,
+        N_omni=1,
         NFP=2,
         helicity=(0, 2),
         B_lm=np.array([0.8, 0.9, 1.1, 1.2]),

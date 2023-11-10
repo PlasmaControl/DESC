@@ -507,10 +507,10 @@ class Omnigenity(_Objective):
 
     Parameters
     ----------
-    field : OmnigeneousField
-        Target omnigeneous field.
     eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
+        Equilibrium to be optimized to satisfy the Objective.
+    field : OmnigeneousField
+        Omnigeneous magnetic field to be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
@@ -549,24 +549,21 @@ class Omnigenity(_Objective):
 
     def __init__(
         self,
+        eq,
         field,
-        eq=None,
         target=0,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
-        helicity=(0, 1),
         M_booz=None,
         N_booz=None,
         well_weight=1,
         name="omnigenity",
     ):
-        assert len(helicity) == 2
-        assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
         self._grid = grid
-        self.helicity = helicity
+        self.helicity = field.helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
         self.well_weight = well_weight
@@ -580,7 +577,7 @@ class Omnigenity(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -643,7 +640,7 @@ class Omnigenity(_Objective):
             # average |B| on axis
             self._normalization = jnp.mean(field.B_lm[: field.M_well])
 
-        super().build(things=(eq, field), use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, equil_params, field_params, constants=None):
         """Compute omnigenity errors.
@@ -702,28 +699,6 @@ class Omnigenity(_Objective):
             field_data["eta"]
         )
         return omnigenity * weights
-
-    @property
-    def helicity(self):
-        """tuple: Type of omnigenity (M, N)."""
-        return self._helicity
-
-    @helicity.setter
-    def helicity(self, helicity):
-        assert (
-            (len(helicity) == 2)
-            and (int(helicity[0]) == helicity[0])
-            and (int(helicity[1]) == helicity[1])
-        )
-        if hasattr(self, "_helicity") and self._helicity != helicity:
-            self._built = False
-            warnings.warn("Re-build objective after changing the helicity!")
-        self._helicity = helicity
-        if hasattr(self, "_print_value_fmt"):
-            self._print_value_fmt = (
-                "Omnigenity ({},{}) error: ".format(self.helicity[0], self.helicity[1])
-                + "{:10.3e} "
-            )
 
 
 class Isodynamicity(_Objective):

@@ -1058,9 +1058,9 @@ class OmnigeneousField(Optimizable, IOAble):
     _io_attrs_ = [
         "_L_well",
         "_M_well",
-        "_L",
-        "_M",
-        "_N",
+        "_L_omni",
+        "_M_omni",
+        "_N_omni",
         "_well_basis",
         "_basis",
         "_helicity",
@@ -1069,39 +1069,46 @@ class OmnigeneousField(Optimizable, IOAble):
     ]
 
     def __init__(
-        self, L_well, M_well, L, M, N, NFP, helicity=(0, 1), B_lm=None, x_lmn=None
+        self,
+        L_well,
+        M_well,
+        L_omni,
+        M_omni,
+        N_omni,
+        NFP,
+        helicity=(0, 1),
+        B_lm=None,
+        x_lmn=None,
     ):
         self._L_well = int(L_well)
         self._M_well = int(M_well)
-        self._L = int(L)
-        self._M = int(M)
-        self._N = int(N)
+        self._L_omni = int(L_omni)
+        self._M_omni = int(M_omni)
+        self._N_omni = int(N_omni)
         self._NFP = int(NFP)
-        self._helicity = helicity
+        self.helicity = helicity
         self._well_basis = ChebyshevPolynomial(L=self.L_well)
-        self._basis = ChebyshevDoubleFourierBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
+        self._omni_basis = ChebyshevDoubleFourierBasis(
+            L=self.L_omni,
+            M=self.M_omni,
+            N=self.N_omni,
             NFP=self.NFP,
             sym="cos(t)",
         )
         if B_lm is None:
             self._B_lm = np.concatenate(
                 (
-                    np.linspace(
-                        1,
-                        2,
-                        self.M_well,
-                    ),
+                    np.ones((self.M_well,)),
                     np.zeros((self.L_well * self.M_well,)),
                 )
             )
         else:
+            assert len(B_lm) == (self.L_well + 1) * self.M_well
             self._B_lm = B_lm
         if x_lmn is None:
-            self._x_lmn = np.zeros(self.basis.num_modes)
+            self._x_lmn = np.zeros(self.omni_basis.num_modes)
         else:
+            assert len(x_lmn) == self.omni_basis.num_modes
             self._x_lmn = x_lmn
 
         warnif(
@@ -1116,7 +1123,7 @@ class OmnigeneousField(Optimizable, IOAble):
         )
 
     def change_resolution(
-        self, L_well=None, M_well=None, L=None, M=None, N=None, NFP=None
+        self, L_well=None, M_well=None, L_omni=None, M_omni=None, N_omni=None, NFP=None
     ):
         """Set the spectral resolution of well and shift terms.
 
@@ -1126,11 +1133,11 @@ class OmnigeneousField(Optimizable, IOAble):
             Radial resolution of the magnetic well parameters B_lm.
         M_well : int
             Number of spline points in the magnetic well parameters B_lm.
-        L : int
+        L_omni : int
             Radial resolution of x_lmn.
-        M : int
+        M_omni : int
             Poloidal resolution of x_lmn.
-        N : int
+        N_omni : int
             Toroidal resolution of x_lmn.
         NFP : int
             Number of field periods.
@@ -1139,17 +1146,19 @@ class OmnigeneousField(Optimizable, IOAble):
         self._NFP = setdefault(NFP, self.NFP)
         self._L_well = setdefault(L_well, self.L_well)
         self._M_well = setdefault(M_well, self.M_well)
-        self._L = setdefault(L, self.L)
-        self._M = setdefault(M, self.M)
-        self._N = setdefault(N, self.N)
+        self._L_omni = setdefault(L_omni, self.L_omni)
+        self._M_omni = setdefault(M_omni, self.M_omni)
+        self._N_omni = setdefault(N_omni, self.N_omni)
 
         old_modes_well = self.well_basis.modes
-        old_modes = self.basis.modes
+        old_modes_omni = self.omni_basis.modes
 
         self.well_basis.change_resolution(self.L_well)
-        self.basis.change_resolution(self.L, self.M, self.N, NFP=self.NFP, sym="cos(t)")
+        self.omni_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="cos(t)"
+        )
 
-        self._x_lmn = copy_coeffs(self.x_lmn, old_modes, self.basis.modes)
+        self._x_lmn = copy_coeffs(self.x_lmn, old_modes_omni, self.omni_basis.modes)
 
         old_well = self.B_lm.reshape((-1, self.M_well))
         new_well = np.zeros((self.L_well + 1, self.M_well))
@@ -1224,7 +1233,7 @@ class OmnigeneousField(Optimizable, IOAble):
         ).reshape((2, 2))
 
         # evaluate h(rho,eta,alpha)
-        h = self.basis.evaluate(nodes) @ self.x_lmn + 2 * eta + np.pi
+        h = self.omni_basis.evaluate(nodes) @ self.x_lmn + 2 * eta + np.pi
 
         # solve for (rho,theta_B,zeta_B) corresponding to (rho,eta,alpha)
         booz = matrix @ np.vstack((alpha, h))
@@ -1251,19 +1260,19 @@ class OmnigeneousField(Optimizable, IOAble):
         return self._M_well
 
     @property
-    def L(self):
+    def L_omni(self):
         """int: Radial resolution of x_lmn."""
-        return self._L
+        return self._L_omni
 
     @property
-    def M(self):
+    def M_omni(self):
         """int: Poloidal resolution of x_lmn."""
-        return self._M
+        return self._M_omni
 
     @property
-    def N(self):
+    def N_omni(self):
         """int: Toroidal resolution of x_lmn."""
-        return self._N
+        return self._N_omni
 
     @property
     def well_basis(self):
@@ -1271,9 +1280,9 @@ class OmnigeneousField(Optimizable, IOAble):
         return self._well_basis
 
     @property
-    def basis(self):
+    def omni_basis(self):
         """FourierZernikeBasis: Spectral basis for x_lmn."""
-        return self._basis
+        return self._omni_basis
 
     @optimizable_parameter
     @property

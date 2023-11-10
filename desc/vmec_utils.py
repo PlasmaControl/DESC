@@ -728,7 +728,6 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         timer.disp("Boozer Transform")
 
     file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
-
     # dimensions
     # a few of these are redundant, but are included for sake
     # of matching the convention of the original booz_xform outputs
@@ -773,7 +772,8 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     aspect.long_name = "Aspect Ratio"
     aspect[:] = eq.compute("R0/a")["R0/a"]
 
-    Rs = eq.compute("R")["R"]
+    grid_lcfs = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=1, NFP=NFP)
+    Rs = eq.compute("R", grid=grid_lcfs)["R"]
     Rmax = file.createVariable("rmax_b", np.int32)
     Rmax.long_name = "Maximum Radius"
     Rmax[:] = np.max(Rs)
@@ -809,7 +809,13 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     mnboz[:] = basis.num_modes
 
     ## 1D Arrays
-
+    keys_1d = [
+        "I",
+        "G",
+    ]
+    # this should be compressed then to just the radial profiles
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
+    data_1d = eq.compute(keys_1d, grid=grid)
     jlist = file.createVariable("jlist", np.int32, ("radius",))
     jlist.long_name = (
         "1-based radial indices of the surfaces for which the "
@@ -846,8 +852,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             -eq.iota(r_half), 0, 0
         )  # negative sign for negative Jacobian in VMEC
     else:
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
-        iotas[0:] = -grid.compress(eq.compute("iota", grid=grid)["iota"])
+        iotas[0:] = -grid.compress(eq.compute("iota", grid=grid, data=data_1d)["iota"])
 
     buco_b = file.createVariable("buco_b", np.float64, ("radius",))
     buco_b.long_name = (
@@ -857,8 +862,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     buco_b.units = "None"
     buco_b[0] = 0
 
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
-    buco_b[1:] = -grid.compress(eq.compute("I", grid=grid)["I"])
+    buco_b[1:] = -grid.compress(data_1d["I"])
 
     bvco_b = file.createVariable("bvco_b", np.float64, ("radius",))
     bvco_b.long_name = (
@@ -868,8 +872,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     bvco_b.units = "None"
     bvco_b[0] = 0
 
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
-    bvco_b[1:] = -grid.compress(eq.compute("G", grid=grid)["G"])
+    bvco_b[1:] = -grid.compress(data_1d["G"])
 
     # TODO: assuming this is on full mesh
     presf = file.createVariable("pres_b", np.float64, ("radius",))
@@ -929,7 +932,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     zmns = file.createVariable("zmns_b", np.float64, ("comput_surfs", "mn_mode"))
     zmns.long_name = (
         "sin(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes"
-        "of the major radius Z"
+        "of the vertical coordinate Z"
     )
     zmns.units = "m"
     zmns[0:, :] = Z_mn[:, np.where(modes_sin[:, 0] == -1)]
@@ -937,31 +940,27 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         zmnc = file.createVariable("zmnc_b", np.float64, ("comput_surfs", "mn_mode"))
         zmnc.long_name = (
             "cos(m * theta_Boozer - n * zeta_Boozer) Fourier"
-            "amplitudes of the major radius Z"
+            "amplitudes of the vertical coordinate Z"
         )
         zmnc.units = "m"
         zmnc[0:, :] = Z_mn[:, np.where(modes[:, 0] == 1)]
-
-    # TODO: should this be negated?
-    # if nu = zeta_VMEC - zeta_B
-    # but our nu is zeta_B - zeta_VMEC
-
-    # p should be zeta - zeta_B,
-    # so technically we must negate our nu
 
     # nu
     nums = file.createVariable("pmns_b", np.float64, ("comput_surfs", "mn_mode"))
     nums.long_name = (
         "sin(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes"
-        "of the angle difference zeta_VMEC - zeta_Boozer"
+        "of the angle difference zeta_DESC - zeta_Boozer"
     )
     nums.units = "m"
+    # we negate here because although nu is defined as zeta_B - zeta_DESC,
+    # in the original fortran there is a negative sign so it is
+    # actually zeta_DESC - zeta_B
     nums[0:, :] = -Nu_mn[:, np.where(modes_sin[:, 0] == -1)]
     if not eq.sym:
         numc = file.createVariable("pmnc_b", np.float64, ("comput_surfs", "mn_mode"))
         numc.long_name = (
             "cos(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes"
-            "of the major radius Z"
+            "of the angle difference zeta_DESC - zeta_Boozer"
         )
         numc.units = "None"
         numc[0:, :] = -Nu_mn[:, np.where(modes[:, 0] == 1)]

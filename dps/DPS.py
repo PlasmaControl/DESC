@@ -98,7 +98,7 @@ eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 
 # Energy and Mass info
-Energy_eV = 3.52e6 #1 # eV (3.52e6 eV proton energy)
+Energy_eV = 1e2 #1 # eV (3.52e6 eV proton energy)
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
 Energy_SI = Energy_eV*Proton_Charge
@@ -111,7 +111,7 @@ Charge = 2*Proton_Charge
 psi_i = 0.2
 zeta_i = 0
 theta_i = 0
-vpar_i = 0.2*jnp.sqrt(2*Energy_SI/Mass)
+vpar_i = 0.3*jnp.sqrt(2*Energy_SI/Mass)
 ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
@@ -149,9 +149,9 @@ print(f"\nTime to build and compute solution: {intermediate_time_2 - intermediat
 ObjFunction = ObjectiveFunction([objective], deriv_mode="looped")
 ObjFunction.build()
 
-jacobian = ObjFunction.grad(ObjFunction.x(eq))
+# jacobian = ObjFunction.grad(ObjFunction.x(eq))
 
-savetxt(jacobian, "jacobian")
+# savetxt(jacobian, "jacobian")
 
 intermediate_time_3 = timet()
 print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermediate_time_2}s\n")

@@ -13,7 +13,7 @@ initial_time = timet()
 # Load Equilibrium
 # filename = "input.LandremanPaul2021_QA_scaled_output.h5"
 # eq = desc.io.load(filename)[-1]
-filename = "eq_M1_N1.h5"
+filename = "rot_ellipse_M1_N1.h5"
 eq = desc.io.load(filename)
 save_text_name = "solution" + filename
 
@@ -25,6 +25,7 @@ print("*************************************")
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 # eq.solve()
+# eq.Psi = eq.Psi/6
 
 # Output the resulting solution to a .txt file, in 4 columns (psi, theta, zeta, vpar)
 def output_to_file(solution, name):
@@ -44,7 +45,7 @@ def output_to_file(solution, name):
 
 
 # Energy and Mass info
-Energy_eV = 1
+Energy_eV = 100
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
 Energy_SI = Energy_eV*Proton_Charge
@@ -57,13 +58,13 @@ Charge = 2*Proton_Charge
 psi_i = 0.2
 zeta_i = 0
 theta_i = 0
-vpar_i = 0.2*jnp.sqrt(2*Energy_SI/Mass)
+vpar_i = 0.3*jnp.sqrt(2*Energy_SI/Mass)
 ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
-tmax = 1e-0
-nt = 1000
+tmax = 1e-2
+nt = 500
 time = jnp.linspace(tmin, tmax, nt)
 
 initial_conditions = ini_cond

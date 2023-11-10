@@ -2564,7 +2564,7 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.magnetic_fields.OmnigeneousField",
+        "desc.magnetic_fields.OmnigenousField",
     ],
 )
 def _rho(params, transforms, profiles, data, **kwargs):

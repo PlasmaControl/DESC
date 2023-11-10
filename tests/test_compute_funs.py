@@ -20,7 +20,11 @@ from desc.geometry import (
 )
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import load
-from desc.magnetic_fields import CurrentPotentialField, FourierCurrentPotentialField
+from desc.magnetic_fields import (
+    CurrentPotentialField,
+    FourierCurrentPotentialField,
+    OmnigenousField,
+)
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -1228,6 +1232,17 @@ def test_compute_everything():
             FourierCurrentPotentialField(
                 **elliptic_cross_section_with_torsion, I=0, G=1e7
             )
+        ),
+        "desc.magnetic_fields.OmnigenousField": OmnigenousField(
+            L_well=0,
+            M_well=4,
+            L_omni=0,
+            M_omni=1,
+            N_omni=1,
+            NFP=2,
+            helicity=(0, 2),
+            B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
+            x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
         ),
         # coils
         "desc.coils.FourierRZCoil": FourierRZCoil(

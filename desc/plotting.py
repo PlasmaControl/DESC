@@ -3747,7 +3747,7 @@ def plot_omnigenous_field(
 
     Parameters
     ----------
-    field : OmnigeneousField
+    field : OmnigenousField
         Object from which to plot.
     iota : float
         Rotational transform.

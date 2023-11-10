@@ -15,7 +15,7 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import OmnigeneousField
+from desc.magnetic_fields import OmnigenousField
 from desc.objectives import (
     AspectRatio,
     CurrentDensity,
@@ -768,7 +768,7 @@ def test_omnigenity_qa():
     """Test optimizing omnigenity parameters to match an axisymmetric equilibrium."""
     eq = desc.examples.get("SOLOVEV")
     eq.Psi *= 5  # B0 = 1 T
-    field = OmnigeneousField(
+    field = OmnigenousField(
         L_well=1,
         M_well=4,
         L_omni=1,

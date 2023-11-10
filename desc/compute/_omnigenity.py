@@ -360,7 +360,7 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
-    parameterization="desc.magnetic_fields.OmnigeneousField",
+    parameterization="desc.magnetic_fields.OmnigenousField",
 )
 def _eta(params, transforms, profiles, data, **kwargs):
     # theta is used as a placeholder for eta (angle along field lines)
@@ -380,7 +380,7 @@ def _eta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
-    parameterization="desc.magnetic_fields.OmnigeneousField",
+    parameterization="desc.magnetic_fields.OmnigenousField",
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
     # zeta is used as a placeholder for alpha (field line label)
@@ -400,7 +400,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["rho", "alpha", "eta"],
-    parameterization="desc.magnetic_fields.OmnigeneousField",
+    parameterization="desc.magnetic_fields.OmnigenousField",
 )
 def _omni_angle(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["eta"], data["alpha"]]).T
@@ -417,14 +417,14 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
     label="|\\mathbf{B}_{omni}|",
     units="T",
     units_long="Tesla",
-    description="Magnitude of omnigeneous magnetic field",
+    description="Magnitude of omnigenous magnetic field",
     dim=1,
     params=["B_lm"],
     transforms={"well": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=["eta"],
-    parameterization="desc.magnetic_fields.OmnigeneousField",
+    parameterization="desc.magnetic_fields.OmnigenousField",
 )
 def _B_well(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_well, M_well)

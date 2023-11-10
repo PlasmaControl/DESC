@@ -17,7 +17,7 @@ from desc.compute.utils import surface_averages
 from desc.examples import get
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import load
-from desc.magnetic_fields import OmnigeneousField
+from desc.magnetic_fields import OmnigenousField
 from desc.plotting import (
     _find_idx,
     plot_1d,
@@ -944,7 +944,7 @@ def test_plot_surfaces_HELIOTRON():
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_omnigenous_field():
     """Test plot omnigenous magnetic field."""
-    field = OmnigeneousField(
+    field = OmnigenousField(
         L_well=0,
         M_well=4,
         L_omni=0,

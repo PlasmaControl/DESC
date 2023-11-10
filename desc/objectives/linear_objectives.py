@@ -3236,7 +3236,7 @@ class FixWell(_FixedObjective):
 
     Parameters
     ----------
-    field : OmnigeneousField, optional
+    field : OmnigenousField, optional
         Field that will be optimized to satisfy the Objective.
     target : float, optional
         Target value(s) of the objective. If None, uses field value.
@@ -3286,7 +3286,7 @@ class FixWell(_FixedObjective):
 
         Parameters
         ----------
-        field : OmnigeneousField, optional
+        field : OmnigenousField, optional
             Field that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
@@ -3337,7 +3337,7 @@ class FixOmni(_FixedObjective):
 
     Parameters
     ----------
-    field : OmnigeneousField, optional
+    field : OmnigenousField, optional
         Field that will be optimized to satisfy the Objective.
     target : float, optional
         Target value(s) of the objective. If None, uses field value.
@@ -3387,7 +3387,7 @@ class FixOmni(_FixedObjective):
 
         Parameters
         ----------
-        field : OmnigeneousField, optional
+        field : OmnigenousField, optional
             Field that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
@@ -3438,7 +3438,7 @@ class StraightBmaxContour(_FixedObjective):
 
     Parameters
     ----------
-    field : OmnigeneousField, optional
+    field : OmnigenousField, optional
         Field that will be optimized to satisfy the Objective.
     target : float, optional
         Target value(s) of the objective. If None, uses field value.
@@ -3487,7 +3487,7 @@ class StraightBmaxContour(_FixedObjective):
 
         Parameters
         ----------
-        field : OmnigeneousField, optional
+        field : OmnigenousField, optional
             Field that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.

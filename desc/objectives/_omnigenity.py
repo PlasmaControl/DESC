@@ -513,8 +513,8 @@ class Omnigenity(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium to be optimized to satisfy the Objective.
-    field : OmnigeneousField
-        Omnigeneous magnetic field to be optimized to satisfy the Objective.
+    field : OmnigenousField
+        Omnigenous magnetic field to be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
@@ -679,7 +679,7 @@ class Omnigenity(_Objective):
         equil_params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         field_params : dict
-            Dictionary of field degrees of freedom, eg OmnigeneousField.params_dict
+            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -700,7 +700,7 @@ class Omnigenity(_Objective):
             profiles=constants["equil_profiles"],
         )
         field_data = compute_fun(
-            "desc.magnetic_fields.OmnigeneousField",
+            "desc.magnetic_fields.OmnigenousField",
             self._field_data_keys,
             params=field_params,
             transforms=constants["field_transforms"],
@@ -708,7 +708,7 @@ class Omnigenity(_Objective):
         )
 
         # TODO: move to a compute function?
-        # would need to add iota as an OmnigeneousField attribute
+        # would need to add iota as an OmnigenousField attribute
         M, N = constants["helicity"]
         iota = eq_data["iota"][0]  # FIXME: assumes a single flux surface
         matrix = jnp.where(

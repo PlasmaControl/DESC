@@ -1045,7 +1045,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         )
 
 
-class OmnigeneousField(Optimizable, IOAble):
+class OmnigenousField(Optimizable, IOAble):
     """Model field with perfect omnigenity.
 
     Notes

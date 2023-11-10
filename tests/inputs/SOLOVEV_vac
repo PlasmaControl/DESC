@@ -14,7 +14,7 @@ objective = vacuum
 
 # fixed-boundary surface shape
 m:   0  n:   0  R1 =  3.999
-m:   1  n:   0  R1 =  1.026
+m:   1  n:   0  R1 = -1.026
 m:  -1  n:   0  Z1 =  1.580
 m:   2  n:   0  R1 =  0.068
-m:  -2  n:   0  Z1 = -0.010
+m:  -2  n:   0  Z1 =  0.010

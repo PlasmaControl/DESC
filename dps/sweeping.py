@@ -44,19 +44,21 @@ time = jnp.linspace(tmin, tmax, nt)
 initial_conditions = ini_cond
 Mass_Charge_Ratio = Mass/Charge
 
-r01 = np.arange(0.0, 0.5, 0.04)
+r11 = np.arange(-0.05, 0.05, 0.02)
 
 f_values = []
 
-for R01 in r01:
-    print(f"R01: {R01}; Tteration: {r01.tolist().index(R01)} of {len(r01)}")
+for R11 in r11:
+    print(f"R11: {R11}; Tteration: {r11.tolist().index(R11)} of {len(r11)}")
     surf = FourierRZToroidalSurface(
-        R_lmn=[1, 0.125, R01], #alterar 0.1
-        Z_lmn=[-0.125, -0.1],
-        modes_R=[[0, 0], [1, 0], [0, 1]],
-        modes_Z=[[-1, 0], [0, -1]],
-        NFP=3,
-    )
+    R_lmn=jnp.array([1, -0.1, R11, 0.03]),  # boundary coefficients
+    Z_lmn=jnp.array([0.1, -0.03, -0.03]),
+    modes_R=jnp.array(
+        [[0, 0], [1, 0], [1, 1], [-1, -1]]
+    ),  # [M, N] boundary Fourier modes
+    modes_Z=jnp.array([[-1, 0], [-1, 1], [1, -1]]),
+    NFP=5,  # number of (toroidal) field periods
+)
     eq = desc.equilibrium.Equilibrium(M=1, N=1, Psi=1, surface=surf)
     eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[-1]
     eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
@@ -78,7 +80,7 @@ for R01 in r01:
     solution = objective.compute(*objective.xs(eq))
 
     intermediate_time_2 = timet()
-    print(f"Time to build and compute R01{R01}: {intermediate_time_2 - intermediate_time}s")
+    print(f"Time to build and compute R11{R11}: {intermediate_time_2 - intermediate_time}s")
 
     print("*************** SOLUTION .compute() ***************")
     print(solution)
@@ -86,12 +88,12 @@ for R01 in r01:
     f_values.append(solution)
 
 f = np.asarray(f_values)
-plt.plot(r01, f, 'o', color='red', label='F function values for R01')
-plt.xlabel('R01')
+plt.plot(r11, f, 'o', color='red', label='F function values for R11')
+plt.xlabel('R11')
 plt.ylabel('F function values')
 plt.savefig('f_values.png')
 
-np.savetxt('r01_f_values.txt', np.c_[r01, f], delimiter=' ')
+np.savetxt('r01_f_values.txt', np.c_[r11, f], delimiter=' ')
 final_time = timet()
 print(f"Total time: {final_time - initial_time}s")
 print("*********************** END ***********************")

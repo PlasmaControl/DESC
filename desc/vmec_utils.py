@@ -762,13 +762,17 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     nfp.long_name = "number of field periods"
     nfp[:] = NFP
 
+    lasym = file.createVariable("lasym__logical__", np.int32)
+    lasym.long_name = "0 if the configuration is stellarator-symmetric, 1 if not"
+    lasym[:] = not eq.sym
+
     # FIXME: ns?
 
     ns = file.createVariable("ns_b", np.int32)
     ns.long_name = "Number of radial surfaces at which data is outputted minus 1"
     ns[:] = surfs
 
-    aspect = file.createVariable("aspect_b", np.int32)
+    aspect = file.createVariable("aspect_b", np.float64)
     aspect.long_name = "Aspect Ratio"
     aspect[:] = eq.compute("R0/a")["R0/a"]
 
@@ -816,14 +820,14 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     # this should be compressed then to just the radial profiles
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
     data_1d = eq.compute(keys_1d, grid=grid)
-    jlist = file.createVariable("jlist", np.int32, ("radius",))
+    jlist = file.createVariable("jlist", np.int32, ("comput_surfs",))
     jlist.long_name = (
         "1-based radial indices of the surfaces for which the "
         "transformation to Boozer coordinates was computed. 2 corresponds to the "
         "first half-grid point."
     )
     jlist.units = "None"
-    jlist[:] = np.arange(0, s_half.size + 1) + 1
+    jlist[:] = np.arange(1, s_half.size + 1) + 1
 
     ixm_b = file.createVariable("ixm_b", np.int32, ("mn_modes",))
     ixm_b.long_name = (
@@ -872,7 +876,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     bvco_b.units = "None"
     bvco_b[0] = 0
 
-    bvco_b[1:] = -grid.compress(data_1d["G"])
+    bvco_b[1:] = grid.compress(data_1d["G"])
 
     # TODO: assuming this is on full mesh
     presf = file.createVariable("pres_b", np.float64, ("radius",))

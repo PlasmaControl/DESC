@@ -1027,7 +1027,7 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
 
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
     make_boozmn_output(
-        eq, output_path, surfs=surfs, verbose=2, M_booz=boozer_res, N_booz=boozer_res
+        eq, output_path, surfs=surfs, verbose=0, M_booz=boozer_res, N_booz=boozer_res
     )
     # load in the .nc file
     file = Dataset(output_path, mode="r")
@@ -1068,3 +1068,22 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
         np.testing.assert_allclose(
             quant_DESC, quant_cpp, atol=quant_atols[i], err_msg=quant_names[i]
         )
+    for key in list(file_cpp.variables.keys()):
+        if key not in [
+            "rmnc_b",
+            "zmns_b",
+            "bmnc_b",
+            "gmn_b",
+            "pmns_b",
+            "ixm_b",
+            "ixn_b",
+            "version",  # skip version bc they are different strings
+            # ones below here, the cpp version does not calculate
+            "rmax_b",
+            "rmin_b",
+            "pres_b",
+            "phip_b",
+        ]:
+            np.testing.assert_allclose(
+                file.variables[key], file_cpp.variables[key], err_msg=key
+            )

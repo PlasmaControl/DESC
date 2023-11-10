@@ -556,13 +556,15 @@ class Omnigenity(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        grid=None,
+        grid_eq=None,
+        grid_field=None,
         M_booz=None,
         N_booz=None,
         well_weight=1,
         name="omnigenity",
     ):
-        self._grid = grid
+        self._grid_eq = grid_eq
+        self._grid_field = grid_field
         self.helicity = field.helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
@@ -595,35 +597,44 @@ class Omnigenity(_Objective):
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
-        if self._grid is None:
-            grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False)
+        if self._grid_eq is None:
+            grid_eq = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False)
         else:
-            grid = self._grid
+            grid_eq = self._grid_eq
 
-        self._dim_f = grid.num_nodes
+        if self._grid_field is None:
+            grid_field = LinearGrid(M=2 * field.M_well, N=8, sym=False)
+        else:
+            grid_field = self._grid_field
+
+        self._dim_f = grid_field.num_nodes
         self._eq_data_keys = ["|B|_mn"]
         self._field_data_keys = ["|B|_omni", "h"]
 
-        assert grid.sym is False
-        assert grid.num_rho == 1
+        assert grid_eq.NFP == eq.NFP
+        assert grid_field.NFP == 1
+        assert grid_eq.sym is False
+        assert grid_field.sym is False
+        assert grid_eq.num_rho == 1
+        assert grid_field.num_rho == 1
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._eq_data_keys, obj=eq, grid=grid)
+        self._profiles = get_profiles(self._eq_data_keys, obj=eq, grid=grid_eq)
         self._eq_transforms = get_transforms(
             self._eq_data_keys,
             obj=eq,
-            grid=grid,
+            grid=grid_eq,
             M_booz=M_booz,
             N_booz=N_booz,
         )
         self._field_transforms = get_transforms(
             self._field_data_keys,
             obj=field,
-            grid=grid,
+            grid=grid_field,
         )
         self._constants = {
             "equil_transforms": self._eq_transforms,
@@ -690,7 +701,7 @@ class Omnigenity(_Objective):
 
         # solve for (theta_B,zeta_B) corresponding to (eta,alpha)
         booz = matrix @ jnp.vstack((field_data["alpha"], field_data["h"]))
-        nodes = jnp.vstack((eq_data["rho"], booz[0, :], booz[1, :])).T
+        nodes = jnp.vstack((jnp.zeros_like(booz[0, :]), booz[0, :], booz[1, :])).T
         B_eta_alpha = jnp.matmul(
             constants["equil_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
         )

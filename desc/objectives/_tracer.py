@@ -109,7 +109,7 @@ class ParticleTracer(_Objective):
         self.Energy = 3.52e6*self.charge 
         eq = eq or self._things[0]
 
-        if self.compute_option == "optimization":
+        if self.compute_option == "optimization" or self.compute_option == "optimization-debug":
             self._dim_f = 1
         elif self.compute_option == "tracer":
             self._dim_f = [len(self.output_time), 4]
@@ -155,6 +155,39 @@ class ParticleTracer(_Objective):
         solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax, rtol = self.tolerance)
 
         if self.compute_option == "optimization":
+            return jnp.sum((solution[:, 0] - solution[0, 0]) * (solution[:, 0] - solution[0, 0]), axis=-1)*1e8
+        elif self.compute_option == "optimization-debug":
+            import matplotlib.pyplot as plt
+            import time as timet
+            def Trajectory_Plot(solution=solution, save_name=f"Trajectory_Plot_{timet.time()}.png"):
+                fig, ax = plt.subplots()
+                ax.plot(jnp.sqrt(solution[:, 0]) * jnp.cos(solution[:, 1]), jnp.sqrt(solution[:, 0]) * jnp.sin(solution[:, 1]))
+                ax.set_aspect("equal", adjustable='box')
+                plt.xlabel(r'$\sqrt{\psi}cos(\theta)$')
+                plt.ylabel(r'$\sqrt{\psi}sin(\theta)$')
+                fig.savefig(save_name, bbox_inches="tight", dpi=300)
+                print(f"Trajectory Plot Saved: {save_name}")
+                plt.close()
+
+            def Quantity_Plot(solution=solution, save_name=f"Quantity_Plot_{timet.time()}.png"):
+                fig, axs = plt.subplots(2, 2)
+                axs[0, 1].plot(self.output_time, solution[:, 0], 'tab:orange')
+                axs[0, 1].set_title(r'$\psi$ (t)')
+                axs[1, 0].plot(self.output_time, solution[:, 1], 'tab:green')
+                axs[1, 0].set_title(r'$\theta$ (t)')
+                axs[1, 1].plot(self.output_time, solution[:, 2], 'tab:red')
+                axs[1, 1].set_title(r'$\zeta$ (t)')
+                axs[0, 0].plot(self.output_time, solution[:, 3], 'tab:blue')
+                axs[0, 0].set_title(r"$v_{\parallel}$ (t)")
+                fig = plt.gcf()
+                fig.set_size_inches(10.5, 10.5)
+                fig.savefig(save_name, bbox_inches="tight", dpi=300)
+                print(f"Quantity Plot Saved: {save_name}")
+                plt.close()
+
+            Trajectory_Plot()
+            Quantity_Plot()
+
             return jnp.sum((solution[:, 0] - solution[0, 0]) * (solution[:, 0] - solution[0, 0]), axis=-1)*1e8
         elif self.compute_option == "tracer":
             return solution

@@ -136,7 +136,7 @@ intermediate_time = timet()
 print(f"\nTime from beginning until here: {intermediate_time - initial_time}s\n")
 
 # Objective Function
-objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1.4e-8)
+objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1.e-7)
 objective.build()
 
 # Compute optimization

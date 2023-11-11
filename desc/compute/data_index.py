@@ -1,5 +1,35 @@
 """data_index contains all the quantities calculated by the compute functions."""
-from desc.utils import find_permutations
+import functools
+import itertools
+
+import numpy as np
+
+
+def find_permutations(name, separator="_"):
+    """Finds permutations of quantity names for aliases."""
+    split_name = name.split(separator)
+    original_permutation = split_name[-1]
+
+    new_permutations = list(itertools.permutations(original_permutation))
+    aliases = [
+        "".join(split_name[:-1]) + separator + "".join(perm)
+        for perm in new_permutations
+    ]
+    aliases = np.unique(aliases)
+    aliases = np.delete(aliases, np.where(aliases == name))
+
+    return aliases
+
+
+def assign_alias_data(
+    alias, primary, base_class, data_index, params, profiles, transforms, data, **kwargs
+):
+    """Assigns primary data to alias."""
+    data = data_index[base_class][primary]["fun"](
+        params, transforms, profiles, data, **kwargs
+    )
+    data[alias] = data[primary].copy()
+    return data
 
 
 def register_compute_fun(
@@ -96,7 +126,16 @@ def register_compute_fun(
                         )
                     data_index[base_class][name] = d.copy()
                     for alias in aliases:
-                        data_index[base_class][alias] = data_index[base_class][name]
+
+                        data_index[base_class][alias] = d.copy()
+                        # assigns alias compute func to generator to be used later
+                        data_index[base_class][alias]["fun"] = functools.partial(
+                            assign_alias_data,
+                            alias=alias,
+                            primary=name,
+                            base_class=base_class,
+                            data_index=data_index,
+                        )
 
                     flag = True
             if not flag:

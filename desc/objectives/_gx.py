@@ -5,12 +5,9 @@ from scipy.interpolate import interp1d
 import os
 import time
 from desc.backend import jnp,put
-from desc.compute import arg_order
 
-from ._equilibrium import CurrentDensity
 from .objective_funs import ObjectiveFunction, _Objective
 from .utils import (
-    align_jacobian,
     factorize_linear_constraints,
 )
 from desc.utils import Timer
@@ -80,7 +77,7 @@ class GX(_Objective):
         self.psi = psi
         self.grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -105,7 +102,7 @@ class GX(_Objective):
         batching.primitive_batchers[self.gx_compute] = self.compute_gx_batch
 
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -119,6 +116,7 @@ class GX(_Objective):
             Level of output.
 
         """
+        eq = self.things[0]
         if self.grid is None:
             self.grid_eq = QuadratureGrid(
                 L=eq.L_grid,
@@ -188,9 +186,9 @@ class GX(_Objective):
 
 #        self._check_dimensions()
 #        self._set_dimensions(eq)
-        super().build(eq=self.eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
     
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Computes flux-tube geometric coefficients and calls GX.
 
         Parameters
@@ -216,11 +214,11 @@ class GX(_Objective):
 
         """
 
-        return self.gx_compute.bind(*args,**kwargs)
+        return self.gx_compute.bind(params,constants)
 
-    def compute_impl(self, *args, **kwargs):
+    def compute_impl(self, params, constants):
 
-        params, constants = self._parse_args(*args, **kwargs)
+#        params, constants = self._parse_args(*args, **kwargs)
         if not np.any(params["R_lmn"]):
             return 0
 

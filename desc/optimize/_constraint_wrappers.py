@@ -482,9 +482,11 @@ class ProximalProjection(ObjectiveFunction):
         # with this directly, so if the user wants to manually rebuild they should
         # do it before this wrapper is created for them.
         if not self._objective.built:
-            self._objective.build(self._eq, verbose=verbose)
+#            self._objective.build(self._eq, verbose=verbose)
+            self._objective.build(use_jit=use_jit,verbose=verbose)
         if not self._constraint.built:
-            self._constraint.build(self._eq, verbose=verbose)
+            self._constraint.build(use_jit=use_jit,verbose=verbose)
+#            self._constraint.build(self._eq, verbose=verbose)
 
         for constraint in self._linear_constraints:
             constraint.build(self._eq, verbose=verbose)

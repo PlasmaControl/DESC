@@ -165,7 +165,7 @@ class Optimizer(IOAble):
 
         # make sure everything is built
         if not objective.built:
-            objective.build(verbose=verbose,use_jit=False)
+            objective.build(use_jit=False,verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
             nonlinear_constraint.build(verbose=verbose)
 

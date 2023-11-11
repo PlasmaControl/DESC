@@ -95,6 +95,7 @@ class GX(_Objective):
         
         self.path = path
         self.path_in = path_in
+        self.gx_app = os.path.join(self.path, "gx")
         self.path_geo = path_geo
         self.t = t
 
@@ -494,7 +495,7 @@ class GX(_Objective):
         stderr = 'stderr.out_' + str(self.t)
         fs = open('stdout.out_' + str(self.t),'w')
         path_in = self.path_in + "_" + str(self.t) + '.in'
-        cmd = ['srun', '-N', '1', '-t', '00:20:00', '--ntasks=1', '--gpus-per-task=1', '--exact','--overcommit',self.path+'./gx',path_in]
+        cmd = ['srun', '-N', '1', '-t', '00:20:00', '--ntasks=1', '--gpus-per-task=1', '--exact','--overcommit',self.gx_app,path_in]
         subprocess.run(cmd,stdout=fs)
         fs.close()
 

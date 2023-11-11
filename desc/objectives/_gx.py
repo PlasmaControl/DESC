@@ -239,7 +239,13 @@ class GX(_Objective):
         qflux_avg = self.weighted_birkhoff_average(qflux) 
         print(qflux_avg)
         ds.close() 
-
+        
+        if qflux_avg > 20:
+            out_fail = 'fail_' + str(self.t) + '_.nc'
+            copyfile(out_file,out_fail)
+            stdout = 'stdout.out_' + str(self.t)
+            stdout_fail = 'stdout_fail.out_' + str(self.t)
+            copyfile(stdout,stdout_fail)
         return jnp.atleast_1d(qflux_avg)
 
     def compute_geometry(self,params,constants):
@@ -488,7 +494,7 @@ class GX(_Objective):
         stderr = 'stderr.out_' + str(self.t)
         fs = open('stdout.out_' + str(self.t),'w')
         path_in = self.path_in + "_" + str(self.t) + '.in'
-        cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', '--exact','--overcommit',self.path+'./gx',path_in]
+        cmd = ['srun', '-N', '1', '-t', '00:20:00', '--ntasks=1', '--gpus-per-task=1', '--exact','--overcommit',self.path+'./gx',path_in]
         subprocess.run(cmd,stdout=fs)
         fs.close()
 

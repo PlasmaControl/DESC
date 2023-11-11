@@ -438,7 +438,6 @@ def _optimize_desc_stochastic(
     def grad_fd(x_reduced,x0,f):
         x = x_reduced
         fx = f
-        print("FX IS " + str(fx))
         dx = 1.0e-1*np.abs(x)               
         x = jnp.asarray(x).at[x == 0].set(0.001)
 
@@ -463,8 +462,11 @@ def _optimize_desc_stochastic(
         for j in range(num_grad):
             djac = np.zeros((len(fx),len(h)))
             dx = (np.random.binomial(1,0.5,x.shape)*2-1)*h
+            print("dx is " + str(dx))
             ob = objective.compute_scaled_error(x + dx)
+            print("ob is " + str(ob))
             obm = objective.compute_scaled_error(x - dx)
+            print("obm is " + str(obm))
             df = ob - obm
             for i in range(len(x)):
                 zx = np.zeros(len(x))
@@ -473,7 +475,7 @@ def _optimize_desc_stochastic(
             jac = jac + djac
         jac = jac/num_grad
 
-        return fx.T @ jac
+        return fx.T @ jac / np.linalg.norm(fx.T)
 
     result = sgd(
         objective,

@@ -113,7 +113,12 @@ def sgd(
     maxiter = setdefault(maxiter, N * 100)
     g_norm = jnp.linalg.norm(g, ord=2)
     x_norm = jnp.linalg.norm(x, ord=2)
-    alpha = options.pop("alpha", 1e-2 * x_norm / g_norm)
+    if g_norm != 0:
+        alpha = options.pop("alpha", 2e-2 * x_norm / g_norm)
+    else:
+        alpha = 0.001
+#    alpha = options.pop("alpha", 5.0e-3 * x_norm/ g_norm)
+    print("alpha is " + str(alpha))
     beta = options.pop("beta", 0.9)
     alpha0 = alpha
 
@@ -136,7 +141,9 @@ def sgd(
     allx = [x]
 
     v = beta * v + (1 - beta) * g
+    print("x old is " + str(x))
     x = x - alpha * v
+    print("x new is " + str(x))
     obj._objective._update_equilibrium(obj.recover(x),store=True)
     fx = obj.compute_scaled_error(x, *args)
 
@@ -188,6 +195,7 @@ def sgd(
 
         iteration += 1
     obj._objective._update_equilibrium(obj.recover(x),store=True)
+
     success = True
 
     result = OptimizeResult(

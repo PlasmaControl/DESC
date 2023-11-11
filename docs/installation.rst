@@ -134,6 +134,14 @@ First, install JAX (check `this tutorial <https://github.com/PrincetonUniversity
     conda activate desc-env
     pip install --upgrade "jax[cuda11_pip]<0.4.15" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
+This method may install JAX with higher CuDNN version (CuDNN 8.6) which is not supported by clusters. When you are trying to use GPU and get an error like **`Loaded runtime CuDNN library: 8.2.0 but source was compiled with: 8.6.0.`** Then, you can instead create the environment with following commands,
+
+.. code-block:: sh
+
+    module load anaconda3/2023.3
+    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.10=cuda112*" -c conda-forge
+    conda activate desc-env
+
 Then, install DESC:
 
 .. code-block:: sh

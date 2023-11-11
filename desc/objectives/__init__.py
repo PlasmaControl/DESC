@@ -55,6 +55,7 @@ from .linear_objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixParameter,
     FixPressure,
     FixPsi,
     FixSumModesLambda,

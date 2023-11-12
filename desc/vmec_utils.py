@@ -666,17 +666,18 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         return d
 
     @jit
-    def compute_data_sin_sym(grid, data, trans):
+    def compute_data_sin_sym(grid, data):
         # don't need to get transforms because all quantities that
         # needed transforms other than the "B" and "w" are already
         # computed from the compute_data call above
+        # and we have those transforms in transforms_sin
         profiles = get_profiles(data_keys_sin, obj=eq, grid=grid, jitable=True)
         # compute data
         d = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             data_keys_sin,
             params=eq.params_dict,
-            transforms=trans,
+            transforms=transforms_sin,
             profiles=profiles,
             data=data,
         )
@@ -723,7 +724,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             if i > 0:
                 data_sin["Boozer transform prefactor modes norm"] = boozer_prefactor_sin
 
-            data_sin = compute_data_sin_sym(grid, data_sin, trans=transforms_sin)
+            data_sin = compute_data_sin_sym(grid, data_sin)
 
             if i == 0:
                 # save the prefactor calculated for future use

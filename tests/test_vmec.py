@@ -919,10 +919,10 @@ def test_make_boozmn_output(TmpDir):
     eq = get("HELIOTRON")
     output_path = str(TmpDir.join("boozmn_out.nc"))
 
-    boozer_res = 50
+    boozer_res = 40
     surfs = 4
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
-    # on 3 surfaces using boozer resolutions of 15
+    # on 3 surfaces (surfs-1 by booz_xform convention) using boozer resolution of 50
     make_boozmn_output(
         eq, output_path, surfs=surfs, verbose=2, M_booz=boozer_res, N_booz=boozer_res
     )

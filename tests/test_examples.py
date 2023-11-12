@@ -1181,8 +1181,8 @@ def test_regcoil_ellipse_and_axisym_surface():
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
-def test_regcoil_ellipse_helical():
-    """Test elliptical eq and circular winding surf helical regcoil solution."""
+def test_regcoil_ellipse_helical_coils():
+    """Test elliptical eq and circular winding surf helical coil regcoil solution."""
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
     (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
@@ -1194,7 +1194,7 @@ def test_regcoil_ellipse_helical():
         source_grid_M=40,
         source_grid_N=80,
         alpha=1e-18,
-        helicity_ratio=-1,
+        helicity_ratio=-2,
     )
     assert np.all(chi_B < 1e-5)
     coords = eq.compute(["R", "phi", "Z", "B"])
@@ -1298,7 +1298,7 @@ def test_regcoil_ellipse_modular():
     # test finding coils
 
     numCoils = 60
-    coilsFilename = "./coilsfile_160.txt"
+    coilsFilename = "./coilsfile_60.txt"
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
     coilset2 = find_modular_coils(

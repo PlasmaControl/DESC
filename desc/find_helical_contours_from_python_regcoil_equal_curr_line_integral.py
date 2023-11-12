@@ -139,7 +139,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
         """
         theta_full = theta_coil * jnp.sign(phi_slope)
-        for inn in range(1, int(2 * nfp)):
+        for inn in range(1, int(2 * nfp) + int(jnp.abs(helicity))):
             theta_full = jnp.concatenate(
                 (theta_full, (theta_coil + 2 * jnp.pi * inn) * jnp.sign(phi_slope))
             )
@@ -181,7 +181,9 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                 plt.plot(contour_zeta[-1], contour_theta[-1], "-r", linewidth=1)
                 plt.plot(contour_zeta[-1][-1], contour_theta[-1][-1], "sk")
         plt.xlim([0, 2 * jnp.pi / nfp])
-        plt.ylim([0, 2 * jnp.pi + 2 * jnp.pi / nfp / 4])
+        plt.ylim([0, (1 + jnp.abs(helicity)) * (2 * jnp.pi + 2 * jnp.pi / nfp / 4)])
+        plt.xlabel(r"$\zeta$")
+        plt.ylabel(r"$\theta$")
 
         return contour_theta, contour_zeta
 
@@ -198,7 +200,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     ################################################################
 
     def find_XYZ_points(
-        theta_pts, zeta_pts, surface, find_min_dist=None, ax=None, ls="-", label=None
+        theta_pts, zeta_pts, surface, find_min_dist=None, ls="-", label=None
     ):
         contour_X = []
         contour_Y = []
@@ -236,19 +238,16 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                         minSeparation2 = this_minSeparation2
 
             print(f"Minimum coil-coil separation: {minSeparation2*1000:3.2f} mm")
-        return contour_X, contour_Y, contour_Z, ax
+        return contour_X, contour_Y, contour_Z
 
     if save_figs:
         fig = plot_3d(eq, "|B|", figsize=(12, 12))
-    else:
-        ax = None
-    contour_X, contour_Y, contour_Z, ax = find_XYZ_points(
+    contour_X, contour_Y, contour_Z = find_XYZ_points(
         contour_theta,
         contour_zeta,
         winding_surf,
         find_min_dist=True,
         label="Final",
-        ax=ax,
     )
     ################
 
@@ -300,6 +299,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
     if save_figs:
         fig = plot_coils(final_coilset, fig=fig)
+        fig.show()
     ###################
     print(f"Current per coil is {thisCurrent:1.4e}" f" A for {desirednumcoils} coils")
 

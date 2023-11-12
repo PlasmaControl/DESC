@@ -1,15 +1,14 @@
 """Utility functions needed for converting VMEC inputs/outputs."""
 
-import warnings
-
 import numpy as np
 from netCDF4 import Dataset, stringtochar
 from scipy.linalg import block_diag, null_space
 
-from desc.backend import sign
+from desc.backend import jit, sign
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, zernike_radial
-from desc.compute import get_transforms
-from desc.grid import Grid, LinearGrid
+from desc.compute import compute as compute_fun
+from desc.compute import get_profiles, get_transforms
+from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.utils import Timer
 
@@ -545,10 +544,12 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     r_full = np.sqrt(s_full)
     r_half = np.sqrt(s_half)
 
+    grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=1.0)
+
     transforms = get_transforms(
         "|B|_mn",
         obj=eq,
-        grid=Grid(np.array([])),
+        grid=grid,
         M_booz=M_booz - 1,
         N_booz=N_booz,
     )
@@ -561,7 +562,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         transforms_sin = get_transforms(
             "|B|_mn",
             obj=eq,
-            grid=Grid(np.array([])),
+            grid=grid,
             M_booz=M_booz - 1,
             N_booz=N_booz,
             sym="sin",
@@ -630,6 +631,61 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         B_theta_lmn, transform.basis, rho=r_half, return_full=False
     )
 
+    B_transform = transforms["B"]
+    w_transform = transforms["w"]
+
+    data_keys = ["|B|_mn", "R_mn", "sqrt(g)_B_mn", "psi_r"]
+    data_keys = data_keys + ["Z_mn", "nu_mn"] if not eq.sym else data_keys
+    data_keys_sin = ["Z_mn", "nu_mn"]
+
+    @jit
+    def compute_data(grid, data):
+        trans = get_transforms(
+            ["|B|", "sqrt(g)"],
+            obj=eq,
+            grid=grid,
+            M_booz=M_booz - 1,
+            N_booz=N_booz,
+            jitable=True,
+        )
+
+        trans["B"] = B_transform
+        trans["w"] = w_transform
+
+        profiles = get_profiles(data_keys, obj=eq, grid=grid, jitable=True)
+        # compute data
+        d = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            data_keys,
+            params=eq.params_dict,
+            transforms=trans,
+            profiles=profiles,
+            data=data,
+        )
+
+        return d
+
+    @jit
+    def compute_data_sin_sym(grid, data, trans):
+        # don't need to get transforms because all quantities that
+        # needed transforms other than the "B" and "w" are already
+        # computed from the compute_data call above
+        profiles = get_profiles(data_keys_sin, obj=eq, grid=grid, jitable=True)
+        # compute data
+        d = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            data_keys_sin,
+            params=eq.params_dict,
+            transforms=trans,
+            profiles=profiles,
+            data=data,
+        )
+
+        return d
+
+    # define these variables now so that code linting
+    # does not complain that they are not defined in the loop
+    boozer_prefactor = boozer_prefactor_sin = None
     for i, r in enumerate(r_half):
         if verbose > 0:
             printstring = f"Calculating Surf {i} at rho={r:1.3f}"
@@ -646,50 +702,32 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
 
         ## calculate boozer transform for this surface
         grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=np.array(r))
+        if i > 0:
+            data["Boozer transform prefactor modes norm"] = boozer_prefactor
         # cos symmetric terms
-        transforms = get_transforms(
-            ["|B|_mn", "sqrt(g)_B_mn"],
-            obj=eq,
-            grid=grid,
-            M_booz=M_booz - 1,
-            N_booz=N_booz,
-        )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            data = eq.compute(
-                ["|B|_mn", "R_mn", "Z_mn", "nu_mn", "sqrt(g)_B_mn", "psi_r"],
-                grid=grid,
-                transforms=transforms,
-                data=data,
-            )
+        data = compute_data(grid, data)
+
+        if i == 0:
+            # save the norm of modes calculated for future use
+            boozer_prefactor = data["Boozer transform prefactor modes norm"]
+
         if eq.sym:
-            # Z and nu are sin-symmetric, but the transforms used
+            # Z and nu are sin-symmetric, but the "B" transforms used
             # before are cos symmetric.
-            # We want to use the data that needed cos sym transforms,
-            # but remove the incorrectly calculated Z_mn,nu_mn from the
-            # dictionary first
-            data.pop("nu_mn")
+            # We want to use the base data, but the prefactor
+            # was calculated with the wrong symmetry, so must pop it
+            # so it can be recalculated here
             data.pop("Boozer transform prefactor")
-            data.pop("Z_mn")
+            data.pop("Boozer transform prefactor modes norm")
             data_sin = data
+            if i > 0:
+                data_sin["Boozer transform prefactor modes norm"] = boozer_prefactor_sin
 
-            transforms_sin = get_transforms(
-                ["Z_mn", "nu_mn"],
-                obj=eq,
-                grid=grid,
-                M_booz=M_booz - 1,
-                N_booz=N_booz,
-                sym="sin",
-            )
+            data_sin = compute_data_sin_sym(grid, data_sin, trans=transforms_sin)
 
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                data_sin = eq.compute(
-                    ["Z_mn", "nu_mn"],
-                    grid=grid,
-                    transforms=transforms_sin,
-                    data=data_sin,
-                )
+            if i == 0:
+                # save the prefactor calculated for future use
+                boozer_prefactor_sin = data_sin["Boozer transform prefactor modes norm"]
 
         else:
             data_sin = data

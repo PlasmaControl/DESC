@@ -342,11 +342,14 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
         elif c == "B":
             transforms["B"] = Transform(
                 grid,
-                DoubleFourierSeries(
-                    M=kwargs.get("M_booz", 2 * obj.M),
-                    N=kwargs.get("N_booz", 2 * obj.N),
-                    NFP=obj.NFP,
-                    sym=kwargs.get("sym", obj.R_basis.sym),
+                kwargs.get(
+                    "B_basis",
+                    DoubleFourierSeries(
+                        M=kwargs.get("M_booz", 2 * obj.M),
+                        N=kwargs.get("N_booz", 2 * obj.N),
+                        NFP=obj.NFP,
+                        sym=kwargs.get("sym", obj.R_basis.sym),
+                    ),
                 ),
                 derivs=derivs["B"],
                 build=True,

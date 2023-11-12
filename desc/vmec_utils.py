@@ -907,12 +907,8 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "requested surfaces, and a 0 is prepended"
     )
     iotas.units = "None"
-    if eq.iota is not None:
-        iotas[0:] = np.insert(
-            -eq.iota(r_half), 0, 0
-        )  # negative sign for negative Jacobian in VMEC
-    else:
-        iotas[0:] = -grid.compress(eq.compute("iota", grid=grid, data=data_1d)["iota"])
+
+    iotas[0:] = -grid.compress(eq.compute("iota", grid=grid, data=data_1d)["iota"])
 
     buco_b = file.createVariable("buco_b", np.float64, ("radius",))
     buco_b.long_name = (
@@ -938,7 +934,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     presf = file.createVariable("pres_b", np.float64, ("radius",))
     presf.long_name = "pressure on full mesh"
     presf.units = "Pa"
-    presf[:] = eq.pressure(r_full)
+    presf[:] = eq.compute("pressure", grid=LinearGrid(rho=r_full, theta=0, zeta=0))
 
     beta = file.createVariable("beta_b", np.float64, ("radius",))
     beta.long_name = "Blank, only included for compatibility reasons"

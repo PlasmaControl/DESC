@@ -540,7 +540,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     # VMEC radial coordinate: s = rho^2 = Psi / Psi(LCFS)
     s_full = np.linspace(0, 1, surfs)
     hs = 1 / (surfs - 1)
-    s_half = np.arange(hs / 2, 1, hs)
+    s_half = s_full[0:-1] + hs / 2
     r_full = np.sqrt(s_full)
     r_half = np.sqrt(s_half)
 
@@ -908,7 +908,9 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     )
     iotas.units = "None"
 
-    iotas[0:] = -grid.compress(eq.compute("iota", grid=grid, data=data_1d)["iota"])
+    iotas[0:] = np.insert(
+        -grid.compress(eq.compute("iota", grid=grid, data=data_1d)["iota"]), 0, 0
+    )
 
     buco_b = file.createVariable("buco_b", np.float64, ("radius",))
     buco_b.long_name = (
@@ -934,7 +936,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     presf = file.createVariable("pres_b", np.float64, ("radius",))
     presf.long_name = "pressure on full mesh"
     presf.units = "Pa"
-    presf[:] = eq.compute("pressure", grid=LinearGrid(rho=r_full, theta=0, zeta=0))
+    presf[:] = eq.compute("p", grid=LinearGrid(rho=r_full, theta=0, zeta=0))["p"]
 
     beta = file.createVariable("beta_b", np.float64, ("radius",))
     beta.long_name = "Blank, only included for compatibility reasons"

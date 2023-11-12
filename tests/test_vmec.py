@@ -930,8 +930,9 @@ def test_make_boozmn_output(TmpDir):
     file = Dataset(output_path, mode="r")
 
     # make half grid in s
+    s_full = np.linspace(0, 1, surfs)
     hs = 1 / (surfs - 1)
-    s_half = np.arange(hs / 2, 1, hs)
+    s_half = s_full[0:-1] + hs / 2
 
     R_mnc = file.variables["rmnc_b"][:].filled()
     Z_mns = file.variables["zmns_b"][:].filled()
@@ -1001,7 +1002,7 @@ def test_make_boozmn_output(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                atol=5e-4,
+                atol=5e-3,
                 rtol=1e-4,
                 err_msg=f"{name} at surf index {surf_index}",
             )

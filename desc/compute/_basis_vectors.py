@@ -1853,6 +1853,7 @@ def _e_sub_rho_rtt(params, transforms, profiles, data, **kwargs):
         "omega_tz",
         "omega_z",
     ],
+    aliases=["x_rrt", "x_trr", "x_rtr"],
 )
 def _e_sub_rho_rtz(params, transforms, profiles, data, **kwargs):
     data["e_rho_rtz"] = jnp.array(

@@ -24,7 +24,21 @@ def find_permutations(name, separator="_"):
 def assign_alias_data(
     alias, primary, base_class, data_index, params, profiles, transforms, data, **kwargs
 ):
-    """Assigns primary data to alias."""
+    """Assigns primary data to alias.
+
+    Parameters
+    ----------
+    alias : `str`
+        data_index key for alias of primary
+    primary : `str`
+        key defined in compute function
+
+    Returns
+    -------
+    data : `dict`
+        computed data dictionary (includes both alias and primary)
+
+    """
     data = data_index[base_class][primary]["fun"](
         params, transforms, profiles, data, **kwargs
     )

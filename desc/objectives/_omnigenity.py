@@ -506,8 +506,7 @@ class Omnigenity(_Objective):
     """Omnigenity error.
 
     This objective assumes that the collocation point (θ=0,ζ=0) lies on the contour of
-    maximum field strength. If this is not the case, the equilibrium geometry should be
-    re-parameterized by flipping the sign of all coefficients with m≠0.
+    maximum field strength |B|=B_max.
 
     Parameters
     ----------

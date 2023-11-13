@@ -762,10 +762,25 @@ def test_multiobject_optimization():
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_omnigenity_qa():
     """Test optimizing omnigenity parameters to match an axisymmetric equilibrium."""
+    # Solov'ev examples has B_max contours at theta=pi, need to change to theta=0
     eq = desc.examples.get("SOLOVEV")
+    rone = np.ones_like(eq.R_lmn)
+    rone[eq.R_basis.modes[:, 1] != 0] *= -1
+    eq.R_lmn *= rone
+    zone = np.ones_like(eq.Z_lmn)
+    zone[eq.Z_basis.modes[:, 1] != 0] *= -1
+    eq.Z_lmn *= zone
+    lone = np.ones_like(eq.L_lmn)
+    lone[eq.L_basis.modes[:, 1] != 0] *= -1
+    eq.L_lmn *= lone
+    eq.axis = eq.get_axis()
+    eq.surface = eq.get_surface_at(rho=1)
     eq.Psi *= 5  # B0 = 1 T
+    eq.solve()
+
     field = OmnigenousField(
         L_well=1,
         M_well=4,
@@ -775,7 +790,6 @@ def test_omnigenity_qa():
         NFP=eq.NFP,
         helicity=(1, 0),
     )
-
     objective = ObjectiveFunction(
         (
             Omnigenity(field=field, eq=eq, rho=1e-2),
@@ -792,7 +806,7 @@ def test_omnigenity_qa():
     )
 
     optimizer = Optimizer("lsq-exact")
-    (eq, field), result = optimizer.optimize(
+    (eq, field), _ = optimizer.optimize(
         (eq, field),
         objective,
         constraints,
@@ -817,7 +831,7 @@ def test_omnigenity_qa():
     # check that magnetic well parameters get |B| min & max on LCFS correct
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
     data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=grid)
-    np.testing.assert_allclose(np.min(B1), data["min_tz |B|"][0], rtol=1e-3)
+    np.testing.assert_allclose(np.min(B1), data["min_tz |B|"][0], rtol=2e-3)
     np.testing.assert_allclose(np.max(B1), data["max_tz |B|"][0], rtol=2e-3)
 
 

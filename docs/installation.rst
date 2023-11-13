@@ -139,7 +139,7 @@ This method may install JAX with higher CuDNN version (CuDNN 8.6) which is not s
 .. code-block:: sh
 
     module load anaconda3/2023.3
-    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.10=cuda112*" -c conda-forge
+    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.14=cuda112*" -c conda-forge
     conda activate desc-env
 
 Then, install DESC:

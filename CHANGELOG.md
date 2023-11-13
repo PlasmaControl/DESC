@@ -3,7 +3,10 @@ Changelog
 
 - Adds ``desc.compat.rescale`` for rescaling equilibria to a specified size and field
 strength.
-
+ - Adds new keyword ``surface_fixed`` to ``PlasmaVesselDistance`` objective which says
+whether or not the surface comparing the distance from the plasma to is fixed or not.
+If True, then the surface coordinates can be precomputed, saving on computation during
+optimization. Set to True by default.
 
 v0.10.2
 -------

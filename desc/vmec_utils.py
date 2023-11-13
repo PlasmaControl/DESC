@@ -866,7 +866,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "The total number of (m,n) pairs for which Fourier amplitudes"
         "rmnc, bmnc etc are stored."
     )
-    mnboz[:] = basis.num_modes
+    mnboz[:] = num_modes
 
     # make indicial arrays for the sin and cos modes
     inds_cos = np.where(modes[:, 0] == 1)

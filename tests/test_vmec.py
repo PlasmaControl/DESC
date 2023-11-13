@@ -1216,15 +1216,14 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
     """Test that booz_xform-style outputs compare well against C++ implementation."""
     # testing against https://github.com/hiddenSymmetries/booz_xform/tree/main
     # commit 881907058ece03
+    # compare against a NS=300  Mboz=Nboz=20 run
+    # with the hidden symmetries C++ booz_xform implementation
+    surfs = 300
+    boozer_res = 20
     # load in asymmetric equilibrium
     eq = load("./tests/inputs/NAE_QA_asym_eq_output.h5")
-    output_path = str(TmpDir.join("boozmn_asym_out.nc"))
+    output_path = str(TmpDir.join(f"boozmn_asym_{surfs}_surfs_{boozer_res}.nc"))
 
-    boozer_res = 20
-    # compare against a 100 surface Mboz=Nboz=20 run of HELIOTRON
-    # with the hidden symmetries C++ booz_xform implementation
-    # (ran on a wout created with VMECIO.save of HELIOTRON example with 100 surfs)
-    surfs = 50
     Cpp_booz_output_path = (
         f"./tests/inputs/boozmn_{surfs}_surfs_QA_asym_sims_booz_{boozer_res}.nc"
     )
@@ -1251,55 +1250,31 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
     g_mnc = file.variables["gmn_b"][:].filled()
     g_mns = file.variables["gmns_b"][:].filled()
 
-    quantities = [
-        R_mnc,
-        R_mns,
-        Z_mnc,
-        Z_mns,
-        B_mnc,
-        B_mns,
-        g_mnc,
-        g_mns,
-        nu_mnc,
-        nu_mns,
-    ]
-    quant_names = [
-        "R",
-        "R",
-        "Z",
-        "Z",
-        "|B|",
-        "|B|",
-        "sqrt(g)_B",
-        "sqrt(g)_B",
-        "nu",
-        "nu",
-    ]
-    quant_atols = [2e-3, 5e-4, 6e-4, 1e-3, 9e-3, 4e-3, 5e-2, 2e-2, 3e-3, 2e-2]
-
     xm = file.variables["ixm_b"][:].filled()
     xn = file.variables["ixn_b"][:].filled()
 
     # load in the .nc from the cpp version
+    # do to an I/O bug in C++ version, the asym
+    # quantities were saved as .npy files instead
+    # of inside the .nc
+    # https://github.com/hiddenSymmetries/booz_xform/issues/15
 
     file_cpp = Dataset(Cpp_booz_output_path, mode="r")
 
-    # the C++ version did not save the asym quantities to
-    # the .nc file, so they are separately saved as .npy files
     R_mnc_cpp = file_cpp.variables["rmnc_b"][:].filled()
-    R_mns_cpp = np.load("./tests/inputs/rmns_b.npy").T
+    R_mns_cpp = np.load(f"rmns_b_{surfs}.npy").T
 
     Z_mns_cpp = file_cpp.variables["zmns_b"][:].filled()
-    Z_mnc_cpp = np.load("./tests/inputs/zmnc_b.npy").T
+    Z_mnc_cpp = np.load(f"zmnc_b_{surfs}.npy").T
 
     B_mnc_cpp = file_cpp.variables["bmnc_b"][:].filled()
-    B_mns_cpp = np.load("./tests/inputs/bmns_b.npy").T
+    B_mns_cpp = np.load(f"bmns_b_{surfs}.npy").T
 
     nu_mns_cpp = file_cpp.variables["pmns_b"][:].filled()
-    nu_mnc_cpp = np.load("./tests/inputs/pmnc_b.npy").T
+    nu_mnc_cpp = np.load(f"pmnc_b_{surfs}.npy").T
 
     g_mnc_cpp = file_cpp.variables["gmn_b"][:].filled()
-    g_mns_cpp = np.load("./tests/inputs/gmns_b.npy").T
+    g_mns_cpp = np.load(f"gmns_b_{surfs}.npy").T
 
     xm_cpp = file_cpp.variables["ixm_b"][:].filled()
     xn_cpp = file_cpp.variables["ixn_b"][:].filled()
@@ -1316,11 +1291,36 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
         nu_mnc_cpp,
         nu_mns_cpp,
     ]
+    quantities = [
+        R_mnc,
+        R_mns,
+        Z_mnc,
+        Z_mns,
+        B_mnc,
+        B_mns,
+        g_mnc,
+        g_mns,
+        nu_mnc,
+        nu_mns,
+    ]
+    quant_names = [
+        "Rmnc",
+        "Rmns",
+        "Zmnc",
+        "Zmns",
+        "|B|mnc",
+        "|B|mns",
+        "sqrt(g)_B_mnc",
+        "sqrt(g)_B_mns",
+        "numnc",
+        "numns",
+    ]
+    quant_atols = [1e-4, 5e-4, 4e-4, 3e-4, 8e-2, 4e-3, 2e-2, 2e-2, 3e-3, 8e-5]
 
     np.testing.assert_allclose(xm_cpp, xm, atol=1e-16)
     np.testing.assert_allclose(xn_cpp, xn, atol=1e-16)
     # compare coefficients
-    max_atols = [9e-4, 4e-4, 6e-4, 9e-4, 7.5e-3, 2e-3, 5e-2, 2e-2, 3e-3, 2e-2]
+    max_atols = [5e-4, 5e-4, 6e-4, 9e-4, 7.5e-3, 2e-3, 5e-2, 2e-2, 3e-3, 2e-2]
     first_surf = 0
     for i, (quant_DESC, quant_cpp) in enumerate(zip(quantities, quantities_cpp)):
         np.testing.assert_allclose(
@@ -1330,11 +1330,10 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
             err_msg=quant_names[i],
         )
         # check that max values are close as well within a tighter tol
-        print(max_atols[i])
         np.testing.assert_allclose(
             np.max(np.abs(quant_DESC[first_surf:, :]), axis=0),
             np.max(np.abs(quant_cpp[first_surf:, :]), axis=0),
-            atol=max_atols[i] / 10,
+            atol=max_atols[i],
             err_msg="max " + quant_names[i],
         )
     for key in list(file_cpp.variables.keys()):

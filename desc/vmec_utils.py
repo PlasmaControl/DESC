@@ -544,7 +544,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     r_full = np.sqrt(s_full)
     r_half = np.sqrt(s_half)
 
-    grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=1.0)
+    grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=1.0, sym=False)
 
     transforms = get_transforms(
         "|B|_mn",
@@ -587,7 +587,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     Nu_mn = np.array([[]])
     Sqrt_g_B_mn = np.array([[]])
 
-    vol_grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=r_half)
+    vol_grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=r_half, sym=False)
     # precompute the needed data for the boozer surface computations
     # (except those which have to be computed on a single surface only,
     # like theta_B, zeta_B or nu)
@@ -606,10 +606,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "lambda_t",
         "lambda_z",
     ]
-    data_vol = eq.compute(
-        keys,
-        grid=vol_grid,
-    )
+    data_vol = eq.compute(keys, grid=vol_grid)
 
     # FourierZernike fit the B_theta and B_zeta, then at each surface
     # just evaluate the fit at the rho to get the B_theta_mn and B_zeta_mn
@@ -617,7 +614,11 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     transform = Transform(
         grid=vol_grid,
         basis=FourierZernikeBasis(
-            L=2 * eq.L, M=M_booz - 1, N=N_booz, sym="cos", NFP=eq.NFP
+            L=2 * eq.L,
+            M=M_booz - 1,
+            N=N_booz,
+            sym="cos" if eq.sym else False,
+            NFP=eq.NFP,
         ),
         build_pinv=True,
     )
@@ -702,7 +703,9 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         data["B_theta_mn"] = B_theta_mn[i, :]
 
         ## calculate boozer transform for this surface
-        grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=np.array(r))
+        grid = LinearGrid(
+            M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=np.array(r), sym=False
+        )
         if i > 0:
             data["Boozer transform prefactor modes norm"] = boozer_prefactor
         # cos symmetric terms
@@ -881,7 +884,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "G",
     ]
     # this should be compressed then to just the radial profiles
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP, sym=eq.sym)
     data_1d = eq.compute(keys_1d, grid=grid)
     jlist = file.createVariable("jlist", np.int32, ("comput_surfs",))
     jlist.long_name = (

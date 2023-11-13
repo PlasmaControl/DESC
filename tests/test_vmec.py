@@ -1009,6 +1009,127 @@ def test_make_boozmn_output(TmpDir):
 
 
 @pytest.mark.unit
+def test_make_boozmn_output_asym(TmpDir):
+    """Test that asym booz_xform-style outputs accurately reconstruct quantities."""
+    # load in asymmetric equilibrium
+    eq = load("./tests/inputs/NAE_QA_asym_eq_output.h5")
+    output_path = str(TmpDir.join("boozmn_asym_out.nc"))
+
+    boozer_res = 25
+    surfs = 10
+    # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
+    # on 3 surfaces (surfs-1 by booz_xform convention) using boozer resolution of 40
+    make_boozmn_output(
+        eq, output_path, surfs=surfs, verbose=2, M_booz=boozer_res, N_booz=boozer_res
+    )
+    # load in the .nc file
+    file = Dataset(output_path, mode="r")
+
+    # make half grid in s
+    s_full = np.linspace(0, 1, surfs)
+    hs = 1 / (surfs - 1)
+    s_half = s_full[0:-1] + hs / 2
+
+    R_mnc = file.variables["rmnc_b"][:].filled()
+    R_mns = file.variables["rmns_b"][:].filled()
+
+    Z_mns = file.variables["zmns_b"][:].filled()
+    Z_mnc = file.variables["zmnc_b"][:].filled()
+
+    B_mnc = file.variables["bmnc_b"][:].filled()
+    B_mns = file.variables["bmns_b"][:].filled()
+
+    nu_mns = file.variables["pmns_b"][:].filled()
+    nu_mnc = file.variables["pmnc_b"][:].filled()
+
+    g_mnc = file.variables["gmn_b"][:].filled()
+    g_mns = file.variables["gmns_b"][:].filled()
+
+    quantities = [
+        [R_mnc, R_mns],
+        [Z_mnc, Z_mns],
+        [B_mnc, B_mns],
+        [g_mnc, g_mns],
+        [nu_mnc, nu_mns],
+    ]
+    quant_names = ["R", "Z", "|B|", "sqrt(g)_B", "nu"]
+    quant_parity = [
+        ["cos", "sin"],
+        ["cos", "sin"],
+        ["cos", "sin"],
+        ["cos", "sin"],
+        ["cos", "sin"],
+    ]
+
+    xm = file.variables["ixm_b"][:].filled()
+    xn = file.variables["ixn_b"][:].filled()
+
+    # create grid on which to check values btwn DESC eq.compute and the
+    # evaluated Boozer harmonics for each quantity
+    M = 40
+    N = 40
+
+    for surf_index in range(surfs - 1):
+        print("surface index", surf_index)
+        rho = np.sqrt(s_half[surf_index])
+        grid = LinearGrid(rho=rho, M=M, N=N, NFP=eq.NFP)
+        data = eq.compute(["theta_B", "zeta_B", "psi_r"] + quant_names, grid=grid)
+        # make the grid in Boozer angles corresponding
+        # to the DESC theta,zeta angles that our quantities
+        # are computed on
+        grid_boozer = Grid(
+            np.vstack(
+                (np.ones_like(data["theta_B"]) * rho, data["theta_B"], data["zeta_B"])
+            ).T,
+            sort=False,
+        )
+
+        for quant_index in range(len(quantities)):
+            name = quant_names[quant_index]
+            quant_from_booz = None
+            # must add up both the sin and cos terms
+            for quant_index2 in [0, 1]:
+                quant = quantities[quant_index][quant_index2]
+                parity = quant_parity[quant_index][quant_index2]
+
+                # B_mn
+                m, n, quant_mn = (
+                    ptolemy_identity_fwd(xm, xn, np.zeros_like(quant), quant)
+                    if parity == "cos"
+                    else ptolemy_identity_fwd(xm, xn, quant, np.zeros_like(quant))
+                )
+                # negate nu since we save it as negative of what our convention is
+                # to comply with booz_xform notation
+                quant_mn = -quant_mn if name == "nu" else quant_mn
+                quant_mn = (
+                    quant_mn * data["psi_r"][0] if name == "sqrt(g)_B" else quant_mn
+                )
+
+                basis = DoubleFourierSeries(
+                    np.max(m), round(np.max(n) / eq.NFP), sym=False, NFP=eq.NFP
+                )
+                quant_mn = np.where(basis.modes[:, 1] < 0, -quant_mn, quant_mn)
+                quant_mn_desc_basis = np.zeros((basis.num_modes,))
+                for i, (mm, nn) in enumerate(zip(m, n / eq.NFP)):
+                    idx = basis.get_idx(L=0, M=mm, N=nn)
+                    quant_mn_desc_basis[idx] = quant_mn[surf_index, i]
+
+                quant_trans = Transform(grid=grid_boozer, basis=basis)
+                if np.any(quant_from_booz):  # add to it if it exists
+                    quant_from_booz += quant_trans.transform(quant_mn_desc_basis)
+                else:
+                    quant_from_booz = quant_trans.transform(quant_mn_desc_basis)
+
+            np.testing.assert_allclose(
+                quant_from_booz,
+                data[name],
+                atol=3e-5,
+                rtol=3e-5,
+                err_msg=f"{name} at surf index {surf_index}",
+            )
+
+
+@pytest.mark.unit
 def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     """Test that booz_xform-style outputs compare well against C++ implementation."""
     # testing against https://github.com/hiddenSymmetries/booz_xform/tree/main
@@ -1095,7 +1216,7 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
     """Test that booz_xform-style outputs compare well against C++ implementation."""
     # testing against https://github.com/hiddenSymmetries/booz_xform/tree/main
     # commit 881907058ece03
-    # load in HELIOTRON equilibrium
+    # load in asymmetric equilibrium
     eq = load("./tests/inputs/NAE_QA_asym_eq_output.h5")
     output_path = str(TmpDir.join("boozmn_asym_out.nc"))
 
@@ -1166,19 +1287,19 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
     # the C++ version did not save the asym quantities to
     # the .nc file, so they are separately saved as .npy files
     R_mnc_cpp = file_cpp.variables["rmnc_b"][:].filled()
-    R_mns_cpp = np.load("rmns_b.npy").T
+    R_mns_cpp = np.load("./tests/inputs/rmns_b.npy").T
 
     Z_mns_cpp = file_cpp.variables["zmns_b"][:].filled()
-    Z_mnc_cpp = np.load("zmnc_b.npy").T
+    Z_mnc_cpp = np.load("./tests/inputs/zmnc_b.npy").T
 
     B_mnc_cpp = file_cpp.variables["bmnc_b"][:].filled()
-    B_mns_cpp = np.load("bmns_b.npy").T
+    B_mns_cpp = np.load("./tests/inputs/bmns_b.npy").T
 
     nu_mns_cpp = file_cpp.variables["pmns_b"][:].filled()
-    nu_mnc_cpp = np.load("pmnc_b.npy").T
+    nu_mnc_cpp = np.load("./tests/inputs/pmnc_b.npy").T
 
     g_mnc_cpp = file_cpp.variables["gmn_b"][:].filled()
-    g_mns_cpp = np.load("gmns_b.npy").T
+    g_mns_cpp = np.load("./tests/inputs/gmns_b.npy").T
 
     xm_cpp = file_cpp.variables["ixm_b"][:].filled()
     xn_cpp = file_cpp.variables["ixn_b"][:].filled()
@@ -1219,9 +1340,14 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
     for key in list(file_cpp.variables.keys()):
         if key not in [
             "rmnc_b",
+            "rmns_b",
+            "zmnc_b",
             "zmns_b",
             "bmnc_b",
+            "bmns_b",
             "gmn_b",
+            "gmns_b",
+            "pmnc_b",
             "pmns_b",
             "ixm_b",
             "ixn_b",

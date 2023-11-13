@@ -556,9 +556,12 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     basis = transforms["B"].basis
 
     matrix, modes = ptolemy_linear_transform(basis.modes)
-    num_modes = modes.shape[0]
+    # if sym is False, then the number of modes is double what each individual mode
+    # array should be, since it has both sin(mt - nz) and cos(mt-nz) modes in it
+    # while num_modes is the number of modes for a single sin or cos series
+    num_modes = modes.shape[0] if eq.sym else int((modes.shape[0] + 1) / 2)
 
-    if eq.sym:  # need a separate sin basis for Z (maybe nu)
+    if eq.sym:  # need a separate sin basis for Z and nu
         transforms_sin = get_transforms(
             "|B|_mn",
             obj=eq,
@@ -568,16 +571,13 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             sym="sin",
         )
         basis_sin = transforms_sin["B"].basis
-        matrix_sin, modes_sin = ptolemy_linear_transform(
-            np.insert(basis_sin.modes, 0, np.array([0, 0, 0]), axis=0)
-        )
-        modes_sin[0, 0] = -1
-        # make the first mode a "sin" mode, even though it is m=n=0
-        # because in the VMEC style outputs it includes this mode
+        matrix_sin, modes_sin = ptolemy_linear_transform(basis_sin.modes)
 
     else:
         matrix_sin = matrix
         modes_sin = modes
+        transforms_sin = transforms
+        basis_sin = basis
 
     timer.start("Boozer Transform")
 
@@ -758,16 +758,14 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             np.vstack((Sqrt_g_B_mn, sqrt_g_B_mn)) if Sqrt_g_B_mn.size else sqrt_g_B_mn
         )
 
-        # insert the 0,0 mode so it matches the ptolemy matrix for
-        # the sin basis
         z_mn = np.where(
             transforms_sin["B"].basis.modes[:, 1] < 0,
             -data_sin["Z_mn"],
             data_sin["Z_mn"],
         )
-        z_mn = np.insert(z_mn, 0, 0) if eq.sym else z_mn
 
         z_mn = np.atleast_2d(matrix_sin @ z_mn)
+
         Z_mn = np.vstack((Z_mn, z_mn)) if Z_mn.size else z_mn
 
         nu_mn = np.where(
@@ -775,7 +773,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             -data_sin["nu_mn"],
             data_sin["nu_mn"],
         )
-        nu_mn = np.insert(nu_mn, 0, 0) if eq.sym else nu_mn
+
         nu_mn = np.atleast_2d(matrix_sin @ nu_mn)
         Nu_mn = np.vstack((Nu_mn, nu_mn)) if Nu_mn.size else nu_mn
 
@@ -794,7 +792,6 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     file.createDimension("radius", s_full.size)  # number of flux surfaces plus 1
     file.createDimension("comput_surfs", surfs - 1)  # number of flux surfaces
     file.createDimension("pack_rad", surfs)  # number of flux surfaces
-
     file.createDimension("mn_mode", num_modes)  # number of Fourier modes
     file.createDimension("mn_modes", num_modes)  # number of Fourier modes
     file.createDimension("preset", 21)  # dimension of profile inputs
@@ -868,6 +865,16 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     )
     mnboz[:] = basis.num_modes
 
+    # make indicial arrays for the sin and cos modes
+    inds_cos = np.where(modes[:, 0] == 1)
+    inds_sin = (
+        np.where(modes_sin[:, 0] == -1) if eq.sym else np.where(modes[:, 0] == -1)
+    )
+    # add the (0,0) mode to modes_sin if eq.sym to abide by booz xform convention
+    # even though the mode is trivially zero for sin(mt-nz)
+    if eq.sym:
+        modes_sin = np.insert(modes_sin, 0, [-1, 0, 0], axis=0)
+
     ## 1D Arrays
     keys_1d = [
         "I",
@@ -891,7 +898,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "bmnc etc are stored"
     )
     ixm_b.units = "None"
-    ixm_b[:] = modes[:, 1]
+    ixm_b[:] = modes[:, 1] if eq.sym else modes[inds_cos, 1]
 
     ixn_b = file.createVariable("ixn_b", np.int32, ("mn_modes",))
     ixn_b.long_name = (
@@ -899,7 +906,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "rmnc, bmnc etc are stored"
     )
     ixn_b.units = "None"
-    ixn_b[:] = modes[:, 2] * eq.NFP
+    ixn_b[:] = modes_sin[:, 2] * eq.NFP if eq.sym else modes[inds_cos, 2] * eq.NFP
 
     iotas = file.createVariable("iota_b", np.float64, ("radius",))
     iotas.long_name = (
@@ -960,14 +967,15 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     bmnc.long_name = "cos(m*t_Boozer-n*p_Boozer) component of |B|, on half mesh"
     bmnc.units = "T"
 
-    bmnc[0:, :] = B_mn[:, np.where(modes[:, 0] == 1)]
+    bmnc[0:, :] = B_mn[:, inds_cos].squeeze()
 
     if not eq.sym:
         bmns = file.createVariable("bmns_b", np.float64, ("comput_surfs", "mn_mode"))
         bmns.long_name = "sin(m*t_Boozer-n*p_Boozer) component of |B|, on half mesh"
         bmns.units = "T"
-
-        bmns[0:, :] = B_mn[:, np.where(modes[:, 0] == -1)]
+        # have to insert the 0,0 mode as the booz xform convention
+        # expects it, even though it is trivially zero for sin(mt-nz)
+        bmns[0:, :] = np.insert(B_mn[:, inds_sin].squeeze(), 0, 0, axis=1)
 
     # R
     rmnc = file.createVariable("rmnc_b", np.float64, ("comput_surfs", "mn_mode"))
@@ -976,7 +984,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "major radius R"
     )
     rmnc.units = "m"
-    rmnc[0:, :] = R_mn[:, np.where(modes[:, 0] == 1)]
+    rmnc[0:, :] = R_mn[:, inds_cos].squeeze()
     if not eq.sym:
         rmns = file.createVariable("rmns_b", np.float64, ("comput_surfs", "mn_mode"))
         rmns.long_name = (
@@ -984,7 +992,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             "amplitudes of the major radius R"
         )
         rmns.units = "m"
-        rmns[0:, :] = R_mn[:, np.where(modes[:, 0] == -1)]
+        rmns[0:, :] = np.insert(R_mn[:, inds_sin].squeeze(), 0, 0, axis=1)
 
     # Z
     zmns = file.createVariable("zmns_b", np.float64, ("comput_surfs", "mn_mode"))
@@ -992,8 +1000,9 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "sin(m * theta_Boozer - n * zeta_Boozer) Fourier amplitudes"
         "of the vertical coordinate Z"
     )
+
     zmns.units = "m"
-    zmns[0:, :] = Z_mn[:, np.where(modes_sin[:, 0] == -1)]
+    zmns[0:, :] = np.insert(Z_mn[:, inds_sin].squeeze(), 0, 0, axis=1)
     if not eq.sym:
         zmnc = file.createVariable("zmnc_b", np.float64, ("comput_surfs", "mn_mode"))
         zmnc.long_name = (
@@ -1001,7 +1010,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             "amplitudes of the vertical coordinate Z"
         )
         zmnc.units = "m"
-        zmnc[0:, :] = Z_mn[:, np.where(modes[:, 0] == 1)]
+        zmnc[0:, :] = Z_mn[:, inds_cos].squeeze()
 
     # nu
     nums = file.createVariable("pmns_b", np.float64, ("comput_surfs", "mn_mode"))
@@ -1013,7 +1022,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     # we negate here because although nu is defined as zeta_B - zeta_DESC,
     # in the original fortran there is a negative sign so it is
     # actually zeta_DESC - zeta_B
-    nums[0:, :] = -Nu_mn[:, np.where(modes_sin[:, 0] == -1)]
+    nums[0:, :] = -np.insert(Nu_mn[:, inds_sin].squeeze(), 0, 0, axis=1)
     if not eq.sym:
         numc = file.createVariable("pmnc_b", np.float64, ("comput_surfs", "mn_mode"))
         numc.long_name = (
@@ -1021,7 +1030,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             "of the angle difference zeta_DESC - zeta_Boozer"
         )
         numc.units = "None"
-        numc[0:, :] = -Nu_mn[:, np.where(modes[:, 0] == 1)]
+        numc[0:, :] = -Nu_mn[:, inds_cos].squeeze()
 
     # calculate sqrt(g)
     gmn = file.createVariable("gmn_b", np.float64, ("comput_surfs", "mn_mode"))
@@ -1030,7 +1039,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "the Boozer coordinate Jacobian (G + iota * I) / B^2"
     )
     gmn.units = "m/T"
-    gmn[0:, :] = Sqrt_g_B_mn[:, np.where(modes[:, 0] == 1)]
+    gmn[0:, :] = Sqrt_g_B_mn[:, inds_cos].squeeze()
     if not eq.sym:
         gmns = file.createVariable("gmns_b", np.float64, ("comput_surfs", "mn_mode"))
         gmns.long_name = (
@@ -1038,7 +1047,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
             "of the Boozer coordinate Jacobian (G + iota * I) / B^2"
         )
         gmns.units = "m"
-        gmns[0:, :] = Sqrt_g_B_mn[:, np.where(modes[:, 0] == -1)]
+        gmns[0:, :] = np.insert(Sqrt_g_B_mn[:, inds_sin].squeeze(), 0, 0, axis=1)
     file.close()
 
     timer.stop("Total time")

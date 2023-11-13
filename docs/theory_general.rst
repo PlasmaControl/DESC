@@ -68,7 +68,19 @@ Magnetic Field & Current Density
 By assuming nested flux surfaces, :math:`\mathbf{B} \cdot \nabla \rho = 0`, and invoking Gauss's Law, :math:`\nabla \cdot \mathbf{B} = 0`, the magnetic field is written in flux coordinates as
 
 .. math::
-  \mathbf{B} = B^\theta \mathbf{e}_\theta + B^\zeta \mathbf{e}_\zeta = \frac{\partial_\rho \psi}{2 \pi \sqrt{g}} \cdot ((\iota - \partial_\zeta \lambda) \mathbf{e}_\theta + (1 + \partial_\theta \lambda) \mathbf{e}_\zeta)
+  \begin{aligned}
+    \mathbf{B} &= B^\theta \mathbf{e}_\theta + B^\zeta \mathbf{e}_\zeta \\[.3cm]
+    &= \frac{\partial_\rho \psi}{2 \pi \sqrt{g}} \left((\iota - \cfrac{\partial \lambda}{\partial \zeta}) \mathbf{e}_\theta + (1 + \cfrac{\partial \lambda}{\partial \theta}) \mathbf{e}_\zeta \right)
+  \end{aligned}
+
+So,
+
+.. math::
+  \begin{aligned}
+    B^\rho &= 0 \\[.2cm]
+    B^\theta &= \frac{\partial_\rho \psi}{2 \pi \sqrt{g}} \left(\iota - \cfrac{\partial \lambda}{\partial \zeta}\right)\\[.2cm]
+    B^\zeta &= \frac{\partial_\rho \psi}{2 \pi \sqrt{g}} \left(1 + \cfrac{\partial \lambda}{\partial \theta}\right)
+  \end{aligned}
 
 The current density is then calculated from Ampere's Law, :math:`\nabla \times \mathbf{B} = \mu_0 \mathbf{J}`,
 
@@ -96,27 +108,34 @@ The ideal magnetohydrodynamic equilibrium force balance is defined as
 .. math::
   \mathbf{F} \equiv \mathbf{J} \times \mathbf{B} - \nabla p = \mathbf{0}
 
+Using cross product in curvilinear coordinates, we can write
+
+.. math::
+  \mathbf{J} \times \mathbf{B} = \sqrt{g} (J^\theta B^\zeta - J^\zeta B^\theta)\mathbf{e}^\rho  \hspace{.2cm}-\hspace{.2cm}
+       \sqrt{g} J^\rho (B^\zeta\mathbf{e}^\theta - B^\theta\mathbf{e}^\zeta)
+
 When written in flux coordinates there are only two independent components:
 
 .. math::
   \begin{aligned}
-    \mathbf{F} &= F_\rho \nabla \rho + F_\beta \mathbf{\beta} \\[.2cm]
-    F_\rho &= \sqrt{g} (B^\zeta J^\theta - B^\theta J^\zeta) - \partial_\rho p \\[.2cm]
-    F_\beta &= \sqrt{g} B^\zeta J^\rho \\[.2cm]
-    \mathbf{\beta} &= \nabla \theta - \iota \nabla \zeta
+    \mathbf{F} &= F_\rho \mathbf{e}^\rho + F_{helical} \mathbf{e}^{helical} \\[.3cm]
+    F_\rho &= \sqrt{g} (J^\theta B^\zeta - J^\zeta B^\theta) - \frac{\partial p}{\partial \rho} \\[.3cm]
+    F_{helical} &= \sqrt{g} J^\rho \\[.3cm]
+    \mathbf{e}^{helical} &= B^\zeta\mathbf{e}^\theta - B^\theta\mathbf{e}^\zeta
   \end{aligned}
 
+where :math:`\mathbf{e}^x = \nabla x` is the contravariant basis vector of parameter x.
 These forces in both the radial and helical directions must vanish in equilibrium.
 DESC solves this force balance locally by evaluating the residual errors at discrete points in real space:
 
 .. math::
   \begin{aligned}
   f_\rho &= F_\rho ||\nabla \rho|| \Delta V \\[.2cm]
-  f_\beta &= F_\beta ||\mathbf{\beta}|| \Delta V
+  f_{helical} &= F_{helical} ||\mathbf{e}^{helical}|| \Delta V
   \end{aligned}
 
-These equations :math:`f_\rho` and :math:`f_\beta` represent the force errors (in Newtons) in the unit of volume :math:`\Delta V = \sqrt{g} \Delta \rho \Delta \theta \Delta \zeta` surrounding a collocation point :math:`(\rho, \theta, \zeta)`.
-[Note: this definition of :math:`\mathbf{\beta}` is slightly different from that given in the original paper, but the resulting equation for :math:`f_\beta` is equivalent.
+These equations :math:`f_\rho` and :math:`f_{helical}` represent the force errors (in Newtons) in the unit of volume :math:`\Delta V = \sqrt{g} \Delta \rho \Delta \theta \Delta \zeta` surrounding a collocation point :math:`(\rho, \theta, \zeta)`.
+[Note: this definition of :math:`\mathbf{e}^{helical}` is slightly different from that of :math:`\mathbf{\beta}` given in the original paper, but the resulting equation for :math:`f_{helical}` is equivalent to the original :math:`f_\beta`.
 The publication also included an additional sign term in the equations for :math:`f_\rho` and :math:`f_\beta` that has been dropped.]
 
 In summary, the equilibrium problem is formulated as a system of nonlinear equations :math:`\mathbf{f}(\mathbf{x}, \mathbf{c}) = \mathbf{0}`.
@@ -138,7 +157,7 @@ The equations :math:`\mathbf{f}` are the force error residuals at a series of co
 
 .. math::
   \mathbf{f} =  \begin{bmatrix}
-      f_\rho \\ f_\beta
+      f_\rho \\ f_{helical}
   \end{bmatrix}
 
 DESC allows flexibility in the choice of optimization algorithm used to solve this system of equations; popular approaches include Newton-Raphson methods and least-squares minimization (as the collocation grids are often oversampled, which has been found to improve convergence and robustness).

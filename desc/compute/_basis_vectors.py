@@ -2691,7 +2691,7 @@ def _e_sub_zeta_rzz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R_tz", "Z_tz""omega_tz",],
+    data=["R_tz", "Z_tz", "omega_tz",],
 )
 def _e_sub_zeta_t(params, transforms, profiles, data, **kwargs):
     data["e_zeta_t"] = jnp.array(

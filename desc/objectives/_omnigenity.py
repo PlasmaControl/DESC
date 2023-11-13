@@ -628,8 +628,7 @@ class Omnigenity(_Objective):
         self._eq_data_keys = ["|B|_mn"]
         self._field_data_keys = ["|B|_omni", "h"]
 
-        assert grid_eq.NFP == eq.NFP
-        assert grid_field.NFP == 1
+        assert grid_eq.NFP == grid_field.NFP
         assert grid_eq.sym is False
         assert grid_field.sym is False
         assert grid_eq.num_rho == 1

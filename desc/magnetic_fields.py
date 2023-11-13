@@ -1078,7 +1078,7 @@ class OmnigenousField(Optimizable, IOAble):
         M_omni,
         N_omni,
         NFP,
-        helicity=(0, 1),
+        helicity=(1, 0),
         B_lm=None,
         x_lmn=None,
     ):

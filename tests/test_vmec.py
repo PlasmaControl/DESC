@@ -1096,7 +1096,7 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
     # testing against https://github.com/hiddenSymmetries/booz_xform/tree/main
     # commit 881907058ece03
     # load in HELIOTRON equilibrium
-    eq = load("NAE_QA_asym_eq_output.h5")
+    eq = load("./tests/inputs/NAE_QA_asym_eq_output.h5")
     output_path = str(TmpDir.join("boozmn_asym_out.nc"))
 
     boozer_res = 20
@@ -1166,19 +1166,19 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
     # the C++ version did not save the asym quantities to
     # the .nc file, so they are separately saved as .npy files
     R_mnc_cpp = file_cpp.variables["rmnc_b"][:].filled()
-    R_mns_cpp = np.load(f"rmns_b_{surfs}.npy").T
+    R_mns_cpp = np.load("rmns_b.npy").T
 
     Z_mns_cpp = file_cpp.variables["zmns_b"][:].filled()
-    Z_mnc_cpp = np.load(f"zmnc_b_{surfs}.npy").T
+    Z_mnc_cpp = np.load("zmnc_b.npy").T
 
     B_mnc_cpp = file_cpp.variables["bmnc_b"][:].filled()
-    B_mns_cpp = np.load(f"bmns_b_{surfs}.npy").T
+    B_mns_cpp = np.load("bmns_b.npy").T
 
     nu_mns_cpp = file_cpp.variables["pmns_b"][:].filled()
-    nu_mnc_cpp = np.load(f"pmnc_b_{surfs}.npy").T
+    nu_mnc_cpp = np.load("pmnc_b.npy").T
 
     g_mnc_cpp = file_cpp.variables["gmn_b"][:].filled()
-    g_mns_cpp = np.load(f"gmns_b_{surfs}.npy").T
+    g_mns_cpp = np.load("gmns_b.npy").T
 
     xm_cpp = file_cpp.variables["ixm_b"][:].filled()
     xn_cpp = file_cpp.variables["ixn_b"][:].filled()

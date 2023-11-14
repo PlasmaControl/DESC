@@ -6,7 +6,7 @@ strength.
  - Adds new keyword ``surface_fixed`` to ``PlasmaVesselDistance`` objective which says
 whether or not the surface comparing the distance from the plasma to is fixed or not.
 If True, then the surface coordinates can be precomputed, saving on computation during
-optimization. Set to True by default.
+optimization. Set to False by default.
 
 v0.10.2
 -------

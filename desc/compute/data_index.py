@@ -98,6 +98,9 @@ def register_compute_fun(
         or `desc.equilibrium.Equilibrium`.
     axis_limit_data : list of str
         Names of other items in the data index needed to compute axis limit of qty.
+    aliases : list
+        Aliases of `name`. Will be stored in the data dictionary as a copy of `name`s
+        data.
 
     Notes
     -----

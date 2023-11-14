@@ -1306,7 +1306,7 @@ def _g_sup_zz(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e^rho", "e^theta"],
 )
-def _g_sup_rt(params, transforms, profiles, data):
+def _g_sup_rt(params, transforms, profiles, data, **kwargs):
     data["g^rt"] = dot(data["e^rho"], data["e^theta"])
     return data
 

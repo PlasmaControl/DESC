@@ -17,7 +17,8 @@ __all__ = [
     "DoubleFourierSeries",
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
-    "FourierZernikeBasis",
+    "FourierZernikeBasis"
+    "ChebyshevZernikeBasis",
 ]
 
 class _Basis(IOAble, ABC):
@@ -1177,6 +1178,7 @@ class FourierZernikeBasis(_Basis):
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
             )
             self._set_up()
+
 
 class ChebyshevZernikeBasis(_Basis):
     """

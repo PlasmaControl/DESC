@@ -1254,27 +1254,23 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
     xn = file.variables["ixn_b"][:].filled()
 
     # load in the .nc from the cpp version
-    # do to an I/O bug in C++ version, the asym
-    # quantities were saved as .npy files instead
-    # of inside the .nc
-    # https://github.com/hiddenSymmetries/booz_xform/issues/15
 
     file_cpp = Dataset(Cpp_booz_output_path, mode="r")
 
     R_mnc_cpp = file_cpp.variables["rmnc_b"][:].filled()
-    R_mns_cpp = np.load(f"./tests/inputs/rmns_b_{surfs}.npy").T
+    R_mns_cpp = file_cpp.variables["rmns_b"][:].filled()
 
     Z_mns_cpp = file_cpp.variables["zmns_b"][:].filled()
-    Z_mnc_cpp = np.load(f"./tests/inputs/zmnc_b_{surfs}.npy").T
+    Z_mnc_cpp = file_cpp.variables["zmnc_b"][:].filled()
 
     B_mnc_cpp = file_cpp.variables["bmnc_b"][:].filled()
-    B_mns_cpp = np.load(f"./tests/inputs/bmns_b_{surfs}.npy").T
+    B_mns_cpp = file_cpp.variables["bmns_b"][:].filled()
 
     nu_mns_cpp = file_cpp.variables["pmns_b"][:].filled()
-    nu_mnc_cpp = np.load(f"./tests/inputs/pmnc_b_{surfs}.npy").T
+    nu_mnc_cpp = file_cpp.variables["pmnc_b"][:].filled()
 
     g_mnc_cpp = file_cpp.variables["gmn_b"][:].filled()
-    g_mns_cpp = np.load(f"./tests/inputs/gmns_b_{surfs}.npy").T
+    g_mns_cpp = file_cpp.variables["gmns_b"][:].filled()
 
     xm_cpp = file_cpp.variables["ixm_b"][:].filled()
     xn_cpp = file_cpp.variables["ixn_b"][:].filled()

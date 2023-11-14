@@ -129,6 +129,7 @@ def register_compute_fun(
             "dim": dim,
             "coordinates": coordinates,
             "dependencies": deps,
+            "aliases": aliases,
         }
         for p in parameterization:
             flag = False

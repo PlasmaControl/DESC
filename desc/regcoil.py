@@ -538,7 +538,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
         if show_plots and not scan:
             plt.figure(figsize=(10, 10))
             plt.rcParams.update({"font.size": 18})
-            plt.figure(figsize=(8, 8))
             plt.contourf(
                 sgrid.nodes[sgrid.unique_zeta_idx, 2],
                 sgrid.nodes[sgrid.unique_theta_idx, 1],
@@ -557,6 +556,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
             plt.title("Total Current Potential on winding surface")
 
             plt.xlim([0, 2 * np.pi / eq.NFP])
+
         if show_plots and external_TF_scan:
             plt.figure()
 

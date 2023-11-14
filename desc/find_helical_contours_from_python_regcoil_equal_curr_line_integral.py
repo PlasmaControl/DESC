@@ -71,10 +71,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         )
 
     nfp = eq.NFP
-    theta_coil = jnp.linspace(0, 2 * jnp.pi, 128)
-    zeta_coil = jnp.linspace(0, 2 * jnp.pi / nfp, 128)
-    dz = zeta_coil[1] - zeta_coil[0]
-    zetal_coil = jnp.arange(0, 2 * jnp.pi, dz)
+
     net_toroidal_current = surface_current_field.I
     net_poloidal_current = surface_current_field.G
 
@@ -117,6 +114,13 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     helicity = -net_poloidal_current / net_toroidal_current / eq.NFP
     phi_slope = jnp.sign(helicity)
 
+    theta_coil = jnp.linspace(0, 2 * jnp.pi, 128)
+    zeta_coil = jnp.linspace(0, 2 * jnp.pi / nfp, round(128 * jnp.abs(helicity)))
+    dz = zeta_coil[1] - zeta_coil[0]
+    zetal_coil = zeta_coil
+
+    theta_coil = theta_coil * phi_slope
+
     ################################################################
     # find contours of constant phi
     ################################################################
@@ -138,19 +142,23 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         returns the theta,zeta points of each contour
 
         """
-        theta_full = theta_coil * jnp.sign(phi_slope)
-        for inn in range(1, int(2 * nfp) + int(jnp.abs(helicity))):
+        theta_full = theta_coil
+        for inn in range(1, int(2 * nfp) + nfp * int(jnp.abs(helicity))):
             theta_full = jnp.concatenate(
-                (theta_full, (theta_coil + 2 * jnp.pi * inn) * jnp.sign(phi_slope))
+                (
+                    theta_full,
+                    (theta_coil + 2 * jnp.pi * inn),
+                )
             )
         theta_full = jnp.append(
             theta_full, theta_full[-1] + theta_full[1]
         )  # add the last point
-        zeta_full = jnp.append(zetal_coil, 2 * jnp.pi)
+        zeta_full = jnp.append(zetal_coil, 2 * jnp.pi / nfp)
         theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
         my_tot_full = phi_tot_fun_vec(theta_full_2D, zeta_full_2D).reshape(
             theta_full.size, zeta_full.size, order="F"
         )
+        # print(notavar)
 
         N_trial_contours = len(contours) - 1
         contour_zeta = []
@@ -175,23 +183,87 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             temp_theta = v[:, 1]
             contour_zeta.append(temp_zeta)
             contour_theta.append(temp_theta)
+            print(
+                "residual when created",
+                (contour_theta[j][-1] - contour_theta[j][0]) % (2 * jnp.pi),
+            )
 
             numCoils += 1
             if show_plots:
                 plt.plot(contour_zeta[-1], contour_theta[-1], "-r", linewidth=1)
                 plt.plot(contour_zeta[-1][-1], contour_theta[-1][-1], "sk")
-        plt.xlim([0, 2 * jnp.pi / nfp])
-        plt.ylim([0, (1 + jnp.abs(helicity)) * (2 * jnp.pi + 2 * jnp.pi / nfp / 4)])
+
         plt.xlabel(r"$\zeta$")
         plt.ylabel(r"$\theta$")
 
+        # before returning, right now these are only over 1 FP
+        # should tile them s.t. they are full coils, by repeating them
+        #  with a pi/NFP shift in zeta, I think
+        print("first 10 theta", contour_theta[0][0:10])
+        print("first 10 zeta", contour_zeta[0][0:10])
+        print("last 10 theta", contour_theta[0][-10:])
+        print("last 10 zeta", contour_zeta[0][-10:])
+        for i_contour in range(len(contour_theta)):
+            inds = jnp.argsort(contour_zeta[i_contour])
+            orig_theta = contour_theta[i_contour][inds]
+            orig_endpoint_theta = orig_theta[-1]
+
+            print("residual", (orig_theta[-1] - orig_theta[0]) % (2 * jnp.pi))
+
+            orig_theta = jnp.atleast_1d(orig_theta[:-1])  # dont need last point
+            orig_zeta = contour_zeta[i_contour][inds]
+            orig_zeta = jnp.atleast_1d(orig_zeta[:-1])  # dont need last point
+
+            contour_theta[i_contour] = jnp.atleast_1d(orig_theta)
+            contour_zeta[i_contour] = jnp.atleast_1d(orig_zeta)
+
+            theta_shift = orig_endpoint_theta - orig_theta[0]
+
+            zeta_shift = 2 * jnp.pi / nfp - orig_zeta[0]
+
+            for i in range(1, nfp):
+                contour_theta[i_contour] = jnp.concatenate(
+                    [contour_theta[i_contour], orig_theta + theta_shift * i]
+                )
+                contour_zeta[i_contour] = jnp.concatenate(
+                    [contour_zeta[i_contour], orig_zeta + zeta_shift * i]
+                )
+            contour_theta[i_contour] = jnp.append(
+                contour_theta[i_contour],
+                nfp * (orig_endpoint_theta - contour_theta[i_contour][0])
+                + contour_theta[i_contour][0],
+            )
+            contour_zeta[i_contour] = jnp.append(contour_zeta[i_contour], 2 * jnp.pi)
+
+        for j in range(N_trial_contours):
+            # plt.plot(contour_zeta[j], contour_theta[j], "--b", linewidth=1)
+            print("#" * 10 + f" {j} " + "#" * 10)
+            print("first 10 theta", contour_theta[j][0:10])
+            print("first 10 zeta", contour_zeta[j][0:10])
+            print("last 10 theta", contour_theta[j][-10:])
+            print("last 10 zeta", contour_zeta[j][-10:])
+            print(
+                "residual", (contour_theta[j][-1] - contour_theta[j][0]) % (2 * jnp.pi)
+            )
+        plt.xlim([0, 3 * jnp.pi / nfp])
+        # plt.xlim([1.5, 1.7])
+        plt.ylim([0, 10])
+        # plt.ylim(
+        #     [
+        #         0,
+        #         jnp.sign(phi_slope)*
+        #         # * (2 + jnp.abs(helicity))
+        #         * (2 * jnp.pi + 2 * jnp.pi / nfp / 4),
+        #     ]
+        # )
+        # plt.ylim([-5, -7])
         return contour_theta, contour_zeta
 
     # make linspace contour
     contours = jnp.linspace(
         0, jnp.abs(net_toroidal_current), desirednumcoils + 1, endpoint=True
-    ) * jnp.sign(net_toroidal_current)
-    contours = jnp.sort(jnp.asarray(contours))
+    )
+    contours = jnp.sort(jnp.sign(phi_slope) * jnp.asarray(contours))
 
     contour_theta, contour_zeta = find_full_coil_contours(contours)
 
@@ -250,6 +322,13 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         label="Final",
     )
     ################
+
+    print("first 10 X", contour_X[0][0:10])
+    print("first 10 Y", contour_Z[0][0:10])
+    print("first 10 Z", contour_Y[0][0:10])
+    print("last 10 X", contour_X[0][-10:])
+    print("last 10 Y", contour_Z[0][-10:])
+    print("last 10 Z", contour_Y[0][-10:])
 
     # Write coils file
     write_coil = True

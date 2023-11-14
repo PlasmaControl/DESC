@@ -16,6 +16,7 @@ from ._geometry import (
     Elongation,
     MeanCurvature,
     PlasmaVesselDistance,
+    PlasmaVesselDistanceCircular,
     PrincipalCurvature,
     Volume,
 )

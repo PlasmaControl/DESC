@@ -5,18 +5,19 @@ import itertools
 import numpy as np
 
 
-def find_permutations(name, separator="_"):
+def find_permutations(primary, separator="_"):
     """Finds permutations of quantity names for aliases."""
-    split_name = name.split(separator)
-    original_permutation = split_name[-1]
+    split_name = primary.split(separator)
+    primary_permutation = split_name[-1]
 
-    new_permutations = list(itertools.permutations(original_permutation))
+    new_permutations = list(itertools.permutations(primary_permutation))
+    # join new permutation to form alias keys
     aliases = [
         "".join(split_name[:-1]) + separator + "".join(perm)
         for perm in new_permutations
     ]
     aliases = np.unique(aliases)
-    aliases = np.delete(aliases, np.where(aliases == name))
+    aliases = np.delete(aliases, np.where(aliases == primary))
 
     return aliases
 

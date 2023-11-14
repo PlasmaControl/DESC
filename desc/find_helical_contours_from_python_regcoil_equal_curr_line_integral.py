@@ -119,7 +119,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     dz = zeta_coil[1] - zeta_coil[0]
     zetal_coil = zeta_coil
 
-    theta_coil = theta_coil * phi_slope
+    theta_coil = theta_coil  # * phi_slope
+    theta_coil = jnp.sort(theta_coil)
 
     ################################################################
     # find contours of constant phi
@@ -147,12 +148,15 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             theta_full = jnp.concatenate(
                 (
                     theta_full,
-                    (theta_coil + 2 * jnp.pi * inn),
+                    (theta_coil + 2 * jnp.pi * inn * jnp.sign(phi_slope)),
                 )
             )
         theta_full = jnp.append(
             theta_full, theta_full[-1] + theta_full[1]
         )  # add the last point
+        theta_full = jnp.sort(theta_full)
+        print(theta_full)
+        print(theta_coil)
         zeta_full = jnp.append(zetal_coil, 2 * jnp.pi / nfp)
         theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
         my_tot_full = phi_tot_fun_vec(theta_full_2D, zeta_full_2D).reshape(

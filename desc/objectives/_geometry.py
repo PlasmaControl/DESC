@@ -401,10 +401,11 @@ class PlasmaVesselDistance(_Objective):
     will only be an upper bound on the minimum separation between the plasma and the
     surrounding surface.
 
-    NOTE: By default, assumes the surface is fixed and its coordinates are precomputed,
-    set surface_fixed=False to compute the surface coordinates at every iteration, for
-    example if the winding surface you compare to is part of the optimization and thus
-    changing.
+    NOTE: By default, assumes the surface is not fixed and its coordinates are computed
+    at every iteration, for example if the winding surface you compare to is part of the
+    optimization and thus changing.
+    If the bounding surface is fixed, set surface_fixed=True to precompute the surface
+    coordinates and improve the efficiency of the calculation
 
     NOTE: for best results, use this objective in combination with either MeanCurvature
     or PrincipalCurvature, to penalize the tendency for the optimizer to only move the

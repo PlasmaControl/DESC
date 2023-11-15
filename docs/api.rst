@@ -164,6 +164,7 @@ Objective Functions
     desc.objectives.FixIota
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
+    desc.objectives.FixParameter
     desc.objectives.FixPressure
     desc.objectives.FixPsi
     desc.objectives.FixSumModesR
@@ -176,6 +177,7 @@ Objective Functions
     desc.objectives.get_fixed_axis_constraints
     desc.objectives.get_fixed_boundary_constraints
     desc.objectives.get_NAE_constraints
+    desc.objectives.GoodCoordinates
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
     desc.objectives.MagneticWell
@@ -191,6 +193,7 @@ Objective Functions
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
+    desc.objectives.Shear
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 

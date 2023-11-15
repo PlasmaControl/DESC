@@ -1,6 +1,19 @@
 Changelog
 =========
 
+- Adds ``desc.compat.rescale`` for rescaling equilibria to a specified size and field
+strength.
+- Adds objective function `desc.objectives.GoodCoordinates` for finding "good" (ie,
+non-singular, non-degenerate) coordinate mappings for initial guesses. This is applied
+automatically when creating a new `Equilibrium` if the default initial guess of scaling
+the boundary surface produces self-intersecting surfaces. This can be disabled by
+passing `ensure_nested=False` when constructing the `Equilibrum`.
+
+v0.10.2
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.10.1...v0.10.2)
+
 - Updates `desc.examples`:
     * `NCSX` now has a fixed current profile. Previously it used a fixed iota based on a
     fit, but this was somewhat inaccurate.

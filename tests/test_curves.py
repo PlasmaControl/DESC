@@ -159,7 +159,7 @@ class TestRZCurve:
 
         # same thing but with arclength angle
 
-        xyz = rz.to_FourierXYZ(N=2, grid=grid, s=None)
+        xyz = rz.to_FourierXYZ(N=2, grid=grid, s="arclength")
 
         np.testing.assert_allclose(
             rz.compute("length", grid=grid)["length"],
@@ -178,7 +178,7 @@ class TestRZCurve:
     def test_to_SplineXYZCurve(self):
         """Test conversion to SplineXYZCurve."""
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
-        xyz = rz.to_SplineXYZ(grid=500)
+        xyz = rz.to_SplineXYZ(grid=500, knots="arclength")
 
         grid = LinearGrid(N=20, endpoint=False)
 
@@ -314,8 +314,14 @@ class TestFourierXYZCurve:
         npts = 4000
         # make a simple circular curve of radius 2
         R = 2
-        phi = np.linspace(0, 2 * np.pi, 1001, endpoint=True)
-        c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        # make initial points non-uniform in angle
+        phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
+        c = SplineXYZCurve(
+            X=R * np.cos(phi),
+            Y=R * np.sin(phi),
+            Z=np.zeros_like(phi),
+            knots="arclength",
+        )
         c2 = c.to_FourierXYZ(N=1, grid=1000)
 
         np.testing.assert_allclose(

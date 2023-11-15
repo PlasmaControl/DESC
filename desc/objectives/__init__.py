@@ -14,6 +14,7 @@ from ._geometry import (
     AspectRatio,
     BScaleLength,
     Elongation,
+    GoodCoordinates,
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,

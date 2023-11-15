@@ -367,20 +367,6 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c == "A":
-            transforms["A"] = Transform(
-                grid,
-                DoubleFourierSeries(
-                    M=obj.M,
-                    N=obj.N,
-                    NFP=obj.NFP,
-                    sym=False,
-                ),
-                derivs=derivs["A"],
-                build=True,
-                build_pinv=True,
-            )
-
         elif c not in transforms:
             transforms[c] = getattr(obj, c)
 

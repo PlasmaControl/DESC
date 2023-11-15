@@ -1019,3 +1019,148 @@ class BScaleLength(_Objective):
             profiles=constants["profiles"],
         )
         return data["L_grad(B)"]
+
+
+class GoodCoordinates(_Objective):
+    """Target "good" coordinates, meaning non self-intersecting curves.
+
+    Uses a method by Z. Tecchiolli et al, minimizing
+
+    1/ρ² ||√g||² + σ ||𝐞ᵨ||²
+
+    where √g is the jacobian of the coordinate system and 𝐞ᵨ is the covariant radial
+    basis vector.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    sigma : float
+        Relative weight between the Jacobian and radial terms.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Coordinate goodness : {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        sigma=1,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="coordinate goodness",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        self._sigma = sigma
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            grid = self._grid
+
+        self._dim_f = 2 * grid.num_nodes
+        self._data_keys = ["sqrt(g)", "g_rr", "rho"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "quad_weights": np.sqrt(np.concatenate([grid.weights, grid.weights])),
+            "sigma": self._sigma,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["V"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute coordinate goodness error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        err : ndarray
+            coordinate goodness error, (m^6)
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+
+        g = jnp.where(data["rho"] == 0, 0, data["sqrt(g)"] ** 2 / data["rho"] ** 2)
+        f = data["g_rr"]
+
+        return jnp.concatenate([g, constants["sigma"] * f])

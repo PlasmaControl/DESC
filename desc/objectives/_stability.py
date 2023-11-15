@@ -5,7 +5,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.equilibrium.coords import compute_theta_coords
 from desc.grid import Grid, LinearGrid
 from desc.utils import Timer
 
@@ -461,6 +460,8 @@ class BallooningStability(_Objective):
         ideal_ball_gamma : ndarray
             Ideal ballooning growth rate
         """
+        from desc.equilibrium.coords import compute_theta_coords
+
         params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants

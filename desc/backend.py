@@ -58,11 +58,48 @@ else:
                 desc.__version__, np.__version__, y.dtype
             )
         )
+
+    from functools import partial
+
+    import jax
+    import jax.numpy as jnp
+    import jaxlib
+    from jax.config import config as jax_config
+
+    _eigvals_cpu = jax.jit(jnp.linalg.eigvals, device=jax.devices("cpu")[0])
+
+    @jax.custom_jvp
+    def eigvals(A):
+        """
+        Eigenvalue solver.
+
+        Returns the eigenvalues of the square matrix A.
+        """
+        u = jax.pure_callback(
+            _eigvals_cpu, jnp.zeros_like(A[..., -1]) + 1j, A, vectorized=True
+        )
+        return u
+
+    @eigvals.defjvp
+    def _eigvals_jvp(primals, tangents):
+
+        u = eigvals(primals)
+
+        @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
+        def jvpfun(primals, tangents):
+            u, du = jax.jvp(_eigvals_cpu, (primals,), (tangents,))
+            return du.squeeze()
+
+        du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
+        return u, du
+
+
 print(
     "Using device: {}, with {:.2f} GB available memory".format(
         desc_config.get("device"), desc_config.get("avail_mem")
     )
 )
+
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
     jit = jax.jit

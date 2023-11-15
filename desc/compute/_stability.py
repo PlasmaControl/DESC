@@ -259,6 +259,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         "phi",
         "iota",
         "psi",
+        "rho",
     ],
 )
 def _ideal_ballooning_gamma(params, transforms, profiles, data, *kwargs):

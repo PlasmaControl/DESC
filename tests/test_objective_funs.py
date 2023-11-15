@@ -40,7 +40,6 @@ from desc.objectives import (
     PlasmaVesselDistance,
     Pressure,
     PrincipalCurvature,
-    QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -48,7 +47,6 @@ from desc.objectives import (
     RotationalTransform,
     Shear,
     ToroidalCurrent,
-    ToroidalFlux,
     Volume,
 )
 from desc.objectives.objective_funs import _Objective
@@ -456,35 +454,6 @@ class TestObjectiveFunction:
         obj.build()
         f = obj.compute_scaled_error(*obj.xs(eq))
         np.testing.assert_allclose(f, 0, atol=1e-3)
-
-    @pytest.mark.unit
-    def test_quadratic_flux(self):
-        """Test calculation of quadratic flux on the boundary."""
-        coil = FourierXYZCoil(5e5)
-        coilset = CoilSet.linspaced_angular(coil, n=100)
-        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
-        eq.solve()
-        obj = QuadraticFlux(coilset, eq)
-        obj.build()
-        f = obj.compute(*obj.xs(eq))
-        np.testing.assert_allclose(f, 0, atol=1e-3)
-
-    @pytest.mark.unit
-    def test_toroidal_flux(self):
-        """Test calculation of toroidal flux from coils through cross section."""
-        coil = FourierXYZCoil(5e5)
-        coilset = CoilSet.linspaced_angular(coil, n=100)
-        # toroid with 100 turns, major radius 10
-        # uniform B = mu_0 * I * N / 2 pi R = 1e-7 * 4pi * 5e5 * 100 / 2pi 10
-        # = 1 T
-        # minor radius is 1m, so area = pi
-        # so total flux = pi Wb
-        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
-        eq.solve()
-        obj = ToroidalFlux(coilset, eq)
-        obj.build()
-        f = obj.compute(*obj.xs(eq))
-        np.testing.assert_allclose(f, 0, atol=1e-2)
 
 
 @pytest.mark.unit

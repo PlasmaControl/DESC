@@ -13,8 +13,6 @@ from ._free_boundary import (
     BoundaryErrorBIEST,
     BoundaryErrorBIESTSC,
     BoundaryErrorNESTOR,
-    QuadraticFlux,
-    ToroidalFlux,
 )
 from ._generic import GenericObjective, ObjectiveFromUser
 from ._geometry import (

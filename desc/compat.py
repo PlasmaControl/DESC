@@ -204,4 +204,8 @@ def rescale(eq, L=("R0", None), B=("B0", None), verbose=0):
     if eq.current is not None:
         eq.c_l *= cL * cB
 
+    # boundary & axis
+    eq.axis = eq.get_axis()
+    eq.surface = eq.get_surface_at(rho=1)
+
     return eq

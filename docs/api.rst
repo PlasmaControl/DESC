@@ -177,6 +177,7 @@ Objective Functions
     desc.objectives.get_fixed_axis_constraints
     desc.objectives.get_fixed_boundary_constraints
     desc.objectives.get_NAE_constraints
+    desc.objectives.GoodCoordinates
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
     desc.objectives.MagneticWell

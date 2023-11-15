@@ -141,7 +141,9 @@ class ObjectiveFromUser(_Objective):
             if data_index[p][key]["dim"] == 0:
                 dummy_data[key] = jnp.array(0.0)
             else:
-                dummy_data[key] = jnp.empty((grid.num_nodes, data_index[p][key]["dim"]))
+                dummy_data[key] = jnp.empty(
+                    (grid.num_nodes, data_index[p][key]["dim"])
+                ).squeeze()
 
         self._fun_wrapped = lambda data: self._fun(grid, data)
         import jax
@@ -153,6 +155,7 @@ class ObjectiveFromUser(_Objective):
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
+            "quad_weights": 1.0,
         }
 
         super().build(use_jit=use_jit, verbose=verbose)

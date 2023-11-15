@@ -204,7 +204,7 @@ class BoundaryErrorBIESTSC(_Objective):
             "src_profiles": src_profiles,
             "interpolator": interpolator,
             "ext_field": self._ext_field,
-            "quad_weights": np.tile(eval_transforms["grid"].weights, 3),
+            "quad_weights": np.sqrt(np.tile(eval_transforms["grid"].weights, 3)),
         }
 
         timer.stop("Precomputing transforms")
@@ -463,7 +463,7 @@ class BoundaryErrorBIEST(_Objective):
             "src_profiles": src_profiles,
             "interpolator": interpolator,
             "ext_field": self._ext_field,
-            "quad_weights": np.tile(eval_transforms["grid"].weights, 2),
+            "quad_weights": np.sqrt(np.tile(eval_transforms["grid"].weights, 2)),
         }
 
         timer.stop("Precomputing transforms")
@@ -713,7 +713,7 @@ class QuadraticFlux(_Objective):
             "src_profiles": src_profiles,
             "interpolator": interpolator,
             "ext_field": self._ext_field,
-            "quad_weights": eval_transforms["grid"].weights,
+            "quad_weights": np.sqrt(eval_transforms["grid"].weights),
         }
 
         timer.stop("Precomputing transforms")
@@ -1068,7 +1068,7 @@ class BoundaryErrorNESTOR(_Objective):
             "transforms": transforms,
             "ext_field": self.ext_field,
             "nestor": nest,
-            "quad_weights": transforms["grid"].weights,
+            "quad_weights": np.sqrt(transforms["grid"].weights),
         }
 
         timer.stop("Precomputing transforms")

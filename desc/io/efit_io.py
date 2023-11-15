@@ -1,16 +1,7 @@
 """Utilities for reading EFIT geqdsk files."""
 
-import time
-
 import numpy as np
 from scipy.interpolate import CubicSpline
-
-from desc.basis import DoubleFourierSeries
-from desc.equilibrium import Equilibrium
-from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
-from desc.profiles import SplineProfile
-from desc.transform import Transform
 
 
 def efit_to_desc(g, M, N=0, L=None):
@@ -38,6 +29,13 @@ def efit_to_desc(g, M, N=0, L=None):
         DESC equilibrium with boundary shape, pressure, iota, and total toroidal flux
         from geqdsk file.
     """
+    from desc.basis import DoubleFourierSeries
+    from desc.equilibrium import Equilibrium
+    from desc.geometry import FourierRZToroidalSurface
+    from desc.grid import LinearGrid
+    from desc.profiles import SplineProfile
+    from desc.transform import Transform
+
     if not isinstance(g, dict):
         g = read_gfile(g)
     ns = len(g["q"])
@@ -129,9 +127,6 @@ def read_gfile(filename):
             return splitline("".join([line.split("\n")[0] for line in l]))
 
     line0 = lines[0].split()
-    g["date"] = time.strptime(line0[1], "%m/%d/%Y")
-    g["shot"] = int("".join([c for c in line0[2] if c.isdigit()]))
-    g["time"] = int("".join([c for c in line0[3] if c.isdigit()]))
     g["nw"] = int("".join([c for c in line0[-2] if c.isdigit()]))
     g["nh"] = int("".join([c for c in line0[-1] if c.isdigit()]))
     if len(line0) == 8:

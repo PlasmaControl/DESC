@@ -279,8 +279,8 @@ class BoundaryErrorBIESTSC(_Objective):
         Bn_err = Bn * g
         Bsq_err = (bsq_in + eval_data["p"] * (2 * mu_0) - bsq_out) * g
         Bjump = Bex_total - Bin_total
-        Kerr = eval_data["K_sc"] - jnp.cross(eval_data["n_rho"], Bjump)
-        Kerr = jnp.sum(Kerr * Kerr, axis=-1) * g
+        Kerr = mu_0 * eval_data["K_sc"] - jnp.cross(eval_data["n_rho"], Bjump)
+        Kerr = jnp.linalg.norm(Kerr, axis=-1) * g
         return jnp.concatenate([Bn_err, Bsq_err, Kerr])
 
 

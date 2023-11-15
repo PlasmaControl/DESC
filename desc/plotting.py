@@ -950,8 +950,7 @@ def plot_3d(
     return fig
 
 
-# flake8: noqa: C901
-def plot_fsa(
+def plot_fsa(  # noqa: C901
     eq,
     name,
     with_sqrt_g=True,

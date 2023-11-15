@@ -73,7 +73,7 @@ def _get_quadrature_nodes(q):
     """
     Nr = Nw = q
     r, dr = scipy.special.roots_legendre(Nr)
-    # integrate seperately over [-1,0] and [0,1]
+    # integrate separately over [-1,0] and [0,1]
     r1 = 1 / 2 * r - 1 / 2
     r2 = 1 / 2 * r + 1 / 2
     r = jnp.concatenate([r1, r2])
@@ -428,27 +428,7 @@ def _nonsingular_part(
         def eval_pt_loop(i, fj):
             # this calculates the effect at a single evaluation point, from all others
             # in a single field period. loop this to get all pts
-            k = kernel(
-                {key: val[i] for key, val in eval_data.items() if key in keys},
-                src_data,
-            )
-            if kernel.ndim == 1:  # so that broadcasting works correctly
-                k = k[:, :, None]
-
-            if mask:
-                rho = _rho(
-                    src_theta,
-                    src_data["zeta"],  # to account for different field periods
-                    eval_theta[i],
-                    eval_zeta[i],
-                    h_t,
-                    h_z,
-                    s,
-                )
-
-                eta = _chi(rho)
-                k = (1 - eta)[None, :, None] * k
-            f_temp = jnp.sum(k * w[None, :, None], axis=1)
+            f_temp = eval_pt_vmap(i)
             return put(fj, i, f_temp.squeeze())
 
         # vmap for inner part found more efficient than fori_loop, especially on gpu,
@@ -468,7 +448,15 @@ def _nonsingular_part(
 
 
 def _singular_part(
-    eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator
+    eval_data,
+    eval_grid,
+    src_data,
+    src_grid,
+    s,
+    q,
+    kernel,
+    interpolator,
+    loop=False,
 ):
     """Integrate singular point by interpolating to polar grid."""
     src_dtheta = src_grid.spacing[:, 1]
@@ -483,11 +471,10 @@ def _singular_part(
 
     eta = _chi(r)
     v = eta * s**2 * h_t * h_z / 4 * abs(r) * dr * dw
-
     keys = list(set(["|e_theta x e_zeta|"] + kernel.keys))
     fsrc = [src_data[key] for key in keys]
 
-    def polar_pt_loop(i):
+    def polar_pt_vmap(i):
         # evaluate the effect from a single polar node around each singular point
         # on that singular point. Polar grids from other singularities have no effect
         dt = s / 2 * h_t * r[i] * jnp.sin(w[i])
@@ -515,8 +502,20 @@ def _singular_part(
         fi = k * dS
         return fi
 
-    # vmap found more efficient than fori_loop, esp on gpu
-    return vmap(polar_pt_loop)(jnp.arange(v.size)).sum(axis=0)
+    def polar_pt_loop(i, f):
+        # this calculates the effect at a single evaluation point, from all others
+        # in a single field period. loop this to get all pts
+        f_temp = polar_pt_vmap(i)
+        return f + f_temp.squeeze()
+
+    f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
+    # vmap found more efficient than fori_loop, esp on gpu, but uses more memory
+    if loop:
+        f = fori_loop(0, v.size, polar_pt_loop, f)
+    else:
+        f = vmap(polar_pt_vmap)(jnp.arange(v.size)).sum(axis=0)
+
+    return f
 
 
 def _singular_integral_exact(
@@ -577,7 +576,7 @@ def singular_integral(
         Kernel function to evaluate. Should take 3 arguments:
             eval_data : dict of data at evaluation points
             src_data : dict of data at source points
-            diag : boolean, whether to evaluate full cross interations or just diagonal
+            diag : boolean, whether to evaluate full cross interactions or just diagonal
         If a callable, should also have the attributes ``ndim`` and ``keys`` defined.
         ``ndim`` is an integer representing the dimensionality of the output function f,
         1 if f is scalar, 3 if f is a vector, etc.

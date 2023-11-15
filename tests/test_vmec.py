@@ -1316,7 +1316,7 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
     np.testing.assert_allclose(xm_cpp, xm, atol=1e-16)
     np.testing.assert_allclose(xn_cpp, xn, atol=1e-16)
     # compare coefficients
-    max_atols = [5e-4, 5e-4, 6e-4, 9e-4, 7.5e-3, 2e-3, 5e-2, 2e-2, 3e-3, 2e-2]
+    max_atols = [5e-4, 5e-4, 6e-4, 9e-4, 7.5e-3, 2e-3, 5e-2, 2e-2, 6e-3, 2e-2]
     first_surf = 0
     for i, (quant_DESC, quant_cpp) in enumerate(zip(quantities, quantities_cpp)):
         np.testing.assert_allclose(

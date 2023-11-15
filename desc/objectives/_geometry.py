@@ -673,8 +673,6 @@ class PlasmaVesselDistanceCircular(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    surface_grid : Grid, optional
-        Collocation grid containing the nodes to evaluate surface geometry at.
     plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
     use_signed_distance: bool, optional

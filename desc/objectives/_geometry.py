@@ -401,6 +401,12 @@ class PlasmaVesselDistance(_Objective):
     will only be an upper bound on the minimum separation between the plasma and the
     surrounding surface.
 
+    NOTE: By default, assumes the surface is not fixed and its coordinates are computed
+    at every iteration, for example if the winding surface you compare to is part of the
+    optimization and thus changing.
+    If the bounding surface is fixed, set surface_fixed=True to precompute the surface
+    coordinates and improve the efficiency of the calculation
+
     NOTE: for best results, use this objective in combination with either MeanCurvature
     or PrincipalCurvature, to penalize the tendency for the optimizer to only move the
     points on surface corresponding to the grid that the plasma-vessel distance
@@ -440,6 +446,12 @@ class PlasmaVesselDistance(_Objective):
         Collocation grid containing the nodes to evaluate plasma geometry at.
     use_softmin: bool, optional
         Use softmin or hard min.
+    surface_fixed: bool, optional
+        Whether the surface the distance from the plasma is computed to
+        is fixed or not. If True, the surface is fixed and its coordinates are
+        precomputed, which saves on computation time during optimization.
+        If False, the surface coordinates are computed at every iteration.
+        False by default.
     alpha: float, optional
         Parameter used for softmin. The larger alpha, the closer the softmin
         approximates the hardmin. softmin -> hardmin as alpha -> infinity.
@@ -467,6 +479,7 @@ class PlasmaVesselDistance(_Objective):
         surface_grid=None,
         plasma_grid=None,
         use_softmin=False,
+        surface_fixed=False,
         alpha=1.0,
         name="plasma-vessel distance",
     ):
@@ -476,6 +489,7 @@ class PlasmaVesselDistance(_Objective):
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
         self._use_softmin = use_softmin
+        self._surface_fixed = surface_fixed
         self._alpha = alpha
         super().__init__(
             things=[eq, self._surface],
@@ -559,6 +573,19 @@ class PlasmaVesselDistance(_Objective):
             "quad_weights": w,
         }
 
+        if self._surface_fixed:
+            # precompute the surface coordinates
+            # as the surface is fixed during the optimization
+            surface_coords = compute_fun(
+                self._surface,
+                self._surface_data_keys,
+                params=self._surface.params_dict,
+                transforms=surface_transforms,
+                profiles={},
+                basis="xyz",
+            )["x"]
+            self._constants["surface_coords"] = surface_coords
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -598,14 +625,17 @@ class PlasmaVesselDistance(_Objective):
             profiles=constants["equil_profiles"],
         )
         plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
-        surface_coords = compute_fun(
-            self._surface,
-            self._surface_data_keys,
-            params=surface_params,
-            transforms=constants["surface_transforms"],
-            profiles={},
-            basis="xyz",
-        )["x"]
+        if self._surface_fixed:
+            surface_coords = constants["surface_coords"]
+        else:
+            surface_coords = compute_fun(
+                self._surface,
+                self._surface_data_keys,
+                params=surface_params,
+                transforms=constants["surface_transforms"],
+                profiles={},
+                basis="xyz",
+            )["x"]
         d = jnp.linalg.norm(
             plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1
         )

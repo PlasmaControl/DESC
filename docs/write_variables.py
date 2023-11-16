@@ -26,14 +26,17 @@ def write_csv(parameterization):
         datidx = data_index[parameterization]
         keys = datidx.keys()
         for key in keys:
-            d = {
-                "Name": "``" + key + "``",
-                "Label": ":math:`" + datidx[key]["label"].replace("$", "") + "`",
-                "Units": datidx[key]["units_long"],
-                "Description": datidx[key]["description"],
-                "Module": "``" + datidx[key]["fun"].__module__ + "``",
-            }
-
+            if key not in data_index[parameterization][key]["aliases"]:
+                d = {
+                    "Name": "``" + key + "``",
+                    "Label": ":math:`" + datidx[key]["label"].replace("$", "") + "`",
+                    "Units": datidx[key]["units_long"],
+                    "Description": datidx[key]["description"],
+                    "Module": "``" + datidx[key]["fun"].__module__ + "``",
+                    "Aliases": f"{['``' + alias + '``' for alias in datidx[key]['aliases']]}".strip(
+                        "[]"
+                    ),
+                }
             # stuff like |x| is interpreted as a substitution by rst, need to escape
             d["Description"] = _escape(d["Description"])
             writer.writerow(d)

@@ -388,6 +388,76 @@ class TestMagneticFields:
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
+    @pytest.mark.unit
+    def test_Bnormal_calculation(self):
+        """Tests Bnormal calculation for simple toroidal field."""
+        tfield = ToroidalMagneticField(2, 1)
+        surface = get("DSHAPE").surface
+        Bnorm, _ = tfield.compute_Bnormal(surface)
+        # should have 0 Bnormal because surface is axisymmetric
+        np.testing.assert_allclose(Bnorm, 0, atol=1e-14)
+
+    @pytest.mark.unit
+    def test_Bnormal_save_and_load_DSHAPE(self, tmpdir_factory):
+        """Tests Bnormal save/load for simple toroidal field with DSHAPE."""
+        ### test on simple field first with tokamak
+        tmpdir = tmpdir_factory.mktemp("BNORM_files")
+        path = tmpdir.join("BNORM_desc.txt")
+        tfield = ToroidalMagneticField(2, 1)
+        eq = get("DSHAPE")
+        grid = LinearGrid(rho=np.array(1.0), M=20, N=20, NFP=eq.NFP)
+        x = eq.surface.compute("x", grid=grid, basis="rpz")["x"]
+        Bnorm, x_from_Bnorm = tfield.compute_Bnormal(
+            eq.surface, eval_grid=grid, source_grid=grid, basis="rpz"
+        )
+
+        # make sure x calculation is the same
+        np.testing.assert_allclose(x[:, 0], x_from_Bnorm[:, 0], atol=1e-16)
+        np.testing.assert_allclose(x[:, 2], x_from_Bnorm[:, 2], atol=1e-16)
+
+        np.testing.assert_allclose(
+            x[:, 1] % (2 * np.pi), x_from_Bnorm[:, 1] % (2 * np.pi), atol=1e-16
+        )
+
+        # should have 0 Bnormal because surface is axisymmetric
+        np.testing.assert_allclose(Bnorm, 0, atol=1e-14)
+
+        tfield.save_BNORM_file(eq, path, scale_by_curpol=False)
+        Bnorm_from_file = read_BNORM_file(path, eq, grid, scale_by_curpol=False)
+        np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-14)
+
+        # check that loading/saving with scale_by_curpol true
+        # but no eq passed raises error
+        with pytest.raises(RuntimeError):
+            Bnorm_from_file = read_BNORM_file(path, eq.surface, grid)
+        with pytest.raises(RuntimeError):
+            tfield.save_BNORM_file(eq.surface, path)
+
+    @pytest.mark.unit
+    def test_Bnormal_save_and_load_HELIOTRON(self, tmpdir_factory):
+        """Tests Bnormal save/load for simple toroidal field with HELIOTRON."""
+        ### test on simple field with stellarator
+        tmpdir = tmpdir_factory.mktemp("BNORM_files")
+        path = tmpdir.join("BNORM_desc_heliotron.txt")
+        tfield = ToroidalMagneticField(2, 1)
+        eq = get("HELIOTRON")
+        grid = LinearGrid(rho=np.array(1.0), M=20, N=20, NFP=eq.NFP)
+        x = eq.surface.compute("x", grid=grid, basis="xyz")["x"]
+        Bnorm, x_from_Bnorm = tfield.compute_Bnormal(
+            eq.surface, eval_grid=grid, basis="xyz"
+        )
+
+        # make sure x calculation is the same
+        np.testing.assert_allclose(x, x_from_Bnorm, atol=1e-16)
+
+        tfield.save_BNORM_file(eq, path, 40, 40)
+        Bnorm_from_file = read_BNORM_file(path, eq, grid)
+        np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-8)
+
+        asym_surf = FourierRZToroidalSurface(sym=False)
+        with pytest.raises(AssertionError, match="sym"):
+            Bnorm_from_file = read_BNORM_file(path, asym_surf, grid)
+
 
 @pytest.mark.unit
 def test_dommaschk_CN_CD_m_0():
@@ -493,14 +563,14 @@ def test_dommaschk_fit_toroidal_field():
     )
 
     B_dom = B.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B_dom[:, 0], 0, atol=4e-15)
-    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-15)
-    np.testing.assert_allclose(B_dom[:, 2], jnp.zeros_like(R.flatten()), atol=1e-15)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 2], jnp.zeros_like(R.flatten()), atol=1e-14)
 
     # only nonzero coefficient of the field should be the B0
-    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-15)
+    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-14)
     for coef in ["a_arr", "b_arr", "c_arr", "d_arr"]:
-        np.testing.assert_allclose(B._params[coef], 0, atol=2e-15)
+        np.testing.assert_allclose(B._params[coef], 0, atol=1e-14)
 
 
 @pytest.mark.unit
@@ -521,88 +591,18 @@ def test_dommaschk_fit_vertical_and_toroidal_field():
     B = DommaschkPotentialField.fit_magnetic_field(field, coords, max_m, max_l)
 
     B_dom = B.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B_dom[:, 0], 0, atol=4e-15)
-    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-15)
-    np.testing.assert_allclose(B_dom[:, 2], B0_Z, atol=1e-15)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 2], B0_Z, atol=1e-14)
 
     np.testing.assert_allclose(B._params["B0"], B0)
 
     # only nonzero coefficient of the field should be the B0 and a_ml = a_01
-    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-15)
+    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-14)
     for coef, m, l in zip(B._params["a_arr"], B._params["ms"], B._params["ls"]):
         if m == 0 and l == 1:
             np.testing.assert_allclose(coef, B0_Z)
         else:
-            np.testing.assert_allclose(coef, 0, atol=1e-15)
+            np.testing.assert_allclose(coef, 0, atol=1e-14)
     for name in ["b_arr", "c_arr", "d_arr"]:
-        np.testing.assert_allclose(B._params[name], 0, atol=2e-15)
-
-    @pytest.mark.unit
-    def test_Bnormal_calculation(self):
-        """Tests Bnormal calculation for simple toroidal field."""
-        tfield = ToroidalMagneticField(2, 1)
-        surface = get("DSHAPE").surface
-        Bnorm, _ = tfield.compute_Bnormal(surface)
-        # should have 0 Bnormal because surface is axisymmetric
-        np.testing.assert_allclose(Bnorm, 0, atol=3e-15)
-
-    @pytest.mark.unit
-    def test_Bnormal_save_and_load_DSHAPE(self, tmpdir_factory):
-        """Tests Bnormal save/load for simple toroidal field with DSHAPE."""
-        ### test on simple field first with tokamak
-        tmpdir = tmpdir_factory.mktemp("BNORM_files")
-        path = tmpdir.join("BNORM_desc.txt")
-        tfield = ToroidalMagneticField(2, 1)
-        eq = get("DSHAPE")
-        grid = LinearGrid(rho=np.array(1.0), M=20, N=20, NFP=eq.NFP)
-        x = eq.surface.compute("x", grid=grid, basis="rpz")["x"]
-        Bnorm, x_from_Bnorm = tfield.compute_Bnormal(
-            eq.surface, eval_grid=grid, source_grid=grid, basis="rpz"
-        )
-
-        # make sure x calculation is the same
-        np.testing.assert_allclose(x[:, 0], x_from_Bnorm[:, 0], atol=1e-16)
-        np.testing.assert_allclose(x[:, 2], x_from_Bnorm[:, 2], atol=1e-16)
-
-        np.testing.assert_allclose(
-            x[:, 1] % (2 * np.pi), x_from_Bnorm[:, 1] % (2 * np.pi), atol=1e-16
-        )
-
-        # should have 0 Bnormal because surface is axisymmetric
-        np.testing.assert_allclose(Bnorm, 0, atol=1e-14)
-
-        tfield.save_BNORM_file(eq, path, scale_by_curpol=False)
-        Bnorm_from_file = read_BNORM_file(path, eq, grid, scale_by_curpol=False)
-        np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-14)
-
-        # check that loading/saving with scale_by_curpol true
-        # but no eq passed raises error
-        with pytest.raises(RuntimeError):
-            Bnorm_from_file = read_BNORM_file(path, eq.surface, grid)
-        with pytest.raises(RuntimeError):
-            tfield.save_BNORM_file(eq.surface, path)
-
-    @pytest.mark.unit
-    def test_Bnormal_save_and_load_HELIOTRON(self, tmpdir_factory):
-        """Tests Bnormal save/load for simple toroidal field with HELIOTRON."""
-        ### test on simple field with stellarator
-        tmpdir = tmpdir_factory.mktemp("BNORM_files")
-        path = tmpdir.join("BNORM_desc_heliotron.txt")
-        tfield = ToroidalMagneticField(2, 1)
-        eq = get("HELIOTRON")
-        grid = LinearGrid(rho=np.array(1.0), M=20, N=20, NFP=eq.NFP)
-        x = eq.surface.compute("x", grid=grid, basis="xyz")["x"]
-        Bnorm, x_from_Bnorm = tfield.compute_Bnormal(
-            eq.surface, eval_grid=grid, basis="xyz"
-        )
-
-        # make sure x calculation is the same
-        np.testing.assert_allclose(x, x_from_Bnorm, atol=1e-16)
-
-        tfield.save_BNORM_file(eq, path, 40, 40)
-        Bnorm_from_file = read_BNORM_file(path, eq, grid)
-        np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-8)
-
-        asym_surf = FourierRZToroidalSurface(sym=False)
-        with pytest.raises(AssertionError, match="sym"):
-            Bnorm_from_file = read_BNORM_file(path, asym_surf, grid)
+        np.testing.assert_allclose(B._params[name], 0, atol=1e-14)

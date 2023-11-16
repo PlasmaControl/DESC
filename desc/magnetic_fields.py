@@ -1278,11 +1278,13 @@ def field_line_integrate(
 true_fun = lambda m_n: 0.0  # used for returning 0 when conditionals evaluate to True
 
 
+@jit
 def gamma(n):
     """Gamma function, only implemented for integers (equiv to factorial of (n-1))."""
     return jnp.exp(gammaln(n))
 
 
+@jit
 def alpha(m, n):
     """Alpha of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
     # modified for eqns 31 and 32
@@ -1305,6 +1307,7 @@ def alpha(m, n):
     )
 
 
+@jit
 def alphastar(m, n):
     """Alphastar of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
     # modified for eqns 31 and 32
@@ -1315,6 +1318,7 @@ def alphastar(m, n):
     return cond(jnp.any(n < 0), true_fun, false_fun, (m, n))
 
 
+@jit
 def beta(m, n):
     """Beta of eq 28, modified for eqns 31 and 32."""
 
@@ -1325,6 +1329,7 @@ def beta(m, n):
     return cond(jnp.any(jnp.logical_or(n < 0, n >= m)), true_fun, false_fun, (m, n))
 
 
+@jit
 def betastar(m, n):
     """Beta* of eq 28, modified for eqns 31 and 32."""
 
@@ -1335,6 +1340,7 @@ def betastar(m, n):
     return cond(jnp.any(jnp.logical_or(n < 0, n >= m)), true_fun, false_fun, (m, n))
 
 
+@jit
 def gamma_n(m, n):
     """gamma_n of eq 33."""
 
@@ -1348,6 +1354,7 @@ def gamma_n(m, n):
     return cond(jnp.any(n <= 0), true_fun, false_fun, (m, n))
 
 
+@jit
 def gamma_nstar(m, n):
     """gamma_n star of eq 33."""
 
@@ -1358,6 +1365,7 @@ def gamma_nstar(m, n):
     return cond(jnp.any(n <= 0), true_fun, false_fun, (m, n))
 
 
+@jit
 def CD_m_k(R, m, k):
     """Eq 31 of Dommaschk paper."""
 
@@ -1384,6 +1392,7 @@ def CD_m_k(R, m, k):
     return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
 
 
+@jit
 def CN_m_k(R, m, k):
     """Eq 32 of Dommaschk paper."""
 
@@ -1406,26 +1415,37 @@ def CN_m_k(R, m, k):
     return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
 
 
+@jit
 def D_m_n(R, Z, m, n):
     """D_m_n term in eqn 8 of Dommaschk paper."""
     # the sum comes from fact that D_mn = I_mn and the def of I_mn in eq 2 of the paper
 
     def body_fun(k, val):
-        return val + Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CD_m_k(R, m, k)
+        coef = CD_m_k(R, m, k) / gamma(n - 2 * k + 1)
+        exp = n - 2 * k
+        # derivative of 0**0 is ill defined, so we do this to enforce it being 0
+        exp = jnp.where((Z == 0) & (exp == 0), 1, exp)
+        return val + coef * Z**exp
 
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
 
+@jit
 def N_m_n(R, Z, m, n):
     """N_m_n term in eqn 9 of Dommaschk paper."""
     # the sum comes from fact that N_mn = I_mn and the def of I_mn in eq 2 of the paper
 
     def body_fun(k, val):
-        return val + Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CN_m_k(R, m, k)
+        coef = CN_m_k(R, m, k) / gamma(n - 2 * k + 1)
+        exp = n - 2 * k
+        # derivative of 0**0 is ill defined, so we do this to enforce it being 0
+        exp = jnp.where((Z == 0) & (exp == 0), 1, exp)
+        return val + coef * Z**exp
 
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
 
+@jit
 def V_m_l(R, phi, Z, m, l, a, b, c, d):
     """Eq 12 of Dommaschk paper.
 
@@ -1459,6 +1479,7 @@ def V_m_l(R, phi, Z, m, l, a, b, c, d):
     ) * N_m_n(R, Z, m, l - 1)
 
 
+@jit
 def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
     """Eq 1 of Dommaschk paper.
 
@@ -1493,25 +1514,24 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
         at the given R,phi,Z points
         (same size as the size of the given R,phi, Z arrays).
     """
+    ms, ls, a_arr, b_arr, c_arr, d_arr = map(
+        jnp.atleast_1d, (ms, ls, a_arr, b_arr, c_arr, d_arr)
+    )
+    R, phi, Z = map(jnp.atleast_1d, (R, phi, Z))
+    R, phi, Z = jnp.broadcast_arrays(R, phi, Z)
+    ms, ls, a_arr, b_arr, c_arr, d_arr = jnp.broadcast_arrays(
+        ms, ls, a_arr, b_arr, c_arr, d_arr
+    )
     value = B0 * phi  # phi term
 
-    # make sure all are 1D arrays
-    ms = jnp.atleast_1d(ms)
-    ls = jnp.atleast_1d(ls)
-    a_arr = jnp.atleast_1d(a_arr)
-    b_arr = jnp.atleast_1d(b_arr)
-    c_arr = jnp.atleast_1d(c_arr)
-    d_arr = jnp.atleast_1d(d_arr)
-    for m, l, a, b, c, d in zip(ms, ls, a_arr, b_arr, c_arr, d_arr):
-        value += V_m_l(R, phi, Z, m, l, a, b, c, d)
+    def body(i, val):
+        val += V_m_l(R, phi, Z, ms[i], ls[i], a_arr[i], b_arr[i], c_arr[i], d_arr[i])
+        return val
 
-    return value
+    return fori_loop(0, len(ms), body, value)
 
 
-def read_mgrid(
-    mgrid_file,
-    extcur=1,
-):
+def read_mgrid(mgrid_file, extcur=1):
     """Read an "mgrid" file from MAKEGRID and return the grid and magnetic field.
 
     Parameters
@@ -1559,7 +1579,7 @@ def read_mgrid(
     Zgrid = np.linspace(zMin, zMax, jz)
     pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
 
-    return Rgrid, Zgrid, pgrid, br, bp, bz, nfp
+    return Rgrid, pgrid, Zgrid, br, bp, bz, nfp
 
 
 class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):

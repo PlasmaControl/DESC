@@ -1,6 +1,6 @@
 """data_index contains all the quantities calculated by the compute functions."""
 import functools
-import itertools
+from collections import deque
 
 import numpy as np
 
@@ -9,8 +9,13 @@ def find_permutations(primary, separator="_"):
     """Finds permutations of quantity names for aliases."""
     split_name = primary.split(separator)
     primary_permutation = split_name[-1]
+    primary_permutation = deque(primary_permutation)
 
-    new_permutations = list(itertools.permutations(primary_permutation))
+    new_permutations = []
+    for i in range(len(primary_permutation)):
+        primary_permutation.rotate(1)
+        new_permutations.append(list(primary_permutation))
+
     # join new permutation to form alias keys
     aliases = [
         "".join(split_name[:-1]) + separator + "".join(perm)
@@ -119,7 +124,7 @@ def register_compute_fun(
         "kwargs": list(kwargs.values()),
     }
 
-    permutable_names = ["R_", "Z_", "phi_", "lambda_", "omega_", "sqrt(g)_"]
+    permutable_names = ["R_", "Z_", "phi_", "lambda_", "omega_"]
     if not aliases and "".join(name.split("_")[:-1]) + "_" in permutable_names:
         aliases = find_permutations(name)
 

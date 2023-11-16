@@ -6,8 +6,15 @@ strength.
 - Adds ``desc.vmec_utils.make_boozmn_output `` for writing boozmn.nc style output files
 for compatibility with other codes which expect such files from the Booz_Xform code.
 - Renames compute quantity ``sqrt(g)_B`` to ``jac_Boozer_DESC`` to more accurately reflect what the quantiy is (the jacobian from (rho,theta_B,zeta_B) to (rho,theta,zeta)), and adds a new function to compute ``sqrt(g)_B`` which is the jacobian from (rho,theta_B,zeta_B) to (R,phi,Z)
-
-
+ - Adds new keyword ``surface_fixed`` to ``PlasmaVesselDistance`` objective which says
+whether or not the surface comparing the distance from the plasma to is fixed or not.
+If True, then the surface coordinates can be precomputed, saving on computation during
+optimization. Set to False by default.
+- Adds objective function `desc.objectives.GoodCoordinates` for finding "good" (ie,
+non-singular, non-degenerate) coordinate mappings for initial guesses. This is applied
+automatically when creating a new `Equilibrium` if the default initial guess of scaling
+the boundary surface produces self-intersecting surfaces. This can be disabled by
+passing `ensure_nested=False` when constructing the `Equilibrum`.
 
 v0.10.2
 -------

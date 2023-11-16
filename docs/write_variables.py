@@ -19,7 +19,7 @@ def _escape(line):
 
 def write_csv(parameterization):
     with open(parameterization + ".csv", "w", newline="") as f:
-        fieldnames = ["Name", "Label", "Units", "Description", "Module"]
+        fieldnames = ["Name", "Label", "Units", "Description", "Module", "Aliases"]
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
 
@@ -37,9 +37,9 @@ def write_csv(parameterization):
                         "[]"
                     ),
                 }
-            # stuff like |x| is interpreted as a substitution by rst, need to escape
-            d["Description"] = _escape(d["Description"])
-            writer.writerow(d)
+                # stuff like |x| is interpreted as a substitution by rst, need to escape
+                d["Description"] = _escape(d["Description"])
+                writer.writerow(d)
 
 
 header = """
@@ -56,6 +56,8 @@ available for plotting / analysis.
   * **Units** : physical units for the variable
   * **Description** : description of the variable
   * **Module** : where in the code the source is defined (mostly for developers)
+  * **Aliases** : alternative names of a variable that can be used in the same way as
+    the primary name
 
 
 """
@@ -67,7 +69,7 @@ block = """
 
 .. csv-table:: List of Variables: {}
    :file: {}.csv
-   :widths: 15, 15, 15, 60, 30
+   :widths: 15, 15, 15, 60, 30, 15
    :header-rows: 1
 
 """

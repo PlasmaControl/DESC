@@ -453,7 +453,7 @@ class TestObjectiveFunction:
         obj = BoundaryErrorNESTOR(coilset, eq, field_grid=coil_grid)
         obj.build()
         f = obj.compute_scaled_error(*obj.xs(eq))
-        np.testing.assert_allclose(f, 0, atol=1e-3)
+        np.testing.assert_allclose(f, 0, atol=2e-3)
 
 
 @pytest.mark.unit

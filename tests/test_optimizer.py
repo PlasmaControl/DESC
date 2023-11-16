@@ -26,6 +26,7 @@ from desc.objectives import (
     FixIota,
     FixPressure,
     FixPsi,
+    FixSurfaceCurrent,
     ForceBalance,
     GenericObjective,
     MagneticWell,
@@ -867,6 +868,7 @@ def test_constrained_AL_lsq():
         FixPressure(eq=eq),  # fix pressure profile
         FixIota(eq=eq),  # fix rotational transform profile
         FixPsi(eq=eq),  # fix total toroidal magnetic flux
+        FixSurfaceCurrent(eq=eq),
     )
     # some random constraints to keep the shape from getting wacky
     V = eq.compute("V")["V"]
@@ -917,6 +919,7 @@ def test_constrained_AL_scalar():
         FixPressure(eq=eq),  # fix pressure profile
         FixIota(eq=eq),  # fix rotational transform profile
         FixPsi(eq=eq),  # fix total toroidal magnetic flux
+        FixSurfaceCurrent(eq=eq),
     )
     V = eq.compute("V")["V"]
     AR = eq.compute("R0/a")["R0/a"]

@@ -1078,7 +1078,7 @@ class _Objective(IOAble, ABC):
 
     @target.setter
     def target(self, target):
-        self._target = np.atleast_1d(target)
+        self._target = np.atleast_1d(target) if target is not None else target
         self._check_dimensions()
 
     @property

@@ -123,7 +123,6 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 Della and Stellar Clusters (Princeton)
 ++++++++++++++++++++++++++++++++++++++
-NOTE: For GPU jobs in Della, you should ssh into <NetID>@della-gpu.princeton.edu.
 
 **Option 1:** First, install JAX (check `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters):
 

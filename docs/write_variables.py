@@ -35,6 +35,8 @@ def write_csv(parameterization):
                     "Module": "``" + datidx[key]["fun"].__module__ + "``",
                     "Aliases": f"{['``' + alias + '``' for alias in datidx[key]['aliases']]}".strip(
                         "[]"
+                    ).replace(
+                        "'", ""
                     ),
                 }
                 # stuff like |x| is interpreted as a substitution by rst, need to escape

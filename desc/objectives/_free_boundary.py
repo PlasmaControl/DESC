@@ -141,7 +141,7 @@ class BoundaryErrorBIESTSC(_Objective):
                 M=M_grid,
                 N=N_grid,
                 NFP=int(eq.NFP),
-                sym=eq.sym,
+                sym=False,
             )
         else:
             eval_grid = self._eval_grid
@@ -401,7 +401,7 @@ class BoundaryErrorBIEST(_Objective):
                 M=M_grid,
                 N=N_grid,
                 NFP=int(eq.NFP),
-                sym=eq.sym,
+                sym=False,
             )
         else:
             eval_grid = self._eval_grid
@@ -635,7 +635,6 @@ class BoundaryErrorNESTOR(_Objective):
         self.ntheta = 4 * eq.M + 1 if self.ntheta is None else self.ntheta
         self.nzeta = 4 * eq.N + 1 if self.nzeta is None else self.nzeta
 
-        eq._sym = False
         nest = Nestor(
             eq,
             self.ext_field,
@@ -645,7 +644,6 @@ class BoundaryErrorNESTOR(_Objective):
             self.nzeta,
             self.field_grid,
         )
-        eq._sym = True
         self.grid = LinearGrid(rho=1, theta=self.ntheta, zeta=self.nzeta, NFP=eq.NFP)
         self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
         self._args = get_params(

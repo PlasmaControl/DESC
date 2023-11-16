@@ -159,6 +159,10 @@ class FFTInterpolator(_BIESTInterpolator):
     _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_h_t", "_h_z", "_st", "_sz"]
 
     def __init__(self, eval_grid, src_grid, s, q):
+        # current fft interpolating can't handle symmetric grids correctly
+        assert not src_grid.sym, "fft interpolator requires non-symmetric grid"
+        assert not eval_grid.sym, "fft interpolator requires non-symmetric grid"
+
         # need src_grid to be linearly spaced in theta, zeta,
         # and contain only 1 rho value
         assert isalmostequal(

@@ -601,7 +601,6 @@ class BoundaryErrorBIEST(_Objective):
         g = eval_data["|e_theta x e_zeta|"]
         Bn_err = Bn * g
         Bsq_err = (bsq_in + eval_data["p"] * (2 * mu_0) - bsq_out) * g
-        breakpoint()
         return jnp.concatenate([Bn_err, Bsq_err])
 
     def print_value(self, *args, **kwargs):

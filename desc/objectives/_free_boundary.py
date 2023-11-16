@@ -283,6 +283,73 @@ class BoundaryErrorBIESTSC(_Objective):
         Kerr = jnp.linalg.norm(Kerr, axis=-1) * g
         return jnp.concatenate([Bn_err, Bsq_err, Kerr])
 
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        # this objective is really 3 residuals concatenated so its helpful to print
+        # them individually
+        f = self.compute_unscaled(*args, **kwargs)
+        # try to do weighted mean if possible
+        constants = kwargs.get("constants", self.constants)
+        if constants is None:
+            w = jnp.ones_like(f)
+        else:
+            w = constants["quad_weights"]
+
+        abserr = jnp.all(self.target == 0)
+
+        def _print(fmt, fmax, fmin, fmean, units):
+
+            print(
+                "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
+            )
+            print(
+                "Minimum " + ("absolute " if abserr else "") + fmt.format(fmin) + units
+            )
+            print(
+                "Average " + ("absolute " if abserr else "") + fmt.format(fmean) + units
+            )
+
+            if self._normalize and units != "(dimensionless)":
+                print(
+                    "Maximum "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmax / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Minimum "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmin / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Average "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmean / self.normalization)
+                    + "(normalized)"
+                )
+
+        # target == 0 probably indicates f is some sort of error metric,
+        # mean abs makes more sense than mean
+        nn = f.size // 3
+        for i, (fmt, units) in enumerate(
+            zip(
+                [
+                    "Boundary normal field error: {:10.3e} ",
+                    "Boundary magnetic pressure error: {:10.3e} ",
+                    "Boundary field jump error: {:10.3e} ",
+                ],
+                ["(T)", "(T^2)", "(T)"],
+            )
+        ):
+            fi = f[i * nn : (i + 1) * nn]
+            fi = jnp.abs(fi) if abserr else fi
+            wi = w[i * nn : (i + 1) * nn]
+            fmax = jnp.max(fi)
+            fmin = jnp.min(fi)
+            fmean = jnp.mean(fi * wi) / jnp.mean(wi)
+            _print(fmt, fmax, fmin, fmean, units)
+
 
 class BoundaryErrorBIEST(_Objective):
     """Target B*n = 0 and B^2_plasma + p - B^2_ext = 0 on LCFS.
@@ -534,7 +601,74 @@ class BoundaryErrorBIEST(_Objective):
         g = eval_data["|e_theta x e_zeta|"]
         Bn_err = Bn * g
         Bsq_err = (bsq_in + eval_data["p"] * (2 * mu_0) - bsq_out) * g
+        breakpoint()
         return jnp.concatenate([Bn_err, Bsq_err])
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        # this objective is really 2 residuals concatenated so its helpful to print
+        # them individually
+        f = self.compute_unscaled(*args, **kwargs)
+        # try to do weighted mean if possible
+        constants = kwargs.get("constants", self.constants)
+        if constants is None:
+            w = jnp.ones_like(f)
+        else:
+            w = constants["quad_weights"]
+
+        abserr = jnp.all(self.target == 0)
+
+        def _print(fmt, fmax, fmin, fmean, units):
+
+            print(
+                "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
+            )
+            print(
+                "Minimum " + ("absolute " if abserr else "") + fmt.format(fmin) + units
+            )
+            print(
+                "Average " + ("absolute " if abserr else "") + fmt.format(fmean) + units
+            )
+
+            if self._normalize and units != "(dimensionless)":
+                print(
+                    "Maximum "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmax / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Minimum "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmin / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Average "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmean / self.normalization)
+                    + "(normalized)"
+                )
+
+        # target == 0 probably indicates f is some sort of error metric,
+        # mean abs makes more sense than mean
+        nn = f.size // 2
+        for i, (fmt, units) in enumerate(
+            zip(
+                [
+                    "Boundary normal field error: {:10.3e} ",
+                    "Boundary magnetic pressure error: {:10.3e} ",
+                ],
+                ["(T)", "(T^2)"],
+            )
+        ):
+            fi = f[i * nn : (i + 1) * nn]
+            fi = jnp.abs(fi) if abserr else fi
+            wi = w[i * nn : (i + 1) * nn]
+            fmax = jnp.max(fi)
+            fmin = jnp.min(fi)
+            fmean = jnp.mean(fi * wi) / jnp.mean(wi)
+            _print(fmt, fmax, fmin, fmean, units)
 
 
 class BoundaryErrorNESTOR(_Objective):
@@ -580,8 +714,8 @@ class BoundaryErrorNESTOR(_Objective):
 
     _scalar = False
     _linear = False
-    _print_value_fmt = "Boundary Force Error: {:10.3e} "
-    _units = "(N)"
+    _print_value_fmt = "Boundary magnetic pressure error: {:10.3e} "
+    _units = "(T^2)"
     _coordinates = "rtz"
 
     def __init__(
@@ -676,12 +810,12 @@ class BoundaryErrorNESTOR(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] ** 2 * scales["R0"] * scales["a"]
+            self._normalization = scales["B"] * scales["R0"] * scales["a"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute boundary force error.
+        """Compute boundary magnetic pressure error.
 
         Parameters
         ----------
@@ -694,7 +828,7 @@ class BoundaryErrorNESTOR(_Objective):
         Returns
         -------
         f : ndarray
-            Boundary force error (N).
+            Boundary magnetic pressure error (T^2).
 
         """
         if constants is None:
@@ -711,8 +845,8 @@ class BoundaryErrorNESTOR(_Objective):
         out = constants["nestor"].compute(params["R_lmn"], params["Z_lmn"], ctor)
         grid = constants["nestor"]._Rb_transform.grid
         bsq = out[1]["|B|^2"].reshape((grid.num_zeta, grid.num_theta)).T.flatten()
-        bv = bsq / (2 * mu_0)
+        bv = bsq
 
-        bp = data["|B|^2"] / (2 * mu_0)
+        bp = data["|B|^2"]
         g = data["|e_theta x e_zeta|"]
-        return (bv - bp - data["p"]) * g * mu_0
+        return (bv - bp - data["p"] * (2 * mu_0)) * g

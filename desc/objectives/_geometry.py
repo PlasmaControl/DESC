@@ -41,7 +41,7 @@ class AspectRatio(_Objective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization.
+        normalization. Note: Has no effect for this objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -172,7 +172,7 @@ class Elongation(_Objective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization.
+        normalization. Note: Has no effect for this objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -303,7 +303,7 @@ class Volume(_Objective):
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
-        normalization.
+        normalization. Note: Has no effect for this objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional

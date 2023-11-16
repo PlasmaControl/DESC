@@ -64,6 +64,10 @@ A full example objective with comments describing key points is given below:
             Whether target and bounds should be normalized before comparing to computed
             values. If `normalize` is `True` and the target is in physical units,
             this should also be set to True.
+        loss_function : {None, 'mean', 'min', 'max'}, optional
+            Loss function to apply to the objective values once computed. This loss function
+            is called on the raw compute value, before any shifting, scaling, or
+            normalization.
         grid : Grid, optional
             Collocation grid containing the nodes to evaluate at.
         name : str, optional
@@ -203,15 +207,18 @@ A full example objective with comments describing key points is given below:
             # and to make the objective value independent of grid resolution.
             return f
 
-Adapting Existing Objectives with Custom Loss Funtion
+Adapting Existing Objectives with Different Loss Funtions
 -----------------------------------------------------
 
-If your desired objective is already implemented in DESC, but not in the correct form, you can pass in a
-custom loss function to the `loss_function` kwarg when instantiating an Objective objective
-in order to adapt the objective to your desired purpose.
+If your desired objective is already implemented in DESC, but not in the correct form, a few different
+loss functions are available through the the `loss_function` kwarg when instantiating an Objective objective to
+modify the objective cost in order to adapt the objective to your desired purpose.
 For example, the DESC `RotationalTransform` objective with `target=iota_target` by default forms the residual
 by taking the target and subtracting it from the profile at the points in the grid, resulting in a residual of
 the form $\iota_{err} = \sum_{i} (\iota_i-iota_target)^2$, i.e. the residual is the sum of squared pointwise error
 between the current rotational transform profile and the target passed into the objective.
 If the desired objective instead is to optimize to target an average rotational transform of `iota_target`, we can adapt
-the `RotationalTransform` object by passing in `loss_function=jnp.mean`.
+the `RotationalTransform` object by passing in `loss_function="mean"`.
+The options available for the `loss_function` kwarg are `[None,"mean","min","max"]`, with `None` meaning using the usual
+default objective cost, while `"mean"` takes the average of the raw objective values (before subtracting the target/bounds or normalization),
+`"min"` takes the minimum, and `"max"` takes the maximum.

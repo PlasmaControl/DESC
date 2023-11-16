@@ -424,9 +424,9 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Boozer transform modes norm",
-    label="\\nu_{mn} = (\\zeta_{B} - \\zeta)_{mn}",
-    units="rad",
-    units_long="radians",
+    label="",
+    units="~",
+    units_long="None",
     description="Inner product norm for boozer modes basis.",
     dim=1,
     params=[],
@@ -444,9 +444,9 @@ def _boozer_modes_norm(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Boozer transform matrix",
-    label="\\nu_{mn} = (\\zeta_{B} - \\zeta)_{mn}",
-    units="rad",
-    units_long="radians",
+    label="",
+    units="~",
+    units_long="None",
     description="Matrix which performs boozer transformation.",
     dim=1,
     params=[],

@@ -168,6 +168,15 @@ class Optimizer(IOAble):
             objective.build(verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
             nonlinear_constraint.build(verbose=verbose)
+        # check and ensure ProximalProjection is only used with eq as an optimizable
+        if isinstance(objective, ProximalProjection):
+            if len(objective.things) > 1:
+                raise ValueError(
+                    "ProximalProjection method "
+                    + "cannot handle optimizing multiple objects! "
+                    + "Expected objective.things to contain only a single Equilibrium,"
+                    + f"instead got {objective.things}"
+                )
 
         if nonlinear_constraint is not None:
             objective, nonlinear_constraint = combine_args(

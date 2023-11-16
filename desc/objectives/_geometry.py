@@ -753,8 +753,8 @@ class PlasmaVesselDistanceCircular(_Objective):
                 " circular toroidal bounding surfaces!"
             )
 
-        self._surface_minor_radius = surface.R_lmn[minor_radius_coef_index]
-        self._surface_major_radius = surface.R_lmn[major_radius_coef_index]
+        self._surface_minor_radius = np.abs(surface.R_lmn[minor_radius_coef_index])
+        self._surface_major_radius = np.abs(surface.R_lmn[major_radius_coef_index])
 
         self._dim_f = plasma_grid.num_nodes
         self._equil_data_keys = ["R", "Z"]

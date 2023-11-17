@@ -449,9 +449,10 @@ class PlasmaVesselDistance(_Objective):
     surface_fixed: bool, optional
         Whether the surface the distance from the plasma is computed to
         is fixed or not. If True, the surface is fixed and its coordinates are
-        precomputed, which saves on computation time during optimization.
+        precomputed, which saves on computation time during optimization, and
+        self.things = [eq] only.
         If False, the surface coordinates are computed at every iteration.
-        False by default, so that self.things = [eq] only, not [eq,surface]
+        False by default, so that self.things = [eq, surface]
     alpha: float, optional
         Parameter used for softmin. The larger alpha, the closer the softmin
         approximates the hardmin. softmin -> hardmin as alpha -> infinity.

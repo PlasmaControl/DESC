@@ -107,6 +107,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             Input array with vals inserted at inds.
 
         """
+        if isinstance(arr, np.ndarray):
+            arr[inds] = vals
+            return arr
         return jnp.asarray(arr).at[inds].set(vals)
 
     def sign(x):
@@ -173,7 +176,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     @eigvals.defjvp
     def _eigvals_jvp(primals, tangents):
 
-        u = eigvals(primals)
+        u = eigvals(primals[0])
 
         @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
         def jvpfun(primals, tangents):

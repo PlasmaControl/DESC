@@ -312,6 +312,7 @@ class MagneticWell(_Objective):
         """
         if constants is None:
             constants = self.constants
+
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -371,11 +372,12 @@ class BallooningStability(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         rho=0.5,
         alpha=0.0,
         zetamax=3 * jnp.pi,
         nzeta=200,
-        name="force",
+        name="ideal-ball gamma",
     ):
         if target is None and bounds is None:
             target = 0
@@ -386,12 +388,13 @@ class BallooningStability(_Objective):
         self.nzeta = nzeta
 
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -408,7 +411,7 @@ class BallooningStability(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
 
         # we need a uniform grid to get correct surface averages for iota
         iota_grid = LinearGrid(rho=self.rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
@@ -436,45 +439,30 @@ class BallooningStability(_Objective):
             "fieldline_nodes": fieldline_nodes,
             "quad_weights": 1.0,
         }
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """
         Compute the ballooning stability growth rate.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
-        ideal_ball_gamma : ndarray
-            Ideal ballooning growth rate
+        gamma : ndarray
+            ideal ballooning growth rate.
+
         """
         from desc.equilibrium.coords import compute_theta_coords
 
-        params, constants = self._parse_args(*args, **kwargs)
+        eq = self.things[0]
+
         if constants is None:
             constants = self.constants
         # we first compute iota on a uniform grid to get correct averaging etc.
@@ -493,16 +481,14 @@ class BallooningStability(_Objective):
         theta_PEST = alpha + iota * zeta
         theta_coords = jnp.array([rho, theta_PEST, zeta]).T
         desc_coords = compute_theta_coords(
-            self._eq, theta_coords, L_lmn=params["L_lmn"], tol=1e-6, maxiter=20
+            eq, theta_coords, L_lmn=params["L_lmn"], tol=1e-6, maxiter=20
         )
 
         sfl_grid = Grid(desc_coords, sort=False, jitable=True)
         transforms = get_transforms(
-            self._data_keys, obj=self._eq, grid=sfl_grid, jitable=True
+            self._data_keys, obj=eq, grid=sfl_grid, jitable=True
         )
-        profiles = get_profiles(
-            self._data_keys, obj=self._eq, grid=sfl_grid, jitable=True
-        )
+        profiles = get_profiles(self._data_keys, obj=eq, grid=sfl_grid, jitable=True)
 
         # we prime the data dict with the correct iota values so we don't recompute them
         # using the wrong grid

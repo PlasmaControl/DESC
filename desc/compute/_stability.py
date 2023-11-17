@@ -356,7 +356,7 @@ def _ideal_ballooning_gamma(params, transforms, profiles, data, *kwargs):
         + g_half[i, j] / f[i, j + 1] * 1 / h**2 * (j - k == 1)
     )
 
-    w = jax.jit(eigvals, device=jax.devices("cpu")[0])(jnp.where(jnp.isfinite(A), A, 0))
+    w = jax.jit(eigvals, device=jax.devices("gpu")[0])(jnp.where(jnp.isfinite(A), A, 0))
 
     lam = jnp.real(jnp.max(w))
     data["ideal_ball_gamma"] = lam * (lam >= -0.001)

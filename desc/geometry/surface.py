@@ -157,12 +157,16 @@ def convert_spectral_to_FE(
     for k in range(L + 1):
         for i in range(I):
             for q in range(Q):
-                ind = k + q * (L + 1) + i * (L + 1) * Q
+                ind = k * Q * I + i * Q + q
+                # Sum over old n, m, l, Fourier indices
                 Aj_Z[k, i, q] = np.sum(
                     Z_lmn
+                    # Integrate over the angular FE mesh
                     * mesh.integrate(
+                        # Integrate rho * basis functions over the rho direction
                         np.sum(
-                            (
+                            rho[:, np.newaxis, np.newaxis]
+                            * (
                                 Z_basis.evaluate(
                                     nodes=quadpoints,
                                 )
@@ -178,7 +182,8 @@ def convert_spectral_to_FE(
                     R_lmn
                     * mesh.integrate(
                         np.sum(
-                            (
+                            rho[:, np.newaxis, np.newaxis]
+                            * (
                                 R_basis.evaluate(
                                     nodes=quadpoints,
                                 )
@@ -194,7 +199,8 @@ def convert_spectral_to_FE(
                     L_lmn
                     * mesh.integrate(
                         np.sum(
-                            (
+                            rho[:, np.newaxis, np.newaxis]
+                            * (
                                 L_basis.evaluate(
                                     nodes=quadpoints,
                                 )

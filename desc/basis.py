@@ -1390,25 +1390,11 @@ class FiniteElementBasis(_FE_Basis):
         else:
             FE_mesh = self.mesh
 
-            # Get the q = 0, 1, ..., Q basis functions from each of the points
-            intervals, basis_functions = FE_mesh.find_intervals_corresponding_to_points(
-                t
-            )
-            # Need a mask here to only integrate over the ith interval
-            mask = np.zeros((t.shape[0], len(j)))
-            for ii in i:
-                for jj in range(len(j)):
-                    mask[intervals == ii, jj] = 1.0
+            # Get all IQ basis functions from each of the points,
+            # and most will be zeros at a given point because of local support.
+            poloidal_toroidal = FE_mesh.full_basis_functions_corresponding_to_points(t)
 
-            # Need to change the shape of mask and poloidal_toroidal to correctly return
-            # shapes num_theta x num_modes, where num_modes is all the combinations of
-            # mode numbers.
-            basis_functions = basis_functions.reshape(t.shape[0], self.Q)
-            poloidal_toroidal = np.zeros((t.shape[0], len(j)))
-            for jj in range(len(j)):
-                poloidal_toroidal[:, jj] = basis_functions[:, j[jj]]
-
-        return radial * poloidal_toroidal * mask
+        return radial * poloidal_toroidal[:, i, j]
 
     def change_resolution(self, L, M, N):
         """Change resolution of the basis to the given resolutions.
@@ -2535,6 +2521,32 @@ class FiniteElementMesh1D:
                 plt.subplot(1, self.Q, i + 1)
                 plt.plot(quadpoints, np.zeros(len(quadpoints)), "ko")
         plt.show()
+
+    def full_basis_functions_corresponding_to_points(self, theta):
+        """Given points on the mesh, find all (I, Q) basis functions values.
+
+        Parameters
+        ----------
+        theta : 1D ndarray, shape (num_points)
+            Set of points for which we want to find the intervals that
+            they lie inside of in the mesh.
+
+        Returns
+        -------
+        basis_functions : 3D ndarray, shape (num_points, I, Q)
+            All of the IQ basis functions evaluated at the points.
+            Most will be zero at a given point.
+        """
+        basis_functions = np.zeros((theta.shape[0], self.M - 1, self.Q))
+        for i in range(theta.shape[0]):
+            v = theta[i]
+            for j, interval in enumerate(self.intervals):
+                v1 = interval.vertices[0]
+                v2 = interval.vertices[1]
+                if v >= v1 and v <= v2:
+                    bfs, _ = interval.get_basis_functions(v)
+                    basis_functions[i, j, :] = bfs
+        return basis_functions
 
     def find_intervals_corresponding_to_points(self, theta):
         """Given a point on the mesh, find which interval it lies inside.

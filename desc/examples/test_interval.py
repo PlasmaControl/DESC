@@ -16,10 +16,10 @@ from matplotlib import pyplot as plt
 from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBasis
 from desc.geometry import convert_spectral_to_FE
 
-M = 3  # Note M > 2 required
+M = 10  # Note M > 2 required
 N = 0
 L = 0
-K = 1
+K = 2
 mesh = FiniteElementMesh1D(M, K=K)
 mesh.plot_intervals(plot_quadrature_points=True)
 integral = mesh.integrate(np.ones((M * mesh.nquad, 10000)))
@@ -75,19 +75,17 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-print("R_lmn, Z_lmn = ", R_basis.R_lmn, Z_basis.Z_lmn)
 nodes = (
     np.array(np.meshgrid(np.ones(1), theta, np.zeros(1), indexing="ij"))
     .reshape(3, len(theta))
     .T
 )
-print(R_basis.modes)
-print(nodes)
 
 R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
 Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
 plt.plot(R, Z, "ro")
 
+print("R_lmn, Z_lmn = ", R_lmn, Z_lmn)
 Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
     R_lmn,
     Z_lmn,
@@ -104,6 +102,7 @@ print(Rprime_lmn)
 print(Zprime_lmn)
 Rprime_basis.R_lmn = Rprime_lmn
 Zprime_basis.Z_lmn = Zprime_lmn
+print(Rprime_basis.evaluate(nodes=nodes))
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
 print(R, Z)

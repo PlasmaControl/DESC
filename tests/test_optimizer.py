@@ -24,6 +24,7 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
+    FixParameter,
     FixPressure,
     FixPsi,
     ForceBalance,
@@ -863,9 +864,11 @@ def test_constrained_AL_lsq():
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
-        FixPressure(eq=eq),  # fix pressure profile
-        FixIota(eq=eq),  # fix rotational transform profile
-        FixPsi(eq=eq),  # fix total toroidal magnetic flux
+        FixPressure(eq=eq),
+        FixParameter(
+            eq, "i_l", bounds=(eq.i_l * 0.9, eq.i_l * 1.1)
+        ),  # linear inequality
+        FixPsi(eq=eq, bounds=(eq.Psi * 0.99, eq.Psi * 1.01)),  # linear inequality
     )
     # some random constraints to keep the shape from getting wacky
     V = eq.compute("V")["V"]
@@ -900,6 +903,9 @@ def test_constrained_AL_lsq():
     Dwell = constraints[-2].compute_scaled(*constraints[-2].xs(eq2))
     assert (ARbounds[0] - ctol) < AR2 < (ARbounds[1] + ctol)
     assert (Vbounds[0] - ctol) < V2 < (Vbounds[1] + ctol)
+    assert (0.99 * eq.Psi - ctol) <= eq2.Psi <= (1.01 * eq.Psi + ctol)
+    np.testing.assert_array_less((0.9 * eq.i_l - ctol), eq2.i_l)
+    np.testing.assert_array_less(eq2.i_l, (1.1 * eq.i_l + ctol))
     assert eq2.is_nested()
     np.testing.assert_array_less(-Dwell, ctol)
 

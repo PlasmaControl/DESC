@@ -1368,7 +1368,7 @@ class FiniteElementBasis(_FE_Basis):
         # TODO: avoid duplicate calculations when mixing derivatives
         r, t, z = nodes.T
         l, i, j = modes.T
-        lm = np.array([l, np.zeros(len(l))]).T
+        lm = np.array([l, np.zeros(modes.shape[0])]).T
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         if self.N > 0:
@@ -1388,18 +1388,27 @@ class FiniteElementBasis(_FE_Basis):
                 Theta.shape[0] * Theta.shape[1], self.Q
             )[i, j]
         else:
-            FE_mesh = FiniteElementMesh1D(M=self.M, K=self.K)
+            FE_mesh = self.mesh
 
             # Get the q = 0, 1, ..., Q basis functions from each of the points
             intervals, basis_functions = FE_mesh.find_intervals_corresponding_to_points(
                 t
             )
             # Need a mask here to only integrate over the ith interval
-            mask = np.zeros((len(t), 1))
-            mask[intervals == i] = 1.0
-            poloidal_toroidal = basis_functions.reshape(t.shape[0], self.Q)[i, j]
+            mask = np.zeros((t.shape[0], len(j)))
+            for ii in i:
+                for jj in range(len(j)):
+                    mask[intervals == ii, jj] = 1.0
 
-        return mask * radial[:, 0:1] * poloidal_toroidal
+            # Need to change the shape of mask and poloidal_toroidal to correctly return
+            # shapes num_theta x num_modes, where num_modes is all the combinations of
+            # mode numbers.
+            basis_functions = basis_functions.reshape(t.shape[0], self.Q)
+            poloidal_toroidal = np.zeros((t.shape[0], len(j)))
+            for jj in range(len(j)):
+                poloidal_toroidal[:, jj] = basis_functions[:, j[jj]]
+
+        return radial * poloidal_toroidal * mask
 
     def change_resolution(self, L, M, N):
         """Change resolution of the basis to the given resolutions.
@@ -2460,10 +2469,13 @@ class FiniteElementMesh1D:
         basis functions.
     """
 
-    def __init__(self, M, K=1):
+    def __init__(self, M, K=1, nquad=2):
         self.M = M
         self.Q = K + 1
         self.K = K
+
+        # can exactly integrate 2 * nquad - 1 degree polynomials
+        self.nquad = max(nquad, K + 1)
 
         theta = np.linspace(0, 2 * np.pi, M, endpoint=True)
         self.Theta = theta
@@ -2486,16 +2498,16 @@ class FiniteElementMesh1D:
         # Using Gauss-Legendre quadrature
         integration_points = []
         weights = []
-        if self.K == 1:
+        if self.nquad == 1:
             integration_points = [0.0]
             weights = [2.0]
-        elif self.K == 2:
+        elif self.nquad == 2:
             integration_points = [1.0 / np.sqrt(3), -1.0 / np.sqrt(3)]
             weights = [1.0, 1.0]
-        elif self.K == 3:
+        elif self.nquad == 3:
             integration_points = [np.sqrt(0.6), -np.sqrt(0.6), 0.0]
             weights = [5.0 / 9.0, 5.0 / 9.0, 8.0 / 9.0]
-        elif self.K == 4:
+        elif self.nquad == 4:
             integration_points = [
                 np.sqrt(3 + np.sqrt(4.8)) / 7.0,
                 -np.sqrt(3 + np.sqrt(4.8)) / 7.0,
@@ -2511,7 +2523,6 @@ class FiniteElementMesh1D:
 
         self.integration_points = np.array(integration_points)
         self.weights = np.ravel(np.array(weights))
-        self.nquad = len(self.integration_points)
 
     def plot_intervals(self, plot_quadrature_points=False):
         """Plot all the intervals in the 1D mesh."""

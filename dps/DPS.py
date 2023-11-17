@@ -1,5 +1,5 @@
 from desc import set_device
-set_device("cpu")
+set_device("gpu")
 from desc.grid import Grid
 import desc.io
 from desc.backend import jnp

@@ -455,6 +455,69 @@ class TestObjectiveFunction:
         f = obj.compute_scaled_error(*obj.xs(eq))
         np.testing.assert_allclose(f, 0, atol=2e-3)
 
+    @pytest.mark.unit
+    def test_target_mean_iota(self):
+        """Test calculation of iota profile average."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            mean_iota = jnp.mean(eq.compute("iota", grid=grid)["iota"])
+            obj = RotationalTransform(
+                target=mean_iota, weight=1, eq=eq, loss_function="mean", grid=grid
+            )
+            obj.build()
+            mean_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
+            mean_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            mean_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(mean_iota, mean_iota_unscaled, atol=1e-16)
+            np.testing.assert_allclose(mean_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(mean_iota_scaled, mean_iota, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
+    def test_target_max_iota(self):
+        """Test calculation of iota profile max."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            max_iota = jnp.max(eq.compute("iota", grid=grid)["iota"])
+            obj = RotationalTransform(
+                target=max_iota, weight=1, eq=eq, loss_function="max", grid=grid
+            )
+            obj.build()
+            max_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
+            max_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            max_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(max_iota, max_iota_unscaled, atol=1e-16)
+            np.testing.assert_allclose(max_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(max_iota_scaled, max_iota, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
+    def test_target_min_iota(self):
+        """Test calculation of iota profile min."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            min_iota = jnp.min(eq.compute("iota", grid=grid)["iota"])
+            obj = RotationalTransform(
+                target=min_iota, weight=1, eq=eq, loss_function="min", grid=grid
+            )
+            obj.build()
+            min_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
+            min_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            min_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(min_iota, min_iota_unscaled, atol=1e-16)
+            np.testing.assert_allclose(min_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(min_iota_scaled, min_iota, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
 
 @pytest.mark.unit
 def test_derivative_modes():
@@ -1332,6 +1395,28 @@ def test_softmax_and_softmin():
     # as alpha -> infinity, softmin -> min
     sftmin = softmin(arr, alpha=100)
     np.testing.assert_almost_equal(sftmin, np.min(arr))
+    sftmin = softmin(arr, alpha=100)
+    np.testing.assert_almost_equal(sftmin, np.min(arr))
+
+
+@pytest.mark.unit
+def test_loss_function_asserts():
+    """Test the checks on loss function for _Objective."""
+    eq = Equilibrium()
+    # ensure passed-in loss_function is callable
+    with pytest.raises(AssertionError):
+        RotationalTransform(eq=eq, loss_function=1)
+    # ensure passed-in loss_function takes only one argument
+    fun = lambda x, y: x + y
+    with pytest.raises(Exception):
+        RotationalTransform(eq=eq, loss_function=fun)
+    # ensure passed-in loss_function returns a single 0D or 1D array
+    fun = lambda x: jnp.vstack((x, x))
+    with pytest.raises(AssertionError):
+        RotationalTransform(eq=eq, loss_function=fun)
+    fun = lambda x: (x, x)
+    with pytest.raises(AssertionError):
+        RotationalTransform(eq=eq, loss_function=fun)
 
 
 @pytest.mark.unit

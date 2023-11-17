@@ -963,11 +963,8 @@ def test_proximal_with_PlasmaVesselDistance():
         FixPsi(eq=eq),  # fix total toroidal magnetic flux
     )
     # circular surface
-    Rmax = 5
-    Rmin = 3
-
     a = 2
-    R0 = (Rmax + Rmin) / 2
+    R0 = 4
     surf = FourierRZToroidalSurface(
         R_lmn=[R0, a],
         Z_lmn=[0.0, -a],

@@ -177,6 +177,9 @@ class Optimizer(IOAble):
                     + "Expected objective.things to contain only a single Equilibrium,"
                     + f"instead got {objective.things}"
                 )
+            assert isinstance(
+                objective.things[0], Equilibrium
+            ), "ProximalProjection can only be used to optimize Equilibrium objects!"
 
         if nonlinear_constraint is not None:
             objective, nonlinear_constraint = combine_args(

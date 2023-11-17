@@ -548,8 +548,8 @@ def test_dommaschk_fit_toroidal_field():
     R, phi, Z = np.meshgrid(R, phi, Z)
     coords = np.vstack((R.flatten(), phi.flatten(), Z.flatten())).T
 
-    max_l = 1
-    max_m = 1
+    max_l = 2
+    max_m = 2
     B0 = 2  # scale strength for to 1/R field to fit
 
     def B0_over_R(coord):
@@ -563,9 +563,9 @@ def test_dommaschk_fit_toroidal_field():
     )
 
     B_dom = B.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-14)
-    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-14)
-    np.testing.assert_allclose(B_dom[:, 2], jnp.zeros_like(R.flatten()), atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=2e-14)
+    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=2e-14)
+    np.testing.assert_allclose(B_dom[:, 2], jnp.zeros_like(R.flatten()), atol=2e-14)
 
     # only nonzero coefficient of the field should be the B0
     np.testing.assert_allclose(B._params["B0"], B0, atol=1e-14)

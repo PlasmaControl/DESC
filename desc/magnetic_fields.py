@@ -1033,7 +1033,6 @@ class DommaschkPotentialField(ScalarPotentialField):
     """
 
     def __init__(self, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1.0):
-
         ms = jnp.atleast_1d(ms)
         ls = jnp.atleast_1d(ls)
         a_arr = jnp.atleast_1d(a_arr)
@@ -1063,7 +1062,9 @@ class DommaschkPotentialField(ScalarPotentialField):
         super().__init__(dommaschk_potential, params)
 
     @classmethod
-    def fit_magnetic_field(cls, field, coords, max_m, max_l, sym=False):
+    def fit_magnetic_field(  # noqa: C901 - FIXME - simplify
+        cls, field, coords, max_m, max_l, sym=False, verbose=1
+    ):
         """Fit a vacuum magnetic field with a Dommaschk Potential field.
 
         Parameters
@@ -1077,6 +1078,7 @@ class DommaschkPotentialField(ScalarPotentialField):
             sym (bool): if field is stellarator symmetric or not.
                 if True, only stellarator-symmetric modes will
                 be included in the fitting
+            verbose (int): verbosity level of fitting routine, > 0 prints residuals
         """
         # We seek c in  Ac = b
         # A will be the BR, Bphi and BZ from each individual
@@ -1090,69 +1092,78 @@ class DommaschkPotentialField(ScalarPotentialField):
         else:
             B = field.compute_magnetic_field(coords)
 
-        num_nodes = coords.shape[0]  # number of coordinate nodes
-
-        # we will have the rhs be 3*num_nodes in length (bc of vector B)
-
         #########
         # make b
         #########
+        # we will have the rhs be 3*num_nodes in length (bc of vector B)
 
         rhs = jnp.vstack((B[:, 0], B[:, 1], B[:, 2])).T.flatten(order="F")
 
         #####################
         # b is made, now do A
         #####################
-        num_modes = (
-            1 + (max_l + 1) * (max_m + 1) * 4
-            if not sym
-            else 1 + (max_l + 1) * (max_m + 1) * 2
-        )
+        num_modes = 1 + (max_l + 1) * (max_m + 1) * 4
+        # TODO: if symmetric, technically only need half the modes
+        # however, the field and functions are setup to accept equal
+        # length arrays for a,b,c,d, so we will just zero out the
+        # modes that don't fit symmetry, but in future
+        # should refactor code to have a 3rd index so that
+        # we have a = V_ml0, b = V_ml1, c = V_ml2, d = V_ml3
+        # and the modes array can then be [m,l,x] where x is 0,1,2,3
+        # and we dont need to keep track of a,b,c,d separately
+
         # TODO: technically we can drop some modes
-        # since if max_l=0, there are only ever nonzero terms
-        # for a and b
-        # and if max_m=0, there are only ever nonzero terms
-        # for a and c
+        # since if max_l=0, there are only ever nonzero terms for a and b
+        # and if max_m=0, there are only ever nonzero terms for a and c
         # but since we are only fitting in a least squares sense,
         # and max_l and max_m should probably be both nonzero anyways,
         # this is not an issue right now
-
-        A = jnp.zeros((3 * num_nodes, num_modes))
 
         # mode numbers
         ms = []
         ls = []
 
-        # order of coeffs are B0, a_ml, b_ml, c_ml, d_ml
-        coef_ind = 1
-        abcd_inds = [[], [], [], []]
+        # order of coeffs in the vector c are B0, a_ml, b_ml, c_ml, d_ml
         a_s = []
         b_s = []
         c_s = []
         d_s = []
+        zero_due_to_sym_inds = []
+        abcd_zero_due_to_sym_inds = [
+            [],
+            [],
+            [],
+            [],
+        ]  # indices that should be 0 due to symmetry
         for l in range(max_l + 1):
             for m in range(max_m + 1):
                 if not sym:
-                    which_coefs = range(4)  # no sym, use all coefs
+                    pass  # no sym, use all coefs
                 elif l // 2 == 0:
-                    which_coefs = [1, 2]  # a=d=0 for even l with sym
+                    zero_due_to_sym_inds = [0, 3]  # a=d=0 for even l with sym
                 elif l // 2 == 1:
-                    which_coefs = [0, 3]  # b=c=0 for odd l with sym
-                for which_coef in which_coefs:
-                    a = 1 if which_coef == 0 else 0
-                    b = 1 if which_coef == 1 else 0
-                    c = 1 if which_coef == 2 else 0
-                    d = 1 if which_coef == 3 else 0
+                    zero_due_to_sym_inds = [1, 2]  # b=c=0 for odd l with sym
+                for which_coef in range(4):
+                    if which_coef == 0:
+                        a_s.append(1)
+                    elif which_coef == 1:
+                        b_s.append(1)
+                    elif which_coef == 2:
+                        c_s.append(1)
+                    elif which_coef == 3:
+                        d_s.append(1)
+                    if which_coef in zero_due_to_sym_inds:
+                        abcd_zero_due_to_sym_inds[which_coef].append(0)
+                    else:
+                        abcd_zero_due_to_sym_inds[which_coef].append(1)
 
-                    a_s.append(a)
-                    b_s.append(b)
-                    c_s.append(c)
-                    d_s.append(d)
-                    ms.append(m)
-                    ls.append(l)
-                    abcd_inds[which_coef].append(coef_ind)
-                    coef_ind += 1
-
+                ms.append(m)
+                ls.append(l)
+        for i in range(4):
+            abcd_zero_due_to_sym_inds[i] = jnp.asarray(abcd_zero_due_to_sym_inds[i])
+        assert (
+            round(jnp.sum(len(a_s) + len(b_s) + len(c_s) + len(d_s))) == num_modes - 1
+        )
         params = {
             "ms": ms,
             "ls": ls,
@@ -1162,21 +1173,29 @@ class DommaschkPotentialField(ScalarPotentialField):
             "d_arr": d_s,
             "B0": 0.0,
         }
-        n = len(ms)  # how many l-m mode pairs there are, also is len(a_s)
-
+        n = (
+            round(num_modes - 1) / 4
+        )  # how many l-m mode pairs there are, also is len(a_s)
+        n = int(n)
         domm_field = DommaschkPotentialField(0, 0, 0, 0, 0, 0, 1)
 
         def get_B_dom(coords, X, ms, ls):
             """Fxn wrapper to find jacobian of dommaschk B wrt coefs a,b,c,d."""
+            # zero out any terms that should be zero due to symmetry, which
+            # we cataloged earlier for each a_arr,b_arr,c_arr,d_arr
+            # that way the resulting modes after pinv don't contain them either
             return domm_field.compute_magnetic_field(
                 coords,
                 params={
                     "ms": jnp.asarray(ms),
                     "ls": jnp.asarray(ls),
-                    "a_arr": jnp.asarray(X[1 : n + 1]),
-                    "b_arr": jnp.asarray(X[n + 1 : 2 * n + 1]),
-                    "c_arr": jnp.asarray(X[2 * n + 1 : 3 * n + 1]),
-                    "d_arr": jnp.asarray(X[3 * n + 1 : 4 * n + 1]),
+                    "a_arr": jnp.asarray(X[1 : n + 1]) * abcd_zero_due_to_sym_inds[0],
+                    "b_arr": jnp.asarray(X[n + 1 : 2 * n + 1])
+                    * abcd_zero_due_to_sym_inds[1],
+                    "c_arr": jnp.asarray(X[2 * n + 1 : 3 * n + 1])
+                    * abcd_zero_due_to_sym_inds[2],
+                    "d_arr": jnp.asarray(X[3 * n + 1 : 4 * n + 1])
+                    * abcd_zero_due_to_sym_inds[3],
                     "B0": X[0],
                 },
             )
@@ -1196,21 +1215,23 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         # now solve Ac=b for the coefficients c
 
-        Ainv = scipy.linalg.pinv(A, rcond=None)
+        Ainv = scipy.linalg.pinv(A)
         c = jnp.matmul(Ainv, rhs)
 
         res = jnp.matmul(A, c) - rhs
-        print(f"Mean Residual of fit: {jnp.mean(jnp.abs(res)):1.4e} T")
-        print(f"Max Residual of fit: {jnp.max(jnp.abs(res)):1.4e} T")
-        print(f"Min Residual of fit: {jnp.min(jnp.abs(res)):1.4e} T")
+        if verbose > 1:
+            print(f"Mean Residual of fit: {jnp.mean(jnp.abs(res)):1.4e} T")
+            print(f"Max Residual of fit: {jnp.max(jnp.abs(res)):1.4e} T")
+            print(f"Min Residual of fit: {jnp.min(jnp.abs(res)):1.4e} T")
 
         # recover the params from the c coefficient vector
         B0 = c[0]
 
-        a_arr = c[1 : n + 1]
-        b_arr = c[n + 1 : 2 * n + 1]
-        c_arr = c[2 * n + 1 : 3 * n + 1]
-        d_arr = c[3 * n + 1 : 4 * n + 1]
+        # we zero out the terms that should be zero due to symmetry here
+        a_arr = c[1 : n + 1] * abcd_zero_due_to_sym_inds[0]
+        b_arr = c[n + 1 : 2 * n + 1] * abcd_zero_due_to_sym_inds[1]
+        c_arr = c[2 * n + 1 : 3 * n + 1] * abcd_zero_due_to_sym_inds[2]
+        d_arr = c[3 * n + 1 : 4 * n + 1] * abcd_zero_due_to_sym_inds[3]
 
         return cls(ms, ls, a_arr, b_arr, c_arr, d_arr, B0)
 
@@ -1310,8 +1331,8 @@ def alpha(m, n):
 @jit
 def alphastar(m, n):
     """Alphastar of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
-    # modified for eqns 31 and 32
-    def false_fun(m_n):
+
+    def false_fun(m_n):  # modified for eqns 31 and 32
         m, n = m_n
         return (2 * n + m) * alpha(m, n)
 
@@ -1558,7 +1579,6 @@ def read_mgrid(mgrid_file, extcur=1):
     bz = np.zeros([kp, jz, ir])
     extcur = np.broadcast_to(extcur, nextcur)
     for i in range(nextcur):
-
         # apply scaling by currents given in VMEC input file
         scale = extcur[i]
 

@@ -1,5 +1,5 @@
 from desc import set_device
-set_device("gpu")
+set_device("cpu")
 from desc.grid import Grid
 import desc.io
 from desc.backend import jnp
@@ -98,7 +98,7 @@ eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
 
 # Energy and Mass info
-Energy_eV = 1e2 #1 # eV (3.52e6 eV proton energy)
+Energy_eV = 100 #1 # eV (3.52e6 eV proton energy)
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
 Energy_SI = Energy_eV*Proton_Charge
@@ -108,15 +108,15 @@ Mass = 4*Proton_Mass
 Charge = 2*Proton_Charge
 
 # Initial State
-psi_i = 0.2
-zeta_i = 0
-theta_i = 0
-vpar_i = 0.3*jnp.sqrt(2*Energy_SI/Mass)
+psi_i = 0.8
+zeta_i = 0.5
+theta_i = jnp.pi/2
+vpar_i = -0.1*jnp.sqrt(2*Energy_SI/Mass)
 ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
-tmax = 1e-3
+tmax = 1e-2
 nt = 1000
 time = jnp.linspace(tmin, tmax, nt)
 
@@ -149,9 +149,9 @@ print(f"\nTime to build and compute solution: {intermediate_time_2 - intermediat
 ObjFunction = ObjectiveFunction([objective], deriv_mode="looped")
 ObjFunction.build()
 
-# jacobian = ObjFunction.grad(ObjFunction.x(eq))
+# gradient = ObjFunction.grad(ObjFunction.x(eq))
 
-# savetxt(jacobian, "jacobian")
+# savetxt(gradient, "gradient")
 
 intermediate_time_3 = timet()
 print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermediate_time_2}s\n")
@@ -165,8 +165,8 @@ print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermed
 # R_modes = jnp.vstack(([0, 0, 0], eq.surface.R_basis.modes[jnp.max(jnp.abs(eq.surface.R_basis.modes), 1), :]))
 # Z_modes = eq.surface.Z_basis.modes[jnp.max(jnp.abs(eq.surface.Z_basis.modes), 1), :]
 
-R_modes = jnp.array([[0, 0, 0]])
-constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixPsi(eq), FixIota(eq)) #ForceBalance(eq, bounds=(-1e-3, 1e-3))
+R_modes = jnp.array([[0, 0, 0], [0, 0, 0]])
+constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=True), FixPressure(eq), FixPsi(eq), FixIota(eq)) #ForceBalance(eq, bounds=(-1e-3, 1e-3))
 eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=5, copy=True) # Mudar o número de iterações para 3, 10, 100
 eq.save(opt_file)
 

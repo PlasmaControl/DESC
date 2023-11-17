@@ -1064,7 +1064,7 @@ class OmnigenousField(Optimizable, IOAble):
         "_M_omni",
         "_N_omni",
         "_well_basis",
-        "_basis",
+        "_omni_basis",
         "_helicity",
         "_B_lm",
         "_x_lmn",

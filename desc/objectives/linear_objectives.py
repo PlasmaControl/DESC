@@ -2222,7 +2222,7 @@ class _FixProfile(_FixedObjective, ABC):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2320,7 +2320,7 @@ class FixPressure(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2426,7 +2426,7 @@ class FixAnisotropy(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
@@ -2530,7 +2530,7 @@ class FixIota(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices.
         corresponding to knots for a SplineProfile).
-        Must len(target) = len(weight) = len(modes).
+        Must len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2633,7 +2633,7 @@ class FixCurrent(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2739,7 +2739,7 @@ class FixElectronTemperature(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2845,7 +2845,7 @@ class FixElectronDensity(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -2951,7 +2951,7 @@ class FixIonTemperature(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -3058,7 +3058,7 @@ class FixAtomicNumber(_FixProfile):
         indices of the Profile.params array to fix.
         (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
         corresponding to knots for a SplineProfile).
-        Must have len(target) = len(weight) = len(modes).
+        Must have len(target) = len(weight) = len(indices).
         If True/False uses all/none of the Profile.params indices.
     name : str, optional
         Name of the objective function.
@@ -3230,7 +3230,7 @@ class FixPsi(_FixedObjective):
 
 
 class FixWell(_FixedObjective):
-    """Fixes well_l.
+    """Fixes OmnigenousField.B_lm coefficients.
 
     Parameters
     ----------
@@ -3248,27 +3248,32 @@ class FixWell(_FixedObjective):
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
+    indices : ndarray or bool, optional
+        indices of the feld.B_lm array to fix.
+        Must have len(target) = len(weight) = len(indices).
+        If True/False uses all/none of the field.B_lm indices.
     name : str
         Name of the objective function.
 
     """
 
-    _target_arg = "well_l"
+    _target_arg = "B_lm"
     _units = "(T)"
-    _print_value_fmt = "Fixed well_l error: {:10.3e} "
+    _print_value_fmt = "Fixed well error: {:10.3e} "
 
     def __init__(
         self,
-        field=None,
+        field,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         indices=True,
-        name="fixed well_l",
+        name="fixed well",
     ):
         self._indices = indices
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=field,
             target=target,
@@ -3279,24 +3284,18 @@ class FixWell(_FixedObjective):
             name=name,
         )
 
-    def build(self, field=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        field : OmnigenousField, optional
-            Field that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(field, self.things)
         field = self.things[0]
-
-        if self.target is None:
-            self._target = field.well_l
 
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
@@ -3308,15 +3307,19 @@ class FixWell(_FixedObjective):
 
         self._dim_f = self._idx.size
 
-        super().build(things=field, use_jit=use_jit, verbose=verbose)
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, field.B_lm[self._idx], None, self._idx
+        )
 
-    def compute(self, params, **kwargs):
-        """Compute fixed well_l error.
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed well error.
 
         Parameters
         ----------
         params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -3324,14 +3327,14 @@ class FixWell(_FixedObjective):
         Returns
         -------
         f : ndarray
-            Total QI magnetic well shape error.
+            Fixed well shape error.
 
         """
-        return params["well_l"][self._idx]
+        return params["B_lm"][self._idx]
 
 
 class FixOmni(_FixedObjective):
-    """Fixes omni_lmn.
+    """Fixes OmnigenousField.x_lmn coefficients.
 
     Parameters
     ----------
@@ -3349,14 +3352,18 @@ class FixOmni(_FixedObjective):
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
+    indices : ndarray or bool, optional
+        indices of the feld.x_lmn array to fix.
+        Must have len(target) = len(weight) = len(indices).
+        If True/False uses all/none of the field.x_lmn indices.
     name : str
         Name of the objective function.
 
     """
 
-    _target_arg = "omni_lmn"
+    _target_arg = "x_lmn"
     _units = "(rad)"
-    _print_value_fmt = "Fixed omni_lmn error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity error: {:10.3e} "
 
     def __init__(
         self,
@@ -3367,9 +3374,10 @@ class FixOmni(_FixedObjective):
         normalize=False,
         normalize_target=False,
         indices=True,
-        name="fixed omni_lmn",
+        name="fixed omnigenity",
     ):
         self._indices = indices
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=field,
             target=target,
@@ -3380,24 +3388,18 @@ class FixOmni(_FixedObjective):
             name=name,
         )
 
-    def build(self, field=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        field : OmnigenousField, optional
-            Field that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(field, self.things)
         field = self.things[0]
-
-        if self.target is None:
-            self._target = field.omni_lmn
 
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
@@ -3409,15 +3411,19 @@ class FixOmni(_FixedObjective):
 
         self._dim_f = self._idx.size
 
-        super().build(things=field, use_jit=use_jit, verbose=verbose)
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, field.x_lmn[self._idx], None, self._idx
+        )
 
-    def compute(self, params, **kwargs):
-        """Compute fixed omni_lmn error.
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed omnigenity error.
 
         Parameters
         ----------
         params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -3425,12 +3431,13 @@ class FixOmni(_FixedObjective):
         Returns
         -------
         f : ndarray
-            Total QI magnetic well shift error.
+            Fixed omnigenity error.
 
         """
-        return params["omni_lmn"][self._idx]
+        return params["x_lmn"][self._idx]
 
 
+# TODO: check that this is consistent with new API of other linear objectives
 class StraightBmaxContour(_FixedObjective):
     """Ensures the B_max contour is straight in Boozer coordinates.
 
@@ -3455,14 +3462,14 @@ class StraightBmaxContour(_FixedObjective):
 
     """
 
-    _target_arg = "omni_lmn"
-    _fixed = False  # not "diagonal", since its fixing a sum
+    _target_arg = "x_lmn"
+    _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
     _print_value_fmt = "Straight B_max error: {:10.3e} "
 
     def __init__(
         self,
-        field=None,
+        field,
         target=0,
         bounds=None,
         weight=1,
@@ -3480,20 +3487,17 @@ class StraightBmaxContour(_FixedObjective):
             name=name,
         )
 
-    def build(self, field=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        field : OmnigenousField, optional
-            Field that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        self.things = setdefault(field, self.things)
         field = self.things[0]
 
         basis = field.omni_basis
@@ -3513,15 +3517,15 @@ class StraightBmaxContour(_FixedObjective):
             self._A[i, idx_0] = 1
             self._A[i, idx_m] = (mm % 2 - 1) * (mm % 4 - 1)
 
-        super().build(things=field, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, **kwargs):
-        """Compute fixed omni_lmn error.
+    def compute(self, params, constants=None):
+        """Compute straight B_max contours error.
 
         Parameters
         ----------
         params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -3532,4 +3536,5 @@ class StraightBmaxContour(_FixedObjective):
             Total straight B_max contour error.
 
         """
-        return jnp.dot(self._A, params["omni_lmn"])
+        f = jnp.dot(self._A, params["x_lmn"])
+        return f

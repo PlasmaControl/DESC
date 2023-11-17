@@ -26,12 +26,15 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixOmni,
     FixParameter,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
+    FixWell,
     ForceBalance,
     ForceBalanceAnisotropic,
+    GenericObjective,
     HelicalForceBalance,
     ObjectiveFunction,
     Omnigenity,
@@ -39,6 +42,7 @@ from desc.objectives import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
+    StraightBmaxContour,
     Volume,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
@@ -833,6 +837,83 @@ def test_omnigenity_qa():
     data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=grid)
     np.testing.assert_allclose(np.min(B1), data["min_tz |B|"][0], rtol=2e-3)
     np.testing.assert_allclose(np.max(B1), data["max_tz |B|"][0], rtol=2e-3)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_omnigenity_optimization():
+    """Test a realistic OP omnigenity optimization."""
+    # this same example is used in docs/notebooks/tutorials/04_Omnigenity_Optimization
+
+    # initial equilibrium from QP model
+    surf = FourierRZToroidalSurface.from_qp_model(
+        major_radius=1,
+        aspect_ratio=10,
+        elongation=3,
+        mirror_ratio=0.2,
+        torsion=0.1,
+        NFP=2,
+        sym=True,
+    )
+    eq = Equilibrium(Psi=3e-2, M=4, N=4, surface=surf)
+    constraints = get_fixed_boundary_constraints(eq)
+    eq, _ = eq.solve(objective="vacuum", constraints=constraints, verbose=3)
+
+    # omnigenity optimization
+    field = OmnigenousField(
+        L_well=1,
+        M_well=3,
+        L_omni=1,
+        M_omni=1,
+        N_omni=1,
+        NFP=eq.NFP,
+        helicity=(0, eq.NFP),
+        B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),
+    )
+    grid_eq_half = LinearGrid(rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    grid_eq_lcfs = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    grid_field_half = LinearGrid(rho=0.5, theta=16, zeta=8, NFP=field.NFP, sym=False)
+    grid_field_lcfs = LinearGrid(rho=1.0, theta=16, zeta=8, NFP=field.NFP, sym=False)
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            AspectRatio(eq=eq, bounds=(0, 10)),
+            Omnigenity(
+                field=field,
+                eq=eq,
+                grid_eq=grid_eq_half,
+                grid_field=grid_field_half,
+                well_weight=2,
+            ),
+            Omnigenity(
+                field=field,
+                eq=eq,
+                grid_eq=grid_eq_lcfs,
+                grid_field=grid_field_lcfs,
+                well_weight=2,
+            ),
+        )
+    )
+    constraints = (
+        CurrentDensity(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+        StraightBmaxContour(field=field),
+        FixOmni(field=field, indices=np.where(field.omni_basis.modes[:, 1] == 0)[0]),
+        FixWell(field=field, indices=[0, field.M_well - 1]),
+    )
+    optimizer = Optimizer("lsq-auglag")
+    (eq, field), _ = optimizer.optimize(
+        (eq, field), objective, constraints, maxiter=100, verbose=3
+    )
+
+    # check results
+    np.testing.assert_allclose(field.B_lm[[0, 2]], [0.8, 1.2])
+    np.testing.assert_allclose(field.x_lmn[[0, 2, 4, 6, 8, 10]], 0)
+    f = objective.compute_scaled_error(objective.x(*(eq, field)))
+    np.testing.assert_allclose(f, 0, atol=1.3e-2)
 
 
 class TestGetExample:

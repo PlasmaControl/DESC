@@ -230,7 +230,7 @@ class TestConstructor:
         np.testing.assert_allclose(Z_lmn, eq.Z_lmn)
         np.testing.assert_allclose(L_lmn, eq.L_lmn)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(AssertionError):
             eq = Equilibrium(L=4, R_lmn=R_lmn)
 
 
@@ -422,6 +422,35 @@ class TestInitialGuess:
 
         np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
         np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
+
+    @pytest.mark.unit
+    def test_guess_from_coordinate_mapping(self):
+        """Test that we can initialize strongly shaped equilibria correctly."""
+        Rb = np.array([3.51, 1.1, 1.5, -0.3])
+        R_modes = np.array([[0, 0], [1, 0], [2, 0], [3, 0]])
+        Zb = np.array([0.0, 0.16, -2])
+        Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
+        surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes)
+        with pytest.warns(UserWarning):
+            eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+
+        assert eq.is_nested()
+
+    @pytest.mark.unit
+    def test_guess_from_coordinate_mapping_no_sym(self):
+        """Test that we can initialize strongly shaped equilibria correctly.
+
+        (without axisymmetry or stellarator symmetry)
+        """
+        Rb = np.array([10, 1, 0.8, -0.2, 0.3, 0.02])
+        R_modes = np.array([[0, 0], [1, 0], [2, 0], [3, 1], [2, 1], [2, 2]])
+        Zb = np.array([0.01, 0.2, -1.5, 0.2])
+        Z_modes = np.array([[-3, -2], [2, -1], [-1, 0], [1, 1]])
+        surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes)
+        with pytest.warns(UserWarning):
+            eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+
+        assert eq.is_nested()
 
 
 class TestGetSurfaces:

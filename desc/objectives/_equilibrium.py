@@ -15,13 +15,13 @@ class ForceBalance(_Objective):
 
     Given force densities:
 
-    Fᵨ = √g (B^ζ J^θ - B^θ J^ζ) - ∇ p
+    Fᵨ = √g (J^θ B^ζ - J^ζ B^θ) - ∇ p
 
     Fₕₑₗᵢ √g J^ρ
 
     and helical basis vector:
 
-    𝐞ʰᵉˡⁱ = −B^ζ ∇ θ + B^θ ∇ ζ
+    𝐞ʰᵉˡⁱ = B^ζ ∇ θ - B^θ ∇ ζ
 
     Minimizes the magnitude of the forces:
 

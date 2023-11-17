@@ -642,7 +642,11 @@ def test_plasma_vessel_distance():
     surf_grid = LinearGrid(M=5, N=6)
     plas_grid = LinearGrid(M=10, N=6)
     obj = PlasmaVesselDistance(
-        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+        eq=eq,
+        plasma_grid=plas_grid,
+        surface_grid=surf_grid,
+        surface=surface,
+        surface_fixed=True,
     )
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq, surface))

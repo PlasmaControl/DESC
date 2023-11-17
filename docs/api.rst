@@ -25,11 +25,12 @@ Coils
     :recursive:
     :template: class.rst
 
+    desc.coils.CoilSet
     desc.coils.FourierRZCoil
     desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
+    desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
-    desc.coils.CoilSet
 
 Continuation
 ************
@@ -136,7 +137,6 @@ Magnetic Fields
     desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
-    desc.magnetic_fields.biot_savart
 
 Objective Functions
 *******************
@@ -164,6 +164,7 @@ Objective Functions
     desc.objectives.FixIota
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
+    desc.objectives.FixParameter
     desc.objectives.FixPressure
     desc.objectives.FixPsi
     desc.objectives.FixSumModesR
@@ -176,6 +177,7 @@ Objective Functions
     desc.objectives.get_fixed_axis_constraints
     desc.objectives.get_fixed_boundary_constraints
     desc.objectives.get_NAE_constraints
+    desc.objectives.GoodCoordinates
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
     desc.objectives.MagneticWell
@@ -191,6 +193,7 @@ Objective Functions
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
+    desc.objectives.Shear
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 

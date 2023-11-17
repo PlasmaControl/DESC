@@ -1,6 +1,32 @@
 Changelog
 =========
 
+- Adds ``desc.compat.rescale`` for rescaling equilibria to a specified size and field
+strength.
+ - Adds new keyword ``surface_fixed`` to ``PlasmaVesselDistance`` objective which says
+whether or not the surface comparing the distance from the plasma to is fixed or not.
+If True, then the surface coordinates can be precomputed, saving on computation during
+optimization. Set to False by default.
+- Adds objective function `desc.objectives.GoodCoordinates` for finding "good" (ie,
+non-singular, non-degenerate) coordinate mappings for initial guesses. This is applied
+automatically when creating a new `Equilibrium` if the default initial guess of scaling
+the boundary surface produces self-intersecting surfaces. This can be disabled by
+passing `ensure_nested=False` when constructing the `Equilibrum`.
+
+v0.10.2
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.10.1...v0.10.2)
+
+- Updates `desc.examples`:
+    * `NCSX` now has a fixed current profile. Previously it used a fixed iota based on a
+    fit, but this was somewhat inaccurate.
+    * `QAS` has been removed as it is now redundant with `NCSX`.
+    * `ARIES-CS` has been scaled to the correct size and field strength.
+    * `WISTELL-A` is now a true vacuum solution, previously it approximated the vacuum
+    solution with fixed rotational transform.
+    * Flips sign of iota for `W7-X` and `ATF` to account for positive jacobian.
+    * new example for `HSX`.
 - Adds new compute quantities `"iota current"` and `"iota vacuum"` to compute the
 rotational transform contributions from the toroidal current and background field.
 - Adds ability to compute equilibria with anisotropic pressure. This includes a new
@@ -17,6 +43,13 @@ overlapping objects in the scene. Main API differences:
     usually pretty informative and list the available options.
 - Adds zeroth and first order NAE constraints on the poloidal stream function lambda,
 accessible by passing in ``fix_lambda=True`` to the ``get_NAE_constraint`` getter function.
+- Implements `CurrentPotentialField` and `FourierCurrentPotentialField` classes,
+which allow for computation of the magnetic field from a surface current density
+given by `K = n x grad(Phi)` where `Phi` is a surface current potential.
+    * `CurrentPotentialField` allows for an arbitrary current potential function `Phi`
+    * `FourierCurrentPotentialField` assumes the current potential function to
+    be of the form of a periodic potential (represented by a `DoubleFourierSeries`)
+    and two secular terms, one each linear in the poloidal and in the toroidal angle.
 
 v0.10.1
 -------

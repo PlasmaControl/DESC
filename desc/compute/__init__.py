@@ -44,7 +44,6 @@ from . import (
 from .data_index import data_index
 from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from .utils import (
-    arg_order,
     compute,
     get_data_deps,
     get_derivs,

@@ -1,4 +1,9 @@
-"""Tests for compute functions evaluated at limits."""
+"""Tests for compute functions evaluated at limits.
+
+If a new quantity is added to the compute functions whose limit is not finite
+(or does not exist), simply add it to the ``not_finite_limits`` set below.
+If the limit has yet to be derived, add it to the ``not_implemented_limits`` set.
+"""
 
 import numpy as np
 import pytest
@@ -76,6 +81,26 @@ not_implemented_limits = {
 }
 
 
+def add_all_aliases(names):
+    """Add aliases to limits."""
+    all_aliases = []
+    for name in names:
+        for base_class in data_index.keys():
+            if name in data_index[base_class].keys():
+                all_aliases.append(data_index[base_class][name]["aliases"])
+
+    # flatten
+    all_aliases = [name for sublist in all_aliases for name in sublist]
+    names.update(all_aliases)
+
+    return names
+
+
+zero_limits = add_all_aliases(zero_limits)
+not_finite_limits = add_all_aliases(not_finite_limits)
+not_implemented_limits = add_all_aliases(not_implemented_limits)
+
+
 def grow_seeds(
     seeds, search_space, parameterization="desc.equilibrium.equilibrium.Equilibrium"
 ):
@@ -109,7 +134,6 @@ not_implemented_limits = grow_seeds(
     not_implemented_limits,
     data_index["desc.equilibrium.equilibrium.Equilibrium"].keys() - not_finite_limits,
 )
-not_implemented_limits.discard("D_Mercier")
 
 
 def _skip_this(eq, name):
@@ -268,7 +292,7 @@ class TestAxisLimits:
         # fixed iota
         assert_is_continuous(get("W7-X"), kwargs=kwargs)
         # fixed current
-        assert_is_continuous(get("QAS"), kwargs=kwargs)
+        assert_is_continuous(get("NCSX"), kwargs=kwargs)
 
     @pytest.mark.unit
     def test_magnetic_field_is_physical(self):
@@ -302,4 +326,4 @@ class TestAxisLimits:
                 np.testing.assert_allclose(B[:, 2], B[0, 2])
 
         test(get("W7-X"))
-        test(get("QAS"))
+        test(get("NCSX"))

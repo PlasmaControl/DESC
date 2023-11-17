@@ -157,11 +157,7 @@ class VMECIO:
         file.close()
 
         # initialize Equilibrium
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore", message="Left handed coordinates detected"
-            )
-            eq = Equilibrium(**inputs)
+        eq = Equilibrium(**inputs, check_orientation=False)
 
         # R
         m, n, R_mn = ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)
@@ -179,19 +175,22 @@ class VMECIO:
 
         constraints = get_fixed_axis_constraints(
             profiles=False, eq=eq
-        ) + get_fixed_boundary_constraints(iota=eq.iota, eq=eq)
+        ) + get_fixed_boundary_constraints(eq=eq)
         constraints = maybe_add_self_consistency(eq, constraints)
         objective = ObjectiveFunction(constraints, verbose=0)
         objective.build()
         _, _, _, _, _, project, recover = factorize_linear_constraints(
-            constraints, objective.args
+            constraints, objective
         )
-        args = objective.unpack_state(recover(project(objective.x(eq))))
-        for key, value in args.items():
-            setattr(eq, key, value)
+        args = objective.unpack_state(recover(project(objective.x(eq))), False)[0]
+        eq.params_dict = args
 
         # now we flip the orientation at the very end
-        eq = ensure_positive_jacobian(eq)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="Left handed coordinates detected"
+            )
+            eq = ensure_positive_jacobian(eq)
 
         return eq
 

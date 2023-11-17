@@ -12,6 +12,17 @@ from desc.grid import ConcentricGrid, LinearGrid
 
 from .data_index import data_index
 
+# map from profile name to equilibrium parameter name
+profile_names = {
+    "pressure": "p_l",
+    "iota": "i_l",
+    "current": "c_l",
+    "electron_temperature": "Te_l",
+    "electron_density": "ne_l",
+    "ion_temperature": "Ti_l",
+    "atomic_number": "Zeff_l",
+}
+
 
 def _parse_parameterization(p):
     if isinstance(p, str):
@@ -21,10 +32,6 @@ def _parse_parameterization(p):
     if module == "builtins":
         return klass.__qualname__  # avoid outputs like 'builtins.str'
     return module + "." + klass.__qualname__
-
-
-def _sort_args(args):
-    return [arg for arg in arg_order if arg in args]
 
 
 def compute(parameterization, names, params, transforms, profiles, data=None, **kwargs):
@@ -123,8 +130,9 @@ def _compute(
                 )
         # now compute the quantity
         data = data_index[parameterization][name]["fun"](
-            params, transforms, profiles, data, **kwargs
+            params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
+
     return data
 
 
@@ -283,14 +291,16 @@ def get_params(keys, obj, has_axis=False, **kwargs):
     params = []
     for key in deps:
         params += data_index[p][key]["dependencies"]["params"]
-    if p == "desc.equilibrium.equilibrium.Equilibrium":
-        # probably need some way to distinguish between params from different instances
-        # of the same class?
-        params = _sort_args(list(set(params)))
     if isinstance(obj, str) or inspect.isclass(obj):
         return params
-    params = {name: np.atleast_1d(getattr(obj, name)).copy() for name in params}
-    return params
+    temp_params = {}
+    for name in params:
+        p = getattr(obj, name)
+        if isinstance(p, dict):
+            temp_params[name] = p.copy()
+        else:
+            temp_params[name] = jnp.atleast_1d(p)
+    return temp_params
 
 
 def get_transforms(keys, obj, grid, jitable=False, **kwargs):
@@ -358,10 +368,8 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c == "rotmat":
-            transforms["rotmat"] = obj.rotmat
-        elif c == "shift":
-            transforms["shift"] = obj.shift
+        elif c not in transforms:
+            transforms[c] = getattr(obj, c)
 
     return transforms
 

@@ -6,7 +6,7 @@ import re
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.utils import get_params, get_profiles, get_transforms
+from desc.compute.utils import get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 
 from .objective_funs import _Objective
@@ -80,7 +80,7 @@ class ObjectiveFromUser(_Objective):
     def __init__(
         self,
         fun,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -94,7 +94,7 @@ class ObjectiveFromUser(_Objective):
         self._fun = fun
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -103,20 +103,18 @@ class ObjectiveFromUser(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
         else:
@@ -137,34 +135,35 @@ class ObjectiveFromUser(_Objective):
             if data_index[p][key]["dim"] == 0:
                 dummy_data[key] = jnp.array(0.0)
             else:
-                dummy_data[key] = jnp.empty((grid.num_nodes, data_index[p][key]["dim"]))
+                dummy_data[key] = jnp.empty(
+                    (grid.num_nodes, data_index[p][key]["dim"])
+                ).squeeze()
 
         self._fun_wrapped = lambda data: self._fun(grid, data)
         import jax
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
         profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
         transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
+            "quad_weights": 1.0,
         }
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute the quantity.
 
         Parameters
         ----------
-        args : ndarray
-            Parameters given by self.args.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -172,7 +171,6 @@ class ObjectiveFromUser(_Objective):
             Computed quantity.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -223,7 +221,7 @@ class GenericObjective(_Objective):
     def __init__(
         self,
         f,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
@@ -237,7 +235,7 @@ class GenericObjective(_Objective):
         self.f = f
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -257,20 +255,18 @@ class GenericObjective(_Objective):
             + ")"
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
         else:
@@ -283,11 +279,6 @@ class GenericObjective(_Objective):
             self._dim_f = grid.num_rho
         else:
             self._dim_f = grid.num_nodes * data_index[p][self.f]["dim"]
-        self._args = get_params(
-            self.f,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
         profiles = get_profiles(self.f, obj=eq, grid=grid)
         transforms = get_transforms(self.f, obj=eq, grid=grid)
         self._constants = {
@@ -295,15 +286,18 @@ class GenericObjective(_Objective):
             "profiles": profiles,
         }
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute the quantity.
 
         Parameters
         ----------
-        args : ndarray
-            Parameters given by self.args.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -311,7 +305,6 @@ class GenericObjective(_Objective):
             Computed quantity.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(

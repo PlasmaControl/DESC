@@ -1312,11 +1312,16 @@ class ChebyshevZernikeBasis(_Basis):
         ]
         pol = np.array(flatten_list(pol))
         num_pol = len(pol)
-
-        pol = np.tile(pol, (2 * N + 1, 1))
-
+        pol = np.tile(pol, (N + 1, 1)) #N+1 modes for chebyshev vs 2N+1 for fourier
         # TASK: Must change to Chebyshev
         # ChebyshevDoubleFourierBasis does l = np.arange(L + 1), so copy
+        
+        # From FourierZernikeBasis
+        # tor = np.atleast_2d(
+        #     np.tile(np.arange(-N, N + 1), (num_pol, 1)).flatten(order="f")
+        # ).T
+
+        #Chebyshev polynomials have N+1 modes
         tor = np.atleast_2d(
             np.tile(np.arange(N + 1), (num_pol, 1)).flatten(order="f")
         ).T
@@ -1386,7 +1391,8 @@ class ChebyshevZernikeBasis(_Basis):
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1]) 
         # Q: fourer? not zernike_angular?
-        axial = chebyshev(z[:, np.newaxis], n, dr=derivatives[2])
+        print("l", l, "m", m, "n", n)
+        axial = chebyshev_z(z[:, np.newaxis], n, dr=derivatives[2])
         #TASK: check toridal and input porpperly. might be dr
         #Question: is this different because we are dz instead of dr?
         #ISSUE?: analytic derivatives of chebyshev polynomials not implemented
@@ -1802,7 +1808,36 @@ def chebyshev(r, l, dr=0):
             "Analytic radial derivatives of Chebyshev polynomials "
             + "have not been implemented."
         )
+    
+@functools.partial(jit, static_argnums=2)
+def chebyshev_z(z, l, dr=0):
+    """Shifted Chebyshev polynomial.
 
+    Parameters
+    ----------
+    rho : ndarray, shape(N,)
+        radial coordinates to evaluate basis
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    dr : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        basis function(s) evaluated at specified points
+
+    """
+    z, l = map(jnp.asarray, (z, l))
+    z_shift = z*2 - 1
+    if dr == 0:
+        return jnp.cos(l * jnp.arccos(z_shift))
+    else:
+        # dy/dr = dy/dx * dx/dr = dy/dx * 2
+        raise NotImplementedError(
+            "Analytic radial derivatives of Chebyshev polynomials "
+            + "have not been implemented."
+        )
 
 @jit
 def fourier(theta, m, NFP=1, dt=0):

@@ -130,8 +130,9 @@ def _compute(
                 )
         # now compute the quantity
         data = data_index[parameterization][name]["fun"](
-            params, transforms, profiles, data, **kwargs
+            params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
+
     return data
 
 

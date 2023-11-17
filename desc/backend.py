@@ -59,40 +59,6 @@ else:
             )
         )
 
-    from functools import partial
-
-    import jax
-    import jax.numpy as jnp
-    import jaxlib
-    from jax.config import config as jax_config
-
-    _eigvals_cpu = jax.jit(jnp.linalg.eigvals, device=jax.devices("cpu")[0])
-
-    @jax.custom_jvp
-    def eigvals(A):
-        """
-        Eigenvalue solver.
-
-        Returns the eigenvalues of the square matrix A.
-        """
-        u = jax.pure_callback(
-            _eigvals_cpu, jnp.zeros_like(A[..., -1]) + 1j, A, vectorized=True
-        )
-        return u
-
-    @eigvals.defjvp
-    def _eigvals_jvp(primals, tangents):
-
-        u = eigvals(primals)
-
-        @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
-        def jvpfun(primals, tangents):
-            u, du = jax.jvp(_eigvals_cpu, (primals,), (tangents,))
-            return du.squeeze()
-
-        du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
-        return u, du
-
 
 print(
     "Using device: {}, with {:.2f} GB available memory".format(
@@ -109,7 +75,13 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     while_loop = jax.lax.while_loop
     vmap = jax.vmap
     bincount = jnp.bincount
+    from functools import partial
+
+    import jax
+    import jax.numpy as jnp
+    import jaxlib
     from jax import custom_jvp
+    from jax.config import config as jax_config
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln, logsumexp
@@ -184,11 +156,39 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         leaves, treedef = jtu.tree_flatten(tree)
         return [treedef.unflatten(leaf) for leaf in zip(*leaves)]
 
+    _eigvals_cpu = jax.jit(jnp.linalg.eigvals, device=jax.devices("cpu")[0])
+
+    @jax.custom_jvp
+    def eigvals(A):
+        """
+        Eigenvalue solver.
+
+        Returns the eigenvalues of the square matrix A.
+        """
+        u = jax.pure_callback(
+            _eigvals_cpu, jnp.zeros_like(A[..., -1]) + 1j, A, vectorized=True
+        )
+        return u
+
+    @eigvals.defjvp
+    def _eigvals_jvp(primals, tangents):
+
+        u = eigvals(primals)
+
+        @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
+        def jvpfun(primals, tangents):
+            u, du = jax.jvp(_eigvals_cpu, (primals,), (tangents,))
+            return du.squeeze()
+
+        du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
+        return u, du
+
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
+    import numpy as np
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
         block_diag,
@@ -391,3 +391,39 @@ else:  # pragma: no cover
         fun.defjvp = lambda *args, **kwargs: None
         fun.defjvps = lambda *args, **kwargs: None
         return fun
+
+    _eigvals_cpu = jax.jit(jnp.linalg.eigvals, device=jax.devices("cpu")[0])
+
+    @jax.custom_jvp
+    def eigvals(A):
+        """
+        Eigenvalue solver.
+
+        Returns the eigenvalues of the square matrix A.
+        """
+        u = jax.pure_callback(
+            _eigvals_cpu, jnp.zeros_like(A[..., -1]) + 1j, A, vectorized=True
+        )
+        return u
+
+    @eigvals.defjvp
+    def _eigvals_jvp(primals, tangents):
+
+        u = eigvals(primals)
+
+        @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
+        def jvpfun(primals, tangents):
+            u, du = jax.jvp(_eigvals_cpu, (primals,), (tangents,))
+            return du.squeeze()
+
+        du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
+        return u, du
+
+    def eigvals(A):
+        """
+        Eigenvalue solver.
+
+        Returns the eigenvalues of the square matrix A.
+        """
+        u = np.linalg.eigvals(A)
+        return u

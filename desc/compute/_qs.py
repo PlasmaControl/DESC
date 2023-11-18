@@ -178,13 +178,13 @@ def _nu(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=[
         "nu",
-        "jac_Boozer_DESC",
+        "sqrt(g)_Boozer_DESC",
         "Boozer transform matrix",
     ],
 )
 def _nu_mn(params, transforms, profiles, data, **kwargs):
     norm = data["Boozer transform matrix"]
-    data["nu_mn"] = (norm @ (data["jac_Boozer_DESC"] * data["nu"])) / transforms[
+    data["nu_mn"] = (norm @ (data["sqrt(g)_Boozer_DESC"] * data["nu"])) / transforms[
         "B"
     ].grid.num_nodes
     return data
@@ -265,11 +265,12 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="jac_Boozer_DESC",
+    name="sqrt(g)_Boozer_DESC",
     label="\\frac{\\partial(\\theta_B,\\zeta_B)}{\\theta_{DESC},\\zeta_{DESC}}",
     units="~",
     units_long="None",
-    description="Jacobian determinant from Boozer coordinates to DESC coordinates.",
+    description="Jacobian determinant from Boozer coordinates (rho, theta_B, zeta_B)"
+    " to DESC coordinates (rho,theta,zeta).",
     dim=1,
     params=[],
     transforms={},
@@ -277,8 +278,8 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["lambda_t", "lambda_z", "nu_t", "nu_z", "iota"],
 )
-def _jac_Boozer_DESC(params, transforms, profiles, data, **kwargs):
-    data["jac_Boozer_DESC"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
+def _sqrt_g__Boozer_DESC(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_Boozer_DESC"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
         data["iota"] - data["lambda_z"]
     ) * data["nu_t"]
     return data
@@ -296,10 +297,10 @@ def _jac_Boozer_DESC(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["jac_Boozer_DESC", "sqrt(g)"],
+    data=["sqrt(g)_Boozer_DESC", "sqrt(g)"],
 )
 def _sqrtg_B(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_B"] = data["sqrt(g)"] / data["jac_Boozer_DESC"]
+    data["sqrt(g)_B"] = data["sqrt(g)"] / data["sqrt(g)_Boozer_DESC"]
     return data
 
 
@@ -317,20 +318,20 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=[
         "sqrt(g)_B",
-        "jac_Boozer_DESC",
+        "sqrt(g)_Boozer_DESC",
         "Boozer transform matrix",
     ],
 )
 def _sqrtg_B_mn(params, transforms, profiles, data, **kwargs):
     norm = data["Boozer transform matrix"]
     data["sqrt(g)_B_mn"] = (
-        norm @ (data["jac_Boozer_DESC"] * data["sqrt(g)_B"])
+        norm @ (data["sqrt(g)_Boozer_DESC"] * data["sqrt(g)_B"])
     ) / transforms["B"].grid.num_nodes
     return data
 
 
 @register_compute_fun(
-    name="|B|_mn",
+    name="|B|_mn_B",
     label="B_{mn}^{\\mathrm{Boozer}}",
     units="T",
     units_long="Tesla",
@@ -341,21 +342,21 @@ def _sqrtg_B_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "jac_Boozer_DESC",
+        "sqrt(g)_Boozer_DESC",
         "|B|",
         "Boozer transform matrix",
     ],
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
     norm = data["Boozer transform matrix"]
-    data["|B|_mn"] = (norm @ (data["jac_Boozer_DESC"] * data["|B|"])) / transforms[
-        "B"
-    ].grid.num_nodes
+    data["|B|_mn_B"] = (
+        norm @ (data["sqrt(g)_Boozer_DESC"] * data["|B|"])
+    ) / transforms["B"].grid.num_nodes
     return data
 
 
 @register_compute_fun(
-    name="R_mn",
+    name="R_mn_B",
     label="R_{mn}^{\\mathrm{Boozer}}",
     units="m",
     units_long="meters",
@@ -366,21 +367,21 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "jac_Boozer_DESC",
+        "sqrt(g)_Boozer_DESC",
         "R",
         "Boozer transform matrix",
     ],
 )
 def _R_mn(params, transforms, profiles, data, **kwargs):
     norm = data["Boozer transform matrix"]
-    data["R_mn"] = (norm @ (data["jac_Boozer_DESC"] * data["R"])) / transforms[
+    data["R_mn_B"] = (norm @ (data["sqrt(g)_Boozer_DESC"] * data["R"])) / transforms[
         "B"
     ].grid.num_nodes
     return data
 
 
 @register_compute_fun(
-    name="Z_mn",
+    name="Z_mn_B",
     label="Z_{mn}^{\\mathrm{Boozer}}",
     units="m",
     units_long="meters",
@@ -391,14 +392,14 @@ def _R_mn(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[
-        "jac_Boozer_DESC",
+        "sqrt(g)_Boozer_DESC",
         "Z",
         "Boozer transform matrix",
     ],
 )
 def _Z_mn(params, transforms, profiles, data, **kwargs):
     norm = data["Boozer transform matrix"]
-    data["Z_mn"] = (norm @ (data["jac_Boozer_DESC"] * data["Z"])) / transforms[
+    data["Z_mn_B"] = (norm @ (data["sqrt(g)_Boozer_DESC"] * data["Z"])) / transforms[
         "B"
     ].grid.num_nodes
     return data

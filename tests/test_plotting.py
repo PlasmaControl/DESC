@@ -776,7 +776,7 @@ def test_plot_boozer_modes():
         eq, M_booz=eq.M, N_booz=eq.N, num_modes=7, return_data=True, norm=True
     )
     ax.set_ylim([1e-6, 5e0])
-    for string in ["|B|_mn", "B modes", "rho"]:
+    for string in ["|B|_mn_B", "B modes", "rho"]:
         assert string in data.keys()
     return fig
 

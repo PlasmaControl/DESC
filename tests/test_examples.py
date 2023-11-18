@@ -695,9 +695,9 @@ def test_NAE_QIC_solve():
 
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(1e-6))
     # Evaluate B modes near the axis
-    data_nae = eq.compute(["|B|_mn", "B modes"], grid=grid)
+    data_nae = eq.compute(["|B|_mn_B", "B modes"], grid=grid)
     modes = data_nae["B modes"]
-    B_mn_nae = data_nae["|B|_mn"]
+    B_mn_nae = data_nae["|B|_mn_B"]
     # Evaluate B on an angular grid
     theta = np.linspace(0, 2 * np.pi, 150)
     phi = np.linspace(0, 2 * np.pi, qic.nphi)

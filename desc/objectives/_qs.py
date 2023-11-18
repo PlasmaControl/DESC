@@ -108,7 +108,7 @@ class QuasisymmetryBoozer(_Objective):
         else:
             grid = self._grid
 
-        self._data_keys = ["|B|_mn"]
+        self._data_keys = ["|B|_mn_B"]
 
         assert grid.sym is False
         assert grid.num_rho == 1
@@ -177,7 +177,7 @@ class QuasisymmetryBoozer(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        B_mn = constants["matrix"] @ data["|B|_mn"]
+        B_mn = constants["matrix"] @ data["|B|_mn_B"]
         return B_mn[constants["idx"]]
 
     @property

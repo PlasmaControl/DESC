@@ -317,7 +317,7 @@ def fourier_to_zernike(m, n, x_mn, basis):
     return x_lmn
 
 
-def zernike_to_fourier(x_lmn, basis, rho, return_full=True):
+def zernike_to_fourier(x_lmn, basis, rho, sym=False):
     """Convert from a Fourier-Zernike basis to a double Fourier series.
 
     Parameters
@@ -328,8 +328,8 @@ def zernike_to_fourier(x_lmn, basis, rho, return_full=True):
         Basis set for x_lmn.
     rho : ndarray
         Radial coordinates of flux surfaces, rho = sqrt(psi).
-    return_full : bool
-        whether or not to return the full doubler Fourier basis, if False
+    sym : bool
+        whether or not to return the full double Fourier basis, if False
         will instead only return the Fourier basis corresponding to the
         input FourierZernike basis (with the same symmetry)
         defaults to True.
@@ -349,7 +349,7 @@ def zernike_to_fourier(x_lmn, basis, rho, return_full=True):
     # FIXME: this always returns the full double Fourier basis regardless of symmetry
     M = basis.M
     N = basis.N
-    if not return_full:
+    if sym:
         fourier_basis = DoubleFourierSeries(M=M, N=N, sym=basis.sym, NFP=basis.NFP)
         mn = fourier_basis.modes[:, 1:]
     else:
@@ -547,7 +547,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=1.0, sym=False)
 
     transforms = get_transforms(
-        "|B|_mn",
+        "|B|_mn_B",
         obj=eq,
         grid=grid,
         M_booz=M_booz - 1,
@@ -563,7 +563,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
 
     if eq.sym:  # need a separate sin basis for Z and nu
         transforms_sin = get_transforms(
-            "|B|_mn",
+            "|B|_mn_B",
             obj=eq,
             grid=grid,
             M_booz=M_booz - 1,
@@ -635,9 +635,9 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     B_transform = transforms["B"]
     w_transform = transforms["w"]
 
-    data_keys = ["|B|_mn", "R_mn", "sqrt(g)_B_mn", "psi_r"]
-    data_keys = data_keys + ["Z_mn", "nu_mn"] if not eq.sym else data_keys
-    data_keys_sin = ["Z_mn", "nu_mn"]
+    data_keys = ["|B|_mn_B", "R_mn_B", "sqrt(g)_B_mn", "psi_r"]
+    data_keys = data_keys + ["Z_mn_B", "nu_mn"] if not eq.sym else data_keys
+    data_keys_sin = ["Z_mn_B", "nu_mn"]
 
     @jit
     def compute_data(grid, data):
@@ -736,13 +736,13 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         else:
             data_sin = data
         b_mn = np.where(
-            transforms["B"].basis.modes[:, 1] < 0, -data["|B|_mn"], data["|B|_mn"]
+            transforms["B"].basis.modes[:, 1] < 0, -data["|B|_mn_B"], data["|B|_mn_B"]
         )
         b_mn = np.atleast_2d(matrix @ b_mn)
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
 
         r_mn = np.where(
-            transforms["B"].basis.modes[:, 1] < 0, -data["R_mn"], data["R_mn"]
+            transforms["B"].basis.modes[:, 1] < 0, -data["R_mn_B"], data["R_mn_B"]
         )
         r_mn = np.atleast_2d(matrix @ r_mn)
         R_mn = np.vstack((R_mn, r_mn)) if R_mn.size else r_mn
@@ -763,8 +763,8 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
 
         z_mn = np.where(
             transforms_sin["B"].basis.modes[:, 1] < 0,
-            -data_sin["Z_mn"],
-            data_sin["Z_mn"],
+            -data_sin["Z_mn_B"],
+            data_sin["Z_mn_B"],
         )
 
         z_mn = np.atleast_2d(matrix_sin @ z_mn)

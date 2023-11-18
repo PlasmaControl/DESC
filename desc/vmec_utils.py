@@ -626,10 +626,10 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     B_theta_lmn = transform.fit(data_vol["B_theta"])
     # compute the fourier coeffs of the B_zeta and B_theta at each rho
     _, _, B_zeta_mn = zernike_to_fourier(
-        B_zeta_lmn, transform.basis, rho=r_half, return_full=False
+        B_zeta_lmn, transform.basis, rho=r_half, sym=False
     )
     _, _, B_theta_mn = zernike_to_fourier(
-        B_theta_lmn, transform.basis, rho=r_half, return_full=False
+        B_theta_lmn, transform.basis, rho=r_half, sym=False
     )
 
     B_transform = transforms["B"]

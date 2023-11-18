@@ -3777,7 +3777,9 @@ def plot_omnigenous_field(
         if True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
+
             plot_X(figsize=(4,6),cmap="plasma")
+
         Valid keyword arguments are:
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
@@ -3800,7 +3802,9 @@ def plot_omnigenous_field(
     Examples
     --------
     .. image:: ../../_static/images/plotting/plot_omnigenous_field.png
+
     .. code-block:: python
+
         from desc.plotting import plot_omnigenous_field
         fig, ax = plot_omnigenous_field(field)
 

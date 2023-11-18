@@ -1052,7 +1052,7 @@ class OmnigenousField(Optimizable, IOAble):
 
     Notes
     -----
-    Doesn't conform to MagneticField API, as it only knows about |B| in flux
+    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in flux
     coordinates, not vector B in lab coordinates.
 
     """

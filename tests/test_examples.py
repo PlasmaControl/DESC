@@ -1235,6 +1235,83 @@ def test_regcoil_ellipse_helical_coils():
         step=6,
         save_figs=False,
     )
+    coilset2 = coilset2.to_FourierXYZ(N=150)
+    B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
+    np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
+
+    fieldR, fieldZ = field_trace_from_coilset(
+        coilset2, eq, 15, only_return_data=True, Rs=np.linspace(0.685, 0.715, 10)
+    )
+
+    assert np.max(fieldR) < 0.73
+    assert np.min(fieldR) > 0.67
+
+    assert np.max(fieldZ) < 0.02
+    assert np.min(fieldZ) > -0.02
+
+    B_ratio = calc_BNORM_from_coilset(coilset2, eqname, 0, 1, B0=None, save=False)
+    np.testing.assert_allclose(B_ratio, 1.0, atol=1e-3)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_ellipse_helical_coils_pos_helicity():
+    """Test elliptical eq and circular winding surf helical coil regcoil solution."""
+    # with positive helicity for the surface current
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+
+    (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
+        basis_M=8,
+        basis_N=8,
+        eqname=eq,
+        eval_grid_M=20,
+        eval_grid_N=20,
+        source_grid_M=40,
+        source_grid_N=80,
+        alpha=1e-18,
+        helicity_ratio=2,
+    )
+    assert np.all(chi_B < 1e-5)
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_surf = surface_current_field.compute_magnetic_field(
+        coords, grid=LinearGrid(M=200, N=200), basis="rpz"
+    )
+    np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
+
+    fieldR, fieldZ = trace_from_curr_pot(
+        surface_current_field,
+        eq,
+        alpha=1e-15,
+        M=50,
+        N=160,
+        ntransit=20,
+        Rs=np.linspace(0.68, 0.72, 10),
+    )
+
+    assert np.max(fieldR) < 0.73
+    assert np.min(fieldR) > 0.67
+
+    assert np.max(fieldZ) < 0.02
+    assert np.min(fieldZ) > -0.02
+
+    # test finding coils
+
+    numCoils = 15
+    coilsFilename = "./coilsfile_15.txt"
+    eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
+
+    coilset2 = find_helical_coils(
+        surface_current_field,
+        eqname,
+        desirednumcoils=numCoils,
+        coilsFilename=coilsFilename,
+        step=6,
+        save_figs=False,
+    )
+    coilset2 = coilset2.to_FourierXYZ(N=150)
     B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
 

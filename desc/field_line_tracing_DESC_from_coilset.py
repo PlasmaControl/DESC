@@ -113,13 +113,13 @@ def field_trace_from_coilset(
     field_R_full = field_R.copy()
     field_Z_full = field_Z.copy()
 
-    if only_return_data:
-        return field_R, field_Z
-
     print(
-        f"{dirname} field line tracing done, took {t_elapse}"
+        f"Field line tracing done, took {t_elapse}"
         f" seconds which is {t_elapse/60} mins or  {t_elapse/3600} hours"
     )
+
+    if only_return_data:
+        return field_R, field_Z
 
     R_list = []
     # save data

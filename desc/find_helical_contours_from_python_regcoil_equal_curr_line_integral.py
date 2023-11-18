@@ -116,7 +116,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
     theta_coil = jnp.linspace(0, 2 * jnp.pi, 128)
     zeta_coil = jnp.linspace(0, 2 * jnp.pi / nfp, round(128 * jnp.abs(helicity)))
-    dz = zeta_coil[1] - zeta_coil[0]
     zetal_coil = zeta_coil
 
     theta_coil = theta_coil  # * phi_slope
@@ -126,16 +125,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     # find contours of constant phi
     ################################################################
 
-    # TODO: don't need this for the whole zeta/theta domain,
-    #  should be able to only use like 2 or 3 repetitions
-    # to find the contour then repeat given the discrete
-    #  periodicity in zeta, by just rotating it by
-    # an angle phi/NFP, just need
-    # wide enough in zeta and tall enough inzeta
-    # to capture the contour entering at zeta=0
-    # and exiting at zeta = XX
-    # then rotate it by repeating it 2pi/(2pi-XX)
-    # times over the angle 2pi-XX/something
     # TODO: change this so that  this fxn only accepts Ncoils length array
     def find_full_coil_contours(contours, show_plots=True, ax=None, label=None, ls="-"):
         """Accepts a list of current potential contour values of length Ncoils+1.
@@ -162,7 +151,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         my_tot_full = phi_tot_fun_vec(theta_full_2D, zeta_full_2D).reshape(
             theta_full.size, zeta_full.size, order="F"
         )
-        # print(notavar)
 
         N_trial_contours = len(contours) - 1
         contour_zeta = []
@@ -202,11 +190,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
         # before returning, right now these are only over 1 FP
         # should tile them s.t. they are full coils, by repeating them
-        #  with a pi/NFP shift in zeta, I think
-        print("first 10 theta", contour_theta[0][0:10])
-        print("first 10 zeta", contour_zeta[0][0:10])
-        print("last 10 theta", contour_theta[0][-10:])
-        print("last 10 zeta", contour_zeta[0][-10:])
+        #  with a pi/NFP shift in zeta
+
         for i_contour in range(len(contour_theta)):
             inds = jnp.argsort(contour_zeta[i_contour])
             orig_theta = contour_theta[i_contour][inds]
@@ -239,28 +224,8 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             )
             contour_zeta[i_contour] = jnp.append(contour_zeta[i_contour], 2 * jnp.pi)
 
-        for j in range(N_trial_contours):
-            # plt.plot(contour_zeta[j], contour_theta[j], "--b", linewidth=1)
-            print("#" * 10 + f" {j} " + "#" * 10)
-            print("first 10 theta", contour_theta[j][0:10])
-            print("first 10 zeta", contour_zeta[j][0:10])
-            print("last 10 theta", contour_theta[j][-10:])
-            print("last 10 zeta", contour_zeta[j][-10:])
-            print(
-                "residual", (contour_theta[j][-1] - contour_theta[j][0]) % (2 * jnp.pi)
-            )
         plt.xlim([0, 3 * jnp.pi / nfp])
-        # plt.xlim([1.5, 1.7])
         plt.ylim([0, 10])
-        # plt.ylim(
-        #     [
-        #         0,
-        #         jnp.sign(phi_slope)*
-        #         # * (2 + jnp.abs(helicity))
-        #         * (2 * jnp.pi + 2 * jnp.pi / nfp / 4),
-        #     ]
-        # )
-        # plt.ylim([-5, -7])
         return contour_theta, contour_zeta
 
     # make linspace contour
@@ -327,13 +292,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     )
     ################
 
-    print("first 10 X", contour_X[0][0:10])
-    print("first 10 Y", contour_Z[0][0:10])
-    print("first 10 Z", contour_Y[0][0:10])
-    print("last 10 X", contour_X[0][-10:])
-    print("last 10 Y", contour_Z[0][-10:])
-    print("last 10 Z", contour_Y[0][-10:])
-
     # Write coils file
     write_coil = True
     if write_coil:
@@ -360,7 +318,9 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
                     basis="xyz",
                 )["K"]
                 current_sign = jnp.sign(jnp.dot(contour_vector, K[0, :]))
-                thisCurrent = current_sign * net_toroidal_current / desirednumcoils
+                thisCurrent = (
+                    current_sign * jnp.abs(net_toroidal_current) / desirednumcoils
+                )
                 for k in range(0, N, step):
                     f.write(
                         "{:14.22e} {:14.22e} {:14.22e} {:14.22e}\n".format(

@@ -21,3 +21,4 @@ tests/benchmarks/.benchmarks/
 *.pdf
 *.pyc
 .pymon
+.vscode/

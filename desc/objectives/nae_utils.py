@@ -9,7 +9,7 @@ from desc.transform import Transform
 from .linear_objectives import FixSumModesLambda, FixSumModesR, FixSumModesZ
 
 
-def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
+def calc_zeroth_order_lambda(qsc, desc_eq, N=None, bounds=False):
     """Calculate 0th order NAE lambda constraint.
 
     Uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
@@ -23,6 +23,10 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
     N : int,
         max toroidal resolution to constrain.
         If None, defaults to equilibrium's toroidal resolution
+    bounds : float or False
+        If not False, uses bounds on the NAE constraints instead
+        of exact targets. The float is the ratio of the coefficient
+        magnitude to use for the bounds, e.g. (coeff*(1-ratio),coeff*(1+ratio)
 
     Returns
     -------
@@ -80,9 +84,18 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
                 sum_weights.append(-1)
 
         modes = np.atleast_2d(modes)
-        Lcon = FixSumModesLambda(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-        )
+        if not bounds:
+            Lcon = FixSumModesLambda(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Lcon = FixSumModesLambda(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
         Lconstraints += (Lcon,)
 
     return Lconstraints, L_0_n, Lbasis_sin
@@ -215,7 +228,9 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
     return coeffs, bases
 
 
-def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
+def _make_RZ_cons_order_rho(  # noqa: C901 - FIXME - simplify
+    qsc, desc_eq, coeffs, bases, fix_lambda=False, bounds=False
+):
     """Create the linear constraints for constraining an eq with O(rho) NAE behavior.
 
     Parameters
@@ -241,6 +256,10 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
     fix_lambda : bool, default False
         whether to include first order constraints to fix the O(rho) behavior
         of lambda. Defaults to False.
+    bounds : float or False
+        If not False, uses bounds on the NAE constraints instead
+        of exact targets. The float is the ratio of the coefficient
+        magnitude to use for the bounds, e.g. (coeff*(1-ratio),coeff*(1+ratio)
 
     Returns
     -------
@@ -281,9 +300,18 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-        )
+        if not bounds:
+            Rcon = FixSumModesR(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Rcon = FixSumModesR(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
         Rconstraints += (Rcon,)
     # Z_1_neg1_n
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_1_neg1_n"]):
@@ -295,9 +323,18 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-        )
+        if not bounds:
+            Zcon = FixSumModesZ(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Zcon = FixSumModesZ(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
         Zconstraints += (Zcon,)
     if fix_lambda:
         # L_1_neg1_n
@@ -310,9 +347,18 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
                 sum_weights.append([(-1) ** k * k])
             modes = np.atleast_2d(modes)
             sum_weights = -np.atleast_1d(sum_weights)
-            Lcon = FixSumModesLambda(
-                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-            )
+            if not bounds:
+                Lcon = FixSumModesLambda(
+                    eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+                )
+            else:
+                bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+                Lcon = FixSumModesLambda(
+                    eq=desc_eq,
+                    sum_weights=sum_weights,
+                    modes=modes,
+                    bounds=(bounds_array[0], bounds_array[1]),
+                )
             Lconstraints += (Lcon,)
     # R_1_neg1_n
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_1_neg1_n"]):
@@ -324,9 +370,18 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-        )
+        if not bounds:
+            Rcon = FixSumModesR(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Rcon = FixSumModesR(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
         Rconstraints += (Rcon,)
     # Z_1_1_n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_1_1_n"]):
@@ -338,9 +393,18 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-        )
+        if not bounds:
+            Zcon = FixSumModesZ(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Zcon = FixSumModesZ(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
         Zconstraints += (Zcon,)
     if fix_lambda:
         # L_1_1_n
@@ -353,14 +417,23 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
                 sum_weights.append([(-1) ** k * k])
             modes = np.atleast_2d(modes)
             sum_weights = -np.atleast_1d(sum_weights)
-            Lcon = FixSumModesLambda(
-                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-            )
+            if not bounds:
+                Lcon = FixSumModesLambda(
+                    eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+                )
+            else:
+                bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+                Lcon = FixSumModesLambda(
+                    eq=desc_eq,
+                    sum_weights=sum_weights,
+                    modes=modes,
+                    bounds=(bounds_array[0], bounds_array[1]),
+                )
             Lconstraints += (Lcon,)
     return Rconstraints, Zconstraints, Lconstraints
 
 
-def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None):
+def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None, bounds=False):
     """Make the first order NAE constraints for a DESC equilibrium.
 
     Parameters
@@ -375,6 +448,10 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None):
     N : int,
         max toroidal resolution to constrain.
         If None, defaults to equilibrium's toroidal resolution
+    bounds : float or False
+        If not False, uses bounds on the NAE constraints instead
+        of exact targets. The float is the ratio of the coefficient
+        magnitude to use for the bounds, e.g. (coeff*(1-ratio),coeff*(1+ratio)
 
     Returns
     -------
@@ -391,7 +468,7 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None):
 
     coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=N)
     Rconstraints, Zconstraints, Lconstraints = _make_RZ_cons_order_rho(
-        qsc, desc_eq, coeffs, bases, fix_lambda
+        qsc, desc_eq, coeffs, bases, fix_lambda, bounds=bounds
     )
 
     return Rconstraints + Zconstraints + Lconstraints
@@ -964,7 +1041,9 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
     return coeffs, bases
 
 
-def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
+def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
+    qsc, desc_eq, coeffs, bases, bounds=False
+):
     """Creates 2nd order NAE constraints for a DESC eq based off given qsc eq.
 
     Parameters
@@ -982,6 +1061,11 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
              stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
             and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
             since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
+        bounds : float or False
+            If not False, uses bounds on the NAE constraints instead
+            of exact targets. The float is the ratio of the coefficient
+            magnitude to use for the bounds, e.g. (coeff*(1-ratio),coeff*(1+ratio)
+
     Returns
     -------
         Rconstraints (tuple): tuple of FixSumModesR constraints corresponding
@@ -1014,10 +1098,18 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-        )
-        desc_eq.R_lmn
+        if not bounds:
+            Rcon = FixSumModesR(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Rcon = FixSumModesR(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
         Rconstraints += (Rcon,)
     # R_2_2n
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_2_2_n"]):
@@ -1029,9 +1121,18 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
-        Rcon = FixSumModesR(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-        )
+        if not bounds:
+            Rcon = FixSumModesR(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Rcon = FixSumModesR(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
         Rconstraints += (Rcon,)
     # R_2_neg2n
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_2_neg2_n"]):
@@ -1043,9 +1144,18 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
-        Rcon = FixSumModesR(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-        )
+        if not bounds:
+            Rcon = FixSumModesR(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Rcon = FixSumModesR(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
         Rconstraints += (Rcon,)
     # Z_2_0n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_0_n"]):
@@ -1057,9 +1167,18 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-        )
+        if not bounds:
+            Zcon = FixSumModesZ(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Zcon = FixSumModesZ(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
         Zconstraints += (Zcon,)
     # Z_2_neg2n
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_2_neg2_n"]):
@@ -1071,9 +1190,18 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
-        Zcon = FixSumModesZ(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-        )
+        if not bounds:
+            Zcon = FixSumModesZ(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Zcon = FixSumModesZ(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
         Zconstraints += (Zcon,)
     # Z_2_2n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_2_n"]):
@@ -1085,21 +1213,34 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k * (k + 1)])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
-        Zcon = FixSumModesZ(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
-        )
+        if not bounds:
+            Zcon = FixSumModesZ(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Zcon = FixSumModesZ(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
         Zconstraints += (Zcon,)
 
     return Rconstraints, Zconstraints
 
 
-def make_RZ_cons_2nd_order(qsc, desc_eq, N=None):
+def make_RZ_cons_2nd_order(qsc, desc_eq, N=None, bounds=False):
     """Make the second order NAE constraints for a DESC equilibrium.
 
     Parameters
     ----------
         qsc (Qsc): pyQsc Qsc object to use as the NAE constraints on the DESC eq
         desc_eq (Equilibrium): desc equilibrium to constrain
+        bounds : float or False
+        If not False, uses bounds on the NAE constraints instead
+        of exact targets. The float is the ratio of the coefficient
+        magnitude to use for the bounds, e.g. (coeff*(1-ratio),coeff*(1+ratio)
 
     Returns
     -------
@@ -1115,7 +1256,7 @@ def make_RZ_cons_2nd_order(qsc, desc_eq, N=None):
 
     coeffs, bases = _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=N)
     Rconstraints, Zconstraints = _calc_2nd_order_constraints(
-        qsc, desc_eq, coeffs, bases
+        qsc, desc_eq, coeffs, bases, bounds=bounds
     )
 
     return Rconstraints + Zconstraints

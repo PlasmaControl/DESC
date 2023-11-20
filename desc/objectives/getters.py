@@ -218,6 +218,9 @@ def get_NAE_constraints(
     normalize=True,
     N=None,
     fix_lambda=False,
+    bounds_zeroth_order=False,
+    bounds_first_order=False,
+    bounds_second_order=False,
 ):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem.
 
@@ -247,6 +250,18 @@ def get_NAE_constraints(
         Whether to constrain lambda to match that of the NAE near-axis
         if an `int`, fixes lambda up to that order in rho {0,1}
         if `True`, fixes lambda up to the specified order given by `order`
+    bounds_zeroth_order : float or False
+        If not False, uses bounds on the 0th order NAE constraints instead
+        of exact targets. The float is the ratio of the coefficient
+        magnitude to use for the bounds, e.g. (coeff*(1-ratio),coeff*(1+ratio)
+    bounds_first_order : float or False
+        If not False, uses bounds on the 1st order NAE constraints instead
+        of exact targets. The float is the ratio of the coefficient
+        magnitude to use for the bounds, e.g. (coeff*(1-ratio),coeff*(1+ratio)
+    bounds_second_order : float or False
+        If not False, uses bounds on the 2nd order NAE constraints instead
+        of exact targets. The float is the ratio of the coefficient
+        magnitude to use for the bounds, e.g. (coeff*(1-ratio),coeff*(1+ratio)
 
     Returns
     -------
@@ -299,15 +314,21 @@ def get_NAE_constraints(
             )
     if fix_lambda or (fix_lambda >= 0 and type(fix_lambda) is int):
         L_axis_constraints, _, _ = calc_zeroth_order_lambda(
-            qsc=qsc_eq, desc_eq=desc_eq, N=N
+            qsc=qsc_eq, desc_eq=desc_eq, N=N, bounds=bounds_zeroth_order
         )
         constraints += L_axis_constraints
     if order >= 1:  # first order constraints
         constraints += make_RZ_cons_1st_order(
-            qsc=qsc_eq, desc_eq=desc_eq, N=N, fix_lambda=fix_lambda and fix_lambda > 0
+            qsc=qsc_eq,
+            desc_eq=desc_eq,
+            N=N,
+            fix_lambda=fix_lambda and fix_lambda > 0,
+            bounds=bounds_first_order,
         )
     if order == 2:  # 2nd order constraints
-        constraints += make_RZ_cons_2nd_order(qsc=qsc_eq, desc_eq=desc_eq, N=N)
+        constraints += make_RZ_cons_2nd_order(
+            qsc=qsc_eq, desc_eq=desc_eq, N=N, bounds=bounds_second_order
+        )
     if order > 2:
         raise NotImplementedError("NAE constraints only implemented up to O(rho^2) ")
 

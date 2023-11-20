@@ -16,7 +16,6 @@ from desc.geometry import (
 )
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
-from desc.optimizable import Optimizable, optimizable_parameter
 from desc.utils import equals, errorif, flatten_list
 
 
@@ -111,7 +110,7 @@ def biot_savart_quad(eval_pts, coil_pts, tangents, current):
     return B
 
 
-class _Coil(_MagneticField, Optimizable, ABC):
+class _Coil(_MagneticField, ABC):
     """Base class representing a magnetic field coil.
 
     Represents coils as a combination of a Curve and current
@@ -135,7 +134,6 @@ class _Coil(_MagneticField, Optimizable, ABC):
         self._current = float(current)
         super().__init__(*args, **kwargs)
 
-    @optimizable_parameter
     @property
     def current(self):
         """float: Current passing through the coil, in Amperes."""
@@ -215,11 +213,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYZCoil.
             If an integer, uses that many equally spaced points.
-        s : ndarray or "arclength"
-            arbitrary curve parameter to use for the fitting.
-            Should be monotonic, 1D array of same length as
-            coords. if None, defaults linearly spaced in [0,2pi)
-            Alternative, can pass "arclength" to use normalized distance between points.
+        s : ndarray
+            arbitrary curve parameter to use for the fitting. if None, defaults to
+            normalized arclength
         name : str
             name for this coil
 
@@ -229,7 +225,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             New representation of the coil parameterized by Fourier series for X,Y,Z.
 
         """
-        if (grid is None) and (s is not None) and (not isinstance(s, str)):
+        if grid is None and s is not None:
             grid = LinearGrid(zeta=s)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCoil.from_values(
@@ -241,15 +237,14 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         Parameters
         ----------
-        knots : ndarray or "arclength"
+        knots : ndarray
             arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.
             (input length in this case is determined by grid argument, since
-            the input coordinates come from Curve.compute("x",grid=grid))
-            If None, defaults to using an linearly spaced points in [0, 2pi) as the
-            knots. If supplied, should lie in [0,2pi].
-            Alternatively, the string "arclength" can be supplied to use the normalized
-            distance between points.
+            the input coordinates come from
+            Coil.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with SplineXYZCoil.
             If an integer, uses that many equally spaced points.
@@ -269,7 +264,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             New representation of the coil parameterized by a spline for X,Y,Z.
 
         """
-        if (grid is None) and (knots is not None) and (not isinstance(knots, str)):
+        if grid is None and knots is not None:
             grid = LinearGrid(zeta=knots)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCoil.from_values(

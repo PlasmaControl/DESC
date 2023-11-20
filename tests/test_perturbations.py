@@ -75,7 +75,7 @@ def test_perturbation_orders(SOLOVEV):
 
     # solve for "true" high-beta solution
     eqS = eq3.copy()
-    eqS.solve(ftol=1e-2, verbose=3)
+    eqS.solve(objective=objective, ftol=1e-2, verbose=3)
 
     # evaluate equilibrium force balance
     grid = ConcentricGrid(2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, node_pattern="jacobi")
@@ -106,7 +106,7 @@ def test_perturb_with_float_without_error():
     # np.concatenate cannot concatenate 0-D arrays. This test exercises the fix.
     eq = Equilibrium()
     objective = get_equilibrium_objective(eq=eq)
-    constraints = get_fixed_boundary_constraints(eq=eq)
+    constraints = get_fixed_boundary_constraints(eq=eq, iota=False)
 
     # perturb Psi with a float
     deltas = {"Psi": float(eq.Psi)}

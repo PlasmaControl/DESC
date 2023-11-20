@@ -24,7 +24,6 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
-    FixParameter,
     FixPressure,
     FixPsi,
     ForceBalance,
@@ -33,7 +32,6 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     Volume,
-    get_fixed_boundary_constraints,
 )
 from desc.objectives.objective_funs import _Objective
 from desc.optimize import (
@@ -327,27 +325,44 @@ def test_overstepping():
     """
 
     class DummyObjective(_Objective):
+
         name = "Dummy"
         _print_value_fmt = "Dummy: {:.3e}"
         _units = "(Foo)"
 
-        def build(self, *args, **kwargs):
-            eq = self.things[0]
-            # objective = just shift x by a lil bit
-            self._x0 = {key: val + 1e-6 for key, val in eq.params_dict.items()}
-            self._dim_f = sum(np.asarray(x).size for x in self._x0.values())
-            super().build()
+        def build(self, eq, *args, **kwargs):
 
-        def compute(self, params, constants=None):
-            x = jnp.concatenate(
-                [jnp.atleast_1d(params[arg] - self._x0[arg]) for arg in params]
+            # objective = just shift x by a lil bit
+            self._args = ["R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi"]
+            self._x0 = (
+                np.concatenate(
+                    [
+                        eq.R_lmn,
+                        eq.Z_lmn,
+                        eq.L_lmn,
+                        eq.p_l,
+                        eq.i_l,
+                        eq.c_l,
+                        np.atleast_1d(eq.Psi),
+                    ]
+                )
+                + 1e-6
             )
-            return x
+            self._dim_f = self._x0.size
+            self._check_dimensions()
+            self._set_dimensions(eq)
+            self._set_derivatives()
+            self._built = True
+
+        def compute(self, *args, **kwargs):
+            params, _ = self._parse_args(*args, **kwargs)
+            x = jnp.concatenate([jnp.atleast_1d(params[arg]) for arg in self.args])
+            return x - self._x0
 
     eq = desc.examples.get("DSHAPE")
 
     np.random.seed(0)
-    objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
+    objective = ObjectiveFunction(DummyObjective(eq=eq), use_jit=False)
     # make gradient super noisy so it stalls
     objective.jac_scaled = lambda x, *args: objective._jac_scaled(x) + 1e2 * (
         np.random.random((objective._dim_f, x.size)) - 0.5
@@ -495,7 +510,7 @@ def test_wrappers():
         _ = LinearConstraintProjection(obj, con)
     with pytest.raises(ValueError):
         _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
-    ob = LinearConstraintProjection(ObjectiveFunction(obj), con)
+    ob = LinearConstraintProjection(ObjectiveFunction(obj), con, eq=eq)
     ob.build()
     assert ob.built
 
@@ -559,28 +574,29 @@ def test_all_optimizers():
     eobj = ObjectiveFunction(Energy(eq=eqe))
     fobj.build()
     eobj.build()
-    econ = get_fixed_boundary_constraints(eq=eqe)
-    fcon = get_fixed_boundary_constraints(eq=eqf)
-    options = {"sgd": {"alpha": 1e-4}}
+    constraints = (
+        FixBoundaryR(eq=eqe),
+        FixBoundaryZ(eq=eqe),
+        FixIota(eq=eqe),
+        FixPressure(eq=eqe),
+        FixPsi(eq=eqe),
+    )
 
     for opt in optimizers:
         print("TESTING ", opt)
         if optimizers[opt]["scalar"]:
             obj = eobj
             eq = eqe
-            con = econ
         else:
             obj = fobj
             eq = eqf
-            con = fcon
         eq.solve(
             objective=obj,
-            constraints=con,
+            constraints=constraints,
             optimizer=opt,
-            copy=True,
             verbose=3,
+            copy=True,
             maxiter=5,
-            options=options.get(opt, None),
         )
 
 
@@ -864,11 +880,9 @@ def test_constrained_AL_lsq():
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
-        FixPressure(eq=eq),
-        FixParameter(
-            eq, "i_l", bounds=(eq.i_l * 0.9, eq.i_l * 1.1)
-        ),  # linear inequality
-        FixPsi(eq=eq, bounds=(eq.Psi * 0.99, eq.Psi * 1.01)),  # linear inequality
+        FixPressure(eq=eq),  # fix pressure profile
+        FixIota(eq=eq),  # fix rotational transform profile
+        FixPsi(eq=eq),  # fix total toroidal magnetic flux
     )
     # some random constraints to keep the shape from getting wacky
     V = eq.compute("V")["V"]
@@ -903,9 +917,6 @@ def test_constrained_AL_lsq():
     Dwell = constraints[-2].compute_scaled(*constraints[-2].xs(eq2))
     assert (ARbounds[0] - ctol) < AR2 < (ARbounds[1] + ctol)
     assert (Vbounds[0] - ctol) < V2 < (Vbounds[1] + ctol)
-    assert (0.99 * eq.Psi - ctol) <= eq2.Psi <= (1.01 * eq.Psi + ctol)
-    np.testing.assert_array_less((0.9 * eq.i_l - ctol), eq2.i_l)
-    np.testing.assert_array_less(eq2.i_l, (1.1 * eq.i_l + ctol))
     assert eq2.is_nested()
     np.testing.assert_array_less(-Dwell, ctol)
 

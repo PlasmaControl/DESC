@@ -129,11 +129,7 @@ def test_map_coordinates():
     out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
 
     out = eq.map_coordinates(
-        in_coords,
-        inbasis,
-        outbasis,
-        period=(2 * np.pi, 2 * np.pi, np.inf),
-        maxiter=40,
+        in_coords, inbasis, outbasis, period=(2 * np.pi, 2 * np.pi, np.inf)
     )
     np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
 

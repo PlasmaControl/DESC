@@ -396,7 +396,7 @@ class TestProfiles:
             sym=True,
         )
         eq1.solve(
-            constraints=get_fixed_boundary_constraints(eq=eq1),
+            constraints=get_fixed_boundary_constraints(eq=eq1, kinetic=False),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq1)),
             maxiter=5,
         )
@@ -417,7 +417,7 @@ class TestProfiles:
             sym=True,
         )
         eq2.solve(
-            constraints=get_fixed_boundary_constraints(eq=eq2),
+            constraints=get_fixed_boundary_constraints(eq=eq2, kinetic=True),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq2)),
             maxiter=5,
         )

@@ -12,7 +12,6 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
-from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
@@ -31,7 +30,6 @@ from desc.objectives import (
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
 )
-from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import Optimizer
 from desc.perturbations import perturb
 from desc.profiles import PowerSeriesProfile, SplineProfile
@@ -49,7 +47,7 @@ from .initial_guess import set_initial_guess
 from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
 
 
-class Equilibrium(IOAble, Optimizable):
+class Equilibrium(IOAble):
     """Equilibrium is an object that represents a plasma equilibrium.
 
     It contains information about a plasma state, including the shapes of flux surfaces
@@ -112,15 +110,6 @@ class Equilibrium(IOAble, Optimizable):
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
         Type of Zernike indexing scheme to use. Default ``'ansi'``
-    check_orientation : bool
-        ensure that this equilibrium has a right handed orientation. Do not set to False
-        unless you are sure the parameterization you have given is right handed
-        (ie, e_theta x e_zeta points outward from the surface).
-    ensure_nested : bool
-        If True, and the default initial guess does not produce nested surfaces,
-        run a small optimization problem to attempt to refine initial guess to improve
-        coordinate mapping.
-
     """
 
     _io_attrs_ = [
@@ -177,8 +166,6 @@ class Equilibrium(IOAble, Optimizable):
         axis=None,
         sym=None,
         spectral_indexing=None,
-        check_orientation=True,
-        ensure_nested=True,
         **kwargs,
     ):
         errorif(
@@ -208,9 +195,7 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"NFP should be a positive integer, got {NFP}",
         )
-        self._NFP = int(
-            setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
-        )
+        self._NFP = setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
 
         # stellarator symmetry for bases
         errorif(
@@ -374,16 +359,13 @@ class Equilibrium(IOAble, Optimizable):
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
-
-        if ("R_lmn" in kwargs) or ("Z_lmn" in kwargs):
-            assert ("R_lmn" in kwargs) and ("Z_lmn" in kwargs), "Must give both R and Z"
+        self.set_initial_guess()
+        if "R_lmn" in kwargs:
             self.R_lmn = kwargs.pop("R_lmn")
+        if "Z_lmn" in kwargs:
             self.Z_lmn = kwargs.pop("Z_lmn")
-            self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
-        else:
-            self.set_initial_guess(ensure_nested=ensure_nested)
-        if check_orientation:
-            ensure_positive_jacobian(self)
+        if "L_lmn" in kwargs:
+            self.L_lmn = kwargs.pop("L_lmn")
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -400,33 +382,6 @@ class Equilibrium(IOAble, Optimizable):
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
 
-    def _sort_args(self, args):
-        """Put arguments in a canonical order. Returns unique sorted elements.
-
-        For Equilibrium, alphabetical order seems to lead to some numerical instability
-        so we enforce a particular order that has worked well.
-        """
-        arg_order = (
-            "R_lmn",
-            "Z_lmn",
-            "L_lmn",
-            "p_l",
-            "i_l",
-            "c_l",
-            "Psi",
-            "Te_l",
-            "ne_l",
-            "Ti_l",
-            "Zeff_l",
-            "a_lmn",
-            "Ra_n",
-            "Za_n",
-            "Rb_lmn",
-            "Zb_lmn",
-        )
-        assert sorted(args) == sorted(arg_order)
-        return [arg for arg in arg_order if arg in args]
-
     def __repr__(self):
         """String form of the object."""
         return (
@@ -438,7 +393,7 @@ class Equilibrium(IOAble, Optimizable):
             )
         )
 
-    def set_initial_guess(self, *args, ensure_nested=True):
+    def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
         Parameters
@@ -456,10 +411,6 @@ class Equilibrium(IOAble, Optimizable):
                 optionally lambda) at fixed flux coordinates. All arrays should have the
                 same length. Optionally, an ndarray of shape(k,3) may be passed instead
                 of a grid.
-        ensure_nested : bool
-            If True, and the default initial guess does not produce nested surfaces,
-            run a small optimization problem to attempt to refine initial guess to
-            improve coordinate mapping.
 
         Examples
         --------
@@ -499,7 +450,7 @@ class Equilibrium(IOAble, Optimizable):
         >>> equil.set_initial_guess(nodes, R, Z, lambda)
 
         """
-        set_initial_guess(self, *args, ensure_nested=ensure_nested)
+        set_initial_guess(self, *args)
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""
@@ -542,13 +493,13 @@ class Equilibrium(IOAble, Optimizable):
             Whether to enforce stellarator symmetry.
 
         """
-        self._L = int(setdefault(L, self.L))
-        self._M = int(setdefault(M, self.M))
-        self._N = int(setdefault(N, self.N))
-        self._L_grid = int(setdefault(L_grid, self.L_grid))
-        self._M_grid = int(setdefault(M_grid, self.M_grid))
-        self._N_grid = int(setdefault(N_grid, self.N_grid))
-        self._NFP = int(setdefault(NFP, self.NFP))
+        self._L = setdefault(L, self.L)
+        self._M = setdefault(M, self.M)
+        self._N = setdefault(N, self.N)
+        self._L_grid = setdefault(L_grid, self.L_grid)
+        self._M_grid = setdefault(M_grid, self.M_grid)
+        self._N_grid = setdefault(N_grid, self.N_grid)
+        self._NFP = setdefault(NFP, self.NFP)
         self._sym = setdefault(sym, self.sym)
 
         old_modes_R = self.R_basis.modes
@@ -752,7 +703,6 @@ class Equilibrium(IOAble, Optimizable):
         transforms=None,
         profiles=None,
         data=None,
-        override_grid=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -773,11 +723,6 @@ class Equilibrium(IOAble, Optimizable):
             of self
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
-        override_grid : bool
-            If True, override the user supplied grid if necessary and use a full
-            resolution grid to compute quantities and then downsample to user requested
-            grid. If False, uses only the user specified grid, which may lead to
-            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -833,7 +778,7 @@ class Equilibrium(IOAble, Optimizable):
             if isinstance(grid, LinearGrid):
                 calc1d = False
 
-        if calc0d and override_grid:
+        if calc0d:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d = compute_fun(
                 self,
@@ -848,7 +793,7 @@ class Equilibrium(IOAble, Optimizable):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        if calc1d and override_grid:
+        if calc1d:
             grid1d = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,
@@ -1121,7 +1066,6 @@ class Equilibrium(IOAble, Optimizable):
         """str: Method for specifying boundary condition."""
         return self._bdry_mode
 
-    @optimizable_parameter
     @property
     def Psi(self):
         """float: Total toroidal flux within the last closed flux surface in Webers."""
@@ -1173,7 +1117,6 @@ class Equilibrium(IOAble, Optimizable):
         _assert_nonnegint(N, "N")
         self.change_resolution(N=N)
 
-    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients of R."""
@@ -1190,7 +1133,6 @@ class Equilibrium(IOAble, Optimizable):
         )
         self._R_lmn = R_lmn
 
-    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients of Z."""
@@ -1207,7 +1149,6 @@ class Equilibrium(IOAble, Optimizable):
         )
         self._Z_lmn = Z_lmn
 
-    @optimizable_parameter
     @property
     def L_lmn(self):
         """ndarray: Spectral coefficients of lambda."""
@@ -1224,7 +1165,6 @@ class Equilibrium(IOAble, Optimizable):
         )
         self._L_lmn = L_lmn
 
-    @optimizable_parameter
     @property
     def Rb_lmn(self):
         """ndarray: Spectral coefficients of R at the boundary."""
@@ -1234,7 +1174,6 @@ class Equilibrium(IOAble, Optimizable):
     def Rb_lmn(self, Rb_lmn):
         self.surface.R_lmn = Rb_lmn
 
-    @optimizable_parameter
     @property
     def Zb_lmn(self):
         """ndarray: Spectral coefficients of Z at the boundary."""
@@ -1244,7 +1183,6 @@ class Equilibrium(IOAble, Optimizable):
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
 
-    @optimizable_parameter
     @property
     def Ra_n(self):
         """ndarray: R coefficients for axis Fourier series."""
@@ -1254,7 +1192,6 @@ class Equilibrium(IOAble, Optimizable):
     def Ra_n(self, Ra_n):
         self.axis.R_n = Ra_n
 
-    @optimizable_parameter
     @property
     def Za_n(self):
         """ndarray: Z coefficients for axis Fourier series."""
@@ -1273,7 +1210,6 @@ class Equilibrium(IOAble, Optimizable):
     def pressure(self, new):
         self._pressure = parse_profile(new, "pressure")
 
-    @optimizable_parameter
     @property
     def p_l(self):
         """ndarray: Coefficients of pressure profile."""
@@ -1297,7 +1233,6 @@ class Equilibrium(IOAble, Optimizable):
     def anisotropy(self, new):
         self._anisotropy = parse_profile(new, "anisotropy")
 
-    @optimizable_parameter
     @property
     def a_lmn(self):
         """ndarray: Coefficients of anisotropy profile."""
@@ -1321,7 +1256,6 @@ class Equilibrium(IOAble, Optimizable):
     def electron_temperature(self, new):
         self._electron_temperature = parse_profile(new, "electron temperature")
 
-    @optimizable_parameter
     @property
     def Te_l(self):
         """ndarray: Coefficients of electron temperature profile."""
@@ -1349,7 +1283,6 @@ class Equilibrium(IOAble, Optimizable):
     def electron_density(self, new):
         self._electron_density = parse_profile(new, "electron density")
 
-    @optimizable_parameter
     @property
     def ne_l(self):
         """ndarray: Coefficients of electron density profile."""
@@ -1377,7 +1310,6 @@ class Equilibrium(IOAble, Optimizable):
     def ion_temperature(self, new):
         self._ion_temperature = parse_profile(new, "ion temperature")
 
-    @optimizable_parameter
     @property
     def Ti_l(self):
         """ndarray: Coefficients of ion temperature profile."""
@@ -1403,7 +1335,6 @@ class Equilibrium(IOAble, Optimizable):
     def atomic_number(self, new):
         self._atomic_number = parse_profile(new, "atomic number")
 
-    @optimizable_parameter
     @property
     def Zeff_l(self):
         """ndarray: Coefficients of effective atomic number profile."""
@@ -1427,7 +1358,6 @@ class Equilibrium(IOAble, Optimizable):
     def iota(self, new):
         self._iota = parse_profile(new, "iota")
 
-    @optimizable_parameter
     @property
     def i_l(self):
         """ndarray: Coefficients of iota profile."""
@@ -1452,7 +1382,6 @@ class Equilibrium(IOAble, Optimizable):
     def current(self, new):
         self._current = parse_profile(new, "current")
 
-    @optimizable_parameter
     @property
     def c_l(self):
         """ndarray: Coefficients of current profile."""
@@ -1717,15 +1646,22 @@ class Equilibrium(IOAble, Optimizable):
 
         """
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(eq=self)
+            constraints = get_fixed_boundary_constraints(
+                eq=self,
+                iota=objective != "vacuum" and self.iota is not None,
+                kinetic=self.electron_temperature is not None,
+            )
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(eq=self, mode=objective)
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
-        if not isinstance(constraints, (list, tuple)):
-            constraints = tuple([constraints])
 
-        if self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid:
+        if copy:
+            eq = self.copy()
+        else:
+            eq = self
+
+        if eq.N > eq.N_grid or eq.M > eq.M_grid or eq.L > eq.L_grid:
             warnings.warn(
                 colored(
                     "Equilibrium has one or more spectral resolutions "
@@ -1736,14 +1672,9 @@ class Equilibrium(IOAble, Optimizable):
                     "yellow",
                 )
             )
-        if self.bdry_mode == "poincare":
-            raise NotImplementedError(
-                "Solving equilibrium with poincare XS as BC is not supported yet "
-                + "on master branch."
-            )
 
-        things, result = optimizer.optimize(
-            self,
+        result = optimizer.optimize(
+            eq,
             objective,
             constraints,
             ftol=ftol,
@@ -1755,7 +1686,19 @@ class Equilibrium(IOAble, Optimizable):
             options=options,
         )
 
-        return things[0], result
+        if verbose > 0:
+            print("Start of solver")
+            objective.print_value(objective.x(eq))
+        for key, value in result["history"].items():
+            # don't set nonexistent profile (values are empty ndarrays)
+            if value[-1].size:
+                setattr(eq, key, value[-1])
+
+        if verbose > 0:
+            print("End of solver")
+            objective.print_value(objective.x(eq))
+
+        return eq, result
 
     def optimize(
         self,
@@ -1818,13 +1761,20 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(eq=self)
+            constraints = get_fixed_boundary_constraints(
+                eq=self,
+                iota=self.iota is not None,
+                kinetic=self.electron_temperature is not None,
+            )
             constraints = (ForceBalance(eq=self), *constraints)
-        if not isinstance(constraints, (list, tuple)):
-            constraints = tuple([constraints])
 
-        things, result = optimizer.optimize(
-            self,
+        if copy:
+            eq = self.copy()
+        else:
+            eq = self
+
+        result = optimizer.optimize(
+            eq,
             objective,
             constraints,
             ftol=ftol,
@@ -1835,10 +1785,24 @@ class Equilibrium(IOAble, Optimizable):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
-            copy=copy,
         )
 
-        return things[0], result
+        if verbose > 0:
+            print("Start of solver")
+            objective.print_value(objective.x(eq))
+            for con in constraints:
+                con.print_value(*con.xs(eq))
+        for key, value in result["history"].items():
+            # don't set nonexistent profile (values are empty ndarrays)
+            if value[-1].size:
+                setattr(eq, key, value[-1])
+        if verbose > 0:
+            print("End of solver")
+            objective.print_value(objective.x(eq))
+            for con in constraints:
+                con.print_value(*con.xs(eq))
+
+        return eq, result
 
     def _optimize(  # noqa: C901
         self,
@@ -1897,12 +1861,13 @@ class Equilibrium(IOAble, Optimizable):
         timer = Timer()
         timer.start("Total time")
 
+        eq = self
         if not objective.built:
-            objective.build()
+            objective.build(eq)
         if not constraint.built:
-            constraint.build()
+            constraint.build(eq)
 
-        cost = objective.compute_scalar(objective.x(self))
+        cost = objective.compute_scalar(objective.x(eq))
         perturb_options = deepcopy(perturb_options)
         tr_ratio = perturb_options.get(
             "tr_ratio",
@@ -1910,9 +1875,7 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         if verbose > 0:
-            objective.print_value(objective.x(self))
-
-        params = orig_params = self.params_dict.copy()
+            objective.print_value(objective.x(eq))
 
         iteration = 1
         success = None
@@ -1925,17 +1888,24 @@ class Equilibrium(IOAble, Optimizable):
                 print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
             # perturb + solve
-            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit,) = optimal_perturb(
-                self,
+            (
+                eq_new,
+                predicted_reduction,
+                dc_opt,
+                dc,
+                c_norm,
+                bound_hit,
+            ) = optimal_perturb(
+                eq,
                 constraint,
                 objective,
-                copy=False,
+                copy=True,
                 **perturb_options,
             )
-            self.solve(objective=constraint, **solve_options)
+            eq_new.solve(objective=constraint, **solve_options)
 
             # update trust region radius
-            cost_new = objective.compute_scalar(objective.x(self))
+            cost_new = objective.compute_scalar(objective.x(eq_new))
             actual_reduction = cost - cost_new
             trust_radius, ratio = update_tr_radius(
                 tr_ratio[0] * c_norm,
@@ -1949,7 +1919,7 @@ class Equilibrium(IOAble, Optimizable):
 
             timer.stop("Step {} time".format(iteration))
             if verbose > 0:
-                objective.print_value(objective.x(self))
+                objective.print_value(objective.x(eq_new))
                 print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
                 print("Reduction Ratio = {:+.3f}".format(ratio))
             if verbose > 1:
@@ -1972,11 +1942,8 @@ class Equilibrium(IOAble, Optimizable):
                 np.inf,
             )
             if actual_reduction > 0:
-                params = self.params_dict.copy()
+                eq = eq_new
                 cost = cost_new
-            else:
-                # reset equilibrium to last good params
-                self.params_dict = params
             if success is not None:
                 break
 
@@ -1991,11 +1958,12 @@ class Equilibrium(IOAble, Optimizable):
             timer.disp("Total time")
 
         if copy:
-            eq = self.copy()
-            self.params = orig_params
+            return eq
         else:
-            eq = self
-        return eq
+            for attr in self._io_attrs_:
+                val = getattr(eq, attr)
+                setattr(self, attr, val)
+            return self
 
     def perturb(
         self,
@@ -2052,9 +2020,17 @@ class Equilibrium(IOAble, Optimizable):
             objective = get_equilibrium_objective(eq=self)
         if constraints is None:
             if "Ra_n" in deltas or "Za_n" in deltas:
-                constraints = get_fixed_axis_constraints(eq=self)
+                constraints = get_fixed_axis_constraints(
+                    eq=self,
+                    iota=self.iota is not None,
+                    kinetic=self.electron_temperature is not None,
+                )
             else:
-                constraints = get_fixed_boundary_constraints(eq=self)
+                constraints = get_fixed_boundary_constraints(
+                    eq=self,
+                    iota=self.iota is not None,
+                    kinetic=self.electron_temperature is not None,
+                )
 
         eq = perturb(
             self,
@@ -2093,20 +2069,16 @@ class EquilibriaFamily(IOAble, MutableSequence):
     _io_attrs_ = ["_equilibria"]
 
     def __init__(self, *args):
-        # we use ensure_nested=False here because it is assumed the family
-        # will be solved with a continuation method, so there's no need for the
-        # fancy coordinate mapping stuff since it will just be overwritten during
-        # solve_continuation
         self.equilibria = []
         if len(args) == 1 and isinstance(args[0], list):
             for inp in args[0]:
-                self.equilibria.append(Equilibrium(**inp, ensure_nested=False))
+                self.equilibria.append(Equilibrium(**inp))
         else:
             for arg in args:
                 if isinstance(arg, Equilibrium):
                     self.equilibria.append(arg)
                 elif isinstance(arg, dict):
-                    self.equilibria.append(Equilibrium(**arg, ensure_nested=False))
+                    self.equilibria.append(Equilibrium(**arg))
                 else:
                     raise TypeError(
                         "Args to create EquilibriaFamily should either be "

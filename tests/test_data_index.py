@@ -91,13 +91,9 @@ class TestDataIndex:
                             for base_class, superclasses in _class_inheritance.items():
                                 if p in superclasses or p == base_class:
                                     queried_deps[base_class][name] = deps
-                                    aliases = data_index[base_class][name]["aliases"]
-                                    for alias in aliases:
-                                        queried_deps[base_class][alias] = deps
 
         for p in data_index:
             for name, val in data_index[p].items():
-                print(name)
                 err_msg = f"Parameterization: {p}. Name: {name}."
                 deps = val["dependencies"]
                 data = set(deps["data"])

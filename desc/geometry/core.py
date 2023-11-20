@@ -17,17 +17,16 @@ from desc.compute.utils import (
 )
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
-from desc.optimizable import Optimizable
 
 
-class Curve(IOAble, Optimizable, ABC):
+class Curve(IOAble, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
     _io_attrs_ = ["_name", "shift", "rotmat"]
 
     def __init__(self, name=""):
-        self.shift = jnp.array([0, 0, 0]).astype(float)
-        self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).astype(float)
+        self.shift = jnp.array([0, 0, 0])
+        self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         self.name = name
 
     @property
@@ -46,7 +45,6 @@ class Curve(IOAble, Optimizable, ABC):
         params=None,
         transforms=None,
         data=None,
-        override_grid=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -64,11 +62,6 @@ class Curve(IOAble, Optimizable, ABC):
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
-        override_grid : bool
-            If True, override the user supplied grid if necessary and use a full
-            resolution grid to compute quantities and then downsample to user requested
-            grid. If False, uses only the user specified grid, which may lead to
-            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -114,7 +107,7 @@ class Curve(IOAble, Optimizable, ABC):
         if calc0d and (grid.N >= 2 * N + 5) and isinstance(grid, LinearGrid):
             calc0d = False
 
-        if calc0d and override_grid:
+        if calc0d:
             grid0d = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=True)
             data0d = compute_fun(
                 self,
@@ -175,11 +168,9 @@ class Curve(IOAble, Optimizable, ABC):
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
             If an integer, uses that many equally spaced points.
-        s : ndarray or "arclength"
-            arbitrary curve parameter to use for the fitting.
-            Should be monotonic, 1D array of same length as
-            coords. if None, defaults linearly spaced in [0,2pi)
-            Alternative, can pass "arclength" to use normalized distance between points.
+        s : ndarray
+            arbitrary curve parameter to use for the fitting. if None, defaults to
+            normalized arclength
         name : str
             name for this curve
 
@@ -191,7 +182,7 @@ class Curve(IOAble, Optimizable, ABC):
         """
         from .curve import FourierXYZCurve
 
-        if (grid is None) and (s is not None) and (not isinstance(s, str)):
+        if grid is None and s is not None:
             grid = LinearGrid(zeta=s)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCurve.from_values(coords, N=N, s=s, basis="xyz", name=name)
@@ -201,15 +192,14 @@ class Curve(IOAble, Optimizable, ABC):
 
         Parameters
         ----------
-        knots : ndarray or "arclength"
+        knots : ndarray
             arbitrary curve parameter values to use for spline knots,
             should be an 1D ndarray of same length as the input.
             (input length in this case is determined by grid argument, since
-            the input coordinates come from Curve.compute("x",grid=grid))
-            If None, defaults to using an linearly spaced points in [0, 2pi) as the
-            knots. If supplied, should lie in [0,2pi].
-            Alternatively, the string "arclength" can be supplied to use the normalized
-            distance between points.
+            the input coordinates come from
+            Curve.compute("x",grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+            If supplied, will be rescaled to lie in [0,2pi]
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with SplineXYZCurve.
             If an integer, uses that many equally spaced points.
@@ -231,7 +221,7 @@ class Curve(IOAble, Optimizable, ABC):
         """
         from .curve import SplineXYZCurve
 
-        if (grid is None) and (knots is not None) and (not isinstance(knots, str)):
+        if grid is None and knots is not None:
             grid = LinearGrid(zeta=knots)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCurve.from_values(
@@ -242,7 +232,7 @@ class Curve(IOAble, Optimizable, ABC):
     # (might be impossible to parameterize some curves with toroidal angle phi)
 
 
-class Surface(IOAble, Optimizable, ABC):
+class Surface(IOAble, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
     _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]
@@ -320,7 +310,6 @@ class Surface(IOAble, Optimizable, ABC):
         params=None,
         transforms=None,
         data=None,
-        override_grid=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -338,11 +327,6 @@ class Surface(IOAble, Optimizable, ABC):
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
-        override_grid : bool
-            If True, override the user supplied grid if necessary and use a full
-            resolution grid to compute quantities and then downsample to user requested
-            grid. If False, uses only the user specified grid, which may lead to
-            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -385,7 +369,7 @@ class Surface(IOAble, Optimizable, ABC):
         ]
         calc0d = bool(len(dep0d))
         # see if the grid we're already using will work for desired qtys
-        if calc0d and override_grid and hasattr(self, "rho"):  # constant rho surface
+        if calc0d and hasattr(self, "rho"):  # constant rho surface
             if (
                 (grid.N >= 2 * self.N + 5)
                 and (grid.M > 2 * self.M + 5)
@@ -399,9 +383,7 @@ class Surface(IOAble, Optimizable, ABC):
                     N=2 * self.N + 5,
                     NFP=self.NFP,
                 )
-        elif (
-            calc0d and override_grid and hasattr(self, "zeta")
-        ):  # constant zeta surface
+        elif calc0d and hasattr(self, "zeta"):  # constant zeta surface
             if (
                 (grid.L >= self.L + 1)
                 and (grid.M > 2 * self.M + 5)
@@ -412,7 +394,7 @@ class Surface(IOAble, Optimizable, ABC):
                 grid0d = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
                 grid0d._nodes[:, 2] = self.zeta
 
-        if calc0d and override_grid:
+        if calc0d:
             data0d = compute_fun(
                 self,
                 dep0d,

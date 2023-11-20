@@ -3,7 +3,7 @@
 import warnings
 
 from desc.compute import compute as compute_fun
-from desc.compute import get_profiles, get_transforms
+from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
 from desc.vmec_utils import ptolemy_linear_transform
@@ -34,10 +34,6 @@ class QuasisymmetryBoozer(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Must be a LinearGrid with a single flux surface and sym=False.
@@ -57,13 +53,12 @@ class QuasisymmetryBoozer(_Objective):
 
     def __init__(
         self,
-        eq,
+        eq=None,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=None,
         grid=None,
         helicity=(1, 0),
         M_booz=None,
@@ -77,13 +72,12 @@ class QuasisymmetryBoozer(_Objective):
         self.M_booz = M_booz
         self.N_booz = N_booz
         super().__init__(
-            things=eq,
+            eq=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             name=name,
         )
 
@@ -94,18 +88,20 @@ class QuasisymmetryBoozer(_Objective):
             + "{:10.3e} "
         )
 
-    def build(self, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = self.things[0]
+        eq = eq or self._eq
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
@@ -115,6 +111,11 @@ class QuasisymmetryBoozer(_Objective):
             grid = self._grid
 
         self._data_keys = ["|B|_mn"]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         assert grid.sym is False
         assert grid.num_rho == 1
@@ -155,18 +156,25 @@ class QuasisymmetryBoozer(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"]
 
-        super().build(use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, *args, **kwargs):
         """Compute quasi-symmetry Boozer harmonics error.
 
         Parameters
         ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -174,6 +182,7 @@ class QuasisymmetryBoozer(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
+        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -235,10 +244,6 @@ class QuasisymmetryTwoTerm(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
@@ -254,13 +259,12 @@ class QuasisymmetryTwoTerm(_Objective):
 
     def __init__(
         self,
-        eq,
+        eq=None,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=None,
         grid=None,
         helicity=(1, 0),
         name="QS two-term",
@@ -270,13 +274,12 @@ class QuasisymmetryTwoTerm(_Objective):
         self._grid = grid
         self.helicity = helicity
         super().__init__(
-            things=eq,
+            eq=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             name=name,
         )
 
@@ -287,18 +290,20 @@ class QuasisymmetryTwoTerm(_Objective):
             + "{:10.3e} "
         )
 
-    def build(self, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = self.things[0]
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -306,6 +311,11 @@ class QuasisymmetryTwoTerm(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_C"]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
@@ -328,18 +338,25 @@ class QuasisymmetryTwoTerm(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"] ** 3
 
-        super().build(use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, *args, **kwargs):
         """Compute quasi-symmetry two-term errors.
 
         Parameters
         ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -347,6 +364,7 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
+        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -407,10 +425,6 @@ class QuasisymmetryTripleProduct(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -424,13 +438,12 @@ class QuasisymmetryTripleProduct(_Objective):
 
     def __init__(
         self,
-        eq,
+        eq=None,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=None,
         grid=None,
         name="QS triple product",
     ):
@@ -438,28 +451,29 @@ class QuasisymmetryTripleProduct(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            things=eq,
+            eq=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = self.things[0]
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -467,6 +481,11 @@ class QuasisymmetryTripleProduct(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_T"]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
@@ -488,18 +507,25 @@ class QuasisymmetryTripleProduct(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"] ** 4 / scales["a"] ** 2
 
-        super().build(use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, *args, **kwargs):
         """Compute quasi-symmetry triple product errors.
 
         Parameters
         ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -507,6 +533,7 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
+        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -545,11 +572,6 @@ class Isodynamicity(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-        Has no effect for this objective.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -563,13 +585,12 @@ class Isodynamicity(_Objective):
 
     def __init__(
         self,
-        eq,
+        eq=None,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
-        loss_function=None,
         grid=None,
         name="Isodynamicity",
     ):
@@ -577,28 +598,29 @@ class Isodynamicity(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            things=eq,
+            eq=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = self.things[0]
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -606,6 +628,11 @@ class Isodynamicity(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["isodynamicity"]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
@@ -623,18 +650,25 @@ class Isodynamicity(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, *args, **kwargs):
         """Compute isodynamicity errors.
 
         Parameters
         ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -642,6 +676,7 @@ class Isodynamicity(_Objective):
             Isodynamicity error at each node (~).
 
         """
+        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(

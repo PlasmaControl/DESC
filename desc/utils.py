@@ -482,9 +482,8 @@ def is_broadcastable(shp1, shp2):
 
 
 def get_instance(things, cls):
-    """Get first thing from an iterable of things that is instance of cls."""
-    foo = [t for t in things if isinstance(t, cls)]
-    return foo[0] if len(foo) else None
+    """Get thing from a collection of things that is the instance of a given class."""
+    return [t for t in things if isinstance(t, cls)][0]
 
 
 def parse_argname_change(arg, kwargs, oldname, newname):
@@ -540,28 +539,3 @@ def only1(*args):
     # copied from https://stackoverflow.com/questions/16801322/
     i = iter(args)
     return any(i) and not any(i)
-
-
-def unique_list(thelist):
-    """Get the unique elements from a list, and indices to recreate it.
-
-    Parameters
-    ----------
-    thelist : list
-        List to get unique elements from.
-
-    Returns
-    -------
-    unique : list
-        Unique elements from the input.
-    inds : list of int
-        Indices of unique elements in original list, such that
-        unique[inds[i]] == thelist[i]
-    """
-    inds = []
-    unique = []
-    for i, x in enumerate(thelist):
-        if x not in unique:
-            unique.append(x)
-        inds.append(unique.index(x))
-    return unique, inds

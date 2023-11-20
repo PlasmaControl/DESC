@@ -1,7 +1,6 @@
 """Functions for computing initial guesses for coordinate surfaces."""
 
 import os
-import warnings
 
 import numpy as np
 
@@ -10,17 +9,11 @@ from desc.basis import zernike_radial
 from desc.geometry import FourierRZCurve, Surface
 from desc.grid import Grid, _Grid
 from desc.io import load
-from desc.objectives import (
-    FixThetaSFL,
-    GoodCoordinates,
-    ObjectiveFunction,
-    get_fixed_boundary_constraints,
-)
 from desc.transform import Transform
-from desc.utils import copy_coeffs, warnif
+from desc.utils import copy_coeffs
 
 
-def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: simplify
+def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
     Parameters
@@ -38,10 +31,6 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
             optionally lambda) at fixed flux coordinates. All arrays should have the
             same length. Optionally, an ndarray of shape(k,3) may be passed instead
             of a grid.
-    ensure_nested : bool
-        If True, and the default initial guess does not produce nested surfaces,
-        run a small optimization problem to attempt to refine initial guess to improve
-        coordinate mapping.
 
     Examples
     --------
@@ -223,33 +212,6 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
 
         else:
             raise ValueError("Can't initialize equilibrium from args {}.".format(args))
-
-    if ensure_nested and not eq.is_nested():
-        warnings.warn(
-            "Surfaces from initial guess are not nested, attempting to refine "
-            + "coordinates. This may take a few moments."
-        )
-        obj = ObjectiveFunction(GoodCoordinates(eq))
-        constraints = get_fixed_boundary_constraints(eq) + (FixThetaSFL(eq),)
-        eq.solve(
-            objective=obj,
-            constraints=constraints,
-            ftol=0,
-            xtol=0,
-            gtol=1e-8,
-            verbose=0,
-            optimizer="fmintr-bfgs",
-        )
-        warnif(
-            not eq.is_nested(),
-            UserWarning,
-            "Surfaces still not nested after refinement. This is possibly because "
-            + "the boundary contains self-intersections or other singularities, or "
-            + "because the refinement requires more iterations. You may need to "
-            + "manually adjust the initial guess or do further refinement using the "
-            + "GoodCoordinates objective.",
-        )
-
     return eq
 
 

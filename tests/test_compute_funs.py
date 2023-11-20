@@ -47,29 +47,6 @@ def myconvolve_2d(arr_1d, stencil, shape):
 
 
 @pytest.mark.unit
-def test_aliases():
-    """Tests that data_index aliases are equal."""
-    surface = FourierRZToroidalSurface(
-        R_lmn=[10, 1, 0.2],
-        Z_lmn=[-2, -0.2],
-        modes_R=[[0, 0], [1, 0], [0, 1]],
-        modes_Z=[[-1, 0], [0, -1]],
-    )
-
-    eq = Equilibrium(surface=surface)
-
-    # automatic case
-    primary_data = eq.compute("R_tz")
-    alias_data = eq.compute("R_zt")
-    np.testing.assert_allclose(primary_data["R_tz"], alias_data["R_zt"])
-
-    # manual case
-    primary_data = eq.compute("e_rho_rt")
-    alias_data = eq.compute("x_rrt")
-    np.testing.assert_allclose(primary_data["e_rho_rt"], alias_data["x_rrt"])
-
-
-@pytest.mark.unit
 def test_total_volume(DummyStellarator):
     """Test that the volume enclosed by the LCFS is equal to the total volume."""
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
@@ -1315,8 +1292,7 @@ def test_compute_everything():
                     np.testing.assert_allclose(
                         actual=this_branch_data[p][name],
                         desired=master_data[p][name],
-                        atol=1e-10,
-                        rtol=1e-10,
+                        atol=1e-12,
                         err_msg=f"Parameterization: {p}. Name: {name}.",
                     )
                 except AssertionError as e:

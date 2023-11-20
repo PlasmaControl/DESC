@@ -143,7 +143,7 @@ class TestTransform:
 
     #     np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
-    @pytest.mark.unit
+    @pytest.mark.mirror_unit
     def test_volume_chebyshev_zernike(self):
         """Tests transform of Chebyshev-Zernike basis in a toroidal volume."""
         print("Test start. Before importing grid")

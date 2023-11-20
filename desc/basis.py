@@ -38,6 +38,12 @@ class _Basis(IOAble, ABC):
         self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()
+        # ensure things that should be ints are ints
+        self._L = int(self._L)
+        self._M = int(self._M)
+        self._N = int(self._N)
+        self._NFP = int(self._NFP)
+        self._modes = self._modes.astype(int)
 
     def _set_up(self):
         """Do things after loading or changing resolution."""
@@ -46,6 +52,12 @@ class _Basis(IOAble, ABC):
         self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()
+        # ensure things that should be ints are ints
+        self._L = int(self._L)
+        self._M = int(self._M)
+        self._N = int(self._N)
+        self._NFP = int(self._NFP)
+        self._modes = self._modes.astype(int)
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry."""

@@ -1,18 +1,21 @@
 """Base classes for objectives."""
 
-import warnings
 from abc import ABC, abstractmethod
-from inspect import getfullargspec
 
 import numpy as np
 
-from desc.backend import block_diag, jit, jnp, use_jax
-from desc.compute import arg_order
+from desc.backend import jit, jnp, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
-from desc.utils import Timer, is_broadcastable
-
-# XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
+from desc.optimizable import Optimizable
+from desc.utils import (
+    Timer,
+    errorif,
+    flatten_list,
+    is_broadcastable,
+    setdefault,
+    unique_list,
+)
 
 
 class ObjectiveFunction(IOAble):
@@ -24,9 +27,9 @@ class ObjectiveFunction(IOAble):
         List of objectives to be minimized.
     use_jit : bool, optional
         Whether to just-in-time compile the objectives and derivatives.
-    deriv_mode : {"batched", "blocked"}
-        method for computing derivatives. "batched" is generally faster, "blocked" may
-        use less memory. Note that the "blocked" Hessian will only be block diagonal.
+    deriv_mode : {"batched", "looped"}
+        method for computing derivatives. "batched" is generally faster, "looped" may
+        use less memory.
     verbose : int, optional
         Level of output.
 
@@ -41,7 +44,7 @@ class ObjectiveFunction(IOAble):
             isinstance(obj, _Objective) for obj in objectives
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
-        assert deriv_mode in {"batched", "blocked", "looped"}
+        assert deriv_mode in {"batched", "looped"}
 
         self._objectives = objectives
         self._use_jit = use_jit
@@ -49,109 +52,8 @@ class ObjectiveFunction(IOAble):
         self._built = False
         self._compiled = False
 
-    def set_args(self, *args):
-        """Set which arguments the objective should expect.
-
-        Defaults to args from all sub-objectives. Additional arguments can be passed in.
-        """
-        self._args = list(np.concatenate([obj.args for obj in self.objectives]))
-        self._args += list(args)
-        self._args = [arg for arg in arg_order if arg in self._args]
-        self._set_state_vector()
-
-    def _set_state_vector(self):
-        """Set state vector components, dimensions, and indices."""
-        self._dimensions = self.objectives[0].dimensions
-
-        self._dim_x = 0
-        self._x_idx = {}
-        for arg in self.args:
-            self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
-            self._dim_x += self.dimensions[arg]
-
     def _set_derivatives(self):
         """Set up derivatives of the objective functions."""
-        self._derivatives = {
-            "jac_scaled": {},
-            "jac_unscaled": {},
-            "grad": {},
-            "hess": {},
-        }
-        for arg in self.args:
-            self._derivatives["jac_scaled"][
-                arg
-            ] = lambda x, constants=None, arg=arg: jnp.vstack(
-                [
-                    obj.derivatives["jac_scaled"][arg](
-                        *self._kwargs_to_args(self.unpack_state(x), obj.args),
-                        constants=const,
-                    )
-                    for obj, const in zip(self.objectives, constants)
-                ]
-            )
-            self._derivatives["jac_unscaled"][
-                arg
-            ] = lambda x, constants=None, arg=arg: jnp.vstack(
-                [
-                    obj.derivatives["jac_unscaled"][arg](
-                        *self._kwargs_to_args(self.unpack_state(x), obj.args),
-                        constants=const,
-                    )
-                    for obj, const in zip(self.objectives, constants)
-                ]
-            )
-            self._derivatives["grad"][arg] = lambda x, constants=None, arg=arg: jnp.sum(
-                jnp.array(
-                    [
-                        obj.derivatives["grad"][arg](
-                            *self._kwargs_to_args(self.unpack_state(x), obj.args),
-                            constants=const,
-                        )
-                        for obj, const in zip(self.objectives, constants)
-                    ]
-                ),
-                axis=0,
-            )
-            self._derivatives["hess"][arg] = lambda x, constants=None, arg=arg: jnp.sum(
-                jnp.array(
-                    [
-                        obj.derivatives["hess"][arg](
-                            *self._kwargs_to_args(self.unpack_state(x), obj.args),
-                            constants=const,
-                        )
-                        for obj, const in zip(self.objectives, constants)
-                    ]
-                ),
-                axis=0,
-            )
-
-        if self._deriv_mode == "blocked":
-            self._grad = lambda x, constants=None: jnp.concatenate(
-                [
-                    jnp.atleast_1d(
-                        self._derivatives["grad"][arg](x, constants=constants)
-                    )
-                    for arg in self.args
-                ]
-            )
-            self._jac_scaled = lambda x, constants=None: jnp.hstack(
-                [
-                    self._derivatives["jac_scaled"][arg](x, constants=constants)
-                    for arg in self.args
-                ]
-            )
-            self._jac_unscaled = lambda x, constants=None: jnp.hstack(
-                [
-                    self._derivatives["jac_unscaled"][arg](x, constants=constants)
-                    for arg in self.args
-                ]
-            )
-            self._hess = lambda x, constants=None: block_diag(
-                *[
-                    self._derivatives["hess"][arg](x, constants=constants)
-                    for arg in self.args
-                ]
-            )
         if self._deriv_mode in {"batched", "looped"}:
             self._grad = Derivative(self.compute_scalar, mode="grad")
             self._hess = Derivative(self.compute_scalar, mode="hess")
@@ -249,13 +151,11 @@ class ObjectiveFunction(IOAble):
             if obj._use_jit:
                 obj.jit()
 
-    def build(self, eq=None, use_jit=None, verbose=1):
+    def build(self, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -272,22 +172,64 @@ class ObjectiveFunction(IOAble):
         for objective in self.objectives:
             if verbose > 0:
                 print("Building objective: " + objective.name)
-            objective.build(eq, use_jit=self.use_jit, verbose=verbose)
+            objective.build(use_jit=self.use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
         if self._dim_f == 1:
             self._scalar = True
         else:
             self._scalar = False
 
-        self.set_args()
         self._set_derivatives()
         if self.use_jit:
             self.jit()
+
+        self._set_things()
 
         self._built = True
         timer.stop("Objective build")
         if verbose > 1:
             timer.disp("Objective build")
+
+    def _set_things(self, things=None):
+        """Tell the ObjectiveFunction what things it is optimizing.
+
+        Parameters
+        ----------
+        things : list, tuple, or nested list, tuple of Optimizable
+            Collection of things used by this objective. Defaults to all things from
+            all sub-objectives.
+
+        Notes
+        -----
+        Sets ``self._flatten`` as a function to return unique flattened list of things
+        and ``self._unflatten`` to recreate full nested list of things
+        from unique flattened version.
+        """
+        from jax.tree_util import tree_flatten, tree_unflatten
+
+        things = setdefault(things, [obj.things for obj in self.objectives])
+
+        flat_, treedef_ = tree_flatten(
+            things, is_leaf=lambda x: isinstance(x, Optimizable)
+        )
+        unique_, inds_ = unique_list(flat_)
+
+        def unflatten(unique):
+            assert len(unique) == len(unique_)
+            flat = [unique[i] for i in inds_]
+            return tree_unflatten(treedef_, flat)
+
+        def flatten(things):
+            flat, treedef = tree_flatten(
+                things, is_leaf=lambda x: isinstance(x, Optimizable)
+            )
+            assert treedef == treedef_
+            assert len(flat) == len(flat_)
+            unique, inds = unique_list(flat)
+            return unique
+
+        self._unflatten = unflatten
+        self._flatten = flatten
 
     def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
@@ -305,15 +247,13 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        kwargs = self.unpack_state(x)
+        params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_unscaled(
-                    *self._kwargs_to_args(kwargs, obj.args), constants=const
-                )
-                for obj, const in zip(self.objectives, constants)
+                obj.compute_unscaled(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
             ]
         )
         return f
@@ -334,15 +274,13 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        kwargs = self.unpack_state(x)
+        params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled(
-                    *self._kwargs_to_args(kwargs, obj.args), constants=const
-                )
-                for obj, const in zip(self.objectives, constants)
+                obj.compute_scaled(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
             ]
         )
         return f
@@ -363,15 +301,13 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        kwargs = self.unpack_state(x)
+        params = self.unpack_state(x)
         if constants is None:
             constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled_error(
-                    *self._kwargs_to_args(kwargs, obj.args), constants=const
-                )
-                for obj, const in zip(self.objectives, constants)
+                obj.compute_scaled_error(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
             ]
         )
         return f
@@ -413,24 +349,29 @@ class ObjectiveFunction(IOAble):
         else:
             f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         print("Total (sum of squares): {:10.3e}, ".format(f))
-        kwargs = self.unpack_state(x)
-        for obj, const in zip(self.objectives, constants):
-            obj.print_value(**kwargs, constants=const)
+        params = self.unpack_state(x)
+        for par, obj, const in zip(params, self.objectives, constants):
+            obj.print_value(*par, constants=const)
         return None
 
-    def unpack_state(self, x):
+    def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        per_objective : bool
+            Whether to return param dicts for each objective (default) or for each
+            unique optimizable thing.
 
         Returns
         -------
-        kwargs : dict
-            Dictionary of the state components with argument names as keys.
-
+        params : pytree of dict
+            if per_objective is True, this is a nested list of parameters for each
+            sub-Objective, such that self.objectives[i] has parameters params[i].
+            Otherwise, it is a list of parameters tied to each optimizable thing
+            such that params[i] = self.things[i].params_dict
         """
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
@@ -442,21 +383,20 @@ class ObjectiveFunction(IOAble):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        kwargs = {}
-        for arg in self.args:
-            kwargs[arg] = jnp.atleast_1d(x[self.x_idx[arg]])
-        return kwargs
+        xs_splits = np.cumsum([t.dim_x for t in self.things])
+        xs = jnp.split(x, xs_splits)
+        params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
+        if per_objective:
+            params = self._unflatten(params)
+        return params
 
-    def _kwargs_to_args(self, kwargs, args):
-        tuple_args = (kwargs[arg] for arg in args)
-        return tuple_args
-
-    def x(self, eq):
-        """Return the full state vector from the Equilibrium eq."""
-        x = np.zeros((self.dim_x,))
-        for arg in self.args:
-            x[self.x_idx[arg]] = getattr(eq, arg)
-        return x
+    def x(self, *things):
+        """Return the full state vector from the Optimizable objects things."""
+        # TODO: also check resolution etc?
+        things = things or self.things
+        assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
+        xs = [t.pack_params(t.params_dict) for t in things]
+        return jnp.concatenate(xs)
 
     def grad(self, x, constants=None):
         """Compute gradient vector of scalar form of the objective wrt x."""
@@ -669,26 +609,9 @@ class ObjectiveFunction(IOAble):
         return self._compiled
 
     @property
-    def args(self):
-        """list: Names (str) of arguments to the compute functions."""
-        return self._args
-
-    @property
-    def dimensions(self):
-        """dict: Dimensions of the argument given by the dict keys."""
-        return self._dimensions
-
-    @property
-    def x_idx(self):
-        """dict: Indices of the components of the state vector."""
-        return self._x_idx
-
-    @property
     def dim_x(self):
         """int: Dimensional of the state vector."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._dim_x
+        return sum(t.dim_x for t in self.things)
 
     @property
     def dim_f(self):
@@ -740,14 +663,57 @@ class ObjectiveFunction(IOAble):
             [jnp.ones(obj.dim_f) * obj.weight for obj in self.objectives]
         )
 
+    @property
+    def _all_things(self):
+        """list: all things known to this objective, used and unused."""
+        if not hasattr(self, "_extra_things"):
+            self._extra_things = []
+        return [obj.things for obj in self.objectives] + self._extra_things
+
+    @property
+    def things(self):
+        """list: Optimizable things that this objective is tied to."""
+        errorif(
+            not hasattr(self, "_flatten"),
+            RuntimeError,
+            "ObjectiveFunction must be built with ObjectiveFunction.build() first",
+        )
+        return self._flatten(self._all_things)
+
+    @things.setter
+    def things(self, new):
+        if not isinstance(new, (tuple, list)):
+            new = [new]
+        assert all(isinstance(x, Optimizable) for x in new)
+        # in general this is a hard problem, since we don't really know which object
+        # to replace with which if there are multiple of the same type, but we can
+        # do our best and throw an error if we can't figure it out here.
+        expected_types = [type(a) for a in self.things]
+        got_types = [type(a) for a in new]
+        errorif(
+            expected_types != got_types,
+            TypeError,
+            "Cannot unambiguously parse Optimizable objects to individual Objectives, "
+            + f"expected types {expected_types} but got types {got_types}. "
+            + "Try setting Objective.things on each sub Objective individually then "
+            + "call ObjectiveFunction.build().",
+        )
+        # now we know that new and self.things contains instances of unique classes, so
+        # we should be able to just replace like with like
+        things = self._unflatten(new)
+        for obj, t in zip(self.objectives, things[: -len(self._extra_things)]):
+            obj.things = t
+            # can maybe improve this later to not rebuild if resolution is the same
+            obj._built = False
+
 
 class _Objective(IOAble, ABC):
     """Objective (or constraint) used in the optimization of an Equilibrium.
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    things : Optimizable or tuple/list of Optimizable
+        Objects that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -763,6 +729,10 @@ class _Objective(IOAble, ABC):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     name : str, optional
         Name of the objective function.
 
@@ -777,7 +747,6 @@ class _Objective(IOAble, ABC):
         "_target",
         "_weight",
         "_name",
-        "_args",
         "_normalize",
         "_normalize_target",
         "_normalization",
@@ -785,14 +754,16 @@ class _Objective(IOAble, ABC):
 
     def __init__(
         self,
-        eq=None,
+        things=None,
         target=0,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         name=None,
     ):
+
         if self._scalar:
             assert self._coordinates == ""
         assert np.all(np.asarray(weight) > 0)
@@ -800,6 +771,8 @@ class _Objective(IOAble, ABC):
         assert normalize_target in {True, False}
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
+        assert loss_function in [None, "mean", "min", "max"]
+
         self._target = target
         self._bounds = bounds
         self._weight = weight
@@ -809,81 +782,23 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        # if args is already set don't overwrite it
-        self._args = getattr(
-            self,
-            "_args",
-            [arg for arg in getfullargspec(self.compute)[0] if arg != "self"],
-        )
-        self._eq = eq
-        if eq is None:
-            warnings.warn(
-                FutureWarning(
-                    "Creating an Objective without specifying the Equilibrium to"
-                    " optimize is deprecated, in the future this will raise an error."
-                )
-            )
+        self._loss_function = {
+            "mean": jnp.mean,
+            "max": jnp.max,
+            "min": jnp.min,
+            None: None,
+        }[loss_function]
 
-    def _set_dimensions(self, eq):
-        """Set state vector component dimensions."""
-        self._dimensions = {}
-        for arg in arg_order:
-            self._dimensions[arg] = np.atleast_1d(getattr(eq, arg)).size
+        self._things = flatten_list([things], True)
 
     def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""
-        self._derivatives = {
-            "jac_scaled": {},
-            "jac_unscaled": {},
-            "grad": {},
-            "hess": {},
-        }
+        self._grad = Derivative(self.compute_scalar, mode="grad")
+        self._hess = Derivative(self.compute_scalar, mode="hess")
+        self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
+        self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
 
-        for arg in arg_order:
-            if arg in self.args:  # derivative wrt arg
-                self._derivatives["jac_unscaled"][arg] = Derivative(
-                    self.compute_unscaled,
-                    argnum=self.args.index(arg),
-                    mode="fwd",
-                )
-                self._derivatives["jac_scaled"][arg] = Derivative(
-                    self.compute_scaled,
-                    argnum=self.args.index(arg),
-                    mode="fwd",
-                )
-                self._derivatives["grad"][arg] = Derivative(
-                    self.compute_scalar,
-                    argnum=self.args.index(arg),
-                    mode="grad",
-                )
-                self._derivatives["hess"][arg] = Derivative(
-                    self.compute_scalar,
-                    argnum=self.args.index(arg),
-                    mode="hess",
-                )
-            else:  # these derivatives are always zero
-                self._derivatives["jac_unscaled"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (self.dim_f, self.dimensions[arg])
-                )
-                self._derivatives["jac_scaled"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (self.dim_f, self.dimensions[arg])
-                )
-                self._derivatives["grad"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (1, self.dimensions[arg])
-                )
-                self._derivatives["hess"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (self.dimensions[arg], self.dimensions[arg])
-                )
-
-    def jit(self):
+    def jit(self):  # noqa: C901
         """Apply JIT to compute methods, or re-apply after updating self."""
         self._use_jit = True
 
@@ -911,11 +826,29 @@ class _Objective(IOAble, ABC):
             pass
         self.compute_scalar = jit(self.compute_scalar)
 
-        del self._derivatives
-        self._set_derivatives()
-        for mode, val in self._derivatives.items():
-            for arg, deriv in val.items():
-                self._derivatives[mode][arg] = jit(self._derivatives[mode][arg])
+        try:
+            del self.jac_scaled
+        except AttributeError:
+            pass
+        self.jac_scaled = jit(self.jac_scaled)
+
+        try:
+            del self.jac_unscaled
+        except AttributeError:
+            pass
+        self.jac_unscaled = jit(self.jac_unscaled)
+
+        try:
+            del self.hess
+        except AttributeError:
+            pass
+        self.hess = jit(self.hess)
+
+        try:
+            del self.grad
+        except AttributeError:
+            pass
+        self.grad = jit(self.grad)
 
     def _check_dimensions(self):
         """Check that len(target) = len(bounds) = len(weight) = dim_f."""
@@ -936,11 +869,9 @@ class _Objective(IOAble, ABC):
             raise ValueError("len(weight) != dim_f")
 
     @abstractmethod
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays."""
-        eq = eq or self._eq
         self._check_dimensions()
-        self._set_dimensions(eq)
         self._set_derivatives()
 
         # set quadrature weights if they haven't been
@@ -960,10 +891,16 @@ class _Objective(IOAble, ABC):
                 w = jnp.tile(w, self.dim_f // w.size)
             self._constants["quad_weights"] = w
 
+        if self._loss_function is not None:
+            self._dim_f = 1
+            if hasattr(self, "_constants"):
+                self._constants["quad_weights"] = 1.0
+
         if use_jit is not None:
             self._use_jit = use_jit
         if self._use_jit:
             self.jit()
+
         self._built = True
 
     @abstractmethod
@@ -972,17 +909,24 @@ class _Objective(IOAble, ABC):
 
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
-        return jnp.atleast_1d(self.compute(*args, **kwargs))
+        f = self.compute(*args, **kwargs)
+        if self._loss_function is not None:
+            f = self._loss_function(f)
+        return jnp.atleast_1d(f)
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
         f = self.compute(*args, **kwargs)
-        return self._scale(f, **kwargs)
+        if self._loss_function is not None:
+            f = self._loss_function(f)
+        return jnp.atleast_1d(self._scale(f, **kwargs))
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         f = self.compute(*args, **kwargs)
-        return self._scale(self._shift(f), **kwargs)
+        if self._loss_function is not None:
+            f = self._loss_function(f)
+        return jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
 
     def _shift(self, f):
         """Subtract target or clamp to bounds."""
@@ -1025,6 +969,22 @@ class _Objective(IOAble, ABC):
         else:
             f = jnp.sum(self.compute_scaled_error(*args, **kwargs) ** 2) / 2
         return f.squeeze()
+
+    def grad(self, *args, **kwargs):
+        """Compute gradient vector of scalar form of the objective wrt x."""
+        return self._grad(*args, **kwargs)
+
+    def hess(self, *args, **kwargs):
+        """Compute Hessian matrix of scalar form of the objective wrt x."""
+        return self._hess(*args, **kwargs)
+
+    def jac_scaled(self, *args, **kwargs):
+        """Compute Jacobian matrix of vector form of the objective wrt x."""
+        return self._jac_scaled(*args, **kwargs)
+
+    def jac_unscaled(self, *args, **kwargs):
+        """Compute Jacobian matrix of vector form of the objective wrt x, unweighted."""
+        return self._jac_unscaled(*args, **kwargs)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -1099,28 +1059,10 @@ class _Objective(IOAble, ABC):
                     + "(normalized)"
                 )
 
-    def xs(self, eq):
-        """Return a tuple of args required by this objective from the Equilibrium eq."""
-        return tuple(getattr(eq, arg) for arg in self.args)
-
-    def _parse_args(self, *args, **kwargs):
-        constants = kwargs.pop("constants", None)
-        assert (len(args) == 0) or (len(kwargs) == 0), (
-            "compute should be called with either positional or keyword arguments,"
-            + " not both"
-        )
-        if len(args):
-            assert len(args) == len(
-                self.args
-            ), f"compute expected {len(self.args)} arguments, got {len(args)}"
-            params = {key: val for key, val in zip(self.args, args)}
-        else:
-            assert all([arg in kwargs for arg in self.args]), (
-                "compute missing required keyword arguments "
-                + f"{set(self.args).difference(kwargs.keys())}"
-            )
-            params = kwargs
-        return params, constants
+    def xs(self, *things):
+        """Return a tuple of args required by this objective from optimizable things."""
+        things = things or self.things
+        return tuple([t.params_dict for t in things])
 
     @property
     def constants(self):
@@ -1136,7 +1078,7 @@ class _Objective(IOAble, ABC):
 
     @target.setter
     def target(self, target):
-        self._target = np.atleast_1d(target)
+        self._target = np.atleast_1d(target) if target is not None else target
         self._check_dimensions()
 
     @property
@@ -1174,21 +1116,6 @@ class _Objective(IOAble, ABC):
         return self._built
 
     @property
-    def args(self):
-        """list: Names (str) of arguments to the compute functions."""
-        return self._args
-
-    @property
-    def dimensions(self):
-        """dict: Dimensions of the argument given by the dict keys."""
-        return self._dimensions
-
-    @property
-    def derivatives(self):
-        """dict: Derivatives of the function wrt the argument given by the dict keys."""
-        return self._derivatives
-
-    @property
     def dim_f(self):
         """int: Number of objective equations."""
         return self._dim_f
@@ -1215,3 +1142,20 @@ class _Objective(IOAble, ABC):
     def name(self):
         """Name of objective function (str)."""
         return self._name
+
+    @property
+    def things(self):
+        """list: Optimizable things that this objective is tied to."""
+        if not hasattr(self, "_things"):
+            self._things = []
+        return list(self._things)
+
+    @things.setter
+    def things(self, new):
+        if not isinstance(new, (tuple, list)):
+            new = [new]
+        assert all(isinstance(x, Optimizable) for x in new)
+        assert all(type(a) == type(b) for a, b in zip(new, self.things))
+        self._things = list(new)
+        # can maybe improve this later to not rebuild if resolution is the same
+        self._built = False

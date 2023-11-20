@@ -418,7 +418,7 @@ def update_tr_radius(
     else:
         reduction_ratio = 0
 
-    if reduction_ratio < decrease_threshold:
+    if reduction_ratio < decrease_threshold or np.isnan(reduction_ratio):
         trust_radius = decrease_ratio * step_norm
     elif reduction_ratio > increase_threshold:
         trust_radius = max(step_norm * increase_ratio, trust_radius)

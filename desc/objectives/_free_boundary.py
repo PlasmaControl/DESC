@@ -692,8 +692,6 @@ class QuadraticFlux(_Objective):
         )
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
 
-        # I'm not sure where these weights
-        # are applied so I don't know what grid to use
         w = eval_grid.weights
         w *= jnp.sqrt(eval_grid.num_nodes)
 

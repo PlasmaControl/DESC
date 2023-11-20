@@ -1368,7 +1368,7 @@ class FiniteElementBasis(_FE_Basis):
         # TODO: avoid duplicate calculations when mixing derivatives
         r, t, z = nodes.T
         l, i, j = modes.T
-        lm = np.array([l, np.zeros(len(l))]).T
+        lm = np.array([l, np.zeros(modes.shape[0])]).T
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         if self.N > 0:
@@ -1388,18 +1388,13 @@ class FiniteElementBasis(_FE_Basis):
                 Theta.shape[0] * Theta.shape[1], self.Q
             )[i, j]
         else:
-            FE_mesh = FiniteElementMesh1D(M=self.M, K=self.K)
+            FE_mesh = self.mesh
 
-            # Get the q = 0, 1, ..., Q basis functions from each of the points
-            intervals, basis_functions = FE_mesh.find_intervals_corresponding_to_points(
-                t
-            )
-            # Need a mask here to only integrate over the ith interval
-            mask = np.zeros((len(t), 1))
-            mask[intervals == i] = 1.0
-            poloidal_toroidal = basis_functions.reshape(t.shape[0], self.Q)[i, j]
+            # Get all IQ basis functions from each of the points,
+            # and most will be zeros at a given point because of local support.
+            poloidal_toroidal = FE_mesh.full_basis_functions_corresponding_to_points(t)
 
-        return mask * radial[:, 0:1] * poloidal_toroidal
+        return radial * poloidal_toroidal[:, i, j]
 
     def change_resolution(self, L, M, N):
         """Change resolution of the basis to the given resolutions.
@@ -2460,10 +2455,13 @@ class FiniteElementMesh1D:
         basis functions.
     """
 
-    def __init__(self, M, K=1):
+    def __init__(self, M, K=1, nquad=2):
         self.M = M
         self.Q = K + 1
         self.K = K
+
+        # can exactly integrate 2 * nquad - 1 degree polynomials
+        self.nquad = max(nquad, K + 1)
 
         theta = np.linspace(0, 2 * np.pi, M, endpoint=True)
         self.Theta = theta
@@ -2486,16 +2484,16 @@ class FiniteElementMesh1D:
         # Using Gauss-Legendre quadrature
         integration_points = []
         weights = []
-        if self.K == 1:
+        if self.nquad == 1:
             integration_points = [0.0]
             weights = [2.0]
-        elif self.K == 2:
+        elif self.nquad == 2:
             integration_points = [1.0 / np.sqrt(3), -1.0 / np.sqrt(3)]
             weights = [1.0, 1.0]
-        elif self.K == 3:
+        elif self.nquad == 3:
             integration_points = [np.sqrt(0.6), -np.sqrt(0.6), 0.0]
             weights = [5.0 / 9.0, 5.0 / 9.0, 8.0 / 9.0]
-        elif self.K == 4:
+        elif self.nquad == 4:
             integration_points = [
                 np.sqrt(3 + np.sqrt(4.8)) / 7.0,
                 -np.sqrt(3 + np.sqrt(4.8)) / 7.0,
@@ -2511,7 +2509,6 @@ class FiniteElementMesh1D:
 
         self.integration_points = np.array(integration_points)
         self.weights = np.ravel(np.array(weights))
-        self.nquad = len(self.integration_points)
 
     def plot_intervals(self, plot_quadrature_points=False):
         """Plot all the intervals in the 1D mesh."""
@@ -2524,6 +2521,32 @@ class FiniteElementMesh1D:
                 plt.subplot(1, self.Q, i + 1)
                 plt.plot(quadpoints, np.zeros(len(quadpoints)), "ko")
         plt.show()
+
+    def full_basis_functions_corresponding_to_points(self, theta):
+        """Given points on the mesh, find all (I, Q) basis functions values.
+
+        Parameters
+        ----------
+        theta : 1D ndarray, shape (num_points)
+            Set of points for which we want to find the intervals that
+            they lie inside of in the mesh.
+
+        Returns
+        -------
+        basis_functions : 3D ndarray, shape (num_points, I, Q)
+            All of the IQ basis functions evaluated at the points.
+            Most will be zero at a given point.
+        """
+        basis_functions = np.zeros((theta.shape[0], self.M - 1, self.Q))
+        for i in range(theta.shape[0]):
+            v = theta[i]
+            for j, interval in enumerate(self.intervals):
+                v1 = interval.vertices[0]
+                v2 = interval.vertices[1]
+                if v >= v1 and v <= v2:
+                    bfs, _ = interval.get_basis_functions(v)
+                    basis_functions[i, j, :] = bfs
+        return basis_functions
 
     def find_intervals_corresponding_to_points(self, theta):
         """Given a point on the mesh, find which interval it lies inside.

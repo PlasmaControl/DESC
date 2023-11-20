@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBasis
 from desc.geometry import convert_spectral_to_FE
 
-M = 3  # Note M > 2 required
+M = 10  # Note M > 2 required
 N = 0
 L = 0
 K = 2
@@ -36,8 +36,10 @@ assert np.allclose(integral, 0.0)
 
 ## Number of modes for l here is probably wrong for the FourierZernike basis
 R_lmn = np.zeros((L + 1, 2 * M + 1, 2 * N + 1))
-R_lmn[0, 1, 0] = 1.0
+R_lmn[0, 0, 0] = 2.0
+R_lmn[0, 2, 0] = 1.0
 Z_lmn = np.zeros((L + 1, 2 * M + 1, 2 * N + 1))
+Z_lmn[0, 0, 0] = 2.0
 Z_lmn[0, 1, 0] = 5.0
 R_lmn = R_lmn.reshape((L + 1) * (2 * M + 1) * (2 * N + 1))
 Z_lmn = Z_lmn.reshape((L + 1) * (2 * M + 1) * (2 * N + 1))
@@ -47,7 +49,7 @@ L_lmn = np.zeros(R_lmn.shape)
 fz = FourierZernikeBasis(L, M, N)
 theta = np.linspace(0, 2 * np.pi, endpoint=True)
 plt.figure()
-plt.plot(np.cos(theta), 5 * np.sin(theta))
+plt.plot(2 + np.cos(theta), 2 + 5 * np.sin(theta))
 
 # Define the bases
 Rprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
@@ -73,16 +75,17 @@ Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
 
 # Replot original boundary using the Zernike polynomials
-print(R_basis.R_lmn, Z_basis.Z_lmn)
 nodes = (
     np.array(np.meshgrid(np.ones(1), theta, np.zeros(1), indexing="ij"))
     .reshape(3, len(theta))
     .T
 )
-R = R_basis.R_lmn[1] * R_basis.evaluate(nodes=nodes, modes=np.array([[1, 1, 0]]))
-Z = Z_basis.Z_lmn[1] * Z_basis.evaluate(nodes=nodes, modes=np.array([[1, -1, 0]]))
+
+R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
+Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
 plt.plot(R, Z, "ro")
 
+print("R_lmn, Z_lmn = ", R_lmn, Z_lmn)
 Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
     R_lmn,
     Z_lmn,
@@ -94,12 +97,14 @@ Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
     Zprime_basis,
     Lprime_basis,
 )
+print("R_lmn, Z_lmn = ")
+print(Rprime_lmn)
+print(Zprime_lmn)
 Rprime_basis.R_lmn = Rprime_lmn
 Zprime_basis.Z_lmn = Zprime_lmn
-
-print(R_basis.evaluate(nodes=nodes).shape)
 print(Rprime_basis.evaluate(nodes=nodes))
-R = np.sum(Rprime_basis.R_lmn * Rprime_basis.evaluate(nodes=nodes), axis=-1)
-Z = np.sum(Zprime_basis.Z_lmn * Zprime_basis.evaluate(nodes=nodes), axis=-1)
+R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
+Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+print(R, Z)
 plt.plot(R, Z, "ko")
 plt.show()

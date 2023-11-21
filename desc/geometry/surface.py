@@ -107,8 +107,9 @@ def convert_spectral_to_FE(
     for i in range(I):
         for q in range(Q):
             for qq in range(Q):
-                ind1 = q * (L + 1) + i * (L + 1) * Q
-                ind2 = qq * (L + 1) + i * (L + 1) * Q
+                # Should it be... ind1 = q * (L + 1) + i * (L + 1) * Q
+                ind1 = q + i * Q
+                ind2 = qq + i * Q
                 Bjb_Z[i, q, i, qq] = mesh.integrate(
                     (
                         Zprime_basis.evaluate(
@@ -139,7 +140,7 @@ def convert_spectral_to_FE(
                         )
                     ).reshape(I * nquad, 1)
                 )
-    Nrho = 10
+    Nrho = 100
     rho = np.linspace(0, 1, Nrho, endpoint=True)
     delta_rho = rho[1] - rho[0]
     quadpoints = np.array(mesh.return_quadrature_points())
@@ -178,7 +179,7 @@ def convert_spectral_to_FE(
                             axis=0,
                         )
                     )
-                ) / (k + 1)
+                ) * (k + 1)
                 Aj_R[k, i, q] = np.sum(
                     R_lmn
                     * mesh.integrate(
@@ -195,7 +196,7 @@ def convert_spectral_to_FE(
                             axis=0,
                         )
                     )
-                ) / (k + 1)
+                ) * (k + 1)
                 Aj_L[k, i, q] = np.sum(
                     L_lmn
                     * mesh.integrate(
@@ -212,7 +213,7 @@ def convert_spectral_to_FE(
                             axis=0,
                         )
                     )
-                ) / (k + 1)
+                ) * (k + 1)
 
     # Bjb and Aj should both be scaled by the grid spacing, but this cancels out
     # if the grid spacing is uniform, so we omit it here.
@@ -231,9 +232,9 @@ def convert_spectral_to_FE(
     Bjb_R = np.reshape(Bjb_R_expanded, (I * Q * (L + 1), I * Q * (L + 1)))
     Bjb_Z = np.reshape(Bjb_Z_expanded, (I * Q * (L + 1), I * Q * (L + 1)))
     Bjb_L = np.reshape(Bjb_L_expanded, (I * Q * (L + 1), I * Q * (L + 1)))
-    Aj_R = Aj_R.reshape(I * Q * (L + 1)) * np.pi * delta_rho
-    Aj_Z = Aj_Z.reshape(I * Q * (L + 1)) * np.pi * delta_rho
-    Aj_L = Aj_L.reshape(I * Q * (L + 1)) * np.pi * delta_rho
+    Aj_R = Aj_R.reshape(I * Q * (L + 1)) * delta_rho * 2
+    Aj_Z = Aj_Z.reshape(I * Q * (L + 1)) * delta_rho * 2
+    Aj_L = Aj_L.reshape(I * Q * (L + 1)) * delta_rho * 2
 
     # Constructed the matrices such that Bjb * Rprime = Aj and now need to solve
     # this linear system of equations. Use an LU

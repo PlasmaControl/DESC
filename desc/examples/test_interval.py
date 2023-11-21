@@ -100,6 +100,7 @@ Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
 print("R_lmn, Z_lmn = ")
 print(Rprime_lmn)
 print(Zprime_lmn)
+print(Rprime_lmn.shape)
 Rprime_basis.R_lmn = Rprime_lmn
 Zprime_basis.Z_lmn = Zprime_lmn
 print(Rprime_basis.evaluate(nodes=nodes))

@@ -10,59 +10,45 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
-if os.environ.get("DESC_BACKEND") == "numpy":
+if not len(desc_config["devices"]):
+    set_device("cpu")
+
+try:
+    import jax
+    import jax.numpy as jnp
+    import jaxlib
+    from jax.config import config as jax_config
+
+    jax_config.update("jax_enable_x64", True)
+    use_jax = True
+    desc_config["backend"] = "jax"
+    version = f"jax version={jax.__version__}, jaxlib version={jaxlib.__version__}"
+
+except ModuleNotFoundError:
     jnp = np
     use_jax = False
-    set_device(kind="cpu")
-    print(
-        "DESC version {}, using numpy backend, version={}, dtype={}".format(
-            desc.__version__, np.__version__, np.linspace(0, 1).dtype
-        )
-    )
-else:
-    if desc_config.get("device") is None:
-        set_device("cpu")
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            import jax
-            import jax.numpy as jnp
-            import jaxlib
-            from jax.config import config as jax_config
+    desc_config["backend"] = "numpy"
+    version = f"numpy version={np.__version__}"
 
-            jax_config.update("jax_enable_x64", True)
-            if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
-                warnings.warn(
-                    "JAX failed to detect GPU, are you sure you "
-                    + "installed JAX with GPU support?"
-                )
-                set_device("cpu")
-            x = jnp.linspace(0, 5)
-            y = jnp.exp(x)
-        use_jax = True
-        print(
-            f"DESC version {desc.__version__},"
-            + f"using JAX backend, jax version={jax.__version__}, "
-            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
-        )
-        del x, y
-    except ModuleNotFoundError:
-        jnp = np
-        x = jnp.linspace(0, 5)
-        y = jnp.exp(x)
-        use_jax = False
-        set_device(kind="cpu")
-        warnings.warn(colored("Failed to load JAX", "red"))
-        print(
-            "DESC version {}, using NumPy backend, version={}, dtype={}".format(
-                desc.__version__, np.__version__, y.dtype
-            )
-        )
+x = jnp.linspace(0, 5)
+y = jnp.exp(x)
+desc_config["dtype"] = y.dtype
+
 print(
-    "Using device: {}, with {:.2f} GB available memory".format(
-        desc_config.get("device"), desc_config.get("avail_mem")
-    )
+    f"DESC version {desc.__version__}, "
+    + f"using {desc_config['backend']} backend, "
+    + f"{version}, dtype={desc_config['dtype']}"
 )
+
+device_str = ""
+for device in desc_config["devices"]:
+    dstr = f"{device.name}, with {device.mem:.2f} GB available memory\n"
+    if device.default:
+        device_str = dstr + device_str
+    else:
+        device_str += dstr
+
+print(device_str)
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
     jit = jax.jit
@@ -72,7 +58,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     while_loop = jax.lax.while_loop
     vmap = jax.vmap
     bincount = jnp.bincount
-    from jax import custom_jvp
+    from jax import custom_jvp, device_get, device_put
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln, logsumexp
@@ -154,6 +140,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
 else:  # pragma: no cover
+    if os.environ.get("DESC_BACKEND") != "numpy":
+        warnings.warn(colored("Failed to load JAX", "red"))
+
     jit = lambda func, *args, **kwargs: func
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
@@ -357,3 +346,11 @@ else:  # pragma: no cover
         fun.defjvp = lambda *args, **kwargs: None
         fun.defjvps = lambda *args, **kwargs: None
         return fun
+
+    def device_put(x, device=None):
+        """Dummy device_put function for numpy backend."""
+        return x
+
+    def device_get(x):
+        """Dummy device_get function for numpy backend."""
+        return x

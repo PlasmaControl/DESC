@@ -729,13 +729,22 @@ def test_multiobject_optimization():
         modes_Z=np.array([[-1, 0]]),
     )
     surf.change_resolution(M=4, N=0)
+    import jax
+
     constraints = (
-        ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
+        ForceBalance(
+            eq=eq,
+            bounds=(-1e-4, 1e-4),
+            normalize_target=False,
+            device=jax.devices("cpu")[0],
+        ),
         FixPressure(eq=eq),
         FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
         FixParameter(eq, ["Psi", "i_l"]),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
-        PlasmaVesselDistance(surface=surf, eq=eq, target=1),
+        PlasmaVesselDistance(
+            surface=surf, eq=eq, target=1, device=jax.devices("cpu")[1]
+        ),
     )
 
     objective = ObjectiveFunction((Volume(eq=eq, target=eq.compute("V")["V"] * 2),))

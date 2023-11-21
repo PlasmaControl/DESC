@@ -5,7 +5,7 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, use_jax
+from desc.backend import device_put, jit, jnp, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
@@ -782,6 +782,9 @@ class _Objective(IOAble, ABC):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     name : str, optional
         Name of the objective function.
 
@@ -812,6 +815,7 @@ class _Objective(IOAble, ABC):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         name=None,
     ):
 
@@ -832,6 +836,7 @@ class _Objective(IOAble, ABC):
         self._normalize_target = normalize_target
         self._normalization = 1
         self._deriv_mode = deriv_mode
+        self._device = device
         self._name = name
         self._use_jit = None
         self._built = False
@@ -980,18 +985,20 @@ class _Objective(IOAble, ABC):
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
         args = self._maybe_array_to_params(*args)
-        f = self.compute(*args, **kwargs)
+        f = self.compute(*device_put(args, self._device), **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
-        return jnp.atleast_1d(f)
+        f = jnp.atleast_1d(f)
+        return f
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
         args = self._maybe_array_to_params(*args)
-        f = self.compute(*args, **kwargs)
+        f = self.compute(*device_put(args, self._device), **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
-        return jnp.atleast_1d(self._scale(f, **kwargs))
+        f = jnp.atleast_1d(self._scale(f, **kwargs))
+        return f
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
@@ -1044,19 +1051,19 @@ class _Objective(IOAble, ABC):
 
     def grad(self, *args, **kwargs):
         """Compute gradient vector of scalar form of the objective wrt x."""
-        return self._grad(*args, **kwargs)
+        return self._grad(*device_put(args, self._device), **kwargs)
 
     def hess(self, *args, **kwargs):
         """Compute Hessian matrix of scalar form of the objective wrt x."""
-        return self._hess(*args, **kwargs)
+        return self._hess(*device_put(args, self._device), **kwargs)
 
     def jac_scaled(self, *args, **kwargs):
         """Compute Jacobian matrix of vector form of the objective wrt x."""
-        return self._jac_scaled(*args, **kwargs)
+        return self._jac_scaled(*device_put(args, self._device), **kwargs)
 
     def jac_unscaled(self, *args, **kwargs):
         """Compute Jacobian matrix of vector form of the objective wrt x, unweighted."""
-        return self._jac_unscaled(*args, **kwargs)
+        return self._jac_unscaled(*device_put(args, self._device), **kwargs)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

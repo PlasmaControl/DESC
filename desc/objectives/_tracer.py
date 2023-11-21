@@ -153,9 +153,10 @@ class ParticleTracer(_Objective):
         t_jax = self.output_time
         system_jit = jit(system)
         solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax, rtol = self.tolerance)
-        # solution = jax_odeint(system, initial_conditions_jax, t_jax, self.initial_parameters, rtol = self.tolerance)
+
         if self.compute_option == "optimization":
-            return jnp.sum((solution[:, 0] - solution[0, 0]) * (solution[:, 0] - solution[0, 0]), axis=-1)*1e8
+            return jnp.sum((solution[:, 0] - solution[0, 0]) * (solution[:, 0] - solution[0, 0]), axis=-1)
+        
         elif self.compute_option == "optimization-debug":
             import matplotlib.pyplot as plt
             import time as timet
@@ -188,7 +189,7 @@ class ParticleTracer(_Objective):
             Trajectory_Plot()
             Quantity_Plot()
 
-            return jnp.sum((solution[:, 0] - solution[0, 0]) * (solution[:, 0] - solution[0, 0]), axis=-1)*1e8
+            return jnp.sum((solution[:, 0] - solution[0, 0]) * (solution[:, 0] - solution[0, 0]), axis=-1)
         elif self.compute_option == "tracer":
             return solution
         elif self.compute_option == "average psi":

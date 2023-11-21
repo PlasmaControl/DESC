@@ -1,5 +1,4 @@
-from desc impor
-t set_device
+from desc import set_device
 set_device("gpu")
 from desc.grid import Grid
 import desc.io

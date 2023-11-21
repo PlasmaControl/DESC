@@ -1,4 +1,5 @@
-from desc import set_device
+from desc impor
+t set_device
 set_device("gpu")
 from desc.grid import Grid
 import desc.io
@@ -167,7 +168,7 @@ print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermed
 
 R_modes = jnp.array([[0, 0, 0], [0, 0, 0]])
 constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=True), FixPressure(eq), FixPsi(eq), FixIota(eq)) #ForceBalance(eq, bounds=(-1e-3, 1e-3))
-eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=5, copy=True) # Mudar o número de iterações para 3, 10, 100
+eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=20, copy=False) # Mudar o número de iterações para 3, 10, 100
 eq.save(opt_file)
 
 intermediate_time_4 = timet()

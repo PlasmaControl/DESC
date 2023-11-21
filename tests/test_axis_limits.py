@@ -81,6 +81,26 @@ not_implemented_limits = {
 }
 
 
+def add_all_aliases(names):
+    """Add aliases to limits."""
+    all_aliases = []
+    for name in names:
+        for base_class in data_index.keys():
+            if name in data_index[base_class].keys():
+                all_aliases.append(data_index[base_class][name]["aliases"])
+
+    # flatten
+    all_aliases = [name for sublist in all_aliases for name in sublist]
+    names.update(all_aliases)
+
+    return names
+
+
+zero_limits = add_all_aliases(zero_limits)
+not_finite_limits = add_all_aliases(not_finite_limits)
+not_implemented_limits = add_all_aliases(not_implemented_limits)
+
+
 def grow_seeds(
     seeds, search_space, parameterization="desc.equilibrium.equilibrium.Equilibrium"
 ):

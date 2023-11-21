@@ -26,7 +26,6 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixPsi,
-    FixSurfaceCurrent,
 )
 from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
@@ -104,7 +103,6 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
         FixAxisR(eq=eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
-        FixSurfaceCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
@@ -138,7 +136,6 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
         FixBoundaryR(eq=eq, normalize=normalize, normalize_target=normalize),
         FixBoundaryZ(eq=eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
-        FixSurfaceCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
@@ -193,7 +190,6 @@ def get_NAE_constraints(
         FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-        FixSurfaceCurrent(eq=desc_eq, normalize=normalize, normalize_target=normalize),
     )
 
     if profiles:

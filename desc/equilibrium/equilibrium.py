@@ -11,7 +11,7 @@ from scipy.constants import mu_0
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -138,7 +138,6 @@ class Equilibrium(IOAble, Optimizable):
         "_R_basis",
         "_Z_basis",
         "_L_basis",
-        "_K_basis",
         "_surface",
         "_axis",
         "_pressure",
@@ -154,7 +153,6 @@ class Equilibrium(IOAble, Optimizable):
         "_L_grid",
         "_M_grid",
         "_N_grid",
-        "_IGPhi_mn",
     ]
 
     def __init__(
@@ -287,9 +285,6 @@ class Equilibrium(IOAble, Optimizable):
             spectral_indexing=self.spectral_indexing,
         )
 
-        self._K_basis = DoubleFourierSeries(self.M, self.N, self.NFP, sym=self._Z_sym)
-        self._IGPhi_mn = jnp.zeros(self.K_basis.num_modes + 2)
-
         # profiles
         self._pressure = None
         self._iota = None
@@ -402,12 +397,6 @@ class Equilibrium(IOAble, Optimizable):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
-        if self.K_basis is None:
-            self._K_basis = DoubleFourierSeries(
-                self.M, self.N, self.NFP, sym=self._Z_sym
-            )
-        if self.IGPhi_mn is None:
-            self._IGPhi_mn = np.zeros(self.K_basis.num_modes + 2)
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
@@ -428,7 +417,6 @@ class Equilibrium(IOAble, Optimizable):
             "Ti_l",
             "Zeff_l",
             "a_lmn",
-            "IGPhi_mn",
             "Ra_n",
             "Za_n",
             "Rb_lmn",
@@ -564,7 +552,6 @@ class Equilibrium(IOAble, Optimizable):
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
-        old_modes_K = self.K_basis.modes
 
         self.R_basis.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
@@ -574,9 +561,6 @@ class Equilibrium(IOAble, Optimizable):
         )
         self.L_basis.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
-        )
-        self.K_basis.change_resolution(
-            self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
         )
 
         for profile in [
@@ -601,12 +585,6 @@ class Equilibrium(IOAble, Optimizable):
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
-        self._IGPhi_mn = np.concatenate(
-            [
-                self.IGPhi_mn[:2],
-                copy_coeffs(self.IGPhi_mn[2:], old_modes_K, self.K_basis.modes),
-            ]
-        )
 
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
@@ -1266,23 +1244,6 @@ class Equilibrium(IOAble, Optimizable):
 
     @optimizable_parameter
     @property
-    def IGPhi_mn(self):
-        """ndarray: Spectral coefficients of surface current potential."""
-        return self._IGPhi_mn
-
-    @IGPhi_mn.setter
-    def IGPhi_mn(self, IGPhi_mn):
-        IGPhi_mn = jnp.atleast_1d(IGPhi_mn)
-        errorif(
-            IGPhi_mn.size != self._IGPhi_mn.size,
-            ValueError,
-            "IGPhi_mn should have the same size as K_basis + 2, "
-            + f"got {len(IGPhi_mn)} for basis with {self.K_basis.num_modes} modes",
-        )
-        self._IGPhi_mn = IGPhi_mn
-
-    @optimizable_parameter
-    @property
     def Ra_n(self):
         """ndarray: R coefficients for axis Fourier series."""
         return self.axis.R_n
@@ -1519,11 +1480,6 @@ class Equilibrium(IOAble, Optimizable):
     def L_basis(self):
         """FourierZernikeBasis: Spectral basis for lambda."""
         return self._L_basis
-
-    @property
-    def K_basis(self):
-        """DoubleFourierSeries: Spectral basis for current potential."""
-        return self._K_basis
 
     @property
     def L_grid(self):

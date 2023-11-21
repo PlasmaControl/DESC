@@ -166,7 +166,7 @@ print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermed
 # Z_modes = eq.surface.Z_basis.modes[jnp.max(jnp.abs(eq.surface.Z_basis.modes), 1), :]
 
 R_modes = jnp.array([[0, 0, 0], [0, 0, 0]])
-constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=True), FixPressure(eq), FixPsi(eq), FixIota(eq)) #ForceBalance(eq, bounds=(-1e-3, 1e-3))
+constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixPsi(eq), FixIota(eq)) #ForceBalance(eq, bounds=(-1e-3, 1e-3))
 eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=100, copy=False) # Mudar o número de iterações para 3, 10, 100
 eq.save(opt_file)
 
@@ -200,7 +200,7 @@ tracer_solution_original = tracing_original.compute(*tracing_original.xs(eq_agai
 intermediate_time_6 = timet()
 print(f"\nTime to build and trace (original): {intermediate_time_6 - intermediate_time_5}s\n")
 
-output_to_file(tracer_solution_original, name="tracing_original")
+output_to_file(tracer_solution_original, name="tracing_original_z")
 
 # Compute tracing optimized equilibrium
 opt_eq = desc.io.load(opt_file)
@@ -215,26 +215,26 @@ tracer_solution_optimized = tracing_optimized.compute(*tracing_optimized.xs(opt_
 intermediate_time_8 = timet()
 print(f"\nTime to build and trace (optimized): {intermediate_time_8 - intermediate_time_7}s\n")
 
-output_to_file(tracer_solution_optimized, name="tracing_optimized")
+output_to_file(tracer_solution_optimized, name="tracing_optimized_z")
 
 # Comparison
 difference = tracer_solution_original - tracer_solution_optimized
 
-output_to_file(difference, name="tracing_difference")
+output_to_file(difference, name="tracing_difference_z")
 
 print("\n*********************** TRACING END ***********************\n")
 
 print("\n*************** PLOTTING ***************\n")
 
 print("Original Equilibrium")
-Trajectory_Plot(solution=tracer_solution_original, save_name="Trajectory_Plot_original.png")
-Quantity_Plot(solution=tracer_solution_original, save_name="Quantity_Plot_original.png")
-Energy_Plot(solution=tracer_solution_original, save_name="Energy_Plot_original.png")
+Trajectory_Plot(solution=tracer_solution_original, save_name="Trajectory_Plot_original_z.png")
+Quantity_Plot(solution=tracer_solution_original, save_name="Quantity_Plot_original_z.png")
+Energy_Plot(solution=tracer_solution_original, save_name="Energy_Plot_original_z.png")
 
 print("Optimized Equilibrium")
-Trajectory_Plot(solution=tracer_solution_optimized, save_name="Trajectory_Plot_optimized.png")
-Quantity_Plot(solution=tracer_solution_optimized, save_name="Quantity_Plot_optimized.png")
-Energy_Plot(solution=tracer_solution_optimized, save_name="Energy_Plot_optimized.png")
+Trajectory_Plot(solution=tracer_solution_optimized, save_name="Trajectory_Plot_optimized_z.png")
+Quantity_Plot(solution=tracer_solution_optimized, save_name="Quantity_Plot_optimized_z.png")
+Energy_Plot(solution=tracer_solution_optimized, save_name="Energy_Plot_optimized_z.png")
 
 print("*************** PLOTTING END ***************")
 

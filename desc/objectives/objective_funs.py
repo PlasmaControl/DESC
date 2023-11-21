@@ -729,6 +729,10 @@ class _Objective(IOAble, ABC):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     name : str, optional
         Name of the objective function.
 
@@ -756,8 +760,10 @@ class _Objective(IOAble, ABC):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         name=None,
     ):
+
         if self._scalar:
             assert self._coordinates == ""
         assert np.all(np.asarray(weight) > 0)
@@ -765,6 +771,8 @@ class _Objective(IOAble, ABC):
         assert normalize_target in {True, False}
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
+        assert loss_function in [None, "mean", "min", "max"]
+
         self._target = target
         self._bounds = bounds
         self._weight = weight
@@ -774,6 +782,13 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
+        self._loss_function = {
+            "mean": jnp.mean,
+            "max": jnp.max,
+            "min": jnp.min,
+            None: None,
+        }[loss_function]
+
         self._things = flatten_list([things], True)
 
     def _set_derivatives(self):
@@ -876,10 +891,16 @@ class _Objective(IOAble, ABC):
                 w = jnp.tile(w, self.dim_f // w.size)
             self._constants["quad_weights"] = w
 
+        if self._loss_function is not None:
+            self._dim_f = 1
+            if hasattr(self, "_constants"):
+                self._constants["quad_weights"] = 1.0
+
         if use_jit is not None:
             self._use_jit = use_jit
         if self._use_jit:
             self.jit()
+
         self._built = True
 
     @abstractmethod
@@ -888,17 +909,24 @@ class _Objective(IOAble, ABC):
 
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
-        return jnp.atleast_1d(self.compute(*args, **kwargs))
+        f = self.compute(*args, **kwargs)
+        if self._loss_function is not None:
+            f = self._loss_function(f)
+        return jnp.atleast_1d(f)
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
         f = self.compute(*args, **kwargs)
-        return self._scale(f, **kwargs)
+        if self._loss_function is not None:
+            f = self._loss_function(f)
+        return jnp.atleast_1d(self._scale(f, **kwargs))
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         f = self.compute(*args, **kwargs)
-        return self._scale(self._shift(f), **kwargs)
+        if self._loss_function is not None:
+            f = self._loss_function(f)
+        return jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
 
     def _shift(self, f):
         """Subtract target or clamp to bounds."""
@@ -1050,7 +1078,7 @@ class _Objective(IOAble, ABC):
 
     @target.setter
     def target(self, target):
-        self._target = np.atleast_1d(target)
+        self._target = np.atleast_1d(target) if target is not None else target
         self._check_dimensions()
 
     @property

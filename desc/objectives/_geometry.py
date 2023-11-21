@@ -39,7 +39,11 @@ class AspectRatio(_Objective):
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Has no effect for this objective.
+        this should also be set to True. Note: Has no effect for this objective.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: Has no effect for this objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -59,6 +63,7 @@ class AspectRatio(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         grid=None,
         name="aspect ratio",
     ):
@@ -72,6 +77,7 @@ class AspectRatio(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -164,7 +170,11 @@ class Elongation(_Objective):
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Has no effect for this objective.
+        this should also be set to True. Note: Has no effect for this objective.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: Has no effect for this objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -184,6 +194,7 @@ class Elongation(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         grid=None,
         name="elongation",
     ):
@@ -197,6 +208,7 @@ class Elongation(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -289,6 +301,11 @@ class Volume(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Note: Has no effect for this objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -308,6 +325,7 @@ class Volume(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         grid=None,
         name="volume",
     ):
@@ -321,6 +339,7 @@ class Volume(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -438,10 +457,14 @@ class PlasmaVesselDistance(_Objective):
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     surface_grid : Grid, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
     plasma_grid : Grid, optional
@@ -478,6 +501,7 @@ class PlasmaVesselDistance(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         surface_grid=None,
         plasma_grid=None,
         use_softmin=False,
@@ -500,6 +524,7 @@ class PlasmaVesselDistance(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -673,10 +698,14 @@ class MeanCurvature(_Objective):
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -696,6 +725,7 @@ class MeanCurvature(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         grid=None,
         name="mean curvature",
     ):
@@ -709,6 +739,7 @@ class MeanCurvature(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -818,10 +849,14 @@ class PrincipalCurvature(_Objective):
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -841,6 +876,7 @@ class PrincipalCurvature(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         grid=None,
         name="principal-curvature",
     ):
@@ -854,6 +890,7 @@ class PrincipalCurvature(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -957,10 +994,14 @@ class BScaleLength(_Objective):
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -980,6 +1021,7 @@ class BScaleLength(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         grid=None,
         name="B-scale-length",
     ):
@@ -993,6 +1035,7 @@ class BScaleLength(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 

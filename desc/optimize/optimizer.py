@@ -347,11 +347,15 @@ def _parse_constraints(constraints):
     """
     if not isinstance(constraints, (tuple, list)):
         constraints = (constraints,)
+    # we treat linear bound constraints as nonlinear since they can't be easily
+    # factorized like linear equality constraints
     linear_constraints = tuple(
-        constraint for constraint in constraints if constraint.linear
+        constraint
+        for constraint in constraints
+        if (constraint.linear and (constraint.bounds is None))
     )
     nonlinear_constraints = tuple(
-        constraint for constraint in constraints if not constraint.linear
+        constraint for constraint in constraints if constraint not in linear_constraints
     )
     # check for incompatible constraints
     if any(isinstance(lc, FixCurrent) for lc in linear_constraints) and any(

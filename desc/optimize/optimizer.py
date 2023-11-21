@@ -1,5 +1,6 @@
 """Class for wrapping a number of common optimization methods."""
 
+import copy as copyp
 import warnings
 
 import numpy as np
@@ -145,7 +146,7 @@ class Optimizer(IOAble):
 
         """
         things = flatten_list(things, flatten_tuple=True)
-
+        things0 = copyp.deepcopy(things)
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
 
@@ -297,7 +298,7 @@ class Optimizer(IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.print_value(objective.x())
+            objective.print_value(objective.x(*things0))
             for con in constraints:
                 con.print_value(*con.xs())
 

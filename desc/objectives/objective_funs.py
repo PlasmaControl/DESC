@@ -119,77 +119,27 @@ class ObjectiveFunction(IOAble):
 
         self._use_jit = True
 
-        try:
-            del self.compute_scaled
-        except AttributeError:
-            pass
-        self.compute_scaled = jit(self.compute_scaled)
+        methods = [
+            "compute_scaled",
+            "compute_scaled_error",
+            "compute_unscaled",
+            "compute_scalar",
+            "jac_scaled",
+            "jac_unscaled",
+            "hess",
+            "grad",
+            "jvp_scaled",
+            "jvp_unscaled",
+            "vjp_scaled",
+            "vjp_unscaled",
+        ]
 
-        try:
-            del self.compute_scaled_error
-        except AttributeError:
-            pass
-        self.compute_scaled_error = jit(self.compute_scaled_error)
-
-        try:
-            del self.compute_unscaled
-        except AttributeError:
-            pass
-        self.compute_unscaled = jit(self.compute_unscaled)
-
-        try:
-            del self.compute_scalar
-        except AttributeError:
-            pass
-        self.compute_scalar = jit(self.compute_scalar)
-
-        try:
-            del self.jac_scaled
-        except AttributeError:
-            pass
-        self.jac_scaled = jit(self.jac_scaled)
-
-        try:
-            del self.jac_unscaled
-        except AttributeError:
-            pass
-        self.jac_unscaled = jit(self.jac_unscaled)
-
-        try:
-            del self.hess
-        except AttributeError:
-            pass
-        self.hess = jit(self.hess)
-
-        try:
-            del self.grad
-        except AttributeError:
-            pass
-        self.grad = jit(self.grad)
-
-        try:
-            del self.jvp_scaled
-        except AttributeError:
-            pass
-        self.jvp_scaled = jit(self.jvp_scaled)
-
-        try:
-            del self.jvp_unscaled
-        except AttributeError:
-            pass
-        self.jvp_unscaled = jit(self.jvp_unscaled)
-
-        try:
-            del self.vjp_scaled
-        except AttributeError:
-            pass
-        self.vjp_scaled = jit(self.vjp_scaled)
-
-        try:
-            del self.vjp_unscaled
-        except AttributeError:
-            pass
-        self.vjp_unscaled = jit(self.vjp_unscaled)
+        for method in methods:
+            try:
+                delattr(self, method)
+            except AttributeError:
+                pass
+            setattr(self, method, jit(getattr(self, method)))
 
         for obj in self._objectives:
             if obj._use_jit:
@@ -863,53 +813,23 @@ class _Objective(IOAble, ABC):
         """Apply JIT to compute methods, or re-apply after updating self."""
         self._use_jit = True
 
-        try:
-            del self.compute_scaled
-        except AttributeError:
-            pass
-        self.compute_scaled = jit(self.compute_scaled)
+        methods = [
+            "compute_scaled",
+            "compute_scaled_error",
+            "compute_unscaled",
+            "compute_scalar",
+            "jac_scaled",
+            "jac_unscaled",
+            "hess",
+            "grad",
+        ]
 
-        try:
-            del self.compute_scaled_error
-        except AttributeError:
-            pass
-        self.compute_scaled_error = jit(self.compute_scaled_error)
-
-        try:
-            del self.compute_unscaled
-        except AttributeError:
-            pass
-        self.compute_unscaled = jit(self.compute_unscaled)
-
-        try:
-            del self.compute_scalar
-        except AttributeError:
-            pass
-        self.compute_scalar = jit(self.compute_scalar)
-
-        try:
-            del self.jac_scaled
-        except AttributeError:
-            pass
-        self.jac_scaled = jit(self.jac_scaled)
-
-        try:
-            del self.jac_unscaled
-        except AttributeError:
-            pass
-        self.jac_unscaled = jit(self.jac_unscaled)
-
-        try:
-            del self.hess
-        except AttributeError:
-            pass
-        self.hess = jit(self.hess)
-
-        try:
-            del self.grad
-        except AttributeError:
-            pass
-        self.grad = jit(self.grad)
+        for method in methods:
+            try:
+                delattr(self, method)
+            except AttributeError:
+                pass
+            setattr(self, method, jit(getattr(self, method)))
 
     def _check_dimensions(self):
         """Check that len(target) = len(bounds) = len(weight) = dim_f."""

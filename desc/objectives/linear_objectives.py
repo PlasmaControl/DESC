@@ -70,7 +70,9 @@ class BoundaryRSelfConsistency(_Objective):
         eq=None,
         surface_label=None,
         name="self_consistency R",
+        zeta=0,
     ):
+        self._zeta = zeta
         self._surface_label = surface_label
         self._args = ["R_lmn", "Rb_lmn"]
         super().__init__(
@@ -101,8 +103,8 @@ class BoundaryRSelfConsistency(_Objective):
         self._dim_f = eq.surface.R_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
 
-        for i, (l, m, n) in enumerate(eq.R_basis.modes):
-            if eq.bdry_mode == "lcfs":
+        if eq.bdry_mode == "lcfs":
+            for i, (l, m, n) in enumerate(eq.R_basis.modes):
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
                 surf = (
                     eq.surface.rho
@@ -110,16 +112,48 @@ class BoundaryRSelfConsistency(_Objective):
                     else self._surface_label
                 )
                 self._A[j, i] = zernike_radial(surf, l, m)
-            elif (
-                eq.bdry_mode == "poincare"
-            ):  # assumes zeta=0 XS is the surface used as BC
-                j = np.argwhere(
-                    np.logical_and(
-                        (modes[:, :-1] == [l, m]).all(axis=1),
-                        modes[:, 2] >= 0,
+        elif eq.bdry_mode == "poincare":
+            if self._zeta == 0:
+                for i, (l, m, n) in enumerate(eq.R_basis.modes):
+                    j = np.argwhere(
+                        np.logical_and(
+                            (modes[:, :-1] == [l, m]).all(axis=1),
+                            modes[:, 2] >= 0,
+                        )
                     )
+                    self._A[j, i] = 1
+            elif self._zeta == np.pi:
+                for i, (l, m, n) in enumerate(modes):
+                    j1 = np.argwhere(
+                        np.logical_and(
+                            np.logical_and(
+                                (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                                eq.R_basis.modes[:, 2] % 2 == 1,
+                            ),
+                            eq.R_basis.modes[:, 2] >= 0,
+                        )
+                    )
+                    j2 = np.argwhere(
+                        np.logical_and(
+                            np.logical_and(
+                                (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                                eq.R_basis.modes[:, 2] % 2 == 0,
+                            ),
+                            eq.R_basis.modes[:, 2] >= 0,
+                        )
+                    )
+                    self._A[i, j1] = -1
+                    self._A[i, j2] = 1
+                print(
+                    f"Number of odd cos terms are:  {np.count_nonzero(self._A == -1)}"
                 )
-                self._A[j, i] = 1
+                print(
+                    f"Number of even cos terms are:  {np.count_nonzero(self._A == 1)}"
+                )
+            else:
+                raise ValueError(
+                    f"Zeta value must be 0 or pi. The given value is {self._zeta}"
+                )
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -157,7 +191,9 @@ class BoundaryZSelfConsistency(_Objective):
         eq=None,
         surface_label=None,
         name="self_consistency Z",
+        zeta=0,
     ):
+        self._zeta = zeta
         self._surface_label = surface_label
         self._args = ["Z_lmn", "Zb_lmn"]
         super().__init__(
@@ -188,8 +224,8 @@ class BoundaryZSelfConsistency(_Objective):
         self._dim_f = eq.surface.Z_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
 
-        for i, (l, m, n) in enumerate(eq.Z_basis.modes):
-            if eq.bdry_mode == "lcfs":
+        if eq.bdry_mode == "lcfs":
+            for i, (l, m, n) in enumerate(eq.Z_basis.modes):
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
                 surf = (
                     eq.surface.rho
@@ -197,16 +233,48 @@ class BoundaryZSelfConsistency(_Objective):
                     else self._surface_label
                 )
                 self._A[j, i] = zernike_radial(surf, l, m)
-            elif (
-                eq.bdry_mode == "poincare"
-            ):  # assumes zeta=0 XS is the surface used as BC
-                j = np.argwhere(
-                    np.logical_and(
-                        (modes[:, :-1] == [l, m]).all(axis=1),
-                        modes[:, 2] >= 0,
+        elif eq.bdry_mode == "poincare":
+            if self._zeta == 0:
+                for i, (l, m, n) in enumerate(eq.Z_basis.modes):
+                    j = np.argwhere(
+                        np.logical_and(
+                            (modes[:, :-1] == [l, m]).all(axis=1),
+                            modes[:, 2] >= 0,
+                        )
                     )
+                    self._A[j, i] = 1
+            elif self._zeta == np.pi:
+                for i, (l, m, n) in enumerate(modes):
+                    j1 = np.argwhere(
+                        np.logical_and(
+                            np.logical_and(
+                                (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                                eq.Z_basis.modes[:, 2] % 2 == 1,
+                            ),
+                            eq.Z_basis.modes[:, 2] >= 0,
+                        )
+                    )
+                    j2 = np.argwhere(
+                        np.logical_and(
+                            np.logical_and(
+                                (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                                eq.Z_basis.modes[:, 2] % 2 == 0,
+                            ),
+                            eq.Z_basis.modes[:, 2] >= 0,
+                        )
+                    )
+                    self._A[i, j1] = -1
+                    self._A[i, j2] = 1
+                print(
+                    f"Number of odd cos terms are:  {np.count_nonzero(self._A == -1)}"
                 )
-                self._A[j, i] = 1
+                print(
+                    f"Number of even cos terms are:  {np.count_nonzero(self._A == 1)}"
+                )
+            else:
+                raise ValueError(
+                    f"Zeta value must be 0 or pi. The given value is {self._zeta}"
+                )
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -2523,8 +2591,15 @@ class PoincareLambda(_FixedObjective):
     _print_value_fmt = "Lambda poincare boundary error: {:10.3e}"
 
     def __init__(
-        self, eq=None, target=None, bounds=None, weight=1, name="poincare lambda"
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        name="poincare lambda",
+        zeta=0,
     ):
+        self._zeta = zeta
         self._args = ["L_lmn"]
         super().__init__(eq=eq, target=target, bounds=bounds, weight=weight, name=name)
 
@@ -2548,21 +2623,52 @@ class PoincareLambda(_FixedObjective):
             self.target is None
         ):  # uses current eq's value of lambda at zeta=0 as constraint
             Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
-                eq.L_lmn, eq.L_basis
+                eq.L_lmn,
+                eq.L_basis,
+                zeta=self._zeta,
             )
             Lb_modes = Lb_basis.modes
             self._dim_f = Lb_basis.num_modes
             self.target = Lb_lmn
 
         self._A = np.zeros((self._dim_f, dim_L))
-        for i, (l, m, n) in enumerate(L_modes):
-            j = np.argwhere(
-                np.logical_and(
-                    (Lb_modes[:, :2] == [l, m]).all(axis=1),
-                    Lb_modes[:, -1] >= 0,
+
+        if self._zeta == 0:
+            for i, (l, m, n) in enumerate(L_modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        (Lb_modes[:, :-1] == [l, m]).all(axis=1),
+                        Lb_modes[:, 2] >= 0,
+                    )
                 )
+                self._A[j, i] = 1
+        elif self._zeta == np.pi:
+            for i, (l, m, n) in enumerate(Lb_modes):
+                j1 = np.argwhere(
+                    np.logical_and(
+                        np.logical_and(
+                            (L_modes[:, :-1] == [l, m]).all(axis=1),
+                            L_modes[:, 2] % 2 == 1,
+                        ),
+                        L_modes[:, 2] >= 0,
+                    )
+                )
+                j2 = np.argwhere(
+                    np.logical_and(
+                        np.logical_and(
+                            (L_modes[:, :-1] == [l, m]).all(axis=1),
+                            L_modes[:, 2] % 2 == 0,
+                        ),
+                        L_modes[:, 2] >= 0,
+                    )
+                )
+                self._A[i, j1] = -1
+                self._A[i, j2] = 1
+        else:
+            raise ValueError(
+                f"Unvalid zeta value! Only 0 or pi is supported! zeta ={self._zeta}"
+                + "is given!"
             )
-            self._A[j, i] = 1
 
         if self.target is not None:
             self._dim_f = self._A.shape[0]

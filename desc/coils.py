@@ -16,7 +16,7 @@ from desc.geometry import (
 )
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
-from desc.optimizable import Optimizable, optimizable_parameter
+from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.utils import equals, errorif, flatten_list
 
 
@@ -710,7 +710,7 @@ def _check_type(coil0, coil):
         )
 
 
-class CoilSet(_Coil, MutableSequence):
+class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     """Set of coils of different geometry but shared parameterization and resolution.
 
     Parameters

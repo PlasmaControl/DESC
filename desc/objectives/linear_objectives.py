@@ -3234,7 +3234,7 @@ class FixWell(_FixedObjective):
 
     Parameters
     ----------
-    field : OmnigenousField, optional
+    field : OmnigenousField
         Field that will be optimized to satisfy the Objective.
     target : float, optional
         Target value(s) of the objective. If None, uses field value.
@@ -3272,6 +3272,7 @@ class FixWell(_FixedObjective):
         indices=True,
         name="fixed well",
     ):
+        self._field = field
         self._indices = indices
         self._target_from_user = setdefault(bounds, target)
         super().__init__(
@@ -3301,7 +3302,7 @@ class FixWell(_FixedObjective):
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
         elif self._indices is True:  # all indices
-            self._idx = np.arange(np.size(self.target))
+            self._idx = np.arange(np.size(self._field.B_lm))
         else:  # specified indices
             self._idx = np.atleast_1d(self._indices)
 
@@ -3338,7 +3339,7 @@ class FixOmni(_FixedObjective):
 
     Parameters
     ----------
-    field : OmnigenousField, optional
+    field : OmnigenousField
         Field that will be optimized to satisfy the Objective.
     target : float, optional
         Target value(s) of the objective. If None, uses field value.
@@ -3367,7 +3368,7 @@ class FixOmni(_FixedObjective):
 
     def __init__(
         self,
-        field=None,
+        field,
         target=None,
         bounds=None,
         weight=1,
@@ -3376,6 +3377,7 @@ class FixOmni(_FixedObjective):
         indices=True,
         name="fixed omnigenity",
     ):
+        self._field = field
         self._indices = indices
         self._target_from_user = setdefault(bounds, target)
         super().__init__(
@@ -3405,7 +3407,7 @@ class FixOmni(_FixedObjective):
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
         elif self._indices is True:  # all indices
-            self._idx = np.arange(np.size(self.target))
+            self._idx = np.arange(np.size(self._field.x_lmn))
         else:  # specified indices
             self._idx = np.atleast_1d(self._indices)
 

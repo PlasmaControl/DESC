@@ -9,6 +9,7 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.magnetic_fields import OmnigenousField
 from desc.objectives import (
     AspectRatio,
     AxisRSelfConsistency,
@@ -29,12 +30,14 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixOmni,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    FixWell,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
     get_equilibrium_objective,
@@ -329,7 +332,7 @@ def test_factorize_linear_constraints_asserts():
 def test_build_init():
     """Ensure that passing an equilibrium to init builds the objective correctly.
 
-    Related to gh issue #378
+    Test for GH issue #378.
     """
     eq = Equilibrium(M=3, N=1)
 
@@ -869,3 +872,40 @@ def test_FixNAE_util_correct_objectives():
     assert _is_any_instance(cs, FixIonTemperature)
     assert _is_any_instance(cs, FixAtomicNumber)
     assert _is_any_instance(cs, FixIota)
+
+
+@pytest.mark.unit
+def test_fix_omni_indices():
+    """Test that omnigenity parameters are constrained properly.
+
+    Test for GH issue #768.
+    """
+    NFP = 3
+    field = OmnigenousField(
+        L_well=1, M_well=5, L_omni=2, M_omni=3, N_omni=4, NFP=NFP, helicity=(1, NFP)
+    )
+
+    # no indices
+    constraint = FixWell(field=field, indices=False)
+    constraint.build()
+    assert constraint._idx.size == 0
+    constraint = FixOmni(field=field, indices=False)
+    constraint.build()
+    assert constraint._idx.size == 0
+
+    # all indices
+    constraint = FixWell(field=field, indices=True)
+    constraint.build()
+    assert constraint._idx.size == field.B_lm.size
+    constraint = FixOmni(field=field, indices=True)
+    constraint.build()
+    assert constraint._idx.size == field.x_lmn.size
+
+    # specified indices
+    indices = np.arange(3, 8)
+    constraint = FixWell(field=field, indices=indices)
+    constraint.build()
+    assert constraint._idx.size == indices.size
+    constraint = FixOmni(field=field, indices=indices)
+    constraint.build()
+    assert constraint._idx.size == indices.size

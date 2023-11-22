@@ -1862,18 +1862,18 @@ def FourierZernike_to_FourierZernike_no_N_modes(X_lmn_3D, basis_3D, zeta):
                     inds = np.where(
                         np.logical_and(
                             (modes_3D[:, :2] == [l, m]).all(axis=1),
-                            modes_3D[:, 2] == 0,
+                            modes_3D[:, 2] % 2 == 0,
                         )
                     )[0]
 
-                    inds2 = np.where(
+                    inds1 = np.where(
                         np.logical_and(
                             (modes_3D[:, :2] == [l, m]).all(axis=1),
-                            modes_3D[:, 2] > 0,
+                            modes_3D[:, 2] % 2 == 1,
                         )
                     )[0]
 
-                    SUM = np.sum(X_lmn_3D[inds]) - np.sum(X_lmn_3D[inds2])
+                    SUM = np.sum(X_lmn_3D[inds]) - np.sum(X_lmn_3D[inds1])
                     X_lmn_no_N[i] = SUM
 
     return X_lmn_no_N, basis_3D

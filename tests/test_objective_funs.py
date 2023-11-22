@@ -18,10 +18,10 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.objectives import (
     AspectRatio,
-    BoundaryErrorBIEST,
-    BoundaryErrorBIESTSC,
+    BoundaryError,
     BoundaryErrorNESTOR,
     BScaleLength,
     CurrentDensity,
@@ -413,10 +413,12 @@ class TestObjectiveFunction:
         coilset = CoilSet.linspaced_angular(coil, n=100)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        sheet_current = FourierCurrentPotentialField()
+        sheet_current.change_resolution(M=eq.M, N=eq.N, NFP=eq.NFP, sym=eq.sym)
         eq.solve()
-        obj = BoundaryErrorBIESTSC(coilset, eq, field_grid=coil_grid)
+        obj = BoundaryError(eq, coilset, sheet_current, field_grid=coil_grid)
         obj.build()
-        f = obj.compute_scaled_error(*obj.xs(eq))
+        f = obj.compute_scaled_error(*obj.xs(eq, sheet_current))
         n = len(f) // 3
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
@@ -433,7 +435,7 @@ class TestObjectiveFunction:
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
-        obj = BoundaryErrorBIEST(coilset, eq, field_grid=coil_grid)
+        obj = BoundaryError(eq, coilset, field_grid=coil_grid)
         obj.build()
         f = obj.compute_scaled_error(*obj.xs(eq))
         n = len(f) // 2
@@ -450,7 +452,7 @@ class TestObjectiveFunction:
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
-        obj = BoundaryErrorNESTOR(coilset, eq, field_grid=coil_grid)
+        obj = BoundaryErrorNESTOR(eq, coilset, field_grid=coil_grid)
         obj.build()
         f = obj.compute_scaled_error(*obj.xs(eq))
         np.testing.assert_allclose(f, 0, atol=2e-3)
@@ -1001,7 +1003,7 @@ def test_boundary_error_print(capsys):
     coil_grid = LinearGrid(N=20)
     eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
 
-    obj = BoundaryErrorBIEST(coilset, eq, field_grid=coil_grid)
+    obj = BoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
     f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
@@ -1075,16 +1077,17 @@ def test_boundary_error_print(capsys):
         + "\n"
     )
     assert out.out == corr_out
-
-    obj = BoundaryErrorBIESTSC(coilset, eq, field_grid=coil_grid)
+    sheet_current = FourierCurrentPotentialField()
+    sheet_current.change_resolution(M=eq.M, N=eq.N, NFP=eq.NFP, sym=eq.sym)
+    obj = BoundaryError(eq, coilset, sheet_current, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq, sheet_current)))
     n = len(f) // 3
     f1 = f[:n]
     f2 = f[n : 2 * n]
     f3 = f[2 * n :]
-    obj.print_value(*obj.xs(eq))
+    obj.print_value(*obj.xs(eq, sheet_current))
     out = capsys.readouterr()
 
     corr_out = str(

@@ -541,7 +541,7 @@ def test_rejit():
 
 @pytest.mark.unit
 def test_generic_compute():
-    """Test for gh issue #388."""
+    """Test for GH issue #388."""
     eq = Equilibrium()
     obj = ObjectiveFunction(AspectRatio(target=2, weight=1, eq=eq))
     obj.build()

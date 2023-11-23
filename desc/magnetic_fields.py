@@ -984,8 +984,7 @@ class ScalarPotentialField(_MagneticField):
         if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
-        if coords.dtype == int:
-            coords = coords.astype(float)
+        coords = coords.astype(float)  # ensure coords are float
         if basis == "xyz":
             coords = xyz2rpz(coords)
 
@@ -1032,7 +1031,16 @@ class DommaschkPotentialField(ScalarPotentialField):
 
     """
 
-    def __init__(self, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1.0):
+    def __init__(
+        self,
+        ms=jnp.array([0]),
+        ls=jnp.array([0]),
+        a_arr=jnp.array([0.0]),
+        b_arr=jnp.array([0.0]),
+        c_arr=jnp.array([0.0]),
+        d_arr=jnp.array([0.0]),
+        B0=1.0,
+    ):
         ms = jnp.atleast_1d(ms)
         ls = jnp.atleast_1d(ls)
         a_arr = jnp.atleast_1d(a_arr)
@@ -1069,9 +1077,11 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         Parameters
         ----------
-            field (MagneticField or callable): magnetic field to fit
+            field (MagneticField or callable or ndarray): magnetic field to fit
                 if callable, must accept (num_nodes,3) ndarray as argument
-                and output (num_nodes,3) as the B field in cylindrical rpz basis.
+                    and output (num_nodes,3) as the B field in cylindrical rpz basis.
+                if ndarray, must be an ndarray of the magnetic field in rpz,
+                    of shape (num_nodes,3) with the columns being (B_R, B_phi, B_Z)
             coords (ndarray): shape (num_nodes,3) of R,phi,Z points to fit field at
             max_m (int): maximum m to use for Dommaschk Potentials
             max_l (int): maximum l to use for Dommaschk Potentials
@@ -1086,11 +1096,15 @@ class DommaschkPotentialField(ScalarPotentialField):
         # c is the dommaschk potential coefficients
         # c will be [B0, a_00, a_10, a_01, a_11... etc]
         # b is the magnetic field at each node which we are fitting
-
-        if not isinstance(field, _MagneticField):
-            B = field(coords)
-        else:
+        if isinstance(field, _MagneticField):
             B = field.compute_magnetic_field(coords)
+        elif callable(field):
+            B = field(coords)
+        else:  # it must be the field evaluated at the passed-in coords
+            B = field
+        # TODO: add basis argument for if passed-in field or callable
+        # evaluates rpz or xyz basis magnetic field vector,
+        # and what basis coords is
 
         #########
         # make b
@@ -1161,9 +1175,7 @@ class DommaschkPotentialField(ScalarPotentialField):
                 ls.append(l)
         for i in range(4):
             abcd_zero_due_to_sym_inds[i] = jnp.asarray(abcd_zero_due_to_sym_inds[i])
-        assert (
-            round(jnp.sum(len(a_s) + len(b_s) + len(c_s) + len(d_s))) == num_modes - 1
-        )
+        assert (len(a_s) + len(b_s) + len(c_s) + len(d_s)) == num_modes - 1
         params = {
             "ms": ms,
             "ls": ls,
@@ -1219,7 +1231,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         c = jnp.matmul(Ainv, rhs)
 
         res = jnp.matmul(A, c) - rhs
-        if verbose > 1:
+        if verbose > 0:
             print(f"Mean Residual of fit: {jnp.mean(jnp.abs(res)):1.4e} T")
             print(f"Max Residual of fit: {jnp.max(jnp.abs(res)):1.4e} T")
             print(f"Min Residual of fit: {jnp.min(jnp.abs(res)):1.4e} T")

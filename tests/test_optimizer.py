@@ -615,7 +615,7 @@ def test_scipy_constrained_solve():
     )["curvature_H_rho"]
     Hbounds = ((1 - 0.05 * np.sign(H)) * H, (1 + 0.05 * np.sign(H)) * abs(H))
     constraints += (
-        Volume(eq=eq, bounds=Vbounds),
+        Volume(eq_or_surf=eq, bounds=Vbounds),
         AspectRatio(eq=eq, bounds=ARbounds),
         MeanCurvature(eq_or_surf=eq, bounds=Hbounds),
     )
@@ -876,7 +876,7 @@ def test_constrained_AL_lsq():
     AR = eq.compute("R0/a")["R0/a"]
     ARbounds = (0.95 * AR, 1.05 * AR)
     constraints += (
-        Volume(eq=eq, bounds=Vbounds),
+        Volume(eq_or_surf=eq, bounds=Vbounds),
         AspectRatio(eq=eq, bounds=ARbounds),
         MagneticWell(eq=eq, bounds=(0, jnp.inf)),
         ForceBalance(eq=eq, bounds=(-1e-3, 1e-3), normalize_target=False),
@@ -926,7 +926,7 @@ def test_constrained_AL_scalar():
     V = eq.compute("V")["V"]
     AR = eq.compute("R0/a")["R0/a"]
     constraints += (
-        Volume(eq=eq, target=V),
+        Volume(eq_or_surf=eq, target=V),
         AspectRatio(eq=eq, target=AR),
         MagneticWell(eq=eq, bounds=(0, jnp.inf)),
         ForceBalance(eq=eq, bounds=(-1e-3, 1e-3), normalize_target=False),

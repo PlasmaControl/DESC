@@ -284,8 +284,9 @@ class Volume(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq_or_surf : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -319,7 +320,7 @@ class Volume(_Objective):
 
     def __init__(
         self,
-        eq,
+        eq_or_surf,
         target=None,
         bounds=None,
         weight=1,
@@ -333,7 +334,7 @@ class Volume(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            things=eq,
+            things=eq_or_surf,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -354,9 +355,14 @@ class Volume(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
+        eq_or_surf = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            grid = QuadratureGrid(
+                L=eq_or_surf.L_grid,
+                M=eq_or_surf.M_grid,
+                N=eq_or_surf.N_grid,
+                NFP=eq_or_surf.NFP,
+            )
         else:
             grid = self._grid
 
@@ -368,8 +374,8 @@ class Volume(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq_or_surf, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq_or_surf, grid=grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -380,7 +386,7 @@ class Volume(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            scales = compute_scaling_factors(eq)
+            scales = compute_scaling_factors(eq_or_surf)
             self._normalization = scales["V"]
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -391,7 +397,8 @@ class Volume(_Objective):
         Parameters
         ----------
         params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -405,7 +412,7 @@ class Volume(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -798,7 +805,8 @@ class MeanCurvature(_Objective):
         Parameters
         ----------
         params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -947,7 +955,8 @@ class PrincipalCurvature(_Objective):
         Parameters
         ----------
         params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants

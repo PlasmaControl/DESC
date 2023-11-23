@@ -3,7 +3,6 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
-import scipy.linalg
 from jax import jacfwd
 from netCDF4 import Dataset
 
@@ -1227,10 +1226,9 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         # now solve Ac=b for the coefficients c
 
-        Ainv = scipy.linalg.pinv(A)
-        c = jnp.matmul(Ainv, rhs)
+        # TODO: use min singular value to give sense of cond number?
+        c, res, _, _ = jnp.linalg.lstsq(A, rhs)
 
-        res = jnp.matmul(A, c) - rhs
         if verbose > 0:
             print(f"Mean Residual of fit: {jnp.mean(jnp.abs(res)):1.4e} T")
             print(f"Max Residual of fit: {jnp.max(jnp.abs(res)):1.4e} T")

@@ -574,7 +574,7 @@ def test_dommaschk_fit_toroidal_field():
 
     # test fit from values
     B = DommaschkPotentialField.fit_magnetic_field(
-        B0_over_R.compute_magnetic_field(coords), coords, max_m, max_l, sym=True
+        B0_over_R(coords), coords, max_m, max_l, sym=True
     )
 
     B_dom = B.compute_magnetic_field(coords)

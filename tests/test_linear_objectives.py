@@ -341,12 +341,12 @@ def test_build_init():
 
     xz = {key: np.zeros_like(val) for key, val in eq.params_dict.items()}
     arg = "Rb_lmn"
-    A = fbR1.jac_scaled(xz)[arg]
+    A = fbR1.jac_scaled(xz)[0][arg]
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
     arg = "Zb_lmn"
-    A = fbZ1.jac_scaled(xz)[arg]
+    A = fbZ1.jac_scaled(xz)[0][arg]
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
 

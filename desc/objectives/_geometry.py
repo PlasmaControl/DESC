@@ -7,6 +7,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
 
@@ -663,9 +664,7 @@ class PlasmaVesselDistance(_Objective):
                 profiles={},
                 basis="xyz",
             )["x"]
-        d = jnp.linalg.norm(
-            plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1
-        )
+        d = safenorm(plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1)
 
         if self._use_softmin:  # do softmin
             return jnp.apply_along_axis(softmin, 0, d, self._alpha)

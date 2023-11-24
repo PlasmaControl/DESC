@@ -141,7 +141,7 @@ objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond,
 objective.build()
 
 ar = jnp.copy(eq.compute("R0/a")["R0/a"])
-aspect_ratio = AspectRatio(target=ar, weight=1e1)
+aspect_ratio = AspectRatio(eq=eq, target=ar, weight=1e1)
 # Compute optimization
 solution = objective.compute(*objective.xs(eq))
 

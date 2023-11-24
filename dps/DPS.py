@@ -149,7 +149,7 @@ intermediate_time_2 = timet()
 print(f"\nTime to build and compute solution: {intermediate_time_2 - intermediate_time}s\n")
 
 # Objective Object
-ObjFunction = ObjectiveFunction([objective, ar], deriv_mode="looped")
+ObjFunction = ObjectiveFunction([objective, aspect_ratio], deriv_mode="looped")
 ObjFunction.build()
 
 # gradient = ObjFunction.grad(ObjFunction.x(eq))

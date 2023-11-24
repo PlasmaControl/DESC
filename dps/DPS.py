@@ -96,7 +96,7 @@ print(f"Loaded Equilibrium: {eq_file}\n")
 
 eq = desc.io.load(eq_file)
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
-eq._current = None
+eq._current = 0
 
 # Energy and Mass info
 Energy_eV = 10 #1 # eV (3.52e6 eV proton energy)

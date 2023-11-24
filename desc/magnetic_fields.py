@@ -1230,7 +1230,8 @@ class DommaschkPotentialField(ScalarPotentialField):
         c, res, _, _ = jnp.linalg.lstsq(A, rhs)
 
         if verbose > 0:
-            print(f"Sum of Squares Residual of fit: {res:1.4e} T")
+            # res is a list of len(1) so index into it
+            print(f"Sum of Squares Residual of fit: {res[0]:1.4e} T")
 
         # recover the params from the c coefficient vector
         B0 = c[0]

@@ -7,7 +7,8 @@ import scipy.constants
 import matplotlib.pyplot as plt
 from time import time as timet
 import desc.equilibrium
-from desc.objectives import ParticleTracer, ObjectiveFunction, ForceBalance, FixBoundaryR, FixBoundaryZ, FixPressure, FixIota, FixPsi
+from desc.objectives import (ParticleTracer, AspectRatio, ObjectiveFunction, ForceBalance, 
+                                FixBoundaryR, FixBoundaryZ, FixPressure, FixIota, FixPsi, FixCurrent)
 from desc.geometry import FourierRZToroidalSurface
 from desc.equilibrium import Equilibrium
 from desc.continuation import solve_continuation_automatic
@@ -88,7 +89,7 @@ print("*************** START ***************")
 print("\nStarting Equilibrium")
 # eq_file = "input.LandremanPaul2021_QA_scaled_output.h5"
 # eq_file = "test_equilibrium.h5"
-eq_file = "rot_ellipse_M1_N1.h5"
+eq_file = "eq_2411_M1_N1.h5"
 
 opt_file = "optimized_" + eq_file
 print(f"Loaded Equilibrium: {eq_file}\n")
@@ -116,8 +117,8 @@ ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
-tmax = 1e-2
-nt = 1000
+tmax = 1e-1
+nt = 20000
 time = jnp.linspace(tmin, tmax, nt)
 
 # Initial State
@@ -139,6 +140,8 @@ print(f"\nTime from beginning until here: {intermediate_time - initial_time}s\n"
 objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1.e-7)
 objective.build()
 
+ar = jnp.copy(eq.compute("R0/a")["R0/a"])
+aspect_ratio = AspectRatio(target=ar, weight=1e1)
 # Compute optimization
 solution = objective.compute(*objective.xs(eq))
 
@@ -146,7 +149,7 @@ intermediate_time_2 = timet()
 print(f"\nTime to build and compute solution: {intermediate_time_2 - intermediate_time}s\n")
 
 # Objective Object
-ObjFunction = ObjectiveFunction([objective], deriv_mode="looped")
+ObjFunction = ObjectiveFunction([objective, ar], deriv_mode="looped")
 ObjFunction.build()
 
 # gradient = ObjFunction.grad(ObjFunction.x(eq))
@@ -166,7 +169,7 @@ print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermed
 # Z_modes = eq.surface.Z_basis.modes[jnp.max(jnp.abs(eq.surface.Z_basis.modes), 1), :]
 
 R_modes = jnp.array([[0, 0, 0]])
-constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixPsi(eq)) #, FixIota(eq)) #ForceBalance(eq, bounds=(-1e-3, 1e-3))
+constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixPsi(eq), FixCurrent(eq)) #, FixIota(eq)) #ForceBalance(eq, bounds=(-1e-3, 1e-3))
 eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=100, copy=False) # Mudar o número de iterações para 3, 10, 100
 eq.save(opt_file)
 

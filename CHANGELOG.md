@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Adds ``deriv_mode`` keyword argument to all ``Objective``s for specifying whether to
+use forward or reverse mode automatic differentiation.
 - Adds ``desc.compat.rescale`` for rescaling equilibria to a specified size and field
 strength.
  - Adds new keyword ``surface_fixed`` to ``PlasmaVesselDistance`` objective which says

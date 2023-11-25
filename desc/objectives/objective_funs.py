@@ -30,13 +30,13 @@ class ObjectiveFunction(IOAble):
         Whether to just-in-time compile the objectives and derivatives.
     deriv_mode : {"auto", "batched", "blocked", "looped"}
         Method for computing Jacobian matrices. "batched" uses forward mode, applied to
-        the entire objective at once, and is generally the fastest, though most memory
-        intensive. "blocked" builds the Jacobian for each objective separately, using
-        each objective's preferred AD mode. It can be somewhat slower but is more
-        memory efficient and can take more advantage of the structure of each objective.
+        the entire objective at once, and is generally the fastest for vector valued
+        objectives, though most memory intensive. "blocked" builds the Jacobian for each
+        objective separately, using each objective's preferred AD mode. Generally the
+        most efficient option when mixing scalar and vector valued objectives.
         "looped" uses forward mode jacobian vector products in a loop to build the
         Jacobian column by column. Generally the slowest, but most memory efficient.
-        "auto" defaults to "batched" if all sub-objectives are also set to "auto",
+        "auto" defaults to "batched" if all sub-objectives are set to "fwd",
         otherwise "blocked".
     verbose : int, optional
         Level of output.
@@ -62,22 +62,21 @@ class ObjectiveFunction(IOAble):
 
     def _set_derivatives(self):
         """Set up derivatives of the objective functions."""
-        deriv_mode = self._deriv_mode
-        if deriv_mode == "auto":
-            if all((obj._deriv_mode == "auto") for obj in self.objectives):
-                deriv_mode = "batched"
+        if self._deriv_mode == "auto":
+            if all((obj._deriv_mode == "fwd") for obj in self.objectives):
+                self._deriv_mode = "batched"
             else:
-                deriv_mode = "blocked"
-        if deriv_mode in {"batched", "looped", "blocked"}:
+                self._deriv_mode = "blocked"
+        if self._deriv_mode in {"batched", "looped", "blocked"}:
             self._grad = Derivative(self.compute_scalar, mode="grad")
             self._hess = Derivative(self.compute_scalar, mode="hess")
-        if deriv_mode == "batched":
+        if self._deriv_mode == "batched":
             self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
             self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
-        if deriv_mode == "looped":
+        if self._deriv_mode == "looped":
             self._jac_scaled = Derivative(self.compute_scaled, mode="looped")
             self._jac_unscaled = Derivative(self.compute_unscaled, mode="looped")
-        if deriv_mode == "blocked":
+        if self._deriv_mode == "blocked":
             # could also do something similar for grad and hess, but probably not
             # worth it. grad is already super cheap to eval all at once, and blocked
             # hess would only be block diag which may miss important interactions.
@@ -119,77 +118,27 @@ class ObjectiveFunction(IOAble):
 
         self._use_jit = True
 
-        try:
-            del self.compute_scaled
-        except AttributeError:
-            pass
-        self.compute_scaled = jit(self.compute_scaled)
+        methods = [
+            "compute_scaled",
+            "compute_scaled_error",
+            "compute_unscaled",
+            "compute_scalar",
+            "jac_scaled",
+            "jac_unscaled",
+            "hess",
+            "grad",
+            "jvp_scaled",
+            "jvp_unscaled",
+            "vjp_scaled",
+            "vjp_unscaled",
+        ]
 
-        try:
-            del self.compute_scaled_error
-        except AttributeError:
-            pass
-        self.compute_scaled_error = jit(self.compute_scaled_error)
-
-        try:
-            del self.compute_unscaled
-        except AttributeError:
-            pass
-        self.compute_unscaled = jit(self.compute_unscaled)
-
-        try:
-            del self.compute_scalar
-        except AttributeError:
-            pass
-        self.compute_scalar = jit(self.compute_scalar)
-
-        try:
-            del self.jac_scaled
-        except AttributeError:
-            pass
-        self.jac_scaled = jit(self.jac_scaled)
-
-        try:
-            del self.jac_unscaled
-        except AttributeError:
-            pass
-        self.jac_unscaled = jit(self.jac_unscaled)
-
-        try:
-            del self.hess
-        except AttributeError:
-            pass
-        self.hess = jit(self.hess)
-
-        try:
-            del self.grad
-        except AttributeError:
-            pass
-        self.grad = jit(self.grad)
-
-        try:
-            del self.jvp_scaled
-        except AttributeError:
-            pass
-        self.jvp_scaled = jit(self.jvp_scaled)
-
-        try:
-            del self.jvp_unscaled
-        except AttributeError:
-            pass
-        self.jvp_unscaled = jit(self.jvp_unscaled)
-
-        try:
-            del self.vjp_scaled
-        except AttributeError:
-            pass
-        self.vjp_scaled = jit(self.vjp_scaled)
-
-        try:
-            del self.vjp_unscaled
-        except AttributeError:
-            pass
-        self.vjp_unscaled = jit(self.vjp_unscaled)
+        for method in methods:
+            try:
+                delattr(self, method)
+            except AttributeError:
+                pass
+            setattr(self, method, jit(getattr(self, method)))
 
         for obj in self._objectives:
             if obj._use_jit:
@@ -855,66 +804,39 @@ class _Objective(IOAble, ABC):
         # derivatives return tuple, one for each thing
         self._grad = Derivative(self.compute_scalar, argnums, mode="grad")
         self._hess = Derivative(self.compute_scalar, argnums, mode="hess")
-        jac_mode = self._deriv_mode
-        if jac_mode == "auto":
+        if self._deriv_mode == "auto":
             # choose based on shape of jacobian
-            jac_mode = (
+            self._deriv_mode = (
                 "fwd" if self.dim_f >= sum(t.dim_x for t in self.things) else "rev"
             )
-        self._jac_scaled = Derivative(self.compute_scaled, argnums, mode=jac_mode)
-        self._jac_unscaled = Derivative(self.compute_unscaled, argnums, mode=jac_mode)
+        self._jac_scaled = Derivative(
+            self.compute_scaled, argnums, mode=self._deriv_mode
+        )
+        self._jac_unscaled = Derivative(
+            self.compute_unscaled, argnums, mode=self._deriv_mode
+        )
 
     def jit(self):  # noqa: C901
         """Apply JIT to compute methods, or re-apply after updating self."""
         self._use_jit = True
 
-        try:
-            del self.compute_scaled
-        except AttributeError:
-            pass
-        self.compute_scaled = jit(self.compute_scaled)
+        methods = [
+            "compute_scaled",
+            "compute_scaled_error",
+            "compute_unscaled",
+            "compute_scalar",
+            "jac_scaled",
+            "jac_unscaled",
+            "hess",
+            "grad",
+        ]
 
-        try:
-            del self.compute_scaled_error
-        except AttributeError:
-            pass
-        self.compute_scaled_error = jit(self.compute_scaled_error)
-
-        try:
-            del self.compute_unscaled
-        except AttributeError:
-            pass
-        self.compute_unscaled = jit(self.compute_unscaled)
-
-        try:
-            del self.compute_scalar
-        except AttributeError:
-            pass
-        self.compute_scalar = jit(self.compute_scalar)
-
-        try:
-            del self.jac_scaled
-        except AttributeError:
-            pass
-        self.jac_scaled = jit(self.jac_scaled)
-
-        try:
-            del self.jac_unscaled
-        except AttributeError:
-            pass
-        self.jac_unscaled = jit(self.jac_unscaled)
-
-        try:
-            del self.hess
-        except AttributeError:
-            pass
-        self.hess = jit(self.hess)
-
-        try:
-            del self.grad
-        except AttributeError:
-            pass
-        self.grad = jit(self.grad)
+        for method in methods:
+            try:
+                delattr(self, method)
+            except AttributeError:
+                pass
+            setattr(self, method, jit(getattr(self, method)))
 
     def _check_dimensions(self):
         """Check that len(target) = len(bounds) = len(weight) = dim_f."""

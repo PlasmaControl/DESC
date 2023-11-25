@@ -1000,19 +1000,18 @@ def test_proximal_with_PlasmaVesselDistance():
         objective,
         constraints,
         verbose=3,
-        maxiter=1,
+        maxiter=3,
     )
 
-    # check error if proximal is given multiple objects in things
+    # make sure it also works if proximal is given multiple objects in things
     obj = PlasmaVesselDistance(
         surface=surf, eq=eq, target=0.5, plasma_grid=grid, surface_fixed=False
     )
     objective = ObjectiveFunction((obj,))
-    with pytest.raises(ValueError):
-        (eq, surf), result = optimizer.optimize(
-            (eq, surf),
-            objective,
-            constraints,
-            verbose=3,
-            maxiter=1,
-        )
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf),
+        objective,
+        constraints,
+        verbose=3,
+        maxiter=3,
+    )

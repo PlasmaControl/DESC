@@ -7,6 +7,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
 
@@ -472,9 +473,10 @@ class PlasmaVesselDistance(_Objective):
     surface_fixed: bool, optional
         Whether the surface the distance from the plasma is computed to
         is fixed or not. If True, the surface is fixed and its coordinates are
-        precomputed, which saves on computation time during optimization.
+        precomputed, which saves on computation time during optimization, and
+        self.things = [eq] only.
         If False, the surface coordinates are computed at every iteration.
-        False by default.
+        False by default, so that self.things = [eq, surface]
     alpha: float, optional
         Parameter used for softmin. The larger alpha, the closer the softmin
         approximates the hardmin. softmin -> hardmin as alpha -> infinity.
@@ -516,7 +518,7 @@ class PlasmaVesselDistance(_Objective):
         self._surface_fixed = surface_fixed
         self._alpha = alpha
         super().__init__(
-            things=[eq, self._surface],
+            things=[eq, self._surface] if not surface_fixed else [eq],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -538,7 +540,7 @@ class PlasmaVesselDistance(_Objective):
 
         """
         eq = self.things[0]
-        surface = self.things[1]
+        surface = self._surface if self._surface_fixed else self.things[1]
         # if things[1] is different than self._surface, update self._surface
         if surface != self._surface:
             self._surface = surface
@@ -621,7 +623,7 @@ class PlasmaVesselDistance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, equil_params, surface_params, constants=None):
+    def compute(self, equil_params, surface_params=None, constants=None):
         """Compute plasma-surface distance.
 
         Parameters
@@ -630,6 +632,7 @@ class PlasmaVesselDistance(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         surface_params : dict
             Dictionary of surface degrees of freedom, eg Surface.params_dict
+            Only needed if self._surface_fixed = False
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -661,9 +664,7 @@ class PlasmaVesselDistance(_Objective):
                 profiles={},
                 basis="xyz",
             )["x"]
-        d = jnp.linalg.norm(
-            plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1
-        )
+        d = safenorm(plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1)
 
         if self._use_softmin:  # do softmin
             return jnp.apply_along_axis(softmin, 0, d, self._alpha)

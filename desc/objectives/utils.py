@@ -66,6 +66,7 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
     A = []
     b = []
 
+    from desc.equilibrium import Equilibrium
     from desc.optimize import ProximalProjection
 
     prox_flag = isinstance(objective, ProximalProjection)
@@ -87,7 +88,11 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
                     arg: jnp.zeros((con.dim_f, dimx))
                     for arg, dimx in thing.dimensions.items()
                 }
-            args = objective._args if prox_flag else thing.optimizable_params
+            args = (
+                objective._args
+                if prox_flag and isinstance(thing, Equilibrium)
+                else thing.optimizable_params
+            )
             A_per_thing.append(jnp.hstack([A_[arg] for arg in args]))
         # using obj.compute instead of obj.target to allow for correct scale/weight
         b_ = -con.compute_scaled_error(*xz)

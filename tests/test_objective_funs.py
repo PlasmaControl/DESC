@@ -19,6 +19,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.objectives import (
     AspectRatio,
+    BootstrapRedlConsistency,
     BScaleLength,
     CurrentDensity,
     Elongation,
@@ -26,6 +27,7 @@ from desc.objectives import (
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
+    GoodCoordinates,
     HelicalForceBalance,
     Isodynamicity,
     MagneticWell,
@@ -47,7 +49,7 @@ from desc.objectives import (
 )
 from desc.objectives.objective_funs import _Objective
 from desc.objectives.utils import softmax, softmin
-from desc.profiles import PowerSeriesProfile
+from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -401,6 +403,69 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_target_mean_iota(self):
+        """Test calculation of iota profile average."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            mean_iota = jnp.mean(eq.compute("iota", grid=grid)["iota"])
+            obj = RotationalTransform(
+                target=mean_iota, weight=1, eq=eq, loss_function="mean", grid=grid
+            )
+            obj.build()
+            mean_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
+            mean_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            mean_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(mean_iota, mean_iota_unscaled, atol=1e-16)
+            np.testing.assert_allclose(mean_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(mean_iota_scaled, mean_iota, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
+    def test_target_max_iota(self):
+        """Test calculation of iota profile max."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            max_iota = jnp.max(eq.compute("iota", grid=grid)["iota"])
+            obj = RotationalTransform(
+                target=max_iota, weight=1, eq=eq, loss_function="max", grid=grid
+            )
+            obj.build()
+            max_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
+            max_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            max_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(max_iota, max_iota_unscaled, atol=1e-16)
+            np.testing.assert_allclose(max_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(max_iota_scaled, max_iota, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
+    def test_target_min_iota(self):
+        """Test calculation of iota profile min."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            min_iota = jnp.min(eq.compute("iota", grid=grid)["iota"])
+            obj = RotationalTransform(
+                target=min_iota, weight=1, eq=eq, loss_function="min", grid=grid
+            )
+            obj.build()
+            min_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
+            min_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            min_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(min_iota, min_iota_unscaled, atol=1e-16)
+            np.testing.assert_allclose(min_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(min_iota_scaled, min_iota, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
 
 
 @pytest.mark.unit
@@ -955,7 +1020,7 @@ def test_objective_fun_things():
     np.testing.assert_allclose(d, a_s2 - a_s)
 
     with pytest.raises(AssertionError):
-        # one of these is not optimizeable, throws error
+        # one of these is not optimizable, throws error
         obj.things = [eq, 2.0]
     with pytest.raises(AssertionError):
         # these are not the expected types
@@ -1095,6 +1160,28 @@ def test_softmax_and_softmin():
     # as alpha -> infinity, softmin -> min
     sftmin = softmin(arr, alpha=100)
     np.testing.assert_almost_equal(sftmin, np.min(arr))
+    sftmin = softmin(arr, alpha=100)
+    np.testing.assert_almost_equal(sftmin, np.min(arr))
+
+
+@pytest.mark.unit
+def test_loss_function_asserts():
+    """Test the checks on loss function for _Objective."""
+    eq = Equilibrium()
+    # ensure passed-in loss_function is callable
+    with pytest.raises(AssertionError):
+        RotationalTransform(eq=eq, loss_function=1)
+    # ensure passed-in loss_function takes only one argument
+    fun = lambda x, y: x + y
+    with pytest.raises(Exception):
+        RotationalTransform(eq=eq, loss_function=fun)
+    # ensure passed-in loss_function returns a single 0D or 1D array
+    fun = lambda x: jnp.vstack((x, x))
+    with pytest.raises(AssertionError):
+        RotationalTransform(eq=eq, loss_function=fun)
+    fun = lambda x: (x, x)
+    with pytest.raises(AssertionError):
+        RotationalTransform(eq=eq, loss_function=fun)
 
 
 @pytest.mark.unit
@@ -1435,3 +1522,67 @@ def test_compute_scalar_resolution():  # noqa: C901
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+
+
+@pytest.mark.unit
+def test_objective_no_nangrad():
+    """Make sure reverse mode AD works correctly for all objectives."""
+    # these need some special logic
+    eq = Equilibrium(L=2, M=2, N=2)
+    surf = FourierRZToroidalSurface()
+    obj = ObjectiveFunction(PlasmaVesselDistance(eq, surf))
+    obj.build()
+    g = obj.grad(obj.x(eq, surf))
+    assert not np.any(np.isnan(g)), "plasma vessel distance"
+
+    eq = Equilibrium(L=2, M=2, N=2, anisotropy=FourierZernikeProfile())
+    obj = ObjectiveFunction(ForceBalanceAnisotropic(eq))
+    obj.build()
+    g = obj.grad(obj.x(eq))
+    assert not np.any(np.isnan(g)), "anisotropic"
+
+    eq = Equilibrium(
+        L=2,
+        M=2,
+        N=2,
+        electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+        electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+        current=PowerSeriesProfile([1, 0, -1]),
+    )
+    obj = ObjectiveFunction(BootstrapRedlConsistency(eq))
+    obj.build()
+    g = obj.grad(obj.x(eq))
+    assert not np.any(np.isnan(g)), "redl bootstrap"
+
+    # these only need basic equilibrium
+    eq = Equilibrium(L=2, M=2, N=2)
+    objectives = [
+        CurrentDensity,
+        Energy,
+        ForceBalance,
+        HelicalForceBalance,
+        RadialForceBalance,
+        AspectRatio,
+        BScaleLength,
+        Elongation,
+        GoodCoordinates,
+        MeanCurvature,
+        PrincipalCurvature,
+        Volume,
+        Pressure,
+        RotationalTransform,
+        Shear,
+        ToroidalCurrent,
+        Isodynamicity,
+        QuasisymmetryBoozer,
+        QuasisymmetryTripleProduct,
+        QuasisymmetryTwoTerm,
+        MagneticWell,
+        MercierStability,
+    ]
+
+    for objective in objectives:
+        obj = ObjectiveFunction(objective(eq))
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), str(objective)

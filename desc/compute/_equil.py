@@ -14,7 +14,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import cross, dot, surface_averages
+from .utils import cross, dot, safenorm, surface_averages
 
 
 @register_compute_fun(
@@ -285,7 +285,7 @@ def _J_Z(params, transforms, profiles, data, **kwargs):
     data=["J"],
 )
 def _Jmag(params, transforms, profiles, data, **kwargs):
-    data["|J|"] = jnp.linalg.norm(data["J"], axis=-1)
+    data["|J|"] = safenorm(data["J"], axis=-1)
     return data
 
 
@@ -518,7 +518,7 @@ def _F(params, transforms, profiles, data, **kwargs):
     data=["F"],
 )
 def _Fmag(params, transforms, profiles, data, **kwargs):
-    data["|F|"] = jnp.linalg.norm(data["F"], axis=-1)
+    data["|F|"] = safenorm(data["F"], axis=-1)
     return data
 
 

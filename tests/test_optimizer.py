@@ -318,6 +318,7 @@ def test_no_iterations():
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.optimize
 def test_overstepping():
     """Test that equilibrium is NOT updated when final function value is worse.
 
@@ -403,6 +404,7 @@ def test_overstepping():
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.solve
 def test_maxiter_1_and_0_solve():
     """Test that solves with maxiter 1 and 0 terminate correctly."""
     # correctly meaning they terminate, instead of looping infinitely
@@ -430,6 +432,7 @@ def test_maxiter_1_and_0_solve():
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.solve
 def test_scipy_fail_message():
     """Test that scipy fail message does not cause an error (see PR #434)."""
     eq = Equilibrium(M=3)
@@ -588,6 +591,7 @@ def test_all_optimizers():
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.optimize
 def test_scipy_constrained_solve():
     """Tests that the scipy constrained optimizer does something.
 
@@ -651,6 +655,7 @@ def test_scipy_constrained_solve():
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_solve_with_x_scale():
     """Make sure we can manually specify x_scale when solving/optimizing."""
     # basically just tests that it runs without error
@@ -860,6 +865,7 @@ def test_auglag():
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.optimize
 def test_constrained_AL_lsq():
     """Tests that the least squares augmented Lagrangian optimizer does something."""
     eq = desc.examples.get("SOLOVEV")
@@ -914,6 +920,7 @@ def test_constrained_AL_lsq():
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.optimize
 def test_constrained_AL_scalar():
     """Tests that the augmented Lagrangian constrained optimizer does something."""
     eq = desc.examples.get("SOLOVEV")
@@ -958,6 +965,7 @@ def test_constrained_AL_scalar():
 
 @pytest.mark.slow
 @pytest.mark.unit
+@pytest.mark.optimize
 def test_proximal_with_PlasmaVesselDistance():
     """Tests that the proximal projection works with fixed surface distance obj."""
     eq = desc.examples.get("SOLOVEV")

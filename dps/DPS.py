@@ -97,6 +97,7 @@ print(f"Loaded Equilibrium: {eq_file}\n")
 eq = desc.io.load(eq_file)
 eq._iota = eq.get_profile("iota").to_powerseries(order=eq.L, sym=True)
 eq._current = None
+eq._pressure = None
 
 # Energy and Mass info
 Energy_eV = 10 #1 # eV (3.52e6 eV proton energy)
@@ -169,8 +170,8 @@ print(f"\nTime to build and compile ObjFunction: {intermediate_time_3 - intermed
 # Z_modes = eq.surface.Z_basis.modes[jnp.max(jnp.abs(eq.surface.Z_basis.modes), 1), :]
 
 R_modes = jnp.array([[0, 0, 0]])
-constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPressure(eq), FixPsi(eq), FixCurrent(eq)) #, FixIota(eq)) #ForceBalance(eq, bounds=(-1e-3, 1e-3))
-eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=100, copy=False) # Mudar o número de iterações para 3, 10, 100
+constraints = (ForceBalance(eq, bounds=(-1e-3, 1e-3)), FixBoundaryR(eq, modes=R_modes), FixBoundaryZ(eq, modes=False), FixPsi(eq), ) #FixPressure(eq), FixCurrent(eq), FixIota(eq), ForceBalance(eq, bounds=(-1e-3, 1e-3))
+eq.optimize(objective=ObjFunction, optimizer = "fmin-auglag-bfgs", constraints=constraints, verbose=3, maxiter=100, copy=False)
 eq.save(opt_file)
 
 intermediate_time_4 = timet()

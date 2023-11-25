@@ -26,8 +26,8 @@ class Curve(IOAble, Optimizable, ABC):
     _io_attrs_ = ["_name", "shift", "rotmat"]
 
     def __init__(self, name=""):
-        self.shift = jnp.array([0, 0, 0])
-        self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        self.shift = jnp.array([0, 0, 0]).astype(float)
+        self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).astype(float)
         self.name = name
 
     @property

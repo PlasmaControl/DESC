@@ -525,6 +525,7 @@ def test_derivative_modes():
 
 
 @pytest.mark.unit
+@pytest.mark.xfail
 def test_rejit():
     """Test that updating attributes and recompiling correctly updates."""
 

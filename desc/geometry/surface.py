@@ -5,6 +5,7 @@ import warnings
 
 import numpy as np
 from scipy.sparse.linalg import splu
+from scipy.special import roots_sh_jacobi
 
 from desc.backend import jnp, put, sign
 from desc.basis import DoubleFiniteElementBasis, DoubleFourierSeries, ZernikePolynomial
@@ -75,7 +76,6 @@ def convert_spectral_to_FE(
     I = Rprime_basis.I_2MN
     Q = Rprime_basis.Q
     L = Rprime_basis.L
-    assert L == R_basis.L
     mesh = Rprime_basis.mesh
     nquad = mesh.nquad
     quadpoints = np.array(mesh.return_quadrature_points())
@@ -140,9 +140,11 @@ def convert_spectral_to_FE(
                         )
                     ).reshape(I * nquad, 1)
                 )
-    Nrho = 100
-    rho = np.linspace(0, 1, Nrho, endpoint=True)
-    delta_rho = rho[1] - rho[0]
+    Nrho = 5
+    # quadrature using the roots of the shifted jacobi polynomials
+    # Integrate 2*Nrho - 1 order polynomial exactly
+    rho, rho_weights = roots_sh_jacobi(Nrho, 2, 2)
+
     quadpoints = np.array(mesh.return_quadrature_points())
     if N == 0:
         quadpoints = (
@@ -167,7 +169,7 @@ def convert_spectral_to_FE(
                     * mesh.integrate(
                         # Integrate rho * basis functions over the rho direction
                         np.sum(
-                            rho[:, np.newaxis, np.newaxis]
+                            rho_weights[:, np.newaxis, np.newaxis]
                             * (
                                 Z_basis.evaluate(
                                     nodes=quadpoints,
@@ -184,7 +186,7 @@ def convert_spectral_to_FE(
                     R_lmn
                     * mesh.integrate(
                         np.sum(
-                            rho[:, np.newaxis, np.newaxis]
+                            rho_weights[:, np.newaxis, np.newaxis]
                             * (
                                 R_basis.evaluate(
                                     nodes=quadpoints,
@@ -201,7 +203,7 @@ def convert_spectral_to_FE(
                     L_lmn
                     * mesh.integrate(
                         np.sum(
-                            rho[:, np.newaxis, np.newaxis]
+                            rho_weights[:, np.newaxis, np.newaxis]
                             * (
                                 L_basis.evaluate(
                                     nodes=quadpoints,
@@ -232,9 +234,9 @@ def convert_spectral_to_FE(
     Bjb_R = np.reshape(Bjb_R_expanded, (I * Q * (L + 1), I * Q * (L + 1)))
     Bjb_Z = np.reshape(Bjb_Z_expanded, (I * Q * (L + 1), I * Q * (L + 1)))
     Bjb_L = np.reshape(Bjb_L_expanded, (I * Q * (L + 1), I * Q * (L + 1)))
-    Aj_R = Aj_R.reshape(I * Q * (L + 1)) * delta_rho * 2
-    Aj_Z = Aj_Z.reshape(I * Q * (L + 1)) * delta_rho * 2
-    Aj_L = Aj_L.reshape(I * Q * (L + 1)) * delta_rho * 2
+    Aj_R = Aj_R.reshape(I * Q * (L + 1)) * 2
+    Aj_Z = Aj_Z.reshape(I * Q * (L + 1)) * 2
+    Aj_L = Aj_L.reshape(I * Q * (L + 1)) * 2
 
     # Constructed the matrices such that Bjb * Rprime = Aj and now need to solve
     # this linear system of equations. Use an LU

@@ -1322,7 +1322,7 @@ class FiniteElementBasis(_FE_Basis):
             self.Q = K + 1
         else:
             self.mesh = FiniteElementMesh2D(M, N, K=K)
-            self.I_2MN = 2 * M * N
+            self.I_2MN = 2 * (M - 1) * N
             self.Q = int((K + 1) * (K + 2) / 2.0)
         self._modes = self._get_modes(L=self.L, I=self.I_2MN, Q=self.Q)
         super().__init__()
@@ -2479,7 +2479,7 @@ class FiniteElementMesh1D:
         self.Theta = theta
 
         # Compute the basis functions at each node
-        vertices = np.zeros((M, 2))
+        vertices = np.zeros((M - 1, 2))
         intervals = []
         for i in range(M - 1):
             # Deal with the periodic boundary conditions...
@@ -2558,6 +2558,7 @@ class FiniteElementMesh1D:
                 if v >= v1 and v <= v2:
                     bfs, _ = interval.get_basis_functions(v)
                     basis_functions[i, j, :] = bfs
+                    break
         return basis_functions
 
     def find_intervals_corresponding_to_points(self, theta):
@@ -2643,11 +2644,10 @@ class FiniteElementMesh1D:
         else:
             integral = 0.0
         for i, interval in enumerate(self.intervals):
-            integral += np.dot(
-                interval.length * self.weights,
-                f[i * nquad : (i + 1) * nquad, :],
+            integral += (
+                interval.jacobian * self.weights @ f[i * nquad : (i + 1) * nquad, :]
             )
-        return integral / 2.0
+        return integral
 
 
 class TriangleFiniteElement:
@@ -3059,12 +3059,15 @@ class TriangleFiniteElement:
 class IntervalFiniteElement:
     """Class representing an interval in a 1D grid of finite elements.
 
+    Takes the range of the isoparametric coordinate eta as [-1, 1],
+    instead of other definitions using [0, 1].
+
     Parameters
     ----------
     vertices: array-like, shape(2)
         The two vertices of the interval in the theta mesh.
     K: integer
-        The order of the finite elements to use, which gives (K+1)(K+2) / 2
+        The order of the finite elements to use, which gives (K + 1)
         basis functions.
     """
 
@@ -3073,6 +3076,11 @@ class IntervalFiniteElement:
         self.length = vertices[1] - vertices[0]
         self.Q = K + 1
         self.K = K
+
+        # if K = 1 or K = 2 with equally-spaced points
+        # Jacobian is length / 2 for isoparametric form eta in [-1, 1]
+        # still true for K > 2 ??
+        self.jacobian = self.length / 2.0
 
         # Going to construct equally spaced nodes for order K interval,
         # which gives Q such nodes.
@@ -3115,6 +3123,16 @@ class IntervalFiniteElement:
         basis_functions = np.zeros((theta.shape[0], self.Q))
         for i in range(self.Q):
             basis_functions[:, i] = self.lagrange_polynomial(eta, self.eta_nodes, i)
+
+        if self.K == 1:
+            assert np.allclose(basis_functions[:, 0], 0.5 * (1 - eta))
+            assert np.allclose(basis_functions[:, 1], 0.5 * (1 + eta))
+        if self.K == 2:
+            # Note the basis function ordering
+            assert np.allclose(basis_functions[:, 0], 0.5 * eta * (eta - 1))
+            assert np.allclose(basis_functions[:, 2], 0.5 * eta * (eta + 1))
+            assert np.allclose(basis_functions[:, 1], 1 - eta**2)
+
         return basis_functions, theta_in_interval
 
     def lagrange_polynomial(self, eta_i, eta_nodes_i, q):

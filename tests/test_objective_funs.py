@@ -18,6 +18,7 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.magnetic_fields import ToroidalMagneticField
 from desc.objectives import (
     AspectRatio,
     BoundaryErrorBIEST,
@@ -460,14 +461,44 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_quadratic_flux(self):
         """Test calculation of quadratic flux on the boundary."""
-        coil = FourierXYZCoil(5e5)
-        coilset = CoilSet.linspaced_angular(coil, n=100)
-        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        t_field = ToroidalMagneticField(1, 1)
+
+        # test that torus Bnorm is exactly 0
+        eq = Equilibrium()
         eq.solve()
-        obj = QuadraticFlux(coilset, eq)
-        obj.build()
-        f = obj.compute(*obj.xs(eq))
-        np.testing.assert_allclose(f, 0, atol=1e-3)
+        obj = QuadraticFlux(t_field, eq)
+        obj.build(eq)
+        f = obj.compute()
+        np.testing.assert_allclose(f, 0)
+
+        # nonaxisymmetric surface
+
+        # need nonaxisymmetric with Bplasma ~ 0
+        eq = Equilibrium()
+        eq.solve()
+        obj = QuadraticFlux(t_field, eq)
+        obj.build(eq)
+
+        f = obj.compute()
+        Bnorm = t_field.compute_Bnormal(eq.surface)
+        np.testing.assert_allclose(f, Bnorm, atol=1e-3)
+
+        local_min_Bnorms = np.r_[True, f[1:] < f[:-1]] & np.r_[f[:-1] < f[1:], True]
+        local_max_Bnorms = np.r_[True, f[1:] > f[:-1]] & np.r_[f[:-1] > f[1:], True]
+        max_Bnorm = np.max(f)
+        min_Bnorm = np.min(f)
+
+        global_max_Bnorm = local_min_Bnorms[
+            np.isclose(local_min_Bnorms, min_Bnorm, atol=1e-3)
+        ]
+        global_min_Bnorm = local_max_Bnorms[
+            np.isclose(local_max_Bnorms, max_Bnorm, atol=1e-3)
+        ]
+
+        # there should be 1 trough and 1 peak for 2pi / NFP
+        # in this case, NFP = 4
+        np.testing.assert_equal(len(global_max_Bnorm), 1)
+        np.testing.assert_equal(len(global_min_Bnorm), 1)
 
     @pytest.mark.unit
     def test_toroidal_flux(self):

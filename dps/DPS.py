@@ -118,7 +118,7 @@ ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
-tmax = 1e-1
+tmax = 5e-2
 nt = 5000
 time = jnp.linspace(tmin, tmax, nt)
 

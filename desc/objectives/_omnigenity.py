@@ -560,8 +560,6 @@ class Omnigenity(_Objective):
     field_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for omnigenous field data.
         Must be a single flux suface.
-    helicity : tuple, optional
-        Type of omnigenity (M, N). Default = quasi-isodynamic (0, 1).
     M_booz : int, optional
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
@@ -632,15 +630,13 @@ class Omnigenity(_Objective):
         N_booz = self.N_booz or 2 * eq.N
 
         if self._eq_grid is None:
-            eq_grid = LinearGrid(
-                rho=self._rho, M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False
-            )
+            eq_grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False)
         else:
             eq_grid = self._eq_grid
 
         if self._field_grid is None:
             field_grid = LinearGrid(
-                rho=self._rho, theta=2 * field.M_well, zeta=8, NFP=field.NFP, sym=False
+                theta=2 * field.M_well, N=2 * field.N_shift, NFP=field.NFP, sym=False
             )
         else:
             field_grid = self._field_grid
@@ -663,23 +659,23 @@ class Omnigenity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eq_grid)
-        self._eq_transforms = get_transforms(
+        profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eq_grid)
+        eq_transforms = get_transforms(
             self._eq_data_keys,
             obj=eq,
             grid=eq_grid,
             M_booz=M_booz,
             N_booz=N_booz,
         )
-        self._field_transforms = get_transforms(
+        field_transforms = get_transforms(
             self._field_data_keys,
             obj=field,
             grid=field_grid,
         )
         self._constants = {
-            "equil_transforms": self._eq_transforms,
-            "equil_profiles": self._profiles,
-            "field_transforms": self._field_transforms,
+            "equil_profiles": profiles,
+            "equil_transforms": eq_transforms,
+            "field_transforms": field_transforms,
             "helicity": self.helicity,
         }
 

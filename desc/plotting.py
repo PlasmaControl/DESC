@@ -3809,6 +3809,11 @@ def plot_omnigenous_field(
         fig, ax = plot_omnigenous_field(field)
 
     """
+    errorif(
+        field.helicity[0] != 0,
+        NotImplementedError,
+        "This function only works for OP fields with helicity=(0, NFP).",
+    )
     if grid is None:
         grid = LinearGrid(
             rho=[1.0], theta=101, zeta=101, endpoint=True, NFP=1, sym=False

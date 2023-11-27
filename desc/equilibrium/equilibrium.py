@@ -1103,6 +1103,10 @@ class Equilibrium(IOAble):
         """str: Method for specifying boundary condition."""
         return self._bdry_mode
 
+    @bdry_mode.setter
+    def bdry_mode(self, bdry_mode):
+        self._bdry_mode = bdry_mode
+
     @property
     def Psi(self):
         """float: Total toroidal flux within the last closed flux surface in Webers."""

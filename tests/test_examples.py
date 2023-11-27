@@ -788,9 +788,9 @@ def test_omnigenity_qa():
     field = OmnigenousField(
         L_well=1,
         M_well=4,
-        L_omni=1,
-        M_omni=1,
-        N_omni=1,
+        L_shift=1,
+        M_shift=1,
+        N_shift=1,
         NFP=eq.NFP,
         helicity=(1, 0),
     )
@@ -844,7 +844,7 @@ def test_omnigenity_qa():
 @pytest.mark.slow
 def test_omnigenity_optimization():
     """Test a realistic OP omnigenity optimization."""
-    # this same example is used in docs/notebooks/tutorials/04_Omnigenity_Optimization
+    # this same example is used in docs/notebooks/tutorials/omnigenity
 
     # initial equilibrium from QP model
     surf = FourierRZToroidalSurface.from_qp_model(
@@ -864,9 +864,9 @@ def test_omnigenity_optimization():
     field = OmnigenousField(
         L_well=1,
         M_well=3,
-        L_omni=1,
-        M_omni=1,
-        N_omni=1,
+        L_shift=1,
+        M_shift=1,
+        N_shift=1,
         NFP=eq.NFP,
         helicity=(0, eq.NFP),
         B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),
@@ -902,7 +902,7 @@ def test_omnigenity_optimization():
         FixPsi(eq=eq),
         FixOmniBmax(field=field),
         FixOmniShift(
-            field=field, indices=np.where(field.omni_basis.modes[:, 1] == 0)[0]
+            field=field, indices=np.where(field.shift_basis.modes[:, 1] == 0)[0]
         ),
         FixOmniWell(field=field, indices=[0, field.M_well - 1]),
     )

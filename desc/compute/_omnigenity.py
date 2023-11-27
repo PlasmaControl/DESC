@@ -396,7 +396,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     description="Omnigenity symmetry angle",
     dim=1,
     params=["x_lmn"],
-    transforms={"omni": [[0, 0, 0]]},
+    transforms={"shift": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=["rho", "alpha", "eta"],

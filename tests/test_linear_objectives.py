@@ -882,7 +882,7 @@ def test_fix_omni_indices():
     """
     NFP = 3
     field = OmnigenousField(
-        L_well=1, M_well=5, L_omni=2, M_omni=3, N_omni=4, NFP=NFP, helicity=(1, NFP)
+        L_well=1, M_well=5, L_shift=2, M_shift=3, N_shift=4, NFP=NFP, helicity=(1, NFP)
     )
 
     # no indices

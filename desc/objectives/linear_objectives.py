@@ -3439,7 +3439,7 @@ class FixOmniShift(_FixedObjective):
         return params["x_lmn"][self._idx]
 
 
-class FixOmniBmax(_FixedObjective):
+class FixedOmniBmax(_FixedObjective):
     """Ensures the B_max contour is straight in Boozer coordinates.
 
     Parameters
@@ -3501,7 +3501,7 @@ class FixOmniBmax(_FixedObjective):
         """
         field = self.things[0]
 
-        basis = field.omni_basis
+        basis = field.shift_basis
         self._dim_f = int(basis.num_modes / (basis.M + 1))
 
         self._A = np.zeros((self._dim_f, basis.num_modes))

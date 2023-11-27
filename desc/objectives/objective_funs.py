@@ -924,6 +924,7 @@ class _Objective(IOAble, ABC):
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
+        args = self._maybe_array_to_params(*args)
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)

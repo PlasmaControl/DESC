@@ -30,14 +30,14 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
-    FixOmni,
+    FixOmniShift,
+    FixOmniWell,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
-    FixWell,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
     get_equilibrium_objective,
@@ -886,26 +886,26 @@ def test_fix_omni_indices():
     )
 
     # no indices
-    constraint = FixWell(field=field, indices=False)
+    constraint = FixOmniWell(field=field, indices=False)
     constraint.build()
     assert constraint._idx.size == 0
-    constraint = FixOmni(field=field, indices=False)
+    constraint = FixOmniShift(field=field, indices=False)
     constraint.build()
     assert constraint._idx.size == 0
 
     # all indices
-    constraint = FixWell(field=field, indices=True)
+    constraint = FixOmniWell(field=field, indices=True)
     constraint.build()
     assert constraint._idx.size == field.B_lm.size
-    constraint = FixOmni(field=field, indices=True)
+    constraint = FixOmniShift(field=field, indices=True)
     constraint.build()
     assert constraint._idx.size == field.x_lmn.size
 
     # specified indices
     indices = np.arange(3, 8)
-    constraint = FixWell(field=field, indices=indices)
+    constraint = FixOmniWell(field=field, indices=indices)
     constraint.build()
     assert constraint._idx.size == indices.size
-    constraint = FixOmni(field=field, indices=indices)
+    constraint = FixOmniShift(field=field, indices=indices)
     constraint.build()
     assert constraint._idx.size == indices.size

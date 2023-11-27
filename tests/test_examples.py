@@ -26,12 +26,13 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
-    FixOmni,
+    FixOmniBmax,
+    FixOmniShift,
+    FixOmniWell,
     FixParameter,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
-    FixWell,
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
@@ -42,7 +43,6 @@ from desc.objectives import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
-    StraightBmaxContour,
     Volume,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
@@ -900,9 +900,11 @@ def test_omnigenity_optimization():
         FixPressure(eq=eq),
         FixCurrent(eq=eq),
         FixPsi(eq=eq),
-        StraightBmaxContour(field=field),
-        FixOmni(field=field, indices=np.where(field.omni_basis.modes[:, 1] == 0)[0]),
-        FixWell(field=field, indices=[0, field.M_well - 1]),
+        FixOmniBmax(field=field),
+        FixOmniShift(
+            field=field, indices=np.where(field.omni_basis.modes[:, 1] == 0)[0]
+        ),
+        FixOmniWell(field=field, indices=[0, field.M_well - 1]),
     )
     optimizer = Optimizer("lsq-auglag")
     (eq, field), _ = optimizer.optimize(

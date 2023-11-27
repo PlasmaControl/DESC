@@ -3229,7 +3229,7 @@ class FixPsi(_FixedObjective):
         return params["Psi"]
 
 
-class FixWell(_FixedObjective):
+class FixOmniWell(_FixedObjective):
     """Fixes OmnigenousField.B_lm coefficients.
 
     Parameters
@@ -3259,7 +3259,7 @@ class FixWell(_FixedObjective):
 
     _target_arg = "B_lm"
     _units = "(T)"
-    _print_value_fmt = "Fixed well error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity well error: {:10.3e} "
 
     def __init__(
         self,
@@ -3270,7 +3270,7 @@ class FixWell(_FixedObjective):
         normalize=True,
         normalize_target=True,
         indices=True,
-        name="fixed well",
+        name="fixed omnigenity well",
     ):
         self._field = field
         self._indices = indices
@@ -3315,7 +3315,7 @@ class FixWell(_FixedObjective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute fixed well error.
+        """Compute fixed omnigenity well error.
 
         Parameters
         ----------
@@ -3334,7 +3334,7 @@ class FixWell(_FixedObjective):
         return params["B_lm"][self._idx]
 
 
-class FixOmni(_FixedObjective):
+class FixOmniShift(_FixedObjective):
     """Fixes OmnigenousField.x_lmn coefficients.
 
     Parameters
@@ -3364,7 +3364,7 @@ class FixOmni(_FixedObjective):
 
     _target_arg = "x_lmn"
     _units = "(rad)"
-    _print_value_fmt = "Fixed omnigenity error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity shift error: {:10.3e} "
 
     def __init__(
         self,
@@ -3375,7 +3375,7 @@ class FixOmni(_FixedObjective):
         normalize=False,
         normalize_target=False,
         indices=True,
-        name="fixed omnigenity",
+        name="fixed omnigenity shift",
     ):
         self._field = field
         self._indices = indices
@@ -3420,7 +3420,7 @@ class FixOmni(_FixedObjective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute fixed omnigenity error.
+        """Compute fixed omnigenity shift error.
 
         Parameters
         ----------
@@ -3433,14 +3433,13 @@ class FixOmni(_FixedObjective):
         Returns
         -------
         f : ndarray
-            Fixed omnigenity error.
+            Fixed omnigenity shift error.
 
         """
         return params["x_lmn"][self._idx]
 
 
-# TODO: check that this is consistent with new API of other linear objectives
-class StraightBmaxContour(_FixedObjective):
+class FixOmniBmax(_FixedObjective):
     """Ensures the B_max contour is straight in Boozer coordinates.
 
     Parameters
@@ -3467,7 +3466,7 @@ class StraightBmaxContour(_FixedObjective):
     _target_arg = "x_lmn"
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
-    _print_value_fmt = "Straight B_max error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity B_max error: {:10.3e} "
 
     def __init__(
         self,
@@ -3477,7 +3476,7 @@ class StraightBmaxContour(_FixedObjective):
         weight=1,
         normalize=False,
         normalize_target=False,
-        name="straight B_max contour",
+        name="fixed omnigenity B_max",
     ):
         super().__init__(
             things=field,
@@ -3522,7 +3521,7 @@ class StraightBmaxContour(_FixedObjective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute straight B_max contours error.
+        """Compute fixed omnigenity B_max error.
 
         Parameters
         ----------
@@ -3535,7 +3534,7 @@ class StraightBmaxContour(_FixedObjective):
         Returns
         -------
         f : ndarray
-            Total straight B_max contour error.
+            Fixed omnigenity B_max error.
 
         """
         f = jnp.dot(self._A, params["x_lmn"])

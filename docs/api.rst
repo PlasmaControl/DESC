@@ -165,14 +165,15 @@ Objective Functions
     desc.objectives.FixIota
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
-    desc.objectives.FixOmni
+    desc.objectives.FixOmniBmax
+    desc.objectives.FixOmniShift
+    desc.objectives.FixOmniWell
     desc.objectives.FixParameter
     desc.objectives.FixPressure
     desc.objectives.FixPsi
     desc.objectives.FixSumModesR
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL
-    desc.objectives.FixWell
     desc.objectives.ForceBalance
     desc.objectives.ForceBalanceAnisotropic
     desc.objectives.GenericObjective
@@ -197,7 +198,6 @@ Objective Functions
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
     desc.objectives.Shear
-    desc.objectives.StraightBmaxContour
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 

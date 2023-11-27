@@ -147,7 +147,7 @@ class TestTransform:
     def test_volume_chebyshev_zernike(self):
         """Tests transform of Chebyshev-Zernike basis in a toroidal volume."""
         print("Test start. Before importing grid")
-        grid = ConcentricGrid(L=2, M=2, N=2)
+        grid = ConcentricGrid(L=2, M=2, N=6)
         print("Before importing basis")
         basis = ChebyshevZernikeBasis(L=1, M=2, N=2, sym="sin")
         print("After importing basis")
@@ -161,7 +161,7 @@ class TestTransform:
         print("r", r)
         print("t", t)
         print("z", z)
-        z_shift = z*2 - 1
+        z_shift = z/np.pi - 1
         print("z_shift", z_shift)
         correct_vals = (
             r  * np.sin(t) * z_shift#(2*z_shift**2 - 1)

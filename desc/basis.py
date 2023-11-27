@@ -1399,9 +1399,9 @@ class ChebyshevZernikeBasis(_Basis):
         if unique:
             radial = radial[routidx][:, lmoutidx]
             poloidal = poloidal[toutidx][:, moutidx]
-            axial = axial[zoutidx][:, noutidx]
+            #axial = axial[zoutidx][:, noutidx]
 
-        return radial * poloidal * axial
+        return axial #radial * poloidal * axial
 
     def change_resolution(self, L, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
@@ -1829,9 +1829,9 @@ def chebyshev_z(z, l, dr=0):
 
     """
     z, l = map(jnp.asarray, (z, l))
-    z_shift = z*2 - 1
+    z_shift = z/np.pi - 1
     if dr == 0:
-        return jnp.cos(l * jnp.arccos(z_shift))
+        return z_shift #jnp.cos(l * jnp.arccos(z_shift))
     else:
         # dy/dr = dy/dx * dx/dr = dy/dx * 2
         raise NotImplementedError(

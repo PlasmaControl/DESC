@@ -49,7 +49,11 @@ class ObjectiveFromUser(_Objective):
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Has no effect for this objective.
+        this should also be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -86,6 +90,7 @@ class ObjectiveFromUser(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         grid=None,
         name="custom",
     ):
@@ -100,6 +105,7 @@ class ObjectiveFromUser(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -135,7 +141,9 @@ class ObjectiveFromUser(_Objective):
             if data_index[p][key]["dim"] == 0:
                 dummy_data[key] = jnp.array(0.0)
             else:
-                dummy_data[key] = jnp.empty((grid.num_nodes, data_index[p][key]["dim"]))
+                dummy_data[key] = jnp.empty(
+                    (grid.num_nodes, data_index[p][key]["dim"])
+                ).squeeze()
 
         self._fun_wrapped = lambda data: self._fun(grid, data)
         import jax
@@ -147,6 +155,7 @@ class ObjectiveFromUser(_Objective):
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
+            "quad_weights": 1.0,
         }
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -205,7 +214,11 @@ class GenericObjective(_Objective):
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Has no effect for this objective.
+        this should also be set to True. Note: Has no effect on this objective.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -224,6 +237,7 @@ class GenericObjective(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
         grid=None,
         name="generic",
     ):
@@ -238,6 +252,7 @@ class GenericObjective(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
         self._scalar = not bool(

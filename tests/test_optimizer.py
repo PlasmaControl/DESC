@@ -16,6 +16,7 @@ import desc.examples
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
@@ -24,6 +25,7 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
+    FixParameter,
     FixPressure,
     FixPsi,
     ForceBalance,
@@ -31,6 +33,7 @@ from desc.objectives import (
     MagneticWell,
     MeanCurvature,
     ObjectiveFunction,
+    PlasmaVesselDistance,
     Volume,
     get_fixed_boundary_constraints,
 )
@@ -863,9 +866,11 @@ def test_constrained_AL_lsq():
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
-        FixPressure(eq=eq),  # fix pressure profile
-        FixIota(eq=eq),  # fix rotational transform profile
-        FixPsi(eq=eq),  # fix total toroidal magnetic flux
+        FixPressure(eq=eq),
+        FixParameter(
+            eq, "i_l", bounds=(eq.i_l * 0.9, eq.i_l * 1.1)
+        ),  # linear inequality
+        FixPsi(eq=eq, bounds=(eq.Psi * 0.99, eq.Psi * 1.01)),  # linear inequality
     )
     # some random constraints to keep the shape from getting wacky
     V = eq.compute("V")["V"]
@@ -900,6 +905,9 @@ def test_constrained_AL_lsq():
     Dwell = constraints[-2].compute_scaled(*constraints[-2].xs(eq2))
     assert (ARbounds[0] - ctol) < AR2 < (ARbounds[1] + ctol)
     assert (Vbounds[0] - ctol) < V2 < (Vbounds[1] + ctol)
+    assert (0.99 * eq.Psi - ctol) <= eq2.Psi <= (1.01 * eq.Psi + ctol)
+    np.testing.assert_array_less((0.9 * eq.i_l - ctol), eq2.i_l)
+    np.testing.assert_array_less(eq2.i_l, (1.1 * eq.i_l + ctol))
     assert eq2.is_nested()
     np.testing.assert_array_less(-Dwell, ctol)
 
@@ -946,3 +954,57 @@ def test_constrained_AL_scalar():
     np.testing.assert_allclose(V, V2, atol=ctol, rtol=ctol)
     assert eq2.is_nested()
     np.testing.assert_array_less(-Dwell, ctol)
+
+
+@pytest.mark.slow
+@pytest.mark.unit
+def test_proximal_with_PlasmaVesselDistance():
+    """Tests that the proximal projection works with fixed surface distance obj."""
+    eq = desc.examples.get("SOLOVEV")
+
+    constraints = (
+        ForceBalance(eq=eq),
+        FixPressure(eq=eq),  # fix pressure profile
+        FixIota(eq=eq),  # fix rotational transform profile
+        FixPsi(eq=eq),  # fix total toroidal magnetic flux
+    )
+    # circular surface
+    a = 2
+    R0 = 4
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+
+    grid = LinearGrid(M=eq.M, N=0, NFP=eq.NFP)
+    obj = PlasmaVesselDistance(
+        surface=surf, eq=eq, target=0.5, plasma_grid=grid, surface_fixed=True
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("proximal-lsq-exact")
+    eq, result = optimizer.optimize(
+        eq,
+        objective,
+        constraints,
+        verbose=3,
+        maxiter=1,
+    )
+
+    # check error if proximal is given multiple objects in things
+    obj = PlasmaVesselDistance(
+        surface=surf, eq=eq, target=0.5, plasma_grid=grid, surface_fixed=False
+    )
+    objective = ObjectiveFunction((obj,))
+    with pytest.raises(ValueError):
+        (eq, surf), result = optimizer.optimize(
+            (eq, surf),
+            objective,
+            constraints,
+            verbose=3,
+            maxiter=1,
+        )

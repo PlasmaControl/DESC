@@ -100,7 +100,7 @@ eq._current = None
 # eq._pressure = None
 
 # Energy and Mass info
-Energy_eV = 10 #1 # eV (3.52e6 eV proton energy)
+Energy_eV = 100 #1 # eV (3.52e6 eV proton energy)
 Proton_Mass = scipy.constants.proton_mass
 Proton_Charge = scipy.constants.elementary_charge
 Energy_SI = Energy_eV*Proton_Charge
@@ -141,8 +141,8 @@ print(f"\nTime from beginning until here: {intermediate_time - initial_time}s\n"
 objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1.e-7)
 objective.build()
 
-ar = jnp.copy(eq.compute("R0/a")["R0/a"])
-aspect_ratio = AspectRatio(eq=eq, target=ar, weight=1e1)
+# ar = jnp.copy(eq.compute("R0/a")["R0/a"])
+# aspect_ratio = AspectRatio(eq=eq, target=ar, weight=1e1)
 # Compute optimization
 solution = objective.compute(*objective.xs(eq))
 
@@ -150,7 +150,7 @@ intermediate_time_2 = timet()
 print(f"\nTime to build and compute solution: {intermediate_time_2 - intermediate_time}s\n")
 
 # Objective Object
-ObjFunction = ObjectiveFunction((objective, aspect_ratio), deriv_mode="looped")
+ObjFunction = ObjectiveFunction((objective), deriv_mode="looped")
 ObjFunction.build()
 
 intermediate_time_3 = timet()

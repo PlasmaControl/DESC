@@ -17,6 +17,7 @@ from .data_index import register_compute_fun
 from .utils import (
     cross,
     dot,
+    safenorm,
     surface_averages,
     surface_integrals_map,
     surface_max,
@@ -2844,9 +2845,7 @@ def _gradB2(params, transforms, profiles, data, **kwargs):
     data=["grad(|B|^2)"],
 )
 def _gradB2mag(params, transforms, profiles, data, **kwargs):
-    data["|grad(|B|^2)|/2mu0"] = jnp.linalg.norm(data["grad(|B|^2)"], axis=-1) / (
-        2 * mu_0
-    )
+    data["|grad(|B|^2)|/2mu0"] = safenorm(data["grad(|B|^2)"], axis=-1) / (2 * mu_0)
     return data
 
 
@@ -3046,7 +3045,7 @@ def _B_dot_grad_B_zeta(params, transforms, profiles, data, **kwargs):
     data=["(B*grad)B"],
 )
 def _B_dot_grad_B_mag(params, transforms, profiles, data, **kwargs):
-    data["|(B*grad)B|"] = jnp.linalg.norm(data["(B*grad)B"], axis=-1)
+    data["|(B*grad)B|"] = safenorm(data["(B*grad)B"], axis=-1)
     return data
 
 
@@ -3352,7 +3351,7 @@ def _grad_B_vec(params, transforms, profiles, data, **kwargs):
     data=["grad(B)"],
 )
 def _grad_B_vec_fro(params, transforms, profiles, data, **kwargs):
-    data["|grad(B)|"] = jnp.linalg.norm(data["grad(B)"], axis=(1, 2), ord="fro")
+    data["|grad(B)|"] = safenorm(data["grad(B)"], axis=(1, 2), ord="fro")
     return data
 
 

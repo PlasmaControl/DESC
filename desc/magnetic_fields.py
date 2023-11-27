@@ -1669,12 +1669,12 @@ class OmnigenousField(Optimizable, IOAble):
 
     def __init__(
         self,
-        L_well,
-        M_well,
-        L_shift,
-        M_shift,
-        N_shift,
-        NFP,
+        L_well=0,
+        M_well=2,
+        L_shift=0,
+        M_shift=0,
+        N_shift=0,
+        NFP=1,
         helicity=(1, 0),
         B_lm=None,
         x_lmn=None,
@@ -1962,7 +1962,7 @@ class OmnigenousField(Optimizable, IOAble):
 
     @B_lm.setter
     def B_lm(self, B_lm):
-        self._B_lm[:] = B_lm
+        self._B_lm = B_lm
 
     @optimizable_parameter
     @property
@@ -1972,7 +1972,7 @@ class OmnigenousField(Optimizable, IOAble):
 
     @x_lmn.setter
     def x_lmn(self, x_lmn):
-        self._x_lmn[:] = x_lmn
+        self._x_lmn = x_lmn
 
     @property
     def helicity(self):

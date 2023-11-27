@@ -3439,12 +3439,12 @@ class FixOmniShift(_FixedObjective):
         return params["x_lmn"][self._idx]
 
 
-class FixedOmniBmax(_FixedObjective):
+class FixOmniBmax(_FixedObjective):
     """Ensures the B_max contour is straight in Boozer coordinates.
 
     Parameters
     ----------
-    field : OmnigenousField, optional
+    field : OmnigenousField
         Field that will be optimized to satisfy the Objective.
     target : float, optional
         Target value(s) of the objective. If None, uses field value.

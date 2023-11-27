@@ -347,7 +347,6 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: change eta to be from [-1, +1] instead of [-pi/2, +pi/2]
 @register_compute_fun(
     name="eta",
     label="\\eta",
@@ -405,7 +404,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
 def _omni_angle(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["eta"], data["alpha"]]).T
     data["h"] = (
-        transforms["omni"].basis.evaluate(nodes) @ params["x_lmn"]
+        transforms["shift"].basis.evaluate(nodes) @ params["x_lmn"]
         + 2 * data["eta"]
         + jnp.pi
     )

@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, errorif
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
@@ -523,12 +523,15 @@ class QuasisymmetryTripleProduct(_Objective):
 class Omnigenity(_Objective):
     """Omnigenity error.
 
+    Errors are relative to a target field that is perfectly omnigenous,
+    and are computed on a collocation grid in (ρ,η,α) coordinates.
+
     This objective assumes that the collocation point (θ=0,ζ=0) lies on the contour of
     maximum field strength |B|=B_max.
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium to be optimized to satisfy the Objective.
     field : OmnigenousField
         Omnigenous magnetic field to be optimized to satisfy the Objective.
@@ -547,13 +550,16 @@ class Omnigenity(_Objective):
        Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    grid_eq : Grid, ndarray, optional
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    eq_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for equilibrium data.
-    grid_field : Grid, ndarray, optional
+        Must be a single flux suface.
+    field_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for omnigenous field data.
-    rho : float, optional
-        Flux surface coordinate to use for the default grids.
-        Only used if `grid_eq` or `grid_field` is not supplied.
+        Must be a single flux suface.
     helicity : tuple, optional
         Type of omnigenity (M, N). Default = quasi-isodynamic (0, 1).
     M_booz : int, optional
@@ -577,22 +583,23 @@ class Omnigenity(_Objective):
         self,
         eq,
         field,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
-        grid_eq=None,
-        grid_field=None,
-        rho=1.0,
+        loss_function=None,
+        eq_grid=None,
+        field_grid=None,
         M_booz=None,
         N_booz=None,
         well_weight=1,
         name="omnigenity",
     ):
-        self._grid_eq = grid_eq
-        self._grid_field = grid_field
-        self._rho = rho
+        if target is None and bounds is None:
+            target = 0
+        self._eq_grid = eq_grid
+        self._field_grid = field_grid
         self.helicity = field.helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
@@ -604,6 +611,7 @@ class Omnigenity(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -612,8 +620,6 @@ class Omnigenity(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -625,50 +631,50 @@ class Omnigenity(_Objective):
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
-        if self._grid_eq is None:
-            grid_eq = LinearGrid(
+        if self._eq_grid is None:
+            eq_grid = LinearGrid(
                 rho=self._rho, M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False
             )
         else:
-            grid_eq = self._grid_eq
+            eq_grid = self._eq_grid
 
-        if self._grid_field is None:
-            # TODO: is this a good default grid?
-            # oversamples in eta by a factor of 2, including points at B_min & B_max
-            # 8 field lines, including alpha=0 and alpha=pi
-            grid_field = LinearGrid(
+        if self._field_grid is None:
+            field_grid = LinearGrid(
                 rho=self._rho, theta=2 * field.M_well, zeta=8, NFP=field.NFP, sym=False
             )
         else:
-            grid_field = self._grid_field
+            field_grid = self._field_grid
 
-        self._dim_f = grid_field.num_nodes
+        self._dim_f = field_grid.num_nodes
         self._eq_data_keys = ["|B|_mn"]
         self._field_data_keys = ["|B|_omni", "h"]
 
-        assert grid_eq.NFP == grid_field.NFP
-        assert grid_eq.sym is False
-        assert grid_field.sym is False
-        assert grid_eq.num_rho == 1
-        assert grid_field.num_rho == 1
+        errorif(
+            eq_grid.NFP != field_grid.NFP,
+            msg="eq_grid and field_grid must have the same number of field periods",
+        )
+        errorif(eq_grid.sym, msg="eq_grid must not be symmetric")
+        errorif(field_grid.sym, msg="field_grid must not be symmetric")
+        errorif(eq_grid.num_rho != 1, msg="eq_grid must be a single surface")
+        errorif(field_grid.num_rho != 1, msg="field_grid must be a single surface")
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._eq_data_keys, obj=eq, grid=grid_eq)
+        self._profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eq_grid)
         self._eq_transforms = get_transforms(
             self._eq_data_keys,
             obj=eq,
-            grid=grid_eq,
+            grid=eq_grid,
             M_booz=M_booz,
             N_booz=N_booz,
         )
         self._field_transforms = get_transforms(
             self._field_data_keys,
             obj=field,
-            grid=grid_field,
+            grid=field_grid,
         )
         self._constants = {
             "equil_transforms": self._eq_transforms,

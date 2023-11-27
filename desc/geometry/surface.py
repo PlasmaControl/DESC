@@ -306,16 +306,16 @@ class FourierRZToroidalSurface(Surface):
     @classmethod
     def from_qp_model(
         cls,
-        major_radius,
-        aspect_ratio,
-        elongation,
-        mirror_ratio,
-        torsion,
+        major_radius=1,
+        aspect_ratio=10,
+        elongation=2,
+        mirror_ratio=0.1,
+        torsion=0,
         NFP=1,
         sym=True,
         positive_iota=True,
     ):
-        """Create a surface from a near-axis model for quasi-poloidal/quasi-isodynamic.
+        """Create a surface from a near-axis model for quasi-poloidal symmetry.
 
         Parameters
         ----------

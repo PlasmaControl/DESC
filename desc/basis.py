@@ -151,8 +151,8 @@ class _Basis(IOAble, ABC):
         modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -296,8 +296,8 @@ class PowerSeries(_Basis):
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -902,8 +902,8 @@ class ChebyshevDoubleFourierBasis(_Basis):
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -1249,8 +1249,8 @@ class ChebyshevPolynomial(_Basis):
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------

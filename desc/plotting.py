@@ -3747,7 +3747,7 @@ def plot_field_lines_real_space(
 def plot_omnigenous_field(
     field,
     iota,
-    rho=1,
+    grid=None,
     fill=False,
     ncontours=30,
     fieldlines=0,
@@ -3809,7 +3809,10 @@ def plot_omnigenous_field(
         fig, ax = plot_omnigenous_field(field)
 
     """
-    grid = LinearGrid(rho=rho, theta=101, zeta=101, endpoint=True, NFP=1, sym=False)
+    if grid is None:
+        grid = LinearGrid(
+            rho=[1.0], theta=101, zeta=101, endpoint=True, NFP=1, sym=False
+        )
     rho = grid.nodes[:, 0]
     eta = (grid.nodes[:, 1] - np.pi) / 2
     alpha = grid.nodes[:, 2]

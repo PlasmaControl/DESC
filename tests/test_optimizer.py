@@ -525,14 +525,16 @@ def test_wrappers():
     con_nl = (ForceBalance(eq=eq),)
     obj = ForceBalance(eq=eq)
     with pytest.raises(AssertionError):
-        _ = ProximalProjection(obj, con[0])
+        _ = ProximalProjection(obj, con[0], eq=eq)
     with pytest.raises(AssertionError):
-        _ = ProximalProjection(ObjectiveFunction(con[0]), con[1])
-    with pytest.raises(ValueError):
-        _ = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con[1]))
+        _ = ProximalProjection(ObjectiveFunction(con[0]), con[1], eq=eq)
     with pytest.raises(ValueError):
         _ = ProximalProjection(
-            ObjectiveFunction(con[0]), ObjectiveFunction(con + con_nl)
+            ObjectiveFunction(con[0]), ObjectiveFunction(con[1]), eq=eq
+        )
+    with pytest.raises(ValueError):
+        _ = ProximalProjection(
+            ObjectiveFunction(con[0]), ObjectiveFunction(con + con_nl), eq=eq
         )
     ob = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con_nl), eq=eq)
     ob.build()

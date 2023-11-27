@@ -34,6 +34,7 @@
    notebooks/tutorials/continuation_step_by_step.ipynb
    notebooks/tutorials/use_outputs.ipynb
    notebooks/tutorials/basic_optimization.ipynb
+   notebooks/tutorials/advanced_optimization.ipynb
    notebooks/tutorials/nae_constraint.ipynb
    precise_qa
 

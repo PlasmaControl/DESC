@@ -52,6 +52,11 @@ class ForceBalance(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -73,6 +78,7 @@ class ForceBalance(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="force",
     ):
@@ -87,6 +93,7 @@ class ForceBalance(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -222,6 +229,11 @@ class ForceBalanceAnisotropic(_Objective):
         normalization.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     name : str
         Name of the objective function.
 
@@ -241,6 +253,7 @@ class ForceBalanceAnisotropic(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="force-anisotropic",
     ):
@@ -255,6 +268,7 @@ class ForceBalanceAnisotropic(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -369,6 +383,11 @@ class RadialForceBalance(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -390,6 +409,7 @@ class RadialForceBalance(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="radial force",
     ):
@@ -404,6 +424,7 @@ class RadialForceBalance(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -518,6 +539,11 @@ class HelicalForceBalance(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -539,6 +565,7 @@ class HelicalForceBalance(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="helical force",
     ):
@@ -553,6 +580,7 @@ class HelicalForceBalance(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -663,6 +691,11 @@ class Energy(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     gamma : float, optional
@@ -688,6 +721,7 @@ class Energy(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         gamma=0,
         name="energy",
@@ -704,6 +738,7 @@ class Energy(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -823,6 +858,11 @@ class CurrentDensity(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -844,6 +884,7 @@ class CurrentDensity(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="current density",
     ):
@@ -858,6 +899,7 @@ class CurrentDensity(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 

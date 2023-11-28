@@ -157,7 +157,7 @@ class OptimizableCollection(Optimizable):
             # offset subsequent indices by length of priors
             for key in idx:
                 idx[key] += d
-        return idx
+        return x_idx
 
     @property
     def dim_x(self):

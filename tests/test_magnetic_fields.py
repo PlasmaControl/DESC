@@ -61,6 +61,85 @@ class TestMagneticFields:
         )
 
     @pytest.mark.unit
+    def test_combined_fields(self):
+        """Tests for sum/scaled fields."""
+        tfield = ToroidalMagneticField(2, 1)
+        vfield = VerticalMagneticField(1)
+        pfield = PoloidalMagneticField(2, 1, 2)
+        tfield.R0 = 1
+        tfield.B0 = 2
+        vfield.B0 = 3.2
+        pfield.R0 = 1
+        pfield.B0 = 2
+        pfield.iota = 1.2
+        scaled_field = 3.1 * tfield
+        assert scaled_field.B0 == 2
+        assert scaled_field.scale == 3.1
+        np.testing.assert_allclose(scaled_field([1.0, 0, 0]), np.array([[0, 6.2, 0]]))
+        scaled_field.R0 = 1.3
+        scaled_field.scale = 1.0
+        np.testing.assert_allclose(scaled_field([1.3, 0, 0]), np.array([[0, 2, 0]]))
+        assert scaled_field.optimizable_params == ["B0", "R0", "scale"]
+        assert hasattr(scaled_field, "B0")
+
+        sum_field = vfield + pfield + tfield
+        assert len(sum_field) == 3
+        np.testing.assert_allclose(
+            sum_field([1.3, 0, 0.0]), [[0.0, 2, 3.2 + 2 * 1.2 * 0.3]]
+        )
+        assert sum_field.optimizable_params == [
+            ["B0"],
+            ["B0", "R0", "iota"],
+            ["B0", "R0"],
+        ]
+        assert sum_field.dimensions == [
+            {"B0": 1},
+            {"B0": 1, "R0": 1, "iota": 1},
+            {"B0": 1, "R0": 1},
+        ]
+        assert sum_field.x_idx == [
+            {"B0": np.array([0])},
+            {"B0": np.array([1]), "R0": np.array([2]), "iota": np.array([3])},
+            {"B0": np.array([4]), "R0": np.array([5])},
+        ]
+        assert sum_field.dim_x == 6
+        p = sum_field.pack_params(sum_field.params_dict)
+        np.testing.assert_allclose(p, [3.2, 2, 1, 1.2, 2, 1.3])
+        p *= 1.3
+        sum_field.params_dict = sum_field.unpack_params(p)
+        assert sum_field[0].B0 == 1.3 * 3.2
+        assert sum_field[1].B0 == 1.3 * 2
+        assert sum_field[2].B0 == 1.3 * 2
+        sum_field.params_dict = sum_field.unpack_params(p / 1.3)
+
+        del sum_field[-1]
+        assert len(sum_field) == 2
+        np.testing.assert_allclose(
+            sum_field([1.3, 0, 0.0]), [[0.0, 0.0, (3.2 + 2 * 1.2 * 0.3)]]
+        )
+        assert sum_field.optimizable_params == [
+            ["B0"],
+            ["B0", "R0", "iota"],
+        ]
+        sum_field.insert(1, tfield)
+        assert len(sum_field) == 3
+        np.testing.assert_allclose(
+            sum_field([1.3, 0, 0.0]), [[0.0, 2.0, (3.2 + 2 * 1.2 * 0.3)]]
+        )
+        assert sum_field.optimizable_params == [
+            ["B0"],
+            ["B0", "R0"],
+            ["B0", "R0", "iota"],
+        ]
+        sum_field[1] = pfield
+        sum_field[2] = tfield
+        assert sum_field.optimizable_params == [
+            ["B0"],
+            ["B0", "R0", "iota"],
+            ["B0", "R0"],
+        ]
+
+    @pytest.mark.unit
     def test_scalar_field(self):
         """Test scalar potential magnetic field against analytic result."""
         field = ScalarPotentialField(phi_lm, args)
@@ -335,7 +414,14 @@ class TestMagneticFields:
         field3 = SplineMagneticField.from_mgrid(mgrid, extcur)
 
         np.testing.assert_allclose(
-            field3([0.70, 0, 0]), [[0, -0.671, 0.0858]], rtol=1e-3, atol=1e-8
+            field3([0.70, 0, 0]), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
+        )
+        field3.currents *= 2
+        np.testing.assert_allclose(
+            field3([0.70, 0, 0]),
+            2 * np.array([[0, -0.671, 0.0858]]),
+            rtol=1e-3,
+            atol=1e-8,
         )
 
     @pytest.mark.unit

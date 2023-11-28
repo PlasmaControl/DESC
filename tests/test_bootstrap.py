@@ -1576,6 +1576,7 @@ def test_bootstrap_objective_build():
     )
 
 
+@pytest.mark.slow
 @pytest.mark.regression
 def test_bootstrap_optimization_comparison_qa():
     """Test that both methods of bootstrap optimization agree."""

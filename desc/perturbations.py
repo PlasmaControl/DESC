@@ -207,25 +207,25 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     tangents = jnp.zeros((eq.dim_x,))
     if "Rb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.jac_unscaled(xz)["R_lmn"]
+        A = con.jac_unscaled(xz)[0]["R_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Rb_lmn"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["R_lmn"]] @ Ainv @ dc
     if "Zb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.jac_unscaled(xz)["Z_lmn"]
+        A = con.jac_unscaled(xz)[0]["Z_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Zb_lmn"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
     if "Ra_n" in deltas.keys():
         con = get_instance(constraints, AxisRSelfConsistency)
-        A = con.jac_unscaled(xz)["R_lmn"]
+        A = con.jac_unscaled(xz)[0]["R_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Ra_n"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["R_lmn"]] @ Ainv @ dc
     if "Za_n" in deltas.keys():
         con = get_instance(constraints, AxisZSelfConsistency)
-        A = con.jac_unscaled(xz)["Z_lmn"]
+        A = con.jac_unscaled(xz)[0]["Z_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Za_n"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
@@ -584,13 +584,13 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             dxdc.append(jnp.eye(eq.dim_x)[:, x_idx])
         if arg == "Rb_lmn":
             con = get_instance(constraints, BoundaryRSelfConsistency)
-            A = con.jac_unscaled(xz)["R_lmn"]
+            A = con.jac_unscaled(xz)[0]["R_lmn"]
             Ainv = jnp.linalg.pinv(A)
             dxdRb = jnp.eye(eq.dim_x)[:, eq.x_idx["R_lmn"]] @ Ainv
             dxdc.append(dxdRb)
         if arg == "Zb_lmn":
             con = get_instance(constraints, BoundaryZSelfConsistency)
-            A = con.jac_unscaled(xz)["Z_lmn"]
+            A = con.jac_unscaled(xz)[0]["Z_lmn"]
             Ainv = jnp.linalg.pinv(A)
             dxdZb = jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv
             dxdc.append(dxdZb)

@@ -208,7 +208,9 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"NFP should be a positive integer, got {NFP}",
         )
-        self._NFP = setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
+        self._NFP = int(
+            setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
+        )
 
         # stellarator symmetry for bases
         errorif(
@@ -540,13 +542,13 @@ class Equilibrium(IOAble, Optimizable):
             Whether to enforce stellarator symmetry.
 
         """
-        self._L = setdefault(L, self.L)
-        self._M = setdefault(M, self.M)
-        self._N = setdefault(N, self.N)
-        self._L_grid = setdefault(L_grid, self.L_grid)
-        self._M_grid = setdefault(M_grid, self.M_grid)
-        self._N_grid = setdefault(N_grid, self.N_grid)
-        self._NFP = setdefault(NFP, self.NFP)
+        self._L = int(setdefault(L, self.L))
+        self._M = int(setdefault(M, self.M))
+        self._N = int(setdefault(N, self.N))
+        self._L_grid = int(setdefault(L_grid, self.L_grid))
+        self._M_grid = int(setdefault(M_grid, self.M_grid))
+        self._N_grid = int(setdefault(N_grid, self.N_grid))
+        self._NFP = int(setdefault(NFP, self.NFP))
         self._sym = setdefault(sym, self.sym)
 
         old_modes_R = self.R_basis.modes

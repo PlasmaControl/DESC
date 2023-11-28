@@ -1382,6 +1382,16 @@ class FiniteElementBasis(_FE_Basis):
         l, i, j = modes.T
         lm = np.array([l, np.zeros(modes.shape[0])]).T
 
+        # There is a bug here. For large enough L, radial shifted
+        # Jacobi polynomials return zeros instead of 1s, which
+        # is wrong because at rho = 1, all the Jacobi polynomials
+        # are normalized to 1.
+
+        # It appears this is just because the code correctly
+        # zeros out the contribution from odd-L Jacobi
+        # polynomials, as it should since only even order polynomials
+        # should be used to be consistent at the rho=0 axis.
+        # This is why L = 14 and L = 15 results look exactly the same.
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         if self.N > 0:
             # Tessellate the domain and find the basis functions for theta, zeta
@@ -1400,13 +1410,17 @@ class FiniteElementBasis(_FE_Basis):
                 Theta.shape[0] * Theta.shape[1], self.Q
             )[i, j]
         else:
-            FE_mesh = self.mesh
-
             # Get all IQ basis functions from each of the points,
             # and most will be zeros at a given point because of local support.
-            poloidal_toroidal = FE_mesh.full_basis_functions_corresponding_to_points(t)
+            poloidal_toroidal = self.mesh.full_basis_functions_corresponding_to_points(
+                t
+            )
+            print(poloidal_toroidal)
+            poloidal_toroidal = np.reshape(poloidal_toroidal, (len(t), -1))  # , "F")
+            poloidal_toroidal = np.tile(poloidal_toroidal, self.L + 1)
+            inds = l * (self.M - 1) * self.Q + i * self.Q + j
 
-        return radial * poloidal_toroidal[:, i, j]
+        return (radial * poloidal_toroidal)[:, inds]
 
     def change_resolution(self, L, M, N):
         """Change resolution of the basis to the given resolutions.
@@ -1891,7 +1905,7 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
     return polyval_vec(coeffs, r, prec=prec).T
 
 
-@functools.partial(jit, static_argnums=3)
+# @functools.partial(jit, static_argnums=3)
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
@@ -2496,27 +2510,28 @@ class FiniteElementMesh1D:
         # Using Gauss-Legendre quadrature
         integration_points = []
         weights = []
+        # Ordered these from smallest to largest
         if self.nquad == 1:
             integration_points = [0.0]
             weights = [2.0]
         elif self.nquad == 2:
-            integration_points = [1.0 / np.sqrt(3), -1.0 / np.sqrt(3)]
+            integration_points = [-1.0 / np.sqrt(3), 1.0 / np.sqrt(3)]
             weights = [1.0, 1.0]
         elif self.nquad == 3:
-            integration_points = [np.sqrt(0.6), -np.sqrt(0.6), 0.0]
-            weights = [5.0 / 9.0, 5.0 / 9.0, 8.0 / 9.0]
+            integration_points = [-np.sqrt(0.6), 0.0, np.sqrt(0.6)]
+            weights = [5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0]
         elif self.nquad == 4:
             integration_points = [
-                np.sqrt(3 + np.sqrt(4.8)) / 7.0,
                 -np.sqrt(3 + np.sqrt(4.8)) / 7.0,
-                np.sqrt(3 - np.sqrt(4.8)) / 7.0,
                 -np.sqrt(3 - np.sqrt(4.8)) / 7.0,
+                np.sqrt(3 - np.sqrt(4.8)) / 7.0,
+                np.sqrt(3 + np.sqrt(4.8)) / 7.0,
             ]
             weights = [
                 0.5 - 1.0 / (3.0 * np.sqrt(4.8)),
+                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
+                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
                 0.5 - 1.0 / (3.0 * np.sqrt(4.8)),
-                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
-                0.5 + 1.0 / (3.0 * np.sqrt(4.8)),
             ]
 
         self.integration_points = np.array(integration_points)
@@ -2595,7 +2610,7 @@ class FiniteElementMesh1D:
 
         Returns
         -------
-        quadrature points: 1D ndarray, shape (nquad * M)
+        quadrature points: 1D ndarray, shape (nquad * (M - 1))
             Points in theta representing the quadrature point
             locations for integration in barycentric coordinates.
 
@@ -2610,8 +2625,6 @@ class FiniteElementMesh1D:
                 quadrature_points[q] = (theta2 - theta1) * (
                     self.integration_points[i] + 1
                 ) / 2.0 + theta1
-                if quadrature_points[q] < 0.0:
-                    quadrature_points[q] += 2 * np.pi
                 q = q + 1
 
         return quadrature_points

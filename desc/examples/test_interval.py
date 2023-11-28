@@ -17,7 +17,7 @@ from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBa
 from desc.geometry import convert_spectral_to_FE
 
 # Seems to have a bug for L odd
-M = 8  # Note M > 2 required
+M = 31  # Note M > 2 required
 N = 0
 L = 0
 K = 2
@@ -36,7 +36,6 @@ assert np.allclose(integral, np.pi)
 
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary
-fz = FourierZernikeBasis(L=M, M=M, N=N)
 theta = np.linspace(0, 2 * np.pi, endpoint=False)
 plt.figure(M)
 plt.plot(2 + np.cos(theta), 2 + 5 * np.sin(theta))
@@ -87,14 +86,16 @@ nodes = (
     .reshape(3, len(theta))
     .T
 )
-R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
-Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
+R_fourier = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
+Z_fourier = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
 print("R_lmn, Z_lmn = ", R_lmn, Z_lmn)
 
-
-for L in range(25):
+r0 = 0
+z0 = 0
+for L in [8, 14]:
     plt.subplot(5, 5, L + 1)
-    plt.plot(R, Z, "ro")
+    plt.plot(R_fourier, Z_fourier, "ro")
+    print(L, M, N, K)
     Rprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
     Zprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
     Lprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
@@ -110,18 +111,24 @@ for L in range(25):
         Zprime_basis,
         Lprime_basis,
     )
-    print("L = ", L)
+    print("L = ", L, M, K)
     print("R_lmn, Z_lmn = ")
-    print(Rprime_lmn)
-    print(Zprime_lmn)
-    print(Rprime_lmn.shape)
+    print(Rprime_lmn[:8])
+    print(Zprime_lmn[:8])
     Rprime_basis.R_lmn = Rprime_lmn
     Zprime_basis.Z_lmn = Zprime_lmn
-    print(Rprime_basis._modes)
-
-    # Replot the surface in the finite element basis
-    R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
-    Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+    if L == 14:
+        assert np.allclose(Rprime_lmn[: len(r0)], r0)
+        assert np.allclose(Zprime_lmn[: len(r0)], z0)
+        # Replot the surface in the finite element basis
+        R = Rprime_basis.evaluate(nodes=nodes)[:, : len(r0)] @ Rprime_lmn[: len(r0)]
+        Z = Zprime_basis.evaluate(nodes=nodes)[:, : len(r0)] @ Zprime_lmn[: len(r0)]
+    else:
+        # Replot the surface in the finite element basis
+        R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
+        Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
+    r0 = Rprime_lmn
+    z0 = Zprime_lmn
     plt.plot(R, Z, "ko")
     plt.grid()
 plt.show()

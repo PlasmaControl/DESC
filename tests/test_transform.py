@@ -149,9 +149,9 @@ class TestTransform:
         print("Test start. Before importing grid")
         grid = ConcentricGrid(L=2, M=2, N=6)
         print("Before importing basis")
-        basis = ChebyshevZernikeBasis(L=1, M=2, N=2, sym="sin")
+        basis = ChebyshevZernikeBasis(L=1, M=2, N=2, sym=None)
         print("After importing basis")
-        transf = Transform(grid, basis)
+        transf = Transform(grid, basis, method = "direct1")
         print("After creating transform")
 
         r = grid.nodes[:, 0]  # rho coordinates
@@ -164,7 +164,7 @@ class TestTransform:
         z_shift = z/np.pi - 1
         print("z_shift", z_shift)
         correct_vals = (
-            r  * np.sin(t) * z_shift#(2*z_shift**2 - 1)
+            r  * np.cos(t) * z_shift#(2*z_shift**2 - 1)
             #- 0.5 * r * np.sin(t) * z_shift
             #+ 1
         ) #Error in the z expression
@@ -172,7 +172,7 @@ class TestTransform:
         # I think these indicies are wrong. no negative for chebyshev
         # 1, -1, 1 is x * np.sin(t) * np.cos(z) 
         # 1, 1, 0 is x * np.sin(t) * 1
-        idx_0 = np.where((basis.modes == [1, -1, 1]).all(axis=1))[0]#Zernike 1, -1: r sin()
+        idx_0 = np.where((basis.modes == [1, 1, 1]).all(axis=1))[0]#Zernike 1, -1: r sin()
         #idx_1 = np.where((basis.modes == [1, -1, 1]).all(axis=1))[0]#Zernike 1, 1: r cos()
         #idx_2 = np.where((basis.modes == [0, 0, 0]).all(axis=1))[0]#Zernike 0,0: 1
         print("After assigning values")

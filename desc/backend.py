@@ -161,8 +161,6 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 
     _eigvals_cpu = jax.jit(jnp.linalg.eigvals, device=jax.devices("cpu")[0])
 
-    _gen_eigval_cpu = jax.jit(jax.scipy.linalg.eigh, device=jax.devices("cpu")[0])
-
     @jax.custom_jvp
     def eigvals(A):
         """
@@ -188,6 +186,8 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
         return u, du
 
+    _gen_eigval_cpu = jax.jit(jax.scipy.linalg.eigh, device=jax.devices("cpu")[0])
+
     @jax.custom_jvp
     def gen_eigval(A):
         """
@@ -195,13 +195,24 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 
         Returns the eigenvalues of the square matrix A.
         """
-        u = jax.pure_callback(
-            _eigvals_cpu, jnp.zeros_like(A[..., -1]) + 1j, A, vectorized=True
+        neigs, N, _ = jnp.shape(A)
+        u = jnp.zeros((N,))
+        i = jnp.arange(N)
+
+        u = u.at[i].set(
+            jax.pure_callback(
+                _gen_eigval_cpu,
+                jnp.zeros_like(A[i, :, :]),
+                A[i, :, :],
+                k=1,
+                sigma=0.42,
+                vectorized=True,
+            )
         )
         return u
 
-    @eigvals.defjvp
-    def _gen_eigvals_jvp(primals, tangents):
+    @gen_eigval.defjvp
+    def _gen_eigval_jvp(primals, tangents):
 
         u = gen_eigval(primals[0])
 

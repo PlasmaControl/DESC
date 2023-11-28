@@ -14,7 +14,7 @@ import scipy
 from scipy.constants import mu_0
 from scipy.integrate import simpson as simps
 
-from desc.backend import eigvals, jnp
+from desc.backend import gen_eigval, jnp
 from desc.grid import Grid
 
 from .data_index import register_compute_fun
@@ -356,7 +356,7 @@ def _ideal_ballooning_gamma(params, transforms, profiles, data, *kwargs):
         + g_half[i, j] / f[i, j + 1] * 1 / h**2 * (j - k == 1)
     )
 
-    w = eigvals(jnp.where(jnp.isfinite(A), A, 0))
+    w = gen_eigval(jnp.where(jnp.isfinite(A), A, 0))
 
     lam = jnp.real(jnp.max(w))
 
@@ -477,6 +477,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     A = jnp.zeros((N_zeta0, N - 2, N - 2))
     B = jnp.zeros((N_zeta0, N - 2, N - 2))
+    B_inv = jnp.zeros((N_zeta0, N - 2, N - 2))
 
     A = A.at[i, j, k].set(
         g_half[i, k] * 1 / h**2 * (j - k == -1)
@@ -484,11 +485,10 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
         + g_half[i, j] * 1 / h**2 * (j - k == 1)
     )
 
-    B = B.at[i, j, k].set(f[i, j + 1] * (j - k == 0))
+    B = B.at[i, j, k].set(jnp.sqrt(f[i, j + 1]) * (j - k == 0))
+    B_inv = B_inv.at[i, j, k].set(1 / jnp.sqrt(f[i, j + 1]) * (j - k == 0))
 
-    L = jnp.linalg.cholesky(B)
-    L_inv = jnp.linalg.inv(L)
-    A_redo = L_inv @ A @ jnp.transpose(L_inv, axes=(0, 2, 1))
+    A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 2, 1))
 
     w, v = jnp.linalg.eigh(A_redo)
 

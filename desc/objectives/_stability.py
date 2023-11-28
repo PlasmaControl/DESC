@@ -51,6 +51,11 @@ class MercierStability(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -71,6 +76,7 @@ class MercierStability(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="Mercier Stability",
     ):
@@ -85,6 +91,7 @@ class MercierStability(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -208,6 +215,11 @@ class MagneticWell(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -228,6 +240,7 @@ class MagneticWell(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="Magnetic Well",
     ):
@@ -242,6 +255,7 @@ class MagneticWell(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -361,7 +375,7 @@ class BallooningStability(_Objective):
     """
 
     _coordinates = "r"
-    _units = "(Wb^-2)"
+    _units = "(normalized)"
     _print_value_fmt = "Ideal-ballooning Stability: {:10.3e} "
 
     def __init__(
@@ -372,6 +386,7 @@ class BallooningStability(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        deriv_mode="fwd",
         loss_function=None,
         rho=0.5,
         alpha=0.0,
@@ -395,6 +410,7 @@ class BallooningStability(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -425,7 +441,7 @@ class BallooningStability(_Objective):
         fieldline_nodes = np.array([rho, alpha, zeta]).T
 
         self._dim_f = 1
-        self._data_keys = ["ideal_ball_gamma"]  # or whatever else you need as output
+        self._data_keys = ["ideal_ball_gamma2"]  # or whatever else you need as output
 
         self._args = get_params(
             self._iota_keys + self._data_keys,
@@ -508,4 +524,4 @@ class BallooningStability(_Objective):
             data=data,
         )
 
-        return data["ideal_ball_gamma"]
+        return data["ideal_ball_gamma2"]

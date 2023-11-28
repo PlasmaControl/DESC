@@ -301,7 +301,7 @@ def _ideal_ballooning_gamma(params, transforms, profiles, data, *kwargs):
     rho = data["rho"]
 
     psi_b = params["Psi"] / (2 * np.pi)
-    a_N = data["a"]
+    a_N = 0.7
     B_N = 2 * psi_b / a_N**2
 
     N_zeta0 = int(10)
@@ -359,7 +359,142 @@ def _ideal_ballooning_gamma(params, transforms, profiles, data, *kwargs):
     w = eigvals(jnp.where(jnp.isfinite(A), A, 0))
 
     lam = jnp.real(jnp.max(w))
-    data["ideal_ball_gamma"] = lam * (lam >= -0.001)
+
+    data["ideal_ball_gamma"] = (lam + 0.001) * (lam >= -0.001)
+
+    return data
+
+
+@register_compute_fun(
+    name="ideal_ball_gamma2",
+    label="\\gamma^2",
+    units=" ",
+    units_long=" ",
+    description="ideal ballooning growth rate" + "requires data along a field line",
+    dim=1,
+    params=["Psi"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "a",
+        "g^aa",
+        "g^ra",
+        "g^rr",
+        "cvdrift",
+        "cvdrift0",
+        "|B|",
+        "B^zeta",
+        "p_r",
+        "psi_r",
+        "phi",
+        "iota",
+        "psi",
+        "rho",
+    ],
+)
+def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
+    """
+    Ideal-ballooning growth rate finder.
+
+    This function uses a finite-difference method
+    to calculate the maximum growth rate against the
+    infinite-n ideal ballooning mode. The equation being solved is
+
+    d / d z (g d X / d z) + c * X - lam * f * X = 0, g, f > 0
+
+    where
+
+    kappa = b dot grad b
+    g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
+    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
+        * (b cross kappa) dot grad alpha/ B**2,
+    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta),
+    are needed along a field line to solve the ballooning equation once.
+
+    To obtain the parameters g, c, and f, we need a set of parameters
+    provided in the list ``data`` above. Here's a description of
+    these parameters:
+
+    - a: minor radius of the device
+    - g^aa: |grad alpha|^2, field line bending term
+    - g^ra: (grad alpha dot grad rho) integrated local shear
+    - g^rr: |grad rho|^2 flux expansion term
+    - cvdrift: geometric factor of the curvature drift
+    - cvdrift0: geoetric factor of curvature drift 2
+    - |B|: magnitude of the magnetic field
+    - B^zeta: inverse of the jacobian
+    - p_r: dp/drho, pressure gradient
+    - psi_r: radial gradient of the toroidal flux
+    - phi: coordinate describing the position in the toroidal angle
+    along a field line
+    """
+    rho = data["rho"]
+
+    psi_b = params["Psi"] / (2 * np.pi)
+    a_N = 0.7
+    B_N = 2 * psi_b / a_N**2
+
+    N_zeta0 = int(10)
+    # up-down symmetric equilibria only
+    zeta0 = jnp.linspace(0, np.pi, N_zeta0)
+
+    iota = data["iota"]
+    psi = data["psi"]
+    sign_psi = jnp.sign(psi[-1])
+    sign_iota = jnp.sign(iota[-1])
+
+    phi = data["phi"]
+    N = len(phi)
+
+    gradpar = data["B^zeta"] / data["|B|"]
+    dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
+
+    gds2 = rho**2 * (
+        data["g^aa"][None, :]
+        - 2 * sign_iota * zeta0[:, None] * data["g^ra"][None, :]
+        + zeta0[:, None] ** 2 * data["g^rr"][None, :]
+    )
+    dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
+
+    f = a_N * B_N**3 * gds2 / data["|B|"][None, :] ** 3 * 1 / gradpar[None, :]
+    g = a_N**3 * B_N * gds2 / data["|B|"][None, :] * gradpar[None, :]
+    g_half = (g[:, 1:] + g[:, :-1]) / 2
+    c = (
+        a_N
+        * 2
+        / data["B^zeta"][None, :]
+        * rho
+        * sign_psi
+        * dpdpsi
+        * (data["cvdrift"][None, :] + zeta0[:, None] * data["cvdrift0"][None, :])
+    )
+    h = (phi[-1] - phi[0]) / (N - 1)
+
+    i = jnp.arange(N_zeta0)[:, None, None]
+    j = jnp.arange(N - 2)[None, :, None]
+    k = jnp.arange(N - 2)[None, None, :]
+
+    A = jnp.zeros((N_zeta0, N - 2, N - 2))
+    B = jnp.zeros((N_zeta0, N - 2, N - 2))
+
+    A = A.at[i, j, k].set(
+        g_half[i, k] * 1 / h**2 * (j - k == -1)
+        + (-(g_half[i, j + 1] + g_half[i, j]) * 1 / h**2 + c[i, j + 1]) * (j - k == 0)
+        + g_half[i, j] * 1 / h**2 * (j - k == 1)
+    )
+
+    B = B.at[i, j, k].set(f[i, j + 1] * (j - k == 0))
+
+    L = jnp.linalg.cholesky(B)
+    L_inv = jnp.linalg.inv(L)
+    A_redo = L_inv @ A @ jnp.transpose(L_inv, axes=(0, 2, 1))
+
+    w, v = jnp.linalg.eigh(A_redo)
+
+    lam = jnp.real(jnp.max(w))
+
+    data["ideal_ball_gamma2"] = (lam + 0.001) * (lam >= -0.001)
 
     return data
 

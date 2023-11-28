@@ -161,6 +161,8 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 
     _eigvals_cpu = jax.jit(jnp.linalg.eigvals, device=jax.devices("cpu")[0])
 
+    _gen_eigval_cpu = jax.jit(jax.scipy.linalg.eigh, device=jax.devices("cpu")[0])
+
     @jax.custom_jvp
     def eigvals(A):
         """
@@ -181,6 +183,31 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
         def jvpfun(primals, tangents):
             u, du = jax.jvp(_eigvals_cpu, (primals,), (tangents,))
+            return du.squeeze()
+
+        du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
+        return u, du
+
+    @jax.custom_jvp
+    def gen_eigval(A):
+        """
+        Generalize eigenvalue solver.
+
+        Returns the eigenvalues of the square matrix A.
+        """
+        u = jax.pure_callback(
+            _eigvals_cpu, jnp.zeros_like(A[..., -1]) + 1j, A, vectorized=True
+        )
+        return u
+
+    @eigvals.defjvp
+    def _gen_eigvals_jvp(primals, tangents):
+
+        u = gen_eigval(primals[0])
+
+        @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
+        def jvpfun(primals, tangents):
+            u, du = jax.jvp(_gen_eigval_cpu, (primals,), (tangents,))
             return du.squeeze()
 
         du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
@@ -394,33 +421,6 @@ else:  # pragma: no cover
         fun.defjvp = lambda *args, **kwargs: None
         fun.defjvps = lambda *args, **kwargs: None
         return fun
-
-    _eigvals_cpu = jax.jit(jnp.linalg.eigvals, device=jax.devices("cpu")[0])
-
-    @jax.custom_jvp
-    def eigvals(A):
-        """
-        Eigenvalue solver.
-
-        Returns the eigenvalues of the square matrix A.
-        """
-        u = jax.pure_callback(
-            _eigvals_cpu, jnp.zeros_like(A[..., -1]) + 1j, A, vectorized=True
-        )
-        return u
-
-    @eigvals.defjvp
-    def _eigvals_jvp(primals, tangents):
-
-        u = eigvals(primals)
-
-        @partial(jnp.vectorize, signature="(n,n),(n,n)->(n)")
-        def jvpfun(primals, tangents):
-            u, du = jax.jvp(_eigvals_cpu, (primals,), (tangents,))
-            return du.squeeze()
-
-        du = jax.pure_callback(jvpfun, u, *primals, *tangents, vectorized=True)
-        return u, du
 
     def eigvals(A):
         """

@@ -36,7 +36,6 @@
    notebooks/tutorials/basic_optimization.ipynb
    notebooks/tutorials/advanced_optimization.ipynb
    notebooks/tutorials/nae_constraint.ipynb
-   precise_qa
 
 .. toctree::
    :maxdepth: 1

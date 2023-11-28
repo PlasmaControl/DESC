@@ -794,18 +794,20 @@ class SplineMagneticField(_MagneticField, Optimizable):
         phi coordinates where field is specified
     Z : array-like, size(NZ)
         Z coordinates where field is specified
-    BR : array-like, shape(NR,Nphi,NZ)
+    BR : array-like, shape(NR,Nphi,NZ,Ngroups)
         radial magnetic field on grid
-    Bphi : array-like, shape(NR,Nphi,NZ)
+    Bphi : array-like, shape(NR,Nphi,NZ,Ngroups)
         toroidal magnetic field on grid
-    BZ : array-like, shape(NR,Nphi,NZ)
+    BZ : array-like, shape(NR,Nphi,NZ,Ngroups)
         vertical magnetic field on grid
+    currents : array-like, shape(Ngroups)
+        Currents or scaling factors for each field group.
+    NFP : int, optional
+        Number of toroidal field periods.
     method : str
-        interpolation method
-    extrap : bool
-        whether to extrapolate beyond the domain of known field values or return nan
-    period : float
-        period in the toroidal direction (usually 2pi/NFP)
+        interpolation method.
+    extrap : bool, optional
+        whether to extrapolate beyond the domain of known field values or return nan.
 
     """
 
@@ -818,42 +820,70 @@ class SplineMagneticField(_MagneticField, Optimizable):
         "_BZ",
         "_method",
         "_extrap",
-        "_period",
         "_derivs",
         "_axisym",
+        "_currents",
+        "_NFP",
     ]
 
-    def __init__(self, R, phi, Z, BR, Bphi, BZ, method="cubic", extrap=False, period=0):
-        R, phi, Z = np.atleast_1d(R), np.atleast_1d(phi), np.atleast_1d(Z)
+    def __init__(
+        self, R, phi, Z, BR, Bphi, BZ, currents=1.0, NFP=1, method="cubic", extrap=False
+    ):
+        R, phi, Z, currents = map(jnp.atleast_1d, (R, phi, Z, currents))
         assert R.ndim == 1
         assert phi.ndim == 1
         assert Z.ndim == 1
-        BR, Bphi, BZ = np.atleast_3d(BR), np.atleast_3d(Bphi), np.atleast_3d(BZ)
-        assert BR.shape == Bphi.shape == BZ.shape == (R.size, phi.size, Z.size)
+        assert currents.ndim == 1
+        shape = (R.size, phi.size, Z.size, currents.size)
+
+        def _atleast_4d(x):
+            x = jnp.atleast_3d(x)
+            if x.ndim < 4:
+                x = x.reshape(x.shape + (1,))
+            return x
+
+        BR, Bphi, BZ = map(_atleast_4d, (BR, Bphi, BZ))
+        assert BR.shape == Bphi.shape == BZ.shape == shape
 
         self._R = R
         self._phi = phi
+        self._Z = Z
         if len(phi) == 1:
             self._axisym = True
         else:
             self._axisym = False
-        self._Z = Z
+
         self._BR = BR
         self._Bphi = Bphi
         self._BZ = BZ
 
+        self._currents = currents
+
+        self._NFP = NFP
         self._method = method
         self._extrap = extrap
-        self._period = period
 
         self._derivs = {}
         self._derivs["BR"] = self._approx_derivs(self._BR)
         self._derivs["Bphi"] = self._approx_derivs(self._Bphi)
         self._derivs["BZ"] = self._approx_derivs(self._BZ)
 
-        # this doesn't have any optimizable params but we want to use it in places
-        # that expect optimizable objects
-        self._optimizable_params = []
+    @property
+    def NFP(self):
+        """int: Number of toroidal field periods."""
+        return self._NFP
+
+    @optimizable_parameter
+    @property
+    def currents(self):
+        """ndarray: currents or scaling factors for each field group."""
+        return self._currents
+
+    @currents.setter
+    def currents(self, new):
+        new = jnp.atleast_1d(new)
+        assert len(new) == len(self.currents)
+        self._currents = new
 
     def _approx_derivs(self, Bi):
         tempdict = {}
@@ -899,6 +929,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
+        currents = self.currents if params is None else params["currents"]
         if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
@@ -955,7 +986,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
                 self._method,
                 (0, 0, 0),
                 self._extrap,
-                (None, self._period, None),
+                (None, 2 * np.pi / self.NFP, None),
                 **self._derivs["BR"],
             )
             Bphiq = interp3d(
@@ -969,7 +1000,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
                 self._method,
                 (0, 0, 0),
                 self._extrap,
-                (None, self._period, None),
+                (None, 2 * np.pi / self.NFP, None),
                 **self._derivs["Bphi"],
             )
             BZq = interp3d(
@@ -983,18 +1014,19 @@ class SplineMagneticField(_MagneticField, Optimizable):
                 self._method,
                 (0, 0, 0),
                 self._extrap,
-                (None, self._period, None),
+                (None, 2 * np.pi / self.NFP, None),
                 **self._derivs["BZ"],
             )
-        B = jnp.array([BRq, Bphiq, BZq]).T
+        # BRq etc shape(nq, ngroups)
+        B = jnp.stack([BRq, Bphiq, BZq], axis=1)
+        # B shape(nq, 3, ngroups)
+        B = jnp.sum(B * currents, axis=-1)
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])
         return B
 
     @classmethod
-    def from_mgrid(
-        cls, mgrid_file, extcur=1, method="cubic", extrap=False, period=None
-    ):
+    def from_mgrid(cls, mgrid_file, extcur=1, method="cubic", extrap=False):
         """Create a SplineMagneticField from an "mgrid" file from MAKEGRID.
 
         Parameters
@@ -1007,8 +1039,6 @@ class SplineMagneticField(_MagneticField, Optimizable):
             interpolation method
         extrap : bool
             whether to extrapolate beyond the domain of known field values or return nan
-        period : float
-            period in the toroidal direction (usually 2pi/NFP)
 
         """
         mgrid = Dataset(mgrid_file, "r")
@@ -1021,20 +1051,16 @@ class SplineMagneticField(_MagneticField, Optimizable):
         rMax = mgrid["rmax"][()]
         zMin = mgrid["zmin"][()]
         zMax = mgrid["zmax"][()]
-
-        br = np.zeros([kp, jz, ir])
-        bp = np.zeros([kp, jz, ir])
-        bz = np.zeros([kp, jz, ir])
         extcur = np.broadcast_to(extcur, nextcur)
-        for i in range(nextcur):
-            # apply scaling by currents given in VMEC input file
-            scale = extcur[i]
 
-            # sum up contributions from different coils
+        br = np.zeros([kp, jz, ir, nextcur])
+        bp = np.zeros([kp, jz, ir, nextcur])
+        bz = np.zeros([kp, jz, ir, nextcur])
+        for i in range(nextcur):
             coil_id = "%03d" % (i + 1,)
-            br[:, :, :] += scale * mgrid["br_" + coil_id][()]
-            bp[:, :, :] += scale * mgrid["bp_" + coil_id][()]
-            bz[:, :, :] += scale * mgrid["bz_" + coil_id][()]
+            br[:, :, :, i] += mgrid["br_" + coil_id][()]
+            bp[:, :, :, i] += mgrid["bp_" + coil_id][()]
+            bz[:, :, :, i] += mgrid["bz_" + coil_id][()]
         mgrid.close()
 
         # shift axes to correct order
@@ -1046,14 +1072,12 @@ class SplineMagneticField(_MagneticField, Optimizable):
         Rgrid = np.linspace(rMin, rMax, ir)
         Zgrid = np.linspace(zMin, zMax, jz)
         pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
-        if period is None:
-            period = 2 * np.pi / (nfp)
 
-        return cls(Rgrid, pgrid, Zgrid, br, bp, bz, method, extrap, period)
+        return cls(Rgrid, pgrid, Zgrid, br, bp, bz, extcur, nfp, method, extrap)
 
     @classmethod
     def from_field(
-        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, period=None
+        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=1
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -1070,8 +1094,8 @@ class SplineMagneticField(_MagneticField, Optimizable):
             spline method for SplineMagneticField
         extrap : bool
             whether to extrapolate splines beyond specified R,phi,Z
-        period : float
-            period for phi coordinate. Usually 2pi/NFP
+        NFP : int, optional
+            Number of toroidal field periods.
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -1086,9 +1110,10 @@ class SplineMagneticField(_MagneticField, Optimizable):
             BR.reshape(shp),
             BP.reshape(shp),
             BZ.reshape(shp),
-            method,
-            extrap,
-            period,
+            currents=1.0,
+            NFP=NFP,
+            method=method,
+            extrap=extrap,
         )
 
 

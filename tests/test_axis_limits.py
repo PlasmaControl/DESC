@@ -25,6 +25,7 @@ not_finite_limits = {
     "D_geodesic",
     "D_well",
     "J^theta",
+    "current Redl",  # may not exist for all configurations
     "curvature_H_rho",
     "curvature_H_zeta",
     "curvature_K_rho",
@@ -57,8 +58,6 @@ not_finite_limits = {
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
-    "iota_num_rrr",
-    "iota_den_rrr",
     "D_current",
     "e^rho_rr",
     "e^theta_rr",
@@ -78,6 +77,8 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
+    "iota_num_rrr",
+    "iota_den_rrr",
 }
 
 

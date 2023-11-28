@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+from interpax import approx_df, interp2d, interp3d
 from netCDF4 import Dataset
 
 from desc.backend import fori_loop, jit, jnp, odeint, sign
@@ -12,7 +13,6 @@ from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
-from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
 from desc.transform import Transform
 from desc.utils import copy_coeffs, errorif, warnif
@@ -735,19 +735,19 @@ class SplineMagneticField(_MagneticField):
 
     def _approx_derivs(self, Bi):
         tempdict = {}
-        tempdict["fx"] = _approx_df(self._R, Bi, self._method, 0)
-        tempdict["fz"] = _approx_df(self._Z, Bi, self._method, 2)
-        tempdict["fxz"] = _approx_df(self._Z, tempdict["fx"], self._method, 2)
+        tempdict["fx"] = approx_df(self._R, Bi, self._method, 0)
+        tempdict["fz"] = approx_df(self._Z, Bi, self._method, 2)
+        tempdict["fxz"] = approx_df(self._Z, tempdict["fx"], self._method, 2)
         if self._axisym:
             tempdict["fy"] = jnp.zeros_like(tempdict["fx"])
             tempdict["fxy"] = jnp.zeros_like(tempdict["fx"])
             tempdict["fyz"] = jnp.zeros_like(tempdict["fx"])
             tempdict["fxyz"] = jnp.zeros_like(tempdict["fx"])
         else:
-            tempdict["fy"] = _approx_df(self._phi, Bi, self._method, 1)
-            tempdict["fxy"] = _approx_df(self._phi, tempdict["fx"], self._method, 1)
-            tempdict["fyz"] = _approx_df(self._Z, tempdict["fy"], self._method, 2)
-            tempdict["fxyz"] = _approx_df(self._Z, tempdict["fxy"], self._method, 2)
+            tempdict["fy"] = approx_df(self._phi, Bi, self._method, 1)
+            tempdict["fxy"] = approx_df(self._phi, tempdict["fx"], self._method, 1)
+            tempdict["fyz"] = approx_df(self._Z, tempdict["fy"], self._method, 2)
+            tempdict["fxyz"] = approx_df(self._Z, tempdict["fxy"], self._method, 2)
         if self._axisym:
             for key, val in tempdict.items():
                 tempdict[key] = val[:, 0, :]

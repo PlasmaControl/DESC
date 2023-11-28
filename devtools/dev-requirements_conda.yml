@@ -14,6 +14,7 @@ dependencies:
   - termcolor
   - pip
   - pip:
+    - interpax
     - jax[cpu] >= 0.3.2, <= 0.4.14
     - nvgpu
     - plotly >= 5.16, <= 6.0

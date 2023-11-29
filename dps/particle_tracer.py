@@ -10,15 +10,8 @@ import numpy as np
 from time import time as timet
 
 initial_time = timet()
-<<<<<<< HEAD
 
 filename = "optimized_eq_2411_M1_N1.h5"
-=======
-# Load Equilibrium
-# filename = "input.LandremanPaul2021_QA_scaled_output.h5"
-# eq = desc.io.load(filename)[-1]
-filename = "rot_ellipse_M1_N1.h5"
->>>>>>> parent of 1c9363b2 (speed test)
 eq = desc.io.load(filename)
 save_text_name = "solution" + filename
 

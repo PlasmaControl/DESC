@@ -68,12 +68,11 @@ def set_device(kind="cpu"):
     available memory.
     Respects environment variable CUDA_VISIBLE_DEVICES for selecting from multiple
     available GPUs
-    The METAL option is used to run on Apple silicon chips.
 
     Parameters
     ----------
-    kind : {``'cpu'``, ``'gpu'``, ``'metal'``}
-        whether to use CPU, GPU or METAL.
+    kind : {``'cpu'``, ``'gpu'``}
+        whether to use CPU or GPU.
 
     """
     config["kind"] = kind
@@ -84,18 +83,6 @@ def set_device(kind="cpu"):
 
         cpu_mem = psutil.virtual_memory().available / 1024**3  # RAM in GB
         config["device"] = "CPU"
-        config["avail_mem"] = cpu_mem
-
-    if kind == "metal":
-        # import jax.config as jax_config
-        # jax_config.update("jax_enable_x64", True)
-        # jax_config.update('jax_platform_name', 'METAL')
-        # os.environ["JAX_PLATFORM_NAME"] = "METAL"
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        import psutil
-
-        cpu_mem = psutil.virtual_memory().available / 1024**3  # RAM in GB
-        config["device"] = "METAL"
         config["avail_mem"] = cpu_mem
 
     if kind == "gpu":

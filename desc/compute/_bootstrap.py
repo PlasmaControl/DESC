@@ -409,9 +409,17 @@ def _current_Redl(params, transforms, profiles, data, **kwargs):
     iterative method to update the current profile until self-consistency is achieved.
     """
     rho = transforms["grid"].compress(data["rho"])
-    current_r = transforms["grid"].compress(
-        -mu_0 * data["current"] / data["<|B|^2>"] * data["p_r"]  # perpendicular
-        + 2 * jnp.pi * data["psi_r"] * data["<J*B> Redl"] / data["<|B|^2>"]  # parallel
+    current_r = (  # perpendicular current
+        -mu_0
+        * transforms["grid"].compress(data["current"])
+        / transforms["grid"].compress(data["<|B|^2>"])
+        * transforms["grid"].compress(data["p_r"])
+    ) + (  # parallel current
+        2
+        * jnp.pi
+        * transforms["grid"].compress(data["psi_r"])
+        * transforms["grid"].compress(data["<J*B> Redl"])
+        / transforms["grid"].compress(data["<|B|^2>"])
     )
     current = cumtrapz(current_r, rho, initial=0)
     data["current Redl"] = transforms["grid"].expand(current)

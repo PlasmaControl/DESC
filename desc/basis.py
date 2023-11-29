@@ -17,7 +17,7 @@ __all__ = [
     "DoubleFourierSeries",
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
-    "FourierZernikeBasis"
+    "FourierZernikeBasis",
     "ChebyshevZernikeBasis",
 ]
 
@@ -1390,7 +1390,7 @@ class ChebyshevZernikeBasis(_Basis):
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1]) 
-        print("l", l, "m", m, "n", n)
+        # print("l", l, "m", m, "n", n)
         axial = chebyshev_z(z[:, np.newaxis], n, dr=derivatives[2])
         if unique:
             radial = radial[routidx][:, lmoutidx]

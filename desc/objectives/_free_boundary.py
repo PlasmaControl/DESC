@@ -16,7 +16,7 @@ from desc.singularities import (
     FFTInterpolator,
     virtual_casing_biot_savart,
 )
-from desc.utils import Timer, errorif
+from desc.utils import Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors
 
@@ -176,6 +176,14 @@ class BoundaryError(_Objective):
                 " much slower. Reason: " + str(e)
             )
             interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
+
+        edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))
+        warnif(
+            (edge_pres > 1e-6) and not self._sheet_current,
+            UserWarning,
+            f"Boundary pressure is nonzero (max {edge_pres} Pa), "
+            + "a sheet current should be included.",
+        )
 
         self._eq_data_keys = [
             "K_vc",

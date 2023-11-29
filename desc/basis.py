@@ -1390,17 +1390,12 @@ class ChebyshevZernikeBasis(_Basis):
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1]) 
-        # Q: fourer? not zernike_angular?
         print("l", l, "m", m, "n", n)
         axial = chebyshev_z(z[:, np.newaxis], n, dr=derivatives[2])
-        #TASK: check toridal and input porpperly. might be dr
-        #Question: is this different because we are dz instead of dr?
-        #ISSUE?: analytic derivatives of chebyshev polynomials not implemented
         if unique:
             radial = radial[routidx][:, lmoutidx]
             poloidal = poloidal[toutidx][:, moutidx]
             axial = axial[zoutidx][:, noutidx]
-
         return radial * poloidal * axial
 
     def change_resolution(self, L, M, N, NFP=None, sym=None):
@@ -1829,7 +1824,7 @@ def chebyshev_z(z, l, dr=0):
 
     """
     z, l = map(jnp.asarray, (z, l))
-    z_shift = z*2 - 1
+    z_shift = z/np.pi - 1
     if dr == 0:
         return jnp.cos(l * jnp.arccos(z_shift))
     else:

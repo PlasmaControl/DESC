@@ -1128,11 +1128,8 @@ class ConcentricGrid(_Grid):
         dt = np.asarray(dt)
         dimzern = r.size
 
-        # z = np.linspace(0, 2*np.pi/NFP , 2 * N + 1, endpoint=False)
-        # dz = 2 * np.pi / z.size
-
-        z = np.linspace(0, 1, 2*N + 1, endpoint=True)
-        dz = 1/(z.size-1)
+        z = np.linspace(0, 2*np.pi/NFP , 2 * N + 1, endpoint=False)
+        dz = 2 * np.pi / z.size
 
         r = np.tile(r, 2 * N + 1)
         t = np.tile(t, 2 * N + 1)

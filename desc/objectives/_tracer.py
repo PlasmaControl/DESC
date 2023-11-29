@@ -70,6 +70,7 @@ class ParticleTracer(_Objective):
         initial_parameters=None,
         compute_option=None,
         tolerance = 1.4e-8,
+        deriv_mode = "rev",
         name="Particle Tracer"
     ):
         self.output_time = output_time
@@ -88,6 +89,7 @@ class ParticleTracer(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            deriv_mode=deriv_mode,
             name=name,
         )
 

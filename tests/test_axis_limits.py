@@ -20,12 +20,14 @@ from desc.grid import LinearGrid
 # d²ψ/(dρ)² and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
 # Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
 zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
+# "current Redl" needs special treatment because it is generally not defined for all
+# configurations (giving NaN values), except it is always 0 at the magnetic axis
+not_continuous_limits = {"current Redl"}
 not_finite_limits = {
     "D_Mercier",
     "D_geodesic",
     "D_well",
     "J^theta",
-    "current Redl",  # may not exist for all configurations
     "curvature_H_rho",
     "curvature_H_zeta",
     "curvature_K_rho",
@@ -215,7 +217,10 @@ def assert_is_continuous(
 
     p = "desc.equilibrium.equilibrium.Equilibrium"
     for name in names:
-        if name in not_finite_limits:
+        if name in not_continuous_limits:
+            assert (np.isfinite(data[name]).T == axis).all(), name
+            continue
+        elif name in not_finite_limits:
             assert (np.isfinite(data[name]).T != axis).all(), name
             continue
         else:

@@ -113,13 +113,13 @@ Charge = 2*Proton_Charge
 psi_i = 0.8
 zeta_i = 0.5
 theta_i = jnp.pi/2
-vpar_i = -0.2*jnp.sqrt(2*Energy_SI/Mass)
+vpar_i = -0.1*jnp.sqrt(2*Energy_SI/Mass)
 ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
 
 # Time
 tmin = 0
 tmax = 5e-2
-nt = 3000
+nt = 5000
 time = jnp.linspace(tmin, tmax, nt)
 
 # Initial State

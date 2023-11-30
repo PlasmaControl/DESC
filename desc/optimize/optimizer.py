@@ -145,12 +145,15 @@ class Optimizer(IOAble):
 
         """
         things = flatten_list(things, flatten_tuple=True)
-
+        things0 = [t.copy() for t in things]
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
 
         # eq may be None
         eq = get_instance(things, Equilibrium)
+        if eq is not None:
+            # save these for later
+            eq_params_init = eq.params_dict.copy()
 
         options = {} if options is None else options
         # TODO: document options
@@ -168,18 +171,6 @@ class Optimizer(IOAble):
             objective.build(verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
             nonlinear_constraint.build(verbose=verbose)
-        # check and ensure ProximalProjection is only used with eq as an optimizable
-        if isinstance(objective, ProximalProjection):
-            if len(objective.things) > 1:
-                raise ValueError(
-                    "ProximalProjection method "
-                    + "cannot handle optimizing multiple objects! "
-                    + "Expected objective.things to contain only a single Equilibrium,"
-                    + f"instead got {objective.things}"
-                )
-            assert isinstance(
-                objective.things[0], Equilibrium
-            ), "ProximalProjection can only be used to optimize Equilibrium objects!"
 
         if nonlinear_constraint is not None:
             objective, nonlinear_constraint = combine_args(
@@ -188,10 +179,10 @@ class Optimizer(IOAble):
             assert set(objective.things) == set(nonlinear_constraint.things)
         assert set(objective.things) == set(things)
 
-        # wrap to handle linear constraints
         if not isinstance(objective, ProximalProjection) and eq is not None:
             # need to include self consistency constraints
             linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
+        # wrap to handle linear constraints
         if len(linear_constraints):
             objective = LinearConstraintProjection(objective, linear_constraints)
             objective.build(verbose=verbose)
@@ -289,6 +280,9 @@ class Optimizer(IOAble):
             objective = objective._objective
 
         if isinstance(objective, ProximalProjection):
+            # reset eq params to initial
+            if eq is not None:
+                eq.params_dict = eq_params_init
             result["history"] = objective.history
             objective = objective._objective
         else:
@@ -307,23 +301,33 @@ class Optimizer(IOAble):
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x())
-            for con in constraints:
-                con.print_value(*con.xs())
-
-        if copy:
-            things = [thing.copy() for thing in things]
-
+        # temporarily assign new stuff for printing, might get replaced later
         for thing, params in zip(things, result["history"][-1]):
             thing.params_dict = params
 
         if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x())
+            print("Start of solver")
+            objective.print_value(objective.x(*things0))
             for con in constraints:
-                con.print_value(*con.xs())
+                con.print_value(
+                    *con.xs(
+                        *[t0 for (t0, t) in zip(things0, things) if t in con.things]
+                    )
+                )
+
+            print("End of solver")
+            objective.print_value(objective.x(*things))
+            for con in constraints:
+                con.print_value(*con.xs(*[t for t in things if t in con.things]))
+
+        if copy:
+            # need to swap things and things0, since things should be unchanged
+            for t, t0 in zip(things, things0):
+                init_params = t0.params_dict.copy()
+                final_params = t.params_dict.copy()
+                t.params_dict = init_params
+                t0.params_dict = final_params
+            return things0, result
 
         return things, result
 

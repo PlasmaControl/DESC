@@ -1762,6 +1762,7 @@ class Equilibrium(IOAble, Optimizable):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
+            copy=copy,
         )
 
         return things[0], result

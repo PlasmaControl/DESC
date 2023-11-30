@@ -114,12 +114,12 @@ psi_i = 0.8
 zeta_i = 0.5
 theta_i = jnp.pi/2
 vpar_i = -0.1*jnp.sqrt(2*Energy_SI/Mass)
-ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
+ini_cond = jnp.array([float(psi_i), theta_i, zeta_i, float(vpar_i)])
 
 # Time
 tmin = 0
 tmax = 5e-2
-nt = 5000
+nt = 7500
 time = jnp.linspace(tmin, tmax, nt)
 
 # Initial State
@@ -132,7 +132,7 @@ data = eq.compute("|B|", grid=grid)
 mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 
 # Initial Parameters
-ini_param = [float(mu), Mass_Charge_Ratio]
+ini_param = jnp.array([float(mu), Mass_Charge_Ratio])
 
 intermediate_time = timet()
 print(f"\nTime from beginning until here: {intermediate_time - initial_time}s\n")

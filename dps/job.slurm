@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=DESC_gpu_jac_test
+#SBATCH --job-name=DPS
 #SBATCH --nodes=1
 #SBATCH -n 1
 #SBATCH --mem=16G

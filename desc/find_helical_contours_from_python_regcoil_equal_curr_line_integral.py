@@ -144,8 +144,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             theta_full, theta_full[-1] + theta_full[1]
         )  # add the last point
         theta_full = jnp.sort(theta_full)
-        print(theta_full)
-        print(theta_coil)
         zeta_full = jnp.append(zetal_coil, 2 * jnp.pi / nfp)
         theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
         my_tot_full = phi_tot_fun_vec(theta_full_2D, zeta_full_2D).reshape(
@@ -175,10 +173,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             temp_theta = v[:, 1]
             contour_zeta.append(temp_zeta)
             contour_theta.append(temp_theta)
-            print(
-                "residual when created",
-                (contour_theta[j][-1] - contour_theta[j][0]) % (2 * jnp.pi),
-            )
 
             numCoils += 1
             if show_plots:
@@ -196,8 +190,6 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             inds = jnp.argsort(contour_zeta[i_contour])
             orig_theta = contour_theta[i_contour][inds]
             orig_endpoint_theta = orig_theta[-1]
-
-            print("residual", (orig_theta[-1] - orig_theta[0]) % (2 * jnp.pi))
 
             orig_theta = jnp.atleast_1d(orig_theta[:-1])  # dont need last point
             orig_zeta = contour_zeta[i_contour][inds]

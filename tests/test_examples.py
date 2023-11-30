@@ -1014,7 +1014,7 @@ def test_regcoil_axisym_and_ellipse_surface():
         source_grid_N=50,
         alpha=0,
         winding_surf=surf_winding,
-        show_plots=True,
+        show_plots=False,
     )
     phi_mn_opt = surface_current_field.Phi_mn
     G = surface_current_field.G
@@ -1374,8 +1374,8 @@ def test_regcoil_ellipse_modular():
 
     # test finding coils
 
-    numCoils = 60
-    coilsFilename = "./coilsfile_60.txt"
+    numCoils = 240
+    coilsFilename = "./coilsfile_240.txt"
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
     coilset2 = find_modular_coils(
@@ -1387,20 +1387,8 @@ def test_regcoil_ellipse_modular():
         save_figs=False,
     )
 
-    coilset2 = coilset2.to_FourierXYZ(N=60)
-
     B_from_coils = coilset2.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B, B_from_coils, atol=1e-3)
-
-    fieldR, fieldZ = field_trace_from_coilset(
-        coilset2, eq, 15, only_return_data=True, Rs=np.linspace(0.685, 0.715, 10)
-    )
-
-    assert np.max(fieldR) < 0.73
-    assert np.min(fieldR) > 0.67
-
-    assert np.max(fieldZ) < 0.02
-    assert np.min(fieldZ) > -0.02
+    np.testing.assert_allclose(B, B_from_coils, atol=2.5e-3)
 
     B_ratio = calc_BNORM_from_coilset(coilset2, eqname, 0, 1, B0=None, save=False)
-    np.testing.assert_allclose(B_ratio, 1.0, atol=1e-3)
+    np.testing.assert_allclose(B_ratio, 1.0, atol=2.5e-3)

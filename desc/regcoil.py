@@ -394,7 +394,11 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 )
 
             # calculate phi
-            phi_mn_opt = jnp.linalg.pinv(A.T @ A + alpha * jnp.eye(A.shape[1])) @ rhs
+
+            result = jnp.linalg.lstsq(
+                A.T @ A + alpha * jnp.eye(A.shape[1]), rhs, rcond=None
+            )
+            phi_mn_opt = result[0]
 
             phi_mns.append(phi_mn_opt)
 

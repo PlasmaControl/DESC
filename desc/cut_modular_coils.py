@@ -180,7 +180,6 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
     coil_current = net_poloidal_current / desirednumcoils
 
     contour_theta, contour_zeta = find_full_coil_contours(contours)
-    # TODO: make sure sign of current is correct
     sign_of_theta_contours = jnp.sign(contour_theta[0][-1] - contour_theta[0][0])
 
     ################################################################
@@ -293,7 +292,6 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
 
             for j in range(desirednumcoils):
                 N = len(contour_X[j])
-                # TODO: here is where we mult by the sign
                 current_sign = -sign_of_theta_contours * jnp.sign(net_poloidal_current)
                 thisCurrent = net_poloidal_current / desirednumcoils
                 thisCurrent = jnp.abs(thisCurrent) * current_sign

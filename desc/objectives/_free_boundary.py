@@ -21,6 +21,255 @@ from desc.utils import Timer, errorif, warnif
 from .normalization import compute_scaling_factors
 
 
+class VacuumBoundaryError(_Objective):
+    """Target B*n = 0 and B^2_in - B^2_out = 0 on LCFS.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    ext_field : MagneticField
+        External field produced by coils.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate error at.
+    field_grid : Grid, optional
+        Grid used to discretize ext_field.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "Boundary Error: {:10.3e} "
+    _units = "(T)"
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        eq,
+        ext_field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        field_grid=None,
+        name="Vacuum boundary error",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        self._ext_field = ext_field
+        self._field_grid = field_grid
+        things = [eq]
+
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=int(eq.NFP),
+                sym=False,
+            )
+        else:
+            grid = self._grid
+
+        pres = np.max(np.abs(eq.compute("p")["p"]))
+        curr = np.max(np.abs(eq.compute("current")["current"]))
+        warnif(
+            pres > 1e-8,
+            UserWarning,
+            f"Pressure is non-zero (max {pres} Pa), "
+            + "VacuumBoundaryError will be incorrect.",
+        )
+        warnif(
+            curr > 1e-8,
+            UserWarning,
+            f"Current is non-zero (max {curr} A), "
+            + "VacuumBoundaryError will be incorrect.",
+        )
+
+        self._eq_data_keys = [
+            "B",
+            "R",
+            "zeta",
+            "Z",
+            "n_rho",
+            "|e_theta x e_zeta|",
+        ]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._eq_data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._eq_data_keys, obj=eq, grid=grid)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "ext_field": self._ext_field,
+            "quad_weights": np.sqrt(np.tile(transforms["grid"].weights, 2)),
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._dim_f = 2 * grid.num_nodes
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, eq_params, constants=None):
+        """Compute boundary force error.
+
+        Parameters
+        ----------
+        eq_params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Boundary force error (N).
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._eq_data_keys,
+            params=eq_params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        x = jnp.array([data["R"], data["zeta"], data["Z"]]).T
+        Bext = constants["ext_field"].compute_magnetic_field(
+            x, grid=self._field_grid, basis="rpz"
+        )
+        Bex_total = Bext
+        Bin_total = data["B"]
+        Bn = jnp.sum(Bex_total * data["n_rho"], axis=-1)
+
+        bsq_out = jnp.sum(Bex_total * Bex_total, axis=-1)
+        bsq_in = jnp.sum(Bin_total * Bin_total, axis=-1)
+
+        g = data["|e_theta x e_zeta|"]
+        Bn_err = Bn * g
+        Bsq_err = (bsq_in - bsq_out) * g
+        return jnp.concatenate([Bn_err, Bsq_err])
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        # this objective is really 3 residuals concatenated so its helpful to print
+        # them individually
+        f = self.compute_unscaled(*args, **kwargs)
+        # try to do weighted mean if possible
+        constants = kwargs.get("constants", self.constants)
+        if constants is None:
+            w = jnp.ones_like(f)
+        else:
+            w = constants["quad_weights"]
+
+        abserr = jnp.all(self.target == 0)
+
+        def _print(fmt, fmax, fmin, fmean, units):
+
+            print(
+                "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
+            )
+            print(
+                "Minimum " + ("absolute " if abserr else "") + fmt.format(fmin) + units
+            )
+            print(
+                "Average " + ("absolute " if abserr else "") + fmt.format(fmean) + units
+            )
+
+            if self._normalize and units != "(dimensionless)":
+                print(
+                    "Maximum "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmax / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Minimum "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmin / self.normalization)
+                    + "(normalized)"
+                )
+                print(
+                    "Average "
+                    + ("absolute " if abserr else "")
+                    + fmt.format(fmean / self.normalization)
+                    + "(normalized)"
+                )
+
+        formats = [
+            "Boundary normal field error: {:10.3e} ",
+            "Boundary magnetic pressure error: {:10.3e} ",
+        ]
+        units = ["(T)", "(T^2)"]
+        nn = f.size // 2
+        for i, (fmt, unit) in enumerate(zip(formats, units)):
+            fi = f[i * nn : (i + 1) * nn]
+            # target == 0 probably indicates f is some sort of error metric,
+            # mean abs makes more sense than mean
+            fi = jnp.abs(fi) if abserr else fi
+            wi = w[i * nn : (i + 1) * nn]
+            fmax = jnp.max(fi)
+            fmin = jnp.min(fi)
+            fmean = jnp.mean(fi * wi) / jnp.mean(wi)
+            _print(fmt, fmax, fmin, fmean, unit)
+
+
 class BoundaryError(_Objective):
     """Target B*n = 0 and B^2_plasma + p - B^2_ext = 0 on LCFS.
 

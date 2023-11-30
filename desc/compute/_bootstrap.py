@@ -427,7 +427,12 @@ def _current_Redl(params, transforms, profiles, data, **kwargs):
         current_r,
         kwargs.get(
             "degree",
-            min(transforms["grid"].num_rho - 1, profiles["current"].basis.L),
+            min(
+                profiles["current"].basis.L
+                if profiles["current"] is not None
+                else transforms["grid"].num_rho - 1,
+                transforms["grid"].num_rho - 1,
+            ),
         ),
     )
     c_l = jnp.polyint(c_l_r)

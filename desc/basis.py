@@ -1828,11 +1828,18 @@ def chebyshev_z(z, l, dr=0):
     if dr == 0:
         return jnp.cos(l * jnp.arccos(z_shift))
     else:
-        # dy/dr = dy/dx * dx/dr = dy/dx * 2
-        raise NotImplementedError(
-            "Analytic radial derivatives of Chebyshev polynomials "
-            + "have not been implemented."
-        )
+        diff = (-l*z_shift*chebyshev_z(z,l,dr-1) + l*chebyshev_z(z,l-1,dr-1))/(1-z_shift**2)
+        prod = 1
+        for k in range(dr):
+            prod *= (l**2 - k**2)/(2*k+1)
+            print("K", k, "prod", prod)
+        sign = (-1)**(l+dr)
+        left_val = sign*prod
+        right_val = prod
+        diff = jnp.where(z_shift==-1, left_val, diff)
+        diff = jnp.where(z_shift==1, right_val, diff)
+
+        return diff
 
 @jit
 def fourier(theta, m, NFP=1, dt=0):

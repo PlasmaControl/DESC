@@ -22,3 +22,7 @@ tests/benchmarks/.benchmarks/
 *.pyc
 .pymon
 .vscode/
+
+.DS_Store
+compare1.py
+compare2.py

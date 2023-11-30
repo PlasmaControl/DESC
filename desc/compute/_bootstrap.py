@@ -14,7 +14,7 @@ from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
 from .data_index import register_compute_fun
-from .utils import cumtrapz, surface_averages_map
+from .utils import surface_averages_map
 
 
 @register_compute_fun(
@@ -396,9 +396,10 @@ def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=[],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["current"],
     coordinates="r",
     data=["rho", "psi_r", "p_r", "current", "<|B|^2>", "<J*B> Redl"],
+    degree="degree",
 )
 def _current_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the current profile consistent with the Redl bootstrap current.
@@ -421,6 +422,15 @@ def _current_Redl(params, transforms, profiles, data, **kwargs):
         * transforms["grid"].compress(data["<J*B> Redl"])
         / transforms["grid"].compress(data["<|B|^2>"])
     )
-    current = cumtrapz(current_r, rho, initial=0)
+    c_l_r = jnp.polyfit(
+        rho,
+        current_r,
+        kwargs.get(
+            "degree",
+            min(transforms["grid"].num_rho - 1, profiles["current"].basis.L),
+        ),
+    )
+    c_l = jnp.polyint(c_l_r)
+    current = jnp.polyval(c_l, rho)
     data["current Redl"] = transforms["grid"].expand(current)
     return data

@@ -923,7 +923,7 @@ class TestBootstrapCompute:
         fig = plt.figure()
         helicity = (1, 0)
         filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
-        eq = desc.io.load(filename)
+        eq = desc.io.load(filename)[-1]
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )
@@ -1012,7 +1012,7 @@ class TestBootstrapCompute:
         fig = plt.figure()
         helicity = (1, 4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
-        eq = desc.io.load(filename)
+        eq = desc.io.load(filename)[-1]
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )
@@ -1301,7 +1301,7 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(eq=eq, kinetic=True),
+            constraints=get_fixed_boundary_constraints(eq=eq),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
@@ -1413,7 +1413,7 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(eq=eq, kinetic=True, iota=False),
+            constraints=get_fixed_boundary_constraints(eq=eq),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )

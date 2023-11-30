@@ -48,6 +48,11 @@ class ParticleTracer(_Objective):
         Select the compute() output. Can be "optimization" for the optimization metric; "tracer" for the full 
         solution of the system; "average psi/theta/zeta/vpar" for the mean value of psi/theta/zeta/vpar in the 
         computed time.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     name : str
         Name of the objective function.
     """

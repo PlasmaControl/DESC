@@ -8,19 +8,15 @@ from desc.continuation import solve_continuation_automatic
 import jax.numpy as jnp
 
 surf = FourierRZToroidalSurface(
-    R_lmn=[1, 0.125, -0.1], #alterar 0.1
-    Z_lmn=[-0.125, -0.1],
-    modes_R=[[0, 0], [1, 0], [0, 1]],
-    modes_Z=[[-1, 0], [0, -1]],
-    NFP=3,
+    R_lmn=jnp.array([1, -0.1, 0.04, 0.03]),  # boundary coefficients # conditions to eq_2411_M1_N1.h5
+    Z_lmn=jnp.array([0.1, -0.03, -0.03]),
+    modes_R=jnp.array(
+        [[0, 0], [1, 0], [1, 1], [-1, -1]]
+    ),  # [M, N] boundary Fourier modes
+    modes_Z=jnp.array([[-1, 0], [-1, 1], [1, -1]]),
+    NFP=5,  # number of (toroidal) field periods
 )
 eq = Equilibrium(M=1, N=1, Psi=1, surface=surf)
 eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[-1]
-#eq.Psi = eq.Psi/19
-
-grid = Grid(jnp.array([jnp.sqrt(0.2), 0, 0]).T, jitable=True, sort=False)
-data = eq.compute(["|B|", "R0"], grid=grid)
-
-print(f"Magnetic Field (abs): {data['|B|']}")
 
 eq.save("eq_M1_N1.h5")

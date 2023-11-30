@@ -342,7 +342,9 @@ def test_poincare_sfl_bc(
 
     Rb_lmn, Rb_basis = FourierZernike_to_PoincareZernikePolynomial(eq.R_lmn, eq.R_basis)
     Zb_lmn, Zb_basis = FourierZernike_to_PoincareZernikePolynomial(eq.Z_lmn, eq.Z_basis)
-    Lb_lmn, Lb_basis = FourierZernike_to_FourierZernike_no_N_modes(eq.L_lmn, eq.L_basis)
+    Lb_lmn, Lb_basis = FourierZernike_to_FourierZernike_no_N_modes(
+        eq.L_lmn, eq.L_basis, zeta=0
+    )
 
     surf = ZernikeRZToroidalSection(
         R_lmn=Rb_lmn,

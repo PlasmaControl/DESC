@@ -98,15 +98,13 @@ def field_trace_from_coilset(
     rrr = (
         np.linspace(R0 - 0.7 * r, R0 + 0.7 * r, npts) if Rs is None else Rs
     )  # initial R positions of field-lines to trace
-    # set initial Z positions to zero
+    zzz = np.zeros_like(rrr) if Zs is None else Zs
     print("Beginning Field Line Integration")
 
     grid = LinearGrid(N=N_grid, NFP=1, endpoint=True)
 
     # integrate field lines
-    field_R, field_Z = field_line_integrate(
-        rrr, np.zeros_like(rrr), phis, coils, grid=grid
-    )
+    field_R, field_Z = field_line_integrate(rrr, zzz, phis, coils, grid=grid)
 
     t_elapse = time.time() - t0
 

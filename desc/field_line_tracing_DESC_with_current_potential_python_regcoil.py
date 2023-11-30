@@ -37,6 +37,7 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
     external_TF=None,
     savename=None,
     Rs=None,
+    Zs=None,
     phi0=0,
     xlim=[0.66, 0.74],
     ylim=[-0.04, 0.04],
@@ -71,6 +72,8 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
         by default None
     Rs : ndarray, optional
         starting seed R points at zeta = 0 for the tracing, by default None
+    Zs : ndarray, optional
+        starting seed Z points at zeta = 0 for the tracing, by default zero
     phi0 : int, optional
         phi plane to create poincare plot at, by default 0
     xlim : tuple or list, optional
@@ -127,12 +130,12 @@ def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
     rrr = (
         np.linspace(R0 - 0.9 * r, R0 + 0.9 * r, n_R_points) if Rs is None else Rs
     )  # initial R positions of field-lines to trace
-    # set initial Z positions are zero
+    zzz = np.zeros_like(rrr) if Zs is None else Zs
     n_R_points = rrr.size
 
     # integrate field lines
     field_R, field_Z = field_line_integrate(
-        rrr, np.zeros_like(rrr), phis, Bfield, grid=current_potential_field.surface_grid
+        rrr, zzz, phis, Bfield, grid=current_potential_field.surface_grid
     )
 
     t_elapse = time.time() - t0

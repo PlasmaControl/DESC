@@ -11,6 +11,7 @@ from scipy.constants import mu_0
 
 # from desc.compute import data_index, rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.profiles import PowerSeriesProfile
 # from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
@@ -21,10 +22,25 @@ from desc.geometry import (
 )
 from desc.grid import LinearGrid, QuadratureGrid
 from dataclasses import dataclass
-
+from abc import ABC, abstractmethod
 
 @dataclass
-class model_const_B:
+class ana_model(ABC):
+    @abstractmethod
+    def j_vec_ana_cal(self):
+        pass
+    @abstractmethod
+    def B_vec_ana_cal(self):
+        pass
+    @abstractmethod
+    def gradp_vec_ana_cal(self):
+        pass
+
+@dataclass
+class model_const_B(ana_model):
+    """
+        Const B configuration
+    """
     Psi: float
     a: float
     R: float
@@ -53,13 +69,18 @@ class model_const_B:
 
 
 @dataclass
-class model_theta_pinch1:
+class model_theta_pinch1(ana_model):
+    """
+        Theta_pinch configuration: w/o p
+        Rlmn: 0,0,0->R; 1,1,0->a0; 3,1,0->a1
+        Zlmn: 1,-1,0->-a0; 3,-1,0->-a1
+    """
     Psi: float
     a0: float
     a1: float
     R: float
 
-    def xyz(self, rtz):
+    def xyz(self, rtz):  # this is wrong
         rho = rtz[:, 0]
         theta = rtz[:, 1]
         zeta = rtz[:, 2]
@@ -139,9 +160,74 @@ class model_theta_pinch1:
         )
 
 
+@dataclass
+class model_screw_pinch1(ana_model):
+    """
+        screw pinch configuration: w/o p
+        Rlmn: 0,0,0->R; 1,1,0->a0; 3,1,0->a1
+        Zlmn: 1,-1,0->-a0; 3,-1,0->-a1
+        iota: i0+i2*rho^2
+        Model calculated analytically in Mathematica
+    """
+    Psi: float
+    a0: float
+    a1: float
+    R: float
+    i0: float
+    i2: float
+
+    def B_vec_ana_cal(self, rtz):
+        rho = rtz[:, 0]
+        theta = rtz[:, 1]
+        zeta = rtz[:, 2]
+        a0 = self.a0
+        a1 = self.a1
+        i0 = self.i0
+        i2 = self.i2
+        psi0 = self.Psi / np.pi / 2
+        B0 = -(2 * psi0 * rho * (i0 + i2 * rho**2) * np.sin(theta)) / (a0 + a1 * (-2 + 9 * rho**2))
+        B1 = (2 * psi0) / ((a0 + a1 * (-2 + 3 * rho**2)) * (a0 + a1 * (-2 + 9 * rho**2)))
+        B2 = -(2 * psi0 * rho * (i0 + i2 * rho**2) * np.cos(theta)) / (a0 + a1 * (-2 + 9 * rho**2))
+        return np.stack((B0,B1,B2), axis=1)
+    
+    def j_vec_ana_cal(self, rtz):
+        rho = rtz[:, 0]
+        theta = rtz[:, 1]
+        zeta = rtz[:, 2]
+        a0 = self.a0
+        a1 = self.a1
+        i0 = self.i0
+        i2 = self.i2
+        psi0 = self.Psi / np.pi / 2
+        mu0 = mu_0
+        j0 = -(24 * a1 * psi0 * rho * (2 * a0 + a1 * (-4 + 9 * rho**2)) * np.sin(theta)) / (mu0 * (a0 + a1 * (-2 + 3 * rho**2))**2 * (a0 + a1 * (-2 + 9 * rho**2))**3)
+        j1 = (4 * psi0 * (a0**2 * (i0 + 2 * i2 * rho**2) + 2 * a0 * a1 * (i0 * (-2 + 3 * rho**2) + i2 * rho**2 * (-4 + 9 * rho**2)) + a1**2 * (2 * i2 * rho**2 * (4 - 18 * rho**2 + 27 * rho**4) + i0 * (4 - 12 * rho**2 + 27 * rho**4)))) / (mu0 * (a0 + a1 * (-2 + 3 * rho**2)) * (a0 + a1 * (-2 + 9 * rho**2))**3)
+        j2 = -(24 * a1 * psi0 * rho * (2 * a0 + a1 * (-4 + 9 * rho**2)) * np.cos(theta)) / (mu0 * (a0 + a1 * (-2 + 3 * rho**2))**2 * (a0 + a1 * (-2 + 9 * rho**2))**3)
+        return np.stack((j0,j1,j2), axis=1)
+    
+    def gradp_vec_ana_cal(self,rtz):
+        rho = rtz[:, 0]
+        theta = rtz[:, 1]
+        zeta = rtz[:, 2]
+        a0 = self.a0
+        a1 = self.a1
+        i0 = self.i0
+        i2 = self.i2
+        psi0 = self.Psi / np.pi / 2
+        mu0 = mu_0
+        complex_expr = 8 * psi0**2 * rho * (-12 * (a0 - 2 * a1) * a1 + (a0 - 2 * a1)**4 * i0**2 + 3 * (2 * a1 * (-9 * a1 + 2 * (a0 - 2 * a1)**3 * i0**2) + (a0 - 2 * a1)**4 * i0 * i2) * rho**2 + 2 * (a0 - 2 * a1)**2 * (36 * a1**2 * i0**2 + 21 * (a0 - 2 * a1) * a1 * i0 * i2 + (a0 - 2 * a1)**2 * i2**2) * rho**4 + 6 * (a0 - 2 * a1) * a1 * (36 * a1**2 * i0**2 + 42 * (a0 - 2 * a1) * a1 * i0 * i2 + 5 * (a0 - 2 * a1)**2 * i2**2) * rho**6 + 9 * a1**2 * (27 * a1**2 * i0**2 + 78 * (a0 - 2 * a1) * a1 * i0 * i2 + 20 * (a0 - 2 * a1)**2 * i2**2) * rho**8 + 243 * a1**3 * i2 * (3 * a1 * i0 + 2 * a0 * i2 - 4 * a1 * i2) * rho**10 + 486 * a1**4 * i2**2 * rho**12)
+
+        f0 = -complex_expr * np.cos(theta) / (mu0 * (a0 + a1 * (-2 + 3 * rho**2))**3 * (a0 + a1 * (-2 + 9 * rho**2))**4)
+        f1 = np.zeros_like(rho)
+        f2 = complex_expr * np.sin(theta) / (mu0 * (a0 + a1 * (-2 + 3 * rho**2))**3 * (a0 + a1 * (-2 + 9 * rho**2))**4)
+        return np.stack((f0,f1,f2), axis=1)
+
+
 @pytest.fixture(scope="session")
 def grid_3d():
-    return LinearGrid(rho=np.linspace(0.1, 1, 5), M=5, N=5) # Carefull on axis, might generate nan when compute
+    return LinearGrid(
+        rho=np.linspace(0.1, 1, 5), M=5, N=5
+    )  # Carefull on axis, might generate nan when compute
 
 
 @pytest.fixture(scope="session")
@@ -166,6 +252,21 @@ def theta_pinch1(grid_3d):
 
 
 @pytest.fixture(scope="session")
+def screw_pinch1(grid_3d):
+    i0, i2 = 1, 1
+    iota = PowerSeriesProfile(params=[i0, i2], modes=[0, 2])
+    eq = Equilibrium(L=3, M=3, iota=iota)
+    rho = grid_3d.nodes[:, 0]
+    theta = grid_3d.nodes[:, 1]
+    # a0, a1 = request.param
+    a0, a1 = 0.8, 0.2
+    R = 10 + (a0 * rho + a1 * (3 * rho**3 - 2 * rho)) * np.cos(theta)
+    Z = -(a0 * rho + a1 * (3 * rho**3 - 2 * rho)) * np.sin(theta)
+    eq.set_initial_guess(grid_3d, R, Z)
+    ana_model = model_screw_pinch1(eq.Psi, a0, a1, 10, i0, i2)
+    return eq, ana_model, grid_3d
+
+@pytest.fixture(scope="session")
 def theta_pinch2(grid_3d):
     eq = None
     B_ana = None
@@ -174,7 +275,7 @@ def theta_pinch2(grid_3d):
 
 
 @pytest.fixture(scope="session")
-def screw_pinch1():
+def screw_pinch2():
     pass
 
 
@@ -206,7 +307,7 @@ def test_comput_ortho_force_balance_straight_coord(config, request):
 )
 @pytest.mark.parametrize(
     "config",
-    ["const_B", "theta_pinch1"],
+    ["const_B", "theta_pinch1","screw_pinch1"],
 )
 def test_compute_against_ana_straight_coord(config, request, name, func_name):
     eq, ana, grid = request.getfixturevalue(config)

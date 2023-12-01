@@ -140,7 +140,7 @@ intermediate_time = timet()
 print(f"\nTime from beginning until here: {intermediate_time - initial_time}s\n")
 
 # Objective Function
-objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1e-8, deriv_mode="fwd")
+objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="optimization", tolerance=1e-7, deriv_mode="rev")
 objective.build()
 
 # ar = jnp.copy(eq.compute("R0/a")["R0/a"])

@@ -1804,6 +1804,7 @@ def chebyshev(r, l, dr=0):
             + "have not been implemented."
         )
     
+
 @functools.partial(jit, static_argnums=2)
 def chebyshev_z(z, l, dr=0):
     """Shifted Chebyshev polynomial.
@@ -1827,7 +1828,7 @@ def chebyshev_z(z, l, dr=0):
     z_shift = z/np.pi - 1
     if dr == 0:
         return jnp.cos(l * jnp.arccos(z_shift))
-    else:
+    elif dr==1:
         diff = (-l*z_shift*chebyshev_z(z,l,dr-1) + l*chebyshev_z(z,l-1,dr-1))/(1-z_shift**2)
         prod = 1
         for k in range(dr):
@@ -1838,8 +1839,72 @@ def chebyshev_z(z, l, dr=0):
         right_val = prod
         diff = jnp.where(z_shift==-1, left_val, diff)
         diff = jnp.where(z_shift==1, right_val, diff)
-
         return diff
+    elif dr==2:
+        # diff = l*((l+1)*chebyshev_z(z,l,0) - chebyshev_second_kind_z(z,l,0))/(z_shift**2-1)
+        diff = -(l ** 2 * jnp.cos(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) +\
+              (l * z_shift * jnp.sin(l * jnp.arccos(z_shift))) / (jnp.sqrt(1 - z_shift ** 2) * (1 - z_shift ** 2))
+
+        prod = 1
+        for k in range(dr):
+            prod *= (l**2 - k**2)/(2*k+1)
+            print("K", k, "prod", prod)
+        sign = (-1)**(l+dr)
+        left_val = sign*prod
+        right_val = prod
+        diff = jnp.where(z_shift==-1, left_val, diff)
+        diff = jnp.where(z_shift==1, right_val, diff)
+        return diff
+    elif dr==3:
+        diff = -(3 * l**2 * z_shift * jnp.cos(l * jnp.arccos(z_shift))) / (1 - z_shift**2)**2 + \
+               (3 * l * z_shift**2 * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift**2)**(5/2) + \
+               (l * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift**2)**(3/2) - \
+               (l**3 * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift**2)**(3/2)
+        # From asking Steven Wolfram to do d^3/dx^3 cos(n * arccos(x))
+        prod = 1
+        for k in range(dr):
+            prod *= (l**2 - k**2)/(2*k+1)
+            print("K", k, "prod", prod)
+        sign = (-1)**(l+dr)
+        left_val = sign*prod
+        right_val = prod
+        diff = jnp.where(z_shift==-1, left_val, diff)
+        diff = jnp.where(z_shift==1, right_val, diff)
+        return diff
+    else:
+        raise NotImplementedError(
+            "Analytic z derivatives of Chebyshev polynomials "
+            + "have not been implemented higher than third order."
+        )
+
+@functools.partial(jit, static_argnums=2)
+def chebyshev_second_kind_z(z, l, dr=0):
+    """Shifted Chebyshev polynomial of the second kind.
+
+    Parameters
+    ----------
+    rho : ndarray, shape(N,)
+        radial coordinates to evaluate basis
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    dr : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        basis function(s) evaluated at specified points
+
+    """
+    z, l = map(jnp.asarray, (z, l))
+    z_shift = z/np.pi - 1
+    if dr == 0:
+        return jnp.sin((l+1) * jnp.arccos(z_shift)) / jnp.sin(jnp.arccos(z_shift))
+    else:
+        raise NotImplementedError(
+            "Analytic radial derivatives of Chebyshev polynomials "
+            + "of the second kind have not been implemented."
+        )
 
 @jit
 def fourier(theta, m, NFP=1, dt=0):

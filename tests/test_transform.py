@@ -122,3 +122,139 @@ class TestTransform:
         values = transf.transform(c, 0, 0, 1)
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+    @pytest.mark.mirror_unit
+    def test_second_derivatives_third_chebyshev_zernike(self):
+        """Test CZ transform differentiating 2nd cheby polynomial once."""
+        grid = ConcentricGrid(L=2, M=2, N=8)
+        basis = ChebyshevZernikeBasis(L=1, M=2, N=5, sym=None)
+        transf = Transform(grid, basis, method = "direct1", derivs = [0,0,2])
+
+
+        r = grid.nodes[:, 0]  # rho coordinates
+        t = grid.nodes[:, 1]  # theta coordinates
+        z = grid.nodes[:, 2]  # zeta coordinates
+
+        z_shift = z/np.pi - 1
+        correct_vals = (
+            2 * r  * np.cos(t) * (24*z_shift**1)
+        ) 
+
+        idx_0 = np.where((basis.modes == [1, 1, 3]).all(axis=1))[0]
+        c = np.zeros((basis.modes.shape[0],))
+
+        #Coeffieicints of each term in the correct expansion
+        c[idx_0] = 2
+
+        values = transf.transform(c, 0, 0, 2)
+
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+    @pytest.mark.mirror_unit
+    def test_third_derivatives_third_chebyshev_zernike(self):
+        """Test CZ transform differentiating 2nd cheby polynomial once."""
+        grid = ConcentricGrid(L=2, M=2, N=8)
+        basis = ChebyshevZernikeBasis(L=1, M=2, N=5, sym=None)
+        transf = Transform(grid, basis, method = "direct1", derivs = [0,0,3])
+
+
+        r = grid.nodes[:, 0]  # rho coordinates
+        t = grid.nodes[:, 1]  # theta coordinates
+        z = grid.nodes[:, 2]  # zeta coordinates
+
+        z_shift = z/np.pi - 1
+        correct_vals = (
+            2 * r  * np.cos(t) * (24)
+        ) 
+
+        idx_0 = np.where((basis.modes == [1, 1, 3]).all(axis=1))[0]
+        c = np.zeros((basis.modes.shape[0],))
+
+        #Coeffieicints of each term in the correct expansion
+        c[idx_0] = 2
+
+        values = transf.transform(c, 0, 0, 3)
+
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+    @pytest.mark.mirror_unit
+    def test_third_derivatives_second_chebyshev_zernike(self):
+        """Test CZ transform differentiating 2nd cheby polynomial once."""
+        grid = ConcentricGrid(L=2, M=2, N=8)
+        basis = ChebyshevZernikeBasis(L=1, M=2, N=5, sym=None)
+        transf = Transform(grid, basis, method = "direct1", derivs = [0,0,3])
+
+
+        r = grid.nodes[:, 0]  # rho coordinates
+        t = grid.nodes[:, 1]  # theta coordinates
+        z = grid.nodes[:, 2]  # zeta coordinates
+
+        z_shift = z/np.pi - 1
+        correct_vals = (
+            2 * r  * np.cos(t) * (0)
+        ) 
+
+        idx_0 = np.where((basis.modes == [1, 1, 2]).all(axis=1))[0]
+        c = np.zeros((basis.modes.shape[0],))
+
+        #Coeffieicints of each term in the correct expansion
+        c[idx_0] = 2
+
+        values = transf.transform(c, 0, 0, 3)
+
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+    @pytest.mark.mirror_unit
+    def test_third_derivatives_zeroth_chebyshev_zernike(self):
+        """Test CZ transform differentiating 2nd cheby polynomial once."""
+        grid = ConcentricGrid(L=2, M=2, N=8)
+        basis = ChebyshevZernikeBasis(L=1, M=2, N=5, sym=None)
+        transf = Transform(grid, basis, method = "direct1", derivs = [0,0,3])
+
+
+        r = grid.nodes[:, 0]  # rho coordinates
+        t = grid.nodes[:, 1]  # theta coordinates
+        z = grid.nodes[:, 2]  # zeta coordinates
+
+        z_shift = z/np.pi - 1
+        correct_vals = (
+            2 * r  * np.cos(t) * (0)
+        ) 
+
+        idx_0 = np.where((basis.modes == [1, 1, 0]).all(axis=1))[0]
+        c = np.zeros((basis.modes.shape[0],))
+
+        #Coeffieicints of each term in the correct expansion
+        c[idx_0] = 2
+
+        values = transf.transform(c, 0, 0, 3)
+
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+
+    @pytest.mark.mirror_unit
+    def test_second_derivatives_zeroth_chebyshev_zernike(self):
+        """Test CZ transform differentiating 2nd cheby polynomial once."""
+        grid = ConcentricGrid(L=2, M=2, N=8)
+        basis = ChebyshevZernikeBasis(L=1, M=2, N=5, sym=None)
+        transf = Transform(grid, basis, method = "direct1", derivs = [0,0,2])
+
+
+        r = grid.nodes[:, 0]  # rho coordinates
+        t = grid.nodes[:, 1]  # theta coordinates
+        z = grid.nodes[:, 2]  # zeta coordinates
+
+        z_shift = z/np.pi - 1
+        correct_vals = (
+            2 * r  * np.cos(t) * (0)
+        ) 
+
+        idx_0 = np.where((basis.modes == [1, 1, 0]).all(axis=1))[0]
+        c = np.zeros((basis.modes.shape[0],))
+
+        #Coeffieicints of each term in the correct expansion
+        c[idx_0] = 2
+
+        values = transf.transform(c, 0, 0, 2)
+
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)

@@ -21,6 +21,7 @@ __all__ = [
     "ChebyshevZernikeBasis",
 ]
 
+
 class _Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets."""
 
@@ -186,6 +187,7 @@ class _Basis(IOAble, ABC):
     def NFP(self):
         """int: Number of field periods."""
         return self.__dict__.setdefault("_NFP", 1)
+
     @property
     def sym(self):
         """str: {``'cos'``, ``'sin'``, ``False``} Type of symmetry."""
@@ -1181,9 +1183,8 @@ class FourierZernikeBasis(_Basis):
 
 
 class ChebyshevZernikeBasis(_Basis):
-    """
-    Max: Heavily coppied from FourierZernikeBasis. Change Fourier to Chebyshev
-    
+    """Max: Heavily coppied from FourierZernikeBasis. Change Fourier to Chebyshev.
+
     3D basis set for analytic functions in a cylindrical volume.
 
     Zernike polynomials in the radial & azimuthal coordinates, and a Chebyshev
@@ -1222,7 +1223,6 @@ class ChebyshevZernikeBasis(_Basis):
         decreasing size, ending in a diamond shape for L=2*M where
         the traditional fringe/U of Arizona indexing is recovered.
         For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond.
-
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
@@ -1313,14 +1313,6 @@ class ChebyshevZernikeBasis(_Basis):
         pol = np.array(flatten_list(pol))
         num_pol = len(pol)
         pol = np.tile(pol, (N + 1, 1)) #N+1 modes for chebyshev vs 2N+1 for fourier
-        # TASK: Must change to Chebyshev
-        # ChebyshevDoubleFourierBasis does l = np.arange(L + 1), so copy
-        
-        # From FourierZernikeBasis
-        # tor = np.atleast_2d(
-        #     np.tile(np.arange(-N, N + 1), (num_pol, 1)).flatten(order="f")
-        # ).T
-
         #Chebyshev polynomials have N+1 modes
         tor = np.atleast_2d(
             np.tile(np.arange(N + 1), (num_pol, 1)).flatten(order="f")
@@ -1390,7 +1382,6 @@ class ChebyshevZernikeBasis(_Basis):
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
-        # print("l", l, "m", m, "n", n)
         axial = chebyshev_z(z[:, np.newaxis], n, dr=derivatives[2])
         if unique:
             radial = radial[routidx][:, lmoutidx]
@@ -1803,7 +1794,7 @@ def chebyshev(r, l, dr=0):
             "Analytic radial derivatives of Chebyshev polynomials "
             + "have not been implemented."
         )
-    
+
 
 @functools.partial(jit, static_argnums=2)
 def chebyshev_z(z, l, dr=0):
@@ -1828,39 +1819,26 @@ def chebyshev_z(z, l, dr=0):
     z_shift = z/np.pi - 1
     if dr == 0:
         return jnp.cos(l * jnp.arccos(z_shift))
-    elif dr==1:
-        diff = (-l*z_shift*chebyshev_z(z,l,dr-1) + l*chebyshev_z(z,l-1,dr-1))/(1-z_shift**2)
-        prod = 1
-        for k in range(dr):
-            prod *= (l**2 - k**2)/(2*k+1)
-            print("K", k, "prod", prod)
-        sign = (-1)**(l+dr)
-        left_val = sign*prod
-        right_val = prod
-        diff = jnp.where(z_shift==-1, left_val, diff)
-        diff = jnp.where(z_shift==1, right_val, diff)
-        return diff
-    elif dr==2:
-        # diff = l*((l+1)*chebyshev_z(z,l,0) - chebyshev_second_kind_z(z,l,0))/(z_shift**2-1)
-        diff = -(l ** 2 * jnp.cos(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) +\
-              (l * z_shift * jnp.sin(l * jnp.arccos(z_shift))) / (jnp.sqrt(1 - z_shift ** 2) * (1 - z_shift ** 2))
-
-        prod = 1
-        for k in range(dr):
-            prod *= (l**2 - k**2)/(2*k+1)
-            print("K", k, "prod", prod)
-        sign = (-1)**(l+dr)
-        left_val = sign*prod
-        right_val = prod
-        diff = jnp.where(z_shift==-1, left_val, diff)
-        diff = jnp.where(z_shift==1, right_val, diff)
-        return diff
-    elif dr==3:
-        diff = -(3 * l**2 * z_shift * jnp.cos(l * jnp.arccos(z_shift))) / (1 - z_shift**2)**2 + \
-               (3 * l * z_shift**2 * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift**2)**(5/2) + \
-               (l * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift**2)**(3/2) - \
-               (l**3 * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift**2)**(3/2)
-        # From asking Steven Wolfram to do d^3/dx^3 cos(n * arccos(x))
+    elif dr in [1, 2, 3, 4]:
+        if dr == 1:
+            diff = (-l * z_shift * chebyshev_z(z, l, dr - 1) + l *
+                chebyshev_z(z, l - 1, dr - 1)) / (1 - z_shift ** 2)
+        elif dr == 2:
+            diff = -(l ** 2 * jnp.cos(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) + \
+                    (l * z_shift * jnp.sin(l * jnp.arccos(z_shift))) / \
+                        (jnp.sqrt(1 - z_shift ** 2) * (1 - z_shift ** 2))
+        elif dr == 3:
+            diff = -(3 * l ** 2 * z_shift * jnp.cos(l * jnp.arccos(z_shift))) \
+                / (1 - z_shift ** 2) ** 2 + (3 * l * z_shift ** 2 * jnp.sin(l *
+                jnp.arccos(z_shift))) / (1 - z_shift ** 2) ** (5 / 2) + \
+                (l * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) \
+                ** (3 / 2) - (l ** 3 * jnp.sin(l * jnp.arccos(z_shift))) / \
+                    (1 - z_shift ** 2) ** (3 / 2)
+        elif dr == 4:
+            diff = l * ((l * (4 + 11 * z_shift ** 2 + l ** 2 * (-1 + z_shift ** 2))
+                * jnp.cos(l * jnp.arccos(z_shift))) / (-1 + z_shift ** 2) ** 3 +
+                (3 * z_shift * (3 + 2 * z_shift ** 2 + 2 * l ** 2 * (-1 + z_shift ** 2))
+                * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) ** (7 / 2))
         prod = 1
         for k in range(dr):
             prod *= (l**2 - k**2)/(2*k+1)
@@ -1877,34 +1855,6 @@ def chebyshev_z(z, l, dr=0):
             + "have not been implemented higher than third order."
         )
 
-@functools.partial(jit, static_argnums=2)
-def chebyshev_second_kind_z(z, l, dr=0):
-    """Shifted Chebyshev polynomial of the second kind.
-
-    Parameters
-    ----------
-    rho : ndarray, shape(N,)
-        radial coordinates to evaluate basis
-    l : ndarray of int, shape(K,)
-        radial mode number(s)
-    dr : int
-        order of derivative (Default = 0)
-
-    Returns
-    -------
-    y : ndarray, shape(N,K)
-        basis function(s) evaluated at specified points
-
-    """
-    z, l = map(jnp.asarray, (z, l))
-    z_shift = z/np.pi - 1
-    if dr == 0:
-        return jnp.sin((l+1) * jnp.arccos(z_shift)) / jnp.sin(jnp.arccos(z_shift))
-    else:
-        raise NotImplementedError(
-            "Analytic radial derivatives of Chebyshev polynomials "
-            + "of the second kind have not been implemented."
-        )
 
 @jit
 def fourier(theta, m, NFP=1, dt=0):

@@ -8,7 +8,7 @@ from desc.continuation import solve_continuation_automatic
 import jax.numpy as jnp
 
 surf = FourierRZToroidalSurface(
-    R_lmn=jnp.array([1, -0.1, 0.04, 0.03]),  # boundary coefficients # conditions to eq_2411_M1_N1.h5
+    R_lmn=jnp.array([1, -0.1, 0.06, 0.07]),  # boundary coefficients # conditions to eq_2411_M1_N1.h5
     Z_lmn=jnp.array([0.1, -0.03, -0.03]),
     modes_R=jnp.array(
         [[0, 0], [1, 0], [1, 1], [-1, -1]]
@@ -19,4 +19,4 @@ surf = FourierRZToroidalSurface(
 eq = Equilibrium(M=1, N=1, Psi=1, surface=surf)
 eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[-1]
 
-eq.save("eq_M1_N1.h5")
+eq.save("eq_0112_M1_N1.h5")

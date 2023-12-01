@@ -132,8 +132,8 @@ data = eq.compute("|B|", grid=grid)
 mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 
 # Initial Parameters
-# ini_param = jnp.array([float(mu), Mass_Charge_Ratio])
-ini_param = jnp.array([mu[0], Mass_Charge_Ratio])
+# ini_param = jnp.array([float(mu), Mass_Charge_Ratio]) # this is deprecated!
+ini_param = jnp.array([mu[0], Mass_Charge_Ratio])       # this works
 
 
 intermediate_time = timet()

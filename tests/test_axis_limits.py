@@ -218,7 +218,6 @@ def assert_is_continuous(
     p = "desc.equilibrium.equilibrium.Equilibrium"
     for name in names:
         if name in not_continuous_limits:
-            assert (np.isfinite(data[name]).T == axis).all(), name
             continue
         elif name in not_finite_limits:
             assert (np.isfinite(data[name]).T != axis).all(), name

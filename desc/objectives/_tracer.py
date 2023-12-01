@@ -137,31 +137,6 @@ class ParticleTracer(_Objective):
             constants = self.constants
         
         def system(initial_conditions = self.initial_conditions, t = self.output_time, initial_parameters = self.initial_parameters):
-        eq = eq or self._eq
-
-        if self.compute_option == "optimization":
-            self._dim_f = len(self.output_time)
-        elif self.compute_option == "tracer":
-            self._dim_f = [len(self.output_time), 4]
-        elif self.compute_option == "average psi":
-            self._dim_f = len(self.output_time)
-        elif self.compute_option == "average theta":
-            self._dim_f = len(self.output_time)
-        elif self.compute_option == "average zeta":
-            self._dim_f = len(self.output_time)
-        elif self.compute_option == "average vpar":
-           self._dim_f = len(self.output_time)
-            
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, *args, **kwargs):
-
-        params, constants = self._parse_args(*args, **kwargs)
-        if constants is None:
-            constants = self.constants
-        
-
-        def system(t = self.output_time, initial_conditions = self.initial_conditions, initial_parameters = self.initial_parameters):
             #initial conditions
             psi = initial_conditions[0]
             theta = initial_conditions[1]
@@ -184,23 +159,8 @@ class ParticleTracer(_Objective):
         initial_conditions_jax = jnp.array(self.initial_conditions, dtype=jnp.float64)
         t_jax = self.output_time
         system_jit = jit(system)
-        term = ODETerm(system_jit)
+        solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax, rtol = self.tolerance)
 
-        stepsize_controller = PIDController(rtol=1e-8, atol=1e-8, dtmin=1e-8)
-
-        solution = diffeqsolve(
-            term,
-            solver=Tsit5(),
-            y0=initial_conditions_jax,
-            t0=self.output_time[0],
-            t1=self.output_time[-1],
-            saveat=SaveAt(ts=self.output_time),
-            max_steps=None,
-            dt0=1e-8,
-            stepsize_controller=stepsize_controller,
-            args=self.initial_parameters,
-        
-        
         if self.compute_option == "optimization":
             return jnp.sum((solution[:, 0] - solution[0, 0]) * (solution[:, 0] - solution[0, 0]), axis=-1)
         

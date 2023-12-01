@@ -57,7 +57,7 @@ psi_i = 0.8
 zeta_i = 0.5
 theta_i = jnp.pi/2
 vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)
-ini_cond = [float(psi_i), theta_i, zeta_i, float(vpar_i)]
+ini_cond = jnp.array([float(psi_i), theta_i, zeta_i, float(vpar_i)])
 
 # Time
 tmin = 0
@@ -73,7 +73,7 @@ data = eq.compute(["|B|", "R"], grid=grid)
 
 mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 
-ini_param = [float(mu), Mass_Charge_Ratio]
+ini_param = jnp.array([mu[0], Mass_Charge_Ratio])
 
 objective = ParticleTracer(eq=eq, output_time=time, initial_conditions=ini_cond, initial_parameters=ini_param, compute_option="tracer", tolerance=1.e-7)
 

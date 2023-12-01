@@ -1,18 +1,14 @@
-"""Objectives for optimizing the equilibrium from tracing particles."""
+"""Objectives for optimizing the equilibrium from tracing particles using Diffrax solver"""
 
 import warnings
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.grid import Grid, LinearGrid
-from desc.utils import Timer
-from desc.vmec_utils import ptolemy_linear_transform
+from desc.grid import Grid
 from jax.experimental.ode import odeint as jax_odeint
 from functools import partial
 from jax import jit
-
-from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 class ParticleTracer(_Objective):
@@ -112,7 +108,7 @@ class ParticleTracer(_Objective):
         )
         
         self.charge = 1.6e-19
-        self.mass = 1.673e-27 # CHECK VALUES
+        self.mass = 1.673e-27
         self.Energy = 3.52e6*self.charge 
         eq = eq or self._things[0]
 
@@ -135,14 +131,11 @@ class ParticleTracer(_Objective):
 
         if constants is None:
             constants = self.constants
-        
+
         def system(initial_conditions = self.initial_conditions, t = self.output_time, initial_parameters = self.initial_parameters):
             #initial conditions
-            psi = initial_conditions[0]
-            theta = initial_conditions[1]
-            zeta = initial_conditions[2]
-            vpar = initial_conditions[3]
-            
+            psi, theta, zeta, vpar = initial_conditions
+
             grid = Grid(jnp.array([jnp.sqrt(psi), theta, zeta]).T, jitable=True, sort=False)
             transforms = get_transforms(self._data_keys, self._things[0], grid, jitable=True)
             profiles = get_profiles(self._data_keys, self._things[0], grid, jitable=True)
@@ -159,6 +152,8 @@ class ParticleTracer(_Objective):
         initial_conditions_jax = jnp.array(self.initial_conditions, dtype=jnp.float64)
         t_jax = self.output_time
         system_jit = jit(system)
+
+        # DIFFRAX
         solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, t_jax, rtol = self.tolerance)
 
         if self.compute_option == "optimization":

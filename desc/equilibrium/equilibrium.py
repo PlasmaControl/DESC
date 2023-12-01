@@ -686,7 +686,7 @@ class Equilibrium(IOAble, Optimizable):
             )
             return surface
 
-    def get_profile(self, name, grid=None, kind="power_series", **kwargs):
+    def get_profile(self, name, grid=None, kind="spline", **kwargs):
         """Return a SplineProfile of the desired quantity.
 
         Parameters
@@ -1762,6 +1762,7 @@ class Equilibrium(IOAble, Optimizable):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
+            copy=copy,
         )
 
         return things[0], result

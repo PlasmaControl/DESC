@@ -1310,7 +1310,12 @@ class FiniteElementBasis(_FE_Basis):
     """
 
     def __init__(self, L, M, N, K=1, NFP=1, sym=False):
-        self.L = L
+        self.L = max(2, L)
+        if L % 2 != 0:
+            raise ValueError(
+                "L must be an even number for the Zernike polynomials with"
+                "m = 0 to be well-defined at the rho=0 axis"
+            )
         self.M = M
         self.N = N
         self.K = K
@@ -1324,10 +1329,11 @@ class FiniteElementBasis(_FE_Basis):
             self.mesh = FiniteElementMesh2D(M, N, K=K)
             self.I_2MN = 2 * (M - 1) * N
             self.Q = int((K + 1) * (K + 2) / 2.0)
-        self._modes = self._get_modes(L=self.L, I=self.I_2MN, Q=self.Q)
+        self.nmodes = (self.L + 1) // 2 * self.I_2MN * self.Q
+        self._modes = self._get_modes()
         super().__init__()
 
-    def _get_modes(self, L=-1, I=0, Q=0):
+    def _get_modes(self):
         """Get mode numbers for mixed spectral-FE basis functions.
 
         Parameters
@@ -1349,9 +1355,12 @@ class FiniteElementBasis(_FE_Basis):
 
         """
         lij_mesh = np.meshgrid(
-            np.arange(L + 1), np.arange(I), np.arange(Q), indexing="ij"
+            np.arange(2, self.L + 1, 2),
+            np.arange(self.I_2MN),
+            np.arange(self.Q),
+            indexing="ij",
         )
-        lij_mesh = np.reshape(np.array(lij_mesh, dtype=int), (3, (L + 1) * I * Q)).T
+        lij_mesh = np.reshape(np.array(lij_mesh, dtype=int), (3, self.nmodes)).T
         return np.unique(lij_mesh, axis=0)
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
@@ -1382,17 +1391,11 @@ class FiniteElementBasis(_FE_Basis):
         l, i, j = modes.T
         lm = np.array([l, np.zeros(modes.shape[0])]).T
 
-        # There is a bug here. For large enough L, radial shifted
-        # Jacobi polynomials return zeros instead of 1s, which
-        # is wrong because at rho = 1, all the Jacobi polynomials
-        # are normalized to 1.
-
-        # It appears this is just because the code correctly
-        # zeros out the contribution from odd-L Jacobi
-        # polynomials, as it should since only even order polynomials
-        # should be used to be consistent at the rho=0 axis.
-        # This is why L = 14 and L = 15 results look exactly the same.
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        r0 = zernike_radial(
+            np.zeros(len(r))[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0]
+        )
+        radial = radial - r0
         if self.N > 0:
             # Tessellate the domain and find the basis functions for theta, zeta
             Theta, Zeta = np.meshgrid(t, z, indexing="ij")
@@ -1415,10 +1418,9 @@ class FiniteElementBasis(_FE_Basis):
             poloidal_toroidal = self.mesh.full_basis_functions_corresponding_to_points(
                 t
             )
-            print(poloidal_toroidal)
-            poloidal_toroidal = np.reshape(poloidal_toroidal, (len(t), -1))  # , "F")
-            poloidal_toroidal = np.tile(poloidal_toroidal, self.L + 1)
-            inds = l * (self.M - 1) * self.Q + i * self.Q + j
+            poloidal_toroidal = np.reshape(poloidal_toroidal, (len(t), -1))
+            poloidal_toroidal = np.tile(poloidal_toroidal, (self.L + 1) // 2)
+            inds = (l - 2) // 2 * (self.M - 1) * self.Q + i * self.Q + j
 
         return (radial * poloidal_toroidal)[:, inds]
 

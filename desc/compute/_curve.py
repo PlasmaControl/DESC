@@ -1,5 +1,6 @@
+from interpax import interp1d
+
 from desc.backend import jnp
-from desc.interpolate import interp1d
 
 from .data_index import register_compute_fun
 from .geom_utils import (

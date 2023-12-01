@@ -1,5 +1,6 @@
 """DESC: a 3D MHD equilibrium solver and stellarator optimization suite."""
 
+import importlib
 import os
 import re
 import warnings
@@ -13,6 +14,36 @@ __version__ = get_versions()["version"]
 del get_versions
 
 colorama.init()
+
+
+__all__ = [
+    "basis",
+    "coils",
+    "compute",
+    "continuation",
+    "derivatives",
+    "equilibrium",
+    "examples",
+    "geometry",
+    "grid",
+    "io",
+    "magnetic_fields",
+    "objectives",
+    "optimize",
+    "perturbations",
+    "plotting",
+    "profiles",
+    "random",
+    "transform",
+    "vmec",
+]
+
+
+def __getattr__(name):
+    if name in __all__:
+        return importlib.import_module("." + name, __name__)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 _BANNER = r"""
  ____  ____  _____   ___

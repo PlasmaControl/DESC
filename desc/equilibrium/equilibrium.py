@@ -116,6 +116,11 @@ class Equilibrium(IOAble, Optimizable):
         ensure that this equilibrium has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
         (ie, e_theta x e_zeta points outward from the surface).
+    ensure_nested : bool
+        If True, and the default initial guess does not produce nested surfaces,
+        run a small optimization problem to attempt to refine initial guess to improve
+        coordinate mapping.
+
     """
 
     _io_attrs_ = [
@@ -173,6 +178,7 @@ class Equilibrium(IOAble, Optimizable):
         sym=None,
         spectral_indexing=None,
         check_orientation=True,
+        ensure_nested=True,
         **kwargs,
     ):
         errorif(
@@ -202,7 +208,9 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"NFP should be a positive integer, got {NFP}",
         )
-        self._NFP = setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
+        self._NFP = int(
+            setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
+        )
 
         # stellarator symmetry for bases
         errorif(
@@ -366,13 +374,14 @@ class Equilibrium(IOAble, Optimizable):
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
-        self.set_initial_guess()
-        if "R_lmn" in kwargs:
+
+        if ("R_lmn" in kwargs) or ("Z_lmn" in kwargs):
+            assert ("R_lmn" in kwargs) and ("Z_lmn" in kwargs), "Must give both R and Z"
             self.R_lmn = kwargs.pop("R_lmn")
-        if "Z_lmn" in kwargs:
             self.Z_lmn = kwargs.pop("Z_lmn")
-        if "L_lmn" in kwargs:
-            self.L_lmn = kwargs.pop("L_lmn")
+            self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
+        else:
+            self.set_initial_guess(ensure_nested=ensure_nested)
         if check_orientation:
             ensure_positive_jacobian(self)
 
@@ -429,7 +438,7 @@ class Equilibrium(IOAble, Optimizable):
             )
         )
 
-    def set_initial_guess(self, *args):
+    def set_initial_guess(self, *args, ensure_nested=True):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
         Parameters
@@ -447,6 +456,10 @@ class Equilibrium(IOAble, Optimizable):
                 optionally lambda) at fixed flux coordinates. All arrays should have the
                 same length. Optionally, an ndarray of shape(k,3) may be passed instead
                 of a grid.
+        ensure_nested : bool
+            If True, and the default initial guess does not produce nested surfaces,
+            run a small optimization problem to attempt to refine initial guess to
+            improve coordinate mapping.
 
         Examples
         --------
@@ -486,7 +499,7 @@ class Equilibrium(IOAble, Optimizable):
         >>> equil.set_initial_guess(nodes, R, Z, lambda)
 
         """
-        set_initial_guess(self, *args)
+        set_initial_guess(self, *args, ensure_nested=ensure_nested)
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""
@@ -529,13 +542,13 @@ class Equilibrium(IOAble, Optimizable):
             Whether to enforce stellarator symmetry.
 
         """
-        self._L = setdefault(L, self.L)
-        self._M = setdefault(M, self.M)
-        self._N = setdefault(N, self.N)
-        self._L_grid = setdefault(L_grid, self.L_grid)
-        self._M_grid = setdefault(M_grid, self.M_grid)
-        self._N_grid = setdefault(N_grid, self.N_grid)
-        self._NFP = setdefault(NFP, self.NFP)
+        self._L = int(setdefault(L, self.L))
+        self._M = int(setdefault(M, self.M))
+        self._N = int(setdefault(N, self.N))
+        self._L_grid = int(setdefault(L_grid, self.L_grid))
+        self._M_grid = int(setdefault(M_grid, self.M_grid))
+        self._N_grid = int(setdefault(N_grid, self.N_grid))
+        self._NFP = int(setdefault(NFP, self.NFP))
         self._sym = setdefault(sym, self.sym)
 
         old_modes_R = self.R_basis.modes
@@ -673,7 +686,7 @@ class Equilibrium(IOAble, Optimizable):
             )
             return surface
 
-    def get_profile(self, name, grid=None, **kwargs):
+    def get_profile(self, name, grid=None, kind="spline", **kwargs):
         """Return a SplineProfile of the desired quantity.
 
         Parameters
@@ -683,6 +696,8 @@ class Equilibrium(IOAble, Optimizable):
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
             Note profile will only be a function of the radial coordinate.
+        kind : {"power_series", "spline", "fourier_zernike"}
+            Type of returned profile.
 
         Returns
         -------
@@ -690,12 +705,19 @@ class Equilibrium(IOAble, Optimizable):
             Radial profile of the desired quantity.
 
         """
+        assert kind in {"power_series", "spline", "fourier_zernike"}
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
-        x = data[name]
-        x = grid.compress(x, surface_label="rho")
-        return SplineProfile(x, grid.nodes[grid.unique_rho_idx, 0], name=name)
+        f = data[name]
+        f = grid.compress(f, surface_label="rho")
+        x = grid.nodes[grid.unique_rho_idx, 0]
+        p = SplineProfile(f, x, name=name)
+        if kind == "power_series":
+            p = p.to_powerseries(order=min(self.L, len(x)), xs=x, sym=True)
+        if kind == "fourier_zernike":
+            p = p.to_fourierzernike(L=min(self.L, len(x)), xs=x)
+        return p
 
     def get_axis(self):
         """Return a representation for the magnetic axis.
@@ -1704,11 +1726,7 @@ class Equilibrium(IOAble, Optimizable):
 
         """
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(
-                eq=self,
-                iota=objective != "vacuum" and self.iota is not None,
-                kinetic=self.electron_temperature is not None,
-            )
+            constraints = get_fixed_boundary_constraints(eq=self)
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(eq=self, mode=objective)
         if not isinstance(optimizer, Optimizer):
@@ -1744,6 +1762,7 @@ class Equilibrium(IOAble, Optimizable):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
+            copy=copy,
         )
 
         return things[0], result
@@ -1809,11 +1828,7 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(
-                eq=self,
-                iota=self.iota is not None,
-                kinetic=self.electron_temperature is not None,
-            )
+            constraints = get_fixed_boundary_constraints(eq=self)
             constraints = (ForceBalance(eq=self), *constraints)
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
@@ -2047,17 +2062,9 @@ class Equilibrium(IOAble, Optimizable):
             objective = get_equilibrium_objective(eq=self)
         if constraints is None:
             if "Ra_n" in deltas or "Za_n" in deltas:
-                constraints = get_fixed_axis_constraints(
-                    eq=self,
-                    iota=self.iota is not None,
-                    kinetic=self.electron_temperature is not None,
-                )
+                constraints = get_fixed_axis_constraints(eq=self)
             else:
-                constraints = get_fixed_boundary_constraints(
-                    eq=self,
-                    iota=self.iota is not None,
-                    kinetic=self.electron_temperature is not None,
-                )
+                constraints = get_fixed_boundary_constraints(eq=self)
 
         eq = perturb(
             self,
@@ -2096,16 +2103,20 @@ class EquilibriaFamily(IOAble, MutableSequence):
     _io_attrs_ = ["_equilibria"]
 
     def __init__(self, *args):
+        # we use ensure_nested=False here because it is assumed the family
+        # will be solved with a continuation method, so there's no need for the
+        # fancy coordinate mapping stuff since it will just be overwritten during
+        # solve_continuation
         self.equilibria = []
         if len(args) == 1 and isinstance(args[0], list):
             for inp in args[0]:
-                self.equilibria.append(Equilibrium(**inp))
+                self.equilibria.append(Equilibrium(**inp, ensure_nested=False))
         else:
             for arg in args:
                 if isinstance(arg, Equilibrium):
                     self.equilibria.append(arg)
                 elif isinstance(arg, dict):
-                    self.equilibria.append(Equilibrium(**arg))
+                    self.equilibria.append(Equilibrium(**arg, ensure_nested=False))
                 else:
                     raise TypeError(
                         "Args to create EquilibriaFamily should either be "

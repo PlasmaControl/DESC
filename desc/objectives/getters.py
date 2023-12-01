@@ -30,6 +30,17 @@ from .linear_objectives import (
 from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
 
+_PROFILE_CONSTRAINTS = {
+    "pressure": FixPressure,
+    "iota": FixIota,
+    "current": FixCurrent,
+    "electron_density": FixElectronDensity,
+    "electron_temperature": FixElectronTemperature,
+    "ion_temperature": FixIonTemperature,
+    "atomic_number": FixAtomicNumber,
+    "anisotropy": FixAnisotropy,
+}
+
 
 def get_equilibrium_objective(eq, mode="force", normalize=True):
     """Get the objective function for a typical force balance equilibrium problem.
@@ -70,23 +81,15 @@ def get_equilibrium_objective(eq, mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def get_fixed_axis_constraints(
-    eq, profiles=True, iota=True, kinetic=False, anisotropy=False, normalize=True
-):
+def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
     """Get the constraints necessary for a fixed-axis equilibrium problem.
 
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium being constrained.
+        Equilibrium to constrain.
     profiles : bool
-        Whether to also return constraints to fix input profiles.
-    iota : bool
-        Whether to add FixIota or FixCurrent as a constraint.
-    kinetic : bool
-        Whether to add constraints to fix kinetic profiles or pressure
-    anisotropy : bool
-        Whether to add constraint to fix anisotropic pressure.
+        If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -102,58 +105,24 @@ def get_fixed_axis_constraints(
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
-        if kinetic:
-            constraints += (
-                FixElectronDensity(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixElectronTemperature(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixIonTemperature(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixAtomicNumber(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixPressure(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-            if anisotropy:
+        for name, con in _PROFILE_CONSTRAINTS.items():
+            if getattr(eq, name) is not None:
                 constraints += (
-                    FixAnisotropy(
-                        eq=eq, normalize=normalize, normalize_target=normalize
-                    ),
+                    con(eq=eq, normalize=normalize, normalize_target=normalize),
                 )
 
-        if iota:
-            constraints += (
-                FixIota(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
     return constraints
 
 
-def get_fixed_boundary_constraints(
-    eq, profiles=True, iota=True, kinetic=False, anisotropy=False, normalize=True
-):
+def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium to constraint.
+        Equilibrium to constrain.
     profiles : bool
-        Whether to also return constraints to fix input profiles.
-    iota : bool
-        Whether to add FixIota or FixCurrent as a constraint.
-    kinetic : bool
-        Whether to also fix kinetic profiles.
-    anisotropy : bool
-        Whether to add constraint to fix anisotropic pressure.
+        If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -169,37 +138,12 @@ def get_fixed_boundary_constraints(
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
-        if kinetic:
-            constraints += (
-                FixElectronDensity(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixElectronTemperature(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixIonTemperature(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixAtomicNumber(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixPressure(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-            if anisotropy:
+        for name, con in _PROFILE_CONSTRAINTS.items():
+            if getattr(eq, name) is not None:
                 constraints += (
-                    FixAnisotropy(
-                        eq=eq, normalize=normalize, normalize_target=normalize
-                    ),
+                    con(eq=eq, normalize=normalize, normalize_target=normalize),
                 )
-        if iota:
-            constraints += (
-                FixIota(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
+
     return constraints
 
 
@@ -208,9 +152,6 @@ def get_NAE_constraints(
     qsc_eq,
     order=1,
     profiles=True,
-    iota=False,
-    kinetic=False,
-    anisotropy=False,
     normalize=True,
     N=None,
     fix_lambda=False,
@@ -227,13 +168,7 @@ def get_NAE_constraints(
     order : int
         order (in rho) of near-axis behavior to constrain
     profiles : bool
-        Whether to also return constraints to fix input profiles.
-    iota : bool
-        Whether to add `FixIota` or `FixCurrent` as a constraint.
-    kinetic : bool
-        Whether to also fix kinetic profiles.
-    anisotropy : bool
-        Whether to add constraint to fix anisotropic pressure.
+        If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
     N : int
@@ -256,43 +191,14 @@ def get_NAE_constraints(
         FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=desc_eq, normalize=normalize, normalize_target=normalize),
     )
+
     if profiles:
-        if kinetic:
-            constraints += (
-                FixElectronDensity(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixElectronTemperature(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixIonTemperature(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixAtomicNumber(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-            )
-        else:
-            constraints += (
-                FixPressure(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-            )
-            if anisotropy:
+        for name, con in _PROFILE_CONSTRAINTS.items():
+            if getattr(desc_eq, name) is not None:
                 constraints += (
-                    FixAnisotropy(
-                        eq=desc_eq, normalize=normalize, normalize_target=normalize
-                    ),
+                    con(eq=desc_eq, normalize=normalize, normalize_target=normalize),
                 )
 
-        if iota:
-            constraints += (
-                FixIota(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixCurrent(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-            )
     if fix_lambda or (fix_lambda >= 0 and type(fix_lambda) is int):
         L_axis_constraints, _, _ = calc_zeroth_order_lambda(
             qsc=qsc_eq, desc_eq=desc_eq, N=N

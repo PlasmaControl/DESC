@@ -919,7 +919,7 @@ def test_make_boozmn_output(TmpDir):
     eq = get("HELIOTRON")
     output_path = str(TmpDir.join("boozmn_out.nc"))
 
-    boozer_res = 40
+    boozer_res = 50
     surfs = 4
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
     # on 3 surfaces (surfs-1 by booz_xform convention) using boozer resolution of 50
@@ -955,7 +955,12 @@ def test_make_boozmn_output(TmpDir):
     for surf_index in range(surfs - 1):
         rho = np.sqrt(s_half[surf_index])
         grid = LinearGrid(rho=rho, M=M, N=N, NFP=eq.NFP)
-        data = eq.compute(["theta_B", "zeta_B", "psi_r"] + quant_names, grid=grid)
+        data = eq.compute(
+            ["theta_B", "zeta_B", "psi_r"] + quant_names,
+            grid=grid,
+            M_booz=boozer_res,
+            N_booz=boozer_res,
+        )
         # make the grid in Boozer angles corresponding
         # to the DESC theta,zeta angles that our quantities
         # are computed on
@@ -1002,8 +1007,8 @@ def test_make_boozmn_output(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                atol=5e-3,
-                rtol=1e-4,
+                atol=1e-10,
+                rtol=3e-6,
                 err_msg=f"{name} at surf index {surf_index}",
             )
 
@@ -1015,8 +1020,8 @@ def test_make_boozmn_output_asym(TmpDir):
     eq = load("./tests/inputs/NAE_QA_asym_eq_output.h5")
     output_path = str(TmpDir.join("boozmn_asym_out.nc"))
 
-    boozer_res = 25
-    surfs = 10
+    boozer_res = 50
+    surfs = 50
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
     # on 3 surfaces (surfs-1 by booz_xform convention) using boozer resolution of 40
     make_boozmn_output(
@@ -1073,7 +1078,12 @@ def test_make_boozmn_output_asym(TmpDir):
         print("surface index", surf_index)
         rho = np.sqrt(s_half[surf_index])
         grid = LinearGrid(rho=rho, M=M, N=N, NFP=eq.NFP)
-        data = eq.compute(["theta_B", "zeta_B", "psi_r"] + quant_names, grid=grid)
+        data = eq.compute(
+            ["theta_B", "zeta_B", "psi_r"] + quant_names,
+            grid=grid,
+            M_booz=boozer_res,
+            N_booz=boozer_res,
+        )
         # make the grid in Boozer angles corresponding
         # to the DESC theta,zeta angles that our quantities
         # are computed on
@@ -1123,8 +1133,8 @@ def test_make_boozmn_output_asym(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                atol=3e-5,
-                rtol=3e-5,
+                atol=1e-10,
+                rtol=3e-6,
                 err_msg=f"{name} at surf index {surf_index}",
             )
 

@@ -5,11 +5,10 @@ from netCDF4 import Dataset, stringtochar
 from scipy.linalg import block_diag, null_space
 
 from desc.backend import jit, sign
-from desc.basis import DoubleFourierSeries, FourierZernikeBasis, zernike_radial
+from desc.basis import DoubleFourierSeries, zernike_radial
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.transform import Transform
 from desc.utils import Timer
 
 
@@ -590,7 +589,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     vol_grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=r_half, sym=False)
     # precompute the needed data for the boozer surface computations
     # (except those which have to be computed on a single surface only,
-    # like theta_B, zeta_B or nu)
+    # like B_theta_mn, B_zeta_mn, theta_B, zeta_B or nu)
     keys = [
         "|B|",
         "R",
@@ -607,30 +606,6 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "lambda_z",
     ]
     data_vol = eq.compute(keys, grid=vol_grid)
-
-    # FourierZernike fit the B_theta and B_zeta, then at each surface
-    # just evaluate the fit at the rho to get the B_theta_mn and B_zeta_mn
-    # so this we only only do a single fit
-    transform = Transform(
-        grid=vol_grid,
-        basis=FourierZernikeBasis(
-            L=2 * eq.L,
-            M=M_booz - 1,
-            N=N_booz,
-            sym="cos" if eq.sym else False,
-            NFP=eq.NFP,
-        ),
-        build_pinv=True,
-    )
-    B_zeta_lmn = transform.fit(data_vol["B_zeta"])
-    B_theta_lmn = transform.fit(data_vol["B_theta"])
-    # compute the fourier coeffs of the B_zeta and B_theta at each rho
-    _, _, B_zeta_mn = zernike_to_fourier(
-        B_zeta_lmn, transform.basis, rho=r_half, sym=False
-    )
-    _, _, B_theta_mn = zernike_to_fourier(
-        B_theta_lmn, transform.basis, rho=r_half, sym=False
-    )
 
     B_transform = transforms["B"]
     w_transform = transforms["w"]
@@ -697,10 +672,6 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         for key in keys:
             # populate the pre-computed data for this surface
             data[key] = data_vol[key][np.where(vol_grid.nodes[:, 0] == r)]
-
-        # are of shape [num_rhos,num_modes], so index into the first axis
-        data["B_zeta_mn"] = B_zeta_mn[i, :]
-        data["B_theta_mn"] = B_theta_mn[i, :]
 
         ## calculate boozer transform for this surface
         grid = LinearGrid(

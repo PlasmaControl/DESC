@@ -493,7 +493,8 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     if len(plot_axes) != 1:
         return ValueError(colored("Grid must be 1D", "red"))
 
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+    data, ylabel = _compute(eq, name, grid, kwargs.pop("component", None))
+    label = kwargs.pop("label", None)
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
@@ -507,7 +508,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         ax.semilogy(
             grid.nodes[:, plot_axes[0]],
             data,
-            label=kwargs.pop("label", None),
+            label=label,
             color=linecolor,
             ls=ls,
             lw=lw,
@@ -516,7 +517,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         ax.plot(
             grid.nodes[:, plot_axes[0]],
             data,
-            label=kwargs.pop("label", None),
+            label=label,
             color=linecolor,
             ls=ls,
             lw=lw,
@@ -527,9 +528,12 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     assert len(kwargs) == 0, f"plot_1d got unexpected keyword argument: {kwargs.keys()}"
     xlabel = _AXIS_LABELS_RTZ[plot_axes[0]]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
-    ax.set_ylabel(label, fontsize=ylabel_fontsize)
+    ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     _set_tight_layout(fig)
     plot_data = {xlabel.strip("$").strip("\\"): grid.nodes[:, plot_axes[0]], name: data}
+
+    if label is not None:
+        ax.legend()
 
     if return_data:
         return fig, ax, plot_data
@@ -946,7 +950,7 @@ def plot_3d(
     return fig
 
 
-def plot_fsa(
+def plot_fsa(  # noqa: C901
     eq,
     name,
     with_sqrt_g=True,
@@ -1044,6 +1048,8 @@ def plot_fsa(
     lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
+    label = kwargs.pop("label", None)
+
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
 
     p = "desc.equilibrium.equilibrium.Equilibrium"
@@ -1059,18 +1065,18 @@ def plot_fsa(
             # surface average we have the recipe to compute in data_index is the
             # desired surface average.
             name = "<" + name + ">"
-    values, label = _compute(
+    values, ylabel = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
-    label = label.split("~")
+    ylabel = ylabel.split("~")
     if (
         data_index[p][name]["coordinates"] == "r"
         or data_index[p][name]["coordinates"] == ""
     ):
         # If the quantity is a surface function, averaging it again has no
         # effect, regardless of whether sqrt(g) is used.
-        # So we avoid surface averaging it and forgo the <> around the label.
-        label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
+        # So we avoid surface averaging it and forgo the <> around the ylabel.
+        ylabel = r"$ " + ylabel[0][1:] + r" ~" + "~".join(ylabel[1:])
         plot_data_ylabel_key = f"{name}"
         if data_index[p][name]["coordinates"] == "r":
             values = grid.compress(values)
@@ -1100,14 +1106,14 @@ def plot_fsa(
                     sqrt_g, _compute(eq, "sqrt(g)_r", grid, reshape=False)[0], copy=True
                 )
             averages = compute_surface_averages(values, sqrt_g=sqrt_g)
-            label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
+            ylabel = r"$\langle " + ylabel[0][1:] + r" \rangle~" + "~".join(ylabel[1:])
         else:  # theta average
             averages = compute_surface_averages(values)
-            label = (
+            ylabel = (
                 r"$\langle "
-                + label[0][1:]
+                + ylabel[0][1:]
                 + r" \rangle_{\theta}~"
-                + "~".join(label[1:])
+                + "~".join(ylabel[1:])
             )
         # True if values has nan on a given surface.
         is_nan = compute_surface_averages(np.isnan(values)).astype(bool)
@@ -1123,13 +1129,9 @@ def plot_fsa(
         values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
-        ax.semilogy(
-            rho, values, label=kwargs.pop("label", None), color=linecolor, ls=ls, lw=lw
-        )
+        ax.semilogy(rho, values, label=label, color=linecolor, ls=ls, lw=lw)
     else:
-        ax.plot(
-            rho, values, label=kwargs.pop("label", None), color=linecolor, ls=ls, lw=lw
-        )
+        ax.plot(rho, values, label=label, color=linecolor, ls=ls, lw=lw)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
@@ -1137,7 +1139,7 @@ def plot_fsa(
     ), f"plot_fsa got unexpected keyword argument: {kwargs.keys()}"
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
-    ax.set_ylabel(label, fontsize=ylabel_fontsize)
+    ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     if norm_F:
         ax.set_ylabel(
             "%s / %s"
@@ -1148,6 +1150,9 @@ def plot_fsa(
             fontsize=ylabel_fontsize,
         )
     _set_tight_layout(fig)
+
+    if label is not None:
+        ax.legend()
 
     plot_data = {"rho": rho, plot_data_ylabel_key: values}
     if norm_F:
@@ -1591,6 +1596,9 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_fontsize,
         )
+        if label is not None and i == 0:
+            ax[i].legend()
+
     _set_tight_layout(fig)
 
     plot_data["rho_R_coords"] = Rr

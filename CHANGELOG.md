@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Adds ``deriv_mode`` keyword argument to all ``Objective``s for specifying whether to
+use forward or reverse mode automatic differentiation.
 - Adds ``desc.compat.rescale`` for rescaling equilibria to a specified size and field
 strength.
 - Adds ``desc.vmec_utils.make_boozmn_output `` for writing boozmn.nc style output files
@@ -15,6 +17,9 @@ non-singular, non-degenerate) coordinate mappings for initial guesses. This is a
 automatically when creating a new `Equilibrium` if the default initial guess of scaling
 the boundary surface produces self-intersecting surfaces. This can be disabled by
 passing `ensure_nested=False` when constructing the `Equilibrum`.
+- Adds `loss_function` argument to all `Objective`s for applying one of min/max/mean
+to objective function values (for targeting the average value of a profile, etc).
+- Fixes a bug preventing linear objectives like `FixPressure` from being used as bounds.
 
 v0.10.2
 -------

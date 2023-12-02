@@ -106,7 +106,7 @@ def test_perturb_with_float_without_error():
     # np.concatenate cannot concatenate 0-D arrays. This test exercises the fix.
     eq = Equilibrium()
     objective = get_equilibrium_objective(eq=eq)
-    constraints = get_fixed_boundary_constraints(eq=eq, iota=False)
+    constraints = get_fixed_boundary_constraints(eq=eq)
 
     # perturb Psi with a float
     deltas = {"Psi": float(eq.Psi)}

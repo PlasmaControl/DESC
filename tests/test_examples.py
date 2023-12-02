@@ -101,7 +101,7 @@ def test_SOLOVEV_anisotropic_results(SOLOVEV):
     eq.anisotropy = anisotropy
 
     obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq))
-    constraints = get_fixed_boundary_constraints(eq=eq, anisotropy=True)
+    constraints = get_fixed_boundary_constraints(eq=eq)
     eq.solve(obj, constraints, verbose=3)
     rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
@@ -170,6 +170,7 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
     # When ConcentricGrid had a rotation option, RadialForceBalance, HelicalForceBalance
@@ -211,6 +212,7 @@ def test_force_balance_grids():
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_solve_bounds():
     """Tests optimizing with bounds=(lower bound, upper bound)."""
     # decrease resolution and double pressure so no longer in force balance
@@ -230,6 +232,7 @@ def test_solve_bounds():
 
 
 @pytest.mark.regression
+@pytest.mark.optimize
 def test_1d_optimization():
     """Tests 1D optimization for target aspect ratio."""
     eq = desc.examples.get("SOLOVEV")
@@ -250,6 +253,7 @@ def test_1d_optimization():
 
 
 @pytest.mark.regression
+@pytest.mark.optimize
 def test_1d_optimization_old():
     """Tests 1D optimization for target aspect ratio."""
     eq = desc.examples.get("SOLOVEV")
@@ -320,6 +324,7 @@ def run_qh_step(n, eq):
 
 @pytest.mark.regression
 @pytest.mark.slow
+@pytest.mark.optimize
 def test_qh_optimization():
     """Tests first 3 steps of precise QH optimization."""
     # create initial equilibrium
@@ -426,7 +431,7 @@ def test_ESTELL_results(tmpdir_factory):
 
 
 @pytest.mark.regression
-@pytest.mark.solve
+@pytest.mark.optimize
 def test_simsopt_QH_comparison():
     """Test case that previously stalled before getting to the solution.
 
@@ -559,13 +564,12 @@ def test_NAE_QSC_solve():
     eq_lambda_fixed_1st_order = eq.copy()
 
     # this has all the constraints we need,
-    #  iota=False specifies we want to fix current instead of iota
-    cs = get_NAE_constraints(eq, qsc, iota=False, order=1, fix_lambda=False, N=eq.N)
+    cs = get_NAE_constraints(eq, qsc, order=1, fix_lambda=False, N=eq.N)
     cs_lambda_fixed_0th_order = get_NAE_constraints(
-        eq_lambda_fixed_0th_order, qsc, iota=False, order=1, fix_lambda=0, N=eq.N
+        eq_lambda_fixed_0th_order, qsc, order=1, fix_lambda=0, N=eq.N
     )
     cs_lambda_fixed_1st_order = get_NAE_constraints(
-        eq_lambda_fixed_1st_order, qsc, iota=False, order=1, fix_lambda=True, N=eq.N
+        eq_lambda_fixed_1st_order, qsc, order=1, fix_lambda=True, N=eq.N
     )
 
     for c in cs:
@@ -647,8 +651,7 @@ def test_NAE_QIC_solve():
     eq_fit = eq.copy()
 
     # this has all the constraints we need,
-    #  iota=False specifies we want to fix current instead of iota
-    cs = get_NAE_constraints(eq, qic, iota=False, order=1)
+    cs = get_NAE_constraints(eq, qic, order=1)
 
     objectives = ForceBalance(eq=eq)
     obj = ObjectiveFunction(objectives)
@@ -733,6 +736,7 @@ def test_NAE_QIC_solve():
 
 
 @pytest.mark.unit
+@pytest.mark.optimize
 def test_multiobject_optimization():
     """Test for optimizing multiple objects at once."""
     eq = Equilibrium(L=4, M=4, N=0, iota=2)
@@ -762,7 +766,52 @@ def test_multiobject_optimization():
     )
 
     np.testing.assert_allclose(
-        constraints[-1].compute(*constraints[-1].xs(eq, surf)), 1, atol=1e-3
+        constraints[-1].compute(*constraints[-1].xs(eq, surf)), 1, rtol=1e-3
+    )
+    assert surf.R_lmn[0] == 10
+    assert surf.Z_lmn[-1] == -2
+    assert eq.Psi == 1.0
+    np.testing.assert_allclose(eq.i_l, [2, 0, 0])
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_multiobject_optimization_prox():
+    """Test for optimizing multiple objects at once using proximal projection."""
+    eq = Equilibrium(L=4, M=4, N=0, iota=2)
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 2.1],
+        Z_lmn=[-2],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+    )
+    surf.change_resolution(M=4, N=0)
+    constraints = (
+        ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
+        FixPressure(eq=eq),
+        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
+        FixParameter(eq, ["Psi", "i_l"]),
+        FixBoundaryR(eq, modes=[[0, 0, 0]]),
+    )
+
+    objective = ObjectiveFunction(
+        (
+            Volume(eq=eq, target=eq.compute("V")["V"] * 2),
+            PlasmaVesselDistance(surface=surf, eq=eq, target=1),
+        )
+    )
+
+    eq.solve(verbose=3)
+
+    optimizer = Optimizer("proximal-lsq-exact")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=100
+    )
+
+    np.testing.assert_allclose(
+        objective.objectives[-1].compute(*objective.objectives[-1].xs(eq, surf)),
+        1,
+        rtol=1e-2,
     )
     assert surf.R_lmn[0] == 10
     assert surf.Z_lmn[-1] == -2

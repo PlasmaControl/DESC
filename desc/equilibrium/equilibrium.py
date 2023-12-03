@@ -598,7 +598,7 @@ class Equilibrium(IOAble, Optimizable):
         self.surface.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
         )
-        if isinstance(self._surface_2, FourierRZToroidalSurface):
+        if isinstance(self.surface_2, FourierRZToroidalSurface):
             self.surface_2.change_resolution(
                 self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
             )
@@ -1303,28 +1303,28 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def Rb2_lmn(self):
         """ndarray: Spectral coefficients of R at the second boundary."""
-        if isinstance(self._surface_2, ZernikeRZToroidalSection):
+        if isinstance(self.surface_2, ZernikeRZToroidalSection):
             return self.surface_2.R_lmn
         else:
             return self.surface.R_lmn
 
     @Rb2_lmn.setter
     def Rb2_lmn(self, Rb2_lmn):
-        if isinstance(self._surface_2, ZernikeRZToroidalSection):
+        if isinstance(self.surface_2, ZernikeRZToroidalSection):
             self.surface_2.R_lmn = Rb2_lmn
 
     @optimizable_parameter
     @property
     def Zb2_lmn(self):
         """ndarray: Spectral coefficients of Z at the second boundary."""
-        if isinstance(self._surface_2, ZernikeRZToroidalSection):
+        if isinstance(self.surface_2, ZernikeRZToroidalSection):
             return self.surface_2.Z_lmn
         else:
             return self.surface.Z_lmn
 
     @Zb2_lmn.setter
     def Zb2_lmn(self, Zb2_lmn):
-        if isinstance(self._surface_2, ZernikeRZToroidalSection):
+        if isinstance(self.surface_2, ZernikeRZToroidalSection):
             self.surface_2.Z_lmn = Zb2_lmn
 
     @optimizable_parameter

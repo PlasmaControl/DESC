@@ -163,36 +163,12 @@ Clone and install DESC
 Della and Stellar Clusters (Princeton)
 ++++++++++++++++++++++++++++++++++++++
 
-**Option 1:** First, install JAX (check `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters):
+First, install JAX (we base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters:
 
 .. code-block:: sh
 
     module load anaconda3/2023.3
-    conda create --name desc-env python=3.9
-    conda activate desc-env
-    pip install --upgrade "jax[cuda11_pip]<0.4.15" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-
-Then, install DESC,
-
-.. code-block:: sh
-
-    git clone https://github.com/PlasmaControl/DESC.git
-    cd DESC
-    # remove the jax lines from requirements.txt, as we already have installed them above
-    sed -i '/jax/d' ./requirements.txt
-    # then install as usual
-    pip install --editable .
-    # optionally install developer requirements (if you want to run tests)
-    pip install -r devtools/dev-requirements.txt
-
-Option 1 was tested and confirmed to work on the Della and Stellar clusters at Princeton as of 11-6-2023.
-
-**Option 2:** First option may install JAX with higher CuDNN version (CuDNN 8.6) which is not supported by clusters. When you are trying to use GPU and get an error like **`Loaded runtime CuDNN library: 8.2.0 but source was compiled with: 8.6.0.`** Then, you can instead create the environment with following commands,
-
-.. code-block:: sh
-
-    module load anaconda3/2023.3
-    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.14=cuda112*" -c conda-forge
+    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env "jax==0.4.14" "jaxlib==0.4.14=cuda112*" -c conda-forge
     conda activate desc-env
 
 Then, install DESC,
@@ -208,7 +184,7 @@ Then, install DESC,
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-Second option was tested and confirmed to work on the Della and Stellar clusters at Princeton as of 11-14-2023.
+Second option was tested and confirmed to work on the Della cluster as of 12-2-23 and Stellar cluster at Princeton as of 11-14-2023.
 
 On Clusters with IBM Power Architecture
 ***************************************

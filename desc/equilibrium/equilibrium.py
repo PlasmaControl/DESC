@@ -104,6 +104,10 @@ class Equilibrium(IOAble, Optimizable):
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
         Default is a FourierRZToroidalSurface with major radius 10 and minor radius 1
+    surface_2: Surface or ndarray shape(k,5) (optional)
+        Second Fixed boundary surface shape, as a Surface object or array of
+        spectral mode numbers and coefficients of the form [l, m, n, R, Z].
+        Default is a FourierRZToroidalSurface with major radius 10 and minor radius 1
     axis : Curve or ndarray shape(k,3) (optional)
         Initial guess for the magnetic axis as a Curve object or ndarray
         of mode numbers and spectral coefficients of the form [n, R, Z].
@@ -139,6 +143,7 @@ class Equilibrium(IOAble, Optimizable):
         "_Z_basis",
         "_L_basis",
         "_surface",
+        "_surface_2",
         "_axis",
         "_pressure",
         "_iota",
@@ -174,6 +179,7 @@ class Equilibrium(IOAble, Optimizable):
         atomic_number=None,
         anisotropy=None,
         surface=None,
+        surface_2=None,
         axis=None,
         sym=None,
         spectral_indexing=None,
@@ -231,6 +237,14 @@ class Equilibrium(IOAble, Optimizable):
         self._surface, self._bdry_mode = parse_surface(
             surface, self.NFP, self.sym, self.spectral_indexing
         )
+
+        # surface-2
+        if isinstance(surface_2, ZernikeRZToroidalSection):
+            self._surface_2, self._bdry_mode = parse_surface(
+                surface_2, self.NFP, self.sym, self.spectral_indexing
+            )
+        else:
+            self._surface_2 = None
 
         # magnetic axis
         self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
@@ -423,6 +437,8 @@ class Equilibrium(IOAble, Optimizable):
             "Za_n",
             "Rb_lmn",
             "Zb_lmn",
+            "Rb2_lmn",
+            "Zb2_lmn",
         )
         assert sorted(args) == sorted(arg_order)
         return [arg for arg in arg_order if arg in args]
@@ -582,6 +598,10 @@ class Equilibrium(IOAble, Optimizable):
         self.surface.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
         )
+        if isinstance(self._surface_2, FourierRZToroidalSurface):
+            self.surface_2.change_resolution(
+                self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
+            )
         self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
@@ -1091,6 +1111,25 @@ class Equilibrium(IOAble, Optimizable):
         self._surface = new
 
     @property
+    def surface_2(self):
+        """Surface: Geometric surface defining boundary conditions."""
+        return self._surface_2
+
+    @surface_2.setter
+    def surface_2(self, new):
+        assert isinstance(
+            new, Surface
+        ), f"surfaces should be of type Surface or a subclass, got {new}"
+        assert (
+            self.sym == new.sym
+        ), "Surface and Equilibrium must have the same symmetry"
+        assert self.NFP == getattr(
+            new, "NFP", self.NFP
+        ), "Surface and Equilibrium must have the same NFP"
+        new.change_resolution(self.L, self.M, self.N)
+        self._surface_2 = new
+
+    @property
     def axis(self):
         """Curve: object representing the magnetic axis."""
         return self._axis
@@ -1120,6 +1159,10 @@ class Equilibrium(IOAble, Optimizable):
     def bdry_mode(self):
         """str: Method for specifying boundary condition."""
         return self._bdry_mode
+
+    @bdry_mode.setter
+    def bdry_mode(self, bdry_mode):
+        self._bdry_mode = bdry_mode
 
     @optimizable_parameter
     @property
@@ -1243,6 +1286,34 @@ class Equilibrium(IOAble, Optimizable):
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
+
+    @optimizable_parameter
+    @property
+    def Rb2_lmn(self):
+        """ndarray: Spectral coefficients of R at the second boundary."""
+        if isinstance(self._surface_2, ZernikeRZToroidalSection):
+            return self.surface_2.R_lmn
+        else:
+            return self.surface.R_lmn
+
+    @Rb2_lmn.setter
+    def Rb2_lmn(self, Rb2_lmn):
+        if isinstance(self._surface_2, ZernikeRZToroidalSection):
+            self.surface_2.R_lmn = Rb2_lmn
+
+    @optimizable_parameter
+    @property
+    def Zb2_lmn(self):
+        """ndarray: Spectral coefficients of Z at the second boundary."""
+        if isinstance(self._surface_2, ZernikeRZToroidalSection):
+            return self.surface_2.Z_lmn
+        else:
+            return self.surface.Z_lmn
+
+    @Zb2_lmn.setter
+    def Zb2_lmn(self, Zb2_lmn):
+        if isinstance(self._surface_2, ZernikeRZToroidalSection):
+            self.surface_2.Z_lmn = Zb2_lmn
 
     @optimizable_parameter
     @property
@@ -1672,6 +1743,8 @@ class Equilibrium(IOAble, Optimizable):
         options=None,
         verbose=1,
         copy=False,
+        zeta=0,
+        zeta2=None,
     ):
         """Solve to find the equilibrium configuration.
 
@@ -1748,6 +1821,8 @@ class Equilibrium(IOAble, Optimizable):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
+            zeta=zeta,
+            zeta2=zeta2,
         )
 
         return things[0], result

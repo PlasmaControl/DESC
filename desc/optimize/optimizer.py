@@ -83,6 +83,8 @@ class Optimizer(IOAble):
         maxiter=None,
         options=None,
         copy=False,
+        zeta=0,
+        zeta2=None,
     ):
         """Optimize an objective function.
 
@@ -191,7 +193,12 @@ class Optimizer(IOAble):
         # wrap to handle linear constraints
         if not isinstance(objective, ProximalProjection) and eq is not None:
             # need to include self consistency constraints
-            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
+            linear_constraints = maybe_add_self_consistency(
+                eq,
+                linear_constraints,
+                zeta=zeta,
+                zeta2=zeta2,
+            )
         if len(linear_constraints):
             objective = LinearConstraintProjection(objective, linear_constraints)
             objective.build(verbose=verbose)

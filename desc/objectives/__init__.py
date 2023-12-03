@@ -18,6 +18,7 @@ from ._geometry import (
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    SurfaceCurrentRegularizedQuadraticFlux,
     Volume,
 )
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent

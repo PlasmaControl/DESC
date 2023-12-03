@@ -1447,7 +1447,7 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
         # source_grid.num_nodes for the regularization cost
         self._dim_f = source_grid.num_nodes + eval_grid.num_nodes
         self._equil_data_keys = ["n_rho", "R", "phi", "Z"]
-        self._surface_data_keys = ["K"]
+        self._surface_data_keys = ["K", "x"]
         # TODO: should check that G is set correctly
         # and is not an optimizable parameter?
         # since we know what G should be given the equilibrium.
@@ -1540,7 +1540,10 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
             basis="rpz",
         )
         B = self._surface_current_field.compute_magnetic_field(
-            plasma_coords, grid=self._source_grid, params=surface_params
+            plasma_coords,
+            grid=self._source_grid,
+            params=surface_params,
+            data=surface_data,
         )
         Bn = jnp.sum(B * data["n_rho"], axis=-1)
 

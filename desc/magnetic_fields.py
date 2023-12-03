@@ -1696,7 +1696,9 @@ class FourierCurrentPotentialField(
             NFP=NFP
         )  # make sure surface and Phi basis NFP are the same
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", grid=None, data=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
@@ -1710,6 +1712,9 @@ class FourierCurrentPotentialField(
             basis for input coordinates and returned magnetic field
         grid : Grid,
             grid upon which to evaluate the surface current density K
+        data: dict
+            dictionary of any precomputed quantities needed by this function.
+
 
         Returns
         -------
@@ -1721,7 +1726,7 @@ class FourierCurrentPotentialField(
             M=self._M_Phi * 3 + 1, N=self._N_Phi * 3 + 1, NFP=self.NFP
         )
         return _compute_magnetic_field_from_CurrentPotentialField(
-            field=self, coords=coords, params=params, basis=basis, grid=grid
+            field=self, coords=coords, params=params, basis=basis, grid=grid, data=data
         )
 
     @classmethod
@@ -1797,7 +1802,7 @@ class FourierCurrentPotentialField(
 
 
 def _compute_magnetic_field_from_CurrentPotentialField(
-    field, coords, params=None, basis="rpz", grid=None
+    field, coords, params=None, basis="rpz", grid=None, data=None
 ):
     """Compute magnetic field at a set of points.
 
@@ -1814,6 +1819,8 @@ def _compute_magnetic_field_from_CurrentPotentialField(
         basis for input coordinates and returned magnetic field
     grid : Grid,
         source grid upon which to evaluate the surface current density K
+    data: dict,
+        dictionary of any precomputed quantities needed by this function.
 
     Returns
     -------
@@ -1832,7 +1839,9 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     # compute surface current, and store grid quantities
     # needed for integration in class
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = field.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
+    data = field.compute(
+        ["K", "x"], grid=surface_grid, basis="xyz", params=params, data=data
+    )
 
     _rs = xyz2rpz(data["x"])
     _K = xyz2rpz_vec(data["K"], phi=surface_grid.nodes[:, 2])

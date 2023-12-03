@@ -1371,9 +1371,10 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
         Name of the objective function.
     """
 
-    _coordinates = "rtz"
-    _units = "(m)"
+    _coordinates = ""
+    _units = ""
     _print_value_fmt = "Regularized Quadratic Flux: {:10.3e} "
+    _scalar = True
 
     def __init__(
         self,
@@ -1445,9 +1446,9 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
 
         # eval_grid.num_nodes for quad flux cost,
         # source_grid.num_nodes for the regularization cost
-        self._dim_f = source_grid.num_nodes + eval_grid.num_nodes
-        self._equil_data_keys = ["n_rho", "R", "phi", "Z"]
-        self._surface_data_keys = ["K", "x"]
+        self._dim_f = 1
+        self._equil_data_keys = ["n_rho", "R", "phi", "Z", "|e_theta x e_zeta}"]
+        self._surface_data_keys = ["K", "x", "|e_theta x e_zeta}"]
         # TODO: should check that G is set correctly
         # and is not an optimizable parameter?
         # since we know what G should be given the equilibrium.
@@ -1476,20 +1477,10 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
             has_axis=source_grid.axis.size,
         )
 
-        # compute returns points on the grid of the surface
-        # AND on plasma grid
-        # (so size source_grid.num_nodes + eval_grid.num_nodes)
-        # so set quad_weights to the concatenation of both
-        # to avoid it being incorrectly set to just the plasma_grid size
-        # in the super build
-        w = np.concatenate([eval_grid.weights, source_grid.weights])
-        w *= jnp.sqrt(w.size)
-
         self._constants = {
             "equil_transforms": equil_transforms,
             "equil_profiles": equil_profiles,
             "surface_transforms": surface_transforms,
-            "quad_weights": w,
         }
 
         timer.stop("Precomputing transforms")
@@ -1514,10 +1505,10 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
 
         Returns
         -------
-        f : ndarray, shape(source_grid.num_nodes + eval_grid.num_nodes ,)
-            concatenation of the quadratic flux on the plasma surface along
-            with the regularization term proportional to the surface current
-            density magnitude.
+        f : float
+            Sum of the quadratic flux integrated on the plasma surface along
+            with the regularization term times the surface current
+            density magnitude integrated over the source surface.
 
         """
         if constants is None:
@@ -1546,7 +1537,12 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
             data=surface_data,
         )
         Bn = jnp.sum(B * data["n_rho"], axis=-1)
+        chi_B = jnp.sum(Bn * Bn * data["|e_theta x e_zeta|"] * self._eval_grid.weights)
 
-        return jnp.concatenate(
-            (Bn**2, self._alpha * safenorm(surface_data["K"], axis=-1))
+        chi_K = jnp.sum(
+            safenorm(surface_data["K"], axis=-1) ** 2
+            * self._source_grid.weights
+            * surface_data["|e_theta x e_zeta|"]
         )
+
+        return chi_B + self._alpha * chi_K

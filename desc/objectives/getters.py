@@ -163,7 +163,7 @@ def get_fixed_boundary_constraints(
                     + " is given! Specify zeta2 !"
                 )
             constraints += (PoincareLambda(eq=eq, zeta=zeta2),)
-            print("Adding second Poincare Lambda")
+            print("Adding second BC Lambda")
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:

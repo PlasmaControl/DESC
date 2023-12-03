@@ -143,7 +143,6 @@ class Equilibrium(IOAble, Optimizable):
         "_Z_basis",
         "_L_basis",
         "_surface",
-        "_surface_2",
         "_axis",
         "_pressure",
         "_iota",
@@ -243,6 +242,7 @@ class Equilibrium(IOAble, Optimizable):
             self._surface_2, self._bdry_mode = parse_surface(
                 surface_2, self.NFP, self.sym, self.spectral_indexing
             )
+            self._io_attrs_ += "_surface_2"
         else:
             self._surface_2 = None
 

@@ -398,7 +398,7 @@ class SecondBoundaryRSelfConsistency(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = eq or self.things[0]
         modes = eq.surface_2.R_basis.modes
         self._dim_f = eq.surface_2.R_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
@@ -449,11 +449,10 @@ class SecondBoundaryRSelfConsistency(_Objective):
                     f"Zeta value must be 0 or pi. The given value is {self._zeta}"
                 )
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute boundary self consistency error."""
-        params, _ = self._parse_args(*args, **kwargs)
         return jnp.dot(self._A, params["R_lmn"]) - params["Rb2_lmn"]
 
 
@@ -644,7 +643,7 @@ class SecondBoundaryZSelfConsistency(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = eq or self.things[0]
         modes = eq.surface_2.Z_basis.modes
         self._dim_f = eq.surface_2.Z_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
@@ -695,11 +694,10 @@ class SecondBoundaryZSelfConsistency(_Objective):
                     f"Zeta value must be 0 or pi. The given value is {self._zeta}"
                 )
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute boundary self consistency error."""
-        params, _ = self._parse_args(*args, **kwargs)
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb2_lmn"]
 
 

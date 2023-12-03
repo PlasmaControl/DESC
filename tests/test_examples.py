@@ -1104,7 +1104,7 @@ def test_regcoil_axisym_and_ellipse_surface():
         source_grid_N=50,
         alpha=0,
         winding_surf=surf_winding,
-        show_plots=True,
+        show_plots=False,
         external_TF_fraction=0.5,
     )
     phi_mn_opt = surface_current_field.Phi_mn

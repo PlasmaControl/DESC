@@ -1122,7 +1122,10 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def surface_2(self):
         """Surface: Geometric surface defining boundary conditions."""
-        return self._surface_2
+        if isinstance(self._surface_2, ZernikeRZToroidalSection):
+            return self._surface_2
+        else:
+            return None
 
     @surface_2.setter
     def surface_2(self, new):

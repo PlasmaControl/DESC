@@ -469,6 +469,11 @@ class SumMagneticField(_MagneticField):
             grid = [None] * len(self._fields)
         if not isinstance(grid, (list, tuple)):
             grid = [grid]
+        if len(grid) != len(self._fields):
+            # ensure that if grid is shorter, that
+            # it is simply repeated so that zip
+            # does not terminate early
+            grid = grid * len(self._fields)
 
         B = 0
         for i, (field, g) in enumerate(zip(self._fields, grid)):

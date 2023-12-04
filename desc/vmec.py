@@ -1209,10 +1209,10 @@ class VMECIO:
         beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
         beta_vol[0] = 0.0
         beta_vol[1:] = 2 * mu_0 * p_half / half_grid.compress(data_half_grid["<|B|^2>"])
-        beta_vol.long_name = "2 * mu_0 * pressure / <|B|^2> on the half grid"
+        beta_vol.long_name = "2 * mu_0 * pressure / <|B|^2>, on half mesh"
         beta_vol.units = "None"
 
-        # betaxis = beta_vol at the axis
+        # betaxis = beta_vol at the magnetic axis
         betaxis = file.createVariable("betaxis", np.float64)
         betaxis[:] = (
             2 * mu_0 * p_full[0] / full_grid.compress(data_full_grid["<|B|^2>"])[0]

@@ -28,6 +28,7 @@ def field_trace_from_coilset(
     only_return_data=False,
     savename=None,
     external_TF=None,
+    grid=None,
 ):
     """Field line trace from coilset.
 
@@ -64,6 +65,15 @@ def field_trace_from_coilset(
     external_TF : _MagneticField, optional
         external magnetic field to include to trace with, in addition to
         the coilset's magnetic field, by default None
+    grid : Grid or list of Grids, optional
+        if passed in, should be a single grid (if external_TF is not passed in)
+        or, if external_TF is passed, should be a list of 2 grids [g_coil,g_external],
+        with g_coil being the grid to discretize the coilset with, and
+        g_external being the grid to discretize the external_TF with.
+        i.e. if external_TF is a SurfaceCurrentField, then g_external should
+        be a LinearGrid with nonzero M and N and an NFP equal to the field's NFP
+        if None is passed in for either, or if None is passed in for grid itself,
+        then default grids will be used
     Returns
     -------
     field_R  : ndarray, size [ntransits, Rs.size]
@@ -97,7 +107,7 @@ def field_trace_from_coilset(
     print("Beginning Field Line Integration")
 
     # integrate field lines
-    field_R, field_Z = field_line_integrate(rrr, zzz, phis, coils, grid=None)
+    field_R, field_Z = field_line_integrate(rrr, zzz, phis, coils, grid=grid)
 
     t_elapse = time.time() - t0
 

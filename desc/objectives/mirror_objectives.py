@@ -143,6 +143,7 @@ class FixEndCapR(_FixedObjective):
 
         # N modes and weight
         Nmodes = np.unique(modes[:, 2])
+        self._Nmodes = Nmodes
         num_Nmodes = Nmodes.shape[0]
         # if not isinstance(eq.R_basis, ChebyshevZernikeBasis):
         #     raise NotImplementedError("End Cap BC not implemented for this basis")
@@ -153,6 +154,7 @@ class FixEndCapR(_FixedObjective):
             idx_N[N] = idx_temp
         # LM modes
         LMmodes = np.unique(modes[:, :2], axis=0)
+        self._LMmodes = LMmodes
         num_LMmodes = LMmodes.shape[0]
         self._dim_f = num_LMmodes
         # build index for LM

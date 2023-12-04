@@ -57,4 +57,9 @@ from .linear_objectives import (
     FixSumModesZ,
     FixThetaSFL,
 )
+from .mirror_objectives import (
+    FixEndCapLambda,
+    FixEndCapR,
+    FixEndCapZ,
+)
 from .objective_funs import ObjectiveFunction

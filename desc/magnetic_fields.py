@@ -471,7 +471,7 @@ class SumMagneticField(_MagneticField):
             grid = [grid]
 
         B = 0
-        for i, field, g in enumerate(self._fields, grid):
+        for i, (field, g) in enumerate(zip(self._fields, grid)):
             B += field.compute_magnetic_field(
                 coords, params[i % len(params)], basis, grid=g
             )

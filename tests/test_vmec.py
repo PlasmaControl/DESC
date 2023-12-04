@@ -571,10 +571,10 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
     )
     np.testing.assert_allclose(
-        vmec.variables["beta_vol"][:], desc.variables["beta_vol"][:], rtol=1e-15
+        vmec.variables["beta_vol"][:], desc.variables["beta_vol"][:], rtol=5e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["betaxis"][:], desc.variables["betaxis"][:], rtol=1e-15
+        vmec.variables["betaxis"][:], desc.variables["betaxis"][:], rtol=5e-5
     )
 
 

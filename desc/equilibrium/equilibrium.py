@@ -11,7 +11,13 @@ from scipy.constants import mu_0
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import FourierZernikeBasis, fourier, zernike_radial, ChebyshevZernikeBasis, chebyshev_z
+from desc.basis import (
+    FourierZernikeBasis,
+    fourier,
+    zernike_radial,
+    ChebyshevZernikeBasis,
+    chebyshev_z,
+)
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
@@ -142,6 +148,7 @@ class Equilibrium(IOAble):
         "_N_grid",
         "_node_pattern",
         "_mirror",
+        "_length",
     ]
 
     def __init__(
@@ -167,6 +174,7 @@ class Equilibrium(IOAble):
         sym=None,
         spectral_indexing=None,
         mirror=False,
+        length=None,
         **kwargs,
     ):
         errorif(
@@ -263,8 +271,16 @@ class Equilibrium(IOAble):
         # bases
         if self._mirror:
             Basis = ChebyshevZernikeBasis
+            # need errorif for length
+            if length == None:
+                self._length = (
+                    self.R_lmn[self.R_basis.get_idx(L=0, M=0, N=0)] * np.pi * 2
+                )
+            else:
+                self._length = length
         else:
             Basis = FourierZernikeBasis
+            self._length = None
         self._R_basis = Basis(
             L=self.L,
             M=self.M,
@@ -1450,6 +1466,20 @@ class Equilibrium(IOAble):
             "M_grid": self.M_grid,
             "N_grid": self.N_grid,
         }
+
+    @property
+    def mirror(self):
+        """bool: whether is a mirror geometry, None when not a mirror"""
+        return self._mirror
+
+    @property
+    def length(self):
+        """float or None: length of the mirror"""
+        return self._length
+
+    @length.setter
+    def length(self, leng):
+        self._length = leng
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""

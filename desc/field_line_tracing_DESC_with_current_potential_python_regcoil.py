@@ -30,8 +30,8 @@ sys.path.insert(0, os.path.abspath("../"))
 def trace_from_curr_pot(  # noqa: C901 - FIXME: simplify this
     current_potential_field,
     eqname,
-    M=30,
-    N=30,
+    M=None,
+    N=None,
     alpha=0,
     ntransit=100,
     external_TF=None,

@@ -793,13 +793,15 @@ class VMECIO:
         # half grid quantities
         half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
         data_half_grid = eq.compute(
-            ["J", "|B|", "B_rho", "B_theta", "B_zeta", "sqrt(g)", "<|B|^2>"], grid=half_grid
+            ["J", "|B|", "B_rho", "B_theta", "B_zeta", "sqrt(g)", "<|B|^2>"],
+            grid=half_grid,
         )
 
         # full grid quantities
         full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
         data_full_grid = eq.compute(
-            ["J", "B_rho", "B_theta", "B_zeta", "J^theta*sqrt(g)"], grid=full_grid
+            ["J", "B_rho", "B_theta", "B_zeta", "J^theta*sqrt(g)", "<|B|^2>"],
+            grid=full_grid,
         )
 
         # Jacobian
@@ -1206,13 +1208,15 @@ class VMECIO:
         # beta_vol = 2 μ₀ p / ⟨|B|^2⟩
         beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
         beta_vol[0] = 0.0
-        beta_vol[1:] = 2 * mu_0 * p_half / data_half_grid["<|B|^2>"]
+        beta_vol[1:] = 2 * mu_0 * p_half / half_grid.compress(data_half_grid["<|B|^2>"])
         beta_vol.long_name = "2 * mu_0 * pressure / <|B|^2> on the half grid"
         beta_vol.units = "None"
 
         # betaxis = beta_vol at the axis
         betaxis = file.createVariable("betaxis", np.float64)
-        betaxis[:] = 2 * mu_0 * p_full[0] / data_full_grid["<|B|^2>"][0]
+        betaxis[:] = (
+            2 * mu_0 * p_full[0] / full_grid.compress(data_full_grid["<|B|^2>"])[0]
+        )
         betaxis.long_name = "2 * mu_0 * pressure / <|B|^2> on the magnetic axis"
         betaxis.units = "None"
 

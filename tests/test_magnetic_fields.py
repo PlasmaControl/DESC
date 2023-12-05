@@ -13,6 +13,7 @@ from desc.grid import LinearGrid
 from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
+    OmnigenousField,
     PoloidalMagneticField,
     ScalarPotentialField,
     SplineMagneticField,
@@ -475,3 +476,37 @@ class TestMagneticFields:
         asym_surf = FourierRZToroidalSurface(sym=False)
         with pytest.raises(AssertionError, match="sym"):
             Bnorm_from_file = read_BNORM_file(path, asym_surf, grid)
+
+    @pytest.mark.unit
+    def test_omnigenous_field_change_well_resolution(self):
+        """Test OmnigenousField.change_resolution() for the magnetic well."""
+        # magnetic well
+        L_well_old = 1
+        L_well_new = 2
+        M_well_old = 3
+        M_well_new = 6
+        NFP = 4
+        field = OmnigenousField(
+            L_well=L_well_old,
+            M_well=M_well_old,
+            L_shift=0,
+            M_shift=0,
+            N_shift=0,
+            NFP=NFP,
+            helicity=(0, NFP),
+            B_lm=np.array([0.9, 1.0, 1.1, 0.2, 0.05, -0.2]),
+        )
+        eta = np.linspace(-np.pi / 2, np.pi / 2, 101)
+        rho_axis = np.zeros_like(eta)
+        rho_half = np.ones_like(eta) * 0.5
+        rho_lcfs = np.ones_like(eta)
+        B_axis_lowres = field.compute_well(rho_axis, eta)
+        B_half_lowres = field.compute_well(rho_half, eta)
+        B_lcfs_lowres = field.compute_well(rho_lcfs, eta)
+        field.change_resolution(L_well=L_well_new, M_well=M_well_new)
+        B_axis_highres = field.compute_well(rho_axis, eta)
+        B_half_highres = field.compute_well(rho_half, eta)
+        B_lcfs_highres = field.compute_well(rho_lcfs, eta)
+        np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
+        np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
+        np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=3e-3)

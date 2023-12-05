@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+import scipy.linalg
 from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset
 
@@ -1758,6 +1759,8 @@ class OmnigenousField(Optimizable, IOAble):
             Number of field periods.
 
         """
+        old_L_well = self.L_well
+
         self._NFP = setdefault(NFP, self.NFP)
         self._L_well = setdefault(L_well, self.L_well)
         self._M_well = setdefault(M_well, self.M_well)
@@ -1765,23 +1768,41 @@ class OmnigenousField(Optimizable, IOAble):
         self._M_shift = setdefault(M_shift, self.M_shift)
         self._N_shift = setdefault(N_shift, self.N_shift)
 
+        # change well parameters and basis
+        rho = (  # Chebyshev-Gauss-Lobatto nodes
+            1
+            - np.cos(np.arange(old_L_well // 2, old_L_well + 1, 1) * np.pi / old_L_well)
+        ) / 2
+        nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
+
+        transform_fwd = self.well_basis.evaluate(nodes)
+        transform_rev = scipy.linalg.pinv(transform_fwd)
+        B_old = transform_fwd @ self.B_lm.reshape((old_L_well + 1, -1))
+
+        eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])
+        eta_new = np.linspace(0, jnp.pi / 2, num=self.M_well)
+
+        B_new = np.zeros((old_L_well + 1, self.M_well))
+        for i in range(old_L_well + 1):
+            B_new[i, :] = interp1d(eta_new, eta_old, B_old[i, :], method="monotonic-0")
+        B_lm_old = transform_rev @ B_new
+
         old_modes_well = self.well_basis.modes
-        old_modes_shift = self.shift_basis.modes
-
         self.well_basis.change_resolution(self.L_well)
-        self.shift_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="cos(t)"
-        )
 
-        self._x_lmn = copy_coeffs(self.x_lmn, old_modes_shift, self.shift_basis.modes)
-
-        old_well = self.B_lm.reshape((-1, self.M_well))
-        new_well = np.zeros((self.L_well + 1, self.M_well))
+        B_lm_new = np.zeros((self.L_well + 1, self.M_well))
         for j in range(self.M_well):
-            new_well[:, j] = copy_coeffs(
-                old_well[:, j], old_modes_well, self.well_basis.modes
+            B_lm_new[:, j] = copy_coeffs(
+                B_lm_old[:, j], old_modes_well, self.well_basis.modes
             )
-        self._B_lm = new_well.flatten()
+        self._B_lm = B_lm_new.flatten()
+
+        # change shift parameters and basis
+        old_modes_shift = self.shift_basis.modes
+        self.shift_basis.change_resolution(
+            self.L_shift, self.M_shift, self.N_shift, NFP=self.NFP, sym="cos(t)"
+        )
+        self._x_lmn = copy_coeffs(self.x_lmn, old_modes_shift, self.shift_basis.modes)
 
     # TODO: reuse compute function?
     def compute_well(self, rho, eta):

@@ -1431,6 +1431,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``legend``: bool, whether to show legend or not, False by default
 
     Returns
     -------
@@ -1597,7 +1598,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_fontsize,
         )
-        if label is not None and i == 0:
+        if label is not None and i == 0 and kwargs.pop("legend", False):
             ax[i].legend()
 
     _set_tight_layout(fig)

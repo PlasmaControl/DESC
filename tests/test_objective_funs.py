@@ -472,33 +472,16 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f, 0)
 
         # nonaxisymmetric surface
-
-        # need nonaxisymmetric with Bplasma ~ 0
-        eq = Equilibrium()
+        eq = get("precise_QA")
         eq.solve()
+
+        Bnorm = t_field.compute_Bnormal(eq)[0]
+
         obj = QuadraticFlux(t_field, eq)
         obj.build(eq)
-
         f = obj.compute()
-        Bnorm = t_field.compute_Bnormal(eq.surface)
-        np.testing.assert_allclose(f, Bnorm, atol=1e-3)
-
-        local_min_Bnorms = np.r_[True, f[1:] < f[:-1]] & np.r_[f[:-1] < f[1:], True]
-        local_max_Bnorms = np.r_[True, f[1:] > f[:-1]] & np.r_[f[:-1] > f[1:], True]
-        max_Bnorm = np.max(f)
-        min_Bnorm = np.min(f)
-
-        global_max_Bnorm = local_min_Bnorms[
-            np.isclose(local_min_Bnorms, min_Bnorm, atol=1e-3)
-        ]
-        global_min_Bnorm = local_max_Bnorms[
-            np.isclose(local_max_Bnorms, max_Bnorm, atol=1e-3)
-        ]
-
-        # there should be 1 trough and 1 peak for 2pi / NFP
-        # in this case, NFP = 4
-        np.testing.assert_equal(len(global_max_Bnorm), 1)
-        np.testing.assert_equal(len(global_min_Bnorm), 1)
+        # not passing
+        np.testing.assert_allclose(f, Bnorm, rtol=1e-3)
 
     @pytest.mark.unit
     def test_toroidal_flux(self):

@@ -579,7 +579,7 @@ class QuadraticFlux(_Objective):
         self._ext_field = ext_field
         self._field_grid = field_grid
         super().__init__(
-            things=eq,
+            things=[ext_field, eq],
             target=target,
             bounds=bounds,
             weight=weight,

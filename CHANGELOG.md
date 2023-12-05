@@ -1,6 +1,13 @@
 Changelog
 =========
 
+v0.10.3
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.10.2...v0.10.3)
+
+- Adds ``deriv_mode`` keyword argument to all ``Objective``s for specifying whether to
+use forward or reverse mode automatic differentiation.
 - Adds ``desc.compat.rescale`` for rescaling equilibria to a specified size and field
 strength.
  - Adds new keyword ``surface_fixed`` to ``PlasmaVesselDistance`` objective which says
@@ -14,7 +21,14 @@ the boundary surface produces self-intersecting surfaces. This can be disabled b
 passing `ensure_nested=False` when constructing the `Equilibrum`.
 - Adds `loss_function` argument to all `Objective`s for applying one of min/max/mean
 to objective function values (for targeting the average value of a profile, etc).
+- `Equilibrium.get_profile` now allows user to choose a profile type (power series, spline, etc)
 - Fixes a bug preventing linear objectives like `FixPressure` from being used as bounds.
+- Updates to tutorials and example scripts
+- `desc.interpolate` module has been deprecated in favor of the `interpax` package.
+- Utility functions like `desc.objectives.get_fixed_boundary_constraints` now no longer
+require the user to specify which profiles the equilibrium has, they will instead be
+inferred from the equilibrium argument.
+
 
 v0.10.2
 -------

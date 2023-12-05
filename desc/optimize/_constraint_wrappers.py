@@ -10,7 +10,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
-from desc.objectives.utils import combine_args, factorize_linear_constraints
+from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer, get_instance
 
 from .utils import compute_jac_scale, f_where_x
@@ -375,7 +375,7 @@ class ProximalProjection(ObjectiveFunction):
         Equilibrium constraint to enforce. Should be an ObjectiveFunction with one or
         more of the following objectives: {ForceBalance, CurrentDensity,
         RadialForceBalance, HelicalForceBalance}
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the objectives.
     verbose : int, optional
         Level of output.
@@ -389,7 +389,7 @@ class ProximalProjection(ObjectiveFunction):
         self,
         objective,
         constraint,
-        eq=None,
+        eq,
         verbose=1,
         perturb_options=None,
         solve_options=None,
@@ -421,9 +421,9 @@ class ProximalProjection(ObjectiveFunction):
         self._compiled = False
         self._eq = eq
 
-    def _set_state_vector(self):
+    def _set_eq_state_vector(self):
 
-        self._full_args = self._eq.optimizable_params.copy()
+        full_args = self._eq.optimizable_params.copy()
         self._args = self._eq.optimizable_params.copy()
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self._args.remove(arg)
@@ -435,11 +435,11 @@ class ProximalProjection(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(self._linear_constraints, self._objective)
+        ) = factorize_linear_constraints(self._linear_constraints, self._constraint)
 
         # dx/dc - goes from the full state to optimization variables
         dxdc = []
-        xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in self._full_args}
+        xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
         for arg in self._args:
             if arg not in ["Rb_lmn", "Zb_lmn"]:
@@ -447,25 +447,23 @@ class ProximalProjection(ObjectiveFunction):
                 dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
             if arg == "Rb_lmn":
                 c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
-                A = c.jac_unscaled(xz)["R_lmn"]
+                A = c.jac_unscaled(xz)[0]["R_lmn"]
                 Ainv = np.linalg.pinv(A)
                 dxdRb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
                 dxdc.append(dxdRb)
             if arg == "Zb_lmn":
                 c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
-                A = c.jac_unscaled(xz)["Z_lmn"]
+                A = c.jac_unscaled(xz)[0]["Z_lmn"]
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
         self._dxdc = np.hstack(dxdc)
 
-    def build(self, eq=None, use_jit=None, verbose=1):  # noqa: C901
+    def build(self, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
             Note: unused by this class, should pass to sub-objectives directly.
@@ -473,7 +471,7 @@ class ProximalProjection(ObjectiveFunction):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self._eq
         timer = Timer()
         timer.start("Proximal projection build")
 
@@ -494,8 +492,14 @@ class ProximalProjection(ObjectiveFunction):
         for constraint in self._linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)
 
-        self._objectives = combine_args(self._objective, self._constraint)
+        assert self._constraint.things == [
+            eq
+        ], "ProximalProjection can only handle constraints on the equilibrium."
+
+        self._objectives = [self._objective, self._constraint]
         self._set_things(self._all_things)
+
+        self._eq_idx = self.things.index(self._eq)
 
         self._dim_f = self._objective.dim_f
         if self._dim_f == 1:
@@ -503,13 +507,13 @@ class ProximalProjection(ObjectiveFunction):
         else:
             self._scalar = False
 
-        self._set_state_vector()
+        self._set_eq_state_vector()
         # history and caching
-        self._x_old = self.x(eq)
+        self._x_old = self.x(self.things)
         self._allx = [self._x_old]
-        self._allxopt = [self._objective.x(eq)]
-        self._allxeq = [self._constraint.x(eq)]
-        self.history = [[self._eq.params_dict]]
+        self._allxopt = [self._objective.x(*self.things)]
+        self._allxeq = [self._eq.pack_params(self._eq.params_dict)]
+        self.history = [[t.params_dict.copy() for t in self.things]]
 
         self._built = True
         timer.stop("Proximal projection build")
@@ -544,9 +548,21 @@ class ProximalProjection(ObjectiveFunction):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs_splits = np.cumsum([self._eq.dimensions[arg] for arg in self._args])
-        # kludge for now if things is only equilibrium
-        params = [{arg: xs for arg, xs in zip(self._args, jnp.split(x, xs_splits))}]
+        xs_splits = [t.dim_x for t in self.things]
+        xs_splits[self._eq_idx] = np.sum(
+            [self._eq.dimensions[arg] for arg in self._args]
+        )
+        xs_splits = np.cumsum(xs_splits)
+        xs = jnp.split(x, xs_splits)
+        params = []
+        for t, xi in zip(self.things, xs):
+            if t is self._eq:
+                xi_splits = np.cumsum([self._eq.dimensions[arg] for arg in self._args])
+                p = {arg: xis for arg, xis in zip(self._args, jnp.split(xi, xi_splits))}
+                params += [p]
+            else:
+                params += [t.unpack_params(xi)]
+
         if per_objective:
             params = self._unflatten(params)
         return params
@@ -556,14 +572,29 @@ class ProximalProjection(ObjectiveFunction):
         # TODO: also check resolution etc?
         things = things or self.things
         assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
-        # things for this is just the equilibrium
-        xs = [jnp.atleast_1d(things[0].params_dict[arg]) for arg in self._args]
+        xs = []
+        for t in self.things:
+            if t is self._eq:
+                xs += [
+                    jnp.concatenate(
+                        [jnp.atleast_1d(t.params_dict[arg]) for arg in self._args]
+                    )
+                ]
+            else:
+                xs += [t.pack_params(t.params_dict)]
+
         return jnp.concatenate(xs)
 
     @property
     def dim_x(self):
-        """int: Dimensional of the state vector."""
-        return sum(self._eq.dimensions[arg] for arg in self._args)
+        """int: Dimension of the state vector."""
+        s = 0
+        for t in self.things:
+            if t is self._eq:
+                s += sum(self._eq.dimensions[arg] for arg in self._args)
+            else:
+                s += t.dim_x
+        return s
 
     def compile(self, mode="lsq", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
@@ -604,8 +635,10 @@ class ProximalProjection(ObjectiveFunction):
         if xopt.size > 0 and xeq.size > 0:
             pass
         else:
-            x_dict = self.unpack_state(x, False)[0]
-            x_dict_old = self.unpack_state(self._x_old, False)[0]
+            x_list = self.unpack_state(x, False)
+            x_list_old = self.unpack_state(self._x_old, False)
+            x_dict = x_list[self._eq_idx]
+            x_dict_old = x_list_old[self._eq_idx]
             deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
             self._eq = self._eq.perturb(
                 objective=self._constraint,
@@ -618,22 +651,28 @@ class ProximalProjection(ObjectiveFunction):
                 constraints=self._linear_constraints,
                 **self._solve_options,
             )
-            xopt = self._objective.x(self._eq)
-            xeq = self._constraint.x(self._eq)
+            xeq = self._eq.pack_params(self._eq.params_dict)
+            x_list[self._eq_idx] = self._eq.params_dict.copy()
+            xopt = jnp.concatenate(
+                [t.pack_params(xi) for t, xi in zip(self.things, x_list)]
+            )
             self._allx.append(x)
             self._allxopt.append(xopt)
             self._allxeq.append(xeq)
 
         if store:
             self._x_old = x
-            xd = self._objective.unpack_state(xopt, False)[0]
-            self._eq.params_dict = xd
-            self.history.append([self._eq.params_dict])
+            x_list = self.unpack_state(x, False)
+            xeq_dict = self._eq.unpack_params(xeq)
+            self._eq.params_dict = xeq_dict
+            x_list[self._eq_idx] = xeq_dict
+            self.history.append(x_list)
             for con in self._linear_constraints:
                 if hasattr(con, "update_target"):
                     con.update_target(self._eq)
         else:
-            self._eq.params_dict = self.history[-1][0]
+            # reset to last good params
+            self._eq.params_dict = self.history[-1][self._eq_idx]
             for con in self._linear_constraints:
                 if hasattr(con, "update_target"):
                     con.update_target(self._eq)
@@ -763,6 +802,11 @@ class ProximalProjection(ObjectiveFunction):
         Fx = self._constraint.jac_scaled(xf, constants[1])
         Gx = self._objective.jac_scaled(xg, constants[0])
 
+        # f depends only on eq, g can depend on other things
+        # all the fancy projection/prox stuff only applies to eq dofs
+        # so we split Gx into parts that depend only on eq, and stuff on other things
+        Gxs = jnp.split(Gx, np.cumsum([t.dim_x for t in self.things]), axis=-1)
+        Gx = Gxs[self._eq_idx]
         # projections onto optimization space
         # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
@@ -778,7 +822,7 @@ class ProximalProjection(ObjectiveFunction):
         Gxh = Gx_reduced * wx
 
         cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
-        uf, sf, vtf = np.linalg.svd(Fxh, full_matrices=False)
+        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
         sf += sf[-1]  # add a tiny bit of regularization
         sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
         Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
@@ -786,7 +830,9 @@ class ProximalProjection(ObjectiveFunction):
         # TODO: make this more efficient for finite differences etc. Can probably
         # reduce the number of operations and tangents
         LHS = Gxh @ (Fxh_inv @ Fc) - Gc
-        return -LHS
+        # now add back in non-eq dofs
+        Gxs[self._eq_idx] = -LHS
+        return jnp.hstack(Gxs)
 
     def hess(self, x, constants=None):
         """Compute Hessian of the sum of squares of residuals.

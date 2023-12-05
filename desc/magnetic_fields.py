@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset
 
 from desc.backend import fori_loop, jit, jnp, odeint, sign
@@ -18,7 +19,6 @@ from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, _Grid
-from desc.interpolate import _approx_df, interp1d, interp2d, interp3d
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.transform import Transform
@@ -458,7 +458,7 @@ class SumMagneticField(_MagneticField):
             one entry for each component field.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
+        grid : list or tuple of Grid, int or None, optional
             Grid used to discretize MagneticField object if calculating
             B from biot savart. If an integer, uses that many equally spaced
             points.
@@ -472,10 +472,20 @@ class SumMagneticField(_MagneticField):
             params = [None] * len(self._fields)
         if isinstance(params, dict):
             params = [params]
+        if grid is None:
+            grid = [None] * len(self._fields)
+        if not isinstance(grid, (list, tuple)):
+            grid = [grid]
+        if len(grid) != len(self._fields):
+            # ensure that if grid is shorter, that
+            # it is simply repeated so that zip
+            # does not terminate early
+            grid = grid * len(self._fields)
+
         B = 0
-        for i, field in enumerate(self._fields):
+        for i, (field, g) in enumerate(zip(self._fields, grid)):
             B += field.compute_magnetic_field(
-                coords, params[i % len(params)], basis, grid=grid
+                coords, params[i % len(params)], basis, grid=g
             )
 
         return B
@@ -742,19 +752,19 @@ class SplineMagneticField(_MagneticField):
 
     def _approx_derivs(self, Bi):
         tempdict = {}
-        tempdict["fx"] = _approx_df(self._R, Bi, self._method, 0)
-        tempdict["fz"] = _approx_df(self._Z, Bi, self._method, 2)
-        tempdict["fxz"] = _approx_df(self._Z, tempdict["fx"], self._method, 2)
+        tempdict["fx"] = approx_df(self._R, Bi, self._method, 0)
+        tempdict["fz"] = approx_df(self._Z, Bi, self._method, 2)
+        tempdict["fxz"] = approx_df(self._Z, tempdict["fx"], self._method, 2)
         if self._axisym:
             tempdict["fy"] = jnp.zeros_like(tempdict["fx"])
             tempdict["fxy"] = jnp.zeros_like(tempdict["fx"])
             tempdict["fyz"] = jnp.zeros_like(tempdict["fx"])
             tempdict["fxyz"] = jnp.zeros_like(tempdict["fx"])
         else:
-            tempdict["fy"] = _approx_df(self._phi, Bi, self._method, 1)
-            tempdict["fxy"] = _approx_df(self._phi, tempdict["fx"], self._method, 1)
-            tempdict["fyz"] = _approx_df(self._Z, tempdict["fy"], self._method, 2)
-            tempdict["fxyz"] = _approx_df(self._Z, tempdict["fxy"], self._method, 2)
+            tempdict["fy"] = approx_df(self._phi, Bi, self._method, 1)
+            tempdict["fxy"] = approx_df(self._phi, tempdict["fx"], self._method, 1)
+            tempdict["fyz"] = approx_df(self._Z, tempdict["fy"], self._method, 2)
+            tempdict["fxyz"] = approx_df(self._Z, tempdict["fxy"], self._method, 2)
         if self._axisym:
             for key, val in tempdict.items():
                 tempdict[key] = val[:, 0, :]
@@ -1566,7 +1576,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
         """
         grid = grid or LinearGrid(
-            M=self._M_Phi * 3 + 1, N=self._N_Phi * 3 + 1, NFP=self.NFP
+            M=self._M_Phi * 4 + 1, N=self._N_Phi * 4 + 1, NFP=self.NFP
         )
         return _compute_magnetic_field_from_CurrentPotentialField(
             field=self, coords=coords, params=params, basis=basis, grid=grid

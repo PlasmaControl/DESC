@@ -553,17 +553,14 @@ def test_get_profile(DSHAPE_current):
     """Test getting/setting iota and current profiles."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     current0 = eq.current
-    iota1 = eq.get_profile("iota")
-    current1 = eq.get_profile("current")
-    eq._current = None
-    eq._iota = iota1
-    iota2 = eq.get_profile("iota")
-    current2 = eq.get_profile("current")
+    current1 = eq.get_profile("current", kind="power_series")
+    current2 = eq.get_profile("current", kind="spline")
+    current3 = eq.get_profile("current", kind="fourier_zernike")
 
-    np.testing.assert_allclose(iota1.params, iota2.params)
-    np.testing.assert_allclose(current1.params, current2.params)
     x = np.linspace(0, 1, 20)
-    np.testing.assert_allclose(current2(x), current0(x), rtol=1e-6, atol=1e-1)
+    np.testing.assert_allclose(current0(x), current1(x), rtol=1e-6, atol=1e-1)
+    np.testing.assert_allclose(current0(x), current2(x), rtol=1e-6, atol=1e-1)
+    np.testing.assert_allclose(current0(x), current3(x), rtol=1e-6, atol=1e-1)
 
 
 @pytest.mark.unit

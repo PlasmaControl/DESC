@@ -1,6 +1,7 @@
 """Base classes for objectives."""
 
 from abc import ABC, abstractmethod
+from functools import partial
 
 import numpy as np
 
@@ -27,9 +28,16 @@ class ObjectiveFunction(IOAble):
         List of objectives to be minimized.
     use_jit : bool, optional
         Whether to just-in-time compile the objectives and derivatives.
-    deriv_mode : {"batched", "looped"}
-        method for computing derivatives. "batched" is generally faster, "looped" may
-        use less memory.
+    deriv_mode : {"auto", "batched", "blocked", "looped"}
+        Method for computing Jacobian matrices. "batched" uses forward mode, applied to
+        the entire objective at once, and is generally the fastest for vector valued
+        objectives, though most memory intensive. "blocked" builds the Jacobian for each
+        objective separately, using each objective's preferred AD mode. Generally the
+        most efficient option when mixing scalar and vector valued objectives.
+        "looped" uses forward mode jacobian vector products in a loop to build the
+        Jacobian column by column. Generally the slowest, but most memory efficient.
+        "auto" defaults to "batched" if all sub-objectives are set to "fwd",
+        otherwise "blocked".
     verbose : int, optional
         Level of output.
 
@@ -37,14 +45,14 @@ class ObjectiveFunction(IOAble):
 
     _io_attrs_ = ["_objectives"]
 
-    def __init__(self, objectives, use_jit=True, deriv_mode="batched", verbose=1):
+    def __init__(self, objectives, use_jit=True, deriv_mode="auto", verbose=1):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
         assert all(
             isinstance(obj, _Objective) for obj in objectives
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
-        assert deriv_mode in {"batched", "looped"}
+        assert deriv_mode in {"auto", "batched", "looped", "blocked"}
 
         self._objectives = objectives
         self._use_jit = use_jit
@@ -54,7 +62,12 @@ class ObjectiveFunction(IOAble):
 
     def _set_derivatives(self):
         """Set up derivatives of the objective functions."""
-        if self._deriv_mode in {"batched", "looped"}:
+        if self._deriv_mode == "auto":
+            if all((obj._deriv_mode == "fwd") for obj in self.objectives):
+                self._deriv_mode = "batched"
+            else:
+                self._deriv_mode = "blocked"
+        if self._deriv_mode in {"batched", "looped", "blocked"}:
             self._grad = Derivative(self.compute_scalar, mode="grad")
             self._hess = Derivative(self.compute_scalar, mode="hess")
         if self._deriv_mode == "batched":
@@ -63,6 +76,36 @@ class ObjectiveFunction(IOAble):
         if self._deriv_mode == "looped":
             self._jac_scaled = Derivative(self.compute_scaled, mode="looped")
             self._jac_unscaled = Derivative(self.compute_unscaled, mode="looped")
+        if self._deriv_mode == "blocked":
+            # could also do something similar for grad and hess, but probably not
+            # worth it. grad is already super cheap to eval all at once, and blocked
+            # hess would only be block diag which may miss important interactions.
+
+            def jac_(op, x, constants=None):
+                if constants is None:
+                    constants = self.constants
+                xs_splits = np.cumsum([t.dim_x for t in self.things])
+                xs = jnp.split(x, xs_splits)
+                J = []
+                for obj, const in zip(self.objectives, constants):
+                    # get the xs that go to that objective
+                    xi = [x for x, t in zip(xs, self.things) if t in obj.things]
+                    Ji_ = getattr(obj, op)(
+                        *xi, constants=const
+                    )  # jac wrt to just those things
+                    Ji = []  # jac wrt all things
+                    for thing in self.things:
+                        if thing in obj.things:
+                            i = obj.things.index(thing)
+                            Ji += [Ji_[i]]
+                        else:
+                            Ji += [jnp.zeros((obj.dim_f, thing.dim_x))]
+                    Ji = jnp.hstack(Ji)
+                    J += [Ji]
+                return jnp.vstack(J)
+
+            self._jac_scaled = partial(jac_, "jac_scaled")
+            self._jac_unscaled = partial(jac_, "jac_unscaled")
 
     def jit(self):  # noqa: C901
         """Apply JIT to compute methods, or re-apply after updating self."""
@@ -75,77 +118,27 @@ class ObjectiveFunction(IOAble):
 
         self._use_jit = True
 
-        try:
-            del self.compute_scaled
-        except AttributeError:
-            pass
-        self.compute_scaled = jit(self.compute_scaled)
+        methods = [
+            "compute_scaled",
+            "compute_scaled_error",
+            "compute_unscaled",
+            "compute_scalar",
+            "jac_scaled",
+            "jac_unscaled",
+            "hess",
+            "grad",
+            "jvp_scaled",
+            "jvp_unscaled",
+            "vjp_scaled",
+            "vjp_unscaled",
+        ]
 
-        try:
-            del self.compute_scaled_error
-        except AttributeError:
-            pass
-        self.compute_scaled_error = jit(self.compute_scaled_error)
-
-        try:
-            del self.compute_unscaled
-        except AttributeError:
-            pass
-        self.compute_unscaled = jit(self.compute_unscaled)
-
-        try:
-            del self.compute_scalar
-        except AttributeError:
-            pass
-        self.compute_scalar = jit(self.compute_scalar)
-
-        try:
-            del self.jac_scaled
-        except AttributeError:
-            pass
-        self.jac_scaled = jit(self.jac_scaled)
-
-        try:
-            del self.jac_unscaled
-        except AttributeError:
-            pass
-        self.jac_unscaled = jit(self.jac_unscaled)
-
-        try:
-            del self.hess
-        except AttributeError:
-            pass
-        self.hess = jit(self.hess)
-
-        try:
-            del self.grad
-        except AttributeError:
-            pass
-        self.grad = jit(self.grad)
-
-        try:
-            del self.jvp_scaled
-        except AttributeError:
-            pass
-        self.jvp_scaled = jit(self.jvp_scaled)
-
-        try:
-            del self.jvp_unscaled
-        except AttributeError:
-            pass
-        self.jvp_unscaled = jit(self.jvp_unscaled)
-
-        try:
-            del self.vjp_scaled
-        except AttributeError:
-            pass
-        self.vjp_scaled = jit(self.vjp_scaled)
-
-        try:
-            del self.vjp_unscaled
-        except AttributeError:
-            pass
-        self.vjp_unscaled = jit(self.vjp_unscaled)
+        for method in methods:
+            try:
+                delattr(self, method)
+            except AttributeError:
+                pass
+            setattr(self, method, jit(getattr(self, method)))
 
         for obj in self._objectives:
             if obj._use_jit:
@@ -733,6 +726,11 @@ class _Objective(IOAble, ABC):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     name : str, optional
         Name of the objective function.
 
@@ -751,6 +749,7 @@ class _Objective(IOAble, ABC):
         "_normalize",
         "_normalize_target",
         "_normalization",
+        "_deriv_mode",
     ]
 
     def __init__(
@@ -762,6 +761,7 @@ class _Objective(IOAble, ABC):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         name=None,
     ):
 
@@ -773,6 +773,7 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert loss_function in [None, "mean", "min", "max"]
+        assert deriv_mode in {"auto", "fwd", "rev"}
 
         self._target = target
         self._bounds = bounds
@@ -780,6 +781,7 @@ class _Objective(IOAble, ABC):
         self._normalize = normalize
         self._normalize_target = normalize_target
         self._normalization = 1
+        self._deriv_mode = deriv_mode
         self._name = name
         self._use_jit = None
         self._built = False
@@ -794,62 +796,43 @@ class _Objective(IOAble, ABC):
 
     def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""
-        self._grad = Derivative(self.compute_scalar, mode="grad")
-        self._hess = Derivative(self.compute_scalar, mode="hess")
-        self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
-        self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
+        argnums = tuple(range(len(self.things)))
+        # derivatives return tuple, one for each thing
+        self._grad = Derivative(self.compute_scalar, argnums, mode="grad")
+        self._hess = Derivative(self.compute_scalar, argnums, mode="hess")
+        if self._deriv_mode == "auto":
+            # choose based on shape of jacobian
+            self._deriv_mode = (
+                "fwd" if self.dim_f >= sum(t.dim_x for t in self.things) else "rev"
+            )
+        self._jac_scaled = Derivative(
+            self.compute_scaled, argnums, mode=self._deriv_mode
+        )
+        self._jac_unscaled = Derivative(
+            self.compute_unscaled, argnums, mode=self._deriv_mode
+        )
 
     def jit(self):  # noqa: C901
         """Apply JIT to compute methods, or re-apply after updating self."""
         self._use_jit = True
 
-        try:
-            del self.compute_scaled
-        except AttributeError:
-            pass
-        self.compute_scaled = jit(self.compute_scaled)
+        methods = [
+            "compute_scaled",
+            "compute_scaled_error",
+            "compute_unscaled",
+            "compute_scalar",
+            "jac_scaled",
+            "jac_unscaled",
+            "hess",
+            "grad",
+        ]
 
-        try:
-            del self.compute_scaled_error
-        except AttributeError:
-            pass
-        self.compute_scaled_error = jit(self.compute_scaled_error)
-
-        try:
-            del self.compute_unscaled
-        except AttributeError:
-            pass
-        self.compute_unscaled = jit(self.compute_unscaled)
-
-        try:
-            del self.compute_scalar
-        except AttributeError:
-            pass
-        self.compute_scalar = jit(self.compute_scalar)
-
-        try:
-            del self.jac_scaled
-        except AttributeError:
-            pass
-        self.jac_scaled = jit(self.jac_scaled)
-
-        try:
-            del self.jac_unscaled
-        except AttributeError:
-            pass
-        self.jac_unscaled = jit(self.jac_unscaled)
-
-        try:
-            del self.hess
-        except AttributeError:
-            pass
-        self.hess = jit(self.hess)
-
-        try:
-            del self.grad
-        except AttributeError:
-            pass
-        self.grad = jit(self.grad)
+        for method in methods:
+            try:
+                delattr(self, method)
+            except AttributeError:
+                pass
+            setattr(self, method, jit(getattr(self, method)))
 
     def _check_dimensions(self):
         """Check that len(target) = len(bounds) = len(weight) = dim_f."""
@@ -908,8 +891,18 @@ class _Objective(IOAble, ABC):
     def compute(self, *args, **kwargs):
         """Compute the objective function."""
 
+    def _maybe_array_to_params(self, *args):
+        argsout = tuple()
+        for arg, thing in zip(args, self.things):
+            if isinstance(arg, (np.ndarray, jnp.ndarray)):
+                argsout += (thing.unpack_params(arg),)
+            else:
+                argsout += (arg,)
+        return argsout
+
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
+        args = self._maybe_array_to_params(*args)
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
@@ -917,6 +910,7 @@ class _Objective(IOAble, ABC):
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
+        args = self._maybe_array_to_params(*args)
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
@@ -924,6 +918,7 @@ class _Objective(IOAble, ABC):
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
+        args = self._maybe_array_to_params(*args)
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)

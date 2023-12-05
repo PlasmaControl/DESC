@@ -686,7 +686,7 @@ class Equilibrium(IOAble, Optimizable):
             )
             return surface
 
-    def get_profile(self, name, grid=None, **kwargs):
+    def get_profile(self, name, grid=None, kind="spline", **kwargs):
         """Return a SplineProfile of the desired quantity.
 
         Parameters
@@ -696,6 +696,8 @@ class Equilibrium(IOAble, Optimizable):
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
             Note profile will only be a function of the radial coordinate.
+        kind : {"power_series", "spline", "fourier_zernike"}
+            Type of returned profile.
 
         Returns
         -------
@@ -703,12 +705,19 @@ class Equilibrium(IOAble, Optimizable):
             Radial profile of the desired quantity.
 
         """
+        assert kind in {"power_series", "spline", "fourier_zernike"}
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
-        x = data[name]
-        x = grid.compress(x, surface_label="rho")
-        return SplineProfile(x, grid.nodes[grid.unique_rho_idx, 0], name=name)
+        f = data[name]
+        f = grid.compress(f, surface_label="rho")
+        x = grid.nodes[grid.unique_rho_idx, 0]
+        p = SplineProfile(f, x, name=name)
+        if kind == "power_series":
+            p = p.to_powerseries(order=min(self.L, len(x)), xs=x, sym=True)
+        if kind == "fourier_zernike":
+            p = p.to_fourierzernike(L=min(self.L, len(x)), xs=x)
+        return p
 
     def get_axis(self):
         """Return a representation for the magnetic axis.
@@ -1761,6 +1770,7 @@ class Equilibrium(IOAble, Optimizable):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
+            copy=copy,
         )
 
         return things[0], result

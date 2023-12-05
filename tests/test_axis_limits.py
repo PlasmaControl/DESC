@@ -20,6 +20,9 @@ from desc.grid import LinearGrid
 # d²ψ/(dρ)² and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
 # Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
 zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
+# "current Redl" needs special treatment because it is generally not defined for all
+# configurations (giving NaN values), except it is always 0 at the magnetic axis
+not_continuous_limits = {"current Redl"}
 not_finite_limits = {
     "D_Mercier",
     "D_geodesic",
@@ -57,8 +60,6 @@ not_finite_limits = {
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
-    "iota_num_rrr",
-    "iota_den_rrr",
     "D_current",
     "e^rho_rr",
     "e^theta_rr",
@@ -78,7 +79,29 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
+    "iota_num_rrr",
+    "iota_den_rrr",
 }
+
+
+def add_all_aliases(names):
+    """Add aliases to limits."""
+    all_aliases = []
+    for name in names:
+        for base_class in data_index.keys():
+            if name in data_index[base_class].keys():
+                all_aliases.append(data_index[base_class][name]["aliases"])
+
+    # flatten
+    all_aliases = [name for sublist in all_aliases for name in sublist]
+    names.update(all_aliases)
+
+    return names
+
+
+zero_limits = add_all_aliases(zero_limits)
+not_finite_limits = add_all_aliases(not_finite_limits)
+not_implemented_limits = add_all_aliases(not_implemented_limits)
 
 
 def grow_seeds(
@@ -194,7 +217,9 @@ def assert_is_continuous(
 
     p = "desc.equilibrium.equilibrium.Equilibrium"
     for name in names:
-        if name in not_finite_limits:
+        if name in not_continuous_limits:
+            continue
+        elif name in not_finite_limits:
             assert (np.isfinite(data[name]).T != axis).all(), name
             continue
         else:

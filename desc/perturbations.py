@@ -207,25 +207,25 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     tangents = jnp.zeros((eq.dim_x,))
     if "Rb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.jac_unscaled(xz)["R_lmn"]
+        A = con.jac_unscaled(xz)[0]["R_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Rb_lmn"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["R_lmn"]] @ Ainv @ dc
     if "Zb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.jac_unscaled(xz)["Z_lmn"]
+        A = con.jac_unscaled(xz)[0]["Z_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Zb_lmn"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
     if "Ra_n" in deltas.keys():
         con = get_instance(constraints, AxisRSelfConsistency)
-        A = con.jac_unscaled(xz)["R_lmn"]
+        A = con.jac_unscaled(xz)[0]["R_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Ra_n"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["R_lmn"]] @ Ainv @ dc
     if "Za_n" in deltas.keys():
         con = get_instance(constraints, AxisZSelfConsistency)
-        A = con.jac_unscaled(xz)["Z_lmn"]
+        A = con.jac_unscaled(xz)[0]["Z_lmn"]
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Za_n"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
@@ -543,9 +543,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         print("Number of objectives: {}".format(objective_g.dim_f))
 
     # FIXME: generalize to other constraints
-    constraints = get_fixed_boundary_constraints(
-        eq=eq, iota=eq.iota is not None, kinetic=eq.electron_temperature is not None
-    )
+    constraints = get_fixed_boundary_constraints(eq=eq)
     constraints = maybe_add_self_consistency(eq=eq, constraints=constraints)
     for con in constraints:
         if not con.built:
@@ -586,13 +584,13 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             dxdc.append(jnp.eye(eq.dim_x)[:, x_idx])
         if arg == "Rb_lmn":
             con = get_instance(constraints, BoundaryRSelfConsistency)
-            A = con.jac_unscaled(xz)["R_lmn"]
+            A = con.jac_unscaled(xz)[0]["R_lmn"]
             Ainv = jnp.linalg.pinv(A)
             dxdRb = jnp.eye(eq.dim_x)[:, eq.x_idx["R_lmn"]] @ Ainv
             dxdc.append(dxdRb)
         if arg == "Zb_lmn":
             con = get_instance(constraints, BoundaryZSelfConsistency)
-            A = con.jac_unscaled(xz)["Z_lmn"]
+            A = con.jac_unscaled(xz)[0]["Z_lmn"]
             Ainv = jnp.linalg.pinv(A)
             dxdZb = jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv
             dxdc.append(dxdZb)

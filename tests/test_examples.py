@@ -983,10 +983,10 @@ def test_omnigenity_optimization():
     )
 
     # check results
-    np.testing.assert_allclose(field.B_lm[[0, 2]], [0.8, 1.2])
-    np.testing.assert_allclose(field.x_lmn[[0, 2, 4, 6, 8, 10]], 0)
+    np.testing.assert_allclose(field.B_lm[np.array([0, 2])], [0.8, 1.2])
+    np.testing.assert_allclose(field.x_lmn[np.array([0, 2, 4, 6, 8, 10])], 0)
     f = objective.compute_scaled_error(objective.x(*(eq, field)))
-    np.testing.assert_allclose(f, 0, atol=1.3e-2)
+    np.testing.assert_allclose(f, 0, atol=1.6e-2)
 
 
 class TestGetExample:

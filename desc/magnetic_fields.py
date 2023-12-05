@@ -1841,10 +1841,14 @@ class OmnigenousField(Optimizable, IOAble):
 
         # helicity matrix
         M, N = self.helicity
-        matrix = np.where(
+        matrix = jnp.where(
             M == 0,
-            np.array([N - M * iota, iota / N, 0, 1 / N]),
-            np.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),
+            jnp.array([N, iota / N, 0, 1 / N]),  # OP
+            jnp.where(
+                N == 0,
+                jnp.array([0, -1, M, -1 / iota]),  # OT
+                jnp.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),  # OH
+            ),
         ).reshape((2, 2))
 
         # evaluate h(rho,eta,alpha)

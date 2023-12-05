@@ -1,4 +1,4 @@
-"""Compute functions for quasisymmetry objectives.
+"""Compute functions for omnigenity objectives.
 
 Notes
 -----
@@ -10,9 +10,9 @@ expensive computations.
 """
 
 import numpy as np
+from interpax import interp1d
 
 from desc.backend import jnp, put, sign
-from desc.interpolate import interp1d
 
 from .data_index import register_compute_fun
 from .utils import cross, dot

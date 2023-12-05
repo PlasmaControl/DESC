@@ -845,10 +845,25 @@ def test_omnigenity_qa():
         NFP=eq.NFP,
         helicity=(1, 0),
     )
+
+    eq_axis_grid = LinearGrid(rho=1e-2, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+
+    field_axis_grid = LinearGrid(
+        rho=1e-2, theta=2 * field.M_well, N=2 * field.N_shift, NFP=field.NFP, sym=False
+    )
+    field_lcfs_grid = LinearGrid(
+        rho=1.0, theta=2 * field.M_well, N=2 * field.N_shift, NFP=field.NFP, sym=False
+    )
+
     objective = ObjectiveFunction(
         (
-            Omnigenity(field=field, eq=eq, rho=1e-2),
-            Omnigenity(field=field, eq=eq, rho=1.0),
+            Omnigenity(
+                field=field, eq=eq, eq_grid=eq_axis_grid, field_grid=field_axis_grid
+            ),
+            Omnigenity(
+                field=field, eq=eq, eq_grid=eq_lcfs_grid, field_grid=field_lcfs_grid
+            ),
         )
     )
     constraints = (
@@ -922,10 +937,15 @@ def test_omnigenity_optimization():
         helicity=(0, eq.NFP),
         B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),
     )
-    grid_eq_half = LinearGrid(rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
-    grid_eq_lcfs = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
-    grid_field_half = LinearGrid(rho=0.5, theta=16, zeta=8, NFP=field.NFP, sym=False)
-    grid_field_lcfs = LinearGrid(rho=1.0, theta=16, zeta=8, NFP=field.NFP, sym=False)
+    eq_half_grid = LinearGrid(rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+
+    field_half_grid = LinearGrid(
+        rho=0.5, theta=2 * field.M_well, N=2 * field.N_shift, NFP=field.NFP, sym=False
+    )
+    field_lcfs_grid = LinearGrid(
+        rho=1.0, theta=2 * field.M_well, N=2 * field.N_shift, NFP=field.NFP, sym=False
+    )
     objective = ObjectiveFunction(
         (
             GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
@@ -933,15 +953,15 @@ def test_omnigenity_optimization():
             Omnigenity(
                 field=field,
                 eq=eq,
-                grid_eq=grid_eq_half,
-                grid_field=grid_field_half,
+                eq_grid=eq_half_grid,
+                field_grid=field_half_grid,
                 well_weight=2,
             ),
             Omnigenity(
                 field=field,
                 eq=eq,
-                grid_eq=grid_eq_lcfs,
-                grid_field=grid_field_lcfs,
+                eq_grid=eq_lcfs_grid,
+                field_grid=field_lcfs_grid,
                 well_weight=2,
             ),
         )

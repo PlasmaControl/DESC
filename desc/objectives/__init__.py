@@ -66,5 +66,6 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    LinearObjectiveFromUser,
 )
 from .objective_funs import ObjectiveFunction

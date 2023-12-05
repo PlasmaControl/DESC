@@ -284,7 +284,7 @@ class LinearObjectiveFromUser(_FixedObjective):
 
         import jax
 
-        self._dim_f = self._dim_f = jax.eval_shape(self._fun, thing.params_dict).size
+        self._dim_f = jax.eval_shape(self._fun, thing.params_dict).size
 
         super().build(use_jit=use_jit, verbose=verbose)
 

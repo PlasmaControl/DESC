@@ -18,6 +18,7 @@ from desc.basis import (
     zernike_radial,
     zernike_radial_coeffs,
 )
+from desc.geometry import ZernikeRZToroidalSection
 from desc.utils import errorif, setdefault
 
 from .normalization import compute_scaling_factors
@@ -342,120 +343,6 @@ class BoundaryRSelfConsistency(_Objective):
         return jnp.dot(self._A, params["R_lmn"]) - params["Rb_lmn"]
 
 
-class SecondBoundaryRSelfConsistency(_Objective):
-    """Ensure that the second boundary and interior surfaces are self-consistent.
-
-    Note: this constraint is automatically applied when needed, if there is a
-    second boundary defined, and does not need to be included by the user.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
-    surface_label : float, optional
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
-    name : str, optional
-        Name of the objective function.
-
-    """
-
-    _scalar = False
-    _linear = True
-    _fixed = False
-    _units = "(m)"
-    _print_value_fmt = "Second R boundary self consistency error: {:10.3e} "
-
-    def __init__(
-        self,
-        eq=None,
-        surface_label=None,
-        name="self_consistency second R",
-        zeta=0,
-    ):
-        self._zeta = zeta
-        self._surface_label = surface_label
-        self._args = ["R_lmn", "Rb2_lmn"]
-        super().__init__(
-            things=eq,
-            target=0,
-            bounds=None,
-            weight=1,
-            normalize=False,
-            normalize_target=False,
-            name=name,
-        )
-
-    def build(self, eq=None, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = eq or self.things[0]
-        modes = eq.surface_2.R_basis.modes
-        self._dim_f = eq.surface_2.R_basis.num_modes
-        self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
-
-        if eq.bdry_mode == "lcfs":
-            for i, (l, m, n) in enumerate(eq.R_basis.modes):
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
-        elif eq.bdry_mode == "poincare":
-            if self._zeta == 0:
-                for i, (l, m, n) in enumerate(modes):
-                    j = np.argwhere(
-                        np.logical_and(
-                            (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                            eq.R_basis.modes[:, 2] >= 0,
-                        )
-                    )
-                    self._A[i, j] = 1
-            elif self._zeta == np.pi:
-                for i, (l, m, n) in enumerate(modes):
-                    j1 = np.argwhere(
-                        np.logical_and(
-                            np.logical_and(
-                                (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                                eq.R_basis.modes[:, 2] % 2 == 1,
-                            ),
-                            eq.R_basis.modes[:, 2] >= 0,
-                        )
-                    )
-                    j2 = np.argwhere(
-                        np.logical_and(
-                            np.logical_and(
-                                (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                                eq.R_basis.modes[:, 2] % 2 == 0,
-                            ),
-                            eq.R_basis.modes[:, 2] >= 0,
-                        )
-                    )
-                    self._A[i, j1] = -1
-                    self._A[i, j2] = 1
-            else:
-                raise ValueError(
-                    f"Zeta value must be 0 or pi. The given value is {self._zeta}"
-                )
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute boundary self consistency error."""
-        return jnp.dot(self._A, params["R_lmn"]) - params["Rb2_lmn"]
-
-
 class BoundaryZSelfConsistency(_Objective):
     """Ensure that the boundary and interior surfaces are self consistent.
 
@@ -587,11 +474,123 @@ class BoundaryZSelfConsistency(_Objective):
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 
 
-class SecondBoundaryZSelfConsistency(_Objective):
-    """Ensure that the boundary and interior surfaces are self consistent.
+class BoundaryLambdaSelfConsistency(_FixedObjective):
+    """Enforces lambda values at zeta=0 XS (i.e. prescribes the SFL angle vartheta).
 
-    Note: this constraint is automatically applied when needed, and does not need to be
-    included by the user.
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Value to fix lambda to at rho=0 and (theta=0,zeta=0)
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    name : str
+        Name of the objective function.
+    """
+
+    _target_arg = "L_lmn"
+    _units = "(dimensionless)"
+    _print_value_fmt = "Lambda boundary self consistency error: {:10.3e}"
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        name="poincare lambda",
+        zeta=0,
+    ):
+        self._zeta = zeta
+        self._args = ["L_lmn"]
+        super().__init__(
+            things=eq, target=target, bounds=bounds, weight=weight, name=name
+        )
+
+    def build(self, eq=None, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        eq = eq or self.things[0]
+        L_modes = eq.L_basis.modes
+        dim_L = eq.L_basis.num_modes
+
+        if (
+            self.target is None
+        ):  # uses current eq's value of lambda at specified zeta as constraint
+            Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
+                eq.L_lmn,
+                eq.L_basis,
+                zeta=self._zeta,
+            )  # Currently this method doesn't support 2 different Poincare BC
+            Lb_modes = Lb_basis.modes
+            self._dim_f = Lb_basis.num_modes
+            self.target = Lb_lmn
+
+        self._A = np.zeros((self._dim_f, dim_L))
+
+        if self._zeta == 0:
+            for i, (l, m, n) in enumerate(Lb_modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        (L_modes[:, :-1] == [l, m]).all(axis=1),
+                        L_modes[:, 2] >= 0,
+                    )
+                )
+                self._A[i, j] = 1
+        elif self._zeta == np.pi:
+            for i, (l, m, n) in enumerate(Lb_modes):
+                j1 = np.argwhere(
+                    np.logical_and(
+                        np.logical_and(
+                            (L_modes[:, :-1] == [l, m]).all(axis=1),
+                            L_modes[:, 2] % 2 == 1,
+                        ),
+                        L_modes[:, 2] >= 0,
+                    )
+                )
+                j2 = np.argwhere(
+                    np.logical_and(
+                        np.logical_and(
+                            (L_modes[:, :-1] == [l, m]).all(axis=1),
+                            L_modes[:, 2] % 2 == 0,
+                        ),
+                        L_modes[:, 2] >= 0,
+                    )
+                )
+                self._A[i, j1] = -1
+                self._A[i, j2] = 1
+        else:
+            raise ValueError(
+                f"Unvalid zeta value! Only 0 or pi is supported! zeta ={self._zeta}"
+                + "is given!"
+            )
+
+        if self.target is not None:
+            self._dim_f = self._A.shape[0]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute deviation from desired boundary."""
+        return jnp.dot(self._A, params["L_lmn"])
+
+
+class SecondBoundaryRSelfConsistency(_Objective):
+    """Ensure that the second boundary and interior surfaces are self-consistent.
 
     Parameters
     ----------
@@ -608,18 +607,25 @@ class SecondBoundaryZSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(m)"
-    _print_value_fmt = "Second Z boundary self consistency error: {:10.3e} "
+    _print_value_fmt = "Second R boundary self consistency error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         surface_label=None,
-        name="self_consistency second Z",
+        name="self_consistency second R",
         zeta=0,
+        surface=None,
     ):
+        if isinstance(surface, ZernikeRZToroidalSection):
+            self._surface = surface
+        else:
+            raise TypeError(
+                "Second surface has to be defined as ZernikeRZToroidalSection"
+            )
         self._zeta = zeta
         self._surface_label = surface_label
-        self._args = ["Z_lmn", "Zb2_lmn"]
+        self._args = ["R_lmn"]
         super().__init__(
             things=eq,
             target=0,
@@ -644,20 +650,122 @@ class SecondBoundaryZSelfConsistency(_Objective):
 
         """
         eq = eq or self.things[0]
-        modes = eq.surface_2.Z_basis.modes
-        self._dim_f = eq.surface_2.Z_basis.num_modes
+        modes = self._surface.R_basis.modes
+        self._dim_f = self._surface.R_basis.num_modes
+        self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+
+        if eq.bdry_mode == "poincare":
+            if self._zeta == 0:
+                for i, (l, m, n) in enumerate(modes):
+                    j = np.argwhere(
+                        np.logical_and(
+                            (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                            eq.R_basis.modes[:, 2] >= 0,
+                        )
+                    )
+                    self._A[i, j] = 1
+            elif self._zeta == np.pi:
+                for i, (l, m, n) in enumerate(modes):
+                    j1 = np.argwhere(
+                        np.logical_and(
+                            np.logical_and(
+                                (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                                eq.R_basis.modes[:, 2] % 2 == 1,
+                            ),
+                            eq.R_basis.modes[:, 2] >= 0,
+                        )
+                    )
+                    j2 = np.argwhere(
+                        np.logical_and(
+                            np.logical_and(
+                                (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                                eq.R_basis.modes[:, 2] % 2 == 0,
+                            ),
+                            eq.R_basis.modes[:, 2] >= 0,
+                        )
+                    )
+                    self._A[i, j1] = -1
+                    self._A[i, j2] = 1
+            else:
+                raise ValueError(
+                    f"Zeta value must be 0 or pi. The given value is {self._zeta}"
+                )
+        else:
+            raise ValueError("Boundary mode must be Poincare for this constraint")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute boundary self consistency error."""
+        return jnp.dot(self._A, params["R_lmn"]) - self._surface.R_lmn
+
+
+class SecondBoundaryZSelfConsistency(_Objective):
+    """Ensure that the boundary and interior surfaces are self consistent.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    surface_label : float, optional
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Second Z boundary self consistency error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        surface_label=None,
+        name="self_consistency second Z",
+        zeta=0,
+        surface=None,
+    ):
+        if isinstance(surface, ZernikeRZToroidalSection):
+            self._surface = surface
+        else:
+            raise TypeError(
+                "Second surface has to be defined as ZernikeRZToroidalSection"
+            )
+        self._zeta = zeta
+        self._surface_label = surface_label
+        self._args = ["Z_lmn"]
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, eq=None, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self.things[0]
+        modes = self._surface.Z_basis.modes
+        self._dim_f = self._surface.Z_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
 
-        if eq.bdry_mode == "lcfs":
-            for i, (l, m, n) in enumerate(eq.Z_basis.modes):
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
-        elif eq.bdry_mode == "poincare":
+        if eq.bdry_mode == "poincare":
             if self._zeta == 0:
                 for i, (l, m, n) in enumerate(modes):
                     j = np.argwhere(
@@ -693,12 +801,131 @@ class SecondBoundaryZSelfConsistency(_Objective):
                 raise ValueError(
                     f"Zeta value must be 0 or pi. The given value is {self._zeta}"
                 )
+        else:
+            raise ValueError("Boundary mode must be Poincare for this constraint")
 
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute boundary self consistency error."""
-        return jnp.dot(self._A, params["Z_lmn"]) - params["Zb2_lmn"]
+        return jnp.dot(self._A, params["Z_lmn"]) - self._surface.Z_lmn
+
+
+class SecondBoundaryLambdaSelfConsistency(_FixedObjective):
+    """Enforces lambda values at given second zeta XS.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Value to fix lambda to at rho=0 and (theta=0,zeta=0)
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    name : str
+        Name of the objective function.
+    """
+
+    _target_arg = "L_lmn"
+    _units = "(dimensionless)"
+    _print_value_fmt = "Second Lambda boundary self consistency error: {:10.3e}"
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        name="Second Poincare lambda",
+        zeta=0,
+        Lb2_lmn=None,
+        Lb2_basis=None,
+    ):
+        self._Lb2_lmn = Lb2_lmn
+        self._Lb2_basis = Lb2_basis
+        self._zeta = zeta
+        self._args = ["L_lmn"]
+        super().__init__(
+            things=eq, target=target, bounds=bounds, weight=weight, name=name
+        )
+
+    def build(self, eq=None, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        eq = eq or self.things[0]
+        L_modes = eq.L_basis.modes
+        dim_L = eq.L_basis.num_modes
+
+        if self.target is None:
+            Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
+                self._Lb2_lmn,
+                self._Lb2_basis,
+                zeta=self._zeta,
+            )
+            Lb_modes = Lb_basis.modes
+            self._dim_f = Lb_basis.num_modes
+            self.target = Lb_lmn
+
+        self._A = np.zeros((self._dim_f, dim_L))
+
+        if self._zeta == 0:
+            for i, (l, m, n) in enumerate(Lb_modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        (L_modes[:, :-1] == [l, m]).all(axis=1),
+                        L_modes[:, 2] >= 0,
+                    )
+                )
+                self._A[i, j] = 1
+        elif self._zeta == np.pi:
+            for i, (l, m, n) in enumerate(Lb_modes):
+                j1 = np.argwhere(
+                    np.logical_and(
+                        np.logical_and(
+                            (L_modes[:, :-1] == [l, m]).all(axis=1),
+                            L_modes[:, 2] % 2 == 1,
+                        ),
+                        L_modes[:, 2] >= 0,
+                    )
+                )
+                j2 = np.argwhere(
+                    np.logical_and(
+                        np.logical_and(
+                            (L_modes[:, :-1] == [l, m]).all(axis=1),
+                            L_modes[:, 2] % 2 == 0,
+                        ),
+                        L_modes[:, 2] >= 0,
+                    )
+                )
+                self._A[i, j1] = -1
+                self._A[i, j2] = 1
+        else:
+            raise ValueError(
+                f"Unvalid zeta value! Only 0 or pi is supported! zeta ={self._zeta}"
+                + "is given!"
+            )
+
+        if self.target is not None:
+            self._dim_f = self._A.shape[0]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute deviation from desired boundary."""
+        return jnp.dot(self._A, params["L_lmn"])
 
 
 class AxisRSelfConsistency(_Objective):
@@ -3014,121 +3241,6 @@ class FixCurrent(_FixProfile):
 
         """
         return params["c_l"][self._idx]
-
-
-class PoincareLambda(_FixedObjective):
-    """Enforces lambda values at zeta=0 XS (i.e. prescribes the SFL angle vartheta).
-
-    Parameters
-    ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Value to fix lambda to at rho=0 and (theta=0,zeta=0)
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    name : str
-        Name of the objective function.
-    """
-
-    _target_arg = "L_lmn"
-    _units = "(dimensionless)"
-    _print_value_fmt = "Lambda poincare boundary error: {:10.3e}"
-
-    def __init__(
-        self,
-        eq=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        name="poincare lambda",
-        zeta=0,
-    ):
-        self._zeta = zeta
-        self._args = ["L_lmn"]
-        super().__init__(
-            things=eq, target=target, bounds=bounds, weight=weight, name=name
-        )
-
-    def build(self, eq=None, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-        """
-        eq = eq or self.things[0]
-        L_modes = eq.L_basis.modes
-        dim_L = eq.L_basis.num_modes
-
-        if (
-            self.target is None
-        ):  # uses current eq's value of lambda at specified zeta as constraint
-            Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
-                eq.L_lmn,
-                eq.L_basis,
-                zeta=self._zeta,
-            )  # Currently this method doesn't support 2 different Poincare BC
-            Lb_modes = Lb_basis.modes
-            self._dim_f = Lb_basis.num_modes
-            self.target = Lb_lmn
-
-        self._A = np.zeros((self._dim_f, dim_L))
-
-        if self._zeta == 0:
-            for i, (l, m, n) in enumerate(Lb_modes):
-                j = np.argwhere(
-                    np.logical_and(
-                        (L_modes[:, :-1] == [l, m]).all(axis=1),
-                        L_modes[:, 2] >= 0,
-                    )
-                )
-                self._A[i, j] = 1
-        elif self._zeta == np.pi:
-            for i, (l, m, n) in enumerate(Lb_modes):
-                j1 = np.argwhere(
-                    np.logical_and(
-                        np.logical_and(
-                            (L_modes[:, :-1] == [l, m]).all(axis=1),
-                            L_modes[:, 2] % 2 == 1,
-                        ),
-                        L_modes[:, 2] >= 0,
-                    )
-                )
-                j2 = np.argwhere(
-                    np.logical_and(
-                        np.logical_and(
-                            (L_modes[:, :-1] == [l, m]).all(axis=1),
-                            L_modes[:, 2] % 2 == 0,
-                        ),
-                        L_modes[:, 2] >= 0,
-                    )
-                )
-                self._A[i, j1] = -1
-                self._A[i, j2] = 1
-        else:
-            raise ValueError(
-                f"Unvalid zeta value! Only 0 or pi is supported! zeta ={self._zeta}"
-                + "is given!"
-            )
-
-        if self.target is not None:
-            self._dim_f = self._A.shape[0]
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute deviation from desired boundary."""
-        return jnp.dot(self._A, params["L_lmn"])
 
 
 class FixElectronTemperature(_FixProfile):

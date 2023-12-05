@@ -38,6 +38,7 @@ from .getters import (
 from .linear_objectives import (
     AxisRSelfConsistency,
     AxisZSelfConsistency,
+    BoundaryLambdaSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixAnisotropy,
@@ -62,6 +63,5 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
-    PoincareLambda,
 )
 from .objective_funs import ObjectiveFunction

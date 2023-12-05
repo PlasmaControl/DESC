@@ -10,6 +10,7 @@ from ._equilibrium import (
 from .linear_objectives import (
     AxisRSelfConsistency,
     AxisZSelfConsistency,
+    BoundaryLambdaSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixAnisotropy,
@@ -26,9 +27,6 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixPsi,
-    PoincareLambda,
-    SecondBoundaryRSelfConsistency,
-    SecondBoundaryZSelfConsistency,
 )
 from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
@@ -123,7 +121,6 @@ def get_fixed_boundary_constraints(
     normalize=True,
     poincare_lambda=False,
     zeta=0,
-    zeta2=None,
 ):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
@@ -151,19 +148,7 @@ def get_fixed_boundary_constraints(
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if poincare_lambda:
-        constraints += (PoincareLambda(eq=eq, zeta=zeta),)
-        if eq.surface_2 is not None:
-            # This doesn't support 2 different BC yet, even if you add new one,
-            # it will be almost
-            # the same as previous. Instead it will try to fix lambda at zeta2,
-            # as lambda at zeta. Fix this!
-            if zeta2 is None:
-                raise ValueError(
-                    "Surface 2 is defined but no toroidal angle"
-                    + " is given! Specify zeta2 !"
-                )
-            constraints += (PoincareLambda(eq=eq, zeta=zeta2),)
-            print("Adding second BC Lambda")
+        constraints += (BoundaryLambdaSelfConsistency(eq=eq, zeta=zeta),)
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
@@ -248,33 +233,11 @@ def maybe_add_self_consistency(eq, constraints, zeta=0, zeta2=None):
         return any([isinstance(t, cls) for t in things])
 
     if not _is_any_instance(constraints, BoundaryRSelfConsistency):
-        constraints += (
-            BoundaryRSelfConsistency(eq=eq, zeta=zeta),
-        )  # add zeta attribute to equilibrium, it is hard to pass it this way
-        if eq.surface_2 is not None and not _is_any_instance(
-            constraints, SecondBoundaryRSelfConsistency
-        ):
-            if zeta2 is None:
-                raise ValueError(
-                    "Surface 2 is defined but no toroidal angle is given! "
-                    + "Specify zeta2 !"
-                )
-            constraints += (SecondBoundaryRSelfConsistency(eq=eq, zeta=zeta2),)
-            print("Adding Second BC R")
+        constraints += (BoundaryRSelfConsistency(eq=eq, zeta=zeta),)
     if not _is_any_instance(constraints, BoundaryZSelfConsistency):
         constraints += (
             BoundaryZSelfConsistency(eq=eq, zeta=zeta),
         )  # add zeta attribute to equilibrium
-        if eq.surface_2 is not None and not _is_any_instance(
-            constraints, SecondBoundaryZSelfConsistency
-        ):
-            if zeta2 is None:
-                raise ValueError(
-                    "Surface 2 is defined but no toroidal angle is given! "
-                    + "Specify zeta2 !"
-                )
-            constraints += (SecondBoundaryZSelfConsistency(eq=eq, zeta=zeta2),)
-            print("Adding Second BC Z")
     if not _is_any_instance(constraints, FixLambdaGauge):
         constraints += (FixLambdaGauge(eq=eq),)
     if not _is_any_instance(constraints, AxisRSelfConsistency):

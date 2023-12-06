@@ -14,7 +14,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import cross, dot, safenorm, surface_averages
+from .utils import cross, dot, safediv, safenorm, surface_averages
 
 
 @register_compute_fun(
@@ -39,8 +39,8 @@ def _J_sup_rho(params, transforms, profiles, data, **kwargs):
     # form 0/0 and we may compute the limit as follows.
     data["J^rho"] = (
         transforms["grid"].replace_at_axis(
-            (data["B_zeta_t"] - data["B_theta_z"]) / data["sqrt(g)"],
-            lambda: (data["B_zeta_rt"] - data["B_theta_rz"]) / data["sqrt(g)_r"],
+            safediv(data["B_zeta_t"] - data["B_theta_z"], data["sqrt(g)"]),
+            lambda: safediv(data["B_zeta_rt"] - data["B_theta_rz"], data["sqrt(g)_r"]),
         )
     ) / mu_0
     return data
@@ -104,8 +104,8 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     # form 0/0 and we may compute the limit as follows.
     data["J^zeta"] = (
         transforms["grid"].replace_at_axis(
-            (data["B_theta_r"] - data["B_rho_t"]) / data["sqrt(g)"],
-            lambda: (data["B_theta_rr"] - data["B_rho_rt"]) / data["sqrt(g)_r"],
+            safediv(data["B_theta_r"] - data["B_rho_t"], data["sqrt(g)"]),
+            lambda: safediv(data["B_theta_rr"] - data["B_rho_rt"], data["sqrt(g)_r"]),
         )
     ) / mu_0
     return data

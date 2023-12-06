@@ -3,6 +3,8 @@
 import inspect
 import re
 
+import numpy as np
+
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -304,7 +306,7 @@ class GenericObjective(_Objective):
         elif data_index[p][self.f]["coordinates"] == "r":
             self._dim_f = grid.num_rho
         else:
-            self._dim_f = grid.num_nodes * data_index[p][self.f]["dim"]
+            self._dim_f = grid.num_nodes * np.prod(data_index[p][self.f]["dim"])
         profiles = get_profiles(self.f, obj=eq, grid=grid)
         transforms = get_transforms(self.f, obj=eq, grid=grid)
         self._constants = {

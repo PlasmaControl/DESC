@@ -5,8 +5,6 @@ import numbers
 import numpy as np
 
 from desc.backend import jnp
-from desc.basis import FourierZernike_to_FourierZernike_no_N_modes
-from desc.equilibrium import Equilibrium
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -190,47 +188,3 @@ def _assert_nonnegint(x, name=""):
     assert (x is None) or isnonnegint(
         x
     ), f"{name} should be a non-negative integer or None, got {x}"
-
-
-def set_poincare_equilibrium(eq, zeta=0):
-    """Sets the equilibrium for solving Poincare BC problem.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Some equilibrium to be used for creating Poincare equilibrium
-    zeta : float (optional)
-        Zeta angle at which the Poincare section will be fixed
-        Only 0 and Pi is supported for now
-
-    Returns
-    -------
-    eq_poincare : Equilibrium
-        Equilibrium object to be used for Poincare BC problem
-    """
-    surface = eq.get_surface_at(zeta=zeta / eq.NFP)
-    Lb_lmn, Lb_basis = FourierZernike_to_FourierZernike_no_N_modes(
-        eq.L_lmn, eq.L_basis, zeta
-    )
-
-    eq_poincare = Equilibrium(
-        surface=surface,
-        pressure=eq.pressure,
-        iota=eq.iota,
-        Psi=eq.Psi,  # flux (in Webers) within the last closed flux surface
-        NFP=eq.NFP,  # number of field periods
-        L=eq.L,  # radial spectral resolution
-        M=eq.M,  # poloidal spectral resolution
-        N=eq.N,  # toroidal spectral resolution
-        L_grid=eq.L_grid,  # real space radial resolution, slightly oversampled
-        M_grid=eq.M_grid,  # real space poloidal resolution, slightly oversampled
-        N_grid=eq.N_grid,  # real space toroidal resolution
-        sym=True,  # explicitly enforce stellarator symmetry
-        bdry_mode="poincare",
-        spectral_indexing=eq._spectral_indexing,
-    )
-    eq_poincare.L_lmn = (
-        Lb_lmn  # initialize the poincare eq with the lambda of the original eq
-    )
-    eq_poincare.axis = eq_poincare.get_axis()
-    return eq_poincare

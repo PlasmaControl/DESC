@@ -11,7 +11,12 @@ from scipy.constants import mu_0
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import (
+    FourierZernike_to_FourierZernike_no_N_modes,
+    FourierZernikeBasis,
+    fourier,
+    zernike_radial,
+)
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -752,6 +757,49 @@ class Equilibrium(IOAble, Optimizable):
             modes_Z = 0
         axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
         return axis
+
+    def set_poincare_equilibrium(self, zeta=0):
+        """Sets the equilibrium for solving Poincare BC problem.
+
+        Parameters
+        ----------
+        self : Equilibrium
+            Some equilibrium to be used for creating Poincare equilibrium
+        zeta : float (optional)
+            Zeta angle at which the Poincare section will be fixed
+            Only 0 and Pi is supported for now
+
+        Returns
+        -------
+        eq_poincare : Equilibrium
+            Separate Equilibrium object to be used for Poincare BC problem
+        """
+        surface = self.get_surface_at(zeta=zeta / self.NFP)
+        Lb_lmn, Lb_basis = FourierZernike_to_FourierZernike_no_N_modes(
+            self.L_lmn, self.L_basis, zeta
+        )
+
+        eq_poincare = Equilibrium(
+            surface=surface,
+            pressure=self.pressure,
+            iota=self.iota,
+            Psi=self.Psi,  # flux (in Webers) within the last closed flux surface
+            NFP=self.NFP,  # number of field periods
+            L=self.L,  # radial spectral resolution
+            M=self.M,  # poloidal spectral resolution
+            N=self.N,  # toroidal spectral resolution
+            L_grid=self.L_grid,  # real space radial resolution, slightly oversampled
+            M_grid=self.M_grid,  # real space poloidal resolution, slightly oversampled
+            N_grid=self.N_grid,  # real space toroidal resolution
+            sym=True,  # explicitly enforce stellarator symmetry
+            bdry_mode="poincare",
+            spectral_indexing=self._spectral_indexing,
+        )
+        eq_poincare.L_lmn = (
+            Lb_lmn  # initialize the poincare eq with the lambda of the original eq
+        )
+        eq_poincare.axis = eq_poincare.get_axis()
+        return eq_poincare
 
     def compute(
         self,

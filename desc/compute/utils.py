@@ -513,6 +513,24 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
     return n
 
 
+def safediv(a, b, fill=0, threshold=0):
+    """Divide a/b with guards for division by zero.
+
+    Parameters
+    ----------
+    a, b : ndarray
+        Numerator and denominator.
+    fill : float, ndarray, optional
+        Value to return where b is zero.
+    threshold : float >= 0
+        How small is b allowed to be.
+    """
+    mask = jnp.abs(b) <= threshold
+    num = jnp.where(mask, fill, a)
+    den = jnp.where(mask, 1, b)
+    return num / den
+
+
 def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
     """Cumulatively integrate y(x) using the composite trapezoidal rule.
 

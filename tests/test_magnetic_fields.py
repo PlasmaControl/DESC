@@ -161,6 +161,27 @@ class TestMagneticFields:
             rtol=1e-8,
         )
 
+        # add a ToroidalField and check passing in/not passing in
+
+        B_TF = ToroidalMagneticField(1, 10)
+        sumfield = B_TF + field
+
+        np.testing.assert_allclose(
+            sumfield.compute_magnetic_field([10.0, 0, 0]),
+            correct_field(10.0, 0, 0) + B_TF([10.0, 0, 0]),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+
+        np.testing.assert_allclose(
+            sumfield.compute_magnetic_field(
+                [10.0, 0, 0], grid=[None, LinearGrid(M=30, N=30, NFP=surface.NFP)]
+            ),
+            correct_field(10.0, 0, 0) + B_TF([10.0, 0, 0]),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+
         with pytest.raises(IOError):
             field.save("test_field.h5")
         with pytest.warns(UserWarning):

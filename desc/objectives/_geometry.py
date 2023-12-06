@@ -7,6 +7,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
 
@@ -44,6 +45,11 @@ class AspectRatio(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization. Note: Has no effect for this objective.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -64,6 +70,7 @@ class AspectRatio(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="aspect ratio",
     ):
@@ -78,6 +85,7 @@ class AspectRatio(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -175,6 +183,11 @@ class Elongation(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization. Note: Has no effect for this objective.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -195,6 +208,7 @@ class Elongation(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="elongation",
     ):
@@ -209,6 +223,7 @@ class Elongation(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -307,6 +322,11 @@ class Volume(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization. Note: Has no effect for this objective.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -327,6 +347,7 @@ class Volume(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="volume",
     ):
@@ -341,6 +362,7 @@ class Volume(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -472,6 +494,11 @@ class PlasmaVesselDistance(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     surface_grid : Grid, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
     plasma_grid : Grid, optional
@@ -481,9 +508,10 @@ class PlasmaVesselDistance(_Objective):
     surface_fixed: bool, optional
         Whether the surface the distance from the plasma is computed to
         is fixed or not. If True, the surface is fixed and its coordinates are
-        precomputed, which saves on computation time during optimization.
+        precomputed, which saves on computation time during optimization, and
+        self.things = [eq] only.
         If False, the surface coordinates are computed at every iteration.
-        False by default.
+        False by default, so that self.things = [eq, surface]
     alpha: float, optional
         Parameter used for softmin. The larger alpha, the closer the softmin
         approximates the hardmin. softmin -> hardmin as alpha -> infinity.
@@ -509,6 +537,7 @@ class PlasmaVesselDistance(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         surface_grid=None,
         plasma_grid=None,
         use_softmin=False,
@@ -525,13 +554,14 @@ class PlasmaVesselDistance(_Objective):
         self._surface_fixed = surface_fixed
         self._alpha = alpha
         super().__init__(
-            things=[eq, self._surface],
+            things=[eq, self._surface] if not surface_fixed else [eq],
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -547,7 +577,7 @@ class PlasmaVesselDistance(_Objective):
 
         """
         eq = self.things[0]
-        surface = self.things[1]
+        surface = self._surface if self._surface_fixed else self.things[1]
         # if things[1] is different than self._surface, update self._surface
         if surface != self._surface:
             self._surface = surface
@@ -630,7 +660,7 @@ class PlasmaVesselDistance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, equil_params, surface_params, constants=None):
+    def compute(self, equil_params, surface_params=None, constants=None):
         """Compute plasma-surface distance.
 
         Parameters
@@ -639,6 +669,7 @@ class PlasmaVesselDistance(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         surface_params : dict
             Dictionary of surface degrees of freedom, eg Surface.params_dict
+            Only needed if self._surface_fixed = False
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -670,9 +701,7 @@ class PlasmaVesselDistance(_Objective):
                 profiles={},
                 basis="xyz",
             )["x"]
-        d = jnp.linalg.norm(
-            plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1
-        )
+        d = safenorm(plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1)
 
         if self._use_softmin:  # do softmin
             return jnp.apply_along_axis(softmin, 0, d, self._alpha)
@@ -713,6 +742,11 @@ class MeanCurvature(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -733,6 +767,7 @@ class MeanCurvature(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="mean curvature",
     ):
@@ -747,6 +782,7 @@ class MeanCurvature(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -865,6 +901,11 @@ class PrincipalCurvature(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -885,6 +926,7 @@ class PrincipalCurvature(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="principal-curvature",
     ):
@@ -899,6 +941,7 @@ class PrincipalCurvature(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -1011,6 +1054,11 @@ class BScaleLength(_Objective):
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -1031,6 +1079,7 @@ class BScaleLength(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="B-scale-length",
     ):
@@ -1045,6 +1094,7 @@ class BScaleLength(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -1150,6 +1200,15 @@ class GoodCoordinates(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -1170,6 +1229,8 @@ class GoodCoordinates(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="coordinate goodness",
     ):
@@ -1184,6 +1245,8 @@ class GoodCoordinates(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 

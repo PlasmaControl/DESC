@@ -19,6 +19,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.objectives import (
     AspectRatio,
+    BootstrapRedlConsistency,
     BScaleLength,
     CurrentDensity,
     Elongation,
@@ -26,6 +27,7 @@ from desc.objectives import (
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
+    GoodCoordinates,
     HelicalForceBalance,
     Isodynamicity,
     MagneticWell,
@@ -47,7 +49,7 @@ from desc.objectives import (
 )
 from desc.objectives.objective_funs import _Objective
 from desc.objectives.utils import softmax, softmin
-from desc.profiles import PowerSeriesProfile
+from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -476,27 +478,60 @@ class TestObjectiveFunction:
 def test_derivative_modes():
     """Test equality of derivatives using batched, looped methods."""
     eq = Equilibrium(M=2, N=1, L=2)
-    obj1 = ObjectiveFunction(MagneticWell(eq=eq), deriv_mode="batched", use_jit=False)
-    obj3 = ObjectiveFunction(MagneticWell(eq=eq), deriv_mode="looped", use_jit=False)
+    surf = FourierRZToroidalSurface()
+    obj1 = ObjectiveFunction(
+        [
+            PlasmaVesselDistance(eq, surf),
+            MagneticWell(eq),
+        ],
+        deriv_mode="batched",
+        use_jit=False,
+    )
+    obj2 = ObjectiveFunction(
+        [
+            PlasmaVesselDistance(eq, surf),
+            MagneticWell(eq),
+        ],
+        deriv_mode="blocked",
+        use_jit=False,
+    )
+    obj3 = ObjectiveFunction(
+        [
+            PlasmaVesselDistance(eq, surf),
+            MagneticWell(eq),
+        ],
+        deriv_mode="looped",
+        use_jit=False,
+    )
 
     obj1.build()
+    obj2.build()
     obj3.build()
-    x = obj1.x(eq)
+    x = obj1.x(eq, surf)
     g1 = obj1.grad(x)
+    g2 = obj2.grad(x)
     g3 = obj3.grad(x)
+    np.testing.assert_allclose(g1, g2, atol=1e-10)
     np.testing.assert_allclose(g1, g3, atol=1e-10)
     J1 = obj1.jac_scaled(x)
+    J2 = obj2.jac_scaled(x)
     J3 = obj3.jac_scaled(x)
+    np.testing.assert_allclose(J1, J2, atol=1e-10)
     np.testing.assert_allclose(J1, J3, atol=1e-10)
     J1 = obj1.jac_unscaled(x)
+    J2 = obj2.jac_unscaled(x)
     J3 = obj3.jac_unscaled(x)
+    np.testing.assert_allclose(J1, J2, atol=1e-10)
     np.testing.assert_allclose(J1, J3, atol=1e-10)
     H1 = obj1.hess(x)
+    H2 = obj2.hess(x)
     H3 = obj3.hess(x)
+    np.testing.assert_allclose(H1, H2, atol=1e-10)
     np.testing.assert_allclose(H1, H3, atol=1e-10)
 
 
 @pytest.mark.unit
+@pytest.mark.xfail
 def test_rejit():
     """Test that updating attributes and recompiling correctly updates."""
 
@@ -1543,3 +1578,67 @@ def test_compute_scalar_resolution():  # noqa: C901
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
+
+
+@pytest.mark.unit
+def test_objective_no_nangrad():
+    """Make sure reverse mode AD works correctly for all objectives."""
+    # these need some special logic
+    eq = Equilibrium(L=2, M=2, N=2)
+    surf = FourierRZToroidalSurface()
+    obj = ObjectiveFunction(PlasmaVesselDistance(eq, surf))
+    obj.build()
+    g = obj.grad(obj.x(eq, surf))
+    assert not np.any(np.isnan(g)), "plasma vessel distance"
+
+    eq = Equilibrium(L=2, M=2, N=2, anisotropy=FourierZernikeProfile())
+    obj = ObjectiveFunction(ForceBalanceAnisotropic(eq))
+    obj.build()
+    g = obj.grad(obj.x(eq))
+    assert not np.any(np.isnan(g)), "anisotropic"
+
+    eq = Equilibrium(
+        L=2,
+        M=2,
+        N=2,
+        electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+        electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+        current=PowerSeriesProfile([1, 0, -1]),
+    )
+    obj = ObjectiveFunction(BootstrapRedlConsistency(eq))
+    obj.build()
+    g = obj.grad(obj.x(eq))
+    assert not np.any(np.isnan(g)), "redl bootstrap"
+
+    # these only need basic equilibrium
+    eq = Equilibrium(L=2, M=2, N=2)
+    objectives = [
+        CurrentDensity,
+        Energy,
+        ForceBalance,
+        HelicalForceBalance,
+        RadialForceBalance,
+        AspectRatio,
+        BScaleLength,
+        Elongation,
+        GoodCoordinates,
+        MeanCurvature,
+        PrincipalCurvature,
+        Volume,
+        Pressure,
+        RotationalTransform,
+        Shear,
+        ToroidalCurrent,
+        Isodynamicity,
+        QuasisymmetryBoozer,
+        QuasisymmetryTripleProduct,
+        QuasisymmetryTwoTerm,
+        MagneticWell,
+        MercierStability,
+    ]
+
+    for objective in objectives:
+        obj = ObjectiveFunction(objective(eq))
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), str(objective)

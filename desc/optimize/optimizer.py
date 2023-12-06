@@ -83,8 +83,7 @@ class Optimizer(IOAble):
         maxiter=None,
         options=None,
         copy=False,
-        zeta=0,
-        zeta2=None,
+        zeta=None,
     ):
         """Optimize an objective function.
 
@@ -187,7 +186,6 @@ class Optimizer(IOAble):
                 eq,
                 linear_constraints,
                 zeta=zeta,
-                zeta2=zeta2,
             )
 
         if len(linear_constraints):

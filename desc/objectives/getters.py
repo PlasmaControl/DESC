@@ -226,7 +226,7 @@ def get_NAE_constraints(
     return constraints
 
 
-def maybe_add_self_consistency(eq, constraints, zeta=0, zeta2=None):
+def maybe_add_self_consistency(eq, constraints, zeta=0):
     """Add self consistency constraints if needed."""
 
     def _is_any_instance(things, cls):
@@ -235,9 +235,7 @@ def maybe_add_self_consistency(eq, constraints, zeta=0, zeta2=None):
     if not _is_any_instance(constraints, BoundaryRSelfConsistency):
         constraints += (BoundaryRSelfConsistency(eq=eq, zeta=zeta),)
     if not _is_any_instance(constraints, BoundaryZSelfConsistency):
-        constraints += (
-            BoundaryZSelfConsistency(eq=eq, zeta=zeta),
-        )  # add zeta attribute to equilibrium
+        constraints += (BoundaryZSelfConsistency(eq=eq, zeta=zeta),)
     if not _is_any_instance(constraints, FixLambdaGauge):
         constraints += (FixLambdaGauge(eq=eq),)
     if not _is_any_instance(constraints, AxisRSelfConsistency):

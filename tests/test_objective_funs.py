@@ -101,7 +101,7 @@ class TestObjectiveFunction:
             obj = Volume(
                 target=10 * np.pi**2,
                 weight=1 / np.pi**2,
-                thing=eq,
+                eq=eq,
                 normalize=False,
             )
             obj.build()
@@ -1148,7 +1148,7 @@ def test_objective_target_bounds():
     """Test that the target_scaled and bounds_scaled etc. return the right things."""
     eq = Equilibrium()
 
-    vol = Volume(target=3, normalize=True, weight=2, thing=eq)
+    vol = Volume(target=3, normalize=True, weight=2, eq=eq)
     asp = AspectRatio(bounds=(2, 3), normalize=False, weight=3, eq=eq)
     fbl = ForceBalance(normalize=True, bounds=(-1, 2), weight=5, eq=eq)
 

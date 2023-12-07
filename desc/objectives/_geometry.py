@@ -381,8 +381,8 @@ class Volume(_Objective):
         if self._grid is None:
             grid = QuadratureGrid(
                 L=getattr(thing, "L_grid", 1),
-                M=thing.M_grid,
-                N=thing.N_grid,
+                M=getattr(thing, "M_grid", thing.M * 2),
+                N=getattr(thing, "N_grid", thing.N * 2),
                 NFP=thing.NFP,
             )
         else:

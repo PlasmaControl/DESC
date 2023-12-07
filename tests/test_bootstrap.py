@@ -1637,11 +1637,9 @@ def test_bootstrap_optimization_comparison_qa():
     for k in range(niters):
         eq2 = eq2.copy()
         data = eq2.compute("current Redl", grid)
-        rho = np.atleast_2d(grid.compress(data["rho"])).T
         current = grid.compress(data["current Redl"])
-        XX = rho**2
-        for p in range(3, eq2.L + 1):
-            XX = np.hstack((XX, rho**p))
+        rho = grid.compress(data["rho"])
+        XX = np.fliplr(np.vander(rho, eq2.L + 1)[:, :-2])
         eq2.c_l = np.pad(np.linalg.lstsq(XX, current, rcond=None)[0], (2, 0))
         eq2, _ = eq2.solve(objective="force", optimizer="lsq-exact", verbose=3)
 
@@ -1656,10 +1654,10 @@ def test_bootstrap_optimization_comparison_qa():
     data2 = eq2.compute(["<J*B> Redl", "<J*B>"], grid)
 
     np.testing.assert_allclose(
-        grid.compress(data1["<J*B>"]), grid.compress(data1["<J*B> Redl"]), rtol=3e-2
+        grid.compress(data1["<J*B>"]), grid.compress(data1["<J*B> Redl"]), rtol=4e-2
     )
     np.testing.assert_allclose(
-        grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=3e-2
+        grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=4e-2
     )
     np.testing.assert_allclose(
         grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=4e-2

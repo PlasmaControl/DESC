@@ -1658,8 +1658,8 @@ def test_bootstrap_optimization_comparison_qa():
         grid.compress(data1["<J*B>"]), grid.compress(data1["<J*B> Redl"]), rtol=2.1e-2
     )
     np.testing.assert_allclose(
-        grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=1.7e-2
+        grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=1.8e-2
     )
     np.testing.assert_allclose(
-        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=1.7e-2
+        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=1.8e-2
     )

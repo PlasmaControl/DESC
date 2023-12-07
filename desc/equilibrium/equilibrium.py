@@ -949,11 +949,15 @@ class Equilibrium(IOAble, Optimizable):
             self, coords, inbasis, outbasis, guess, period, tol, maxiter, **kwargs
         )
 
-    def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
-        """Find geometric theta for given straight field line theta.
+    def compute_theta_coords(
+        self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
+    ):
+        """Find theta_DESC for given straight field line theta_PEST.
 
         Parameters
         ----------
+        eq : Equilibrium
+            Equilibrium to use
         flux_coords : ndarray, shape(k,3)
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
             point in space.
@@ -963,15 +967,30 @@ class Equilibrium(IOAble, Optimizable):
             Stopping tolerance.
         maxiter : int > 0
             maximum number of Newton iterations
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to ``root_scalar`` such as
+            ``maxiter_ls``, ``alpha``.
 
         Returns
         -------
         coords : ndarray, shape(k,3)
-            coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-            a given coordinate nan will be returned for those values
-
+            coordinates [rho,theta,zeta].
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True
         """
-        return compute_theta_coords(self, flux_coords, L_lmn, tol, maxiter)
+        return compute_theta_coords(
+            self,
+            flux_coords,
+            L_lmn=L_lmn,
+            maxiter=maxiter,
+            tol=tol,
+            full_output=full_output,
+            **kwargs,
+        )
 
     def compute_flux_coords(
         self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6

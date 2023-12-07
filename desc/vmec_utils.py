@@ -1,5 +1,7 @@
 """Utility functions needed for converting VMEC inputs/outputs."""
 
+import io
+
 import numpy as np
 from scipy.linalg import block_diag, null_space
 
@@ -471,7 +473,7 @@ def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa:
     return opt_subspace
 
 
-def print_vmec_boundary(surface):
+def print_vmec_boundary(surface, filename=None):
     """Print the VMEC input boundary coefficients."""
     if hasattr(surface, "__len__"):
         surface = surface[-1]
@@ -479,15 +481,29 @@ def print_vmec_boundary(surface):
         surface = surface.surface
 
     M, N, RBS, RBC = ptolemy_identity_rev(
-        surface.R_basis.modes[:, 1], surface.R_basis.modes[:, 2], surface.Rb_lmn
+        surface.R_basis.modes[:, 1], surface.R_basis.modes[:, 2], surface.R_lmn
     )
     _, _, ZBS, ZBC = ptolemy_identity_rev(
-        surface.Z_basis.modes[:, 1], surface.Z_basis.modes[:, 2], surface.Zb_lmn
+        surface.Z_basis.modes[:, 1], surface.Z_basis.modes[:, 2], surface.Z_lmn
     )
 
+    if filename is not None:
+        # open the file, unless its already open
+        if not isinstance(filename, io.IOBase):
+            f = open(filename, "w+")
+        else:
+            f = filename
+        f.seek(0)
+
     for m, n, rbc, zbs in np.vstack((np.atleast_2d(M), np.atleast_2d(N), RBC, ZBS)).T:
-        print(
+        line = (
             f"  RBC({n:2.0f},{m:2.0f}) = {rbc:+14.8e}"
             + f"  ZBS({n:2.0f},{m:2.0f}) = {zbs:+14.8e}"
         )
+        if filename is not None:
+            f.write(line + "\n")
+        else:
+            print(line)
+
+    f.close()
     return None

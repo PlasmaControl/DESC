@@ -1374,7 +1374,6 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
     _coordinates = ""
     _units = ""
     _print_value_fmt = "Regularized Quadratic Flux: {:10.3e} "
-    _scalar = True
 
     def __init__(
         self,
@@ -1391,6 +1390,7 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
         eval_grid=None,
         alpha=0.0,
         name="surface-current-regularized-quadratic-flux",
+        eq_fixed=False,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1398,8 +1398,12 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
         self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._alpha = alpha
+        self._eq_fixed = eq_fixed
+        self._eq = eq if eq_fixed else None
         super().__init__(
-            things=[eq, surface_current_field],
+            things=[surface_current_field, eq]
+            if not eq_fixed
+            else [surface_current_field],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1421,8 +1425,8 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
-        surface_current_field = self.things[1]
+        eq = self._eq if self._eq_fixed else self.things[1]
+        surface_current_field = self.things[0]
         # if things[1] is different than self._surface_current_field, update
         if surface_current_field != self._surface_current_field:
             self._surface_current_field = surface_current_field
@@ -1446,9 +1450,9 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
 
         # eval_grid.num_nodes for quad flux cost,
         # source_grid.num_nodes for the regularization cost
-        self._dim_f = 1
-        self._equil_data_keys = ["n_rho", "R", "phi", "Z", "|e_theta x e_zeta}"]
-        self._surface_data_keys = ["K", "x", "|e_theta x e_zeta}"]
+        self._dim_f = eval_grid.num_nodes
+        self._equil_data_keys = ["n_rho", "R", "phi", "Z", "|e_theta x e_zeta|"]
+        self._surface_data_keys = ["K", "x", "|e_theta x e_zeta|"]
         # TODO: should check that G is set correctly
         # and is not an optimizable parameter?
         # since we know what G should be given the equilibrium.
@@ -1477,11 +1481,24 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
             has_axis=source_grid.axis.size,
         )
 
-        self._constants = {
-            "equil_transforms": equil_transforms,
-            "equil_profiles": equil_profiles,
-            "surface_transforms": surface_transforms,
-        }
+        if self._eq_fixed:
+            data = eq.compute(["R", "phi", "Z", "n_rho"], grid=eval_grid)
+            plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+
+        if not self._eq_fixed:
+            self._constants = {
+                "equil_transforms": equil_transforms,
+                "equil_profiles": equil_profiles,
+                "surface_transforms": surface_transforms,
+            }
+        else:
+            self._constants = {
+                "equil_transforms": equil_transforms,
+                "equil_profiles": equil_profiles,
+                "surface_transforms": surface_transforms,
+                "plasma_coords": plasma_coords,
+                "equil_data": data,
+            }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -1489,7 +1506,7 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, equil_params, surface_params, constants=None):
+    def compute(self, surface_params=None, equil_params=None, constants=None):
         """Compute current-regularized quadratic flux.
 
         Parameters
@@ -1513,14 +1530,18 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
         """
         if constants is None:
             constants = self.constants
-        data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._equil_data_keys,
-            params=equil_params,
-            transforms=constants["equil_transforms"],
-            profiles=constants["equil_profiles"],
-        )
-        plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+        if not self._eq_fixed:
+            data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._equil_data_keys,
+                params=equil_params,
+                transforms=constants["equil_transforms"],
+                profiles=constants["equil_profiles"],
+            )
+            plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+        else:
+            data = constants["equil_data"]
+            plasma_coords = constants["plasma_coords"]
 
         surface_data = compute_fun(
             self._surface_current_field,
@@ -1528,21 +1549,21 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
             params=surface_params,
             transforms=constants["surface_transforms"],
             profiles={},
-            basis="rpz",
+            basis="xyz",
         )
         B = self._surface_current_field.compute_magnetic_field(
             plasma_coords,
             grid=self._source_grid,
             params=surface_params,
             data=surface_data,
+            basis="xyz",
         )
         Bn = jnp.sum(B * data["n_rho"], axis=-1)
-        chi_B = jnp.sum(Bn * Bn * data["|e_theta x e_zeta|"] * self._eval_grid.weights)
 
-        chi_K = jnp.sum(
+        _ = jnp.sum(  # chi_K
             safenorm(surface_data["K"], axis=-1) ** 2
             * self._source_grid.weights
             * surface_data["|e_theta x e_zeta|"]
         )
 
-        return chi_B + self._alpha * chi_K
+        return Bn

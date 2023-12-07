@@ -77,6 +77,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     dirname=".",
     override_G=None,
     sym_Phi="sin",
+    return_A=False,
 ):
     """Python regcoil to find single-valued current potential.
 
@@ -604,11 +605,13 @@ def run_regcoil(  # noqa: C901 fxn too complex
             chi2Bs,
             lowest_idx_without_saddles,
         )
-
-    return (
-        surface_current_field,
-        TF_B,
-        np.mean(np.abs(Bn_tot)),
-        chi_B,
-        Bn_tot,
-    )
+    if not return_A:
+        return (
+            surface_current_field,
+            TF_B,
+            np.mean(np.abs(Bn_tot)),
+            chi_B,
+            Bn_tot,
+        )
+    else:
+        return (surface_current_field, TF_B, np.mean(np.abs(Bn_tot)), chi_B, Bn_tot, A)

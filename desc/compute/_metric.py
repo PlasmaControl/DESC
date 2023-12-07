@@ -12,7 +12,7 @@ expensive computations.
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import cross, dot
+from .utils import cross, dot, safediv, safenorm
 
 
 @register_compute_fun(
@@ -71,7 +71,7 @@ def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
-    data["|e_theta x e_zeta|"] = jnp.linalg.norm(
+    data["|e_theta x e_zeta|"] = safenorm(
         cross(data["e_theta"], data["e_zeta"]), axis=-1
     )
     return data
@@ -106,7 +106,7 @@ def _e_theta_x_e_zeta_r(params, transforms, profiles, data, **kwargs):
     # lim (𝐞^ρ ⋅ a_r / ‖𝐞^ρ‖) = lim 𝐞^ρ ⋅ lim a_r / lim ‖𝐞^ρ‖
     # The vectors converge to be parallel.
     data["|e_theta x e_zeta|_r"] = transforms["grid"].replace_at_axis(
-        dot(a, a_r) / jnp.linalg.norm(a, axis=-1), lambda: jnp.linalg.norm(a_r, axis=-1)
+        safediv(dot(a, a_r), safenorm(a, axis=-1)), lambda: safenorm(a_r, axis=-1)
     )
     return data
 
@@ -139,13 +139,15 @@ def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
         + 2 * cross(data["e_theta_r"], data["e_zeta_r"])
         + cross(data["e_theta"], data["e_zeta_rr"])
     )
-    norm_a = jnp.linalg.norm(a, axis=-1)
-    norm_a_r = jnp.linalg.norm(a_r, axis=-1)
+    norm_a = safenorm(a, axis=-1)
+    norm_a_r = safenorm(a_r, axis=-1)
     # The limit eventually reduces to a form where the technique used to compute
     # lim |e_theta x e_zeta|_r can be applied.
     data["|e_theta x e_zeta|_rr"] = transforms["grid"].replace_at_axis(
-        (norm_a_r**2 + dot(a, a_rr) - (dot(a, a_r) / norm_a) ** 2) / norm_a,
-        lambda: dot(a_r, a_rr) / norm_a_r,
+        safediv(
+            norm_a_r**2 + dot(a, a_rr) - safediv(dot(a, a_r), norm_a) ** 2, norm_a
+        ),
+        lambda: safediv(dot(a_r, a_rr), norm_a_r),
     )
     return data
 
@@ -168,7 +170,7 @@ def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
-    data["|e_zeta x e_rho|"] = jnp.linalg.norm(data["e^theta*sqrt(g)"], axis=-1)
+    data["|e_zeta x e_rho|"] = safenorm(data["e^theta*sqrt(g)"], axis=-1)
     return data
 
 
@@ -190,9 +192,7 @@ def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
-    data["|e_rho x e_theta|"] = jnp.linalg.norm(
-        cross(data["e_rho"], data["e_theta"]), axis=-1
-    )
+    data["|e_rho x e_theta|"] = safenorm(cross(data["e_rho"], data["e_theta"]), axis=-1)
     return data
 
 
@@ -225,7 +225,7 @@ def _e_rho_x_e_theta_r(params, transforms, profiles, data, **kwargs):
     # lim (𝐞^ζ ⋅ a_r / ‖𝐞^ζ‖) = lim 𝐞^ζ ⋅ lim a_r / lim ‖𝐞^ζ‖
     # The vectors converge to be parallel.
     data["|e_rho x e_theta|_r"] = transforms["grid"].replace_at_axis(
-        dot(a, a_r) / jnp.linalg.norm(a, axis=-1), lambda: jnp.linalg.norm(a_r, axis=-1)
+        safediv(dot(a, a_r), safenorm(a, axis=-1)), lambda: safenorm(a_r, axis=-1)
     )
     return data
 
@@ -258,13 +258,15 @@ def _e_rho_x_e_theta_rr(params, transforms, profiles, data, **kwargs):
         + 2 * cross(data["e_rho_r"], data["e_theta_r"])
         + cross(data["e_rho"], data["e_theta_rr"])
     )
-    norm_a = jnp.linalg.norm(a, axis=-1)
-    norm_a_r = jnp.linalg.norm(a_r, axis=-1)
+    norm_a = safenorm(a, axis=-1)
+    norm_a_r = safenorm(a_r, axis=-1)
     # The limit eventually reduces to a form where the technique used to compute
     # lim |e_rho x e_theta|_r can be applied.
     data["|e_rho x e_theta|_rr"] = transforms["grid"].replace_at_axis(
-        (norm_a_r**2 + dot(a, a_rr) - (dot(a, a_r) / norm_a) ** 2) / norm_a,
-        lambda: dot(a_r, a_rr) / norm_a_r,
+        safediv(
+            norm_a_r**2 + dot(a, a_rr) - safediv(dot(a, a_r), norm_a) ** 2, norm_a
+        ),
+        lambda: safediv(dot(a_r, a_rr), norm_a_r),
     )
     return data
 

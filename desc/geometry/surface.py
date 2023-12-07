@@ -77,20 +77,22 @@ def convert_spectral_to_FE(
     I = Rprime_basis.I_2MN
     Q = Rprime_basis.Q
     L = Rprime_basis.L
-    lmodes = (L + 1) // 2
-    nmodes = lmodes * I * Q + 1
+    lmodes = (L + 3) // 2
+    nmodes = lmodes * I * Q
     mesh = Rprime_basis.mesh
     nquad = mesh.nquad
-    quadpoints = np.array(mesh.return_quadrature_points())
+
+    # Get the angular quadrature points
+    quadpoints_mesh = np.array(mesh.return_quadrature_points())
     if N == 0:
         quadpoints = (
             np.array(
-                np.meshgrid(np.ones(1), quadpoints, np.zeros(1), indexing="ij")
+                np.meshgrid(np.ones(1), quadpoints_mesh, np.zeros(1), indexing="ij")
             ).reshape(3, I * nquad)
         ).T
     else:
         quadpoints = (
-            np.array(np.meshgrid(np.ones(1), quadpoints, indexing="ij")).reshape(
+            np.array(np.meshgrid(np.ones(1), quadpoints_mesh, indexing="ij")).reshape(
                 3, I * nquad
             )
         ).T
@@ -120,32 +122,40 @@ def convert_spectral_to_FE(
             * Lprime_pre_evaluated[:, :IQ, np.newaxis]
         ).reshape(I * nquad, -1)
     ).reshape(I, Q, I, Q)
+    k_plus1 = np.arange(0, L + 1, 2) + 1
+
     t2 = time.time()
     print("Time to construct A matrix = ", t2 - t1)
 
+    t1 = time.time()
+
     # quadrature using the roots of the shifted jacobi polynomials
     # Integrate 2*Nrho - 1 order polynomial exactly
-    Nrho = 5
+    Nrho = 2 * (L + 3)
+
+    # weights for integral rho * R_l * R_k
     rho, rho_weights = roots_sh_jacobi(Nrho, 2, 2)
 
-    quadpoints = np.array(mesh.return_quadrature_points())
+    # Get the angular quadrature points
+    quadpoints_mesh = np.array(mesh.return_quadrature_points())
     if N == 0:
         quadpoints = (
-            np.array(np.meshgrid(rho, quadpoints, np.zeros(1), indexing="ij")).reshape(
-                3, I * nquad * Nrho
-            )
+            np.array(
+                np.meshgrid(rho, quadpoints_mesh, np.zeros(1), indexing="ij")
+            ).reshape(3, I * nquad * Nrho)
         ).T
     else:
         quadpoints = (
-            np.array(np.meshgrid(rho, quadpoints, indexing="ij")).reshape(
+            np.array(np.meshgrid(rho, quadpoints_mesh, indexing="ij")).reshape(
                 3, I * nquad * Nrho
             )
         ).T
-
-    t1 = time.time()
     R_pre_evaluated = R_basis.evaluate(nodes=quadpoints)
     Z_pre_evaluated = Z_basis.evaluate(nodes=quadpoints)
     L_pre_evaluated = L_basis.evaluate(nodes=quadpoints)
+
+    # Evaluated FE basis functions but using the usual R_k(rho) basis
+    # functions without any rho factors.
     Rprime_pre_evaluated = Rprime_basis.evaluate(nodes=quadpoints)
     Zprime_pre_evaluated = Zprime_basis.evaluate(nodes=quadpoints)
     Lprime_pre_evaluated = Lprime_basis.evaluate(nodes=quadpoints)
@@ -156,7 +166,7 @@ def convert_spectral_to_FE(
     RR = R_sum_pre_evaluated[:, np.newaxis] * Rprime_pre_evaluated
     LL = L_sum_pre_evaluated[:, np.newaxis] * Lprime_pre_evaluated
 
-    k_plus1 = np.arange(2, L + 1, 2) + 1
+    # Note integral rho R_k(rho) = 0 unless k = 0 by orthogonality
     Aj_Z = mesh.integrate(
         # Integrate rho * basis functions over the rho direction
         np.sum(
@@ -176,9 +186,6 @@ def convert_spectral_to_FE(
             axis=0,
         )
     )
-    Aj_R = k_plus1[:, np.newaxis, np.newaxis] * Aj_R.reshape(lmodes, I, Q)
-    Aj_Z = k_plus1[:, np.newaxis, np.newaxis] * Aj_Z.reshape(lmodes, I, Q)
-    Aj_L = k_plus1[:, np.newaxis, np.newaxis] * Aj_L.reshape(lmodes, I, Q)
     t2 = time.time()
     print("Time to construct vector b = ", t2 - t1)
 
@@ -187,9 +194,16 @@ def convert_spectral_to_FE(
     # However, factor of pi from the orthonormality of the radial basis functions
     # being used in the finite element representation.
     t1 = time.time()
-    Bjb_R = Bjb_R.reshape(I * Q + 1, I * Q + 1)
-    Bjb_L = Bjb_L.reshape(I * Q + 1, I * Q + 1)
-    Bjb_Z = Bjb_Z.reshape(I * Q + 1, I * Q + 1)
+    Aj_R = 2 * k_plus1[:, np.newaxis, np.newaxis] * Aj_R.reshape(lmodes, I, Q)
+    Aj_Z = 2 * k_plus1[:, np.newaxis, np.newaxis] * Aj_Z.reshape(lmodes, I, Q)
+    Aj_L = 2 * k_plus1[:, np.newaxis, np.newaxis] * Aj_L.reshape(lmodes, I, Q)
+    Aj_R = np.array(Aj_R.reshape(nmodes))
+    Aj_Z = np.array(Aj_Z.reshape(nmodes))
+    Aj_L = np.array(Aj_L.reshape(nmodes))
+
+    Bjb_R = Bjb_R.reshape(I * Q, I * Q)
+    Bjb_L = Bjb_L.reshape(I * Q, I * Q)
+    Bjb_Z = Bjb_Z.reshape(I * Q, I * Q)
     Bjb_R_expanded = np.zeros((lmodes, I * Q, lmodes, I * Q))
     Bjb_Z_expanded = np.zeros((lmodes, I * Q, lmodes, I * Q))
     Bjb_L_expanded = np.zeros((lmodes, I * Q, lmodes, I * Q))
@@ -200,21 +214,18 @@ def convert_spectral_to_FE(
     Bjb_R = np.reshape(Bjb_R_expanded, (nmodes, nmodes))
     Bjb_Z = np.reshape(Bjb_Z_expanded, (nmodes, nmodes))
     Bjb_L = np.reshape(Bjb_L_expanded, (nmodes, nmodes))
-    Aj_R = np.array(Aj_R.reshape(nmodes) * 2)
-    Aj_Z = np.array(Aj_Z.reshape(nmodes) * 2)
-    Aj_L = np.array(Aj_L.reshape(nmodes) * 2)
 
     # Constructed the matrices such that Bjb * Rprime = Aj and now need to solve
     # this linear system of equations. Use an LU
-    lu = splu(Bjb_R)
-    Rprime = lu.solve(Aj_R)
-    Rprime_lmn = Rprime.reshape(nmodes)
-    lu = splu(Bjb_Z)
-    Zprime = lu.solve(Aj_Z)
-    Zprime_lmn = Zprime.reshape(nmodes)
-    lu = splu(Bjb_L)
-    Lprime = lu.solve(Aj_L)
-    Lprime_lmn = Lprime.reshape(nmodes)
+    lu = splu(Bjb_R)  # [:nmodes - (L + 3) // 2, :nmodes - (L + 3) // 2])
+    Rprime = lu.solve(Aj_R)  # [:nmodes - (L + 3) // 2])
+    Rprime_lmn = Rprime.reshape(nmodes)  # - (L + 3) // 2)
+    lu = splu(Bjb_Z)  # [:nmodes - (L + 3) // 2, :nmodes - (L + 3) // 2])
+    Zprime = lu.solve(Aj_Z)  # [:nmodes - (L + 3) // 2])
+    Zprime_lmn = Zprime.reshape(nmodes)  # - (L + 3) // 2)
+    lu = splu(Bjb_L)  # [:nmodes - (L + 3) // 2, :nmodes - (L + 3) // 2])
+    Lprime = lu.solve(Aj_L)  # [:nmodes - (L + 3) // 2])
+    Lprime_lmn = Lprime.reshape(nmodes)  # - (L + 3) // 2)
     t2 = time.time()
     print("Time to solve Ax = b, ", t2 - t1)
     return Rprime_lmn, Zprime_lmn, Lprime_lmn

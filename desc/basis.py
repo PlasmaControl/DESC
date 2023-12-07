@@ -1324,12 +1324,12 @@ class FiniteElementBasis(_FE_Basis):
         if N == 0:
             self.mesh = FiniteElementMesh1D(M, K=K)
             self.I_2MN = M - 1
-            self.Q = K + 1
+            self.Q = K + 2  # + 1 here for the constant basis function
         else:
             self.mesh = FiniteElementMesh2D(M, N, K=K)
             self.I_2MN = 2 * (M - 1) * N
-            self.Q = int((K + 1) * (K + 2) / 2.0)
-        self.nmodes = (self.L + 1) // 2 * self.I_2MN * self.Q
+            self.Q = int((K + 1) * (K + 2) / 2.0) + 1
+        self.nmodes = (self.L + 3) // 2 * self.I_2MN * self.Q
         self._modes = self._get_modes()
         super().__init__()
 
@@ -1355,7 +1355,7 @@ class FiniteElementBasis(_FE_Basis):
 
         """
         lij_mesh = np.meshgrid(
-            np.arange(2, self.L + 1, 2),
+            np.arange(0, self.L + 1, 2),
             np.arange(self.I_2MN),
             np.arange(self.Q),
             indexing="ij",
@@ -1363,7 +1363,7 @@ class FiniteElementBasis(_FE_Basis):
         lij_mesh = np.reshape(np.array(lij_mesh, dtype=int), (3, self.nmodes)).T
         return np.unique(lij_mesh, axis=0)
 
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None, n=-1):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -1392,10 +1392,8 @@ class FiniteElementBasis(_FE_Basis):
         lm = np.array([l, np.zeros(modes.shape[0])]).T
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
-        r0 = zernike_radial(
-            np.zeros(len(r))[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0]
-        )
-        radial = radial - r0
+        # Rescale all the radial basis functions by r ** (n + 1)?
+
         if self.N > 0:
             # Tessellate the domain and find the basis functions for theta, zeta
             Theta, Zeta = np.meshgrid(t, z, indexing="ij")
@@ -1419,8 +1417,8 @@ class FiniteElementBasis(_FE_Basis):
                 t
             )
             poloidal_toroidal = np.reshape(poloidal_toroidal, (len(t), -1))
-            poloidal_toroidal = np.tile(poloidal_toroidal, (self.L + 1) // 2)
-            inds = (l - 2) // 2 * (self.M - 1) * self.Q + i * self.Q + j
+            poloidal_toroidal = np.tile(poloidal_toroidal, (self.L + 3) // 2)
+            inds = (l + 1) // 2 * (self.M - 1) * self.Q + i * self.Q + j
 
         return (radial * poloidal_toroidal)[:, inds]
 

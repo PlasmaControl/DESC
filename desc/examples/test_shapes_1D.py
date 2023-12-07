@@ -16,10 +16,9 @@ from matplotlib import pyplot as plt
 from desc.basis import FiniteElementBasis, FiniteElementMesh1D, FourierZernikeBasis
 from desc.geometry import convert_spectral_to_FE
 
-# Seems to have a bug for L odd
 plt.figure()
-# for M in range(31, 32):
-M = 4
+L = 20
+M = 20
 N = 0
 K = 2
 mesh = FiniteElementMesh1D(M, K=K)
@@ -38,8 +37,6 @@ assert np.allclose(integral, np.pi)
 # Make a surface in (R, phi=0, Z) plane.
 # Plot original boundary
 theta = np.linspace(0, 2 * np.pi, 400, endpoint=True)
-plt.plot(2 + np.cos(theta), 2 + 5 * np.sin(theta))
-L = 0
 
 # Define the bases
 R_basis = FourierZernikeBasis(
@@ -74,14 +71,22 @@ Z_lmn[1, 0] = 5.0
 R_lmn = R_lmn.reshape(num_modes * (2 * N + 1))
 Z_lmn = Z_lmn.reshape(num_modes * (2 * N + 1))
 L_lmn = np.zeros(R_lmn.shape)
+amp = 0.5
+R_lmn[np.isclose(R_lmn, 0.0)] = (
+    (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
+    * amp
+    / np.arange(1, len(R_lmn[np.isclose(R_lmn, 0.0)]) + 1)
+)
+Z_lmn[np.isclose(Z_lmn, 0.0)] = (
+    (np.random.rand(np.sum(np.isclose(Z_lmn, 0.0))) - 0.5)
+    * amp
+    / np.arange(1, len(R_lmn[np.isclose(Z_lmn, 0.0)]) + 1)
+)
 
 # Set the coefficients in the basis class
 R_basis.R_lmn = R_lmn
 Z_basis.Z_lmn = Z_lmn
 L_basis.L_lmn = L_lmn
-print(R_basis._modes)
-L = 6
-M = 12
 
 # Replot original boundary using the Zernike polynomials
 rho = np.linspace(0, 1, 5)
@@ -114,12 +119,9 @@ Rprime_lmn, Zprime_lmn, Lprime_lmn = convert_spectral_to_FE(
 )
 Rprime_basis.R_lmn = Rprime_lmn
 Zprime_basis.Z_lmn = Zprime_lmn
-print(Rprime_basis._modes)
-print("R_lmn, Z_lmn = ")
-print(Rprime_lmn)
-print(Zprime_lmn)
 
 # Replot the surface in the finite element basis
+nmodes = len(Rprime_basis.modes)
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
 plt.plot(R, Z, "ko")

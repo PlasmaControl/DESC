@@ -9,9 +9,10 @@ import pytest
 from qic import Qic
 from qsc import Qsc
 
-import desc.examples
+from desc.backend import jnp
 from desc.continuation import _solve_axisym, solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
@@ -28,7 +29,6 @@ from desc.objectives import (
     FixModeZ,
     FixOmniBmax,
     FixOmniShift,
-    FixOmniWell,
     FixParameter,
     FixPressure,
     FixPsi,
@@ -37,6 +37,7 @@ from desc.objectives import (
     ForceBalanceAnisotropic,
     GenericObjective,
     HelicalForceBalance,
+    LinearObjectiveFromUser,
     ObjectiveFunction,
     Omnigenity,
     PlasmaVesselDistance,
@@ -213,7 +214,7 @@ def test_force_balance_grids():
 def test_solve_bounds():
     """Tests optimizing with bounds=(lower bound, upper bound)."""
     # decrease resolution and double pressure so no longer in force balance
-    eq = desc.examples.get("DSHAPE")
+    eq = get("DSHAPE")
     eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
     eq.p_l *= 2
 
@@ -232,7 +233,7 @@ def test_solve_bounds():
 @pytest.mark.optimize
 def test_1d_optimization():
     """Tests 1D optimization for target aspect ratio."""
-    eq = desc.examples.get("SOLOVEV")
+    eq = get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(eq=eq, target=2.5))
     constraints = (
         ForceBalance(eq=eq),
@@ -253,7 +254,7 @@ def test_1d_optimization():
 @pytest.mark.optimize
 def test_1d_optimization_old():
     """Tests 1D optimization for target aspect ratio."""
-    eq = desc.examples.get("SOLOVEV")
+    eq = get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(eq=eq, target=2.5))
     eq._optimize(
         objective,
@@ -368,7 +369,7 @@ def test_qh_optimization():
 def test_ATF_results(tmpdir_factory):
     """Test automatic continuation method with ATF."""
     output_dir = tmpdir_factory.mktemp("result")
-    eq0 = desc.examples.get("ATF")
+    eq0 = get("ATF")
     eq = Equilibrium(
         Psi=eq0.Psi,
         NFP=eq0.NFP,
@@ -400,7 +401,7 @@ def test_ATF_results(tmpdir_factory):
 def test_ESTELL_results(tmpdir_factory):
     """Test automatic continuation method with ESTELL."""
     output_dir = tmpdir_factory.mktemp("result")
-    eq0 = desc.examples.get("ESTELL")
+    eq0 = get("ESTELL")
     eq = Equilibrium(
         Psi=eq0.Psi,
         NFP=eq0.NFP,
@@ -821,7 +822,7 @@ def test_multiobject_optimization_prox():
 def test_omnigenity_qa():
     """Test optimizing omnigenity parameters to match an axisymmetric equilibrium."""
     # Solov'ev examples has B_max contours at theta=pi, need to change to theta=0
-    eq = desc.examples.get("SOLOVEV")
+    eq = get("SOLOVEV")
     rone = np.ones_like(eq.R_lmn)
     rone[eq.R_basis.modes[:, 1] != 0] *= -1
     eq.R_lmn *= rone
@@ -937,6 +938,17 @@ def test_omnigenity_optimization():
         helicity=(0, eq.NFP),
         B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),
     )
+
+    def mirrorRatio(params):
+        B_lm = params["B_lm"]
+        f = jnp.array(
+            [
+                B_lm[0] - B_lm[field.M_well],  # B_min on axis
+                B_lm[field.M_well - 1] - B_lm[-1],  # B_max on axis
+            ]
+        )
+        return f
+
     eq_half_grid = LinearGrid(rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
     eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
 
@@ -975,18 +987,22 @@ def test_omnigenity_optimization():
         FixOmniShift(
             field=field, indices=np.where(field.shift_basis.modes[:, 1] == 0)[0]
         ),
-        FixOmniWell(field=field, indices=[0, field.M_well - 1]),
+        LinearObjectiveFromUser(mirrorRatio, field, target=[0.8, 1.2]),
     )
     optimizer = Optimizer("lsq-auglag")
     (eq, field), _ = optimizer.optimize(
         (eq, field), objective, constraints, maxiter=100, verbose=3
     )
 
-    # check results
-    np.testing.assert_allclose(field.B_lm[np.array([0, 2])], [0.8, 1.2])
-    np.testing.assert_allclose(field.x_lmn[np.array([0, 2, 4, 6, 8, 10])], 0)
+    # check omnigenity error is low
     f = objective.compute_scaled_error(objective.x(*(eq, field)))
     np.testing.assert_allclose(f, 0, atol=1.6e-2)
+
+    # check mirror ratio is correct
+    grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=np.array([0]))
+    data = eq.compute("|B|", grid=grid)
+    np.testing.assert_allclose(np.min(data["|B|"]), 0.8, atol=2e-2)
+    np.testing.assert_allclose(np.max(data["|B|"]), 1.2, atol=2e-2)
 
 
 class TestGetExample:
@@ -996,36 +1012,36 @@ class TestGetExample:
     def test_missing_example(self):
         """Test for correct error thrown when no example is found."""
         with pytest.raises(ValueError, match="example FOO not found"):
-            desc.examples.get("FOO")
+            get("FOO")
 
     @pytest.mark.unit
     def test_example_get_eq(self):
         """Test getting a single equilibrium."""
-        eq = desc.examples.get("SOLOVEV")
+        eq = get("SOLOVEV")
         assert eq.Psi == 1
 
     @pytest.mark.unit
     def test_example_get_eqf(self):
         """Test getting full equilibria family."""
-        eqf = desc.examples.get("DSHAPE", "all")
+        eqf = get("DSHAPE", "all")
         np.testing.assert_allclose(eqf[0].pressure.params, 0)
 
     @pytest.mark.unit
     def test_example_get_boundary(self):
         """Test getting boundary surface."""
-        surf = desc.examples.get("HELIOTRON", "boundary")
+        surf = get("HELIOTRON", "boundary")
         np.testing.assert_allclose(surf.R_lmn[surf.R_basis.get_idx(0, 1, 1)], -0.3)
 
     @pytest.mark.unit
     def test_example_get_pressure(self):
         """Test getting pressure profile."""
-        pres = desc.examples.get("ATF", "pressure")
+        pres = get("ATF", "pressure")
         np.testing.assert_allclose(pres.params[:5], [5e5, -1e6, 5e5, 0, 0])
 
     @pytest.mark.unit
     def test_example_get_iota(self):
         """Test getting iota profile."""
-        iota = desc.examples.get("W7-X", "iota")
+        iota = get("W7-X", "iota")
         np.testing.assert_allclose(
             iota.params[:5],
             [
@@ -1040,7 +1056,7 @@ class TestGetExample:
     @pytest.mark.unit
     def test_example_get_current(self):
         """Test getting current profile."""
-        current = desc.examples.get("NCSX", "current")
+        current = get("NCSX", "current")
         np.testing.assert_allclose(
             current.params[:11],
             [

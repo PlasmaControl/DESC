@@ -299,7 +299,7 @@ class Volume(_Objective):
 
     Parameters
     ----------
-    eq_or_surf : Equilibrium or FourierRZToroidalSurface
+    thing : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
@@ -340,7 +340,7 @@ class Volume(_Objective):
 
     def __init__(
         self,
-        eq_or_surf,
+        thing,
         target=None,
         bounds=None,
         weight=1,
@@ -355,7 +355,7 @@ class Volume(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            things=eq_or_surf,
+            things=thing,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -377,13 +377,13 @@ class Volume(_Objective):
             Level of output.
 
         """
-        eq_or_surf = self.things[0]
+        thing = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(
-                L=eq_or_surf.L_grid,
-                M=eq_or_surf.M_grid,
-                N=eq_or_surf.N_grid,
-                NFP=eq_or_surf.NFP,
+                L=getattr(thing, "L_grid", 1),
+                M=thing.M_grid,
+                N=thing.N_grid,
+                NFP=thing.NFP,
             )
         else:
             grid = self._grid
@@ -396,8 +396,8 @@ class Volume(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, obj=eq_or_surf, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=eq_or_surf, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=thing, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=thing, grid=grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -408,7 +408,7 @@ class Volume(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            scales = compute_scaling_factors(eq_or_surf)
+            scales = compute_scaling_factors(thing)
             self._normalization = scales["V"]
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -720,7 +720,7 @@ class MeanCurvature(_Objective):
 
     Parameters
     ----------
-    eq_or_surf : Equilibrium or FourierRZToroidalSurface
+    thing : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
@@ -760,7 +760,7 @@ class MeanCurvature(_Objective):
 
     def __init__(
         self,
-        eq_or_surf,
+        thing,
         target=None,
         bounds=None,
         weight=1,
@@ -775,7 +775,7 @@ class MeanCurvature(_Objective):
             bounds = (-np.inf, 0)
         self._grid = grid
         super().__init__(
-            things=eq_or_surf,
+            things=thing,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -797,13 +797,13 @@ class MeanCurvature(_Objective):
             Level of output.
 
         """
-        eq_or_surf = self.things[0]
+        thing = self.things[0]
         if self._grid is None:
             grid = LinearGrid(  # getattr statements in case a surface is passed in
-                M=getattr(eq_or_surf, "M_grid", eq_or_surf.M * 2),
-                N=getattr(eq_or_surf, "N_grid", eq_or_surf.N * 2),
-                NFP=eq_or_surf.NFP,
-                sym=eq_or_surf.sym,
+                M=getattr(thing, "M_grid", thing.M * 2),
+                N=getattr(thing, "N_grid", thing.N * 2),
+                NFP=thing.NFP,
+                sym=thing.sym,
             )
         else:
             grid = self._grid
@@ -816,8 +816,8 @@ class MeanCurvature(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, obj=eq_or_surf, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=eq_or_surf, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=thing, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=thing, grid=grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -830,7 +830,7 @@ class MeanCurvature(_Objective):
         if self._normalize:
             # FIXME: if normalize=True, this fails bc
             #  compute_scaling_factors expects an equilibrium
-            scales = compute_scaling_factors(eq_or_surf)
+            scales = compute_scaling_factors(thing)
             self._normalization = 1 / scales["a"]
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -879,7 +879,7 @@ class PrincipalCurvature(_Objective):
 
     Parameters
     ----------
-    eq_or_surf : Equilibrium or FourierRZToroidalSurface
+    thing : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
@@ -919,7 +919,7 @@ class PrincipalCurvature(_Objective):
 
     def __init__(
         self,
-        eq_or_surf,
+        thing,
         target=None,
         bounds=None,
         weight=1,
@@ -934,7 +934,7 @@ class PrincipalCurvature(_Objective):
             target = 1
         self._grid = grid
         super().__init__(
-            things=eq_or_surf,
+            things=thing,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -956,13 +956,13 @@ class PrincipalCurvature(_Objective):
             Level of output.
 
         """
-        eq_or_surf = self.things[0]
+        thing = self.things[0]
         if self._grid is None:
             grid = LinearGrid(  # getattr statements in case a surface is passed in
-                M=getattr(eq_or_surf, "M_grid", eq_or_surf.M * 2),
-                N=getattr(eq_or_surf, "N_grid", eq_or_surf.N * 2),
-                NFP=eq_or_surf.NFP,
-                sym=eq_or_surf.sym,
+                M=getattr(thing, "M_grid", thing.M * 2),
+                N=getattr(thing, "N_grid", thing.N * 2),
+                NFP=thing.NFP,
+                sym=thing.sym,
             )
         else:
             grid = self._grid
@@ -975,8 +975,8 @@ class PrincipalCurvature(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, obj=eq_or_surf, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=eq_or_surf, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=thing, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=thing, grid=grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -987,7 +987,7 @@ class PrincipalCurvature(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            scales = compute_scaling_factors(eq_or_surf)
+            scales = compute_scaling_factors(thing)
             self._normalization = 1 / scales["a"]
 
         super().build(use_jit=use_jit, verbose=verbose)

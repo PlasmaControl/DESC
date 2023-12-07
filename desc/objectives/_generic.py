@@ -3,6 +3,8 @@
 import inspect
 import re
 
+import numpy as np
+
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -245,6 +247,17 @@ class LinearObjectiveFromUser(_FixedObjective):
         import jax
 
         self._dim_f = self._dim_f = jax.eval_shape(self._fun, thing.params_dict).size
+
+        # check that fun is linear
+        J1 = jax.jacrev(self._fun)(thing.params_dict)
+        params = thing.params_dict.copy()
+        for key, value in params.items():
+            params[key] = value + np.random.rand(value.size) * 10
+        J2 = jax.jacrev(self._fun)(params)
+        for key in J1.keys():
+            np.testing.assert_allclose(
+                J1[key], J2[key], err_msg="Function must be linear!"
+            )
 
         super().build(use_jit=use_jit, verbose=verbose)
 

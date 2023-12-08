@@ -379,12 +379,20 @@ class Volume(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(
-                L=getattr(eq, "L_grid", 1),
-                M=getattr(eq, "M_grid", eq.M * 2),
-                N=getattr(eq, "N_grid", eq.N * 2),
-                NFP=eq.NFP,
-            )
+            if hasattr(eq, "L_grid"):
+                grid = QuadratureGrid(
+                    L=getattr(eq, "L_grid", 1),
+                    M=getattr(eq, "M_grid", eq.M * 2),
+                    N=getattr(eq, "N_grid", eq.N * 2),
+                    NFP=eq.NFP,
+                )
+            else:
+                grid = LinearGrid(
+                    L=1,
+                    M=eq.M * 2,
+                    N=eq.N * 2,
+                    NFP=eq.NFP,
+                )
         else:
             grid = self._grid
 

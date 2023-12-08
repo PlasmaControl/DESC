@@ -6,7 +6,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.compute import get_profiles, get_transforms, rpz2xyz, rpz2xyz_vec
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
@@ -1486,7 +1486,7 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
         # source_grid.num_nodes for the regularization cost
         self._dim_f = (
             eval_grid.num_nodes
-            if self._alpha > 0
+            if self._alpha == 0
             else eval_grid.num_nodes + source_grid.num_nodes
         )
         self._equil_data_keys = ["n_rho", "R", "phi", "Z", "|e_theta x e_zeta|"]
@@ -1521,7 +1521,11 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
 
         if self._eq_fixed:
             data = eq.compute(["R", "phi", "Z", "n_rho"], grid=eval_grid)
+
             plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            data["n_rho"] = rpz2xyz_vec(
+                data["n_rho"], x=plasma_coords[:, 0], y=plasma_coords[:, 1]
+            )
 
         if not self._eq_fixed:
             self._constants = {
@@ -1577,6 +1581,10 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
                 profiles=constants["equil_profiles"],
             )
             plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            data["n_rho"] = rpz2xyz_vec(
+                data["n_rho"], x=plasma_coords[:, 0], y=plasma_coords[:, 1]
+            )
+
         else:
             data = constants["equil_data"]
             plasma_coords = constants["plasma_coords"]

@@ -1,6 +1,11 @@
 Changelog
 =========
 
+- `Equilibrium.map_coordinates` is now differentiable.
+- Removes method `Equilibrium.compute_flux_coordinates` as it is now redundant with the
+more general `Equilibrium.map_coordinates`.
+
+
 v0.10.3
 -------
 

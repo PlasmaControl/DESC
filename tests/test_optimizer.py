@@ -623,9 +623,9 @@ def test_scipy_constrained_solve():
     )["curvature_H_rho"]
     Hbounds = ((1 - 0.05 * np.sign(H)) * H, (1 + 0.05 * np.sign(H)) * abs(H))
     constraints += (
-        Volume(eq_or_surf=eq, bounds=Vbounds),
+        Volume(eq=eq, bounds=Vbounds),
         AspectRatio(eq=eq, bounds=ARbounds),
-        MeanCurvature(eq_or_surf=eq, bounds=Hbounds),
+        MeanCurvature(eq=eq, bounds=Hbounds),
     )
     obj = ObjectiveFunction(ForceBalance(eq=eq))
     eq2, result = eq.optimize(
@@ -886,7 +886,7 @@ def test_constrained_AL_lsq():
     AR = eq.compute("R0/a")["R0/a"]
     ARbounds = (0.95 * AR, 1.05 * AR)
     constraints += (
-        Volume(eq_or_surf=eq, bounds=Vbounds),
+        Volume(eq=eq, bounds=Vbounds),
         AspectRatio(eq=eq, bounds=ARbounds),
         MagneticWell(eq=eq, bounds=(0, jnp.inf)),
         ForceBalance(eq=eq, bounds=(-1e-3, 1e-3), normalize_target=False),
@@ -895,7 +895,7 @@ def test_constrained_AL_lsq():
         "curvature_H_rho",
         grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym),
     )["curvature_H_rho"]
-    obj = ObjectiveFunction(MeanCurvature(eq_or_surf=eq, target=H))
+    obj = ObjectiveFunction(MeanCurvature(eq=eq, target=H))
     ctol = 1e-4
     eq2, result = eq.optimize(
         objective=obj,
@@ -937,7 +937,7 @@ def test_constrained_AL_scalar():
     V = eq.compute("V")["V"]
     AR = eq.compute("R0/a")["R0/a"]
     constraints += (
-        Volume(eq_or_surf=eq, target=V),
+        Volume(eq=eq, target=V),
         AspectRatio(eq=eq, target=AR),
         MagneticWell(eq=eq, bounds=(0, jnp.inf)),
         ForceBalance(eq=eq, bounds=(-1e-3, 1e-3), normalize_target=False),

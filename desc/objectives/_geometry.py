@@ -379,12 +379,23 @@ class Volume(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(
-                L=getattr(eq, "L_grid", 1),
-                M=getattr(eq, "M_grid", eq.M * 2),
-                N=getattr(eq, "N_grid", eq.N * 2),
-                NFP=eq.NFP,
-            )
+            if hasattr(eq, "L_grid"):
+                grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+            else:
+                # if not an Equilibrium, is a Surface,
+                # has no radial resolution so just need
+                # the surface points
+                grid = LinearGrid(
+                    rho=1.0,
+                    M=eq.M * 2,
+                    N=eq.N * 2,
+                    NFP=eq.NFP,
+                )
         else:
             grid = self._grid
 

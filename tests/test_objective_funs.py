@@ -30,6 +30,7 @@ from desc.objectives import (
     GoodCoordinates,
     HelicalForceBalance,
     Isodynamicity,
+    LinearObjectiveFromUser,
     MagneticWell,
     MeanCurvature,
     MercierStability,
@@ -92,6 +93,24 @@ class TestObjectiveFunction:
         R1 = objective.compute(*objective.xs(eq))
         R2 = eq.compute("R", grid=grid)["R"]
         np.testing.assert_allclose(R1, R2)
+
+    @pytest.mark.unit
+    def test_linear_objective_from_user(self):
+        """Test LinearObjectiveFromUser for arbitrary callable."""
+
+        def myfun(params):
+            L_lmn = params["L_lmn"]
+            p_l = params["p_l"]
+            c_l = params["c_l"]
+            Zb_lmn = params["Zb_lmn"]
+            r = jnp.array([p_l[0] + Zb_lmn[0], c_l[2] + L_lmn[1]])
+            return r
+
+        eq = Equilibrium(pressure=np.array([1, 0, -1]), current=np.array([0, 0, 2]))
+        objective = LinearObjectiveFromUser(myfun, eq)
+        objective.build()
+        f = objective.compute(*objective.xs(eq))
+        np.testing.assert_allclose(f, np.array([0, 2]))
 
     @pytest.mark.unit
     def test_volume(self):
@@ -810,20 +829,20 @@ def test_mean_curvature():
     """Test for mean curvature objective function."""
     # torus should have mean curvature negative everywhere
     eq = Equilibrium()
-    obj = MeanCurvature(eq_or_surf=eq)
+    obj = MeanCurvature(eq=eq)
     obj.build()
     H = obj.compute_unscaled(*obj.xs(eq))
     assert np.all(H <= 0)
 
     # more shaped case like NCSX should have some positive curvature
     eq = get("NCSX")
-    obj = MeanCurvature(eq_or_surf=eq)
+    obj = MeanCurvature(eq=eq)
     obj.build()
     H = obj.compute_unscaled(*obj.xs(eq))
     assert np.any(H > 0)
 
     # check using the surface
-    obj = MeanCurvature(eq_or_surf=eq.surface)
+    obj = MeanCurvature(eq=eq.surface)
     obj.build()
     H = obj.compute_unscaled(*obj.xs(eq.surface))
     assert np.any(H > 0)
@@ -834,10 +853,10 @@ def test_principal_curvature():
     """Test for principal curvature objective function."""
     eq1 = get("DSHAPE")
     eq2 = get("NCSX")
-    obj1 = PrincipalCurvature(eq_or_surf=eq1, normalize=False)
+    obj1 = PrincipalCurvature(eq=eq1, normalize=False)
     obj1.build()
     K1 = obj1.compute_unscaled(*obj1.xs(eq1))
-    obj2 = PrincipalCurvature(eq_or_surf=eq2, normalize=False)
+    obj2 = PrincipalCurvature(eq=eq2, normalize=False)
     obj2.build()
     K2 = obj2.compute_unscaled(*obj2.xs(eq2))
 
@@ -845,10 +864,10 @@ def test_principal_curvature():
     assert K1.mean() < K2.mean()
 
     # same test but using the surface directly
-    obj1 = PrincipalCurvature(eq_or_surf=eq1.surface, normalize=False)
+    obj1 = PrincipalCurvature(eq=eq1.surface, normalize=False)
     obj1.build()
     K1 = obj1.compute_unscaled(*obj1.xs(eq1.surface))
-    obj2 = PrincipalCurvature(eq_or_surf=eq2.surface, normalize=False)
+    obj2 = PrincipalCurvature(eq=eq2.surface, normalize=False)
     obj2.build()
     K2 = obj2.compute_unscaled(*obj2.xs(eq2.surface))
 
@@ -1421,7 +1440,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(MeanCurvature(eq_or_surf=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(MeanCurvature(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1447,7 +1466,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(PrincipalCurvature(eq_or_surf=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(PrincipalCurvature(eq=eq, grid=grid), verbose=0)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)

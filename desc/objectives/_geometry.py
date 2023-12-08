@@ -387,8 +387,11 @@ class Volume(_Objective):
                     NFP=eq.NFP,
                 )
             else:
+                # if not an Equilibrium, is a Surface,
+                # has no radial resolution so just need
+                # the surface points
                 grid = LinearGrid(
-                    L=1,
+                    rho=1.0,
                     M=eq.M * 2,
                     N=eq.N * 2,
                     NFP=eq.NFP,

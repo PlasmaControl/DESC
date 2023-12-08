@@ -6,11 +6,12 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import fori_loop, jit, jnp, put, root_scalar, vmap, while_loop
+from desc.backend import fori_loop, jit, jnp, put, root, root_scalar, vmap, while_loop
 from desc.compute import compute as compute_fun
-from desc.compute import data_index, get_params, get_profiles, get_transforms
+from desc.compute import data_index, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
+from desc.utils import setdefault
 
 
 def map_coordinates(  # noqa: C901
@@ -19,9 +20,11 @@ def map_coordinates(  # noqa: C901
     inbasis,
     outbasis=("rho", "theta", "zeta"),
     guess=None,
+    params=None,
     period=(np.inf, np.inf, np.inf),
     tol=1e-6,
     maxiter=30,
+    full_output=False,
     **kwargs,
 ):
     """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
@@ -31,8 +34,6 @@ def map_coordinates(  # noqa: C901
 
     Speed can often be significantly improved by providing a reasonable initial guess.
     The default is a nearest neighbor search on a coarse grid.
-
-    NOTE: this function cannot be JIT compiled or differentiated with AD.
 
     Parameters
     ----------
@@ -49,6 +50,8 @@ def map_coordinates(  # noqa: C901
         Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
         corresponding to coords in inbasis. If None, heuristics are used based on
         in basis and a nearest neighbor search on a coarse grid.
+    params : dict
+        Values of equilibrium parameters to use, eg eq.params_dict
     period : tuple of float
         Assumed periodicity for each quantity in inbasis.
         Use np.inf to denote no periodicity.
@@ -56,6 +59,12 @@ def map_coordinates(  # noqa: C901
         Stopping tolerance.
     maxiter : int > 0
         Maximum number of Newton iterations
+    full_output : bool, optional
+        If True, also return a tuple where the first element is the residual from
+        the root finding and the second is the number of iterations.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
+        ``alpha``.
 
     Returns
     -------
@@ -63,6 +72,13 @@ def map_coordinates(  # noqa: C901
         Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
         for coordinates where root finding did not succeed, possibly because the
         coordinate is not in the plasma volume.
+    info : tuple
+        2 element tuple containing residuals and number of iterations
+        for each point. Only returned if ``full_output`` is True
+
+    Notes
+    -----
+    ``guess`` must be given for this function to be compatible with ``jit``.
 
     """
     inbasis = tuple(inbasis)
@@ -79,13 +95,12 @@ def map_coordinates(  # noqa: C901
         ), f"don't have recipe to compute partial derivative {key}"
 
     rhomin = kwargs.pop("rhomin", tol / 10)
-    alpha = kwargs.pop("backtrack_frac", 0.1)
-    maxls = kwargs.pop("max_backtrack", 10)
-    assert len(kwargs) == 0, f"map_coordinates got unexpected kwargs: {kwargs.keys()}"
+    kwargs.setdefault("tol", tol)
+    kwargs.setdefault("maxiter", maxiter)
     period = np.asarray(period)
     coords = coords % period
 
-    params = get_params(inbasis + basis_derivs, eq)
+    params = setdefault(params, eq.params_dict)
 
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
@@ -96,23 +111,23 @@ def map_coordinates(  # noqa: C901
             profiles["iota"] = eq.get_profile("iota")
         transforms = get_transforms(inbasis + basis_derivs, eq, grid, jitable=True)
         data = compute_fun(eq, basis, params, transforms, profiles)
-        x = jnp.stack([data[k] for k in basis], axis=-1)
+        x = jnp.array([data[k] for k in basis]).T
         return x
 
     @jit
-    def residual(y):
+    def residual(y, coords):
         xk = compute(y, inbasis)
         r = xk % period - coords % period
         return jnp.where(r > period / 2, -period + r, r)
 
     @jit
-    def jac(y):
+    def jac(y, coords):
         J = compute(y, basis_derivs)
-        J = J.reshape((-1, 3, 3))
+        J = J.reshape((3, 3))
         return J
 
     @jit
-    def fixup(y):
+    def fixup(y, *args):
         r, t, z = y.T
         # negative rho -> flip theta
         t = jnp.where(r < 0, (t + np.pi), t)
@@ -120,13 +135,6 @@ def map_coordinates(  # noqa: C901
         r = jnp.clip(r, rhomin, 1)
         y = jnp.array([r, t, z]).T
         return y
-
-    # use least squares to avoid singular behavior, cheap for 3x3 systems
-    lstsq = jit(
-        jnp.vectorize(
-            lambda A, b: jnp.linalg.lstsq(A, b)[0], signature="(n,n),(n)->(n)"
-        )
-    )
 
     yk = guess
     if yk is None:
@@ -160,45 +168,16 @@ def map_coordinates(  # noqa: C901
             yk = put(yk.T, 2, coords[:, inbasis.index("phi")]).T
 
     yk = fixup(yk)
-    resk = residual(yk)
 
-    for i in range(maxiter):
-        if np.max(np.abs(resk)) < tol:
-            break
-        J = jac(yk)
-        d = lstsq(J, resk)
-        alphak = jnp.ones(yk.shape[0])
-        for j in range(maxls):
-            # backtracking line search
-            yt = fixup(yk - alphak[:, None] * d)
-            res = residual(yt)
-            if np.max(np.abs(res)) < np.max(np.abs(resk)):
-                yk = yt
-                resk = res
-                break
-            else:
-                # only reduce step size where needed
-                alphak = jnp.where(
-                    np.max(np.abs(res), axis=-1) > np.max(np.abs(resk), axis=-1),
-                    alpha * alphak,
-                    alphak,
-                )
-        else:
-            # if we haven't found a good step, try taking a bad one and
-            # hope the next one is better
-            yk = yt
-            resk = res
-
-    r, t, z = yk.T
-    res = jnp.max(jnp.abs(residual(yk)), axis=-1)
-    r = jnp.where(res > tol, jnp.nan, r)
-    t = jnp.where(res > tol, jnp.nan, t)
-    z = jnp.where(res > tol, jnp.nan, z)
-
-    yk = jnp.vstack([r, t, z]).T
+    vecroot = jit(
+        vmap(lambda x0, *p: root(residual, x0, jac=jac, args=p, fixup=fixup, **kwargs))
+    )
+    yk, (res, niter) = vecroot(yk, coords)
 
     out = compute(yk, outbasis)
 
+    if full_output:
+        return out, (res, niter)
     return out
 
 
@@ -263,7 +242,7 @@ def compute_theta_coords(
         lmbda_t = jnp.dot(A1, L_lmn)
         return 1 + lmbda_t.squeeze()
 
-    def fixup(x):
+    def fixup(x, *args):
         return x % (2 * np.pi)
 
     vecroot = jit(
@@ -279,7 +258,7 @@ def compute_theta_coords(
 
     out = nodes
     if full_output:
-        out = (out, (res, niter))
+        return out, (res, niter)
     return out
 
 

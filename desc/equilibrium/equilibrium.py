@@ -904,17 +904,17 @@ class Equilibrium(IOAble, Optimizable):
         inbasis,
         outbasis=("rho", "theta", "zeta"),
         guess=None,
+        params=None,
         period=(np.inf, np.inf, np.inf),
         tol=1e-6,
         maxiter=30,
+        full_output=False,
         **kwargs,
     ):
         """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
 
         First solves for the computational coordinates that correspond to inbasis, then
         evaluates outbasis at those locations.
-
-        NOTE: this function cannot be JIT compiled or differentiated with AD.
 
         Parameters
         ----------
@@ -929,6 +929,8 @@ class Equilibrium(IOAble, Optimizable):
             Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
             corresponding to coords in inbasis. If None, heuristics are used based on
             in basis and a nearest neighbor search on a coarse grid.
+        params : dict
+            Values of equilibrium parameters to use, eg eq.params_dict
         period : tuple of float
             Assumed periodicity for each quantity in inbasis.
             Use np.inf to denote no periodicity.
@@ -936,17 +938,38 @@ class Equilibrium(IOAble, Optimizable):
             Stopping tolerance.
         maxiter : int > 0
             Maximum number of Newton iterations
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
+            ``alpha``.
 
         Returns
         -------
         coords : ndarray, shape(k,3)
-            Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
-            for coordinates where root finding did not succeed, possibly because the
-            coordinate is not in the plasma volume.
+            Coordinates mapped from inbasis to outbasis.
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True
+
+        Notes
+        -----
+        ``guess`` must be given for this function to be compatible with ``jit``.
 
         """
         return map_coordinates(
-            self, coords, inbasis, outbasis, guess, period, tol, maxiter, **kwargs
+            self,
+            coords,
+            inbasis,
+            outbasis,
+            guess,
+            params,
+            period,
+            tol,
+            maxiter,
+            full_output,
+            **kwargs,
         )
 
     def compute_theta_coords(

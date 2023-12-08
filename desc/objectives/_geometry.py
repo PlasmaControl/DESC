@@ -1450,7 +1450,11 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
 
         # eval_grid.num_nodes for quad flux cost,
         # source_grid.num_nodes for the regularization cost
-        self._dim_f = eval_grid.num_nodes
+        self._dim_f = (
+            eval_grid.num_nodes
+            if self._alpha > 0
+            else eval_grid.num_nodes + source_grid.num_nodes
+        )
         self._equil_data_keys = ["n_rho", "R", "phi", "Z", "|e_theta x e_zeta|"]
         self._surface_data_keys = ["K", "x", "|e_theta x e_zeta|"]
         # TODO: should check that G is set correctly
@@ -1560,10 +1564,8 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
         )
         Bn = jnp.sum(B * data["n_rho"], axis=-1)
 
-        _ = jnp.sum(  # chi_K
-            safenorm(surface_data["K"], axis=-1) ** 2
-            * self._source_grid.weights
-            * surface_data["|e_theta x e_zeta|"]
-        )
-
-        return Bn
+        if self._alpha > 0:
+            K_mag = safenorm(surface_data["K"], axis=-1)
+            return jnp.concatenate([Bn, self._alpha * K_mag])
+        else:
+            return Bn

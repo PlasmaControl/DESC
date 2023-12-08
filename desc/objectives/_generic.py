@@ -246,7 +246,7 @@ class LinearObjectiveFromUser(_FixedObjective):
 
         import jax
 
-        self._dim_f = self._dim_f = jax.eval_shape(self._fun, thing.params_dict).size
+        self._dim_f = jax.eval_shape(self._fun, thing.params_dict).size
 
         # check that fun is linear
         J1 = jax.jacrev(self._fun)(thing.params_dict)
@@ -255,9 +255,7 @@ class LinearObjectiveFromUser(_FixedObjective):
             params[key] = value + np.random.rand(value.size) * 10
         J2 = jax.jacrev(self._fun)(params)
         for key in J1.keys():
-            np.testing.assert_allclose(
-                J1[key], J2[key], err_msg="Function must be linear!"
-            )
+            assert np.all(J1[key] == J2[key]), "Function must be linear!"
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -267,7 +265,7 @@ class LinearObjectiveFromUser(_FixedObjective):
         Parameters
         ----------
         params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of equilibrium degrees of freedom, eg thing.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants

@@ -155,7 +155,10 @@ class AspectRatio(_Objective):
 
 
 class Elongation(_Objective):
-    """Elongation = semi-major radius / semi-minor radius. Max of all toroidal angles.
+    """Elongation = semi-major radius / semi-minor radius.
+
+    Elongation is a function of the toroidal angle.
+    Default ``loss_function="max"`` returns the maximum of all toroidal angles.
 
     Parameters
     ----------
@@ -205,7 +208,7 @@ class Elongation(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=None,
+        loss_function="max",
         deriv_mode="auto",
         grid=None,
         name="elongation",
@@ -242,7 +245,7 @@ class Elongation(_Objective):
         else:
             grid = self._grid
 
-        self._dim_f = 1
+        self._dim_f = grid.num_zeta
         self._data_keys = ["a_major/a_minor"]
 
         timer = Timer()
@@ -289,7 +292,9 @@ class Elongation(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["a_major/a_minor"]
+        return self._constants["transforms"]["grid"].compress(
+            data["a_major/a_minor"], surface_label="zeta"
+        )
 
 
 class Volume(_Objective):

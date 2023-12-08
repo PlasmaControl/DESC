@@ -38,13 +38,7 @@ from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import Timer, copy_coeffs, errorif, isposint, only1, setdefault
 
-from .coords import (
-    compute_flux_coords,
-    compute_theta_coords,
-    is_nested,
-    map_coordinates,
-    to_sfl,
-)
+from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
 from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
 
@@ -1013,37 +1007,6 @@ class Equilibrium(IOAble, Optimizable):
             tol=tol,
             full_output=full_output,
             **kwargs,
-        )
-
-    def compute_flux_coords(
-        self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
-    ):
-        """Find the (rho, theta, zeta) that correspond to given (R, phi, Z).
-
-        Parameters
-        ----------
-        real_coords : ndarray, shape(k,3)
-            2D array of real space coordinates [R,phi,Z]. Each row is a different
-            point in space.
-        R_lmn, Z_lmn : ndarray
-            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
-        tol : float
-            Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
-        maxiter : int > 0
-            maximum number of Newton iterations
-        rhomin : float
-            minimum allowable value of rho (to avoid singularity at rho=0)
-
-        Returns
-        -------
-        flux_coords : ndarray, shape(k,3)
-            flux coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-            a given coordinate (often because it is outside the plasma boundary),
-            nan will be returned for those values
-
-        """
-        return compute_flux_coords(
-            self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
         )
 
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

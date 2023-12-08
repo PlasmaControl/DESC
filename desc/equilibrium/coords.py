@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import fori_loop, jit, jnp, put, root, root_scalar, vmap, while_loop
+from desc.backend import fori_loop, jit, jnp, put, root, root_scalar, vmap
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -260,106 +260,6 @@ def compute_theta_coords(
     if full_output:
         return out, (res, niter)
     return out
-
-
-def compute_flux_coords(
-    eq, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
-):
-    """Find the (rho, theta, zeta) that correspond to given (R, phi, Z).
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium to use
-    real_coords : ndarray, shape(k,3)
-        2D array of real space coordinates [R,phi,Z]. Each row is a different
-        point in space.
-    R_lmn, Z_lmn : ndarray
-        spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
-    tol : float
-        Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
-    maxiter : int > 0
-        maximum number of Newton iterations
-    rhomin : float
-        minimum allowable value of rho (to avoid singularity at rho=0)
-
-    Returns
-    -------
-    flux_coords : ndarray, shape(k,3)
-        flux coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-        a given coordinate (often because it is outside the plasma boundary),
-        nan will be returned for those values
-
-    """
-    if maxiter <= 0:
-        raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
-    if R_lmn is None:
-        R_lmn = eq.R_lmn
-    if Z_lmn is None:
-        Z_lmn = eq.Z_lmn
-
-    R, phi, Z = real_coords.T
-    R = jnp.abs(R)
-
-    # nearest neighbor search on coarse grid for initial guess
-    nodes = ConcentricGrid(L=20, M=10, N=0).nodes
-    AR = eq.R_basis.evaluate(nodes)
-    AZ = eq.Z_basis.evaluate(nodes)
-    Rg = jnp.dot(AR, R_lmn)
-    Zg = jnp.dot(AZ, Z_lmn)
-    distance = (R[:, np.newaxis] - Rg) ** 2 + (Z[:, np.newaxis] - Zg) ** 2
-    idx = jnp.argmin(distance, axis=1)
-
-    rhok = nodes[idx, 0]
-    thetak = nodes[idx, 1]
-    Rk = Rg[idx]
-    Zk = Zg[idx]
-    k = 0
-
-    def cond_fun(k_rhok_thetak_Rk_Zk):
-        k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
-        return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol**2) & (k < maxiter)
-
-    def body_fun(k_rhok_thetak_Rk_Zk):
-        k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
-        nodes = jnp.array([rhok, thetak, phi]).T
-        ARr = eq.R_basis.evaluate(nodes, (1, 0, 0))
-        Rr = jnp.dot(ARr, R_lmn)
-        AZr = eq.Z_basis.evaluate(nodes, (1, 0, 0))
-        Zr = jnp.dot(AZr, Z_lmn)
-        ARt = eq.R_basis.evaluate(nodes, (0, 1, 0))
-        Rt = jnp.dot(ARt, R_lmn)
-        AZt = eq.Z_basis.evaluate(nodes, (0, 1, 0))
-        Zt = jnp.dot(AZt, Z_lmn)
-
-        tau = Rt * Zr - Rr * Zt
-        eR = R - Rk
-        eZ = Z - Zk
-        thetak += (Zr * eR - Rr * eZ) / tau
-        rhok += (Rt * eZ - Zt * eR) / tau
-        # negative rho -> rotate theta instead
-        thetak = jnp.where(
-            rhok < 0, (thetak + np.pi) % (2 * np.pi), thetak % (2 * np.pi)
-        )
-        rhok = jnp.abs(rhok)
-        rhok = jnp.clip(rhok, rhomin, 1)
-        nodes = jnp.array([rhok, thetak, phi]).T
-
-        AR = eq.R_basis.evaluate(nodes, (0, 0, 0))
-        Rk = jnp.dot(AR, R_lmn)
-        AZ = eq.Z_basis.evaluate(nodes, (0, 0, 0))
-        Zk = jnp.dot(AZ, Z_lmn)
-        k += 1
-        return (k, rhok, thetak, Rk, Zk)
-
-    k, rhok, thetak, Rk, Zk = while_loop(cond_fun, body_fun, (k, rhok, thetak, Rk, Zk))
-
-    noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol**2
-    rho = jnp.where(noconverge, jnp.nan, rhok)
-    theta = jnp.where(noconverge, jnp.nan, thetak)
-    phi = jnp.where(noconverge, jnp.nan, phi)
-
-    return jnp.vstack([rho, theta, phi]).T
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):

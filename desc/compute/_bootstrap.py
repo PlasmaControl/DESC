@@ -422,19 +422,17 @@ def _current_Redl(params, transforms, profiles, data, **kwargs):
         * transforms["grid"].compress(data["<J*B> Redl"])
         / transforms["grid"].compress(data["<|B|^2>"])
     )
-    c_l_r = jnp.polyfit(
-        rho,
-        current_r,
-        kwargs.get(
-            "degree",
-            min(
-                profiles["current"].basis.L
-                if profiles["current"] is not None
-                else transforms["grid"].num_rho - 1,
-                transforms["grid"].num_rho - 1,
-            ),
+    degree = kwargs.get(
+        "degree",
+        min(
+            profiles["current"].basis.L
+            if profiles["current"] is not None
+            else transforms["grid"].num_rho - 1,
+            transforms["grid"].num_rho - 1,
         ),
     )
+    XX = jnp.vander(rho, degree + 1)[:, :-1]  # remove constant term
+    c_l_r = jnp.pad(jnp.linalg.lstsq(XX, current_r)[0], (0, 1))  # manual polyfit
     c_l = jnp.polyint(c_l_r)
     current = jnp.polyval(c_l, rho)
     data["current Redl"] = transforms["grid"].expand(current)

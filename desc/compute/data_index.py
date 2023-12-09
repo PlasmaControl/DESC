@@ -66,6 +66,7 @@ def register_compute_fun(
     data,
     aliases=[],
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
+    grid_type=None,
     axis_limit_data=None,
     **kwargs,
 ):
@@ -98,14 +99,16 @@ def register_compute_fun(
         a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty.
-    parameterization: str or list of str
-        Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
-        or `desc.equilibrium.Equilibrium`.
-    axis_limit_data : list of str
-        Names of other items in the data index needed to compute axis limit of qty.
     aliases : list
         Aliases of `name`. Will be stored in the data dictionary as a copy of `name`s
         data.
+    parameterization : str or list of str
+        Name of desc types the method is valid for. eg `'desc.geometry.FourierXYZCurve'`
+        or `'desc.equilibrium.Equilibrium'`.
+    grid_type : str
+        Name of grid type the quantity must be computed with. eg `'quad'`.
+    axis_limit_data : list of str
+        Names of other items in the data index needed to compute axis limit of qty.
 
     Notes
     -----
@@ -139,6 +142,7 @@ def register_compute_fun(
             "coordinates": coordinates,
             "dependencies": deps,
             "aliases": aliases,
+            "grid_type": grid_type,
         }
         for p in parameterization:
             flag = False
@@ -150,7 +154,6 @@ def register_compute_fun(
                         )
                     data_index[base_class][name] = d.copy()
                     for alias in aliases:
-
                         data_index[base_class][alias] = d.copy()
                         # assigns alias compute func to generator to be used later
                         data_index[base_class][alias]["fun"] = functools.partial(

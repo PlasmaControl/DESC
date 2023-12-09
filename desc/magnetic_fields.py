@@ -451,7 +451,7 @@ class SumMagneticField(_MagneticField):
             one entry for each component field.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
+        grid : list or tuple of Grid, int or None, optional
             Grid used to discretize MagneticField object if calculating
             B from biot savart. If an integer, uses that many equally spaced
             points.
@@ -465,10 +465,20 @@ class SumMagneticField(_MagneticField):
             params = [None] * len(self._fields)
         if isinstance(params, dict):
             params = [params]
+        if grid is None:
+            grid = [None] * len(self._fields)
+        if not isinstance(grid, (list, tuple)):
+            grid = [grid]
+        if len(grid) != len(self._fields):
+            # ensure that if grid is shorter, that
+            # it is simply repeated so that zip
+            # does not terminate early
+            grid = grid * len(self._fields)
+
         B = 0
-        for i, field in enumerate(self._fields):
+        for i, (field, g) in enumerate(zip(self._fields, grid)):
             B += field.compute_magnetic_field(
-                coords, params[i % len(params)], basis, grid=grid
+                coords, params[i % len(params)], basis, grid=g
             )
 
         return B
@@ -1559,7 +1569,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
         """
         grid = grid or LinearGrid(
-            M=self._M_Phi * 3 + 1, N=self._N_Phi * 3 + 1, NFP=self.NFP
+            M=self._M_Phi * 4 + 1, N=self._N_Phi * 4 + 1, NFP=self.NFP
         )
         return _compute_magnetic_field_from_CurrentPotentialField(
             field=self, coords=coords, params=params, basis=basis, grid=grid

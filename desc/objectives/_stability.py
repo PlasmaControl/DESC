@@ -527,3 +527,5 @@ class BallooningStability(_Objective):
         )
 
         return data["ideal_ball_gamma2"]
+
+

@@ -13,7 +13,7 @@ import scipy
 from scipy.constants import mu_0
 from scipy.integrate import simpson as simps
 
-from desc.backend import gen_eigval, jnp
+from desc.backend import eigvals, jnp
 from desc.grid import Grid
 
 from .data_index import register_compute_fun
@@ -355,7 +355,7 @@ def _ideal_ballooning_gamma(params, transforms, profiles, data, *kwargs):
         + g_half[i, j] / f[i, j + 1] * 1 / h**2 * (j - k == 1)
     )
 
-    w = gen_eigval(jnp.where(jnp.isfinite(A), A, 0))
+    w = eigvals(jnp.where(jnp.isfinite(A), A, 0))
 
     lam = jnp.real(jnp.max(w))
 
@@ -501,13 +501,161 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     w, _ = jnp.linalg.eigh(A_redo)
 
-    lam = jnp.real(jnp.max(w, axis=(2,)))
+    lam = jnp.real(jnp.max(w, axis=(2,))) + 0.1
 
-    lam = (lam + 0.001) * (lam >= -0.001)
+    lam = lam * (lam >= 0.0)
 
     data["ideal_ball_gamma2"] = jnp.sum(lam)
 
     return data
+
+
+@register_compute_fun(
+    name="Newcomb_metric",
+    label="\\mathrm{Nwecomb-metric}",
+    units=" ",
+    units_long=" ",
+    description="A measure of Newcomb's distance from marginality",
+    dim=1,
+    params=["Psi"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "a",
+        "g^aa",
+        "g^ra",
+        "g^rr",
+        "cvdrift",
+        "cvdrift0",
+        "|B|",
+        "B^zeta",
+        "p_r",
+        "psi_r",
+        "phi",
+        "iota",
+        "psi",
+        "rho",
+    ],
+)
+def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
+    """
+    Ideal-ballooning growth rate proxy
+
+    This function uses a finite-difference method to solve the
+    marginal stability ideal-ballooning equation using the 
+    Newcomb's stability criterion
+
+    d / d z (g d X / d z) + c * X = 0, g, f > 0
+
+    where
+
+    kappa = b dot grad b
+    g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
+    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
+        * (b cross kappa) dot grad alpha/ B**2,
+    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta),
+    are needed along a field line to solve the ballooning equation once.
+
+    To obtain the parameters g, c, and f, we need a set of parameters
+    provided in the list ``data`` above. Here's a description of
+    these parameters:
+
+    - a: minor radius of the device
+    - g^aa: |grad alpha|^2, field line bending term
+    - g^ra: (grad alpha dot grad rho) integrated local shear
+    - g^rr: |grad rho|^2 flux expansion term
+    - cvdrift: geometric factor of the curvature drift
+    - cvdrift0: geoetric factor of curvature drift 2
+    - |B|: magnitude of the magnetic field
+    - B^zeta: inverse of the jacobian
+    - p_r: dp/drho, pressure gradient
+    - psi_r: radial gradient of the toroidal flux
+    - phi: coordinate describing the position in the toroidal angle
+    along a field line
+    """
+    rho = data["rho"]
+
+    psi_b = params["Psi"] / (2 * np.pi)
+    a_N = 0.1
+    B_N = 2 * psi_b / a_N**2
+
+    N_zeta0 = int(11)
+    # up-down symmetric equilibria only
+    zeta0 = jnp.linspace(-np.pi, np.pi, N_zeta0)
+
+    iota = data["iota"]
+    psi = data["psi"]
+    sign_psi = jnp.sign(psi[-1])
+    sign_iota = jnp.sign(iota[-1])
+
+    phi = data["phi"]
+
+    N_alpha = int(8)
+    N = int(len(phi) / N_alpha)
+
+    B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
+    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
+    dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
+
+    gds2 = jnp.reshape(
+        rho**2
+        * (
+            data["g^aa"][None, :]
+            - 2 * sign_iota * zeta0[:, None] * data["g^ra"][None, :]
+            + zeta0[:, None] ** 2 * data["g^rr"][None, :]
+        ),
+        (N_alpha, N_zeta0, N),
+    )
+
+    f = a_N * B_N**3 * gds2 / B**3 * 1 / gradpar
+    g = a_N**3 * B_N * gds2 / B * gradpar
+    g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
+    c = jnp.reshape(
+        a_N
+        * 2
+        / data["B^zeta"][None, :]
+        * rho
+        * sign_psi
+        * dpdpsi
+        * (data["cvdrift"][None, :] + zeta0[:, None] * data["cvdrift0"][None, :]),
+        (N_alpha, N_zeta0, N),
+    )
+
+    h = (phi[-1] - phi[0]) / (N - 1)
+
+    i = jnp.arange(N_alpha)[:, None, None, None]
+    l = jnp.arange(N_zeta0)[None, :, None, None]
+    j = jnp.arange(N - 2)[None, None, :, None]
+    k = jnp.arange(N - 2)[None, None, None, :]
+
+    A = jnp.zeros((N_alpha, N_zeta0, N - 2, N - 2))
+    B = jnp.zeros((N_alpha, N_zeta0, N - 2, N - 2))
+    B_inv = jnp.zeros((N_alpha, N_zeta0, N - 2, N - 2))
+
+    A = A.at[i, l, j, k].set(
+        g_half[i, l, k] * 1 / h**2 * (j - k == -1)
+        + (-(g_half[i, l, j + 1] + g_half[i, l, j]) * 1 / h**2 + c[i, l, j + 1])
+        * (j - k == 0)
+        + g_half[i, l, j] * 1 / h**2 * (j - k == 1)
+    )
+
+    B = B.at[i, l, j].set(-g_half[i, j] / f[i, j + 1] * 1 / h**2  * (j == 0))
+
+    X = jnp.linalg.inv(A) @ B
+
+    Y = X[:, :, 1:] * X[:, :, :-1]
+
+    zero_cross_idx = jnp.where(np.sign(Y) == -1)[0]
+
+    if len(zero_cross_idx) == 0:
+    	first_idx = jnp.array([zero_cross_idx[:-1], 0])
+    	last_idx = jnp.array([zero_cross_idx[:-1], -1])
+    	data = jnp.sum((phi[zero_cross_idx] - phi[last_idx])/(phi[zero_cross_idx] - phi[last_idx]))
+    else:
+    	data = jnp.sum(1 + jnp.tanh(jnp.abs(jnp.cbrt(X[:, :, -1]))*10))
+
+    return jnp.abs(data - 2.0)
 
 
 def _gamma_ideal_ballooning_FD2(eq):

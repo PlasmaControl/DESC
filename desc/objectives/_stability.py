@@ -1,5 +1,4 @@
 """Objectives for targeting MHD stability."""
-
 import numpy as np
 
 from desc.backend import jnp
@@ -435,6 +434,12 @@ class BallooningStability(_Objective):
         iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
         iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
 
+        ## Separate grid to calculate the right length scale for normalization
+        len_grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        self._len_keys = ["a"]
+        len_profiles = get_profiles(self._len_keys, obj=eq, grid=len_grid)
+        len_transforms = get_transforms(self._len_keys, obj=eq, grid=len_grid)
+
         # make a set of nodes along a single fieldline
         zeta = np.linspace(-self.zetamax, self.zetamax, self.nzeta)
         rho, alpha, zeta = np.reshape(
@@ -443,10 +448,10 @@ class BallooningStability(_Objective):
         fieldline_nodes = np.array([rho, alpha, zeta]).T
 
         self._dim_f = 1
-        self._data_keys = ["ideal_ball_gamma2"]  # or whatever else you need as output
+        self._data_keys = ["Newcomb_metric"]  # or whatever else you need as output
 
         self._args = get_params(
-            self._iota_keys + self._data_keys,
+            self._iota_keys + self._len_keys + self._data_keys,
             obj="desc.equilibrium.equilibrium.Equilibrium",
             has_axis=False,
         )
@@ -454,6 +459,8 @@ class BallooningStability(_Objective):
         self._constants = {
             "iota_transforms": iota_transforms,
             "iota_profiles": iota_profiles,
+            "len_transforms": len_transforms,
+            "len_profiles": len_profiles,
             "fieldline_nodes": fieldline_nodes,
             "quad_weights": 1.0,
         }
@@ -491,9 +498,16 @@ class BallooningStability(_Objective):
             transforms=constants["iota_transforms"],
             profiles=constants["iota_profiles"],
         )
-        # map_coordinates doesnt work with JIT/AD yet,
-        # so we compute theta_DESC for given theta_PEST
 
+        len_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._len_keys,
+            params=params,
+            transforms=constants["len_transforms"],
+            profiles=constants["len_profiles"],
+        )
+
+        # Now we compute theta_DESC for given theta_PEST
         iota = iota_data["iota"][0]
         rho, alpha, zeta = constants["fieldline_nodes"].T
         theta_PEST = alpha + iota * zeta
@@ -514,6 +528,7 @@ class BallooningStability(_Objective):
             "iota": iota_data["iota"][0] * jnp.ones_like(zeta),
             "iota_r": iota_data["iota_r"][0] * jnp.ones_like(zeta),
             "iota_rr": iota_data["iota_rr"][0] * jnp.ones_like(zeta),
+            "a": len_data["a"],
         }
 
         # now compute ballooning stuff
@@ -526,4 +541,4 @@ class BallooningStability(_Objective):
             data=data,
         )
 
-        return data["ideal_ball_gamma2"]
+        return data["Newcomb_metric"]  # or whatever else you need as output

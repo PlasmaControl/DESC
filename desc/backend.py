@@ -167,6 +167,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         Eigenvalue solver.
 
         Returns the eigenvalues of the square matrix A.
+        eigvals only run on CPUs
         """
         u = jax.pure_callback(
             _eigvals_cpu, jnp.zeros_like(A[..., -1]) + 1j, A, vectorized=True
@@ -193,7 +194,10 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         """
         Generalize eigenvalue solver.
 
-        Returns the eigenvalues of the square matrix A.
+        Returns the top n eigenvalues of the square matrix A. Calculation is
+        being performed on a CPU. If the CPU version can provide the top eigenvalue,
+        the calculation should be faster on a CPU.
+        Currently doesn't work because of the limitations of the jax functionality.
         """
         neigs, N, _ = jnp.shape(A)
         u = jnp.zeros((N,))

@@ -13,8 +13,7 @@ import scipy
 from scipy.constants import mu_0
 from scipy.integrate import simpson as simps
 
-from desc.backend import gen_eigval, jnp
-from desc.grid import Grid
+from desc.backend import eigvals, jax, jit, jnp, root_scalar, vmap
 
 from .data_index import register_compute_fun
 from .utils import dot, surface_integrals_map
@@ -234,7 +233,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="ideal_ball_gamma",
+    name="ideal_ball_gamma1",
     label="\\gamma^2",
     units=" ",
     units_long=" ",
@@ -261,7 +260,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         "rho",
     ],
 )
-def _ideal_ballooning_gamma(params, transforms, profiles, data, *kwargs):
+def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
     """
     Ideal-ballooning growth rate finder.
 
@@ -300,12 +299,11 @@ def _ideal_ballooning_gamma(params, transforms, profiles, data, *kwargs):
     rho = data["rho"]
 
     psi_b = params["Psi"] / (2 * np.pi)
-    a_N = 0.7
+    a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
-    N_zeta0 = int(10)
-    # up-down symmetric equilibria only
-    zeta0 = jnp.linspace(0, np.pi, N_zeta0)
+    N_zeta0 = int(11)
+    zeta0 = jnp.linspace(-np.pi / 2, np.pi / 2, N_zeta0)
 
     iota = data["iota"]
     psi = data["psi"]
@@ -355,11 +353,11 @@ def _ideal_ballooning_gamma(params, transforms, profiles, data, *kwargs):
         + g_half[i, j] / f[i, j + 1] * 1 / h**2 * (j - k == 1)
     )
 
-    w = gen_eigval(jnp.where(jnp.isfinite(A), A, 0))
+    w = eigvals(jnp.where(jnp.isfinite(A), A, 0))
 
     lam = jnp.real(jnp.max(w))
 
-    data["ideal_ball_gamma"] = (lam + 0.001) * (lam >= -0.001)
+    data["ideal_ball_gamma1"] = (lam + 0.001) * (lam >= -0.001)
 
     return data
 
@@ -431,7 +429,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     rho = data["rho"]
 
     psi_b = params["Psi"] / (2 * np.pi)
-    a_N = 0.5
+    a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
     N_zeta0 = int(11)
@@ -476,7 +474,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
         (N_alpha, N_zeta0, N),
     )
 
-    h = (phi[-1] - phi[0]) / (N - 1)
+    h = phi[1] - phi[0]
 
     i = jnp.arange(N_alpha)[:, None, None, None]
     l = jnp.arange(N_zeta0)[None, :, None, None]
@@ -501,16 +499,273 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     w, _ = jnp.linalg.eigh(A_redo)
 
-    lam = jnp.real(jnp.max(w, axis=(2,)))
+    lam = jnp.real(jnp.max(w, axis=(2,))) + 0.02
 
-    lam = (lam + 0.001) * (lam >= -0.001)
+    lam = lam * (lam >= 0.0)
 
     data["ideal_ball_gamma2"] = jnp.sum(lam)
 
     return data
 
 
-def _gamma_ideal_ballooning_FD2(eq):
+@register_compute_fun(
+    name="Newcomb_metric",
+    label="\\mathrm{Nwecomb-metric}",
+    units=" ",
+    units_long=" ",
+    description="A measure of Newcomb's distance from marginality",
+    dim=1,
+    params=["Psi"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "a",
+        "g^aa",
+        "g^ra",
+        "g^rr",
+        "cvdrift",
+        "cvdrift0",
+        "|B|",
+        "B^zeta",
+        "p_r",
+        "psi_r",
+        "phi",
+        "iota",
+        "psi",
+        "rho",
+    ],
+)
+def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
+    """
+    Ideal-ballooning growth rate proxy.
+
+    This function uses a finite-difference method to integrate the
+    marginal stability ideal-ballooning equation
+
+    d / d z (g d X / d z) + c * X = 0, g, f > 0
+
+    using the Newcomb's stability criterion
+
+    where
+
+    kappa = b dot grad b
+    g = a_N^3 * B_N * (b dot grad zeta) * |grad alpha|^2 / B,
+    c = a_N/B_N * (1/ b dot grad zeta) * dpsi/drho * dp/dpsi
+        * (b cross kappa) dot grad alpha/ B**2,
+    f = a_N * B_N^3 *|grad alpha|^2 / bmag^3 * 1/(b dot grad zeta),
+    are needed along a field line to solve the ballooning equation once.
+
+    To obtain the parameters g, c, and f, we need a set of parameters
+    provided in the list ``data`` above. Here's a description of
+    these parameters:
+
+    - a: minor radius of the device
+    - g^aa: |grad alpha|^2, field line bending term
+    - g^ra: (grad alpha dot grad rho) integrated local shear
+    - g^rr: |grad rho|^2 flux expansion term
+    - cvdrift: geometric factor of the curvature drift
+    - cvdrift0: geoetric factor of curvature drift 2
+    - |B|: magnitude of the magnetic field
+    - B^zeta: inverse of the jacobian
+    - p_r: dp/drho, pressure gradient
+    - psi_r: radial gradient of the toroidal flux
+    - phi: coordinate describing the position in the toroidal angle
+    along a field line
+
+    Here's how we define the Newcomb metric:
+    If zero crossing is at -inf (root finder failed), use the Y coordinate
+    as a metric of stability else use the zero-crossing point on the X-axis
+    as the metric
+    """
+    rho = data["rho"]
+
+    psi_b = params["Psi"] / (2 * np.pi)
+    a_N = data["a"]
+    B_N = 2 * psi_b / a_N**2
+
+    N_zeta0 = int(11)
+    # up-down symmetric equilibria only
+    zeta0 = jnp.linspace(-np.pi, np.pi, N_zeta0)
+
+    iota = data["iota"]
+    psi = data["psi"]
+    sign_psi = jnp.sign(psi[-1])
+    sign_iota = jnp.sign(iota[-1])
+
+    phi = data["phi"]
+
+    N_alpha = int(8)
+    N = int(len(phi) / N_alpha)
+
+    B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
+    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
+    dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
+
+    gds2 = jnp.reshape(
+        rho**2
+        * (
+            data["g^aa"][None, :]
+            - 2 * sign_iota * zeta0[:, None] * data["g^ra"][None, :]
+            + zeta0[:, None] ** 2 * data["g^rr"][None, :]
+        ),
+        (N_alpha, N_zeta0, N),
+    )
+
+    g = a_N**3 * B_N * gds2 / B * gradpar
+    c = jnp.reshape(
+        a_N
+        * 2
+        / data["B^zeta"][None, :]
+        * rho
+        * sign_psi
+        * dpdpsi
+        * (data["cvdrift"][None, :] + zeta0[:, None] * data["cvdrift0"][None, :]),
+        (N_alpha, N_zeta0, N),
+    )
+
+    # g_half on half grid points, c_full on full
+    g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
+    c_full = c[:, :, :-1]
+    h = phi[1] - phi[0]
+
+    i = jnp.arange(N_alpha)[:, None, None]
+    j = jnp.arange(N_zeta0)[None, :, None]
+    k = jnp.arange(N - 1)[None, None, :]
+
+    X = jnp.zeros((N_alpha, N_zeta0, N - 1))
+    X = X.at[i, j, k].set(phi[k])
+
+    Y = jnp.zeros((N_alpha, N_zeta0))
+    eps = 5e-3  # slope of the test function
+    Yp = eps * jnp.ones((N_alpha, N_zeta0))
+
+    @jax.jit
+    def integrator(carry, x):
+        arr, arr_d = carry
+        g_element, c_element = x
+        # Update the array (Y) and its derivative
+        arr_updated = (g_element * arr + arr_d * h) / g_element
+        arr_d_updated = arr_d - c_element * arr_updated * h
+        # Calculate the sign of the product of arr and arr_updated
+        sign_product = jnp.sign(arr * arr_updated)
+
+        return (arr_updated, arr_d_updated), (arr_updated, sign_product)
+
+    @jax.jit
+    def cumulative_update_jit(arr, arr_d, g_half, c_full):
+        _, scan_output = jax.lax.scan(integrator, (arr, arr_d), (g_half, c_full))
+        Y, sign_product = scan_output
+        # Create a mask where sign_product is negative
+        negative_mask = sign_product < 0
+        # Find the first occurrence of a negative value
+        first_negative_index = jnp.argmax(negative_mask)
+        # Use where to return 0 if there are no negative values
+        first_negative_index = jnp.where(
+            jnp.any(negative_mask), first_negative_index, -1
+        )
+
+        return Y, first_negative_index
+
+    # Vectorize over the first two dimensions
+    vectorized_cumulative_update = jit(vmap(vmap(cumulative_update_jit)))
+    Y, first_negative_indices = vectorized_cumulative_update(Y, Yp, g_half, c_full)
+
+    @jax.jit
+    def root_finder(x_guess, xp, yp):
+        """
+        A simple function that wraps the root finder and interpolator.
+
+        x_guess: 2D jax.numpy array with a shape (N_alpha, N_zeta0)
+        xp: 3D jax.numpy array with a shape (N_alpha, N_zeta0, N)
+        yp: 3D jax.numpy array with a shape (N_alpha, N_zeta0, N)
+        """
+
+        def interpolator(x):
+            return jnp.interp(x, xp, yp)
+
+        return root_scalar(interpolator, x0=x_guess, tol=1e-10, maxiter=10)
+
+    # vectorized root finder
+    vec_root_finder = jit(vmap(vmap(root_finder)))
+
+    X0 = jnp.zeros((N_alpha, N_zeta0))
+    i0 = jnp.arange(N_alpha)[:, None]
+    j0 = jnp.arange(N_zeta0)[None, :]
+    X0 = X0.at[i0, j0].set(
+        X[i0, j0, first_negative_indices[i0, j0]]
+    )  # best initial guesses
+
+    Z = vec_root_finder(X0, X, Y)
+    Z0 = Z[0]
+    data1 = 10 * jnp.max(
+        2
+        - (1 + (jnp.tanh(0.1 * jnp.cbrt(Y[:, :, -1])))) * (jnp.isinf(Z0) + 1 == 2)
+        - (Z0 - phi[0]) / (2 * phi[-1]) * (jnp.isinf(Z0) + 1 == 1)
+    )
+
+    data["Newcomb_metric"] = data1
+
+    return data
+
+
+@register_compute_fun(
+    name="ideal_ball_gamma3",
+    label="\\gamma^2",
+    units=" ",
+    units_long=" ",
+    description="ideal ballooning growth rate" + "requires data along a field line",
+    dim=1,
+    params=["Psi"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "a",
+        "rho",
+        "p_r",
+        "psi_r",
+        "phi",
+        "iota",
+        "psi",
+        "rho",
+        "g^aa",
+        "g^ra",
+        "g^rr",
+        "g^aa_z",
+        "g^aa_t",
+        "g^aa_zz",
+        "g^aa_tt",
+        "g^aa_tz",
+        "g^ra_z",
+        "g^ra_t",
+        "g^ra_zz",
+        "g^ra_tt",
+        "g^ra_tz",
+        "g^rr_z",
+        "g^rr_t",
+        "g^rr_zz",
+        "g^rr_tt",
+        "g^rr_tz",
+        "cvdrift",
+        "cvdrift0",
+        "lambda_t",
+        "lambda_z",
+        "|B|",
+        "|B|_z",
+        "|B|_t",
+        "|B|_zz",
+        "|B|_tt",
+        "|B|_tz",
+        "B^zeta",
+        "B^zeta_t",
+        "B^zeta_z",
+        "B^zeta_tt",
+        "B^zeta_zz",
+        "B^zeta_tz",
+    ],
+)
+def _ideal_ballooning_gamma3(params, transforms, profiles, data, *kwargs):
     """
     Ideal-ballooning growth rate finder.
 
@@ -533,98 +788,24 @@ def _gamma_ideal_ballooning_FD2(eq):
     eq :  Input equilibrium object
     N : resolution
     """
-    ns = 1
-    nalpha = 1
-    s = np.linspace(0.9, 1.00, ns)
-    rho = np.sqrt(s)
+    rho = data["rho"]
 
-    alpha = np.linspace(0, np.pi, nalpha)
-    zeta_0 = 0.0
-    eq_keys = ["iota", "rho", "psi", "a"]
+    psi_b = params["Psi"] / (2 * np.pi)
+    a_N = data["a"]
+    B_N = 2 * psi_b / a_N**2
 
-    data_eq = eq.compute(eq_keys)
+    N_zeta0 = int(11)
+    zeta0 = jnp.linspace(-np.pi / 2, np.pi / 2, N_zeta0)
 
-    iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
-    psi = data_eq["psi"]
-    sign_psi = np.sign(psi[-1])
-    sign_iota = np.sign(iota[-1])
+    iota = data["iota"]
+    psi = data["psi"]
+    sign_psi = jnp.sign(psi[-1])
+    sign_iota = jnp.sign(iota[-1])
 
-    a_N = data_eq["a"]
-    B_N = 2 * sign_psi * psi[-1] / a_N**2
+    phi = data["phi"]
 
-    nperiod = 3
-    # Number of toroidal turns
-    ntor = 2 * nperiod - 1
-    N = 2 * (2 * eq.M_grid * eq.N_grid) * ntor + 1
-
-    rho_full = np.ones(
-        int(N * ns * nalpha),
-    )
-    theta_full = np.zeros(
-        int(N * ns * nalpha),
-    )
-    zeta_full = np.zeros(
-        int(N * ns * nalpha),
-    )
-
-    zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
-
-    for i in range(ns):
-        for j in range(nalpha):
-            rho_full[i * N : (i + 1) * N] = rho[i] * np.ones(
-                N,
-            )
-            zeta_full[i * N : (i + 1) * N] = zeta
-            theta_full[i * N : (i + 1) * N] = (
-                alpha[j]
-                * np.ones(
-                    N,
-                )
-                + iota[i] * zeta
-            )
-
-    C0 = np.vstack([rho_full, theta_full, zeta_full]).T
-    coords = eq.compute_theta_coords(C0, tol=1e-10, maxiter=50)
-    grid = Grid(coords, sort=False)
-
-    data_names = [
-        "g^aa",
-        "g^ra",
-        "g^rr",
-        "g^aa_z",
-        "g^aa_t",
-        "g^aa_zz",
-        "g^aa_tt",
-        "g^aa_tz",
-        "g^ra_z",
-        "g^ra_t",
-        "g^ra_zz",
-        "g^ra_tt",
-        "g^ra_tz",
-        "g^rr_z",
-        "g^rr_t",
-        "g^rr_zz",
-        "g^rr_tt",
-        "g^rr_tz",
-        "cvdrift",
-        "cvdrift0",
-        "|B|",
-        "|B|_z",
-        "|B|_t",
-        "|B|_zz",
-        "|B|_tt",
-        "|B|_tz",
-        "B^zeta",
-        "B^zeta_t",
-        "B^zeta_z",
-        "B^zeta_tt",
-        "B^zeta_zz",
-        "B^zeta_tz",
-        "p_r",
-        "psi_r",
-    ]
-
-    data = eq.compute(data_names, grid)
+    N_alpha = int(2)
+    N = int(len(phi) / N_alpha)
 
     temp_fac1 = 1 / (1 + data["lambda_t"])
     temp_fac2 = (iota - data["lambda_z"]) * temp_fac1
@@ -705,14 +886,12 @@ def _gamma_ideal_ballooning_FD2(eq):
         + modB_zz0 * B_sup_zeta / modB**2
     )
 
-    gds2 = data["g^aa"] + 2 * zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
+    gds2 = data["g^aa"] + 2 * zeta0 * data["g^ra"] + zeta0**2 * data["g^rr"]
     gds2_z = rho**2 * (
-        g_sup_aa_z0 - 2 * sign_iota * zeta_0 * g_sup_ra_z0 + zeta_0**2 * g_sup_rr_z0
+        g_sup_aa_z0 - 2 * sign_iota * zeta0 * g_sup_ra_z0 + zeta0**2 * g_sup_rr_z0
     )
     gds2_zz = rho**2 * (
-        g_sup_aa_zz0
-        - 2 * sign_iota * zeta_0 * g_sup_ra_zz0
-        + zeta_0**2 * g_sup_rr_zz0
+        g_sup_aa_zz0 - 2 * sign_iota * zeta0 * g_sup_ra_zz0 + zeta0**2 * g_sup_rr_zz0
     )
 
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
@@ -750,7 +929,7 @@ def _gamma_ideal_ballooning_FD2(eq):
         * rho
         * sign_psi
         * dpdpsi
-        * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
+        * (data["cvdrift"] + zeta0 * data["cvdrift0"])
     )
 
     V = c / g + 1 / 4 * g_z**2 / g**2 - 1 / 2 * g_zz / g
@@ -758,7 +937,7 @@ def _gamma_ideal_ballooning_FD2(eq):
     b = f / g
 
     # grid spacing
-    h = 2 * ntor * np.pi / (N - 1)
+    h = phi[1] - phi[0]
 
     sub_diag = (
         1
@@ -781,8 +960,7 @@ def _gamma_ideal_ballooning_FD2(eq):
     b = f / g
     M = np.diag(b[1:-1], 0)
 
-    vguess = np.exp(-np.abs(zeta[1:-1]) / 2)
-    w, v = scipy.sparse.linalg.eigs(D2, k=1, M=M, sigma=2.0, v0=vguess, OPpart="r")
+    w, v = jax.linlag.eigh(D2, k=1, M=M, sigma=2.0, OPpart="r")
 
     # variational refinement here
     X = np.zeros((N,))
@@ -805,10 +983,67 @@ def _gamma_ideal_ballooning_FD2(eq):
     Y1 = b * X**2
     lam = simps(Y0) / simps(Y1)
 
-    return lam
+    data["ideal_ball_gamma3"] = lam * (lam > 0)
+    return data
 
 
-def _gamma_ideal_ballooning_Fourier(eq):
+@register_compute_fun(
+    name="ideal_ball_gamma4",
+    label="\\gamma^2",
+    units=" ",
+    units_long=" ",
+    description="ideal ballooning growth rate" + "requires data along a field line",
+    dim=1,
+    params=["Psi"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "a",
+        "rho",
+        "p_r",
+        "psi_r",
+        "phi",
+        "iota",
+        "psi",
+        "rho",
+        "g^aa",
+        "g^ra",
+        "g^rr",
+        "g^aa_z",
+        "g^aa_t",
+        "g^aa_zz",
+        "g^aa_tt",
+        "g^aa_tz",
+        "g^ra_z",
+        "g^ra_t",
+        "g^ra_zz",
+        "g^ra_tt",
+        "g^ra_tz",
+        "g^rr_z",
+        "g^rr_t",
+        "g^rr_zz",
+        "g^rr_tt",
+        "g^rr_tz",
+        "cvdrift",
+        "cvdrift0",
+        "lambda_t",
+        "lambda_z",
+        "|B|",
+        "|B|_z",
+        "|B|_t",
+        "|B|_zz",
+        "|B|_tt",
+        "|B|_tz",
+        "B^zeta",
+        "B^zeta_t",
+        "B^zeta_z",
+        "B^zeta_tt",
+        "B^zeta_zz",
+        "B^zeta_tz",
+    ],
+)
+def _ideal_ballooning_gamma4(params, transforms, profiles, data, *kwargs):
     """
     Ideal-ballooning growth rate finder.
 
@@ -832,97 +1067,26 @@ def _gamma_ideal_ballooning_Fourier(eq):
     D2 = jax.scipy.linalg.toeplitz(col1, row1) + np.diag(V, 0)
     x = jax.scipy.linalg.eikh(D2, b * np.eye(N))
     """
-    ns = 1
-    nalpha = 1
-    s = np.linspace(0.9, 1.00, ns)
-    rho = np.sqrt(s)
-    alpha = np.linspace(0, np.pi, nalpha)
-    zeta_0 = 0.0
+    rho = data["rho"]
 
-    eq_keys = ["iota", "rho", "psi", "a"]
+    psi_b = params["Psi"] / (2 * np.pi)
+    a_N = data["a"]
+    B_N = 2 * psi_b / a_N**2
 
-    data_eq = eq.compute(eq_keys)
+    N_zeta0 = int(11)
+    zeta0 = jnp.linspace(-np.pi / 2, np.pi / 2, N_zeta0)
 
-    iota = np.interp(rho, data_eq["rho"], data_eq["iota"])
-    psi = data_eq["psi"]
-    sign_psi = np.sign(psi[-1])
-    sign_iota = np.sign(iota[-1])
+    iota = data["iota"]
+    psi = data["psi"]
+    sign_psi = jnp.sign(psi[-1])
+    sign_iota = jnp.sign(iota[-1])
 
-    a_N = data_eq["a"]
-    B_N = 2 * sign_psi * psi[-1] / a_N**2
+    phi = data["phi"]
 
-    nperiod = 3
-    ntor = 2 * nperiod - 1  # Number of toroidal turns
-    N = int((2 * eq.M_grid * eq.N_grid) * ntor)
+    ntor = int((jnp.max(phi) - jnp.min(phi)) / (2 * jnp.pi))
 
-    rho_full = np.ones(
-        int(N * ns * nalpha),
-    )
-    theta_full = np.zeros(
-        int(N * ns * nalpha),
-    )
-    zeta_full = np.zeros(
-        int(N * ns * nalpha),
-    )
-
-    zeta = np.linspace(-ntor * np.pi, ntor * np.pi, N)
-
-    for i in range(ns):
-        for j in range(nalpha):
-            rho_full[i * N : (i + 1) * N] = rho[i] * np.ones(
-                N,
-            )
-            zeta_full[i * N : (i + 1) * N] = zeta
-            theta_full[i * N : (i + 1) * N] = (
-                alpha[j]
-                * np.ones(
-                    N,
-                )
-                + iota[i] * zeta
-            )
-
-    C0 = np.vstack([rho_full, theta_full, zeta_full]).T
-    coords = eq.compute_theta_coords(C0, tol=1e-10, maxiter=50)
-    grid = Grid(coords, sort=False)
-
-    data_names = [
-        "g^aa",
-        "g^ra",
-        "g^rr",
-        "g^aa_z",
-        "g^aa_t",
-        "g^aa_zz",
-        "g^aa_tt",
-        "g^aa_tz",
-        "g^ra_z",
-        "g^ra_t",
-        "g^ra_zz",
-        "g^ra_tt",
-        "g^ra_tz",
-        "g^rr_z",
-        "g^rr_t",
-        "g^rr_zz",
-        "g^rr_tt",
-        "g^rr_tz",
-        "cvdrift",
-        "cvdrift0",
-        "|B|",
-        "|B|_z",
-        "|B|_t",
-        "|B|_zz",
-        "|B|_tt",
-        "|B|_tz",
-        "B^zeta",
-        "B^zeta_t",
-        "B^zeta_z",
-        "B^zeta_tt",
-        "B^zeta_zz",
-        "B^zeta_tz",
-        "p_r",
-        "psi_r",
-    ]
-
-    data = eq.compute(data_names, grid)
+    N_alpha = int(2)
+    N = int(len(phi) / N_alpha)
 
     temp_fac1 = 1 / (1 + data["lambda_t"])
     temp_fac2 = (iota - data["lambda_z"]) * temp_fac1
@@ -1003,14 +1167,12 @@ def _gamma_ideal_ballooning_Fourier(eq):
         + modB_zz0 * B_sup_zeta / modB**2
     )
 
-    gds2 = data["g^aa"] + 2 * zeta_0 * data["g^ra"] + zeta_0**2 * data["g^rr"]
+    gds2 = data["g^aa"] + 2 * zeta0 * data["g^ra"] + zeta0**2 * data["g^rr"]
     gds2_z = rho**2 * (
-        g_sup_aa_z0 - 2 * sign_iota * zeta_0 * g_sup_ra_z0 + zeta_0**2 * g_sup_rr_z0
+        g_sup_aa_z0 - 2 * sign_iota * zeta0 * g_sup_ra_z0 + zeta0**2 * g_sup_rr_z0
     )
     gds2_zz = rho**2 * (
-        g_sup_aa_zz0
-        - 2 * sign_iota * zeta_0 * g_sup_ra_zz0
-        + zeta_0**2 * g_sup_rr_zz0
+        g_sup_aa_zz0 - 2 * sign_iota * zeta0 * g_sup_ra_zz0 + zeta0**2 * g_sup_rr_zz0
     )
 
     dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
@@ -1048,7 +1210,7 @@ def _gamma_ideal_ballooning_Fourier(eq):
         * rho
         * sign_psi
         * dpdpsi
-        * (data["cvdrift"] + zeta_0 * data["cvdrift0"])
+        * (data["cvdrift"] + zeta0 * data["cvdrift0"])
     )
 
     V = c / g + 1 / 4 * g_z**2 / g**2 - 1 / 2 * g_zz / g
@@ -1091,4 +1253,7 @@ def _gamma_ideal_ballooning_Fourier(eq):
 
     ## eigvals will be deprecated, replace by subset_by_idx in scipy >= 1.12
     w, v = scipy.linalg.eigh(D2, b=np.diag(b, 0), eigvals=[N - 1, N - 1])
-    return w
+
+    lam = w + 0.01
+    data["ideal_ball_gamma4"] = lam * (lam > 0)
+    return data

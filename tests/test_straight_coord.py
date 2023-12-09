@@ -1,4 +1,4 @@
-"""Test cylindrical coordinate implementation"""
+"""Test cylindrical coordinate implementation (Still periodic in zeta)"""
 
 # import pickle
 
@@ -23,7 +23,7 @@ from desc.geometry import (
 from desc.grid import LinearGrid, QuadratureGrid
 from .ana_util import modes_gen
 from .ana_straight import model_const_B, model_screw_pinch1, model_theta_pinch1
-from .ana_straight_3d import model_mirror1, model_mirror_iota1, model_mirror_3d1
+from .ana_straight_3d import model_mirror1, model_mirror_iota1, model_mirror_3d1, model_mirror_full1
 
 
 @pytest.fixture(scope="session")
@@ -124,6 +124,28 @@ def mirror_3d1(grid_3d):
     return eq, ana_model, grid_3d
 
 @pytest.fixture(scope="session")
+def mirror_full1(grid_3d):
+    a0 = 0.8
+    a1 = 0.2
+    b1 = -0.1
+    c1 = 0.1
+    c2 = 0.2
+    Psi = 1.0
+    i0 = 0.3
+    i2 = -0.5
+    R = 15
+    ana_model = model_mirror_full1(Psi, a0, a1, b1, c1, c2, i0, i2, R)
+    iota = PowerSeriesProfile(
+        params=ana_model.modes["iota"]["params"], modes=ana_model.modes["iota"]["modes"]
+    )
+    eq = Equilibrium(Psi, L=3, M=3, N=1, iota=iota, sym=None)
+    rlmn = modes_gen(ana_model.modes["R_lmn"], eq.R_basis)
+    zlmn = modes_gen(ana_model.modes["Z_lmn"], eq.Z_basis)
+    eq.R_lmn = rlmn
+    eq.Z_lmn = zlmn
+    return eq, ana_model, grid_3d
+
+@pytest.fixture(scope="session")
 def theta_pinch2(grid_3d):
     eq = None
     B_ana = None
@@ -182,7 +204,7 @@ def test_compute_against_ana_straight_coord(config, request, name, func_name):
 )
 @pytest.mark.parametrize(
     "config",
-    ["mirror1", "mirror_iota1"],
+    ["mirror1", "mirror_iota1", "mirror_3d1"],
 )
 def test_compute_against_ana_straight_coord_3D(config, request, name, func_name):
     eq, ana, grid = request.getfixturevalue(config)
@@ -199,7 +221,7 @@ def test_compute_against_ana_straight_coord_3D(config, request, name, func_name)
 )
 @pytest.mark.parametrize(
     "config",
-    ["mirror_3d1"],
+    ["mirror_full1"],
 )
 def test_compute_B_against_ana_straight_coord_3D(config, request, name, func_name):
     eq, ana, grid = request.getfixturevalue(config)

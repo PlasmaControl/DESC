@@ -818,10 +818,15 @@ class Equilibrium(IOAble, Optimizable):
         # and compute those first on a full grid
         p = "desc.equilibrium.equilibrium.Equilibrium"
         deps = list(set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names))
+        # TODO: replace this logic with `grid_type` from data_index
         dep0d = [
             dep
             for dep in deps
-            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
+            if (
+                (data_index[p][dep]["coordinates"] == "")
+                or (data_index[p][dep]["grid_type"] == "quad")
+            )
+            and (dep not in data)
         ]
         dep1d = [
             dep

@@ -386,10 +386,10 @@ class BallooningStability(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        deriv_mode="fwd",
+        deriv_mode="rev",
         loss_function=None,
         rho=0.5,
-        alpha=0.0,
+        alpha=jnp.array([[0.0], [0.2], [0.4], [0.6], [0.8], [1.0], [1.2], [1.4]]),
         zetamax=3 * jnp.pi,
         nzeta=200,
         name="ideal-ball gamma",
@@ -437,7 +437,9 @@ class BallooningStability(_Objective):
 
         # make a set of nodes along a single fieldline
         zeta = np.linspace(-self.zetamax, self.zetamax, self.nzeta)
-        rho, alpha, zeta = np.broadcast_arrays(self.rho, self.alpha, zeta)
+        rho, alpha, zeta = np.reshape(
+            np.broadcast_arrays(self.rho, self.alpha, zeta), (3, -1)
+        )
         fieldline_nodes = np.array([rho, alpha, zeta]).T
 
         self._dim_f = 1
@@ -497,7 +499,7 @@ class BallooningStability(_Objective):
         theta_PEST = alpha + iota * zeta
         theta_coords = jnp.array([rho, theta_PEST, zeta]).T
         desc_coords = compute_theta_coords(
-            eq, theta_coords, L_lmn=params["L_lmn"], tol=1e-6, maxiter=20
+            eq, theta_coords, L_lmn=params["L_lmn"], tol=1e-6, maxiter=40
         )
 
         sfl_grid = Grid(desc_coords, sort=False, jitable=True)

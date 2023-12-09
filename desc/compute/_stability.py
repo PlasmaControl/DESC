@@ -8,7 +8,6 @@ of these quantities. These lambda functions are evaluated only when the
 computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
-
 import numpy as np
 import scipy
 from scipy.constants import mu_0
@@ -432,12 +431,12 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     rho = data["rho"]
 
     psi_b = params["Psi"] / (2 * np.pi)
-    a_N = 0.7
+    a_N = 0.5
     B_N = 2 * psi_b / a_N**2
 
-    N_zeta0 = int(10)
+    N_zeta0 = int(11)
     # up-down symmetric equilibria only
-    zeta0 = jnp.linspace(0, np.pi, N_zeta0)
+    zeta0 = jnp.linspace(-np.pi, np.pi, N_zeta0)
 
     iota = data["iota"]
     psi = data["psi"]
@@ -445,56 +444,68 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     sign_iota = jnp.sign(iota[-1])
 
     phi = data["phi"]
-    N = len(phi)
 
-    gradpar = data["B^zeta"] / data["|B|"]
-    dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
+    N_alpha = int(8)
+    N = int(len(phi) / N_alpha)
 
-    gds2 = rho**2 * (
-        data["g^aa"][None, :]
-        - 2 * sign_iota * zeta0[:, None] * data["g^ra"][None, :]
-        + zeta0[:, None] ** 2 * data["g^rr"][None, :]
+    B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
+    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
+    dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
+
+    gds2 = jnp.reshape(
+        rho**2
+        * (
+            data["g^aa"][None, :]
+            - 2 * sign_iota * zeta0[:, None] * data["g^ra"][None, :]
+            + zeta0[:, None] ** 2 * data["g^rr"][None, :]
+        ),
+        (N_alpha, N_zeta0, N),
     )
-    dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
-    f = a_N * B_N**3 * gds2 / data["|B|"][None, :] ** 3 * 1 / gradpar[None, :]
-    g = a_N**3 * B_N * gds2 / data["|B|"][None, :] * gradpar[None, :]
-    g_half = (g[:, 1:] + g[:, :-1]) / 2
-    c = (
+    f = a_N * B_N**3 * gds2 / B**3 * 1 / gradpar
+    g = a_N**3 * B_N * gds2 / B * gradpar
+    g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
+    c = jnp.reshape(
         a_N
         * 2
         / data["B^zeta"][None, :]
         * rho
         * sign_psi
         * dpdpsi
-        * (data["cvdrift"][None, :] + zeta0[:, None] * data["cvdrift0"][None, :])
+        * (data["cvdrift"][None, :] + zeta0[:, None] * data["cvdrift0"][None, :]),
+        (N_alpha, N_zeta0, N),
     )
+
     h = (phi[-1] - phi[0]) / (N - 1)
 
-    i = jnp.arange(N_zeta0)[:, None, None]
-    j = jnp.arange(N - 2)[None, :, None]
-    k = jnp.arange(N - 2)[None, None, :]
+    i = jnp.arange(N_alpha)[:, None, None, None]
+    l = jnp.arange(N_zeta0)[None, :, None, None]
+    j = jnp.arange(N - 2)[None, None, :, None]
+    k = jnp.arange(N - 2)[None, None, None, :]
 
-    A = jnp.zeros((N_zeta0, N - 2, N - 2))
-    B = jnp.zeros((N_zeta0, N - 2, N - 2))
-    B_inv = jnp.zeros((N_zeta0, N - 2, N - 2))
+    A = jnp.zeros((N_alpha, N_zeta0, N - 2, N - 2))
+    B = jnp.zeros((N_alpha, N_zeta0, N - 2, N - 2))
+    B_inv = jnp.zeros((N_alpha, N_zeta0, N - 2, N - 2))
 
-    A = A.at[i, j, k].set(
-        g_half[i, k] * 1 / h**2 * (j - k == -1)
-        + (-(g_half[i, j + 1] + g_half[i, j]) * 1 / h**2 + c[i, j + 1]) * (j - k == 0)
-        + g_half[i, j] * 1 / h**2 * (j - k == 1)
+    A = A.at[i, l, j, k].set(
+        g_half[i, l, k] * 1 / h**2 * (j - k == -1)
+        + (-(g_half[i, l, j + 1] + g_half[i, l, j]) * 1 / h**2 + c[i, l, j + 1])
+        * (j - k == 0)
+        + g_half[i, l, j] * 1 / h**2 * (j - k == 1)
     )
 
-    B = B.at[i, j, k].set(jnp.sqrt(f[i, j + 1]) * (j - k == 0))
-    B_inv = B_inv.at[i, j, k].set(1 / jnp.sqrt(f[i, j + 1]) * (j - k == 0))
+    B = B.at[i, l, j, k].set(jnp.sqrt(f[i, l, j + 1]) * (j - k == 0))
+    B_inv = B_inv.at[i, l, j, k].set(1 / jnp.sqrt(f[i, l, j + 1]) * (j - k == 0))
 
-    A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 2, 1))
+    A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 1, 3, 2))
 
-    w, v = jnp.linalg.eigh(A_redo)
+    w, _ = jnp.linalg.eigh(A_redo)
 
-    lam = jnp.real(jnp.max(w))
+    lam = jnp.real(jnp.max(w, axis=(2,)))
 
-    data["ideal_ball_gamma2"] = (lam + 0.001) * (lam >= -0.001)
+    lam = (lam + 0.001) * (lam >= -0.001)
+
+    data["ideal_ball_gamma2"] = jnp.sum(lam)
 
     return data
 

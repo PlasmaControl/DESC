@@ -30,6 +30,7 @@ from desc.objectives import (
     GoodCoordinates,
     HelicalForceBalance,
     Isodynamicity,
+    LinearObjectiveFromUser,
     MagneticWell,
     MeanCurvature,
     MercierStability,
@@ -94,12 +95,33 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(R1, R2)
 
     @pytest.mark.unit
+    def test_linear_objective_from_user(self):
+        """Test LinearObjectiveFromUser for arbitrary callable."""
+
+        def myfun(params):
+            L_lmn = params["L_lmn"]
+            p_l = params["p_l"]
+            c_l = params["c_l"]
+            Zb_lmn = params["Zb_lmn"]
+            r = jnp.array([p_l[0] + Zb_lmn[0], c_l[2] + L_lmn[1]])
+            return r
+
+        eq = Equilibrium(pressure=np.array([1, 0, -1]), current=np.array([0, 0, 2]))
+        objective = LinearObjectiveFromUser(myfun, eq)
+        objective.build()
+        f = objective.compute(*objective.xs(eq))
+        np.testing.assert_allclose(f, np.array([0, 2]))
+
+    @pytest.mark.unit
     def test_volume(self):
         """Test calculation of plasma volume."""
 
         def test(eq):
             obj = Volume(
-                target=10 * np.pi**2, weight=1 / np.pi**2, eq=eq, normalize=False
+                target=10 * np.pi**2,
+                weight=1 / np.pi**2,
+                eq=eq,
+                normalize=False,
             )
             obj.build()
             V = obj.compute_unscaled(*obj.xs(eq))
@@ -109,8 +131,11 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(V_scaled, 10)
             np.testing.assert_allclose(V_scalar, 10)
 
-        test(Equilibrium(iota=PowerSeriesProfile(0)))
+        eqi = Equilibrium(iota=PowerSeriesProfile(0))
+        test(eqi)
         test(Equilibrium(current=PowerSeriesProfile(0)))
+        # test that it can compute with a surface object
+        test(eqi.surface)
 
     @pytest.mark.unit
     def test_aspect_ratio(self):
@@ -816,6 +841,12 @@ def test_mean_curvature():
     H = obj.compute_unscaled(*obj.xs(eq))
     assert np.any(H > 0)
 
+    # check using the surface
+    obj = MeanCurvature(eq=eq.surface)
+    obj.build()
+    H = obj.compute_unscaled(*obj.xs(eq.surface))
+    assert np.any(H > 0)
+
 
 @pytest.mark.unit
 def test_principal_curvature():
@@ -828,6 +859,17 @@ def test_principal_curvature():
     obj2 = PrincipalCurvature(eq=eq2, normalize=False)
     obj2.build()
     K2 = obj2.compute_unscaled(*obj2.xs(eq2))
+
+    # simple test: NCSX should have higher mean absolute curvature than DSHAPE
+    assert K1.mean() < K2.mean()
+
+    # same test but using the surface directly
+    obj1 = PrincipalCurvature(eq=eq1.surface, normalize=False)
+    obj1.build()
+    K1 = obj1.compute_unscaled(*obj1.xs(eq1.surface))
+    obj2 = PrincipalCurvature(eq=eq2.surface, normalize=False)
+    obj2.build()
+    K2 = obj2.compute_unscaled(*obj2.xs(eq2.surface))
 
     # simple test: NCSX should have higher mean absolute curvature than DSHAPE
     assert K1.mean() < K2.mean()

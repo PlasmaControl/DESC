@@ -955,3 +955,29 @@ def test_plot_2d_surface():
     surf = FourierRZToroidalSurface()
     fig, ax = plot_2d(surf, "curvature_H_rho")
     return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_1d_surface():
+    """Test plot_1d function for Surface objects."""
+    surf = FourierRZToroidalSurface()
+    fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGrid(M=50))
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_boundary_surface():
+    """Test plot_boundary function for Surface objects."""
+    surf = FourierRZToroidalSurface()
+    fig, ax = plot_boundary(surf)
+    return fig
+
+
+@pytest.mark.unit
+def test_plot_3d_surface():
+    """Test 3d plotting of surface object."""
+    surf = FourierRZToroidalSurface()
+    fig = plot_3d(surf, "curvature_H_rho")
+    return fig

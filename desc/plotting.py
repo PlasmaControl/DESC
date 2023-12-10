@@ -19,6 +19,7 @@ from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization, surface_averages_map
+from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.utils import errorif, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
@@ -405,7 +406,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface, Curve
         Object from which to plot.
     name : str
         Name of variable to plot.
@@ -546,7 +547,7 @@ def plot_2d(
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface
         Object from which to plot.
     name : str
         Name of variable to plot.
@@ -765,7 +766,7 @@ def plot_3d(
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface
         Object from which to plot.
     name : str
         Name of variable to plot.
@@ -1240,7 +1241,8 @@ def plot_section(
         }
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        coords = eq.map_coordinates(
+        coords = map_coordinates(
+            eq,
             grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1253,7 +1255,8 @@ def plot_section(
         phi = np.unique(grid.nodes[:, 2])
         nphi = phi.size
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        coords = eq.map_coordinates(
+        coords = map_coordinates(
+            eq,
             grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1495,7 +1498,8 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     r_grid = _get_grid(**grid_kwargs)
     rnr, rnt, rnz = r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta
     r_grid = Grid(
-        eq.map_coordinates(
+        map_coordinates(
+            eq,
             r_grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1516,7 +1520,8 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         t_grid = _get_grid(**grid_kwargs)
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
         v_grid = Grid(
-            eq.map_coordinates(
+            map_coordinates(
+                eq,
                 t_grid.nodes,
                 ["rho", "theta_PEST", "phi"],
                 ["rho", "theta", "zeta"],
@@ -1608,7 +1613,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface
         Object from which to plot.
     phi : float, int or array-like or None
         Values of phi to plot boundary surface at.
@@ -1680,14 +1685,16 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
         phi = np.linspace(0, 2 * np.pi / eq.NFP, phi + 1)  # +1 to include pi and 2pi
     phi = np.atleast_1d(phi)
     nphi = len(phi)
-
+    # don't plot axis for FourierRZToroidalSurface, since it's not defined.
+    plot_axis = plot_axis and eq.L > 0
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
     grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(**grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     grid = Grid(
-        eq.map_coordinates(
+        map_coordinates(
+            eq,
             grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1752,7 +1759,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
 
     Parameters
     ----------
-    eqs : array-like of Equilibrium or EquilibriaFamily
+    eqs : array-like of Equilibrium, Surface or EquilibriaFamily
         Equilibria to plot.
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
@@ -1843,7 +1850,8 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
-            eqs[i].map_coordinates(
+            map_coordinates(
+                eqs[i],
                 grid.nodes,
                 ["rho", "theta", "phi"],
                 ["rho", "theta", "zeta"],

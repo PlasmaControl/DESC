@@ -1,6 +1,15 @@
 Changelog
 =========
 
+- `Equilibrium.map_coordinates` is now differentiable.
+- Removes method `Equilibrium.compute_flux_coordinates` as it is now redundant with the
+more general `Equilibrium.map_coordinates`.
+- Allows certain objectives to target ``FourierRZToroidalSurface`` objects as well as
+``Equilibrium`` objects, such as ``MeanCurvature``, ``MeanCurvature``, and ``Volume``.
+- Allow optimizations where the only object being optimized is not an ``Equilibrium``
+object e.g. optimizing only a ``FourierRZToroidalSurface`` object to have a certain
+``Volume``.
+
 v0.10.3
 -------
 

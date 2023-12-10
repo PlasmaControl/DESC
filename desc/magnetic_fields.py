@@ -17,7 +17,7 @@ from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, warnif
+from desc.utils import copy_coeffs, errorif, flatten_list, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -153,7 +153,10 @@ class _MagneticField(IOAble, ABC):
 
     def __add__(self, x):
         if isinstance(x, _MagneticField):
-            return SumMagneticField(self, x)
+            if isinstance(self, SumMagneticField):
+                return SumMagneticField(*self, x)
+            else:
+                return SumMagneticField(self, x)
         else:
             return NotImplemented
 
@@ -416,7 +419,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
         return getattr(self._field, attr)
 
     def __setattr__(self, name, value):
-        if name in ["_scalar", "_optimizable_params"]:
+        if name in ["scale", "_scale", "_optimizable_params"]:
             object.__setattr__(self, name, value)
         else:
             setattr(object.__getattribute__(self, "_field"), name, value)
@@ -462,6 +465,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
     _io_attrs = _MagneticField._io_attrs_ + ["_fields"]
 
     def __init__(self, *fields):
+        fields = flatten_list(fields, flatten_tuple=True)
         assert all(
             [isinstance(field, _MagneticField) for field in fields]
         ), "fields should each be a subclass of MagneticField, got {}".format(
@@ -516,7 +520,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
 
     # dunder methods required by MutableSequence
     def __getitem__(self, i):
-        return self.coils[i]
+        return self._fields[i]
 
     def __setitem__(self, i, new_item):
         if not isinstance(new_item, _MagneticField):
@@ -537,7 +541,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             raise TypeError(
                 "Members of SumMagneticField must be of type MagneticField."
             )
-        self._field.insert(i, new_item)
+        self._fields.insert(i, new_item)
 
 
 class ToroidalMagneticField(_MagneticField, Optimizable):
@@ -922,8 +926,8 @@ class SplineMagneticField(_MagneticField, Optimizable):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : tuple, optional
-            unused by this method
+        params : dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None

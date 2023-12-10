@@ -1,29 +1,20 @@
 """Test cylindrical coordinate implementation (Still periodic in zeta)"""
 
-# import pickle
-
 import numpy as np
 import pytest
 
-# from scipy.io import netcdf_file
-# from scipy.signal import convolve2d
-
-# from desc.compute import data_index, rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.profiles import PowerSeriesProfile
 
-# from desc.examples import get
-from desc.geometry import (
-    FourierPlanarCurve,
-    FourierRZCurve,
-    FourierRZToroidalSurface,
-    FourierXYZCurve,
-    ZernikeRZToroidalSection,
-)
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid
 from .ana_util import modes_gen
 from .ana_straight import model_const_B, model_screw_pinch1, model_theta_pinch1
-from .ana_straight_3d import model_mirror1, model_mirror_iota1, model_mirror_3d1, model_mirror_full1
+from .ana_straight_3d import (
+    model_mirror1,
+    model_mirror_iota1,
+    model_mirror_3d1,
+    model_mirror_full1,
+)
 
 
 @pytest.fixture(scope="session")
@@ -104,6 +95,7 @@ def mirror_iota1(grid_3d):
     eq.Z_lmn = zlmn
     return eq, ana_model, grid_3d
 
+
 @pytest.fixture(scope="session")
 def mirror_3d1(grid_3d):
     a0 = 0.8
@@ -122,6 +114,7 @@ def mirror_3d1(grid_3d):
     eq.R_lmn = rlmn
     eq.Z_lmn = zlmn
     return eq, ana_model, grid_3d
+
 
 @pytest.fixture(scope="session")
 def mirror_full1(grid_3d):
@@ -144,18 +137,6 @@ def mirror_full1(grid_3d):
     eq.R_lmn = rlmn
     eq.Z_lmn = zlmn
     return eq, ana_model, grid_3d
-
-@pytest.fixture(scope="session")
-def theta_pinch2(grid_3d):
-    eq = None
-    B_ana = None
-    grid = grid_3d
-    return eq, B_ana, grid
-
-
-@pytest.fixture(scope="session")
-def screw_pinch2():
-    pass
 
 
 @pytest.mark.mirror_unit
@@ -214,6 +195,7 @@ def test_compute_against_ana_straight_coord_3D(config, request, name, func_name)
     data_ana = getattr(ana, func_name)(rtz)
     np.testing.assert_allclose(data[name], data_ana, atol=1e-6, rtol=1e-10)
 
+
 @pytest.mark.mirror_unit
 @pytest.mark.parametrize(
     "name, func_name",
@@ -230,8 +212,3 @@ def test_compute_B_against_ana_straight_coord_3D(config, request, name, func_nam
     rtz = grid.nodes
     data_ana = getattr(ana, func_name)(rtz)
     np.testing.assert_allclose(data[name], data_ana, atol=1e-6, rtol=1e-10)
-
-
-@pytest.mark.mirror_regression
-def test_solved_theta_pinch(theta_pinch):
-    pass

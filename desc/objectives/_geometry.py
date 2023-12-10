@@ -16,6 +16,8 @@ from .objective_funs import _Objective
 from .utils import softmin
 
 
+# TODO: add Surface parametrization to compute R0/a
+# so can use this objective with FourierRZToroidalSurface
 class AspectRatio(_Objective):
     """Aspect ratio = major radius / minor radius.
 
@@ -302,8 +304,9 @@ class Volume(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -381,7 +384,23 @@ class Volume(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            if hasattr(eq, "L_grid"):
+                grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+            else:
+                # if not an Equilibrium, is a Surface,
+                # has no radial resolution so just need
+                # the surface points
+                grid = LinearGrid(
+                    rho=1.0,
+                    M=eq.M * 2,
+                    N=eq.N * 2,
+                    NFP=eq.NFP,
+                )
         else:
             grid = self._grid
 
@@ -416,7 +435,8 @@ class Volume(_Objective):
         Parameters
         ----------
         params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -430,7 +450,7 @@ class Volume(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -716,8 +736,9 @@ class MeanCurvature(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -794,7 +815,12 @@ class MeanCurvature(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGrid(  # getattr statements in case a surface is passed in
+                M=getattr(eq, "M_grid", eq.M * 2),
+                N=getattr(eq, "N_grid", eq.N * 2),
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
         else:
             grid = self._grid
 
@@ -829,7 +855,8 @@ class MeanCurvature(_Objective):
         Parameters
         ----------
         params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -843,7 +870,7 @@ class MeanCurvature(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -866,8 +893,9 @@ class PrincipalCurvature(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -944,7 +972,12 @@ class PrincipalCurvature(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGrid(  # getattr statements in case a surface is passed in
+                M=getattr(eq, "M_grid", eq.M * 2),
+                N=getattr(eq, "N_grid", eq.N * 2),
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
         else:
             grid = self._grid
 
@@ -979,7 +1012,8 @@ class PrincipalCurvature(_Objective):
         Parameters
         ----------
         params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -993,7 +1027,7 @@ class PrincipalCurvature(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

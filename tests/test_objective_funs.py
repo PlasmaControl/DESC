@@ -118,7 +118,10 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = Volume(
-                target=10 * np.pi**2, weight=1 / np.pi**2, eq=eq, normalize=False
+                target=10 * np.pi**2,
+                weight=1 / np.pi**2,
+                eq=eq,
+                normalize=False,
             )
             obj.build()
             V = obj.compute_unscaled(*obj.xs(eq))
@@ -128,8 +131,11 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(V_scaled, 10)
             np.testing.assert_allclose(V_scalar, 10)
 
-        test(Equilibrium(iota=PowerSeriesProfile(0)))
+        eqi = Equilibrium(iota=PowerSeriesProfile(0))
+        test(eqi)
         test(Equilibrium(current=PowerSeriesProfile(0)))
+        # test that it can compute with a surface object
+        test(eqi.surface)
 
     @pytest.mark.unit
     def test_aspect_ratio(self):
@@ -835,6 +841,12 @@ def test_mean_curvature():
     H = obj.compute_unscaled(*obj.xs(eq))
     assert np.any(H > 0)
 
+    # check using the surface
+    obj = MeanCurvature(eq=eq.surface)
+    obj.build()
+    H = obj.compute_unscaled(*obj.xs(eq.surface))
+    assert np.any(H > 0)
+
 
 @pytest.mark.unit
 def test_principal_curvature():
@@ -847,6 +859,17 @@ def test_principal_curvature():
     obj2 = PrincipalCurvature(eq=eq2, normalize=False)
     obj2.build()
     K2 = obj2.compute_unscaled(*obj2.xs(eq2))
+
+    # simple test: NCSX should have higher mean absolute curvature than DSHAPE
+    assert K1.mean() < K2.mean()
+
+    # same test but using the surface directly
+    obj1 = PrincipalCurvature(eq=eq1.surface, normalize=False)
+    obj1.build()
+    K1 = obj1.compute_unscaled(*obj1.xs(eq1.surface))
+    obj2 = PrincipalCurvature(eq=eq2.surface, normalize=False)
+    obj2.build()
+    K2 = obj2.compute_unscaled(*obj2.xs(eq2.surface))
 
     # simple test: NCSX should have higher mean absolute curvature than DSHAPE
     assert K1.mean() < K2.mean()

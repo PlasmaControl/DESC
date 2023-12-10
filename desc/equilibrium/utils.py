@@ -158,6 +158,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
                     np.where(surface.Z_basis.modes[:, 1] == 0)[0], -1
                 ],
                 NFP=NFP,
+                sym=sym,
             )
         elif isinstance(surface, ZernikeRZToroidalSection):
             # FIXME: include m=0 l!=0 modes
@@ -177,6 +178,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
                 modes_R=[0],
                 modes_Z=[0],
                 NFP=NFP,
+                sym=sym,
             )
     else:
         raise TypeError("Got unknown axis type {}".format(axis))

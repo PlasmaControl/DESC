@@ -3571,13 +3571,14 @@ class FixOmniBmax(_FixedObjective):
     def __init__(
         self,
         field,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
         name="fixed omnigenity B_max",
     ):
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=field,
             target=target,
@@ -3617,6 +3618,10 @@ class FixOmniBmax(_FixedObjective):
             mm = basis.modes[idx_m, 2]
             self._A[i, idx_0] = 1
             self._A[i, idx_m] = (mm % 2 - 1) * (mm % 4 - 1)
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, 0, None, np.array([0])
+        )
 
         super().build(use_jit=use_jit, verbose=verbose)
 

@@ -926,8 +926,8 @@ class SplineMagneticField(_MagneticField, Optimizable):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : tuple, optional
-            unused by this method
+        params : dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None

@@ -473,12 +473,24 @@ def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa:
     return opt_subspace
 
 
-def print_vmec_boundary(surface, filename=None):
-    """Print the VMEC input boundary coefficients."""
-    if hasattr(surface, "__len__"):
-        surface = surface[-1]
-    if hasattr(surface, "surface"):
-        surface = surface.surface
+def print_vmec_boundary(eq, filename=None):
+    """Print or save boundary coefficients in VMEC input file format.
+
+    Parameters
+    ----------
+    eq : EquilibriaFamily or Equilibrium or FourierRZToroidalSurface
+        Surface for which to print the boundary coefficients.
+    filename : str or path-like, optional
+        If supplied, name of the file to create and save the boundary coefficients to.
+        If None, print the boundary coefficients to the console (Default).
+
+    """
+    if hasattr(eq, "__len__"):
+        eq = eq[-1]  # EquilibriaFamily
+    if hasattr(eq, "surface"):
+        surface = eq.surface  # Equilibrium
+    else:
+        surface = eq  # FourierRZToroidalSurface
 
     M, N, RBS, RBC = ptolemy_identity_rev(
         surface.R_basis.modes[:, 1], surface.R_basis.modes[:, 2], surface.R_lmn

@@ -707,17 +707,31 @@ class FixLambdaGauge(_Objective):
             # this constraint will make
             # L_200 + 2*L_310 = 0
             # L_100 + 2*L_210 = 0
-            L_modes = L_basis.modes
-            mnpos = np.where((L_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
-            l_lmn = L_modes[mnpos, :]
-            if len(l_lmn) > 0:
-                c = zernike_radial_coeffs(l_lmn[:, 0], l_lmn[:, 1])
-            else:
-                c = np.zeros((0, 0))
+            # for mirror: l(rho,0,2pi) = 0
+            if eq.mirror:
+                L_modes = L_basis.modes
+                mnpos = np.where((L_modes[:, 1] >= 0))[0]
+                l_lmn = L_modes[mnpos, :]
+                if len(l_lmn) > 0:
+                    c = zernike_radial_coeffs(l_lmn[:, 0], l_lmn[:, 1])
+                else:
+                    c = np.zeros((0, 0))
 
-            A = np.zeros((c.shape[1], L_basis.num_modes))
-            A[:, mnpos] = c.T
-            self._A = A
+                A = np.zeros((c.shape[1], L_basis.num_modes))
+                A[:, mnpos] = c.T
+                self._A = A
+            else:
+                L_modes = L_basis.modes
+                mnpos = np.where((L_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
+                l_lmn = L_modes[mnpos, :]
+                if len(l_lmn) > 0:
+                    c = zernike_radial_coeffs(l_lmn[:, 0], l_lmn[:, 1])
+                else:
+                    c = np.zeros((0, 0))
+
+                A = np.zeros((c.shape[1], L_basis.num_modes))
+                A[:, mnpos] = c.T
+                self._A = A
 
         self._dim_f = self._A.shape[0]
 

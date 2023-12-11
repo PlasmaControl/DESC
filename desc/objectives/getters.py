@@ -275,8 +275,9 @@ def maybe_add_self_consistency(eq, constraints):
         constraints += (BoundaryRSelfConsistency(eq=eq),)
     if not _is_any_instance(constraints, BoundaryZSelfConsistency):
         constraints += (BoundaryZSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, FixLambdaGauge):
-        constraints += (FixLambdaGauge(eq=eq),)
+    if not eq.mirror:
+        if not _is_any_instance(constraints, FixLambdaGauge):
+            constraints += (FixLambdaGauge(eq=eq),)
     if not _is_any_instance(constraints, AxisRSelfConsistency):
         constraints += (AxisRSelfConsistency(eq=eq),)
     if not _is_any_instance(constraints, AxisZSelfConsistency):

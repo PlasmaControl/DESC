@@ -161,6 +161,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, mirror=False):
                     np.where(surface.Z_basis.modes[:, 1] == 0)[0], -1
                 ],
                 NFP=NFP,
+                sym=sym,
                 mirror=mirror,
             )
         elif isinstance(surface, ZernikeRZToroidalSection):
@@ -181,6 +182,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, mirror=False):
                 modes_R=[0],
                 modes_Z=[0],
                 NFP=NFP,
+                sym=sym,
                 mirror=mirror,
             )
     else:

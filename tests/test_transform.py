@@ -45,7 +45,7 @@ class TestTransform:
         transf = Transform(grid, basis, method = "direct1", derivs = [0,0,1])
         r = grid.nodes[:, 0]  # rho coordinates
         t = grid.nodes[:, 1]  # theta coordinates
-        correct_vals = 2 * r  * np.cos(t) * 1
+        correct_vals = 2 * r  * np.cos(t) * 1 / np.pi
         idx_0 = np.where((basis.modes == [1, 1, 1]).all(axis=1))[0]
         c = np.zeros((basis.modes.shape[0],))
         #Coeffieicints of each term in the correct expansion
@@ -63,7 +63,7 @@ class TestTransform:
         t = grid.nodes[:, 1]  # theta coordinates
         z = grid.nodes[:, 2]  # zeta coordinates
         z_shift = z/np.pi - 1
-        correct_vals = 2 * r  * np.cos(t) * 4*z_shift
+        correct_vals = 2 * r  * np.cos(t) * 4*z_shift / np.pi
         idx_0 = np.where((basis.modes == [1, 1, 2]).all(axis=1))[0]
         c = np.zeros((basis.modes.shape[0],))
         #Coeffieicints of each term in the correct expansion
@@ -81,7 +81,7 @@ class TestTransform:
         t = grid.nodes[:, 1]  # theta coordinates
         z = grid.nodes[:, 2]  # zeta coordinates
         z_shift = z/np.pi - 1
-        correct_vals = 2 * r  * np.cos(t) * (12*z_shift**2 - 3)
+        correct_vals = 2 * r  * np.cos(t) * (12*z_shift**2 - 3) / np.pi
         idx_0 = np.where((basis.modes == [1, 1, 3]).all(axis=1))[0]
         c = np.zeros((basis.modes.shape[0],))
         #Coeffieicints of each term in the correct expansion
@@ -99,7 +99,7 @@ class TestTransform:
         t = grid.nodes[:, 1]  # theta coordinates
         z = grid.nodes[:, 2]  # zeta coordinates
         z_shift = z/np.pi - 1
-        correct_vals = (2 * r  * np.cos(t) * (24*z_shift**1))
+        correct_vals = (2 * r  * np.cos(t) * (24*z_shift**1)) / np.pi**2
         idx_0 = np.where((basis.modes == [1, 1, 3]).all(axis=1))[0]
         c = np.zeros((basis.modes.shape[0],))
         #Coeffieicints of each term in the correct expansion
@@ -115,7 +115,7 @@ class TestTransform:
         transf = Transform(grid, basis, method = "direct1", derivs = [0,0,3])
         r = grid.nodes[:, 0]  # rho coordinates
         t = grid.nodes[:, 1]  # theta coordinates
-        correct_vals = (2 * r  * np.cos(t) * (24))
+        correct_vals = (2 * r  * np.cos(t) * (24)) / np.pi**3
         idx_0 = np.where((basis.modes == [1, 1, 3]).all(axis=1))[0]
         c = np.zeros((basis.modes.shape[0],))
         #Coeffieicints of each term in the correct expansion
@@ -131,7 +131,7 @@ class TestTransform:
         transf = Transform(grid, basis, method = "direct1", derivs = [0,0,3])
         r = grid.nodes[:, 0]  # rho coordinates
         t = grid.nodes[:, 1]  # theta coordinates
-        correct_vals = (2 * r  * np.cos(t) * (0))
+        correct_vals = (2 * r  * np.cos(t) * (0)) / np.pi**3
         idx_0 = np.where((basis.modes == [1, 1, 2]).all(axis=1))[0]
         c = np.zeros((basis.modes.shape[0],))
         #Coeffieicints of each term in the correct expansion
@@ -147,7 +147,7 @@ class TestTransform:
         transf = Transform(grid, basis, method = "direct1", derivs = [0,0,3])
         r = grid.nodes[:, 0]  # rho coordinates
         t = grid.nodes[:, 1]  # theta coordinates
-        correct_vals = (2 * r  * np.cos(t) * (0))
+        correct_vals = (2 * r  * np.cos(t) * (0)) / np.pi**3
         idx_0 = np.where((basis.modes == [1, 1, 0]).all(axis=1))[0]
         c = np.zeros((basis.modes.shape[0],))
         #Coeffieicints of each term in the correct expansion
@@ -163,7 +163,7 @@ class TestTransform:
         transf = Transform(grid, basis, method = "direct1", derivs = [0,0,2])
         r = grid.nodes[:, 0]  # rho coordinates
         t = grid.nodes[:, 1]  # theta coordinates
-        correct_vals = (2 * r  * np.cos(t) * (0))
+        correct_vals = (2 * r  * np.cos(t) * (0)) / np.pi**2
         idx_0 = np.where((basis.modes == [1, 1, 0]).all(axis=1))[0]
         c = np.zeros((basis.modes.shape[0],))
         #Coeffieicints of each term in the correct expansion
@@ -179,7 +179,7 @@ class TestTransform:
         transf = Transform(grid, basis, method = "direct1", derivs = [0,0,4])
         r = grid.nodes[:, 0]  # rho coordinates
         t = grid.nodes[:, 1]  # theta coordinates
-        correct_vals = (2 * r  * np.cos(t) * (192))
+        correct_vals = (2 * r  * np.cos(t) * (192)) / np.pi**4
         idx_0 = np.where((basis.modes == [1, 1, 4]).all(axis=1))[0]
         c = np.zeros((basis.modes.shape[0],))
         #Coeffieicints of each term in the correct expansion

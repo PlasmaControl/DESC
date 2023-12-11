@@ -1,6 +1,9 @@
 Changelog
 =========
 
+- Adds functionality to optimize for omnigenity. This includes the ``OmnigenousField`` magnetic field class, the ``Omnigenity`` objective function, and an accompanying tutorial.
+
+
 v0.10.3
 -------
 

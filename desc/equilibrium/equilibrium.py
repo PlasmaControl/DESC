@@ -269,18 +269,13 @@ class Equilibrium(IOAble):
         self._mirror = mirror
 
         # bases
-        if self._mirror:
+        if self.mirror:
+            assert sym == False or None, NotImplementedError(f"mirror sym expected false but given {sym}")
+            assert NFP == 1, NotImplementedError(f"mirror NFP expected 1 but given {NFP}")
             Basis = ChebyshevZernikeBasis
-            # need errorif for length
-            if length == None:
-                self._length = (
-                    self.R_lmn[self.R_basis.get_idx(L=0, M=0, N=0)] * np.pi * 2
-                )
-            else:
-                self._length = length
         else:
             Basis = FourierZernikeBasis
-            self._length = None
+        
         self._R_basis = Basis(
             L=self.L,
             M=self.M,
@@ -398,6 +393,15 @@ class Equilibrium(IOAble):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
+        if self.mirror:
+            if length == None:
+                self.length = (
+                    self.R_lmn[self.R_basis.get_idx(L=0, M=0, N=0)] * np.pi * 2
+                )
+            else:
+                self.length = length
+        else:
+            self.length = None
 
     def _set_up(self):
         """Set unset attributes after loading.

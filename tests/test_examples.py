@@ -38,9 +38,11 @@ from desc.objectives import (
     GenericObjective,
     HelicalForceBalance,
     LinearObjectiveFromUser,
+    MeanCurvature,
     ObjectiveFunction,
     Omnigenity,
     PlasmaVesselDistance,
+    PrincipalCurvature,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
@@ -1003,6 +1005,72 @@ def test_omnigenity_optimization():
     data = eq.compute("|B|", grid=grid)
     np.testing.assert_allclose(np.min(data["|B|"]), 0.8, atol=2e-2)
     np.testing.assert_allclose(np.max(data["|B|"]), 1.2, atol=2e-2)
+
+
+@pytest.mark.unit
+def test_non_eq_optimization():
+    """Test for optimizing a non-eq object by fixing all eq parameters."""
+    eq = desc.examples.get("DSHAPE")
+    Rmax = 4
+    Rmin = 2
+
+    a = 2
+    R0 = (Rmax + Rmin) / 2
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+
+    surf.change_resolution(M=eq.M, N=eq.N)
+    constraints = (
+        FixParameter(eq),
+        MeanCurvature(surf, bounds=(-8, 8)),
+        PrincipalCurvature(surf, bounds=(0, 15)),
+    )
+
+    grid = LinearGrid(M=18, N=0, NFP=eq.NFP)
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=0.5,
+        use_softmin=True,
+        surface_grid=grid,
+        plasma_grid=grid,
+        alpha=5000,
+    )
+    objective = ObjectiveFunction((obj,))
+    optimizer = Optimizer("lsq-auglag")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=100
+    )
+
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.5, atol=1e-5)
+
+
+@pytest.mark.unit
+def test_only_non_eq_optimization():
+    """Test for optimizing only a non-eq object."""
+    eq = desc.examples.get("DSHAPE")
+    surf = eq.surface
+
+    surf.change_resolution(M=eq.M, N=eq.N)
+    constraints = (
+        FixParameter(surf, params="R_lmn", indices=surf.R_basis.get_idx(0, 0, 0)),
+    )
+
+    obj = PrincipalCurvature(surf, target=1)
+
+    objective = ObjectiveFunction((obj,))
+    optimizer = Optimizer("lsq-exact")
+    (surf), result = optimizer.optimize(
+        (surf), objective, constraints, verbose=3, maxiter=100
+    )
+    surf = surf[0]
+    np.testing.assert_allclose(obj.compute(*obj.xs(surf)), 1, atol=1e-5)
 
 
 class TestGetExample:

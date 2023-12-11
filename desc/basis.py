@@ -1822,30 +1822,30 @@ def chebyshev_z(z, l, dr=0):
     elif dr in [1, 2, 3, 4]:
         if dr == 1:
             diff = (-l * z_shift * chebyshev_z(z, l, dr - 1) + l *
-                chebyshev_z(z, l - 1, dr - 1)) / (1 - z_shift ** 2)
+                chebyshev_z(z, l - 1, dr - 1)) / (1 - z_shift ** 2) / np.pi
         elif dr == 2:
-            diff = -(l ** 2 * jnp.cos(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) + \
+            diff = (-(l ** 2 * jnp.cos(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) + \
                     (l * z_shift * jnp.sin(l * jnp.arccos(z_shift))) / \
-                        (jnp.sqrt(1 - z_shift ** 2) * (1 - z_shift ** 2))
+                        (jnp.sqrt(1 - z_shift ** 2) * (1 - z_shift ** 2)))/ np.pi**2
         elif dr == 3:
-            diff = -(3 * l ** 2 * z_shift * jnp.cos(l * jnp.arccos(z_shift))) \
+            diff = (-(3 * l ** 2 * z_shift * jnp.cos(l * jnp.arccos(z_shift))) \
                 / (1 - z_shift ** 2) ** 2 + (3 * l * z_shift ** 2 * jnp.sin(l *
                 jnp.arccos(z_shift))) / (1 - z_shift ** 2) ** (5 / 2) + \
                 (l * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) \
                 ** (3 / 2) - (l ** 3 * jnp.sin(l * jnp.arccos(z_shift))) / \
-                    (1 - z_shift ** 2) ** (3 / 2)
+                    (1 - z_shift ** 2) ** (3 / 2) )/ np.pi**3
         elif dr == 4:
-            diff = l * ((l * (4 + 11 * z_shift ** 2 + l ** 2 * (-1 + z_shift ** 2))
+            diff = (l * ((l * (4 + 11 * z_shift ** 2 + l ** 2 * (-1 + z_shift ** 2))
                 * jnp.cos(l * jnp.arccos(z_shift))) / (-1 + z_shift ** 2) ** 3 +
                 (3 * z_shift * (3 + 2 * z_shift ** 2 + 2 * l ** 2 * (-1 + z_shift ** 2))
-                * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) ** (7 / 2))
+                * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) ** (7 / 2)) )/ np.pi**4
         prod = 1
         for k in range(dr):
             prod *= (l**2 - k**2)/(2*k+1)
-            print("K", k, "prod", prod)
+            # print("K", k, "prod", prod)
         sign = (-1)**(l+dr)
-        left_val = sign*prod
-        right_val = prod
+        left_val = sign*prod / np.pi**dr
+        right_val = prod / np.pi**dr
         diff = jnp.where(z_shift==-1, left_val, diff)
         diff = jnp.where(z_shift==1, right_val, diff)
         return diff

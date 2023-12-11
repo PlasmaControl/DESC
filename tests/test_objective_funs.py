@@ -30,6 +30,7 @@ from desc.objectives import (
     GoodCoordinates,
     HelicalForceBalance,
     Isodynamicity,
+    LinearObjectiveFromUser,
     MagneticWell,
     MeanCurvature,
     MercierStability,
@@ -92,6 +93,24 @@ class TestObjectiveFunction:
         R1 = objective.compute(*objective.xs(eq))
         R2 = eq.compute("R", grid=grid)["R"]
         np.testing.assert_allclose(R1, R2)
+
+    @pytest.mark.unit
+    def test_linear_objective_from_user(self):
+        """Test LinearObjectiveFromUser for arbitrary callable."""
+
+        def myfun(params):
+            L_lmn = params["L_lmn"]
+            p_l = params["p_l"]
+            c_l = params["c_l"]
+            Zb_lmn = params["Zb_lmn"]
+            r = jnp.array([p_l[0] + Zb_lmn[0], c_l[2] + L_lmn[1]])
+            return r
+
+        eq = Equilibrium(pressure=np.array([1, 0, -1]), current=np.array([0, 0, 2]))
+        objective = LinearObjectiveFromUser(myfun, eq)
+        objective.build()
+        f = objective.compute(*objective.xs(eq))
+        np.testing.assert_allclose(f, np.array([0, 2]))
 
     @pytest.mark.unit
     def test_volume(self):

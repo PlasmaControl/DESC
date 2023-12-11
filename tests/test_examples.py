@@ -954,12 +954,9 @@ def test_omnigenity_optimization():
     eq_half_grid = LinearGrid(rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
     eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
 
-    field_half_grid = LinearGrid(
-        rho=0.5, theta=2 * field.M_well, N=2 * field.N_shift, NFP=field.NFP, sym=False
-    )
-    field_lcfs_grid = LinearGrid(
-        rho=1.0, theta=2 * field.M_well, N=2 * field.N_shift, NFP=field.NFP, sym=False
-    )
+    field_half_grid = LinearGrid(rho=0.5, theta=16, zeta=8, NFP=field.NFP, sym=False)
+    field_lcfs_grid = LinearGrid(rho=1.0, theta=16, zeta=8, NFP=field.NFP, sym=False)
+
     objective = ObjectiveFunction(
         (
             GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
@@ -969,7 +966,7 @@ def test_omnigenity_optimization():
                 eq=eq,
                 eq_grid=eq_half_grid,
                 field_grid=field_half_grid,
-                well_weight=2,
+                well_weight=1,
             ),
             Omnigenity(
                 field=field,
@@ -997,8 +994,8 @@ def test_omnigenity_optimization():
     )
 
     # check omnigenity error is low
-    f = objective.compute_scaled_error(objective.x(*(eq, field)))
-    np.testing.assert_allclose(f, 0, atol=1.6e-2)
+    f = objective.compute_unscaled(objective.x(*(eq, field)))  # error in Tesla
+    np.testing.assert_allclose(f[2:], 0, atol=1.2e-2)  # f[:2] is R0 and R0/a
 
     # check mirror ratio is correct
     grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=np.array([0]))

@@ -140,7 +140,7 @@ def test_map_coordinates2():
 @pytest.mark.unit
 def test_map_coordinates_derivative():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-    eq = desc.examples.get("DSHAPE")
+    eq = get("DSHAPE")
 
     inbasis = ["alpha", "phi", "rho"]
     outbasis = ["rho", "theta_PEST", "zeta"]

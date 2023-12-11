@@ -24,7 +24,7 @@ from desc.grid import LinearGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, warnif
+from desc.utils import copy_coeffs, errorif, flatten_list, isposint, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 

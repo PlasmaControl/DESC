@@ -3745,6 +3745,8 @@ def plot_field_lines_real_space(
 
 
 # FIXME: this only really works for OP fields where helicity=(0, NFP)
+# TODO: make this part of plot_boozer_surface
+# TODO: try using tricontour to work with other helicities
 def plot_omnigenous_field(
     field,
     iota,

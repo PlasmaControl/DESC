@@ -1010,7 +1010,7 @@ def test_omnigenity_optimization():
 @pytest.mark.unit
 def test_non_eq_optimization():
     """Test for optimizing a non-eq object by fixing all eq parameters."""
-    eq = desc.examples.get("DSHAPE")
+    eq = get("DSHAPE")
     Rmax = 4
     Rmin = 2
 
@@ -1054,7 +1054,7 @@ def test_non_eq_optimization():
 @pytest.mark.unit
 def test_only_non_eq_optimization():
     """Test for optimizing only a non-eq object."""
-    eq = desc.examples.get("DSHAPE")
+    eq = get("DSHAPE")
     surf = eq.surface
 
     surf.change_resolution(M=eq.M, N=eq.N)

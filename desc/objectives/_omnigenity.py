@@ -598,8 +598,7 @@ class Omnigenity(_Objective):
 
     """
 
-    _scalar = False
-    _linear = False
+    _coordinates = "rtz"
     _units = "(T)"
     _print_value_fmt = "Omnigenity error: {:10.3e} "
 
@@ -700,10 +699,19 @@ class Omnigenity(_Objective):
             obj=field,
             grid=field_grid,
         )
+
+        # compute returns points on the grid of the field
+        # (dim_f = field_grid.num_nodes)
+        # so set quad_weights to the surface grid
+        # to avoid it being incorrectly set in the super build
+        w = field_grid.weights
+        w *= jnp.sqrt(field_grid.num_nodes)
+
         self._constants = {
             "equil_profiles": profiles,
             "equil_transforms": eq_transforms,
             "field_transforms": field_transforms,
+            "quad_weights": w,
             "helicity": self.helicity,
         }
 

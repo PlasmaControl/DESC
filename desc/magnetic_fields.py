@@ -24,7 +24,7 @@ from desc.grid import LinearGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, isposint, setdefault, warnif
+from desc.utils import copy_coeffs, errorif, flatten_list, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -1826,6 +1826,7 @@ class OmnigenousField(Optimizable, IOAble):
         "_L_shift",
         "_M_shift",
         "_N_shift",
+        "_NFP",
         "_well_basis",
         "_shift_basis",
         "_helicity",
@@ -2029,11 +2030,6 @@ class OmnigenousField(Optimizable, IOAble):
     def NFP(self):
         """int: Number of (toroidal) field periods."""
         return self._NFP
-
-    @NFP.setter
-    def NFP(self, NFP):
-        assert isposint(NFP), f"NFP should be a positive integer, got {type(NFP)}"
-        self.change_resolution(NFP=NFP)
 
     @property
     def L_well(self):

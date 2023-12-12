@@ -820,7 +820,7 @@ def test_multiobject_optimization_prox():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
+@pytest.mark.optimize
 def test_omnigenity_qa():
     """Test optimizing omnigenity parameters to match an axisymmetric equilibrium."""
     # Solov'ev examples has B_max contours at theta=pi, need to change to theta=0
@@ -909,7 +909,7 @@ def test_omnigenity_qa():
 
 
 @pytest.mark.regression
-@pytest.mark.solve
+@pytest.mark.optimize
 @pytest.mark.slow
 def test_omnigenity_optimization():
     """Test a realistic OP omnigenity optimization."""

@@ -607,7 +607,7 @@ class Equilibrium(IOAble):
         )
         if rho is not None:
             assert (rho >= 0) and (rho <= 1)
-            surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho)
+            surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho, mirror=self.mirror, length=self.length)
             surface.change_resolution(self.M, self.N)
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
@@ -731,7 +731,7 @@ class Equilibrium(IOAble):
         else:  # catch cases such as axisymmetry with stellarator symmetry
             Z_n = 0
             modes_Z = 0
-        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
+        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym, mirror=self.mirror, length=self.length)
         return axis
 
     def compute(

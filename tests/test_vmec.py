@@ -1176,7 +1176,6 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
 
     quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_mns]
     quant_names = ["R", "Z", "|B|", "sqrt(g)_B", "nu"]
-    quant_atols = [1e-4, 7e-5, 9e-6, 5e-3, 2e-7]
 
     xm = file.variables["ixm_b"][:].filled()
     xn = file.variables["ixn_b"][:].filled()
@@ -1202,7 +1201,7 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     # compare coefficients
     for i, (quant_DESC, quant_cpp) in enumerate(zip(quantities, quantities_cpp)):
         np.testing.assert_allclose(
-            quant_DESC, quant_cpp, atol=quant_atols[i], err_msg=quant_names[i]
+            quant_DESC, quant_cpp, rtol=1e-8, err_msg=quant_names[i]
         )
     for key in list(file_cpp.variables.keys()):
         if key not in [
@@ -1325,26 +1324,17 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
         "numnc",
         "numns",
     ]
-    quant_atols = [1e-4, 5e-4, 4e-4, 3e-4, 8e-2, 4e-3, 2e-2, 2e-2, 3e-3, 8e-5]
 
     np.testing.assert_allclose(xm_cpp, xm, atol=1e-16)
     np.testing.assert_allclose(xn_cpp, xn, atol=1e-16)
     # compare coefficients
-    max_atols = [5e-4, 5e-4, 6e-4, 9e-4, 7.5e-3, 2e-3, 5e-2, 2e-2, 6e-3, 2e-2]
     first_surf = 0
     for i, (quant_DESC, quant_cpp) in enumerate(zip(quantities, quantities_cpp)):
         np.testing.assert_allclose(
             quant_DESC[first_surf:, :],
             quant_cpp[first_surf:, :],
-            atol=quant_atols[i],
+            rtol=1e-8,
             err_msg=quant_names[i],
-        )
-        # check that max values are close as well within a tighter tol
-        np.testing.assert_allclose(
-            np.max(np.abs(quant_DESC[first_surf:, :]), axis=0),
-            np.max(np.abs(quant_cpp[first_surf:, :]), axis=0),
-            atol=max_atols[i],
-            err_msg="max " + quant_names[i],
         )
     for key in list(file_cpp.variables.keys()):
         if key not in [

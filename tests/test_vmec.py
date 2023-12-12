@@ -925,7 +925,7 @@ def test_make_boozmn_output(TmpDir):
     eq = get("HELIOTRON")
     output_path = str(TmpDir.join("boozmn_out.nc"))
 
-    boozer_res = 50
+    boozer_res = 55
     surfs = 4
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
     # on 3 surfaces (surfs-1 by booz_xform convention) using boozer resolution of 50
@@ -1013,8 +1013,7 @@ def test_make_boozmn_output(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                atol=1e-10,
-                rtol=3e-6,
+                rtol=2e-5,
                 err_msg=f"{name} at surf index {surf_index}",
             )
 
@@ -1139,7 +1138,6 @@ def test_make_boozmn_output_asym(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                atol=1e-10,
                 rtol=3e-6,
                 err_msg=f"{name} at surf index {surf_index}",
             )

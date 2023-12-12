@@ -13,7 +13,7 @@ def compute_scaling_factors(thing):
     from desc.geometry import FourierRZToroidalSurface
 
     scales = {}
-    
+
     # change this to also work with Poincare XS where bdry is  ZernikePolynomial
     # equivalent modes? might need to be a sum since the radial extent
     # is determined by the modes evaluated at rho=1 which is not
@@ -30,7 +30,7 @@ def compute_scaling_factors(thing):
             thing.Zb_lmn[thing.surface.Z_basis.get_idx(M=-1, N=0)]
             if thing.bdry_mode == "lcfs"
             else thing.Zb_lmn[thing.surface.Z_basis.get_idx(L=1, M=-1)]
-        ) 
+        )
         R00 = thing.Rb_lmn[thing.surface.R_basis.get_idx(M=0, N=0)]
 
         scales["R0"] = R00

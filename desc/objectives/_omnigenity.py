@@ -670,7 +670,7 @@ class Omnigenity(_Objective):
 
         self._dim_f = field_grid.num_nodes
         self._eq_data_keys = ["|B|_mn"]
-        self._field_data_keys = ["|B|_omni", "h"]
+        self._field_data_keys = ["theta_B", "zeta_B", "|B|_omni"]
 
         errorif(
             eq_grid.NFP != field_grid.NFP,
@@ -759,25 +759,17 @@ class Omnigenity(_Objective):
             params=field_params,
             transforms=constants["field_transforms"],
             profiles={},
+            helicity=constants["helicity"],
+            iota=eq_data["iota"][0],
         )
 
-        # TODO: move to a compute function?
-        # would need to add iota as an OmnigenousField attribute
-        M, N = constants["helicity"]
-        iota = eq_data["iota"][0]  # FIXME: assumes a single flux surface
-        matrix = jnp.where(
-            M == 0,
-            jnp.array([N, iota / N, 0, 1 / N]),  # OP
-            jnp.where(
-                N == 0,
-                jnp.array([0, -1, M, -1 / iota]),  # OT
-                jnp.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),  # OH
-            ),
-        ).reshape((2, 2))
-
-        # solve for (theta_B,zeta_B) corresponding to (eta,alpha)
-        booz = matrix @ jnp.vstack((field_data["alpha"], field_data["h"]))
-        nodes = jnp.vstack((jnp.zeros_like(booz[0, :]), booz[0, :], booz[1, :])).T
+        nodes = jnp.vstack(
+            (
+                jnp.zeros_like(field_data["theta_B"]),
+                field_data["theta_B"],
+                field_data["zeta_B"],
+            )
+        ).T
         B_eta_alpha = jnp.matmul(
             constants["equil_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
         )

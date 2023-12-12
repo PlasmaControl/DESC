@@ -3818,20 +3818,19 @@ def plot_omnigenous_field(
         "This function only works for OP fields with helicity=(0, NFP).",
     )
     if grid is None:
-        grid = LinearGrid(
-            rho=[1.0], theta=101, zeta=101, endpoint=True, NFP=1, sym=False
-        )
-    rho = grid.nodes[:, 0]
-    eta = (grid.nodes[:, 1] - np.pi) / 2
-    alpha = grid.nodes[:, 2]
+        grid = LinearGrid(rho=[1.0], theta=101, zeta=101, endpoint=True, NFP=field.NFP)
 
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     # compute data from omnigenous magnetic field
-    B = field.compute_well(rho, eta)
-    theta_B, zeta_B = field.compute_boozer_angles(rho, eta, alpha, iota)
+    data = field.compute(
+        ["theta_B", "zeta_B", "|B|_omni"], grid=grid, helicity=field.helicity, iota=iota
+    )
+    B = data["|B|_omni"]
+    theta_B = data["theta_B"]
+    zeta_B = data["zeta_B"]
 
     # reshape to 2D arrays
     BB = B.reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()

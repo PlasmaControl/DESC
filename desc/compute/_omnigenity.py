@@ -412,6 +412,45 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="theta_B",
+    label="(\\theta_{B},\\zeta_{B})",
+    units="rad",
+    units_long="radians",
+    description="Boozer angular coordinates",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["alpha", "h"],
+    aliases=["zeta_B"],
+    parameterization="desc.magnetic_fields.OmnigenousField",
+    helicity="helicity",
+    iota="iota",
+)
+def _omni_map(params, transforms, profiles, data, **kwargs):
+    M, N = kwargs.get("helicity", (1, 0))
+    iota = kwargs.get("iota", 1)
+
+    # coordinate mapping matrix from (alpha,h) to (theta_B,zeta_B)
+    matrix = jnp.where(
+        M == 0,
+        jnp.array([N, iota / N, 0, 1 / N]),  # OP
+        jnp.where(
+            N == 0,
+            jnp.array([0, -1, M, -1 / iota]),  # OT
+            jnp.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),  # OH
+        ),
+    ).reshape((2, 2))
+
+    # solve for (theta_B,zeta_B) corresponding to (eta,alpha)
+    booz = matrix @ jnp.vstack((data["alpha"], data["h"]))
+    data["theta_B"] = booz[0, :]
+    data["zeta_B"] = booz[1, :]
+    return data
+
+
+@register_compute_fun(
     name="|B|_omni",
     label="|\\mathbf{B}_{omni}|",
     units="T",

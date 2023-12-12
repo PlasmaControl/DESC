@@ -1959,87 +1959,13 @@ class OmnigenousField(Optimizable, IOAble):
         )
         self._x_lmn = copy_coeffs(self.x_lmn, old_modes_shift, self.shift_basis.modes)
 
-    # TODO: reuse compute function?
-    def compute_well(self, rho, eta):
-        """Compute well shape from B_lm.
-
-        Parameters
-        ----------
-        rho : ndarray
-            Radial coordinates.
-        eta : ndarray
-            Coordinates along the field line.
-
-        Returns
-        -------
-        B : ndarray
-            Magnetic field strength.
-
-        """
-        alpha = np.zeros_like(rho)
-        nodes = np.array([rho, eta, alpha]).T
-
-        # reshaped to size (L_well, M_well)
-        B_lm = self.B_lm.reshape((self.well_basis.L + 1, -1))
-        # assuming single flux surface, so only take first row (single node)
-        B_input = (self.well_basis.evaluate(nodes) @ B_lm)[0, :]
-        B_input = np.sort(B_input)  # sort to ensure monotonicity
-        eta_input = np.linspace(0, jnp.pi / 2, num=B_input.size)
-
-        # |B|_omnigeneous is an even function so B(-eta) = B(+eta) = B(|eta|)
-        B = interp1d(np.abs(eta), eta_input, B_input, method="monotonic-0")
-        return B
-
-    # TODO: move to compute function?
-    def compute_boozer_angles(self, rho, eta, alpha, iota):
-        """Compute corresponding Boozer angles from x_lmn.
-
-        Parameters
-        ----------
-        rho : ndarray
-            Radial coordinates.
-        eta : ndarray
-            Coordinates along the field line.
-        alpha : ndarray
-            Field line label.
-        iota : float
-            Rotational transform.
-
-        Returns
-        -------
-        theta_B : ndarray
-            Boozer poloidal angle.
-        zeta_B : ndarray
-            Boozer toroidal angle.
-
-        """
-        nodes = np.array([rho, eta, alpha]).T
-
-        # helicity matrix
-        M, N = self.helicity
-        matrix = jnp.where(
-            M == 0,
-            jnp.array([N, iota / N, 0, 1 / N]),  # OP
-            jnp.where(
-                N == 0,
-                jnp.array([0, -1, M, -1 / iota]),  # OT
-                jnp.array([N, M * iota / (N - M * iota), M, M / (N - M * iota)]),  # OH
-            ),
-        ).reshape((2, 2))
-
-        # evaluate h(rho,eta,alpha)
-        h = self.shift_basis.evaluate(nodes) @ self.x_lmn + 2 * eta + np.pi
-
-        # solve for (rho,theta_B,zeta_B) corresponding to (rho,eta,alpha)
-        booz = matrix @ np.vstack((alpha, h))
-        return booz[0, :], booz[1, :]
-
     def compute(
         self,
         names,
         grid=None,
         params=None,
         transforms=None,
+        profiles=None,
         data=None,
         **kwargs,
     ):
@@ -2049,20 +1975,18 @@ class OmnigenousField(Optimizable, IOAble):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : Grid or int, optional
-            Grid of coordinates to evaluate at. Defaults to a Linear grid.
-            If an integer, uses that many equally spaced points.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. Defaults to the quadrature grid.
         params : dict of ndarray
-            Parameters from the equilibrium. Defaults to attributes of self.
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to attributes of self.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from grid
+        profiles : dict of Profile
+            Profile objects for pressure, iota, current, etc. Defaults to attributes
+            of self
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
-        override_grid : bool
-            If True, override the user supplied grid if necessary and use a full
-            resolution grid to compute quantities and then downsample to user requested
-            grid. If False, uses only the user specified grid, which may lead to
-            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -2073,7 +1997,9 @@ class OmnigenousField(Optimizable, IOAble):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            grid = LinearGrid(theta=2 * self.M_well, zeta=8, NFP=self.NFP, sym=False)
+            grid = LinearGrid(
+                theta=2 * self.M_well, N=2 * self.N_shift, NFP=self.NFP, sym=False
+            )
         elif not isinstance(grid, _Grid):
             raise TypeError(
                 "must pass in a Grid object for argument grid!"

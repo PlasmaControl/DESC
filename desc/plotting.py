@@ -38,7 +38,6 @@ __all__ = [
     "plot_fsa",
     "plot_grid",
     "plot_logo",
-    "plot_omnigenous_field",
     "plot_qs_error",
     "plot_section",
     "plot_surfaces",
@@ -2397,7 +2396,7 @@ def plot_boozer_surface(
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium or OmnigenousField
         Object from which to plot.
     grid_compute : Grid, optional
         grid to use for computing boozer spectrum
@@ -2449,6 +2448,26 @@ def plot_boozer_surface(
         fig, ax = plot_boozer_surface(eq)
 
     """
+    if hasattr(eq, "_well_basis"):
+        grid_kwargs = {
+            "rho": rho,
+            "M": 50,
+            "N": 50,
+            "NFP": eq.NFP,
+            "endpoint": False,
+        }
+        grid = _get_grid(**grid_kwargs)
+        return _plot_omnigenous_field(
+            eq,
+            iota=kwargs.pop("iota", 1),
+            grid=grid,
+            fill=fill,
+            ncontours=ncontours,
+            fieldlines=fieldlines,
+            ax=ax,
+            return_data=return_data,
+            **kwargs,
+        )
     if grid_compute is None:
         grid_kwargs = {
             "rho": rho,
@@ -3744,10 +3763,7 @@ def plot_field_lines_real_space(
         return fig, ax
 
 
-# FIXME: this only really works for OP fields where helicity=(0, NFP)
-# TODO: make this part of plot_boozer_surface
-# TODO: try using tricontour to work with other helicities
-def plot_omnigenous_field(
+def _plot_omnigenous_field(
     field,
     iota,
     grid=None,
@@ -3812,13 +3828,8 @@ def plot_omnigenous_field(
         fig, ax = plot_omnigenous_field(field)
 
     """
-    errorif(
-        field.helicity[0] != 0,
-        NotImplementedError,
-        "This function only works for OP fields with helicity=(0, NFP).",
-    )
     if grid is None:
-        grid = LinearGrid(rho=[1.0], theta=101, zeta=101, endpoint=True, NFP=field.NFP)
+        grid = LinearGrid(rho=[1.0], theta=101, zeta=101, endpoint=False, NFP=field.NFP)
 
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
@@ -3829,16 +3840,8 @@ def plot_omnigenous_field(
         ["theta_B", "zeta_B", "|B|_omni"], grid=grid, helicity=field.helicity, iota=iota
     )
     B = data["|B|_omni"]
-    theta_B = data["theta_B"]
-    zeta_B = data["zeta_B"]
-
-    # reshape to 2D arrays
-    BB = B.reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
-    tt = theta_B.reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
-    zz = zeta_B.reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
-    BB = np.tile(BB, (3, 1))
-    tt = np.vstack((tt - 2 * np.pi, tt, tt + 2 * np.pi))
-    zz = np.tile(zz, (3, 1))
+    theta_B = np.mod(data["theta_B"], 2 * np.pi)
+    zeta_B = np.mod(data["zeta_B"], 2 * np.pi / field.NFP)
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
@@ -3854,14 +3857,14 @@ def plot_omnigenous_field(
 
     assert (
         len(kwargs) == 0
-    ), f"plot_omnigenous_field got unexpected keyword argument: {kwargs.keys()}"
+    ), f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
     if fill:
-        im = ax.contourf(zz, tt, BB, **contourf_kwargs)
+        im = ax.tricontour(zeta_B, theta_B, B, **contourf_kwargs)
     else:
-        im = ax.contour(zz, tt, BB, **contourf_kwargs)
+        im = ax.tricontour(zeta_B, theta_B, B, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
@@ -3887,7 +3890,7 @@ def plot_omnigenous_field(
     ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
 
     _set_tight_layout(fig)
-    plot_data = {"zeta_Boozer": zz, "theta_Boozer": tt, "|B|": BB}
+    plot_data = {"theta_Boozer": theta_B, "zeta_Boozer": zeta_B, "|B|": B}
 
     if return_data:
         return fig, ax, plot_data

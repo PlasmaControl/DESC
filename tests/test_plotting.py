@@ -35,7 +35,6 @@ from desc.plotting import (
     plot_fsa,
     plot_grid,
     plot_logo,
-    plot_omnigenous_field,
     plot_qs_error,
     plot_section,
     plot_surfaces,
@@ -950,10 +949,10 @@ def test_plot_omnigenous_field():
         L_shift=0,
         M_shift=1,
         N_shift=1,
-        NFP=2,
-        helicity=(0, 2),
+        NFP=4,
+        helicity=(1, 4),
         B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
         x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
     )
-    fig, ax = plot_omnigenous_field(field, iota=0.25, fieldlines=4)
+    fig, ax = plot_boozer_surface(field, iota=0.6, fieldlines=4)
     return fig

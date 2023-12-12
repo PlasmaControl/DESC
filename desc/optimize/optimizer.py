@@ -137,6 +137,8 @@ class Optimizer(IOAble):
 
         Returns
         -------
+        things : list,
+            list of optimized things
         res : OptimizeResult
             The optimization result represented as a ``OptimizeResult`` object.
             Important attributes are: ``x`` the solution array, ``success`` a
@@ -168,7 +170,7 @@ class Optimizer(IOAble):
         )
 
         # make sure everything is built
-        if not objective.built:
+        if objective is not None and not objective.built:
             objective.build(verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
             nonlinear_constraint.build(verbose=verbose)
@@ -397,7 +399,7 @@ def _maybe_wrap_nonlinear_constraints(
 ):
     """Use ProximalProjection to handle nonlinear constraints."""
     if eq is None:  # not deal with an equilibrium problem -> no ProximalProjection
-        return eq, nonlinear_constraint
+        return objective, nonlinear_constraint
     wrapper, method = _parse_method(method)
     if nonlinear_constraint is None:
         if wrapper is not None:

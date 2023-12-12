@@ -301,6 +301,7 @@ class FixEndCapZ(_FixedObjective):
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
+            self._idx = idx
         else:  # specified modes
             raise NotImplementedError("Specifying Modes not implemented")
             # modes = np.atleast_2d(self._modes)
@@ -487,6 +488,7 @@ class FixEndCapLambda(_FixedObjective):
         if self._modes is True:  # all modes
             modes = eq.L_basis.modes
             idx = np.arange(eq.L_basis.num_modes)
+            self._idx = idx
         else:  # specified modes
             raise NotImplementedError("Specifying Modes not implemented")
             # modes = np.atleast_2d(self._modes)

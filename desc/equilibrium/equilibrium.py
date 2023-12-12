@@ -270,11 +270,11 @@ class Equilibrium(IOAble):
 
         # bases
         if self.mirror:
-            assert sym == False or None, NotImplementedError(
-                f"mirror sym expected false but given {sym}"
+            assert (self.sym == False) or (self.sym == None), NotImplementedError(
+                f"mirror sym expected false but given {self.sym}"
             )
-            assert NFP == 1, NotImplementedError(
-                f"mirror NFP expected 1 but given {NFP}"
+            assert self.NFP == 1, NotImplementedError(
+                f"mirror NFP expected 1 but given {self.NFP}"
             )
             Basis = ChebyshevZernikeBasis
         else:

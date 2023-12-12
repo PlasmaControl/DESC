@@ -223,11 +223,11 @@ class Equilibrium(IOAble):
 
         # surface
         self._surface, self._bdry_mode = parse_surface(
-            surface, self.NFP, self.sym, self.spectral_indexing
+            surface, self.NFP, self.sym, self.spectral_indexing, mirror=mirror
         )
 
         # magnetic axis
-        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
+        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface, mirror=mirror)
 
         # resolution
         _assert_nonnegint(L, "L")
@@ -270,12 +270,16 @@ class Equilibrium(IOAble):
 
         # bases
         if self.mirror:
-            assert sym == False or None, NotImplementedError(f"mirror sym expected false but given {sym}")
-            assert NFP == 1, NotImplementedError(f"mirror NFP expected 1 but given {NFP}")
+            assert sym == False or None, NotImplementedError(
+                f"mirror sym expected false but given {sym}"
+            )
+            assert NFP == 1, NotImplementedError(
+                f"mirror NFP expected 1 but given {NFP}"
+            )
             Basis = ChebyshevZernikeBasis
         else:
             Basis = FourierZernikeBasis
-        
+
         self._R_basis = Basis(
             L=self.L,
             M=self.M,

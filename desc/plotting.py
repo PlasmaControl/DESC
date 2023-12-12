@@ -276,7 +276,10 @@ def _compute(eq, name, grid, component=None, reshape=True):
     """
     parameterization = _parse_parameterization(eq)
     if name not in data_index[parameterization]:
-        raise ValueError("Unrecognized value '{}'.".format(name))
+        raise ValueError(
+            f"Unrecognized value '{name}' for "
+            + f"parameterization {parameterization}."
+        )
     assert component in [
         None,
         "R",

@@ -817,9 +817,12 @@ class _Objective(IOAble, ABC):
         self._grad = Derivative(self.compute_scalar, argnums, mode="grad")
         self._hess = Derivative(self.compute_scalar, argnums, mode="hess")
         if self._deriv_mode == "auto":
-            # choose based on shape of jacobian
+            # choose based on shape of jacobian. fwd mode is more memory efficient
+            # so we prefer that unless the jacobian is really wide
             self._deriv_mode = (
-                "fwd" if self.dim_f >= sum(t.dim_x for t in self.things) else "rev"
+                "fwd"
+                if self.dim_f >= 0.5 * sum(t.dim_x for t in self.things)
+                else "rev"
             )
         self._jac_scaled = Derivative(
             self.compute_scaled, argnums, mode=self._deriv_mode

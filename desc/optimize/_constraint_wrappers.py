@@ -13,7 +13,7 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer, get_instance
 
-from .utils import compute_jac_scale, f_where_x
+from .utils import f_where_x
 
 
 class LinearConstraintProjection(ObjectiveFunction):
@@ -503,6 +503,24 @@ class ProximalProjection(ObjectiveFunction):
             self._scalar = False
 
         self._set_eq_state_vector()
+        # map from eq c to full c
+        self._dimc_per_thing = [t.dim_x for t in self.things]
+        self._dimc_per_thing[self._eq_idx] = np.sum(
+            [self._eq.dimensions[arg] for arg in self._args]
+        )
+        self._dimx_per_thing = [t.dim_x for t in self.things]
+
+        self._unfixed_idx_mat = jnp.eye(self._objective.dim_x)
+        self._unfixed_idx_mat = jnp.split(
+            self._unfixed_idx_mat, np.cumsum([t.dim_x for t in self.things]), axis=-1
+        )
+        self._unfixed_idx_mat[self._eq_idx] = (
+            self._unfixed_idx_mat[self._eq_idx][:, self._unfixed_idx] @ self._Z
+        )
+        self._unfixed_idx_mat = np.concatenate(
+            [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
+        )
+
         # history and caching
         self._x_old = self.x(self.things)
         self._allx = [self._x_old]
@@ -771,6 +789,87 @@ class ProximalProjection(ObjectiveFunction):
         """
         raise NotImplementedError("Unscaled jacobian of proximal projection is hard.")
 
+    def _jvp_f(self, xf, dc, constants=None):
+        Fx = self._constraint.jac_scaled(xf, constants)
+        Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
+        Fc = Fx @ (self._dxdc @ dc)
+        Fxh = Fx_reduced
+        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]  # add a tiny bit of regularization
+        sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+        Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
+        return Fxh_inv @ Fc
+
+    def jvp_scaled(self, v, x, constants=None):
+        """Compute Jacobian-vector product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+            This method only works for first order jvps.
+        x : ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        if isinstance(v, tuple):
+            v = v[0]
+        if constants is None:
+            constants = self.constants
+        xg, xf = self._update_equilibrium(x, store=True)
+
+        # we're replacing stuff like this with jvps
+        # Fx_reduced = Fx[:, unfixed_idx] @ Z               # noqa: E800
+        # Gx_reduced = Gx[:, unfixed_idx] @ Z               # noqa: E800
+        # Fc = Fx @ dxdc @ v                                # noqa: E800
+        # Gc = Gx @ dxdc @ v                                # noqa: E800
+        # LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc     # noqa: E800
+
+        # v contains "boundary" dofs from eq and other objects
+        # want jvp_f to only get parts from equilibrium, not other things
+        vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
+        # this is Fx_reduced_inv @ Fc
+        dfdc = self._jvp_f(xf, vs[self._eq_idx], constants[1])
+        # broadcasting against multiple things
+        dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
+        dfdcs[self._eq_idx] = dfdc
+        dfdc = jnp.concatenate(dfdcs)
+
+        # LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc    # noqa: E800
+        # = Gx @ (unfixed_idx @ Z @ dfdc - dxdc @ v)
+        # unfixed_idx_mat includes Z already
+        tangent = self._unfixed_idx_mat @ dfdc - jnp.atleast_2d(self._dxdc @ v)
+        if self._objective._deriv_mode in ["batched", "looped"]:
+            out = self._objective.jvp_scaled(tangent.T, xg, constants[0])
+        else:  # deriv_mode == "blocked"
+            vgs = jnp.split(tangent, np.cumsum(self._dimx_per_thing))
+            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
+            out = []
+            for obj, const in zip(
+                self._objective.objectives, self._objective.constants
+            ):
+                xi = [x for x, t in zip(xgs, self._objective.things) if t in obj.things]
+                vi = [v for v, t in zip(vgs, self._objective.things) if t in obj.things]
+                if obj._deriv_mode == "rev":
+                    # obj might now allow fwd mode, so compute full rev mode jacobian
+                    # and do matmul manually. This is slightly inefficient, but usually
+                    # when rev mode is used, dim_f <<< dim_x, so its not too bad.
+                    Ji = obj.jac_scaled(*xi, const)
+                    outi = jnp.array([Jii @ vii for Jii, vii in zip(Ji, vi)]).sum(
+                        axis=0
+                    )
+                    out.append(outi)
+                else:
+                    outi = obj.jvp_scaled([_vi.T for _vi in vi], xi, constants=const).T
+                    out.append(outi)
+            out = jnp.concatenate(out)
+        return out
+
     def jac_scaled(self, x, constants=None):
         """Compute Jacobian of the vector objective function with weights / bounds.
 
@@ -786,45 +885,8 @@ class ProximalProjection(ObjectiveFunction):
         J : ndarray
             Jacobian matrix.
         """
-        if constants is None:
-            constants = self.constants
-        xg, xf = self._update_equilibrium(x, store=True)
-
-        # Jacobian matrices wrt combined state vectors
-        Fx = self._constraint.jac_scaled(xf, constants[1])
-        Gx = self._objective.jac_scaled(xg, constants[0])
-
-        # f depends only on eq, g can depend on other things
-        # all the fancy projection/prox stuff only applies to eq dofs
-        # so we split Gx into parts that depend only on eq, and stuff on other things
-        Gxs = jnp.split(Gx, np.cumsum([t.dim_x for t in self.things]), axis=-1)
-        Gx = Gxs[self._eq_idx]
-        # projections onto optimization space
-        # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
-        Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
-        Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
-        Fc = Fx @ self._dxdc
-        Gc = Gx @ self._dxdc
-
-        # some scaling to improve conditioning
-        wf, _ = compute_jac_scale(Fx_reduced)
-        wg, _ = compute_jac_scale(Gx_reduced)
-        wx = wf + wg
-        Fxh = Fx_reduced * wx
-        Gxh = Gx_reduced * wx
-
-        cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
-        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-        sf += sf[-1]  # add a tiny bit of regularization
-        sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
-        Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
-
-        # TODO: make this more efficient for finite differences etc. Can probably
-        # reduce the number of operations and tangents
-        LHS = Gxh @ (Fxh_inv @ Fc) - Gc
-        # now add back in non-eq dofs
-        Gxs[self._eq_idx] = -LHS
-        return jnp.hstack(Gxs)
+        v = jnp.eye(x.shape[0])
+        return self.jvp_scaled(v, x, constants).T
 
     def hess(self, x, constants=None):
         """Compute Hessian of the sum of squares of residuals.

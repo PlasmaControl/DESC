@@ -24,9 +24,6 @@ from desc.objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
-    FixModeLambda,
-    FixModeR,
-    FixModeZ,
     FixOmniBmax,
     FixOmniShift,
     FixParameter,
@@ -862,27 +859,26 @@ def test_omnigenity_qa():
     objective = ObjectiveFunction(
         (
             Omnigenity(
-                field=field, eq=eq, eq_grid=eq_axis_grid, field_grid=field_axis_grid
+                field=field,
+                eq=eq,
+                eq_grid=eq_axis_grid,
+                field_grid=field_axis_grid,
+                eq_fixed=True,
             ),
             Omnigenity(
-                field=field, eq=eq, eq_grid=eq_lcfs_grid, field_grid=field_lcfs_grid
+                field=field,
+                eq=eq,
+                eq_grid=eq_lcfs_grid,
+                field_grid=field_lcfs_grid,
+                eq_fixed=True,
             ),
         )
     )
-    constraints = (
-        FixModeR(eq=eq),
-        FixModeZ(eq=eq),
-        FixModeLambda(eq=eq),
-        FixPressure(eq=eq),
-        FixIota(eq=eq),
-        FixPsi(eq=eq),
-    )
 
     optimizer = Optimizer("lsq-exact")
-    (eq, field), _ = optimizer.optimize(
-        (eq, field),
+    (field,), _ = optimizer.optimize(
+        field,
         objective,
-        constraints,
         maxiter=100,
         ftol=1e-6,
         xtol=1e-6,

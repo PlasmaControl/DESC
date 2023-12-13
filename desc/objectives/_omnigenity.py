@@ -593,6 +593,16 @@ class Omnigenity(_Objective):
     well_weight : float, optional
         Weight applied to the bottom of the magnetic well (B_min) relative to the top
         of the magnetic well (B_max). Default = 1, which weights all points equally.
+    eq_fixed: bool, optional
+        Whether the Equilibrium `eq` is fixed or not.
+        If True, the equilibrium is fixed and its values are precomputed, which saves on
+        computation time during optimization and self.things = [field] only.
+        If False, the equilibrium values are computed at every iteration (Default).
+    field_fixed: bool, optional
+        Whether the OmnigenousField `field` is fixed or not.
+        If True, the field is fixed and its values are precomputed, which saves on
+        computation time during optimization and self.things = [eq] only.
+        If False, the field values are computed at every iteration (Default).
     name : str
         Name of the objective function.
 
@@ -618,18 +628,32 @@ class Omnigenity(_Objective):
         M_booz=None,
         N_booz=None,
         well_weight=1,
+        eq_fixed=False,
+        field_fixed=False,
         name="omnigenity",
     ):
         if target is None and bounds is None:
             target = 0
+        self._eq = eq
+        self._field = field
         self._eq_grid = eq_grid
         self._field_grid = field_grid
         self.helicity = field.helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
         self.well_weight = well_weight
+        self._eq_fixed = eq_fixed
+        self._field_fixed = field_fixed
+        if not eq_fixed or field_fixed:
+            things = [eq, field]
+        elif eq_fixed and not field_fixed:
+            things = [field]
+        elif field_fixed and not eq_fixed:
+            things = [eq]
+        else:
+            raise ValueError("Cannot fix both the eq and field.")
         super().__init__(
-            things=[eq, field],
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -651,8 +675,16 @@ class Omnigenity(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
-        field = self.things[1]
+        if self._eq_fixed:
+            eq = self._eq
+            field = self.things[0]
+        elif self._field_fixed:
+            eq = self.things[0]
+            field = self._field
+        else:
+            eq = self.things[0]
+            field = self.things[1]
+
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
@@ -708,12 +740,34 @@ class Omnigenity(_Objective):
         w *= jnp.sqrt(field_grid.num_nodes)
 
         self._constants = {
-            "equil_profiles": profiles,
-            "equil_transforms": eq_transforms,
+            "eq_profiles": profiles,
+            "eq_transforms": eq_transforms,
             "field_transforms": field_transforms,
             "quad_weights": w,
             "helicity": self.helicity,
         }
+
+        if self._eq_fixed:
+            # precompute the eq data since it is fixed during the optimization
+            eq_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._eq_data_keys,
+                params=self._eq.params_dict,
+                transforms=self._constants["eq_transforms"],
+                profiles=self._constants["eq_profiles"],
+            )
+            self._constants["eq_data"] = eq_data
+        if self._field_fixed:
+            # precompute the field data since it is fixed during the optimization
+            field_data = compute_fun(
+                "desc.magnetic_fields.OmnigenousField",
+                self._field_data_keys,
+                params=self._field.params_dict,
+                transforms=self._constants["field_transforms"],
+                profiles={},
+                helicity=self._constants["helicity"],
+            )
+            self._constants["field_data"] = field_data
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -725,12 +779,12 @@ class Omnigenity(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, equil_params, field_params, constants=None):
+    def compute(self, params_1=None, params_2=None, constants=None):
         """Compute omnigenity errors.
 
         Parameters
         ----------
-        equil_params : dict
+        eq_params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         field_params : dict
             Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
@@ -746,23 +800,43 @@ class Omnigenity(_Objective):
         """
         if constants is None:
             constants = self.constants
-        eq_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._eq_data_keys,
-            params=equil_params,
-            transforms=constants["equil_transforms"],
-            profiles=constants["equil_profiles"],
-        )
-        field_data = compute_fun(
-            "desc.magnetic_fields.OmnigenousField",
-            self._field_data_keys,
-            params=field_params,
-            transforms=constants["field_transforms"],
-            profiles={},
-            helicity=constants["helicity"],
-            iota=eq_data["iota"][0],
-        )
 
+        # sort parameters
+        if self._eq_fixed:
+            field_params = params_1
+        elif self._field_fixed:
+            eq_params = params_1
+        else:
+            eq_params = params_1
+            field_params = params_2
+
+        # compute data
+        if self._eq_fixed:
+            eq_data = constants["eq_data"]
+        else:
+            eq_params = params_1
+            eq_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._eq_data_keys,
+                params=eq_params,
+                transforms=constants["eq_transforms"],
+                profiles=constants["eq_profiles"],
+            )
+        if self._field_fixed:
+            # FIXME: update this data with new iota from the equilibrium
+            field_data = constants["field_data"]
+        else:
+            field_data = compute_fun(
+                "desc.magnetic_fields.OmnigenousField",
+                self._field_data_keys,
+                params=field_params,
+                transforms=constants["field_transforms"],
+                profiles={},
+                helicity=constants["helicity"],
+                iota=eq_data["iota"][0],
+            )
+
+        # additional computation
         nodes = jnp.vstack(
             (
                 jnp.zeros_like(field_data["theta_B"]),
@@ -771,7 +845,7 @@ class Omnigenity(_Objective):
             )
         ).T
         B_eta_alpha = jnp.matmul(
-            constants["equil_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
+            constants["eq_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
         )
         omnigenity = B_eta_alpha - field_data["|B|_omni"]
         weights = (self.well_weight + 1) / 2 + (self.well_weight - 1) / 2 * jnp.cos(

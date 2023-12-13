@@ -428,9 +428,10 @@ class TestMagneticFields:
         )
         basis = DoubleFourierSeries(M=2, N=2, sym="cos")
         phi_mn = np.ones((basis.num_modes,))
-        # make a current potential corresponding a purely poloidal current
         field = FourierCurrentPotentialField(
             Phi_mn=phi_mn,
+            G=1000,
+            I=-50,
             modes_Phi=basis.modes[:, 1:],
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
@@ -443,7 +444,7 @@ class TestMagneticFields:
         assert field.eq(field2)
 
     def test_change_Phi_basis_fourier_current_field(self):
-        """Test that i/o works for FourierCurrentPotentialField."""
+        """Test that change_Phi_resolution works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
             R_lmn=jnp.array([10, 1]),
             Z_lmn=jnp.array([0, -1]),
@@ -455,7 +456,6 @@ class TestMagneticFields:
         basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym="cos")
 
         phi_mn = np.ones((basis.num_modes,))
-        # make a current potential corresponding a purely poloidal current
         field = FourierCurrentPotentialField(
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],

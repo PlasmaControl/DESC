@@ -893,7 +893,7 @@ class Equilibrium(IOAble, Optimizable):
                 L=self.L_grid,
                 M=self.M_grid,
                 NFP=self.NFP,
-                sym=False,
+                sym=self.sym,
                 axis=False,
             )
             # TODO: Pass in data0d as a seed once there are 1d quantities that

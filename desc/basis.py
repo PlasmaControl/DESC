@@ -2116,7 +2116,7 @@ def chebyshev_z(z, l, dr=0):
                 (3 * z_shift * (3 + 2 * z_shift ** 2 + 2 * l ** 2 * (-1 + z_shift ** 2))
                 * jnp.sin(l * jnp.arccos(z_shift))) / (1 - z_shift ** 2) ** (7 / 2)) )/ np.pi**4
         prod = 1
-        for k in range(dr):
+        for k in range(int(dr)):
             prod *= (l**2 - k**2)/(2*k+1)
             # print("K", k, "prod", prod)
         sign = (-1)**(l+dr)

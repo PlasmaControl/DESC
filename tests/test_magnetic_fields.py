@@ -10,6 +10,7 @@ from desc.compute import rpz2xyz_vec, xyz2rpz_vec
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
+from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
@@ -416,6 +417,87 @@ class TestMagneticFields:
         # check error thrown if new array is different size than old
         with pytest.raises(ValueError):
             field.Phi_mn = np.ones((basis.num_modes + 1,))
+
+    def test_io_fourier_current_field(self):
+        """Test that i/o works for FourierCurrentPotentialField."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        basis = DoubleFourierSeries(M=2, N=2, sym="cos")
+        phi_mn = np.ones((basis.num_modes,))
+        field = FourierCurrentPotentialField(
+            Phi_mn=phi_mn,
+            G=1000,
+            I=-50,
+            modes_Phi=basis.modes[:, 1:],
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+        field.save("test_field.h5")
+        field2 = load("test_field.h5")
+        assert field.eq(field2)
+
+    def test_change_Phi_basis_fourier_current_field(self):
+        """Test that change_Phi_resolution works for FourierCurrentPotentialField."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        M = N = 2
+        basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym="cos")
+
+        phi_mn = np.ones((basis.num_modes,))
+        field = FourierCurrentPotentialField(
+            Phi_mn=phi_mn,
+            modes_Phi=basis.modes[:, 1:],
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 1:])), M)
+        np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
+        assert field.Phi_basis.sym == "cos"
+
+        M = N = 5
+        basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym="cos")
+        field.change_Phi_resolution(M=M, N=N)
+
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 1:])), M)
+        np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
+        assert field.Phi_basis.sym == "cos"
+
+        M = 7
+        N = 9
+        basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym="cos")
+        field.change_Phi_resolution(M=M, N=N)
+
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 1])), M)
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 2])), N)
+        np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
+        assert field.Phi_basis.sym == "cos"
+
+        M = 3
+        N = 3
+        basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym="sin")
+        field.change_Phi_resolution(M=M, N=N, sym_Phi="sin")
+
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 1])), M)
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 2])), N)
+        np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
+        assert field.Phi_basis.sym == "sin"
 
     @pytest.mark.slow
     @pytest.mark.unit

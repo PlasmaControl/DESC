@@ -1291,21 +1291,30 @@ def test_compute_everything():
     )
     # use this low resolution grid for equilibria to reduce file size
     eqgrid = LinearGrid(
-        # include magnetic axis
-        rho=np.linspace(0, 1, 10),
+        L=9,
         M=5,
         N=5,
         NFP=things["desc.equilibrium.equilibrium.Equilibrium"].NFP,
         sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
+        axis=True,
     )
     curvegrid1 = LinearGrid(N=10)
     curvegrid2 = LinearGrid(N=10, NFP=2)
+    fieldgrid = LinearGrid(
+        L=2,
+        M=4,
+        N=5,
+        NFP=things["desc.magnetic_fields.OmnigenousField"].NFP,
+        sym=False,
+        axis=True,
+    )
     grid = {
         "desc.equilibrium.equilibrium.Equilibrium": {"grid": eqgrid},
         "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
         "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
         "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
         "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
+        "desc.magnetic_fields.OmnigenousField": {"grid": fieldgrid},
     }
 
     with open("tests/inputs/master_compute_data.pkl", "rb") as file:

@@ -1560,7 +1560,7 @@ class FourierCurrentPotentialField(
     _io_attrs_ = (
         _MagneticField._io_attrs_
         + FourierRZToroidalSurface._io_attrs_
-        + ["_surface_grid", "_Phi_mn", "_I", "_G"]
+        + ["_Phi_mn", "_I", "_G", "_Phi_basis", "_M_Phi", "_N_Phi", "_sym_Phi"]
     )
 
     def __init__(
@@ -1694,8 +1694,8 @@ class FourierCurrentPotentialField(
             If True, non-symmetric modes will be truncated.
 
         """
-        M = self._M_Phi or M
-        N = self._M_Phi or N
+        M = M or self._M_Phi
+        N = N or self._M_Phi
         NFP = NFP or self.NFP
         sym_Phi = sym_Phi or self.sym_Phi
 
@@ -2023,6 +2023,7 @@ class OmnigenousField(Optimizable, IOAble):
             transforms=transforms,
             profiles=profiles,
             data=data,
+            helicity=self.helicity,
             **kwargs,
         )
         return data

@@ -9,6 +9,8 @@ more general `Equilibrium.map_coordinates`.
 - Allow optimizations where the only object being optimized is not an ``Equilibrium``
 object e.g. optimizing only a ``FourierRZToroidalSurface`` object to have a certain
 ``Volume``.
+- Many functions from ``desc.plotting`` now also work for plotting quantities from
+``Curve`` and ``Surface`` classes.
 
 v0.10.3
 -------

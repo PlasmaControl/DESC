@@ -52,6 +52,121 @@ def _ds(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="X",
+    label="X",
+    units="m",
+    units_long="meters",
+    description="Cartesian X coordinate.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x"],
+    parameterization="desc.geometry.core.Curve",
+    basis="basis",
+)
+def _X_curve(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        # if basis is rpz, then "x" is rpz and we must convert to xyz
+        coords = rpz2xyz(coords)
+    data["X"] = coords[:, 0]
+    return data
+
+
+@register_compute_fun(
+    name="Y",
+    label="Y",
+    units="m",
+    units_long="meters",
+    description="Cartesian Y coordinate.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x"],
+    parameterization="desc.geometry.core.Curve",
+    basis="basis",
+)
+def _Y_Curve(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        # if basis is rpz, then "x" is rpz and we must convert to xyz
+        coords = rpz2xyz(coords)
+    data["Y"] = coords[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="R",
+    label="R",
+    units="m",
+    units_long="meters",
+    description="Cylindrical radial position along curve",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x"],
+    parameterization="desc.geometry.core.Curve",
+    basis="basis",
+)
+def _R_Curve(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords = xyz2rpz(coords)
+    data["R"] = coords[:, 0]
+    return data
+
+
+@register_compute_fun(
+    name="phi",
+    label="\\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal phi position along curve",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x"],
+    parameterization="desc.geometry.core.Curve",
+    basis="basis",
+)
+def _phi_Curve(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords = xyz2rpz(coords)
+    data["phi"] = coords[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="Z",
+    label="Z",
+    units="m",
+    units_long="meters",
+    description="Cylindrical vertical position along curve",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x"],
+    parameterization="desc.geometry.core.Curve",
+)
+def _Z_Curve(params, transforms, profiles, data, **kwargs):
+    data["Z"] = data["x"][:, 2]
+    return data
+
+
+@register_compute_fun(
     name="x",
     label="\\mathbf{x}",
     units="m",

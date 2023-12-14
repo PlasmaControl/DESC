@@ -1827,9 +1827,9 @@ class OmnigenousField(Optimizable, IOAble):
         "_M_shift",
         "_N_shift",
         "_NFP",
+        "_helicity",
         "_well_basis",
         "_shift_basis",
-        "_helicity",
         "_B_lm",
         "_x_lmn",
     ]

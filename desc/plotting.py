@@ -2453,6 +2453,7 @@ def plot_boozer_surface(
 
     """
     if hasattr(eq, "_well_basis"):
+        # eq is really an OmnigenousField
         grid_kwargs = {
             "rho": rho,
             "M": 50,

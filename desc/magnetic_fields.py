@@ -2023,7 +2023,7 @@ class OmnigenousField(Optimizable, IOAble):
             transforms=transforms,
             profiles=profiles,
             data=data,
-            helicity=self.helicity,
+            helicity=kwargs.pop("helicity", self.helicity),
             **kwargs,
         )
         return data

@@ -637,6 +637,8 @@ def plot_2d(
         contourf_kwargs["levels"] = kwargs.pop(
             "levels", np.linspace(np.nanmin(data), np.nanmax(data), 100)
         )
+    print(data)
+    print(contourf_kwargs)
     contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
     title_fontsize = kwargs.pop("title_fontsize", None)
@@ -687,6 +689,7 @@ def plot_2d(
         name: data,
     }
 
+    print("fig, ax, plot_data", fig, ax, plot_data)
     if norm_F:
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
@@ -2988,6 +2991,63 @@ def plot_basis(basis, return_data=False, **kwargs):
 
         return fig, ax
     elif basis.__class__.__name__ in ["ZernikePolynomial", "FourierZernikeBasis"]:
+        lmax = abs(basis.modes[:, 0]).max().astype(int)
+        mmax = abs(basis.modes[:, 1]).max().astype(int)
+
+        grid = LinearGrid(rho=100, theta=100, endpoint=True)
+        r = grid.nodes[grid.unique_rho_idx, 0]
+        v = grid.nodes[grid.unique_theta_idx, 1]
+
+        fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 3 * lmax / 2)))
+
+        plot_data = {"amplitude": [], "rho": r, "theta": v}
+
+        ax = {i: {} for i in range(lmax + 1)}
+        ratios = np.ones(2 * (mmax + 1) + 1)
+        ratios[-1] = kwargs.get("cbar_ratio", 0.25)
+        gs = matplotlib.gridspec.GridSpec(
+            lmax + 2, 2 * (mmax + 1) + 1, width_ratios=ratios
+        )
+
+        modes = basis.modes[basis.modes[:, 2] == 0]
+        plot_data["l"] = basis.modes[:, 0]
+        plot_data["m"] = basis.modes[:, 1]
+        Zs = basis.evaluate(grid.nodes, modes=modes)
+        for i, (l, m) in enumerate(
+            zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
+        ):
+            Z = Zs[:, i].reshape((grid.num_rho, grid.num_theta))
+            ax[l][m] = plt.subplot(
+                gs[l + 1, m + mmax : m + mmax + 2], projection="polar"
+            )
+            ax[l][m].set_title("$l={}, m={}$".format(l, m))
+            ax[l][m].axis("off")
+            im = ax[l][m].contourf(
+                v,
+                r,
+                Z,
+                levels=np.linspace(-1, 1, 100),
+                cmap=kwargs.get("cmap", "coolwarm"),
+            )
+            plot_data["amplitude"].append(Zs)
+
+        cb_ax = plt.subplot(gs[:, -1])
+        plt.subplots_adjust(right=0.8)
+        cbar = fig.colorbar(im, cax=cb_ax)
+        cbar.set_ticks(np.linspace(-1, 1, 9))
+        fig.suptitle(
+            "{}, $L={}$, $M={}$, spectral indexing = {}".format(
+                basis.__class__.__name__, basis.L, basis.M, basis.spectral_indexing
+            ),
+            y=0.98,
+            fontsize=title_fontsize,
+        )
+        _set_tight_layout(fig)
+        if return_data:
+            return fig, ax, plot_data
+
+        return fig, ax
+    elif basis.__class__.__name__ in ["ChebyshevZernikeBasis"]:
         lmax = abs(basis.modes[:, 0]).max().astype(int)
         mmax = abs(basis.modes[:, 1]).max().astype(int)
 

@@ -11,13 +11,7 @@ from scipy.constants import mu_0
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import (
-    FourierZernikeBasis,
-    fourier,
-    zernike_radial,
-    ChebyshevZernikeBasis,
-    chebyshev_z,
-)
+from desc.basis import FourierZernikeBasis, fourier, zernike_radial, chebyshev_z, ChebyshevZernikeBasis
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import get_data_deps, get_params, get_profiles, get_transforms
@@ -53,7 +47,7 @@ from .initial_guess import set_initial_guess
 from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
 
 
-class Equilibrium(IOAble):
+class Equilibrium_mirror(IOAble):
     """Equilibrium is an object that represents a plasma equilibrium.
 
     It contains information about a plasma state, including the shapes of flux surfaces
@@ -126,6 +120,7 @@ class Equilibrium(IOAble):
         "_L",
         "_M",
         "_N",
+        "_Length"
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
@@ -147,8 +142,6 @@ class Equilibrium(IOAble):
         "_M_grid",
         "_N_grid",
         "_node_pattern",
-        "_mirror",
-        "_length",
     ]
 
     def __init__(
@@ -173,8 +166,6 @@ class Equilibrium(IOAble):
         axis=None,
         sym=None,
         spectral_indexing=None,
-        mirror=False,
-        length=None,
         **kwargs,
     ):
         errorif(
@@ -223,11 +214,11 @@ class Equilibrium(IOAble):
 
         # surface
         self._surface, self._bdry_mode = parse_surface(
-            surface, self.NFP, self.sym, self.spectral_indexing, mirror=mirror
+            surface, self.NFP, self.sym, self.spectral_indexing
         )
 
         # magnetic axis
-        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface, mirror=mirror)
+        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
 
         # resolution
         _assert_nonnegint(L, "L")
@@ -256,31 +247,8 @@ class Equilibrium(IOAble):
         self._surface.change_resolution(self.L, self.M, self.N)
         self._axis.change_resolution(self.N)
 
-        # implement errorif for _mirror
-        errorif(
-            mirror
-            not in [
-                True,
-                False,
-            ],
-            ValueError,
-            f"mirror should be one of True, False, got {mirror}",
-        )
-        self._mirror = mirror
-
         # bases
-        if self.mirror:
-            assert (self.sym == False) or (self.sym == None), NotImplementedError(
-                f"mirror sym expected false but given {self.sym}"
-            )
-            assert self.NFP == 1, NotImplementedError(
-                f"mirror NFP expected 1 but given {self.NFP}"
-            )
-            Basis = ChebyshevZernikeBasis
-        else:
-            Basis = FourierZernikeBasis
-
-        self._R_basis = Basis(
+        self._R_basis = ChebyshevZernikeBasis(
             L=self.L,
             M=self.M,
             N=self.N,
@@ -288,7 +256,7 @@ class Equilibrium(IOAble):
             sym=self._R_sym,
             spectral_indexing=self.spectral_indexing,
         )
-        self._Z_basis = Basis(
+        self._Z_basis = ChebyshevZernikeBasis(
             L=self.L,
             M=self.M,
             N=self.N,
@@ -296,7 +264,7 @@ class Equilibrium(IOAble):
             sym=self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
-        self._L_basis = Basis(
+        self._L_basis = ChebyshevZernikeBasis(
             L=self.L,
             M=self.M,
             N=self.N,
@@ -397,15 +365,6 @@ class Equilibrium(IOAble):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
-        if self.mirror:
-            if length == None:
-                self.length = (
-                    self.R_lmn[self.R_basis.get_idx(L=0, M=0, N=0)] * np.pi * 2
-                )
-            else:
-                self.length = length
-        else:
-            self.length = None
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -607,7 +566,7 @@ class Equilibrium(IOAble):
         )
         if rho is not None:
             assert (rho >= 0) and (rho <= 1)
-            surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho, mirror=self.mirror, length=self.length)
+            surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho)
             surface.change_resolution(self.M, self.N)
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
@@ -731,7 +690,7 @@ class Equilibrium(IOAble):
         else:  # catch cases such as axisymmetry with stellarator symmetry
             Z_n = 0
             modes_Z = 0
-        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym, mirror=self.mirror, length=self.length)
+        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
         return axis
 
     def compute(
@@ -1475,20 +1434,6 @@ class Equilibrium(IOAble):
             "N_grid": self.N_grid,
         }
 
-    @property
-    def mirror(self):
-        """bool: whether is a mirror geometry, None when not a mirror"""
-        return self._mirror
-
-    @property
-    def length(self):
-        """float or None: length of the mirror"""
-        return self._length
-
-    @length.setter
-    def length(self, leng):
-        self._length = leng
-
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""
         print("Spectral indexing: {}".format(self.spectral_indexing))
@@ -1619,7 +1564,7 @@ class Equilibrium(IOAble):
         inputs["Z_lmn"] = transform_Z.fit(Z_1D)
         inputs["L_lmn"] = transform_L.fit(L_1D)
 
-        eq = Equilibrium(**inputs)
+        eq = Equilibrium_mirror(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
 
         return eq
@@ -2089,7 +2034,7 @@ class Equilibrium(IOAble):
         return eq
 
 
-class EquilibriaFamily(IOAble, MutableSequence):
+class EquilibriaFamily_mirror(IOAble, MutableSequence):
     """EquilibriaFamily stores a list of Equilibria.
 
     Has methods for solving complex equilibria using a multi-grid continuation method.
@@ -2113,13 +2058,13 @@ class EquilibriaFamily(IOAble, MutableSequence):
         self.equilibria = []
         if len(args) == 1 and isinstance(args[0], list):
             for inp in args[0]:
-                self.equilibria.append(Equilibrium(**inp))
+                self.equilibria.append(Equilibrium_mirror(**inp))
         else:
             for arg in args:
-                if isinstance(arg, Equilibrium):
+                if isinstance(arg, Equilibrium_mirror):
                     self.equilibria.append(arg)
                 elif isinstance(arg, dict):
-                    self.equilibria.append(Equilibrium(**arg))
+                    self.equilibria.append(Equilibrium_mirror(**arg))
                 else:
                     raise TypeError(
                         "Args to create EquilibriaFamily should either be "
@@ -2279,7 +2224,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             equil = equil.tolist()
         elif not isinstance(equil, list):
             equil = [equil]
-        if len(equil) and not all([isinstance(eq, Equilibrium) for eq in equil]):
+        if len(equil) and not all([isinstance(eq, Equilibrium_mirror) for eq in equil]):
             raise ValueError(
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )
@@ -2289,7 +2234,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return self._equilibria[i]
 
     def __setitem__(self, i, new_item):
-        if not isinstance(new_item, Equilibrium):
+        if not isinstance(new_item, Equilibrium_mirror):
             raise ValueError(
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )
@@ -2303,7 +2248,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
     def insert(self, i, new_item):
         """Insert a new Equilibrium into the family at position i."""
-        if not isinstance(new_item, Equilibrium):
+        if not isinstance(new_item, Equilibrium_mirror):
             raise ValueError(
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )

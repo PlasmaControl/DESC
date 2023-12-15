@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 
 from desc.backend import jnp, put, sign
-from desc.basis import DoubleFourierSeries, ZernikePolynomial
+from desc.basis import DoubleFourierSeries, ZernikePolynomial, ChebyshevFourierSeries
 from desc.io import InputReader
 from desc.utils import copy_coeffs
 
@@ -49,6 +49,8 @@ class FourierRZToroidalSurface(Surface):
         "_Z_basis",
         "rho",
         "_NFP",
+        "_mirror",
+        "_length",
     ]
 
     def __init__(
@@ -63,6 +65,8 @@ class FourierRZToroidalSurface(Surface):
         grid=None,
         name="",
         check_orientation=True,
+        mirror=False,
+        length=None,
     ):
         if R_lmn is None:
             R_lmn = np.array([10, 1])
@@ -95,11 +99,21 @@ class FourierRZToroidalSurface(Surface):
                 sym = True
             else:
                 sym = False
+        
+        self._mirror = mirror
+        if self.mirror:
+            assert (sym == False) or (sym == None), NotImplementedError(f"mirror sym expected false or None but given {sym}")
+            assert NFP == 1, NotImplementedError(f"mirror NFP expected 1 but given {NFP}")
+            Basis = ChebyshevFourierSeries
+            
+        else:
+            Basis = DoubleFourierSeries
+        
 
-        self._R_basis = DoubleFourierSeries(
+        self._R_basis = Basis(
             M=MR, N=NR, NFP=NFP, sym="cos" if sym else False
         )
-        self._Z_basis = DoubleFourierSeries(
+        self._Z_basis = Basis(
             M=MZ, N=NZ, NFP=NFP, sym="sin" if sym else False
         )
 
@@ -120,6 +134,30 @@ class FourierRZToroidalSurface(Surface):
 
         self.name = name
 
+        if self.mirror:
+            if length == None:
+                self.length = (
+                    self.R_lmn[self.R_basis.get_idx(L=0, M=0, N=0)] * np.pi * 2
+                )
+            else:
+                self.length = length
+        else:
+            self.length = None
+
+    @property
+    def mirror(self):
+        """bool: whether is a mirror geometry, None when not a mirror"""
+        return self._mirror
+    
+    @property
+    def length(self):
+        """float or None: length of the mirror"""
+        return self._length
+    
+    @length.setter
+    def length(self,new):
+        self._length = new
+    
     @property
     def NFP(self):
         """int: Number of (toroidal) field periods."""

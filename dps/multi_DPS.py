@@ -116,15 +116,15 @@ tmax = 5e-2
 nt = 7500
 time = jnp.linspace(tmin, tmax, nt)
 
-zeta_array = jnp.linspace(0, 2*jnp.pi, 4)
+theta_list = [jnp.pi/2, jnp.pi]
 
 objective_tuple = ()
 
-for zeta in zeta_array:
+for theta in theta_list:
     # Initial State
     psi_i = 0.8
-    zeta_i = zeta
-    theta_i = jnp.pi/2
+    zeta_i = 0.5
+    theta_i = theta #jnp.pi/2
     vpar_i = -0.1*jnp.sqrt(2*Energy_SI/Mass)
     ini_cond = jnp.array([float(psi_i), theta_i, zeta_i, float(vpar_i)])
 

@@ -448,7 +448,7 @@ class BallooningStability(_Objective):
         fieldline_nodes = np.array([rho, alpha, zeta]).T
 
         self._dim_f = 1
-        self._data_keys = ["Newcomb_metric"]  # or whatever else you need as output
+        self._data_keys = ["ideal_ball_gamma2"]  # or whatever else you need as output
 
         self._args = get_params(
             self._iota_keys + self._len_keys + self._data_keys,
@@ -541,4 +541,4 @@ class BallooningStability(_Objective):
             data=data,
         )
 
-        return data["Newcomb_metric"]  # or whatever else you need as output
+        return data["ideal_ball_gamma2"]

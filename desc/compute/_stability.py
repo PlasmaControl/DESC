@@ -499,7 +499,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     w, _ = jnp.linalg.eigh(A_redo)
 
-    lam = jnp.real(jnp.max(w, axis=(2,))) + 0.02
+    lam = jnp.real(jnp.max(w, axis=(2,))) + 0.1
 
     lam = lam * (lam >= 0.0)
 
@@ -709,6 +709,62 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
     return data
 
 
+@register_compute_fun(
+    name="ideal_ball_gamma3",
+    label="\\gamma^2",
+    units=" ",
+    units_long=" ",
+    description="ideal ballooning growth rate" + "requires data along a field line",
+    dim=1,
+    params=["Psi"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "a",
+        "rho",
+        "p_r",
+        "psi_r",
+        "phi",
+        "iota",
+        "psi",
+        "rho",
+        "g^aa",
+        "g^ra",
+        "g^rr",
+        "g^aa_z",
+        "g^aa_t",
+        "g^aa_zz",
+        "g^aa_tt",
+        "g^aa_tz",
+        "g^ra_z",
+        "g^ra_t",
+        "g^ra_zz",
+        "g^ra_tt",
+        "g^ra_tz",
+        "g^rr_z",
+        "g^rr_t",
+        "g^rr_zz",
+        "g^rr_tt",
+        "g^rr_tz",
+        "cvdrift",
+        "cvdrift0",
+        "lambda_t",
+        "lambda_z",
+        "|B|",
+        "|B|_z",
+        "|B|_t",
+        "|B|_zz",
+        "|B|_tt",
+        "|B|_tz",
+        "B^zeta",
+        "B^zeta_t",
+        "B^zeta_z",
+        "B^zeta_tt",
+        "B^zeta_zz",
+        "B^zeta_tz",
+    ],
+)
 @register_compute_fun(
     name="ideal_ball_gamma3",
     label="\\gamma^2",

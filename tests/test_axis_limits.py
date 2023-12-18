@@ -255,8 +255,11 @@ def assert_is_continuous(
             continue
         else:
             assert np.isfinite(data[name]).all(), name
-        if data_index[p][name]["coordinates"] == "":
-            # can't check continuity of global scalar
+        if (
+            data_index[p][name]["coordinates"] == ""
+            or data_index[p][name]["coordinates"] == "z"
+        ):
+            # can't check continuity of global scalar or function of toroidal angle
             continue
         # make single variable function of rho
         if data_index[p][name]["coordinates"] == "r":

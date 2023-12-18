@@ -306,7 +306,7 @@ def test_ballooning_geometry(tmpdir_factory):
     Observation: The larger the force error, the worse the tests behave. For
     example, HELIOTRON coefficients are hard to match
     """
-    psi = 0.5
+    psi = 0.5  # Actually rho^2 (normalized)
     alpha = 0
     ntor = 2.0
 

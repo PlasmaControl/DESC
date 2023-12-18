@@ -335,16 +335,17 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
     units="~",
     units_long="None",
-    description="Maximum elongation",
-    dim=0,
+    description="Elongation at a toroidal cross-section",
+    dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="",
-    data=["sqrt(g)", "g_tt", "R"],
+    coordinates="z",
+    data=["rho", "sqrt(g)", "g_tt", "R"],
+    grid_type="quad",
 )
 def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
-    max_rho = transforms["grid"].nodes[transforms["grid"].unique_rho_idx[-1], 0]
+    max_rho = jnp.max(data["rho"])
     P = (  # perimeter at rho=1
         line_integrals(
             transforms["grid"],
@@ -378,7 +379,7 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
         + 3 * P
     ) / (12 * jnp.pi)
     b = A / (jnp.pi * a)  # semi-minor radius
-    data["a_major/a_minor"] = jnp.max(a / b)
+    data["a_major/a_minor"] = transforms["grid"].expand(a / b, surface_label="zeta")
     return data
 
 

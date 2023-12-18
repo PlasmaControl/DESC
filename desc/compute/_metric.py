@@ -2214,13 +2214,10 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["|B|", "b", "e^rho", "iota_r", "grad(|B|)"],
+    data=["|B|", "b", "e^rho", "grad(|B|)"],
 )
 def _cvdrift0(params, transforms, profiles, data, **kwargs):
     data["cvdrift0"] = (
-        1
-        / data["|B|"] ** 2
-        * data["iota_r"]
-        * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
+        1 / data["|B|"] ** 2 * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
     )
     return data

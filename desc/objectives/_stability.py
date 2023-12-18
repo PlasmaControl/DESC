@@ -448,7 +448,7 @@ class BallooningStability(_Objective):
         fieldline_nodes = np.array([rho, alpha, zeta]).T
 
         self._dim_f = 1
-        self._data_keys = ["ideal_ball_gamma2"]  # or whatever else you need as output
+        self._data_keys = ["ideal_ball_gamma2"]
 
         self._args = get_params(
             self._iota_keys + self._len_keys + self._data_keys,
@@ -513,7 +513,7 @@ class BallooningStability(_Objective):
         theta_PEST = alpha + iota * zeta
         theta_coords = jnp.array([rho, theta_PEST, zeta]).T
         desc_coords = compute_theta_coords(
-            eq, theta_coords, L_lmn=params["L_lmn"], tol=1e-6, maxiter=40
+            eq, theta_coords, L_lmn=params["L_lmn"], tol=1e-8, maxiter=40
         )
 
         sfl_grid = Grid(desc_coords, sort=False, jitable=True)

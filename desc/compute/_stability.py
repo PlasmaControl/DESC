@@ -13,7 +13,7 @@ import scipy
 from scipy.constants import mu_0
 from scipy.integrate import simpson as simps
 
-from desc.backend import eigvals, jax, jit, jnp, root_scalar, vmap
+from desc.backend import eigvals, jax, jit, jnp, vmap
 
 from .data_index import register_compute_fun
 from .utils import dot, surface_integrals_map
@@ -253,7 +253,6 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         "|B|",
         "B^zeta",
         "p_r",
-        "psi_r",
         "phi",
         "iota",
         "psi",
@@ -292,7 +291,6 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
     - |B|: magnitude of the magnetic field
     - B^zeta: inverse of the jacobian
     - p_r: dp/drho, pressure gradient
-    - psi_r: radial gradient of the toroidal flux
     - phi: coordinate describing the position in the toroidal angle
     along a field line
     """
@@ -303,61 +301,80 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
     B_N = 2 * psi_b / a_N**2
 
     N_zeta0 = int(11)
+    # up-down symmetric equilibria only
     zeta0 = jnp.linspace(-np.pi / 2, np.pi / 2, N_zeta0)
 
     iota = data["iota"]
+    shat = -rho / iota * data["iota_r"]
     psi = data["psi"]
     sign_psi = jnp.sign(psi[-1])
     sign_iota = jnp.sign(iota[-1])
 
     phi = data["phi"]
-    N = len(phi)
 
-    gradpar = data["B^zeta"] / data["|B|"]
-    dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
+    N_alpha = int(len(jnp.where(jnp.abs(phi) <= 1e-10)[0]))
+    N = int(len(phi) / N_alpha)
 
-    gds2 = rho**2 * (
-        data["g^aa"][None, :]
-        - 2 * sign_iota * zeta0[:, None] * data["g^ra"][None, :]
-        + zeta0[:, None] ** 2 * data["g^rr"][None, :]
+    B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
+    gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
+    dpdrho = jnp.mean(mu_0 * data["p_r"])
+
+    gds2 = jnp.reshape(
+        rho**2
+        * (
+            data["g^aa"][None, :]
+            - 2 * sign_iota * shat / rho * zeta0[:, None] * data["g^ra"][None, :]
+            + zeta0[:, None] ** 2 * (shat / rho) ** 2 * data["g^rr"][None, :]
+        ),
+        (N_alpha, N_zeta0, N),
     )
-    dpdpsi = mu_0 * data["p_r"] / data["psi_r"]
 
-    f = a_N * B_N**3 * gds2 / data["|B|"][None, :] ** 3 * 1 / gradpar[None, :]
-    g = a_N**3 * B_N * gds2 / data["|B|"][None, :] * gradpar[None, :]
-    g_half = (g[:, 1:] + g[:, :-1]) / 2
+    f = B_N / a_N**3 * gds2 / B**3 * 1 / gradpar
+    g = 1 / (a_N * B_N) * gds2 / B * gradpar
+    g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
     c = (
-        a_N
-        * 2
-        / data["B^zeta"][None, :]
-        * rho
-        * sign_psi
-        * dpdpsi
-        * (data["cvdrift"][None, :] + zeta0[:, None] * data["cvdrift0"][None, :])
+        -1
+        / (a_N * B_N)
+        * jnp.reshape(
+            2
+            / data["B^zeta"][None, :]
+            * sign_psi
+            * rho
+            * dpdrho
+            * (
+                data["cvdrift"][None, :]
+                - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
+            ),
+            (N_alpha, N_zeta0, N),
+        )
     )
-    h = (phi[-1] - phi[0]) / (N - 1)
 
-    i = jnp.arange(N_zeta0)[:, None, None]
-    j = jnp.arange(N - 2)[None, :, None]
-    k = jnp.arange(N - 2)[None, None, :]
+    h = phi[1] - phi[0]
 
-    A = jnp.zeros((N_zeta0, N - 2, N - 2))
+    A = jnp.zeros((N_alpha, N_zeta0, N - 2, N - 2))
 
-    A = A.at[i, j, k].set(
-        g_half[i, k] / f[i, k] * 1 / h**2 * (j - k == -1)
+    i = jnp.arange(N_alpha)[:, None, None, None]
+    l = jnp.arange(N_zeta0)[None, :, None, None]
+    j = jnp.arange(N - 2)[None, None, :, None]
+    k = jnp.arange(N - 2)[None, None, None, :]
+
+    A = A.at[i, l, j, k].set(
+        g_half[i, l, k] / f[i, l, k] * 1 / h**2 * (j - k == -1)
         + (
-            -(g_half[i, j + 1] + g_half[i, j]) / f[i, j + 1] * 1 / h**2
-            + c[i, j + 1] / f[i, j + 1]
+            -(g_half[i, l, j + 1] + g_half[i, l, j]) / f[i, l, j + 1] * 1 / h**2
+            + c[i, l, j + 1] / f[i, l, j + 1]
         )
         * (j - k == 0)
-        + g_half[i, j] / f[i, j + 1] * 1 / h**2 * (j - k == 1)
+        + g_half[i, l, j] / f[i, l, j + 1] * 1 / h**2 * (j - k == 1)
     )
 
     w = eigvals(jnp.where(jnp.isfinite(A), A, 0))
 
-    lam = jnp.real(jnp.max(w))
+    lam = jnp.real(jnp.max(w, axis=(2,)))
 
-    data["ideal_ball_gamma1"] = (lam + 0.001) * (lam >= -0.001)
+    lam = lam * (lam > 0)
+
+    data["ideal_ball_gamma1"] = lam
 
     return data
 
@@ -383,7 +400,6 @@ def _ideal_ballooning_gamma1(params, transforms, profiles, data, *kwargs):
         "|B|",
         "B^zeta",
         "p_r",
-        "psi_r",
         "phi",
         "iota",
         "psi",
@@ -422,7 +438,6 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
     - |B|: magnitude of the magnetic field
     - B^zeta: inverse of the jacobian
     - p_r: dp/drho, pressure gradient
-    - psi_r: radial gradient of the toroidal flux
     - phi: coordinate describing the position in the toroidal angle
     along a field line
     """
@@ -430,13 +445,15 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     psi_b = params["Psi"] / (2 * np.pi)
     a_N = data["a"]
+    # a_N is 0.4
     B_N = 2 * psi_b / a_N**2
 
-    N_zeta0 = int(11)
+    N_zeta0 = int(15)
     # up-down symmetric equilibria only
     zeta0 = jnp.linspace(-np.pi, np.pi, N_zeta0)
 
     iota = data["iota"]
+    shat = -rho / iota * data["iota_r"]
     psi = data["psi"]
     sign_psi = jnp.sign(psi[-1])
     sign_iota = jnp.sign(iota[-1])
@@ -448,30 +465,36 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
     gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
-    dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
+    dpdrho = jnp.mean(mu_0 * data["p_r"])
 
     gds2 = jnp.reshape(
         rho**2
         * (
             data["g^aa"][None, :]
-            - 2 * sign_iota * zeta0[:, None] * data["g^ra"][None, :]
-            + zeta0[:, None] ** 2 * data["g^rr"][None, :]
+            - 2 * sign_iota * shat / rho * zeta0[:, None] * data["g^ra"][None, :]
+            + zeta0[:, None] ** 2 * (shat / rho) ** 2 * data["g^rr"][None, :]
         ),
         (N_alpha, N_zeta0, N),
     )
 
-    f = a_N * B_N**3 * gds2 / B**3 * 1 / gradpar
-    g = a_N**3 * B_N * gds2 / B * gradpar
+    f = B_N / a_N**3 * gds2 / B**3 * 1 / gradpar
+    g = 1 / (a_N * B_N) * gds2 / B * gradpar
     g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
-    c = jnp.reshape(
-        a_N
-        * 2
-        / data["B^zeta"][None, :]
-        * rho
-        * sign_psi
-        * dpdpsi
-        * (data["cvdrift"][None, :] + zeta0[:, None] * data["cvdrift0"][None, :]),
-        (N_alpha, N_zeta0, N),
+    c = (
+        -1
+        / (a_N * B_N)
+        * jnp.reshape(
+            2
+            / data["B^zeta"][None, :]
+            * sign_psi
+            * rho
+            * dpdrho
+            * (
+                data["cvdrift"][None, :]
+                - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
+            ),
+            (N_alpha, N_zeta0, N),
+        )
     )
 
     h = phi[1] - phi[0]
@@ -499,11 +522,11 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     w, _ = jnp.linalg.eigh(A_redo)
 
-    lam = jnp.real(jnp.max(w, axis=(2,))) + 0.1
+    lam = jnp.real(jnp.max(w, axis=(2,)))
 
-    lam = lam * (lam >= 0.0)
+    lam = jnp.max(2 * (lam + 0.005) * (lam > -0.005))
 
-    data["ideal_ball_gamma2"] = jnp.sum(lam)
+    data["ideal_ball_gamma2"] = lam
 
     return data
 
@@ -529,7 +552,6 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
         "|B|",
         "B^zeta",
         "p_r",
-        "psi_r",
         "phi",
         "iota",
         "psi",
@@ -582,52 +604,62 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
 
     psi_b = params["Psi"] / (2 * np.pi)
     a_N = data["a"]
+    # a_N is 0.4
     B_N = 2 * psi_b / a_N**2
 
     N_zeta0 = int(11)
     # up-down symmetric equilibria only
-    zeta0 = jnp.linspace(-np.pi, np.pi, N_zeta0)
+    zeta0 = jnp.linspace(-np.pi / 2, np.pi / 2, N_zeta0)
 
     iota = data["iota"]
+    shat = -rho / iota * data["iota_r"]
     psi = data["psi"]
     sign_psi = jnp.sign(psi[-1])
     sign_iota = jnp.sign(iota[-1])
 
     phi = data["phi"]
 
+    # Count the number of 0s in phi (= number of field lines)
     N_alpha = int(8)
     N = int(len(phi) / N_alpha)
 
     B = jnp.reshape(data["|B|"], (N_alpha, 1, N))
     gradpar = jnp.reshape(data["B^zeta"] / data["|B|"], (N_alpha, 1, N))
-    dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
+    dpdrho = jnp.mean(mu_0 * data["p_r"])
 
     gds2 = jnp.reshape(
         rho**2
         * (
             data["g^aa"][None, :]
-            - 2 * sign_iota * zeta0[:, None] * data["g^ra"][None, :]
-            + zeta0[:, None] ** 2 * data["g^rr"][None, :]
+            - 2 * sign_iota * shat / rho * zeta0[:, None] * data["g^ra"][None, :]
+            + zeta0[:, None] ** 2 * (shat / rho) ** 2 * data["g^rr"][None, :]
         ),
         (N_alpha, N_zeta0, N),
     )
 
-    g = a_N**3 * B_N * gds2 / B * gradpar
-    c = jnp.reshape(
-        a_N
-        * 2
-        / data["B^zeta"][None, :]
-        * rho
-        * sign_psi
-        * dpdpsi
-        * (data["cvdrift"][None, :] + zeta0[:, None] * data["cvdrift0"][None, :]),
-        (N_alpha, N_zeta0, N),
+    g = 1 / (a_N * B_N) * gds2 / B * gradpar
+    c = (
+        -1
+        / (a_N * B_N)
+        * jnp.reshape(
+            2
+            / data["B^zeta"][None, :]
+            * sign_psi
+            * rho
+            * dpdrho
+            * (
+                data["cvdrift"][None, :]
+                - shat / rho * zeta0[:, None] * data["cvdrift0"][None, :]
+            ),
+            (N_alpha, N_zeta0, N),
+        )
     )
 
-    # g_half on half grid points, c_full on full
+    h = phi[1] - phi[0]
+
+    # g_half on half grid points, c_full on full grid points
     g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
     c_full = c[:, :, :-1]
-    h = phi[1] - phi[0]
 
     i = jnp.arange(N_alpha)[:, None, None]
     j = jnp.arange(N_zeta0)[None, :, None]
@@ -664,107 +696,46 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
         first_negative_index = jnp.where(
             jnp.any(negative_mask), first_negative_index, -1
         )
+        # This factor will give us the exact X point of intersection
+        lin_interp_factor = jnp.where(
+            first_negative_index != -1,
+            1 / (1 - Y[first_negative_index + 1] / Y[first_negative_index]),
+            0,
+        )
 
-        return Y, first_negative_index
+        return Y, first_negative_index, lin_interp_factor
 
     # Vectorize over the first two dimensions
     vectorized_cumulative_update = jit(vmap(vmap(cumulative_update_jit)))
-    Y, first_negative_indices = vectorized_cumulative_update(Y, Yp, g_half, c_full)
-
-    @jax.jit
-    def root_finder(x_guess, xp, yp):
-        """
-        A simple function that wraps the root finder and interpolator.
-
-        x_guess: 2D jax.numpy array with a shape (N_alpha, N_zeta0)
-        xp: 3D jax.numpy array with a shape (N_alpha, N_zeta0, N)
-        yp: 3D jax.numpy array with a shape (N_alpha, N_zeta0, N)
-        """
-
-        def interpolator(x):
-            return jnp.interp(x, xp, yp)
-
-        return root_scalar(interpolator, x0=x_guess, tol=1e-10, maxiter=10)
-
-    # vectorized root finder
-    vec_root_finder = jit(vmap(vmap(root_finder)))
+    Y, first_negative_indices, lin_interp_factors = vectorized_cumulative_update(
+        Y, Yp, g_half, c_full
+    )
 
     X0 = jnp.zeros((N_alpha, N_zeta0))
+    Y0 = jnp.zeros((N_alpha, N_zeta0))
     i0 = jnp.arange(N_alpha)[:, None]
     j0 = jnp.arange(N_zeta0)[None, :]
     X0 = X0.at[i0, j0].set(
-        X[i0, j0, first_negative_indices[i0, j0]]
-    )  # best initial guesses
-
-    Z = vec_root_finder(X0, X, Y)
-    Z0 = Z[0]
-    data1 = 10 * jnp.max(
-        2
-        - (1 + (jnp.tanh(0.1 * jnp.cbrt(Y[:, :, -1])))) * (jnp.isinf(Z0) + 1 == 2)
-        - (Z0 - phi[0]) / (2 * phi[-1]) * (jnp.isinf(Z0) + 1 == 1)
+        X[i0, j0, first_negative_indices[i0, j0]] + lin_interp_factors[i0, j0] * h
     )
 
-    data["Newcomb_metric"] = data1
+    # value of Y at the zero-crossing. If there is a zero-crossing,
+    # it's very small, if not it's the Y intercept because first
+    # negative index will be -1
+    Y0 = Y0.at[i0, j0].set(Y[i0, j0, first_negative_indices[i0, j0]])
+    Y0 = jnp.where(first_negative_indices != -1, 0, Y0)
+
+    data2 = jnp.min(
+        ((X0 - phi[0]) / (phi[-1] - phi[0])) ** 2 + jnp.tanh(jnp.cbrt(Y0[:, :]))
+    )
+
+    data3 = 2 * (2 - data2)
+
+    data["Newcomb_metric"] = data3
 
     return data
 
 
-@register_compute_fun(
-    name="ideal_ball_gamma3",
-    label="\\gamma^2",
-    units=" ",
-    units_long=" ",
-    description="ideal ballooning growth rate" + "requires data along a field line",
-    dim=1,
-    params=["Psi"],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="rtz",
-    data=[
-        "a",
-        "rho",
-        "p_r",
-        "psi_r",
-        "phi",
-        "iota",
-        "psi",
-        "rho",
-        "g^aa",
-        "g^ra",
-        "g^rr",
-        "g^aa_z",
-        "g^aa_t",
-        "g^aa_zz",
-        "g^aa_tt",
-        "g^aa_tz",
-        "g^ra_z",
-        "g^ra_t",
-        "g^ra_zz",
-        "g^ra_tt",
-        "g^ra_tz",
-        "g^rr_z",
-        "g^rr_t",
-        "g^rr_zz",
-        "g^rr_tt",
-        "g^rr_tz",
-        "cvdrift",
-        "cvdrift0",
-        "lambda_t",
-        "lambda_z",
-        "|B|",
-        "|B|_z",
-        "|B|_t",
-        "|B|_zz",
-        "|B|_tt",
-        "|B|_tz",
-        "B^zeta",
-        "B^zeta_t",
-        "B^zeta_z",
-        "B^zeta_tt",
-        "B^zeta_zz",
-        "B^zeta_tz",
-    ],
-)
 @register_compute_fun(
     name="ideal_ball_gamma3",
     label="\\gamma^2",

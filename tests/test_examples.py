@@ -25,7 +25,7 @@ from desc.find_helical_contours_from_python_regcoil_equal_curr_line_integral imp
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import ToroidalMagneticField
+from desc.magnetic_fields import FourierCurrentPotentialField, ToroidalMagneticField
 from desc.objectives import (
     AspectRatio,
     CurrentDensity,
@@ -984,18 +984,16 @@ def test_regcoil_axisymmetric():
     # no phi_SV is needed since it is axisymmetric,
     # so phi_mn should be zero when running REGCOIL
     # especially with a nonzero alpha
-    surface_current_field, _, _, chi_B, _ = run_regcoil(
-        basis_M=1,
-        basis_N=1,
-        eqname=eq,
-        eval_grid_M=40,
-        eval_grid_N=40,
-        source_grid_M=100,
-        source_grid_N=100,
+
+    surface_current_field = FourierCurrentPotentialField.from_surface(surf_winding)
+    data = surface_current_field.run_regcoil(
+        eq,
+        M_Phi=1,
+        N_Phi=1,
         alpha=1e-19,
-        winding_surf=surf_winding,
         show_plots=False,
     )
+    chi_B = data["chi^2_B"]
     phi_mn_opt = surface_current_field.Phi_mn
     G = surface_current_field.G
     np.testing.assert_allclose(phi_mn_opt, 0, atol=2e-9)

@@ -45,11 +45,6 @@ def biot_loop(re, rs, J, dV):
 
 ######################################################################
 
-# list of quantities we need (really is every argument I think?)
-# but really I can bootstrap a version with I,G as input and
-# the surface Rb, Zb and then let those argnums as input
-# just make it with all of Rlmn Zlmn etc ()
-
 
 def run_regcoil(  # noqa: C901 fxn too complex
     eqname,

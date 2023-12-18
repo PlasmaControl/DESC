@@ -1869,6 +1869,9 @@ class FourierCurrentPotentialField(
             the bulk of the required net toroidal magnetic flux, by default None
         current_helicity : int, optional
             Ratio of used to determine if coils are modular (0) or helical (!=0)
+            defined as (G - G_ext) / (I * NFP)  = current_helicity
+            positive current_helicity corresponds to coils which rotate in the negative
+            poloidal direction as they rotate toroidally
         scan : bool, optional
             Whether to scan over the regularization parameter (alpha) values,
             in range: np.concatenate([0, np.logspace(scan_lower, scan_upper, nscan)])

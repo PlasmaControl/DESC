@@ -120,6 +120,86 @@ class Optimizable(ABC):
         return sorted(set(list(args)))
 
 
+class OptimizableCollection(Optimizable):
+    """Base class for collections of multiple optimizable objects (coilsets, etc).
+
+    Subclasses should be iterable, where each member is itself Optimizable.
+    """
+
+    @property
+    def optimizable_params(self):
+        """list: string names of parameters that have been declared optimizable."""
+        return [s.optimizable_params for s in self]
+
+    @property
+    def params_dict(self):
+        """list: list of dictionary of arrays of optimizable parameters."""
+        return [s.params_dict for s in self]
+
+    @params_dict.setter
+    def params_dict(self, d):
+        for s, p in zip(self, d):
+            s.params_dict = p
+
+    @property
+    def dimensions(self):
+        """list: list of dictionary of integers of sizes of each parameter."""
+        return [s.dimensions for s in self]
+
+    @property
+    def x_idx(self):
+        """list: list of dict of arrays of idx for each param in concatenated array."""
+        x_idx = [s.x_idx for s in self]
+        offset = jnp.concatenate(
+            [jnp.array([0]), jnp.cumsum(jnp.array([s.dim_x for s in self]))[:-1]]
+        )
+        for d, idx in zip(offset, x_idx):
+            # offset subsequent indices by length of priors
+            for key in idx:
+                idx[key] += d
+        return x_idx
+
+    @property
+    def dim_x(self):
+        """int: total number of optimizable parameters."""
+        return sum(s.dim_x for s in self)
+
+    def pack_params(self, params):
+        """Convert a list of dictionary of parameters into a single array.
+
+        Parameters
+        ----------
+        params : list of dict
+            list of dictionary of ndarray of optimizable parameters.
+
+        Returns
+        -------
+        x : ndarray
+            optimizable parameters concatenated into a single array, with indices
+            given by ``x_idx``
+        """
+        return jnp.concatenate([s.pack_params(p) for s, p in zip(self, params)])
+
+    def unpack_params(self, x):
+        """Convert a single array of concatenated parameters into a dictionary.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimizable parameters concatenated into a single array, with indices
+            given by ``x_idx``
+
+        Returns
+        -------
+        p : list dict
+            list of dictionary of ndarray of optimizable parameters.
+        """
+        split_idx = jnp.cumsum(jnp.array([s.dim_x for s in self]))
+        xs = jnp.split(x, split_idx)
+        params = [s.unpack_params(xi) for s, xi in zip(self, xs)]
+        return params
+
+
 def optimizable_parameter(f):
     """Decorator to declare an attribute or property as optimizable.
 

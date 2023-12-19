@@ -150,11 +150,218 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         leaves, treedef = jtu.tree_flatten(tree)
         return [treedef.unflatten(leaf) for leaf in zip(*leaves)]
 
+    def root_scalar(
+        fun,
+        x0,
+        jac=None,
+        args=(),
+        tol=1e-6,
+        maxiter=20,
+        maxiter_ls=5,
+        alpha=0.1,
+        fixup=None,
+    ):
+        """Find x where fun(x, *args) == 0.
+
+        Parameters
+        ----------
+        fun : callable
+            Function to find the root of. Should have a signature of the form
+            fun(x, *args)- > float.
+        x0 : float
+            Initial guess for the root.
+        jac : callable
+            Jacobian of fun, should have a signature of the form jac(x, *args) -> float.
+            Defaults to using jax.jacfwd
+        args : tuple, optional
+            Additional arguments to pass to fun and jac.
+        tol : float, optional
+            Stopping tolerance. Stops when norm(fun(x)) < tol.
+        maxiter : int > 0, optional
+            Maximum number of iterations.
+        maxiter_ls : int >=0, optional
+            Maximum number of sub-iterations for the backtracking line search.
+        alpha : 0 < float < 1, optional
+            Backtracking line search decrease factor. Line search first tries full
+            Newton step, then alpha*Newton step, then alpha**2*Newton step etc.
+        fixup : callable, optional
+            Function to modify x after each update, ie to enforce periodicity. Should
+            have a signature of the form fixup(x, *args) -> x'.
+
+        Returns
+        -------
+        xk : float
+            Root, or best approximation
+        info : tuple of (float, int)
+            Residual of fun at xk and number of iterations of outer loop
+
+        """
+        if fixup is None:
+            fixup = lambda x, *args: x
+        if jac is None:
+            jac = jax.jacfwd(fun)
+        jac2 = lambda x: jac(x, *args)
+        res = lambda x: fun(x, *args)
+
+        def solve(resfun, guess):
+            def condfun_ls(state_ls):
+                xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
+                return (k2 <= maxiter_ls) & (jnp.dot(fk2, fk2) >= jnp.dot(fk1, fk1))
+
+            def bodyfun_ls(state_ls):
+                xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
+                xk2 = fixup(xk1 - alphak2 * d, *args)
+                fk2 = resfun(xk2)
+                return xk2, xk1, fk2, fk1, d, alpha * alphak2, k2 + 1
+
+            def backtrack(xk1, fk1, d):
+                state_ls = (xk1, xk1, fk1, fk1, d, 1.0, 0)
+                state_ls = jax.lax.while_loop(condfun_ls, bodyfun_ls, state_ls)
+                xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
+                return xk2, fk2
+
+            def condfun(state):
+                xk1, fk1, k1 = state
+                return (k1 < maxiter) & (jnp.dot(fk1, fk1) > tol**2)
+
+            def bodyfun(state):
+                xk1, fk1, k1 = state
+                J = jac2(xk1)
+                d = fk1 / J
+                xk1, fk1 = backtrack(xk1, fk1, d)
+                return xk1, fk1, k1 + 1
+
+            state = guess, res(guess), 0
+            state = jax.lax.while_loop(condfun, bodyfun, state)
+            return state[0], state[1:]
+
+        def tangent_solve(g, y):
+            A = jax.jacfwd(g)(y)
+            return y / A
+
+        x, (res, niter) = jax.lax.custom_root(
+            res, x0, solve, tangent_solve, has_aux=True
+        )
+        return x, (abs(res), niter)
+
+    def root(
+        fun,
+        x0,
+        jac=None,
+        args=(),
+        tol=1e-6,
+        maxiter=20,
+        maxiter_ls=0,
+        alpha=0.1,
+        fixup=None,
+    ):
+        """Find x where fun(x, *args) == 0.
+
+        Parameters
+        ----------
+        fun : callable
+            Function to find the root of. Should have a signature of the form
+            fun(x, *args)- > 1d array.
+        x0 : ndarray
+            Initial guess for the root.
+        jac : callable
+            Jacobian of fun, should have a signature of the form
+            jac(x, *args) -> 2d array. Defaults to using jax.jacfwd
+        args : tuple, optional
+            Additional arguments to pass to fun and jac.
+        tol : float, optional
+            Stopping tolerance. Stops when norm(fun(x)-f) < tol.
+        maxiter : int > 0, optional
+            Maximum number of iterations.
+        maxiter_ls : int >=0, optional
+            Maximum number of sub-iterations for the backtracking line search.
+        alpha : 0 < float < 1, optional
+            Backtracking line search decrease factor. Line search first tries full
+            Newton step, then alpha*Newton step, then alpha**2*Newton step etc.
+        fixup : callable, optional
+            Function to modify x after each update, ie to enforce periodicity. Should
+            have a signature of the form fixup(x, *args) -> 1d array.
+
+        Returns
+        -------
+        xk : ndarray
+            Root, or best approximation
+        info : tuple of (ndarray, int)
+            Residual of fun at xk and number of iterations of outer loop
+
+        Notes
+        -----
+        This routine may be used on over or under-determined systems, in which case it
+        will solve it in a least squares / least norm sense.
+        """
+        if fixup is None:
+            fixup = lambda x, *args: x
+        if jac is None:
+            jac2 = lambda x: jnp.atleast_2d(jax.jacfwd(fun)(x, *args))
+        else:
+            jac2 = lambda x: jnp.atleast_2d(jac(x, *args))
+
+        res = lambda x: jnp.atleast_1d(fun(x, *args)).flatten()
+
+        # want to use least squares for rank-defficient systems, but
+        # jnp.linalg.lstsq doesn't have JVP defined and is slower than needed
+        # so we use the normal equations with regularized cholesky
+        def _lstsq(a, b):
+            a = jnp.atleast_2d(a)
+            b = jnp.atleast_1d(b)
+            tall = a.shape[-2] >= a.shape[-1]
+            A = a.T @ a if tall else a @ a.T
+            B = a.T @ b if tall else b @ a
+            A += jnp.sqrt(jnp.finfo(A.dtype).eps) * jnp.eye(A.shape[0])
+            return cho_solve(cho_factor(A), B)
+
+        def solve(resfun, guess):
+            def condfun_ls(state_ls):
+                xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
+                return (k2 <= maxiter_ls) & (jnp.dot(fk2, fk2) >= jnp.dot(fk1, fk1))
+
+            def bodyfun_ls(state_ls):
+                xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
+                xk2 = fixup(xk1 - alphak2 * d, *args)
+                fk2 = resfun(xk2)
+                return xk2, xk1, fk2, fk1, d, alpha * alphak2, k2 + 1
+
+            def backtrack(xk1, fk1, d):
+                state_ls = (xk1, xk1, fk1, fk1, d, 1.0, 0)
+                state_ls = jax.lax.while_loop(condfun_ls, bodyfun_ls, state_ls)
+                xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
+                return xk2, fk2
+
+            def condfun(state):
+                xk1, fk1, k1 = state
+                return (k1 < maxiter) & (jnp.dot(fk1, fk1) > tol**2)
+
+            def bodyfun(state):
+                xk1, fk1, k1 = state
+                J = jac2(xk1)
+                d = _lstsq(J, fk1)
+                xk1, fk1 = backtrack(xk1, fk1, d)
+                return xk1, fk1, k1 + 1
+
+            state = jnp.atleast_1d(guess), jnp.atleast_1d(resfun(guess)), 0
+            state = jax.lax.while_loop(condfun, bodyfun, state)
+            return state[0], state[1:]
+
+        def tangent_solve(g, y):
+            A = jnp.atleast_2d(jax.jacfwd(g)(y))
+            return _lstsq(A, jnp.atleast_1d(y))
+
+        x, (res, niter) = jax.lax.custom_root(
+            res, x0, solve, tangent_solve, has_aux=True
+        )
+        return x, (jnp.linalg.norm(res), niter)
+
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
+    import scipy.optimize
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
         block_diag,
@@ -357,3 +564,107 @@ else:  # pragma: no cover
         fun.defjvp = lambda *args, **kwargs: None
         fun.defjvps = lambda *args, **kwargs: None
         return fun
+
+    def root_scalar(
+        fun,
+        x0,
+        jac=None,
+        args=(),
+        tol=1e-6,
+        maxiter=20,
+        maxiter_ls=5,
+        alpha=0.1,
+        fixup=None,
+    ):
+        """Find x where fun(x, *args) == 0.
+
+        Parameters
+        ----------
+        fun : callable
+            Function to find the root of. Should have a signature of the form
+            fun(x, *args)- > float.
+        x0 : float
+            Initial guess for the root.
+        jac : callable
+            Jacobian of fun, should have a signature of the form jac(x, *args) -> float.
+            Defaults to using jax.jacfwd
+        args : tuple, optional
+            Additional arguments to pass to fun and jac.
+        tol : float, optional
+            Stopping tolerance. Stops when norm(fun(x)) < tol.
+        maxiter : int > 0, optional
+            Maximum number of iterations.
+        maxiter_ls : int >=0, optional
+            Maximum number of sub-iterations for the backtracking line search.
+        alpha : 0 < float < 1, optional
+            Backtracking line search decrease factor. Line search first tries full
+            Newton step, then alpha*Newton step, then alpha**2*Newton step etc.
+        fixup : callable, optional
+            Function to modify x after each update, ie to enforce periodicity. Should
+            have a signature of the form fixup(x) -> x'.
+
+        Returns
+        -------
+        xk : float
+            Root, or best approximation
+        info : tuple of (float, int)
+            Residual of fun at xk and number of iterations of outer loop
+
+        """
+        out = scipy.optimize.root_scalar(
+            fun, args, x0=x0, fprime=jac, xtol=tol, rtol=tol
+        )
+        return out.root, out
+
+    def root(
+        fun,
+        x0,
+        jac=None,
+        args=(),
+        tol=1e-6,
+        maxiter=20,
+        maxiter_ls=0,
+        alpha=0.1,
+        fixup=None,
+    ):
+        """Find x where fun(x, *args) == 0.
+
+        Parameters
+        ----------
+        fun : callable
+            Function to find the root of. Should have a signature of the form
+            fun(x, *args)- > 1d array.
+        x0 : ndarray
+            Initial guess for the root.
+        jac : callable
+            Jacobian of fun, should have a signature of the form
+            jac(x, *args) -> 2d array. Defaults to using jax.jacfwd
+        args : tuple, optional
+            Additional arguments to pass to fun and jac.
+        tol : float, optional
+            Stopping tolerance. Stops when norm(fun(x)-f) < tol.
+        maxiter : int > 0, optional
+            Maximum number of iterations.
+        maxiter_ls : int >=0, optional
+            Maximum number of sub-iterations for the backtracking line search.
+        alpha : 0 < float < 1, optional
+            Backtracking line search decrease factor. Line search first tries full
+            Newton step, then alpha*Newton step, then alpha**2*Newton step etc.
+        fixup : callable, optional
+            Function to modify x after each update, ie to enforce periodicity. Should
+            have a signature of the form fixup(x, *args) -> 1d array.
+
+        Returns
+        -------
+        xk : ndarray
+            Root, or best approximation
+        info : tuple of (ndarray, int)
+            Residual of fun at xk and number of iterations of outer loop
+
+        Notes
+        -----
+        This routine may be used on over or under-determined systems, in which case it
+        will solve it in a least squares sense.
+        """
+        out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
+        return out.x, out

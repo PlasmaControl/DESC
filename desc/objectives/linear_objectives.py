@@ -244,7 +244,7 @@ class BoundaryRSelfConsistency(_Objective):
         name="self_consistency R",
         zeta=0,
     ):
-        self._zeta = zeta
+        self._zeta = zeta or 0
         self._surface_label = surface_label
         super().__init__(
             things=eq,
@@ -373,7 +373,7 @@ class BoundaryZSelfConsistency(_Objective):
         name="self_consistency Z",
         zeta=0,
     ):
-        self._zeta = zeta
+        self._zeta = zeta or 0
         self._surface_label = surface_label
         super().__init__(
             things=eq,
@@ -623,7 +623,7 @@ class SecondBoundaryRSelfConsistency(_Objective):
             raise TypeError(
                 "Second surface has to be defined as ZernikeRZToroidalSection"
             )
-        self._zeta = zeta
+        self._zeta = zeta or 0
         self._surface_label = surface_label
         self._args = ["R_lmn"]
         super().__init__(
@@ -734,7 +734,7 @@ class SecondBoundaryZSelfConsistency(_Objective):
             raise TypeError(
                 "Second surface has to be defined as ZernikeRZToroidalSection"
             )
-        self._zeta = zeta
+        self._zeta = zeta or 0
         self._surface_label = surface_label
         self._args = ["Z_lmn"]
         super().__init__(

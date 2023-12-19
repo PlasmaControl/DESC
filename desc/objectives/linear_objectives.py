@@ -506,7 +506,7 @@ class BoundaryLambdaSelfConsistency(_FixedObjective):
         name="poincare lambda",
         zeta=0,
     ):
-        self._zeta = zeta
+        self._zeta = zeta or 0
         self._args = ["L_lmn"]
         super().__init__(
             things=eq, target=target, bounds=bounds, weight=weight, name=name
@@ -847,7 +847,7 @@ class SecondBoundaryLambdaSelfConsistency(_FixedObjective):
     ):
         self._Lb2_lmn = Lb2_lmn
         self._Lb2_basis = Lb2_basis
-        self._zeta = zeta
+        self._zeta = zeta or 0
         self._args = ["L_lmn"]
         super().__init__(
             things=eq, target=target, bounds=bounds, weight=weight, name=name

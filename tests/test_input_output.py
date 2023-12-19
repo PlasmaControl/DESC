@@ -560,9 +560,7 @@ def test_io_SplineMagneticField(tmpdir_factory):
     Z = np.linspace(1, 2, 2)
     phi = np.linspace(1, 2, 2)
 
-    field = SplineMagneticField.from_field(
-        ToroidalMagneticField(R0=1, B0=1), R, phi, Z, period=2 * np.pi
-    )
+    field = SplineMagneticField.from_field(ToroidalMagneticField(R0=1, B0=1), R, phi, Z)
 
     field.save(tmp_path)
     field2 = load(tmp_path)

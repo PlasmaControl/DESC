@@ -15,6 +15,7 @@ from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
 from desc.compute import data_index
 from desc.compute.utils import surface_averages
 from desc.examples import get
+from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import load
 from desc.plotting import (
@@ -935,4 +936,48 @@ def test_plot_b_mag():
 def test_plot_surfaces_HELIOTRON():
     """Test plot surfaces of equilibrium for correctness of vartheta lines."""
     fig, ax = plot_surfaces(get("HELIOTRON"))
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_1d_curve():
+    """Test plot_1d function for Curve objects."""
+    curve = FourierXYZCurve([0, 10, 1])
+    fig, ax = plot_1d(curve, "curvature")
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_2d_surface():
+    """Test plot_2d function for Surface objects."""
+    surf = FourierRZToroidalSurface()
+    fig, ax = plot_2d(surf, "curvature_H_rho")
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_1d_surface():
+    """Test plot_1d function for Surface objects."""
+    surf = FourierRZToroidalSurface()
+    fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGrid(M=50))
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_boundary_surface():
+    """Test plot_boundary function for Surface objects."""
+    surf = FourierRZToroidalSurface()
+    fig, ax = plot_boundary(surf)
+    return fig
+
+
+@pytest.mark.unit
+def test_plot_3d_surface():
+    """Test 3d plotting of surface object."""
+    surf = FourierRZToroidalSurface()
+    fig = plot_3d(surf, "curvature_H_rho")
     return fig

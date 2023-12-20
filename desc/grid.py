@@ -499,16 +499,18 @@ class LinearGrid(_Grid):
         If True, theta=0 and zeta=0 are duplicated after a full period.
         Should be False for use with FFT. (Default = False).
         This boolean is ignored if an array is given for theta or zeta.
-    rho : ndarray of float, optional
-        Radial coordinates (Default = 1.0). Note that if supplied the values may be
-        reordered in the resulting grid.
-    theta : ndarray of float, optional
-        Poloidal coordinates (Default = 0.0). Note that if supplied the values may be
-        reordered in the resulting grid.
-    zeta : ndarray of float, optional
-        Toroidal coordinates (Default = 0.0). Note that if supplied the values may be
-        reordered in the resulting grid.
-
+    rho : int or ndarray of float, optional
+        Radial coordinates (Default = 1.0).
+        Alternatively, the number of radial coordinates (if an integer).
+        Note that if supplied the values may be reordered in the resulting grid.
+    theta : int or ndarray of float, optional
+        Poloidal coordinates (Default = 0.0).
+        Alternatively, the number of poloidal coordinates (if an integer).
+        Note that if supplied the values may be reordered in the resulting grid.
+    zeta : int or ndarray of float, optional
+        Toroidal coordinates (Default = 0.0).
+        Alternatively, the number of toroidal coordinates (if an integer).
+        Note that if supplied the values may be reordered in the resulting grid.
     """
 
     def __init__(

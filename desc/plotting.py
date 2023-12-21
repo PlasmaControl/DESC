@@ -18,7 +18,8 @@ from termcolor import colored
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
-from desc.compute.utils import surface_averages_map
+from desc.compute.utils import _parse_parameterization, surface_averages_map
+from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.utils import errorif, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
@@ -273,8 +274,12 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Computed quantity.
 
     """
-    if name not in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
-        raise ValueError("Unrecognized value '{}'.".format(name))
+    parameterization = _parse_parameterization(eq)
+    if name not in data_index[parameterization]:
+        raise ValueError(
+            f"Unrecognized value '{name}' for "
+            + f"parameterization {parameterization}."
+        )
     assert component in [
         None,
         "R",
@@ -284,13 +289,13 @@ def _compute(eq, name, grid, component=None, reshape=True):
 
     components = {"R": 0, "phi": 1, "Z": 2}
 
-    label = data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
+    label = data_index[parameterization][name]["label"]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         data = eq.compute(name, grid=grid)[name]
 
-    if data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["dim"] > 1:
+    if data_index[parameterization][name]["dim"] > 1:
         if component is None:
             data = np.linalg.norm(data, axis=-1)
             label = "|" + label + "|"
@@ -302,13 +307,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
             else:
                 label += r"\phi"
 
-    label = (
-        r"$"
-        + label
-        + "~("
-        + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
-        + ")$"
-    )
+    label = r"$" + label + "~(" + data_index[parameterization][name]["units"] + ")$"
 
     if reshape:
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
@@ -410,7 +409,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface, Curve
         Object from which to plot.
     name : str
         Name of variable to plot.
@@ -464,11 +463,10 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     # surface average. Surface averages should be computed over a 2-D grid to
     # sample the entire surface. Computing this on a 1-D grid would return a
     # misleading plot.
+    parameterization = _parse_parameterization(eq)
     default_L = 100
-    if (
-        data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["coordinates"]
-        == "r"
-    ):
+    default_N = 0
+    if data_index[parameterization][name]["coordinates"] == "r":
         if grid is None:
             return plot_fsa(
                 eq,
@@ -486,8 +484,12 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 eq, name, rho=rho, log=log, ax=ax, return_data=return_data, **kwargs
             )
 
+    elif data_index[parameterization][name]["coordinates"] == "s":  # curve qtys
+        default_L = 0
+        default_N = 100
+    NFP = getattr(eq, "NFP", 1)
     if grid is None:
-        grid_kwargs = {"L": default_L, "NFP": eq.NFP}
+        grid_kwargs = {"L": default_L, "N": default_N, "NFP": NFP}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 1:
@@ -548,7 +550,7 @@ def plot_2d(
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface
         Object from which to plot.
     name : str
         Name of variable to plot.
@@ -600,6 +602,7 @@ def plot_2d(
         plot_2d(eq, 'sqrt(g)')
 
     """
+    parameterization = _parse_parameterization(eq)
     if grid is None:
         grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
         grid = _get_grid(**grid_kwargs)
@@ -676,14 +679,8 @@ def plot_2d(
         ax.set_title(
             "%s / %s"
             % (
-                "$"
-                + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
-                + "$",
-                "$"
-                + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
-                    "label"
-                ]
-                + "$",
+                "$" + data_index[parameterization][name]["label"] + "$",
+                "$" + data_index[parameterization][norm_name]["label"] + "$",
             )
         )
     _set_tight_layout(fig)
@@ -772,7 +769,7 @@ def plot_3d(
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface
         Object from which to plot.
     name : str
         Name of variable to plot.
@@ -1247,7 +1244,8 @@ def plot_section(
         }
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        coords = eq.map_coordinates(
+        coords = map_coordinates(
+            eq,
             grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1260,7 +1258,8 @@ def plot_section(
         phi = np.unique(grid.nodes[:, 2])
         nphi = phi.size
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        coords = eq.map_coordinates(
+        coords = map_coordinates(
+            eq,
             grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1430,6 +1429,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``legend``: bool, whether to show legend or not, False by default
 
     Returns
     -------
@@ -1501,7 +1501,8 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     r_grid = _get_grid(**grid_kwargs)
     rnr, rnt, rnz = r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta
     r_grid = Grid(
-        eq.map_coordinates(
+        map_coordinates(
+            eq,
             r_grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1522,7 +1523,8 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         t_grid = _get_grid(**grid_kwargs)
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
         v_grid = Grid(
-            eq.map_coordinates(
+            map_coordinates(
+                eq,
                 t_grid.nodes,
                 ["rho", "theta_PEST", "phi"],
                 ["rho", "theta", "zeta"],
@@ -1596,7 +1598,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_fontsize,
         )
-        if label is not None and i == 0:
+        if label is not None and i == 0 and kwargs.pop("legend", False):
             ax[i].legend()
 
     _set_tight_layout(fig)
@@ -1614,7 +1616,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium, Surface
         Object from which to plot.
     phi : float, int or array-like or None
         Values of phi to plot boundary surface at.
@@ -1686,14 +1688,16 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
         phi = np.linspace(0, 2 * np.pi / eq.NFP, phi + 1)  # +1 to include pi and 2pi
     phi = np.atleast_1d(phi)
     nphi = len(phi)
-
+    # don't plot axis for FourierRZToroidalSurface, since it's not defined.
+    plot_axis = plot_axis and eq.L > 0
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
     grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(**grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     grid = Grid(
-        eq.map_coordinates(
+        map_coordinates(
+            eq,
             grid.nodes,
             ["rho", "theta", "phi"],
             ["rho", "theta", "zeta"],
@@ -1758,7 +1762,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
 
     Parameters
     ----------
-    eqs : array-like of Equilibrium or EquilibriaFamily
+    eqs : array-like of Equilibrium, Surface or EquilibriaFamily
         Equilibria to plot.
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
@@ -1849,7 +1853,8 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
-            eqs[i].map_coordinates(
+            map_coordinates(
+                eqs[i],
                 grid.nodes,
                 ["rho", "theta", "phi"],
                 ["rho", "theta", "zeta"],

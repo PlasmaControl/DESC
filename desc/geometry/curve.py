@@ -707,6 +707,7 @@ class SplineXYZCurve(Curve):
         self._knots = knots
         self.method = method
 
+    @optimizable_parameter
     @property
     def X(self):
         """Coordinates for X."""
@@ -722,6 +723,7 @@ class SplineXYZCurve(Curve):
                 + f"got {len(new)} X values for {len(self.knots)} knots"
             )
 
+    @optimizable_parameter
     @property
     def Y(self):
         """Coordinates for Y."""
@@ -737,6 +739,7 @@ class SplineXYZCurve(Curve):
                 + f"got {len(new)} Y values for {len(self.knots)} knots"
             )
 
+    @optimizable_parameter
     @property
     def Z(self):
         """Coordinates for Z."""

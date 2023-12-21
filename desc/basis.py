@@ -1324,11 +1324,11 @@ class FiniteElementBasis(_FE_Basis):
         if N == 0:
             self.mesh = FiniteElementMesh1D(M, K=K)
             self.I_2MN = M - 1
-            self.Q = K + 2  # + 1 here for the constant basis function
+            self.Q = K + 1  # + 1 here if want the constant basis function
         else:
             self.mesh = FiniteElementMesh2D(M, N, K=K)
             self.I_2MN = 2 * (M - 1) * N
-            self.Q = int((K + 1) * (K + 2) / 2.0) + 1
+            self.Q = int((K + 1) * (K + 2) / 2.0)
         self.nmodes = (self.L + 3) // 2 * self.I_2MN * self.Q
         self._modes = self._get_modes()
         super().__init__()
@@ -1416,6 +1416,7 @@ class FiniteElementBasis(_FE_Basis):
             poloidal_toroidal = self.mesh.full_basis_functions_corresponding_to_points(
                 t
             )
+            print(poloidal_toroidal.shape)
             poloidal_toroidal = np.reshape(poloidal_toroidal, (len(t), -1))
             poloidal_toroidal = np.tile(poloidal_toroidal, (self.L + 3) // 2)
             inds = (l + 1) // 2 * (self.M - 1) * self.Q + i * self.Q + j

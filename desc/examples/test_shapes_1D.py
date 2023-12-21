@@ -71,7 +71,7 @@ Z_lmn[1, 0] = 5.0
 R_lmn = R_lmn.reshape(num_modes * (2 * N + 1))
 Z_lmn = Z_lmn.reshape(num_modes * (2 * N + 1))
 L_lmn = np.zeros(R_lmn.shape)
-amp = 0.5
+amp = 2
 R_lmn[np.isclose(R_lmn, 0.0)] = (
     (np.random.rand(np.sum(np.isclose(R_lmn, 0.0))) - 0.5)
     * amp
@@ -98,7 +98,7 @@ nodes = (
 R = R_basis.evaluate(nodes=nodes) @ R_basis.R_lmn
 Z = Z_basis.evaluate(nodes=nodes) @ Z_basis.Z_lmn
 print("R_lmn, Z_lmn = ", R_lmn, Z_lmn)
-plt.plot(R, Z, "ro")
+plt.plot(R, Z, "ro", label="DESC rep")
 
 print(M, L, N, K)
 Rprime_basis = FiniteElementBasis(L=L, M=M, N=N, K=K)
@@ -124,6 +124,7 @@ Zprime_basis.Z_lmn = Zprime_lmn
 nmodes = len(Rprime_basis.modes)
 R = Rprime_basis.evaluate(nodes=nodes) @ Rprime_lmn
 Z = Zprime_basis.evaluate(nodes=nodes) @ Zprime_lmn
-plt.plot(R, Z, "ko")
+plt.plot(R, Z, "ko", label="FE rep")
+plt.legend()
 plt.grid()
 plt.show()

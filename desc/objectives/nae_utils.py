@@ -390,9 +390,9 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None, threshold=1e-
     Zconstraints = ()
     Lconstraints = ()
 
-    coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=N)
+    coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=N, threshold=threshold)
     Rconstraints, Zconstraints, Lconstraints = _make_RZ_cons_order_rho(
-        qsc, desc_eq, coeffs, bases, fix_lambda, threshold=threshold
+        qsc, desc_eq, coeffs, bases, fix_lambda
     )
 
     return Rconstraints + Zconstraints + Lconstraints

@@ -8,7 +8,8 @@ import numpy as np
 from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.io import InputReader
-from desc.utils import copy_coeffs
+from desc.optimizable import optimizable_parameter
+from desc.utils import copy_coeffs, isposint
 
 from .core import Surface
 
@@ -60,7 +61,6 @@ class FourierRZToroidalSurface(Surface):
         NFP=1,
         sym="auto",
         rho=1,
-        grid=None,
         name="",
         check_orientation=True,
     ):
@@ -78,7 +78,8 @@ class FourierRZToroidalSurface(Surface):
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
-
+        assert isposint(NFP)
+        NFP = int(NFP)
         MR = np.max(abs(modes_R[:, 0]))
         NR = np.max(abs(modes_R[:, 1]))
         MZ = np.max(abs(modes_Z[:, 0]))
@@ -113,7 +114,8 @@ class FourierRZToroidalSurface(Surface):
             warnings.warn(
                 "Left handed coordinates detected, switching sign of theta."
                 + " To avoid this warning in the future, switch the sign of all"
-                + " modes with m<0"
+                + " modes with m<0. You may also need to switch the sign of iota or"
+                + " current profiles."
             )
             self._flip_orientation()
             assert self._compute_orientation() == 1
@@ -158,7 +160,7 @@ class FourierRZToroidalSurface(Surface):
         NFP = kwargs.pop("NFP", None)
         sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
-        self._NFP = NFP if NFP is not None else self.NFP
+        self._NFP = int(NFP if NFP is not None else self.NFP)
         self._sym = sym if sym is not None else self.sym
         if L is not None:
             warnings.warn(
@@ -174,8 +176,8 @@ class FourierRZToroidalSurface(Surface):
             or ((M is not None) and (M != self.M))
             or (NFP is not None)
         ):
-            M = M if M is not None else self.M
-            N = N if N is not None else self.N
+            M = int(M if M is not None else self.M)
+            N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(
@@ -189,6 +191,7 @@ class FourierRZToroidalSurface(Surface):
             self._M = M
             self._N = N
 
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients for R."""
@@ -204,6 +207,7 @@ class FourierRZToroidalSurface(Surface):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients for Z."""
@@ -273,7 +277,12 @@ class FourierRZToroidalSurface(Surface):
 
         """
         f = open(path)
-        if "&INDATA" in f.readlines()[0]:  # vmec input, convert to desc
+        isVMEC = False
+        for line in f.readlines():
+            if "&INDATA" in line.upper():
+                isVMEC = True
+                break
+        if isVMEC:  # vmec input, convert to desc
             inputs = InputReader.parse_vmec_inputs(f)[-1]
         else:
             inputs = InputReader().parse_inputs(f)[-1]
@@ -371,7 +380,7 @@ class ZernikeRZToroidalSection(Surface):
         For L>0, the indexing scheme defines order of the basis functions:
 
         ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-        decreasing size, ending in a triagle shape. For L == M,
+        decreasing size, ending in a triangle shape. For L == M,
         the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
         to the bottom of the pyramid, increasing L while keeping M constant,
         giving a "house" shape
@@ -409,7 +418,6 @@ class ZernikeRZToroidalSection(Surface):
         spectral_indexing="ansi",
         sym="auto",
         zeta=0.0,
-        grid=None,
         name="",
         check_orientation=True,
     ):
@@ -518,8 +526,8 @@ class ZernikeRZToroidalSection(Surface):
             L, M, N = args
 
         if ((L is not None) and (L != self.L)) or ((M is not None) and (M != self.M)):
-            L = L if L is not None else self.L
-            M = M if M is not None else self.M
+            L = int(L if L is not None else self.L)
+            M = int(M if M is not None else self.M)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(
@@ -533,6 +541,7 @@ class ZernikeRZToroidalSection(Surface):
             self._L = L
             self._M = M
 
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients for R."""
@@ -548,6 +557,7 @@ class ZernikeRZToroidalSection(Surface):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients for Z."""

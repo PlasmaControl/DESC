@@ -270,7 +270,7 @@ def issorted(x, axis=None, tol=1e-12):
 
     Returns
     -------
-    issorted : bool
+    is_sorted : bool
         whether the array is sorted along specified axis
 
     """
@@ -294,7 +294,7 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
         relative tolerance for comparison.
     atol : float
         absolute tolerance for comparison.
-        If the following equation is element-wise True, then isalmostequal returns True.
+        If the following equation is element-wise True, then returns True.
             absolute(a - b) <= (atol + rtol * absolute(b))
         where a= x[0] and b is every other element of x, if flattened array,
         or if axis is not None, a = x[:,0,:] and b = x[:,i,:] for all i, and
@@ -302,7 +302,7 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
 
     Returns
     -------
-    isalmostequal : bool
+    is_almost_equal : bool
         whether the array is equal along specified axis
 
     """
@@ -347,13 +347,10 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
         relative tolerance for comparison.
     atol : float
         absolute tolerance for comparison.
-        If the following equation is element-wise True for,
-         then isalmostequal returns True.
-            absolute(a - b) <= (atol + rtol * absolute(b))
 
     Returns
     -------
-    islinspaced : bool
+    is_linspaced : bool
         whether the array is linearly spaced along specified axis
 
     """
@@ -485,8 +482,9 @@ def is_broadcastable(shp1, shp2):
 
 
 def get_instance(things, cls):
-    """Get thing from a collection of things that is the instance of a given class."""
-    return [t for t in things if isinstance(t, cls)][0]
+    """Get first thing from an iterable of things that is instance of cls."""
+    foo = [t for t in things if isinstance(t, cls)]
+    return foo[0] if len(foo) else None
 
 
 def parse_argname_change(arg, kwargs, oldname, newname):
@@ -531,8 +529,39 @@ def errorif(cond, err=ValueError, msg=""):
         raise err(msg)
 
 
+def warnif(cond, err=UserWarning, msg=""):
+    """Throw a warning if condition is met."""
+    if cond:
+        warnings.warn(msg, err)
+
+
 def only1(*args):
     """Return True if 1 and only 1 of args evaluates to True."""
     # copied from https://stackoverflow.com/questions/16801322/
     i = iter(args)
     return any(i) and not any(i)
+
+
+def unique_list(thelist):
+    """Get the unique elements from a list, and indices to recreate it.
+
+    Parameters
+    ----------
+    thelist : list
+        List to get unique elements from.
+
+    Returns
+    -------
+    unique : list
+        Unique elements from the input.
+    inds : list of int
+        Indices of unique elements in original list, such that
+        unique[inds[i]] == thelist[i]
+    """
+    inds = []
+    unique = []
+    for i, x in enumerate(thelist):
+        if x not in unique:
+            unique.append(x)
+        inds.append(unique.index(x))
+    return unique, inds

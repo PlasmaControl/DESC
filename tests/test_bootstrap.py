@@ -7,7 +7,8 @@ from scipy.constants import elementary_charge
 from scipy.integrate import quad
 
 import desc.io
-from desc.compute._bootstrap import _trapped_fraction, j_dot_B_Redl
+from desc.compat import rescale
+from desc.compute._bootstrap import _trapped_fraction, compute_J_dot_B_Redl
 from desc.compute._field import (
     _1_over_B_fsa,
     _B2_fsa,
@@ -17,6 +18,7 @@ from desc.compute._field import (
 )
 from desc.compute._geometry import _V_r_of_r, _V_rr_of_r
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives import (
@@ -421,7 +423,7 @@ class TestBootstrapCompute:
             "Te_r": Te(rho, dr=1),
             "Ti_r": Ti(rho, dr=1),
         }
-        J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+        J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
         atol = 1e-13
         rtol = 1e-13
@@ -527,7 +529,7 @@ class TestBootstrapCompute:
                 "Te_r": Te(rho, dr=1),
                 "Ti_r": Ti(rho, dr=1),
             }
-            J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+            J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
             # Make sure L31, L32, and alpha are within the right range:
             np.testing.assert_array_less(J_dot_B_data["L31"], 1.05)
@@ -664,7 +666,7 @@ class TestBootstrapCompute:
                     "Te_r": Te(rho, dr=1),
                     "Ti_r": Ti(rho, dr=1),
                 }
-                J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+                J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
                 L31s[j_nu_star, :] = J_dot_B_data["L31"]
                 L32s[j_nu_star, :] = J_dot_B_data["L32"]
@@ -923,7 +925,7 @@ class TestBootstrapCompute:
         fig = plt.figure()
         helicity = (1, 0)
         filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
-        eq = desc.io.load(filename)
+        eq = desc.io.load(filename)[-1]
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )
@@ -1012,7 +1014,7 @@ class TestBootstrapCompute:
         fig = plt.figure()
         helicity = (1, 4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
-        eq = desc.io.load(filename)
+        eq = desc.io.load(filename)[-1]
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )
@@ -1192,7 +1194,7 @@ class TestBootstrapObjectives:
         integrand = (data["<J*B>"] - data["<J*B> Redl"]) / (scales["B"] * scales["J"])
         expected = 0.5 * sum(grid.weights * integrand**2) / (4 * np.pi**2)
         print(
-            "boostrap objectives for scaled configs:", results, " expected:", expected
+            "bootstrap objectives for scaled configs:", results, " expected:", expected
         )
 
         # Results are not perfectly identical because ln(Lambda) is not quite invariant.
@@ -1301,7 +1303,7 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(eq=eq, kinetic=True),
+            constraints=get_fixed_boundary_constraints(eq=eq),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
@@ -1413,7 +1415,7 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(eq=eq, kinetic=True, iota=False),
+            constraints=get_fixed_boundary_constraints(eq=eq),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
@@ -1563,10 +1565,101 @@ def test_bootstrap_objective_build():
     obj = BootstrapRedlConsistency(eq=eq)
     obj.build()
     # make sure default grid has the right nodes
-    assert obj._transforms["grid"].num_theta == 17
-    assert obj._transforms["grid"].num_zeta == 17
-    assert obj._transforms["grid"].num_rho == 4
+    assert obj.constants["transforms"]["grid"].num_theta == 17
+    assert obj.constants["transforms"]["grid"].num_zeta == 17
+    assert obj.constants["transforms"]["grid"].num_rho == 4
     np.testing.assert_allclose(
-        obj._transforms["grid"].nodes[obj._transforms["grid"].unique_rho_idx, 0],
+        obj.constants["transforms"]["grid"].nodes[
+            obj.constants["transforms"]["grid"].unique_rho_idx, 0
+        ],
         np.array([0.125, 0.375, 0.625, 0.875]),
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_bootstrap_optimization_comparison_qa():
+    """Test that both methods of bootstrap optimization agree."""
+    # this same example is used in docs/notebooks/tutorials/bootstrap_current
+
+    # initial equilibrium
+    eq0 = get("precise_QA")
+    eq0 = rescale(eq0, L=("R0", 10), B=("B0", 5.86))
+    eq0.pressure = None
+    eq0.atomic_number = PowerSeriesProfile(np.array([1]), sym=True)
+    eq0.electron_density = (
+        PowerSeriesProfile(np.array([1.0, 0.0, 0.0, 0.0, 0.0, -1.0]), sym=True)
+        * 2.38e20
+    )
+    eq0.electron_temperature = (
+        PowerSeriesProfile(np.array([1.0, -1.0]), sym=True) * 9.45e3
+    )
+    eq0.ion_temperature = PowerSeriesProfile(np.array([1.0, -1.0]), sym=True) * 9.45e3
+    eq0.current = PowerSeriesProfile(np.zeros((eq0.L + 1,)), sym=False)
+    eq0, _ = eq0.solve(objective="force", optimizer="lsq-exact", verbose=3)
+    eq1 = eq0.copy()
+    eq2 = eq0.copy()
+
+    grid = LinearGrid(
+        M=eq0.M_grid,
+        N=eq0.N_grid,
+        NFP=eq0.NFP,
+        sym=eq0.sym,
+        rho=np.linspace(1 / eq0.L_grid, 1, eq0.L_grid) - 1 / (2 * eq0.L_grid),
+    )
+
+    # method 1
+    objective = ObjectiveFunction(
+        BootstrapRedlConsistency(eq=eq1, grid=grid, helicity=(1, 0)),
+        verbose=0,
+    )
+    constraints = (
+        FixAtomicNumber(eq=eq1),
+        FixBoundaryR(eq=eq1),
+        FixBoundaryZ(eq=eq1),
+        FixCurrent(eq=eq1, indices=[0, 1]),
+        FixElectronDensity(eq=eq1),
+        FixElectronTemperature(eq=eq1),
+        FixIonTemperature(eq=eq1),
+        FixPsi(eq=eq1),
+        ForceBalance(eq=eq1),
+    )
+    eq1, _ = eq1.optimize(
+        objective=objective,
+        constraints=constraints,
+        optimizer="proximal-lsq-exact",
+        maxiter=4,
+        gtol=1e-16,
+        verbose=3,
+    )
+
+    # method 2
+    niters = 3
+    for k in range(niters):
+        eq2 = eq2.copy()
+        data = eq2.compute("current Redl", grid)
+        current = grid.compress(data["current Redl"])
+        rho = grid.compress(data["rho"])
+        XX = np.fliplr(np.vander(rho, eq2.L + 1)[:, :-2])
+        eq2.c_l = np.pad(np.linalg.lstsq(XX, current, rcond=None)[0], (2, 0))
+        eq2, _ = eq2.solve(objective="force", optimizer="lsq-exact", verbose=3)
+
+    grid = LinearGrid(
+        M=eq0.M_grid,
+        N=eq0.N_grid,
+        NFP=eq0.NFP,
+        sym=eq0.sym,
+        rho=np.linspace(0.25, 0.9, 14),
+    )
+    data1 = eq1.compute(["<J*B> Redl", "<J*B>"], grid)
+    data2 = eq2.compute(["<J*B> Redl", "<J*B>"], grid)
+
+    np.testing.assert_allclose(
+        grid.compress(data1["<J*B>"]), grid.compress(data1["<J*B> Redl"]), rtol=2.1e-2
+    )
+    np.testing.assert_allclose(
+        grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=1.8e-2
+    )
+    np.testing.assert_allclose(
+        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=1.8e-2
     )

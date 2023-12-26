@@ -18,7 +18,7 @@ from the equilibrium if necessary. The grid defines the points in flux coordinat
 we evaluate the residuals.
 Next, we define the physics quantities we need to evaluate the objective (``_data_keys``),
 and the number of residuals that will be returned by ``compute`` (``_dim_f``).
-Next, we use some helper functions to build the required ``Tranform`` and ``Profile``
+Next, we use some helper functions to build the required ``Transform`` and ``Profile``
 objects needed to compute the desired physics quantities. These ``transforms`` and
 ``profiles`` are then packaged into ``constants``, which will be passed to the ``compute``
 method. Other "constant" values that are needed to compute the given quantity such as
@@ -38,7 +38,7 @@ A full example objective with comments describing key points is given below:
 
     from desc.objectives.objective_funs import _Objective
     from desc.objectives.normalization import compute_scaling_factors
-    from desc.compute.utils import get_params, get_profiles, get_transforms
+    from desc.compute import get_profiles, get_transforms
     from desc.compute import compute as compute_fun
 
 
@@ -47,38 +47,42 @@ A full example objective with comments describing key points is given below:
 
         Parameters
         ----------
-        eq : Equilibrium, optional
+        eq : Equilibrium
             Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
+        target : {float, ndarray}, optional
             Target value(s) of the objective. Only used if bounds is None.
-            len(target) must be equal to Objective.dim_f
-        bounds : tuple, optional
+            Must be broadcastable to Objective.dim_f.
+        bounds : tuple of {float, ndarray}, optional
             Lower and upper bounds on the objective. Overrides target.
-            len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
+            Both bounds must be broadcastable to to Objective.dim_f
+        weight : {float, ndarray}, optional
             Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        normalize : bool
+            Must be broadcastable to to Objective.dim_f
+        normalize : bool, optional
             Whether to compute the error in physical units or non-dimensionalize.
-        normalize_target : bool
-            Whether target should be normalized before comparing to computed values.
-            if `normalize` is `True` and the target is in physical units, this should also
-            be set to True.
-        grid : Grid, ndarray, optional
+        normalize_target : bool, optional
+            Whether target and bounds should be normalized before comparing to computed
+            values. If `normalize` is `True` and the target is in physical units,
+            this should also be set to True.
+        loss_function : {None, 'mean', 'min', 'max'}, optional
+            Loss function to apply to the objective values once computed. This loss function
+            is called on the raw compute value, before any shifting, scaling, or
+            normalization.
+        grid : Grid, optional
             Collocation grid containing the nodes to evaluate at.
-        name : str
+        name : str, optional
             Name of the objective function.
 
         """
 
-        _scalar = False         # does self.compute return a scalar or vector?
-        _linear = False         # is self.compute a linear function of its parameters?
+        _coordinates = "rtz"    # What coordinates is this objective a function of, with r=rho, t=theta, z=zeta?
+                                # i.e. if only a profile, it is "r" , while if all 3 coordinates it is "rtz"
         _units = "(T^4/m^2)"    # units of the output
-        _print_value_fmt = "Quasi-symmetry error: {:10.3e} "  # string with python string formatting for printing the value
+        _print_value_fmt = "Quasi-symmetry error: {:10.3e} "    # string with python string formatting for printing the value
 
         def __init__(
             self,
-            eq=None,
+            eq,
             target=None,
             bounds=None,
             weight=1,
@@ -90,45 +94,43 @@ A full example objective with comments describing key points is given below:
             # we don't have to do much here, mostly just call ``super().__init__()``
             if target is None and bounds is None:
                 target = 0 # default target value
-            self.grid = grid
+            self._grid = grid
             super().__init__(
-                eq=eq,
+                things=[eq], # things is a list of things that will be optimized, in this case just the equilibrium
                 target=target,
+                bounds=bounds,
                 weight=weight,
                 normalize=normalize,
                 normalize_target=normalize_target,
                 name=name,
             )
 
-        def build(self, eq, use_jit=True, verbose=1):
+        def build(self, use_jit=True, verbose=1):
             """Build constant arrays.
 
             Parameters
             ----------
-            eq : Equilibrium, optional
-                Equilibrium that will be optimized to satisfy the Objective.
             use_jit : bool, optional
                 Whether to just-in-time compile the objective and derivatives.
             verbose : int, optional
                 Level of output.
 
             """
+            # things is the list of things that will be optimized,
+            # we assigned things to be just eq in the init, so we know that the
+            # first (and only) element of things is the equilibrium
+            eq = self.things[0]
             # need some sensible default grid
-            if self.grid is None:
-                self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-
+            if self._grid is None:
+                grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            else:
+                grid = self._grid
             # dim_f = size of the output vector returned by self.compute
             # usually the same as self.grid.num_nodes, unless you're doing some downsampling
             # or averaging etc.
             self._dim_f = self.grid.num_nodes
             # What data from desc.compute is needed? Here we want the QS triple product.
             self._data_keys = ["f_T"]
-            # what arguments should be passed to self.compute
-            self._args = get_params(
-                self._data_keys,
-                obj="desc.equilibrium.equilibrium.Equilibrium",
-                has_axis=grid.axis.size,
-            )
 
             # some helper code for profiling and logging
             timer = Timer()
@@ -139,11 +141,11 @@ A full example objective with comments describing key points is given below:
             # helper functions for building transforms etc to compute given
             # quantities. Alternatively, these can be created manually based on the
             # equilibrium, though in most cases that isn't necessary.
-            self._profiles = get_profiles(self._data_keys, obj=eq, grid=self.grid)
-            self._transforms = get_transforms(self._data_keys, obj=eq, grid=self.grid)
+            profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+            transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
             self._constants = {
-                "transforms": self._transforms,
-                "profiles": self._profiles,
+                "transforms": transforms,
+                "profiles": profiles,
             }
 
             timer.stop("Precomputing transforms")
@@ -158,33 +160,26 @@ A full example objective with comments describing key points is given below:
                 scales = compute_scaling_factors(eq)
                 # since the objective has units of T^4/m^2, the normalization here is
                 # based on a characteristic field strength and minor radius.
-                # we also divide by the square root of number of residuals to keep
-                # things roughly independent of the grid resolution.
                 self._normalization = (
-                    scales["B"] ** 4 / scales["a"] ** 2 / jnp.sqrt(self._dim_f)
+                    scales["B"] ** 4 / scales["a"] ** 2
                 )
 
             # finally, call ``super.build()``
-            super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+            super().build(use_jit=use_jit, verbose=verbose)
 
-        def compute(self, *args, **kwargs):
-            """Signature should only take args and kwargs, but you can use the Parameters
-            block below to specify what these should be.
+        def compute(self, params, constants=None):
+            """Signature should take params (or possibly multiple params, one for each thing in self.things),
+               which is the params_dict of the expected thing(s) to be optimized.
+               It also takes in constants, which is a dictionary of any other constant data needed to compute
+               the objective, and is usually none by default so the self.constants are used.
 
             Parameters
             ----------
-            R_lmn : ndarray
-                Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-            Z_lmn : ndarray
-                Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-            L_lmn : ndarray
-                Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-            i_l : ndarray
-                Spectral coefficients of iota(rho) -- rotational transform profile.
-            c_l : ndarray
-                Spectral coefficients of I(rho) -- toroidal current profile.
-            Psi : float
-                Total toroidal magnetic flux within the last closed flux surface (Wb).
+            params : dict
+                Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            constants : dict
+                Dictionary of constant data, eg transforms, profiles etc. Defaults to
+                self.constants
 
             Returns
             -------
@@ -192,8 +187,6 @@ A full example objective with comments describing key points is given below:
                 Quasi-symmetry flux function error at each node (T^4/m^2).
 
             """
-            # this parses the inputs into a dictionary expected by ``desc.compute.compute``
-            params, constants = self._parse_args(*args, **kwargs)
             if constants is None:
                 constants = self.constants
 
@@ -201,14 +194,31 @@ A full example objective with comments describing key points is given below:
             data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,                 # quantities we want
-                params=params,                   # params from previous line
+                params=params,                   # params from input containing the equilibrium R_lmn, Z_lmn, etc
                 transforms=self._transforms,     # transforms and profiles from self.build
                 profiles=self._profiles,
             )
             # next we do any additional processing, such as combining things,
-            # averaging, etc. Here we just scale things by the quadrature weights from
-            # the grid to make things roughly independent of the grid resolution.
-            f = data["f_T"] * constants["transforms"]["grid"].weights
+            # averaging, etc. Here we just return the QS triple product f_T evaluated at each
+            # node in the grid.
+            f = data["f_T"]
             # this is all we need to do here. Applying objective weights/targets/bounds
-            # is handled by the base class.
+            # is handled by the base _Objective class, as well as the normalizations to be unitless
+            # and to make the objective value independent of grid resolution.
             return f
+
+Adapting Existing Objectives with Different Loss Funtions
+---------------------------------------------------------
+
+If your desired objective is already implemented in DESC, but not in the correct form, a few different
+loss functions are available through the the `loss_function` kwarg when instantiating an Objective objective to
+modify the objective cost in order to adapt the objective to your desired purpose.
+For example, the DESC `RotationalTransform` objective with `target=iota_target` by default forms the residual
+by taking the target and subtracting it from the profile at the points in the grid, resulting in a residual of
+the form $\iota_{err} = \sum_{i} (\iota_i-iota_target)^2$, i.e. the residual is the sum of squared pointwise error
+between the current rotational transform profile and the target passed into the objective.
+If the desired objective instead is to optimize to target an average rotational transform of `iota_target`, we can adapt
+the `RotationalTransform` object by passing in `loss_function="mean"`.
+The options available for the `loss_function` kwarg are `[None,"mean","min","max"]`, with `None` meaning using the usual
+default objective cost, while `"mean"` takes the average of the raw objective values (before subtracting the target/bounds or normalization),
+`"min"` takes the minimum, and `"max"` takes the maximum.

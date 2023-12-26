@@ -13,7 +13,7 @@ from desc.grid import Grid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs
+from desc.utils import copy_coeffs, isposint
 
 from .core import Surface
 
@@ -82,7 +82,8 @@ class FourierRZToroidalSurface(Surface):
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
-
+        assert isposint(NFP)
+        NFP = int(NFP)
         MR = np.max(abs(modes_R[:, 0]))
         NR = np.max(abs(modes_R[:, 1]))
         MZ = np.max(abs(modes_Z[:, 0]))
@@ -163,7 +164,7 @@ class FourierRZToroidalSurface(Surface):
         NFP = kwargs.pop("NFP", None)
         sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
-        self._NFP = NFP if NFP is not None else self.NFP
+        self._NFP = int(NFP if NFP is not None else self.NFP)
         self._sym = sym if sym is not None else self.sym
         if L is not None:
             warnings.warn(
@@ -179,8 +180,8 @@ class FourierRZToroidalSurface(Surface):
             or ((M is not None) and (M != self.M))
             or (NFP is not None)
         ):
-            M = M if M is not None else self.M
-            N = N if N is not None else self.N
+            M = int(M if M is not None else self.M)
+            N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(
@@ -689,8 +690,8 @@ class ZernikeRZToroidalSection(Surface):
             L, M, N = args
 
         if ((L is not None) and (L != self.L)) or ((M is not None) and (M != self.M)):
-            L = L if L is not None else self.L
-            M = M if M is not None else self.M
+            L = int(L if L is not None else self.L)
+            M = int(M if M is not None else self.M)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(

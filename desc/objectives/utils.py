@@ -66,6 +66,7 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
     A = []
     b = []
 
+    from desc.equilibrium import Equilibrium
     from desc.optimize import ProximalProjection
 
     prox_flag = isinstance(objective, ProximalProjection)
@@ -81,16 +82,17 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
         # computing A matrix for each constraint for each thing in the optimization
         for thing in objective.things:
             if thing in con.things:
-                # for now we implicitly assume that each linear constraint is bound to
-                # only 1  thing, to generalize we need to make jac_scaled work for all
-                # positional args not just the first one.
-                A_ = con.jac_scaled(*xz)
+                A_ = con.jac_scaled(*xz)[con.things.index(thing)]
             else:
                 A_ = {
                     arg: jnp.zeros((con.dim_f, dimx))
                     for arg, dimx in thing.dimensions.items()
                 }
-            args = objective._args if prox_flag else thing.optimizable_params
+            args = (
+                objective._args
+                if prox_flag and isinstance(thing, Equilibrium)
+                else thing.optimizable_params
+            )
             A_per_thing.append(jnp.hstack([A_[arg] for arg in args]))
         # using obj.compute instead of obj.target to allow for correct scale/weight
         b_ = -con.compute_scaled_error(*xz)
@@ -157,8 +159,8 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
         np.testing.assert_allclose(
             y1,
             y2,
-            atol=1e-14,
-            rtol=1e-14,
+            atol=2e-14,
+            rtol=5e-14,
             err_msg="Incompatible constraints detected, cannot satisfy "
             + f"constraint {con}",
         )

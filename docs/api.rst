@@ -128,13 +128,14 @@ Magnetic Fields
     :recursive:
     :template: class.rst
 
+    desc.magnetic_fields.OmnigenousField
+    desc.magnetic_fields.PoloidalMagneticField
+    desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.ScaledMagneticField
+    desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.SumMagneticField
     desc.magnetic_fields.ToroidalMagneticField
     desc.magnetic_fields.VerticalMagneticField
-    desc.magnetic_fields.PoloidalMagneticField
-    desc.magnetic_fields.SplineMagneticField
-    desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
 
@@ -164,6 +165,9 @@ Objective Functions
     desc.objectives.FixIota
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
+    desc.objectives.FixOmniBmax
+    desc.objectives.FixOmniShift
+    desc.objectives.FixOmniWell
     desc.objectives.FixParameter
     desc.objectives.FixPressure
     desc.objectives.FixPsi
@@ -249,6 +253,7 @@ Plotting
     desc.plotting.plot_fsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo
+    desc.plotting.plot_omnigenous_field
     desc.plotting.plot_qs_error
     desc.plotting.plot_section
     desc.plotting.plot_surfaces

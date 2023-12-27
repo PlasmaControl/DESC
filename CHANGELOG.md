@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Adds functionality to optimize for omnigenity. This includes the ``OmnigenousField`` magnetic field class, the ``Omnigenity`` objective function, and an accompanying tutorial.
 - `Equilibrium.map_coordinates` is now differentiable.
 - Removes method `Equilibrium.compute_flux_coordinates` as it is now redundant with the
 more general `Equilibrium.map_coordinates`.
@@ -11,6 +12,7 @@ object e.g. optimizing only a ``FourierRZToroidalSurface`` object to have a cert
 ``Volume``.
 - Many functions from ``desc.plotting`` now also work for plotting quantities from
 ``Curve`` and ``Surface`` classes.
+
 
 v0.10.3
 -------

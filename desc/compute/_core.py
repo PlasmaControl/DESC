@@ -6,6 +6,24 @@ from .data_index import register_compute_fun
 
 
 @register_compute_fun(
+    name="NFP",
+    label="N_{FP}",
+    units="~",
+    units_long="None",
+    description="Number of toroidal field periods",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=[],
+)
+def _NFP(params, transforms, profiles, data, **kwargs):
+    data["NFP"] = transforms["grid"].NFP
+    return data
+
+
+@register_compute_fun(
     name="0",
     label="0",
     units="~",
@@ -2917,6 +2935,7 @@ def _phi_zzz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
+        "desc.magnetic_fields.OmnigenousField",
     ],
 )
 def _rho(params, transforms, profiles, data, **kwargs):

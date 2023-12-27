@@ -1,16 +1,20 @@
 """Tests for reading/writing/converting VMEC data."""
 
+import filecmp
+
 import numpy as np
 import pytest
 from netCDF4 import Dataset
 
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
 from desc.grid import LinearGrid
 from desc.io import load
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
     fourier_to_zernike,
+    print_vmec_boundary,
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
     ptolemy_linear_transform,
@@ -885,6 +889,20 @@ def test_plot_vmec_comparison(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = VMECIO.plot_vmec_comparison(eq, str(SOLOVEV["vmec_nc_path"]))
     return fig
+
+
+@pytest.mark.unit
+def test_print_vmec_boundary(TmpDir):
+    """Test for print_vmec_boundary."""
+    input_path = "./tests/inputs/W7-X_boundary.txt"
+    output_path = str(TmpDir.join("W7-X_boundary.txt"))
+
+    eq = get("W7-X")
+    surface = eq.surface
+    surface.change_resolution(M=2, N=3)
+    print_vmec_boundary(surface, filename=output_path)
+
+    assert filecmp.cmp(input_path, output_path, shallow=False)
 
 
 @pytest.mark.unit

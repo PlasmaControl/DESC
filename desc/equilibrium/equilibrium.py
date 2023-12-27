@@ -1556,7 +1556,15 @@ class Equilibrium(IOAble, Optimizable):
 
     @classmethod
     def from_near_axis(
-        cls, na_eq, r=0.1, L=None, M=8, N=None, ntheta=None, spectral_indexing="ansi"
+        cls,
+        na_eq,
+        r=0.1,
+        L=None,
+        M=8,
+        N=None,
+        ntheta=None,
+        spectral_indexing="ansi",
+        **kwargs,
     ):
         """Initialize an Equilibrium from a near-axis solution.
 

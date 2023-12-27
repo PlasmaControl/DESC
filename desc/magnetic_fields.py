@@ -4,20 +4,27 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
-from interpax import approx_df, interp2d, interp3d
+import scipy.linalg
+from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset
 
 from desc.backend import fori_loop, jit, jnp, odeint, sign
-from desc.basis import DoubleFourierSeries
+from desc.basis import (
+    ChebyshevDoubleFourierBasis,
+    ChebyshevPolynomial,
+    DoubleFourierSeries,
+)
+from desc.compute import compute as compute_fun
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, warnif
+from desc.utils import copy_coeffs, errorif, flatten_list, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -1801,6 +1808,299 @@ class FourierCurrentPotentialField(
             name=name,
             check_orientation=False,
         )
+
+
+class OmnigenousField(Optimizable, IOAble):
+    """Model field with perfect omnigenity.
+
+    Notes
+    -----
+    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in flux
+    coordinates, not vector B in lab coordinates.
+
+    """
+
+    _io_attrs_ = [
+        "_L_well",
+        "_M_well",
+        "_L_shift",
+        "_M_shift",
+        "_N_shift",
+        "_NFP",
+        "_helicity",
+        "_well_basis",
+        "_shift_basis",
+        "_B_lm",
+        "_x_lmn",
+    ]
+
+    def __init__(
+        self,
+        L_well=0,
+        M_well=2,
+        L_shift=0,
+        M_shift=0,
+        N_shift=0,
+        NFP=1,
+        helicity=(1, 0),
+        B_lm=None,
+        x_lmn=None,
+    ):
+        self._L_well = int(L_well)
+        self._M_well = int(M_well)
+        self._L_shift = int(L_shift)
+        self._M_shift = int(M_shift)
+        self._N_shift = int(N_shift)
+        self._NFP = int(NFP)
+        self.helicity = helicity
+        self._well_basis = ChebyshevPolynomial(L=self.L_well)
+        self._shift_basis = ChebyshevDoubleFourierBasis(
+            L=self.L_shift,
+            M=self.M_shift,
+            N=self.N_shift,
+            NFP=self.NFP,
+            sym="cos(t)",
+        )
+        if B_lm is None:
+            self._B_lm = np.concatenate(
+                (
+                    np.ones((self.M_well,)),
+                    np.zeros((self.L_well * self.M_well,)),
+                )
+            )
+        else:
+            assert len(B_lm) == (self.L_well + 1) * self.M_well
+            self._B_lm = B_lm
+        if x_lmn is None:
+            self._x_lmn = np.zeros(self.shift_basis.num_modes)
+        else:
+            assert len(x_lmn) == self.shift_basis.num_modes
+            self._x_lmn = x_lmn
+
+        # TODO: should we not allow some types of helicity?
+        warnif(
+            self.helicity != (0, self.NFP) and self.helicity[0] != 1,
+            UserWarning,
+            "Typical helicity (M,N) has M=1.",
+        )
+        warnif(
+            self.helicity != (1, 0) and self.helicity[1] != self.NFP,
+            UserWarning,
+            "Typical helicity (M,N) has N=NFP.",
+        )
+
+    def change_resolution(
+        self,
+        L_well=None,
+        M_well=None,
+        L_shift=None,
+        M_shift=None,
+        N_shift=None,
+        NFP=None,
+    ):
+        """Set the spectral resolution of well and shift terms.
+
+        Parameters
+        ----------
+        L_well : int
+            Radial resolution of the magnetic well parameters B_lm.
+        M_well : int
+            Number of spline points in the magnetic well parameters B_lm.
+        L_shift : int
+            Radial resolution of x_lmn.
+        M_shift : int
+            Poloidal resolution of x_lmn.
+        N_shift : int
+            Toroidal resolution of x_lmn.
+        NFP : int
+            Number of field periods.
+
+        """
+        old_L_well = self.L_well
+
+        self._NFP = setdefault(NFP, self.NFP)
+        self._L_well = setdefault(L_well, self.L_well)
+        self._M_well = setdefault(M_well, self.M_well)
+        self._L_shift = setdefault(L_shift, self.L_shift)
+        self._M_shift = setdefault(M_shift, self.M_shift)
+        self._N_shift = setdefault(N_shift, self.N_shift)
+
+        # change well parameters and basis
+        rho = (  # Chebyshev-Gauss-Lobatto nodes
+            1
+            - np.cos(np.arange(old_L_well // 2, old_L_well + 1, 1) * np.pi / old_L_well)
+        ) / 2
+        nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
+
+        transform_fwd = self.well_basis.evaluate(nodes)
+        transform_rev = scipy.linalg.pinv(transform_fwd)
+        B_old = transform_fwd @ self.B_lm.reshape((old_L_well + 1, -1))
+
+        eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])
+        eta_new = np.linspace(0, jnp.pi / 2, num=self.M_well)
+
+        B_new = np.zeros((old_L_well + 1, self.M_well))
+        for i in range(old_L_well + 1):
+            B_new[i, :] = interp1d(eta_new, eta_old, B_old[i, :], method="monotonic-0")
+        B_lm_old = transform_rev @ B_new
+
+        old_modes_well = self.well_basis.modes
+        self.well_basis.change_resolution(self.L_well)
+
+        B_lm_new = np.zeros((self.L_well + 1, self.M_well))
+        for j in range(self.M_well):
+            B_lm_new[:, j] = copy_coeffs(
+                B_lm_old[:, j], old_modes_well, self.well_basis.modes
+            )
+        self._B_lm = B_lm_new.flatten()
+
+        # change shift parameters and basis
+        old_modes_shift = self.shift_basis.modes
+        self.shift_basis.change_resolution(
+            self.L_shift, self.M_shift, self.N_shift, NFP=self.NFP, sym="cos(t)"
+        )
+        self._x_lmn = copy_coeffs(self.x_lmn, old_modes_shift, self.shift_basis.modes)
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        profiles=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. Defaults to the quadrature grid.
+        params : dict of ndarray
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        profiles : dict of Profile
+            Profile objects for pressure, iota, current, etc. Defaults to attributes
+            of self
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        if isinstance(names, str):
+            names = [names]
+        if grid is None:
+            grid = LinearGrid(
+                theta=2 * self.M_well, N=2 * self.N_shift, NFP=self.NFP, sym=False
+            )
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
+
+        if params is None:
+            params = get_params(names, obj=self)
+        if transforms is None:
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+        if data is None:
+            data = {}
+        profiles = {}
+
+        data = compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            helicity=kwargs.pop("helicity", self.helicity),
+            **kwargs,
+        )
+        return data
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @property
+    def L_well(self):
+        """int: Radial resolution of the magnetic well parameters well_l."""
+        return self._L_well
+
+    @property
+    def M_well(self):
+        """int: Number of spline points in the magnetic well parameters well_l."""
+        return self._M_well
+
+    @property
+    def L_shift(self):
+        """int: Radial resolution of x_lmn."""
+        return self._L_shift
+
+    @property
+    def M_shift(self):
+        """int: Poloidal resolution of x_lmn."""
+        return self._M_shift
+
+    @property
+    def N_shift(self):
+        """int: Toroidal resolution of x_lmn."""
+        return self._N_shift
+
+    @property
+    def well_basis(self):
+        """ChebyshevPolynomial: Spectral basis for B_lm."""
+        return self._well_basis
+
+    @property
+    def shift_basis(self):
+        """FourierZernikeBasis: Spectral basis for x_lmn."""
+        return self._shift_basis
+
+    @optimizable_parameter
+    @property
+    def B_lm(self):
+        """ndarray: Omnigenity magnetic well shape parameters."""
+        return self._B_lm
+
+    @B_lm.setter
+    def B_lm(self, B_lm):
+        self._B_lm = B_lm
+
+    @optimizable_parameter
+    @property
+    def x_lmn(self):
+        """ndarray: Omnigenity coordinate mapping parameters."""
+        return self._x_lmn
+
+    @x_lmn.setter
+    def x_lmn(self, x_lmn):
+        self._x_lmn = x_lmn
+
+    @property
+    def helicity(self):
+        """tuple: Type of omnigenity (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        self._helicity = helicity
 
 
 def _compute_magnetic_field_from_CurrentPotentialField(

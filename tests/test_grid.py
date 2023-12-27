@@ -488,7 +488,7 @@ class TestGrid:
     def test_concentric_grid_high_res(self):
         """Test that we can create high resolution grids without crashing.
 
-        Verifies solution to GH issue #207.
+        Test for GH issue #207.
         """
         _ = ConcentricGrid(L=32, M=28, N=30)
 
@@ -622,6 +622,7 @@ class TestGrid:
     @pytest.mark.unit
     def test_symmetry_volume_integral(self):
         """Test volume integral of a symmetric function."""
+
         # Currently, midpoint rule is false for LinearGrid made with L=number.
         def test(grid, midpoint_rule=False):
             r = grid.nodes[:, 0]

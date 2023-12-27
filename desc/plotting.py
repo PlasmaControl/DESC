@@ -2400,7 +2400,7 @@ def plot_boozer_surface(
 
     Parameters
     ----------
-    eq : Equilibrium
+    eq : Equilibrium or OmnigenousField
         Object from which to plot.
     grid_compute : Grid, optional
         grid to use for computing boozer spectrum
@@ -2452,6 +2452,27 @@ def plot_boozer_surface(
         fig, ax = plot_boozer_surface(eq)
 
     """
+    if hasattr(eq, "_well_basis"):
+        # eq is really an OmnigenousField
+        grid_kwargs = {
+            "rho": rho,
+            "M": 50,
+            "N": 50,
+            "NFP": eq.NFP,
+            "endpoint": False,
+        }
+        grid = _get_grid(**grid_kwargs)
+        return _plot_omnigenous_field(
+            eq,
+            iota=kwargs.pop("iota", 1),
+            grid=grid,
+            fill=fill,
+            ncontours=ncontours,
+            fieldlines=fieldlines,
+            ax=ax,
+            return_data=return_data,
+            **kwargs,
+        )
     if grid_compute is None:
         grid_kwargs = {
             "rho": rho,
@@ -3745,6 +3766,141 @@ def plot_field_lines_real_space(
         )
     else:
         return fig, ax
+
+
+def _plot_omnigenous_field(
+    field,
+    iota,
+    grid=None,
+    fill=False,
+    ncontours=30,
+    fieldlines=0,
+    ax=None,
+    return_data=False,
+    **kwargs,
+):
+    """Plot :math:`|B|` on a surface vs the Boozer poloidal and toroidal angles.
+
+    Parameters
+    ----------
+    field : OmnigenousField
+        Object from which to plot.
+    iota : float
+        Rotational transform.
+    rho : float, optional
+        Radial coordinate of flux surface.
+    fill : bool, optional
+        Whether the contours are filled, i.e. whether to use `contourf` or `contour`.
+    ncontours : int, optional
+        Number of contours to plot.
+    fieldlines : int, optional
+        Number of (linearly spaced) magnetic fieldlines to plot. Default is 0 (none).
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),cmap="plasma")
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
+        * ``title_fontsize``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+    plot_data : dict
+        dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/plot_omnigenous_field.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_omnigenous_field
+        fig, ax = plot_omnigenous_field(field)
+
+    """
+    if grid is None:
+        grid = LinearGrid(rho=[1.0], theta=101, zeta=101, endpoint=False, NFP=field.NFP)
+
+    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+
+    # compute data from omnigenous magnetic field
+    data = field.compute(
+        ["theta_B", "zeta_B", "|B|_omni"], grid=grid, helicity=field.helicity, iota=iota
+    )
+    B = data["|B|_omni"]
+    theta_B = np.mod(data["theta_B"], 2 * np.pi)
+    zeta_B = np.mod(data["zeta_B"], 2 * np.pi / field.NFP)
+
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
+    divider = make_axes_locatable(ax)
+
+    contourf_kwargs = {
+        "norm": matplotlib.colors.Normalize(),
+        "levels": kwargs.pop(
+            "levels", np.linspace(np.nanmin(B), np.nanmax(B), ncontours)
+        ),
+        "cmap": kwargs.pop("cmap", "jet"),
+        "extend": "both",
+    }
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
+
+    cax_kwargs = {"size": "5%", "pad": 0.05}
+
+    if fill:
+        im = ax.tricontour(zeta_B, theta_B, B, **contourf_kwargs)
+    else:
+        im = ax.tricontour(zeta_B, theta_B, B, **contourf_kwargs)
+    cax = divider.append_axes("right", **cax_kwargs)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.update_ticks()
+
+    if fieldlines:
+        theta0 = np.linspace(0, 2 * np.pi, fieldlines, endpoint=False)
+        zeta = np.linspace(0, 2 * np.pi / grid.NFP, 100)
+        alpha = np.atleast_2d(theta0) + iota * np.atleast_2d(zeta).T
+        alpha1 = np.where(np.logical_and(alpha >= 0, alpha <= 2 * np.pi), alpha, np.nan)
+        alpha2 = np.where(
+            np.logical_or(alpha < 0, alpha > 2 * np.pi),
+            alpha % (sign(iota) * 2 * np.pi) + (sign(iota) < 0) * (2 * np.pi),
+            np.nan,
+        )
+        alphas = np.hstack((alpha1, alpha2))
+        ax.plot(zeta, alphas, color="k", ls="-", lw=2)
+
+    ax.set_xlim([0, 2 * np.pi / field.NFP])
+    ax.set_ylim([0, 2 * np.pi])
+
+    ax.set_xlabel(r"$\zeta_{Boozer}$", fontsize=xlabel_fontsize)
+    ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
+    ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
+
+    _set_tight_layout(fig)
+    plot_data = {"theta_Boozer": theta_B, "zeta_Boozer": zeta_B, "|B|": B}
+
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def _find_idx(rho0, theta0, phi0, grid):

@@ -18,6 +18,7 @@ from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import load
+from desc.magnetic_fields import OmnigenousField
 from desc.plotting import (
     _find_idx,
     plot_1d,
@@ -980,4 +981,23 @@ def test_plot_3d_surface():
     """Test 3d plotting of surface object."""
     surf = FourierRZToroidalSurface()
     fig = plot_3d(surf, "curvature_H_rho")
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_omnigenous_field():
+    """Test plot omnigenous magnetic field."""
+    field = OmnigenousField(
+        L_well=0,
+        M_well=4,
+        L_shift=0,
+        M_shift=1,
+        N_shift=1,
+        NFP=4,
+        helicity=(1, 4),
+        B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
+        x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
+    )
+    fig, ax = plot_boozer_surface(field, iota=0.6, fieldlines=4)
     return fig

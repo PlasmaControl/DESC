@@ -29,7 +29,6 @@
    :maxdepth: 1
    :caption: Tutorials
 
-
    notebooks/tutorials/basic_equilibrium.ipynb
    notebooks/tutorials/advanced_equilibrium_continuation.ipynb
    notebooks/tutorials/continuation_step_by_step.ipynb
@@ -38,6 +37,7 @@
    notebooks/tutorials/advanced_optimization.ipynb
    notebooks/tutorials/nae_constraint.ipynb
    notebooks/tutorials/bootstrap_current.ipynb
+   notebooks/tutorials/omnigenity.ipynb
 
 .. toctree::
    :maxdepth: 1

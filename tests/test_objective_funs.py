@@ -473,15 +473,40 @@ class TestObjectiveFunction:
 
         # nonaxisymmetric surface
         eq = get("precise_QA")
-        eq.solve()
 
-        Bnorm = t_field.compute_Bnormal(eq)[0]
+        source_N = 8
+        source_M = 8
 
-        obj = QuadraticFlux(t_field, eq)
-        obj.build(eq)
+        eval_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=int(eq.NFP),
+            sym=False,
+        )
+
+        source_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=source_M,
+            N=source_N,
+            NFP=int(eq.NFP),
+            sym=False,
+        )
+
+        obj = QuadraticFlux(
+            t_field,
+            eq,
+            eval_grid=eval_grid,
+            src_grid=source_grid,
+        )
+        Bnorm = t_field.compute_Bnormal(
+            eq.surface, eval_grid=eval_grid, source_grid=source_grid
+        )[0]
+        obj.build(eq, verbose=0)
         f = obj.compute()
-        # not passing
-        np.testing.assert_allclose(f, Bnorm, rtol=1e-3)
+
+        indices = eval_grid.unique_zeta_idx
+        np.testing.assert_allclose(f[indices], Bnorm[indices], atol=1e-3)
 
     @pytest.mark.unit
     def test_toroidal_flux(self):

@@ -27,23 +27,17 @@
 
 .. toctree::
    :maxdepth: 1
-   :caption: Examples
-
-   notebooks/hands_on
-   notebooks/Spline_Basis
-   notebooks/Saving_Equilibria_in_VMEC_Format
-   notebooks/DESC_Fixed_Axis_NAE_Constraint
-   notebooks/Toroidal_current_constraint
-   precise_qa
-
-.. toctree::
-   :maxdepth: 1
    :caption: Tutorials
 
-   notebooks/tutorials/00_Getting_Started_with_DESC.ipynb
-   notebooks/tutorials/01_Using_DESC_Outputs.ipynb
-   notebooks/tutorials/02_Script_Interface.ipynb
-   notebooks/tutorials/03_Quasi-Symmetry_Optimization.ipynb
+
+   notebooks/tutorials/basic_equilibrium.ipynb
+   notebooks/tutorials/advanced_equilibrium_continuation.ipynb
+   notebooks/tutorials/continuation_step_by_step.ipynb
+   notebooks/tutorials/use_outputs.ipynb
+   notebooks/tutorials/basic_optimization.ipynb
+   notebooks/tutorials/advanced_optimization.ipynb
+   notebooks/tutorials/nae_constraint.ipynb
+   notebooks/tutorials/bootstrap_current.ipynb
 
 .. toctree::
    :maxdepth: 1

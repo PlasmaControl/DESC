@@ -10,6 +10,7 @@ from desc.compute import rpz2xyz_vec, xyz2rpz_vec
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
+from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
@@ -59,6 +60,85 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             (tfield + vfield - pfield)([1, 0, 0.1]), [[0.4, 2, 1]]
         )
+
+    @pytest.mark.unit
+    def test_combined_fields(self):
+        """Tests for sum/scaled fields."""
+        tfield = ToroidalMagneticField(2, 1)
+        vfield = VerticalMagneticField(1)
+        pfield = PoloidalMagneticField(2, 1, 2)
+        tfield.R0 = 1
+        tfield.B0 = 2
+        vfield.B0 = 3.2
+        pfield.R0 = 1
+        pfield.B0 = 2
+        pfield.iota = 1.2
+        scaled_field = 3.1 * tfield
+        assert scaled_field.B0 == 2
+        assert scaled_field.scale == 3.1
+        np.testing.assert_allclose(scaled_field([1.0, 0, 0]), np.array([[0, 6.2, 0]]))
+        scaled_field.R0 = 1.3
+        scaled_field.scale = 1.0
+        np.testing.assert_allclose(scaled_field([1.3, 0, 0]), np.array([[0, 2, 0]]))
+        assert scaled_field.optimizable_params == ["B0", "R0", "scale"]
+        assert hasattr(scaled_field, "B0")
+
+        sum_field = vfield + pfield + tfield
+        assert len(sum_field) == 3
+        np.testing.assert_allclose(
+            sum_field([1.3, 0, 0.0]), [[0.0, 2, 3.2 + 2 * 1.2 * 0.3]]
+        )
+        assert sum_field.optimizable_params == [
+            ["B0"],
+            ["B0", "R0", "iota"],
+            ["B0", "R0"],
+        ]
+        assert sum_field.dimensions == [
+            {"B0": 1},
+            {"B0": 1, "R0": 1, "iota": 1},
+            {"B0": 1, "R0": 1},
+        ]
+        assert sum_field.x_idx == [
+            {"B0": np.array([0])},
+            {"B0": np.array([1]), "R0": np.array([2]), "iota": np.array([3])},
+            {"B0": np.array([4]), "R0": np.array([5])},
+        ]
+        assert sum_field.dim_x == 6
+        p = sum_field.pack_params(sum_field.params_dict)
+        np.testing.assert_allclose(p, [3.2, 2, 1, 1.2, 2, 1.3])
+        p *= 1.3
+        sum_field.params_dict = sum_field.unpack_params(p)
+        assert sum_field[0].B0 == 1.3 * 3.2
+        assert sum_field[1].B0 == 1.3 * 2
+        assert sum_field[2].B0 == 1.3 * 2
+        sum_field.params_dict = sum_field.unpack_params(p / 1.3)
+
+        del sum_field[-1]
+        assert len(sum_field) == 2
+        np.testing.assert_allclose(
+            sum_field([1.3, 0, 0.0]), [[0.0, 0.0, (3.2 + 2 * 1.2 * 0.3)]]
+        )
+        assert sum_field.optimizable_params == [
+            ["B0"],
+            ["B0", "R0", "iota"],
+        ]
+        sum_field.insert(1, tfield)
+        assert len(sum_field) == 3
+        np.testing.assert_allclose(
+            sum_field([1.3, 0, 0.0]), [[0.0, 2.0, (3.2 + 2 * 1.2 * 0.3)]]
+        )
+        assert sum_field.optimizable_params == [
+            ["B0"],
+            ["B0", "R0"],
+            ["B0", "R0", "iota"],
+        ]
+        sum_field[1] = pfield
+        sum_field[2] = tfield
+        assert sum_field.optimizable_params == [
+            ["B0"],
+            ["B0", "R0", "iota"],
+            ["B0", "R0"],
+        ]
 
     @pytest.mark.unit
     def test_scalar_field(self):
@@ -157,6 +237,27 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, np.pi / 4, 0]),
             correct_field(10.0, np.pi / 4, 0),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+
+        # add a ToroidalField and check passing in/not passing in
+
+        B_TF = ToroidalMagneticField(1, 10)
+        sumfield = B_TF + field
+
+        np.testing.assert_allclose(
+            sumfield.compute_magnetic_field([10.0, 0, 0]),
+            correct_field(10.0, 0, 0) + B_TF([10.0, 0, 0]),
+            atol=1e-16,
+            rtol=1e-8,
+        )
+
+        np.testing.assert_allclose(
+            sumfield.compute_magnetic_field(
+                [10.0, 0, 0], grid=[None, LinearGrid(M=30, N=30, NFP=surface.NFP)]
+            ),
+            correct_field(10.0, 0, 0) + B_TF([10.0, 0, 0]),
             atol=1e-16,
             rtol=1e-8,
         )
@@ -316,6 +417,87 @@ class TestMagneticFields:
         with pytest.raises(ValueError):
             field.Phi_mn = np.ones((basis.num_modes + 1,))
 
+    def test_io_fourier_current_field(self):
+        """Test that i/o works for FourierCurrentPotentialField."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        basis = DoubleFourierSeries(M=2, N=2, sym="cos")
+        phi_mn = np.ones((basis.num_modes,))
+        field = FourierCurrentPotentialField(
+            Phi_mn=phi_mn,
+            G=1000,
+            I=-50,
+            modes_Phi=basis.modes[:, 1:],
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+        field.save("test_field.h5")
+        field2 = load("test_field.h5")
+        assert field.eq(field2)
+
+    def test_change_Phi_basis_fourier_current_field(self):
+        """Test that change_Phi_resolution works for FourierCurrentPotentialField."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        M = N = 2
+        basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym="cos")
+
+        phi_mn = np.ones((basis.num_modes,))
+        field = FourierCurrentPotentialField(
+            Phi_mn=phi_mn,
+            modes_Phi=basis.modes[:, 1:],
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 1:])), M)
+        np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
+        assert field.Phi_basis.sym == "cos"
+
+        M = N = 5
+        basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym="cos")
+        field.change_Phi_resolution(M=M, N=N)
+
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 1:])), M)
+        np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
+        assert field.Phi_basis.sym == "cos"
+
+        M = 7
+        N = 9
+        basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym="cos")
+        field.change_Phi_resolution(M=M, N=N)
+
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 1])), M)
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 2])), N)
+        np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
+        assert field.Phi_basis.sym == "cos"
+
+        M = 3
+        N = 3
+        basis = DoubleFourierSeries(M=M, N=N, NFP=surface.NFP, sym="sin")
+        field.change_Phi_resolution(M=M, N=N, sym_Phi="sin")
+
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 1])), M)
+        np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 2])), N)
+        np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
+        assert field.Phi_basis.sym == "sin"
+
     @pytest.mark.slow
     @pytest.mark.unit
     def test_spline_field(self):
@@ -324,7 +506,7 @@ class TestMagneticFields:
         R = np.linspace(0.5, 1.5, 20)
         Z = np.linspace(-1.5, 1.5, 20)
         p = np.linspace(0, 2 * np.pi / 5, 40)
-        field2 = SplineMagneticField.from_field(field1, R, p, Z, period=2 * np.pi / 5)
+        field2 = SplineMagneticField.from_field(field1, R, p, Z, NFP=5)
 
         np.testing.assert_allclose(
             field1([1.0, 1.0, 1.0]), field2([1.0, 1.0, 1.0]), rtol=1e-2, atol=1e-2
@@ -335,7 +517,14 @@ class TestMagneticFields:
         field3 = SplineMagneticField.from_mgrid(mgrid, extcur)
 
         np.testing.assert_allclose(
-            field3([0.70, 0, 0]), [[0, -0.671, 0.0858]], rtol=1e-3, atol=1e-8
+            field3([0.70, 0, 0]), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
+        )
+        field3.currents *= 2
+        np.testing.assert_allclose(
+            field3([0.70, 0, 0]),
+            2 * np.array([[0, -0.671, 0.0858]]),
+            rtol=1e-3,
+            atol=1e-8,
         )
 
     @pytest.mark.unit

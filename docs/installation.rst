@@ -121,20 +121,57 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 **Note that DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet), and thus older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.**
 
+Perlmutter (NERSC)
+++++++++++++++++++++++++++++++
+These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on 11-02-2023
+
+Set up the correct cuda environment for jax installation
+
+.. code-block:: sh
+
+    module load cudatoolkit/11.7
+    module load cudnn/8.9.1_cuda11
+    module load python
+
+Check that you have loaded these modules
+
+.. code-block:: sh
+
+    module list
+
+Create a conda environment for DESC
+
+.. code-block:: sh
+
+    conda create -n desc-env python=3.9
+    conda activate desc-env
+    pip install --no-cache-dir "jax[cuda11_cudnn82]==0.4.7" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+Clone and install DESC
+
+.. code-block:: sh
+
+    git clone https://github.com/PlasmaControl/DESC.git
+    cd DESC
+    sed -i '/jax/d' ./requirements.txt
+    # installation for users
+    pip install --editable .
+    # optionally install developer requirements (if you want to run tests)
+    pip install -r devtools/dev-requirements.txt
+
+
 Della and Stellar Clusters (Princeton)
 ++++++++++++++++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Della and Stellar clusters at Princeton as of 11-6-2023.
 
-First, install JAX (check `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters):
+First, install JAX (we base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ) for the latest version of `jaxlib` available on the Princeton clusters:
 
 .. code-block:: sh
 
     module load anaconda3/2023.3
-    conda create --name desc-env python=3.9
+    CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env "jax==0.4.14" "jaxlib==0.4.14=cuda112*" -c conda-forge
     conda activate desc-env
-    pip install --upgrade "jax[cuda11_pip]<0.4.15" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
-Then, install DESC:
+Then, install DESC,
 
 .. code-block:: sh
 
@@ -146,6 +183,8 @@ Then, install DESC:
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
+
+Second option was tested and confirmed to work on the Della cluster as of 12-2-23 and Stellar cluster at Princeton as of 11-14-2023.
 
 On Clusters with IBM Power Architecture
 ***************************************

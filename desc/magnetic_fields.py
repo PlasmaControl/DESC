@@ -1917,10 +1917,15 @@ class FourierCurrentPotentialField(
                 the given external field
             chi^2_B : quadratic flux integrated over the plasma surface.
                 a float if `scan=False`, or list of float of length
-                `nscan` if `scan=True, corresponding to the list of `alpha`
+                `nscan` if `scan=True`, corresponding to the list of `alpha`
             chi^2_K : Current density magnitude integrated over the winding surface.
                 a float if `scan=False`, or list of float of length
-                `nscan` if `scan=True, corresponding to the list of `alpha`
+                `nscan` if `scan=True`, corresponding to the list of `alpha`
+            |K| : Current density magnitude on the winding surface, evaluated at the
+                given `source_grid`. An array of length `source_grid.num_nodes` if
+                `scan=False`, or list of arrays, with list length `nscan`,
+                if `scan=True`, corresponding to the list of `alpha`
+
 
         """
         assert (
@@ -2058,6 +2063,7 @@ class FourierCurrentPotentialField(
         data = {}
         chi2Bs = []
         chi2Ks = []
+        K_mags = []
         phi_mns = []
 
         # calculate the Phi_mn which minimizes (chi^2_B + alpha*chi^2_K) for each alpha
@@ -2092,6 +2098,7 @@ class FourierCurrentPotentialField(
             K_mag = jnp.linalg.norm(K, axis=-1)
             chi_K = jnp.sum(K_mag * K_mag * ns_mag * source_grid.weights)
             chi2Ks.append(chi_K)
+            K_mags.append(K_mag)
             if verbose > 1:
                 printstring = f"chi^2 B = {chi_B:1.5e}"
                 print(printstring)
@@ -2215,6 +2222,7 @@ class FourierCurrentPotentialField(
         data["G"] = G
         data["chi^2_B"] = chi2Bs[0] if not scan else chi2Bs
         data["chi^2_K"] = chi2Ks[0] if not scan else chi2Ks
+        data["|K|"] = K_mags[0] if not scan else K_mags
 
         self.Phi_mn = phi_mns[0]
 

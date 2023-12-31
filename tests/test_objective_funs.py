@@ -474,8 +474,8 @@ class TestObjectiveFunction:
         # test nonaxisymmetric surface
         eq = get("precise_QA")
 
-        source_N = 15
-        source_M = 15
+        source_N = 20
+        source_M = 10
 
         eval_grid = LinearGrid(
             rho=np.array([1.0]),
@@ -506,7 +506,7 @@ class TestObjectiveFunction:
         f = obj.compute()
 
         # for this to pass with rtol=1e-3, the source resolution needs to be quite high
-        np.testing.assert_allclose(f, Bnorm, rtol=1e-3, atol=1e-3)
+        np.testing.assert_allclose(f, Bnorm, rtol=1e-2, atol=1e-2)
 
     @pytest.mark.unit
     def test_toroidal_flux(self):

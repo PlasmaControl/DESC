@@ -463,7 +463,7 @@ class TestObjectiveFunction:
         """Test calculation of quadratic flux on the boundary."""
         t_field = ToroidalMagneticField(1, 1)
 
-        # test that torus Bnorm is exactly 0
+        # test that torus (axisymmetric) Bnorm is exactly 0
         eq = Equilibrium()
         eq.solve()
         obj = QuadraticFlux(t_field, eq)
@@ -471,11 +471,11 @@ class TestObjectiveFunction:
         f = obj.compute()
         np.testing.assert_allclose(f, 0)
 
-        # nonaxisymmetric surface
+        # test nonaxisymmetric surface
         eq = get("precise_QA")
 
-        source_N = 8
-        source_M = 8
+        source_N = 15
+        source_M = 15
 
         eval_grid = LinearGrid(
             rho=np.array([1.0]),
@@ -505,8 +505,8 @@ class TestObjectiveFunction:
         obj.build(eq, verbose=0)
         f = obj.compute()
 
-        indices = eval_grid.unique_zeta_idx
-        np.testing.assert_allclose(f[indices], Bnorm[indices], atol=1e-3)
+        # for this to pass with rtol=1e-3, the source resolution needs to be quite high
+        np.testing.assert_allclose(f, Bnorm, rtol=1e-3, atol=1e-3)
 
     @pytest.mark.unit
     def test_toroidal_flux(self):

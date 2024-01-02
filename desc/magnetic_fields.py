@@ -392,6 +392,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
         assert (
             np.isscalar(scale) or np.asarray(scale).size == 1
         ), "scale must be a scalar value"
+        scale = float(scale)
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(

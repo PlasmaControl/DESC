@@ -1944,7 +1944,7 @@ class FourierCurrentPotentialField(
         if source_grid is None:
             source_grid = LinearGrid(M=30, N=30, NFP=self.NFP)
         if eval_grid is None:
-            eval_grid = LinearGrid(M=30, N=30, NFP=self.NFP)
+            eval_grid = LinearGrid(M=30, N=30, NFP=self.NFP, sym=eq.sym)
 
         # plasma surface normal vector magnitude on eval grid
         ne_mag = eq.compute(["|e_theta x e_zeta|"], eval_grid)["|e_theta x e_zeta|"]
@@ -1952,13 +1952,12 @@ class FourierCurrentPotentialField(
         ns_mag = self.compute(["|e_theta x e_zeta|"], source_grid)["|e_theta x e_zeta|"]
 
         # change self basis to match desired resolution
+        # TODO: allow cos for this as well?
         sym_Phi = "sin" if eq.sym else False
         self.change_Phi_resolution(M=M_Phi, N=N_Phi, sym_Phi=sym_Phi)
 
         # calculate net enclosed poloidal and toroidal currents
-        G_tot = -(
-            eq.compute("G", grid=source_grid)["G"][0] / mu_0 * 2 * jnp.pi
-        )  # poloidal
+        G_tot = -(eq.compute("G", grid=source_grid)["G"][0] / mu_0 * 2 * jnp.pi)
 
         if external_field:
             # calculate the portion of G provided by external field

@@ -9,18 +9,13 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._free_boundary import (
-    BoundaryErrorBIEST,
-    BoundaryErrorBIESTSC,
-    BoundaryErrorNESTOR,
-    QuadraticFlux,
-    ToroidalFlux,
-)
-from ._generic import GenericObjective, ObjectiveFromUser
+from ._free_boundary import BoundaryError, BoundaryErrorNESTOR, VacuumBoundaryError
+from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
     BScaleLength,
     Elongation,
+    GoodCoordinates,
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,

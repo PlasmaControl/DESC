@@ -6,7 +6,7 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import jit, jnp, tree_stack, tree_unstack, vmap
+from desc.backend import jit, jnp, scan, tree_stack, tree_unstack, vmap
 from desc.compute import get_params, rpz2xyz, xyz2rpz_vec
 from desc.geometry import (
     FourierPlanarCurve,
@@ -16,7 +16,7 @@ from desc.geometry import (
 )
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
-from desc.optimizable import Optimizable, optimizable_parameter
+from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.utils import equals, errorif, flatten_list
 
 
@@ -710,7 +710,7 @@ def _check_type(coil0, coil):
         )
 
 
-class CoilSet(_Coil, MutableSequence):
+class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     """Set of coils of different geometry but shared parameterization and resolution.
 
     Parameters
@@ -855,11 +855,15 @@ class CoilSet(_Coil, MutableSequence):
             for par, coil in zip(params, self):
                 par["current"] = coil.current
 
-        B = vmap(
-            lambda x: self[0].compute_magnetic_field(
+        coords = jnp.atleast_2d(coords)
+
+        def body(B, x):
+            B += self[0].compute_magnetic_field(
                 coords, params=x, basis=basis, grid=grid
             )
-        )(tree_stack(params)).sum(axis=0)
+            return B, None
+
+        B = scan(body, jnp.zeros(coords.shape), tree_stack(params))[0]
 
         return B
 

@@ -38,9 +38,28 @@ class _FixedObjective(_Objective):
         if self._use_jit:
             self.jit()
 
+    def _parse_target_from_user(
+        self, target_from_user, default_target, default_bounds, idx
+    ):
+        if target_from_user is None:
+            target = default_target
+            bounds = default_bounds
+        elif isinstance(target_from_user, tuple) and (
+            len(target_from_user) == 2
+        ):  # treat as bounds
+            target = None
+            bounds = (
+                np.broadcast_to(target_from_user[0], self._dim_f).copy()[idx],
+                np.broadcast_to(target_from_user[1], self._dim_f).copy()[idx],
+            )
+        else:
+            target = np.broadcast_to(target_from_user, self._dim_f).copy()[idx]
+            bounds = None
+        return target, bounds
+
 
 # TODO: make this work with above, but for multiple target args?
-class FixParameter(_Objective):
+class FixParameter(_FixedObjective):
     """Fix specific degrees of freedom associated with a given Optimizable object.
 
     Parameters
@@ -148,14 +167,24 @@ class FixParameter(_Objective):
                 idx = np.arange(thing.dimensions[par])
             indices[par] = np.atleast_1d(idx)
         self._indices = indices
-
-        target = setdefault(
-            self._target_from_user,
-            {par: thing.params_dict[par][self._indices[par]] for par in params},
-        )
         self._dim_f = sum(t.size for t in self._indices.values())
-        self.target = jnp.concatenate([target[par] for par in params])
 
+        default_target = {
+            par: thing.params_dict[par][self._indices[par]] for par in params
+        }
+        default_bounds = None
+        target, bounds = self._parse_target_from_user(
+            self._target_from_user, default_target, default_bounds, indices
+        )
+        if target:
+            self.target = jnp.concatenate([target[par] for par in params])
+            self.bounds = None
+        else:
+            self.target = None
+            self.bounds = (
+                jnp.concatenate([bounds[0][par] for par in params]),
+                jnp.concatenate([bounds[1][par] for par in params]),
+            )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -604,7 +633,7 @@ class FixBoundaryR(_FixedObjective):
         name="lcfs R",
     ):
         self._modes = modes
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         self._surface_label = surface_label
         super().__init__(
             things=eq,
@@ -631,9 +660,11 @@ class FixBoundaryR(_FixedObjective):
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
+            modes_idx = idx
         elif self._modes is True:  # all modes
             modes = eq.surface.R_basis.modes
             idx = np.arange(eq.surface.R_basis.num_modes)
+            modes_idx = idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
@@ -660,23 +691,12 @@ class FixBoundaryR(_FixedObjective):
                 )
 
         self._dim_f = idx.size
-        if self._target_from_user is not None:
-            if self._modes is True or self._modes is False:
-                raise RuntimeError(
-                    "Attempting to provide target for R boundary modes without "
-                    + "providing modes array!"
-                    + "You must pass in the modes corresponding to the"
-                    + "provided target"
-                )
-            # rearrange given target to match modes order
-            self.target = self._target_from_user[modes_idx]
-
         # Rb_lmn -> Rb optimization space
         self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
-        # use surface parameters as target if needed
-        if self._target_from_user is None:
-            self.target = eq.surface.R_lmn[idx]
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.surface.R_lmn[idx], None, modes_idx
+        )
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -760,7 +780,7 @@ class FixBoundaryZ(_FixedObjective):
         name="lcfs Z",
     ):
         self._modes = modes
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         self._surface_label = surface_label
         super().__init__(
             things=eq,
@@ -787,9 +807,11 @@ class FixBoundaryZ(_FixedObjective):
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
+            modes_idx = idx
         elif self._modes is True:  # all modes
             modes = eq.surface.Z_basis.modes
             idx = np.arange(eq.surface.Z_basis.num_modes)
+            modes_idx = idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
@@ -816,23 +838,12 @@ class FixBoundaryZ(_FixedObjective):
                 )
 
         self._dim_f = idx.size
-        if self._target_from_user is not None:
-            if self._modes is True or self._modes is False:
-                raise RuntimeError(
-                    "Attempting to provide target for Z boundary modes without "
-                    + "providing modes array!"
-                    + "You must pass in the modes corresponding to the"
-                    + "provided target"
-                )
-            # rearrange given target to match modes order
-            self.target = self._target_from_user[modes_idx]
-
         # Zb_lmn -> Zb optimization space
         self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 
-        # use surface parameters as target if needed
-        if self._target_from_user is None:
-            self.target = eq.surface.Z_lmn[idx]
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.surface.Z_lmn[idx], None, modes_idx
+        )
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -1069,7 +1080,7 @@ class FixAxisR(_FixedObjective):
         name="axis R",
     ):
         self._modes = modes
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
             target=target,
@@ -1096,9 +1107,11 @@ class FixAxisR(_FixedObjective):
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
+            modes_idx = idx
         elif self._modes is True:  # all modes
             modes = eq.axis.R_basis.modes
             idx = np.arange(eq.axis.R_basis.num_modes)
+            modes_idx = idx
         else:  # specified modes
             modes = np.atleast_1d(self._modes)
             dtype = {
@@ -1125,23 +1138,12 @@ class FixAxisR(_FixedObjective):
                 )
 
         self._dim_f = idx.size
-        if self._target_from_user is not None:
-            if self._modes is True or self._modes is False:
-                raise RuntimeError(
-                    "Attempting to provide target for R axis modes without "
-                    + "providing modes array!"
-                    + "You must pass in the modes corresponding to the"
-                    + "provided target"
-                )
-            # rearrange given target to match modes order
-            self.target = self._target_from_user[modes_idx]
-
         # Ra_lmn -> Ra optimization space
         self._A = np.eye(eq.axis.R_basis.num_modes)[idx, :]
 
-        # use surface parameters as target if needed
-        if self._target_from_user is None:
-            self.target = eq.axis.R_n[idx]
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.axis.R_n[idx], None, modes_idx
+        )
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -1217,7 +1219,7 @@ class FixAxisZ(_FixedObjective):
         name="axis Z",
     ):
         self._modes = modes
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
             target=target,
@@ -1244,9 +1246,11 @@ class FixAxisZ(_FixedObjective):
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
+            modes_idx = idx
         elif self._modes is True:  # all modes
             modes = eq.axis.Z_basis.modes
             idx = np.arange(eq.axis.Z_basis.num_modes)
+            modes_idx = idx
         else:  # specified modes
             modes = np.atleast_1d(self._modes)
             dtype = {
@@ -1273,23 +1277,12 @@ class FixAxisZ(_FixedObjective):
                 )
 
         self._dim_f = idx.size
-        if self._target_from_user is not None:
-            if self._modes is True or self._modes is False:
-                raise RuntimeError(
-                    "Attempting to provide target for Z axis modes without "
-                    + "providing modes array!"
-                    + "You must pass in the modes corresponding to the"
-                    + "provided target"
-                )
-            # rearrange given target to match modes order
-            self.target = self._target_from_user[modes_idx]
-
-        # Ra_lmn -> Ra optimization space
+        # Za_lmn -> Za optimization space
         self._A = np.eye(eq.axis.Z_basis.num_modes)[idx, :]
 
-        # use surface parameters as target if needed
-        if self._target_from_user is None:
-            self.target = eq.axis.Z_n[idx]
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.axis.Z_n[idx], None, modes_idx
+        )
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -1368,9 +1361,9 @@ class FixModeR(_FixedObjective):
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
-                f"modes kwarg must be specified or True with FixModeR! got {modes}"
+                f"modes kwarg must be specified or True with FixModeR got {modes}"
             )
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
             target=target,
@@ -1420,18 +1413,9 @@ class FixModeR(_FixedObjective):
 
         self._dim_f = modes_idx.size
 
-        # use current eq's coefficients as target if needed
-        if self._target_from_user is None:
-            self.target = eq.R_lmn[self._idx]
-        else:  # rearrange given target to match modes order
-            if self._modes is True or self._modes is False:
-                raise RuntimeError(
-                    "Attempting to provide target for R fixed modes without "
-                    + "providing modes array!"
-                    + "You must pass in the modes corresponding to the"
-                    + "provided target modes"
-                )
-            self.target = self._target_from_user[modes_idx]
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.R_lmn[idx], None, modes_idx
+        )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1506,9 +1490,9 @@ class FixModeZ(_FixedObjective):
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
-                f"modes kwarg must be specified or True with FixModeZ! got {modes}"
+                f"modes kwarg must be specified or True with FixModeZ got {modes}"
             )
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
             target=target,
@@ -1558,18 +1542,9 @@ class FixModeZ(_FixedObjective):
 
         self._dim_f = modes_idx.size
 
-        # use current eq's coefficients as target if needed
-        if self._target_from_user is None:
-            self.target = eq.Z_lmn[self._idx]
-        else:  # rearrange given target to match modes order
-            if self._modes is True or self._modes is False:
-                raise RuntimeError(
-                    "Attempting to provide target for Z fixed modes without "
-                    + "providing modes array!"
-                    + "You must pass in the modes corresponding to the"
-                    + "provided target modes"
-                )
-            self.target = self._target_from_user[modes_idx]
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.Z_lmn[idx], None, modes_idx
+        )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1645,7 +1620,7 @@ class FixModeLambda(_FixedObjective):
         if modes is None or modes is False:
             raise ValueError(
                 "modes kwarg must be specified"
-                + f" or True with FixModeLambda! got {modes}"
+                + f" or True with FixModeLambda got {modes}"
             )
         self._target_from_user = target
         super().__init__(
@@ -1697,18 +1672,9 @@ class FixModeLambda(_FixedObjective):
 
         self._dim_f = modes_idx.size
 
-        # use current eq's coefficients as target if needed
-        if self._target_from_user is None:
-            self.target = eq.L_lmn[self._idx]
-        else:  # rearrange given target to match modes order
-            if self._modes is True or self._modes is False:
-                raise RuntimeError(
-                    "Attempting to provide target for lambda fixed modes without "
-                    + "providing modes array!"
-                    + "You must pass in the modes corresponding to the"
-                    + "provided target modes"
-                )
-            self.target = self._target_from_user[modes_idx]
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.L_lmn[idx], None, modes_idx
+        )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1755,7 +1721,7 @@ class FixSumModesR(_FixedObjective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    sum_weight : float, ndarray, optional
+    sum_weights : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
     modes : ndarray, optional
@@ -1785,20 +1751,29 @@ class FixSumModesR(_FixedObjective):
         modes=True,
         name="Fix Sum Modes R",
     ):
+
+        errorif(
+            modes is None or modes is False,
+            ValueError,
+            f"modes kwarg must be specified or True with FixSumModesR got {modes}",
+        )
+        errorif(
+            target is not None and np.asarray(target).size > 1,
+            ValueError,
+            "FixSumModesR only accepts 1 target value, please use multiple"
+            + " FixSumModesR objectives if you wish to have multiple"
+            + " sets of constrained mode sums",
+        )
+        errorif(
+            bounds is not None and np.asarray(bounds)[0].size > 1,
+            ValueError,
+            "FixSumModesR only accepts 1 target value, please use multiple"
+            + " FixSumModesR objectives if you wish to have multiple"
+            + " sets of constrained mode sums",
+        )
         self._modes = modes
-        if modes is None or modes is False:
-            raise ValueError(
-                f"modes kwarg must be specified or True with FixSumModesR! got {modes}"
-            )
         self._sum_weights = sum_weights
-        if target is not None:
-            if target.size > 1:
-                raise ValueError(
-                    "FixSumModesR only accepts 1 target value, please use multiple"
-                    + " FixSumModesR objectives if you wish to have multiple"
-                    + " sets of constrained mode sums!"
-                )
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
             target=target,
@@ -1862,9 +1837,12 @@ class FixSumModesR(_FixedObjective):
             j = eq.R_basis.get_idx(L=l, M=m, N=n)
             self._A[0, j] = sum_weights[i]
 
-        # use current sum as target if needed
-        if self._target_from_user is None:
-            self.target = np.dot(sum_weights.T, eq.R_lmn[self._idx])
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user,
+            np.dot(sum_weights.T, eq.R_lmn[self._idx]),
+            None,
+            np.array([0]),
+        )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1911,7 +1889,7 @@ class FixSumModesZ(_FixedObjective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    sum_weight : float, ndarray, optional
+    sum_weights : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
     modes : ndarray, optional
@@ -1941,20 +1919,28 @@ class FixSumModesZ(_FixedObjective):
         modes=True,
         name="Fix Sum Modes Z",
     ):
+        errorif(
+            modes is None or modes is False,
+            ValueError,
+            f"modes kwarg must be specified or True with FixSumModesZ got {modes}",
+        )
+        errorif(
+            target is not None and np.asarray(target).size > 1,
+            ValueError,
+            "FixSumModesZ only accepts 1 target value, please use multiple"
+            + " FixSumModesZ objectives if you wish to have multiple"
+            + " sets of constrained mode sums",
+        )
+        errorif(
+            bounds is not None and np.asarray(bounds)[0].size > 1,
+            ValueError,
+            "FixSumModesZ only accepts 1 target value, please use multiple"
+            + " FixSumModesZ objectives if you wish to have multiple"
+            + " sets of constrained mode sums",
+        )
         self._modes = modes
-        if modes is None or modes is False:
-            raise ValueError(
-                f"modes kwarg must be specified or True with FixSumModesZ! got {modes}"
-            )
         self._sum_weights = sum_weights
-        if target is not None:
-            if target.size > 1:
-                raise ValueError(
-                    "FixSumModesZ only accepts 1 target value, please use multiple"
-                    + " FixSumModesZ objectives if you wish to have multiple sets of"
-                    + " constrained mode sums!"
-                )
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
             target=target,
@@ -2019,10 +2005,12 @@ class FixSumModesZ(_FixedObjective):
             j = eq.Z_basis.get_idx(L=l, M=m, N=n)
             self._A[0, j] = sum_weights[i]
 
-        # use current sum as target if needed
-        if self._target_from_user is None:
-            self.target = np.dot(sum_weights.T, eq.Z_lmn[self._idx])
-
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user,
+            np.dot(sum_weights.T, eq.Z_lmn[self._idx]),
+            None,
+            np.array([0]),
+        )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -2101,22 +2089,28 @@ class FixSumModesLambda(_FixedObjective):
         modes=True,
         name="Fix Sum Modes lambda",
     ):
+        errorif(
+            modes is None or modes is False,
+            ValueError,
+            f"modes kwarg must be specified or True with FixSumModesLambda got {modes}",
+        )
+        errorif(
+            target is not None and np.asarray(target).size > 1,
+            ValueError,
+            "FixSumModesLambda only accepts 1 target value, please use multiple"
+            + " FixSumModesLambda objectives if you wish to have multiple"
+            + " sets of constrained mode sums",
+        )
+        errorif(
+            bounds is not None and np.asarray(bounds)[0].size > 1,
+            ValueError,
+            "FixSumModesLambda only accepts 1 target value, please use multiple"
+            + " FixSumModesLambda objectives if you wish to have multiple"
+            + " sets of constrained mode sums",
+        )
         self._modes = modes
-        if modes is None or modes is False:
-            raise ValueError(
-                "modes kwarg must be specified or True with"
-                + f" FixSumModesLambda! got {modes}"
-            )
         self._sum_weights = sum_weights
-        if target is not None:
-            if target.size > 1:
-                raise ValueError(
-                    "FixSumModesLambda only accepts 1 target value, please use"
-                    + " multiple FixSumModesLambda objectives if you wish"
-                    + " to have multiple sets of"
-                    + " constrained mode sums!"
-                )
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
             target=target,
@@ -2181,9 +2175,12 @@ class FixSumModesLambda(_FixedObjective):
             j = eq.L_basis.get_idx(L=l, M=m, N=n)
             self._A[0, j] = sum_weights[i]
 
-        # use current sum as target if needed
-        if self._target_from_user is None:
-            self.target = np.dot(sum_weights.T, eq.L_lmn[self._idx])
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user,
+            np.dot(sum_weights.T, eq.L_lmn[self._idx]),
+            None,
+            np.array([0]),
+        )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -2259,7 +2256,7 @@ class _FixProfile(_FixedObjective, ABC):
     ):
         self._profile = profile
         self._indices = indices
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
             target=target,
@@ -2298,9 +2295,10 @@ class _FixProfile(_FixedObjective, ABC):
             self._idx = np.atleast_1d(self._indices)
 
         self._dim_f = self._idx.size
-        # use profile parameters as target if needed
-        if self._target_from_user is None:
-            self.target = self._profile.params[self._idx]
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, self._profile.params[self._idx], None, self._idx
+        )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -2430,9 +2428,9 @@ class FixAnisotropy(_FixProfile):
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -3187,7 +3185,7 @@ class FixPsi(_FixedObjective):
         normalize_target=True,
         name="fixed-Psi",
     ):
-        self._target_from_user = target
+        self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
             target=target,
@@ -3212,8 +3210,9 @@ class FixPsi(_FixedObjective):
         eq = self.things[0]
         self._dim_f = 1
 
-        if self._target_from_user is None:
-            self.target = eq.Psi
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.Psi, None, np.array([0])
+        )
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -3239,144 +3238,3 @@ class FixPsi(_FixedObjective):
 
         """
         return params["Psi"]
-
-
-class FixSurfaceCurrent(_FixedObjective):
-    """Fix surface current potential.
-
-    Parameters
-    ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    weight : float, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-    modes : ndarray, optional
-        Basis modes numbers [l,m,n] of boundary modes to fix.
-        len(target) = len(weight) = len(modes).
-        If True/False uses all/none of the profile modes.
-    name : str
-        Name of the objective function.
-
-    """
-
-    _target_arg = "IGPhi_mn"
-    _units = "(A)"
-    _print_value_fmt = "Fixed-Surface current error: {:10.3e} "
-
-    def __init__(
-        self,
-        eq=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        modes=True,
-        name="fixed-surface-current",
-    ):
-        self._modes = modes
-        self._target_from_user = target
-        super().__init__(
-            things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-        )
-
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-        elif self._modes is True:  # all modes
-            modes = eq.K_basis.modes
-            idx = np.arange(eq.K_basis.num_modes + 2)
-        else:  # specified modes
-            modes = np.atleast_2d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, idx, modes_idx = np.intersect1d(
-                eq.K_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            # rearrange modes to match order of eq.surface.R_basis.modes
-            # and eq.surface.R_lmn,
-            # necessary so that the A matrix rows match up with the target b
-            modes = np.atleast_2d(eq.K_basis.modes[idx, :])
-
-            if idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the surface current, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._idx = idx
-        self._dim_f = idx.size
-        if self._target_from_user is not None:
-            if self._modes is True or self._modes is False:
-                raise RuntimeError(
-                    "Attempting to provide target for Surface current modes without "
-                    + "providing modes array!"
-                    + "You must pass in the modes corresponding to the"
-                    + "provided target"
-                )
-            # rearrange given target to match modes order
-            self.target = self._target_from_user[modes_idx]
-
-        # use surface parameters as target if needed
-        if self._target_from_user is None:
-            self.target = eq.IGPhi_mn[idx]
-
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["J"]
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute fixed-pressure profile errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Surface current errors (A).
-
-        """
-        return params["IGPhi_mn"][self._idx]

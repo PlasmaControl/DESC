@@ -130,8 +130,9 @@ def _compute(
                 )
         # now compute the quantity
         data = data_index[parameterization][name]["fun"](
-            params, transforms, profiles, data, **kwargs
+            params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
+
     return data
 
 
@@ -367,20 +368,6 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c == "A":
-            transforms["A"] = Transform(
-                grid,
-                DoubleFourierSeries(
-                    M=obj.M,
-                    N=obj.N,
-                    NFP=obj.NFP,
-                    sym=False,
-                ),
-                derivs=derivs["A"],
-                build=True,
-                build_pinv=True,
-            )
-
         elif c not in transforms:
             transforms[c] = getattr(obj, c)
 
@@ -500,6 +487,48 @@ def cross(a, b, axis=-1):
 
     """
     return jnp.cross(a, b, axis=axis)
+
+
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+    """Like jnp.linalg.norm, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, ‘fro’, ‘nuc’}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    x = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = jnp.linalg.norm(x, ord=ord, axis=axis)
+    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    return n
+
+
+def safediv(a, b, fill=0, threshold=0):
+    """Divide a/b with guards for division by zero.
+
+    Parameters
+    ----------
+    a, b : ndarray
+        Numerator and denominator.
+    fill : float, ndarray, optional
+        Value to return where b is zero.
+    threshold : float >= 0
+        How small is b allowed to be.
+    """
+    mask = jnp.abs(b) <= threshold
+    num = jnp.where(mask, fill, a)
+    den = jnp.where(mask, 1, b)
+    return num / den
 
 
 def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):

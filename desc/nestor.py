@@ -1094,8 +1094,8 @@ class Nestor(IOAble):
         self.N = N
         self.ntheta = ntheta
         self.nzeta = nzeta
-        self.NFP = equil.NFP
-        self.sym = equil.sym
+        self.NFP = int(equil.NFP)
+        self.sym = False  # hard-coded for now, can be generalized later
         if self.sym:
             ntheta_sym = self.ntheta // 2 + 1
         else:

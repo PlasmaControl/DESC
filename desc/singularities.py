@@ -1,13 +1,57 @@
 """High order method for singular surface integrals, from Malhotra 2019."""
+from abc import ABC, abstractmethod
+
 import numpy as np
 import scipy
+from interpax import fft_interp2d
 
 from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec
-from desc.interpolate import fft_interp2d
 from desc.io import IOAble
 from desc.utils import isalmostequal, islinspaced
+
+
+def safediv(a, b, fill=0, threshold=0):
+    """Divide a/b with guards for division by zero.
+
+    Parameters
+    ----------
+    a, b : ndarray
+        Numerator and denominator.
+    fill : float, ndarray, optional
+        Value to return where b is zero.
+    threshold : float >= 0
+        How small is b allowed to be.
+    """
+    mask = jnp.abs(b) <= threshold
+    num = jnp.where(mask, fill, a)
+    den = jnp.where(mask, 1, b)
+    return num / den
+
+
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+    """Like jnp.linalg.norm, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, ‘fro’, ‘nuc’}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    x = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = jnp.linalg.norm(x, ord=ord, axis=axis)
+    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    return n
 
 
 def _get_quadrature_nodes(q):
@@ -28,7 +72,7 @@ def _get_quadrature_nodes(q):
     """
     Nr = Nw = q
     r, dr = scipy.special.roots_legendre(Nr)
-    # integrate seperately over [-1,0] and [0,1]
+    # integrate separately over [-1,0] and [0,1]
     r1 = 1 / 2 * r - 1 / 2
     r2 = 1 / 2 * r + 1 / 2
     r = jnp.concatenate([r1, r2])
@@ -44,7 +88,59 @@ def _get_quadrature_nodes(q):
     return r, w, dr, dw
 
 
-class FFTInterpolator(IOAble):
+class _BIESTInterpolator(IOAble, ABC):
+    """Base class for interpolators from cartesian to polar domain.
+
+    Used for singular integral calculations.
+
+    Parameters
+    ----------
+    eval_grid, src_grid : Grid
+        Evaluation and source points for the integral transform.
+        src_grid should be a LinearGrid
+    s : int
+        Extent of polar grid in number of src grid points. Same as "M" in the
+        original Malhotra papers.
+    q : int
+        Order of quadrature in polar domain
+
+    """
+
+    _io_attrs_ = ["_eval_grid", "_src_grid", "_q", "_s"]
+
+    @abstractmethod
+    def __init__(self, eval_grid, src_grid, s, q):
+        pass
+
+    @property
+    def s(self):
+        """int: Extent of polar grid in number of src grid points."""
+        return self._s
+
+    @property
+    def q(self):
+        """int: Order of quadrature in polar domain."""
+        return self._q
+
+    @abstractmethod
+    def __call__(self, f, i):
+        """Interpolate data to polar grid points.
+
+        Parameters
+        ----------
+        f : ndarray
+            Data at source grid points to interpolate.
+        i : int
+            Index of polar node.
+
+        Returns
+        -------
+        fi : ndarray
+            Source data interpolated to ith polar node.
+        """
+
+
+class FFTInterpolator(_BIESTInterpolator):
     """FFT interpolation operator required for high order singular integration.
 
     Parameters
@@ -60,9 +156,13 @@ class FFTInterpolator(IOAble):
 
     """
 
-    _io_attrs_ = ["_eval_grid", "_src_grid", "_h_t", "_h_z", "_st", "_sz", "_q", "_s"]
+    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_h_t", "_h_z", "_st", "_sz"]
 
     def __init__(self, eval_grid, src_grid, s, q):
+        # current fft interpolating can't handle symmetric grids correctly
+        assert not src_grid.sym, "fft interpolator requires non-symmetric grid"
+        assert not eval_grid.sym, "fft interpolator requires non-symmetric grid"
+
         # need src_grid to be linearly spaced in theta, zeta,
         # and contain only 1 rho value
         assert isalmostequal(
@@ -162,7 +262,7 @@ class FFTInterpolator(IOAble):
         return g.reshape((self._eval_grid.num_nodes, *shp), order="F")
 
 
-class DFTInterpolator(IOAble):
+class DFTInterpolator(_BIESTInterpolator):
     """Fourier interpolation matrix required for high order singular integration.
 
     Parameters
@@ -177,6 +277,8 @@ class DFTInterpolator(IOAble):
         Order of quadrature in polar domain
 
     """
+
+    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_mat"]
 
     def __init__(self, eval_grid, src_grid, s, q):
         # need src_grid to be linearly spaced in theta, zeta,
@@ -275,7 +377,7 @@ def _rho(theta, zeta, theta0, zeta0, dtheta, dzeta, s):
     return 2 / s * jnp.sqrt((dt / dtheta) ** 2 + (dz / dzeta) ** 2)
 
 
-def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
+def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=False):
     """Integrate kernel over non-singular points."""
     assert isinstance(src_grid.NFP, int)
     src_theta = src_grid.nodes[:, 1]
@@ -298,13 +400,16 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
 
         # nest this def to avoid having to pass the modified src_data around the loop
         # easier to just close over it and let JAX figure it out
-        def eval_pt_loop(i):
+        def eval_pt_vmap(i):
             # this calculates the effect at a single evaluation point, from all others
-            # in a single field period
+            # in a single field period. vmap this to get all pts
             k = kernel(
                 {key: val[i] for key, val in eval_data.items() if key in keys},
                 src_data,
             )
+            if kernel.ndim == 1:  # so that broadcasting works correctly
+                k = k[:, :, None]
+
             rho = _rho(
                 src_theta,
                 src_data["zeta"],  # to account for different field periods
@@ -314,15 +419,25 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
                 h_z,
                 s,
             )
-            if kernel.ndim == 1:  # so that broadcasting works correctly
-                k = k[:, :, None]
+
             eta = _chi(rho)
-            A = (1 - eta)[None, :, None] * k
-            f_temp = jnp.sum(A * w[None, :, None], axis=1)
+            k = (1 - eta)[None, :, None] * k
+            f_temp = jnp.sum(k * w[None, :, None], axis=1)
             return f_temp.squeeze()
 
-        # vmap for inner part found more efficient than fori_loop, especially on gpu
-        fj = vmap(eval_pt_loop)(jnp.arange(eval_grid.num_nodes))
+        def eval_pt_loop(i, fj):
+            # this calculates the effect at a single evaluation point, from all others
+            # in a single field period. loop this to get all pts
+            f_temp = eval_pt_vmap(i)
+            return put(fj, i, f_temp.squeeze())
+
+        # vmap for inner part found more efficient than fori_loop, especially on gpu,
+        # but for jacobian looped seems to be better and less memory
+        if loop:
+            fj = fori_loop(0, eval_grid.num_nodes, eval_pt_loop, jnp.zeros_like(f))
+        else:
+            fj = vmap(eval_pt_vmap)(jnp.arange(eval_grid.num_nodes))
+
         f += fj
         return f, src_data
 
@@ -333,7 +448,15 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
 
 
 def _singular_part(
-    eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator
+    eval_data,
+    eval_grid,
+    src_data,
+    src_grid,
+    s,
+    q,
+    kernel,
+    interpolator,
+    loop=False,
 ):
     """Integrate singular point by interpolating to polar grid."""
     src_dtheta = src_grid.spacing[:, 1]
@@ -348,11 +471,10 @@ def _singular_part(
 
     eta = _chi(r)
     v = eta * s**2 * h_t * h_z / 4 * abs(r) * dr * dw
-
     keys = list(set(["|e_theta x e_zeta|"] + kernel.keys))
     fsrc = [src_data[key] for key in keys]
 
-    def polar_pt_loop(i):
+    def polar_pt_vmap(i):
         # evaluate the effect from a single polar node around each singular point
         # on that singular point. Polar grids from other singularities have no effect
         dt = s / 2 * h_t * r[i] * jnp.sin(w[i])
@@ -380,12 +502,30 @@ def _singular_part(
         fi = k * dS
         return fi
 
-    # vmap found more efficient than fori_loop, esp on gpu
-    return vmap(polar_pt_loop)(jnp.arange(v.size)).sum(axis=0)
+    def polar_pt_loop(i, f):
+        # this calculates the effect at a single evaluation point, from all others
+        # in a single field period. loop this to get all pts
+        f_temp = polar_pt_vmap(i)
+        return f + f_temp.squeeze()
+
+    f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
+    # vmap found more efficient than fori_loop, esp on gpu, but uses more memory
+    if loop:
+        f = fori_loop(0, v.size, polar_pt_loop, f)
+    else:
+        f = vmap(polar_pt_vmap)(jnp.arange(v.size)).sum(axis=0)
+
+    return f
 
 
 def singular_integral(
-    eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator
+    eval_data,
+    eval_grid,
+    src_data,
+    src_grid,
+    kernel,
+    interpolator,
+    loop=False,
 ):
     """Evaluate a singular integral transform on a surface.
 
@@ -404,16 +544,11 @@ def singular_integral(
     src_grid : LinearGrid
         Source points for integral (eg primed coordinates). Should be linearly spaced
         rectangular grid in both theta, zeta.
-    s : int
-        Extent of polar grid in number of src grid points. Same as "M" in the
-        original Malhotra papers.
-    q : int
-        Order of quadrature in polar domain.
     kernel : str or callable
         Kernel function to evaluate. Should take 3 arguments:
             eval_data : dict of data at evaluation points
             src_data : dict of data at source points
-            diag : boolean, whether to evaluate full cross interations or just diagonal
+            diag : boolean, whether to evaluate full cross interactions or just diagonal
         If a callable, should also have the attributes ``ndim`` and ``keys`` defined.
         ``ndim`` is an integer representing the dimensionality of the output function f,
         1 if f is scalar, 3 if f is a vector, etc.
@@ -424,6 +559,9 @@ def singular_integral(
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
         ``DFTInterpolator``
+    loop : bool
+        If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
+        less memory.
 
     Returns
     -------
@@ -439,10 +577,12 @@ def singular_integral(
     if isinstance(kernel, str):
         kernel = kernels[kernel]
 
+    s, q = interpolator.s, interpolator.q
+
     out2 = _singular_part(
-        eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator
+        eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator, loop
     )
-    out1 = _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel)
+    out1 = _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop)
     return out1 + out2
 
 
@@ -460,8 +600,8 @@ def _kernel_nr_over_r3(eval_data, src_data, diag=False):
         dx = eval_x[:, None] - src_x[None]
     n = rpz2xyz_vec(src_data["e^rho"], phi=src_data["zeta"])
     n = n / jnp.linalg.norm(n, axis=-1)[:, None]
-    r = jnp.linalg.norm(dx, axis=-1)
-    return jnp.where(r < np.finfo(r.dtype).eps, 0, jnp.sum(n * dx, axis=-1) / r**3)
+    r = safenorm(dx, axis=-1)
+    return safediv(jnp.sum(n * dx, axis=-1), r**3)
 
 
 _kernel_nr_over_r3.ndim = 1
@@ -480,8 +620,8 @@ def _kernel_1_over_r(eval_data, src_data, diag=False):
         dx = eval_x - src_x
     else:
         dx = eval_x[:, None] - src_x[None]
-    r = jnp.linalg.norm(dx, axis=-1)
-    return jnp.where(r < np.finfo(r.dtype).eps, 0, 1 / r)
+    r = safenorm(dx, axis=-1)
+    return safediv(1, r)
 
 
 _kernel_1_over_r.ndim = 1
@@ -502,12 +642,12 @@ def _kernel_biot_savart(eval_data, src_data, diag=False):
         dx = eval_x[:, None] - src_x[None]
     K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["zeta"])
     num = jnp.cross(K, dx, axis=-1)
-    r = jnp.linalg.norm(dx, axis=-1)
+    r = safenorm(dx, axis=-1)
     if diag:
         r = r[:, None]
     else:
         r = r[:, :, None]
-    return 1e-7 * jnp.where(r < np.finfo(r.dtype).eps, 0, num / (r * r * r))
+    return 1e-7 * safediv(num, r**3)
 
 
 _kernel_biot_savart.ndim = 3
@@ -527,12 +667,12 @@ def _kernel_biot_savart_A(eval_data, src_data, diag=False):
     else:
         dx = eval_x[:, None] - src_x[None]
     K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["zeta"])
-    r = jnp.linalg.norm(dx, axis=-1)
+    r = safenorm(dx, axis=-1)
     if diag:
         r = r[:, None]
     else:
         r = r[:, :, None]
-    return 1e-7 * jnp.where(r < np.finfo(r.dtype).eps, 0, K / r)
+    return 1e-7 * safediv(K, r)
 
 
 _kernel_biot_savart_A.ndim = 3
@@ -545,3 +685,46 @@ kernels = {
     "biot_savart": _kernel_biot_savart,
     "biot_savart_A": _kernel_biot_savart_A,
 }
+
+
+def virtual_casing_biot_savart(
+    eval_data, eval_grid, src_data, src_grid, interpolator, loop=True
+):
+    """Evaluate magnetic field on surface due to sheet current on surface.
+
+    Parameters
+    ----------
+    eval_data : dict
+        Dictionary of data at evaluation points. Keys should be those required by
+        kernel as kernel.keys
+    eval_grid : Grid
+        Points where integral transform is to be evaluated (eg unprimed coordinates).
+    src_data : dict
+        Dictionary of data at source points. Keys should be those required by
+        kernel as kernel.keys
+    src_grid : LinearGrid
+        Source points for integral (eg primed coordinates). Should be linearly spaced
+        rectangular grid in both theta, zeta.
+    interpolator : callable
+        Function to interpolate from rectangular source grid to polar
+        source grid around each singular point. See ``FFTInterpolator`` or
+        ``DFTInterpolator``
+    loop : bool
+        If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
+        less memory.
+
+    Returns
+    -------
+    f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
+        Integral transform evaluated at eval_grid.
+
+    """
+    return singular_integral(
+        eval_data,
+        eval_grid,
+        src_data,
+        src_grid,
+        _kernel_biot_savart,
+        interpolator,
+        loop,
+    )

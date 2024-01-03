@@ -47,6 +47,7 @@ from desc.objectives import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
+    SurfaceCurrentRegularizedQuadraticFlux,
     Volume,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
@@ -1300,15 +1301,23 @@ def test_regcoil_ellipse_helical_coils():
     """Test elliptical eq and circular winding surf helical coil regcoil solution."""
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
+    M_Phi = 8
+    N_Phi = 8
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 40
+    N_sgrid = 80
+    alpha = 1e-18
+
     (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
-        basis_M=8,
-        basis_N=8,
+        basis_M=M_Phi,
+        basis_N=N_Phi,
         eqname=eq,
-        eval_grid_M=20,
-        eval_grid_N=20,
-        source_grid_M=40,
-        source_grid_N=80,
-        alpha=1e-18,
+        eval_grid_M=M_egrid,
+        eval_grid_N=N_egrid,
+        source_grid_M=M_sgrid,
+        source_grid_N=N_sgrid,
+        alpha=alpha,
         helicity_ratio=-2,
     )
     assert np.all(chi_B < 1e-5)
@@ -1366,6 +1375,52 @@ def test_regcoil_ellipse_helical_coils():
 
     B_ratio = calc_BNORM_from_coilset(coilset2, eqname, 0, 1, B0=None, save=False)
     np.testing.assert_allclose(B_ratio, 1.0, atol=1e-3)
+
+    # check against the objective method of running REGCOIL
+
+    surface_current_field2 = surface_current_field.copy()
+    surface_current_field2.change_Phi_resolution(M=M_Phi, N=N_Phi, sym_Phi="sin")
+    surface_current_field2.Phi_mn = np.zeros_like(surface_current_field2.Phi_mn)
+
+    constraints = (  # now fix all but Phi_mn
+        FixParameter(surface_current_field2, params=["I", "G", "R_lmn", "Z_lmn"]),
+    )
+
+    eval_grid = LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True)
+    sgrid = LinearGrid(
+        M=M_sgrid,
+        N=N_sgrid,
+        NFP=eq.NFP,
+    )
+    obj = SurfaceCurrentRegularizedQuadraticFlux(
+        surface_current_field=surface_current_field2,
+        eq=eq,
+        eval_grid=eval_grid,
+        source_grid=sgrid,
+        alpha=1e-18,
+        eq_fixed=True,
+    )
+    optimizer = Optimizer("lsq-exact")
+
+    objective = ObjectiveFunction(obj)
+    (surface_current_field2,), result = optimizer.optimize(
+        (surface_current_field2,),
+        objective,
+        constraints,
+        verbose=1,
+        maxiter=1,
+        ftol=0,
+        gtol=0,
+        xtol=1e-16,
+        options={"initial_trust_radius": np.inf},
+    )
+
+    np.testing.assert_allclose(
+        surface_current_field2.Phi_mn,
+        surface_current_field.Phi_mn,
+        rtol=1e-5,
+        atol=1e-13,
+    )
 
 
 @pytest.mark.regression

@@ -1383,7 +1383,7 @@ def test_regcoil_ellipse_helical_coils():
     surface_current_field2.Phi_mn = np.zeros_like(surface_current_field2.Phi_mn)
 
     constraints = (  # now fix all but Phi_mn
-        FixParameter(surface_current_field, params=["I", "G", "R_lmn", "Z_lmn"]),
+        FixParameter(surface_current_field2, params=["I", "G", "R_lmn", "Z_lmn"]),
     )
 
     eval_grid = LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True)
@@ -1404,7 +1404,7 @@ def test_regcoil_ellipse_helical_coils():
 
     objective = ObjectiveFunction(obj)
     (surface_current_field2,), result = optimizer.optimize(
-        surface_current_field2,
+        (surface_current_field2,),
         objective,
         constraints,
         verbose=1,

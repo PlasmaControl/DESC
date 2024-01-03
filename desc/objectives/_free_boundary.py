@@ -14,6 +14,7 @@ from desc.objectives.objective_funs import _Objective
 from desc.singularities import (
     DFTInterpolator,
     FFTInterpolator,
+    singular_integral,
     virtual_casing_biot_savart,
 )
 from desc.utils import Timer, errorif, warnif
@@ -761,13 +762,11 @@ class QuadraticFlux(_Objective):
         )
 
         # don't need extra B/2 since we only care about normal component
-        Bplasma = -virtual_casing_biot_savart(
+        Bplasma = -singular_integral(
             eval_data,
             eval_grid,
             src_data,
             src_grid,
-            self._s,
-            self._q,
             "biot_savart",
             interpolator,
         )

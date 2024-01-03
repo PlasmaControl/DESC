@@ -622,11 +622,15 @@ class QuadraticFlux(_Objective):
         Hyperparameters for singular integration scheme, s is roughly equal to the size
         of the local singular grid with respect to the global grid, q is the order of
         integration on the local grid
-    src_grid, eval_grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at for source terms and where
+    src_grid : Grid, optional
+        Collocation grid containing the nodes for plasma source terms and where
         to evaluate errors.
+    eval_grid : Grid, optional
+        Collocation grid containing the nodes at which the magnetic field is being
+        calculated and where to evaluate errors.
     field_grid : Grid, optional
-        Grid used to discretize ext_field.
+        Grid used to discretize ext_field (i.e. grid for the magnetic field source from
+        the coils).
     name : str
         Name of the objective function.
 
@@ -798,12 +802,16 @@ class QuadraticFlux(_Objective):
 
         Parameters
         ----------
-        params :
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
         f : ndarray
-            Bnorm
+            Bnorm from Bext and Bplasma
 
         """
         if constants is None:
@@ -820,10 +828,10 @@ class QuadraticFlux(_Objective):
             x, grid=self._field_grid, basis="rpz"
         )
 
-        Bnorm = jnp.sum(
+        f = jnp.sum(
             (Bext + constants["Bplasma"]) * constants["eval_data"]["n_rho"], axis=-1
         )
-        return Bnorm
+        return f
 
 
 class BoundaryErrorNESTOR(_Objective):

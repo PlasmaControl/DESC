@@ -8,6 +8,7 @@ import numpy as np
 from interpax import approx_df, interp2d, interp3d
 from netCDF4 import Dataset
 from scipy.constants import mu_0
+from scipy.optimize import brentq
 
 from desc.backend import fori_loop, jit, jnp, odeint, sign
 from desc.basis import DoubleFourierSeries
@@ -1830,6 +1831,7 @@ class FourierCurrentPotentialField(
         show_plots=False,
         sym_Phi=None,
         verbose=1,
+        target_Brms=None,
     ):
         """Runs regcoil algorithm to find the current potential for the surface.
 
@@ -1895,6 +1897,10 @@ class FourierCurrentPotentialField(
             by default False
         verbose : int, optional
             level of verbosity, if 0 will print nothing.
+        target_Brms : float
+            if provided, will root find on lambda until the desired target Brms
+            is found.
+            if target not found after a set amount of iterations, will return an error.
 
         Returns
         -------
@@ -2034,6 +2040,8 @@ class FourierCurrentPotentialField(
         if verbose > 0:
             timer.disp("Jacobian Calculation")
 
+        eq_surf_area = eq.compute("S")["S"]
+
         self.I = float(I)
         self.G = float(G)
         # find the normal field from the secular part of the current potential
@@ -2079,18 +2087,65 @@ class FourierCurrentPotentialField(
                 )
 
             # calculate Phi_mn
+            A_transpose_A = A.T @ A
             result = jnp.linalg.lstsq(
-                A.T @ A + alpha * jnp.eye(A.shape[1]), rhs, rcond=None
+                A_transpose_A + alpha * jnp.eye(A.shape[1]), rhs, rcond=None
             )
             phi_mn_opt = result[0]
             # TODO: do something with the residuals from lstsq?
-
-            phi_mns.append(phi_mn_opt)
 
             Bn_SV = A @ phi_mn_opt
             Bn_tot = Bn_SV + Bn_plasma + B_GI_normal + Bn_ext
 
             chi_B = jnp.sum(Bn_tot * Bn_tot * ne_mag * eval_grid.weights)
+            B_rms = jnp.sqrt(chi_B / eq_surf_area)
+
+            if target_Brms is not None:
+                # iterate over alpha with rootfind until
+                # we get the target we want
+                Bn_GI_and_ext_and_pl = Bn_plasma + B_GI_normal + Bn_ext
+
+                def f(alpha):
+                    result = jnp.linalg.lstsq(
+                        A_transpose_A + alpha * jnp.eye(A.shape[1]), rhs, rcond=None
+                    )
+                    phi_mn_opt = result[0]
+                    Bn_SV = A @ phi_mn_opt
+                    Bn_tot = Bn_SV + Bn_GI_and_ext_and_pl
+                    chi_B = jnp.sum(Bn_tot * Bn_tot * ne_mag * eval_grid.weights)
+                    B_rms = jnp.sqrt(chi_B / eq_surf_area)
+                    print(B_rms)
+                    return float(B_rms) - target_Brms
+
+                lower_bound_alpha = 0
+                upper_bound_alpha = 0
+                diff = B_rms - target_Brms
+                if diff > 0:  # we are above, set as upper bound
+                    while diff > 0:
+                        upper_bound_alpha = alpha
+                        alpha = alpha / 100
+                        diff = f(alpha)
+                    lower_bound_alpha = alpha
+                elif diff < 0:  # we are below, set as lower bound
+                    while diff < 0:
+                        lower_bound_alpha = alpha
+                        alpha = alpha * 100
+                        diff = f(alpha)
+                    upper_bound_alpha = alpha
+
+                alpha = brentq(
+                    f,
+                    lower_bound_alpha,
+                    upper_bound_alpha,
+                    xtol=lower_bound_alpha / 100,
+                )
+                result = jnp.linalg.lstsq(
+                    A_transpose_A + alpha * jnp.eye(A.shape[1]), rhs, rcond=None
+                )
+                phi_mn_opt = result[0]
+
+            phi_mns.append(phi_mn_opt)
+
             chi2Bs.append(chi_B)
 
             self.Phi_mn = phi_mn_opt

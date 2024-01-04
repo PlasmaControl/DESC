@@ -1027,7 +1027,6 @@ def test_regcoil_axisymmetric():
     )
     phi_mn_opt = surface_current_field.Phi_mn
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-16)
-    # FIXME: this used to be close to 0 down to 1e-26
     np.testing.assert_allclose(chi_B, 0, atol=1e-16)
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=1e-16

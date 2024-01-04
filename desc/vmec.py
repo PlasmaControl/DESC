@@ -1,5 +1,6 @@
 """Functions and classes for interfacing with VMEC equilibria."""
 
+import io
 import os
 import warnings
 
@@ -1308,12 +1309,12 @@ class VMECIO:
         Parameters
         ----------
         fname : str or path-like
-            filename of VMEC output file
+            Filename of VMEC output file.
 
         Returns
         -------
         vmec_data : dict
-            the VMEC data fields
+            The VMEC data fields.
 
         """
         file = Dataset(fname, mode="r")
@@ -1337,6 +1338,157 @@ class VMECIO:
             vmec_data["sym"] = True
 
         return vmec_data
+
+    @classmethod
+    def write_vmec_input(cls, eq, fname, header="", **kwargs):  # noqa: C901
+        """Write a VMEC input file for an equivalent DESC equilibrium.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium to write the input file for.
+        fname : str or path-like
+            Filename of VMEC input file.
+        header : str
+            Text to print at the top of the file.
+
+        Returns
+        -------
+        None
+
+        """
+        # open the file, unless its already open
+        if not isinstance(fname, io.IOBase):
+            f = open(fname, "w+")
+        else:
+            f = fname
+        f.seek(0)
+
+        f.write("! " + header + "\n")
+        f.write("&INDATA\n")
+
+        # free-boundary parameters (values are hard-coded for fixed-boundary solve)
+        f.write("!---- Free-Boundary Parameters ----\n")
+        f.write("  LFREEB = F\n")  # free-boundary?
+        f.write("  MGRID_FILE = 'none'\n")  # MGRID file name
+        f.write("  NVACSKIP = 5\n")  # how often to update vaccum solution
+
+        f.write("!---- Runtime Parameters ----\n")
+        # how often (in iterations) to print diagnostics
+        f.write("  NSTEP = {:3.0f}\n".format(kwargs.get("NITER", 250)))
+        # blending parameter from previous iteration [0, 1]
+        f.write("  DELT = {}\n".format(kwargs.get("DELT", 0.9)))
+        f.write("  NS_ARRAY =    ")  # number of flux surfaces
+        for ns in kwargs.get("NS_ARRAY", [17, 33, 65, 129]):
+            f.write("{:5.0f} ".format(ns))
+        f.write("\n  NITER_ARRAY = ")  # maximum number of iterations
+        for niter in kwargs.get("NITER_ARRAY", [1000, 2000, 4000, 10000]):
+            f.write("{:5.0f} ".format(niter))
+        f.write("\n  FTOL_ARRAY =  ")  # stopping tolerance
+        for ftol in kwargs.get("FTOL_ARRAY", [1e-9, 1e-10, 1e-11, 1e-12]):
+            f.write("{:5.0e} ".format(niter))
+        f.write("\n")
+
+        f.write("!---- Grid Parameters ----\n")
+        f.write("  LASYM = {}\n".format("T" if eq.sym else "F"))  # stellarator symmetry
+        f.write("  NFP = {:2.0f}\n".format(eq.NFP))  # number of field periods
+        # poloidal resolution
+        f.write("  MPOL = {:2.0f}\n".format(kwargs.get("MPOL", eq.M + 1)))
+        # toroidal resolution
+        f.write("  NTOR = {:2.0f}\n".format(kwargs.get("NTOR", eq.N)))
+        # total toroidal magnetic flux (Wb)
+        f.write("  PHIEDGE = {:+14.8e}\n".format(eq.Psi))
+
+        f.write("!---- Pressure Parameters ----\n")
+        f.write("  GAMMA = 0\n")  # pressure profile specified
+        f.write("  PRES_SCALE = {}\n".format(kwargs.get("PRES_SCALE", 1)))  # AM scale
+        f.write("  AM = ")  # pressure coefficients
+        for am in eq.pressure.params:
+            f.write("{:+14.8e} ".format(am))
+        f.write("\n  PMASS_TYPE = 'power_series'\n")
+
+        f.write("!---- Current/Iota Parameters ----\n")
+        if eq.current is None:
+            f.write("  NCURR = 0\n")  # rotational transform profile specified
+            f.write("  AI = ")  # iota coefficients
+            for ai in eq.iota.params:
+                f.write("{:+14.8e} ".format(ai))
+            f.write("\n  PIOTA_TYPE = 'power_series'\n")
+        else:
+            f.write("  NCURR = 1\n")  # current profile specified
+            f.write("  CURTOR = {}\n".format(kwargs.get("CURTOR", 1)))  # AC scale
+            f.write("  AC = ")  # current coefficients
+            for ac in eq.current.params:
+                f.write("{:+14.8e} ".format(ac))
+            f.write("\n  PCURR_TYPE = 'power_series'\n")
+
+        f.write("!---- Axis Parameters ----\n")
+        # R axis
+        idx = np.where(eq.R_basis.modes[:, 1] == 0)[0]
+        R0_n = np.zeros((2 * eq.N + 1,))
+        for k in idx:
+            (l, m, n) = eq.R_basis.modes[k, :]
+            R0_n[n + eq.N] += (-2 * (l // 2 % 2) + 1) * eq.R_lmn[k]
+        # Z axis
+        idx = np.where(eq.Z_basis.modes[:, 1] == 0)[0]
+        Z0_n = np.zeros((2 * eq.N + 1,))
+        for k in idx:
+            (l, m, n) = eq.Z_basis.modes[k, :]
+            Z0_n[n + eq.N] += (-2 * (l // 2 % 2) + 1) * eq.Z_lmn[k]
+        # R axis cosine coefficients
+        f.write("  RAXIS_CC = ")
+        for rac in R0_n[eq.N :]:
+            f.write("{:+14.8e} ".format(rac))
+        if eq.sym:
+            # R axis sine coefficients
+            f.write("\n  RAXIS_CS = {:+14.8e}".format(0))
+            for ras in -R0_n[0 : eq.N][::-1]:
+                f.write("{:+14.8e} ".format(ras))
+            # Z axis cosine coefficients
+            f.write("\n  ZAXIS_CC = ")
+            for zac in Z0_n[eq.N :]:
+                f.write("{:+14.8e} ".format(zac))
+        # Z axis sine coefficients
+        f.write("\n  ZAXIS_CS = {:+14.8e}".format(0))
+        for zas in -Z0_n[0 : eq.N][::-1]:
+            f.write("{:+14.8e} ".format(zas))
+        f.write("\n")
+
+        f.write("!---- Boundary Parameters ----\n")
+        # R boundary coefficients
+        M, N, RBS, RBC = ptolemy_identity_rev(
+            eq.surface.R_basis.modes[:, 1],
+            eq.surface.R_basis.modes[:, 2],
+            eq.surface.R_lmn,
+        )
+        # Z boundary coefficients
+        _, _, ZBS, ZBC = ptolemy_identity_rev(
+            eq.surface.Z_basis.modes[:, 1],
+            eq.surface.Z_basis.modes[:, 2],
+            eq.surface.Z_lmn,
+        )
+        if eq.sym:
+            for m, n, rbc, zbs in np.vstack(
+                (np.atleast_2d(M), np.atleast_2d(N), RBC, ZBS)
+            ).T:
+                f.write(
+                    f"  RBC({n:3.0f},{m:3.0f}) = {rbc:+14.8e}"
+                    + f"  ZBS({n:3.0f},{m:3.0f}) = {zbs:+14.8e}\n"
+                )
+        else:
+            for m, n, rbc, rbs, zbc, zbs in np.vstack(
+                (np.atleast_2d(M), np.atleast_2d(N), RBC, RBS, ZBC, ZBS)
+            ).T:
+                f.write(
+                    f"  RBC({n:3.0f},{m:3.0f}) = {rbc:+14.8e}"
+                    + f"  RBS({n:3.0f},{m:3.0f}) = {rbs:+14.8e}"
+                    + f"  ZBC({n:3.0f},{m:3.0f}) = {zbc:+14.8e}"
+                    + f"  ZBS({n:3.0f},{m:3.0f}) = {zbs:+14.8e}\n"
+                )
+
+        f.write("/")
+        f.close()
+        return None
 
     @staticmethod
     def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi, s=None, si=None, sym=True):

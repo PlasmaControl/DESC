@@ -389,7 +389,10 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
 
     def __init__(self, scale, field):
-        assert np.isscalar(scale) or len(scale) == 1, "scale must be a scalar value"
+        assert (
+            np.isscalar(scale) or np.asarray(scale).size == 1
+        ), "scale must be a scalar value"
+        scale = float(scale)
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
@@ -1601,8 +1604,8 @@ class FourierCurrentPotentialField(
         self._sym_Phi = sym_Phi
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
 
-        assert np.isscalar(I) or len(I) == 1, "I must be a scalar"
-        assert np.isscalar(G) or len(G) == 1, "G must be a scalar"
+        assert np.isscalar(I) or np.asarray(I).size == 1, "I must be a scalar"
+        assert np.isscalar(G) or np.asarray(G).size == 1, "G must be a scalar"
         self._I = float(I)
         self._G = float(G)
 
@@ -1625,7 +1628,7 @@ class FourierCurrentPotentialField(
 
     @I.setter
     def I(self, new):  # noqa: E743
-        assert np.isscalar(new) or len(new) == 1, "I must be a scalar"
+        assert np.isscalar(new) or np.asarray(new).size == 1, "I must be a scalar"
         self._I = float(new)
 
     @optimizable_parameter
@@ -1636,7 +1639,7 @@ class FourierCurrentPotentialField(
 
     @G.setter
     def G(self, new):
-        assert np.isscalar(new) or len(new) == 1, "G must be a scalar"
+        assert np.isscalar(new) or np.asarray(new).size == 1, "G must be a scalar"
         self._G = float(new)
 
     @optimizable_parameter

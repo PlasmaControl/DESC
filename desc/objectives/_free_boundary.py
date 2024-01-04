@@ -656,16 +656,18 @@ class QuadraticFlux(_Objective):
         src_grid=None,
         eval_grid=None,
         field_grid=None,
+        eq_fixed=False,
         name="Quadratic flux",
     ):
         self._src_grid = src_grid
         self._eval_grid = eval_grid
+        self._eq_fixed = eq_fixed
         self._s = s
         self._q = q
         self._ext_field = ext_field
         self._field_grid = field_grid
         super().__init__(
-            things=[ext_field, eq],
+            things=[ext_field, eq] if not eq_fixed else [ext_field],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -687,7 +689,9 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = eq or self._eq if self._eq_fixed else self.things[1]
+        print(eq)
+
         if self._src_grid is None:
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
@@ -696,6 +700,7 @@ class QuadraticFlux(_Objective):
                 NFP=int(eq.NFP),
                 sym=False,
             )
+            self._src_grid = src_grid
         else:
             src_grid = self._src_grid
 
@@ -707,6 +712,7 @@ class QuadraticFlux(_Objective):
                 NFP=int(eq.NFP),
                 sym=False,
             )
+            self._eval_grid = eval_grid
         else:
             eval_grid = self._eval_grid
         if self._s is None:
@@ -725,6 +731,7 @@ class QuadraticFlux(_Objective):
             )
             interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
 
+        self._constants = {"interpolator": interpolator}
         self._data_keys = [
             "R",
             "zeta",
@@ -749,41 +756,49 @@ class QuadraticFlux(_Objective):
         eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
         eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
 
-        src_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=src_transforms,
-            profiles=src_profiles,
-        )
-
-        eval_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=eval_transforms,
-            profiles=eval_profiles,
-        )
-
-        # don't need extra B/2 since we only care about normal component
-        Bplasma = -singular_integral(
-            eval_data,
-            eval_grid,
-            src_data,
-            src_grid,
-            "biot_savart",
-            interpolator,
-        )
-        Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
-
         w = eval_grid.weights
         w *= jnp.sqrt(eval_grid.num_nodes)
 
-        self._constants = {
-            "quad_weights": w,
-            "eval_data": eval_data,
-            "Bplasma": Bplasma,
-        }
+        self._constants.update(
+            eval_transforms=eval_transforms,
+            eval_profiles=eval_profiles,
+            src_transforms=src_transforms,
+            src_profiles=src_profiles,
+            quad_weights=w,
+        )
+
+        if self._eq_fixed:
+            eval_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._data_keys,
+                params=params,
+                transforms=eval_transforms,
+                profiles=eval_profiles,
+            )
+
+            src_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._data_keys,
+                params=params,
+                transforms=src_transforms,
+                profiles=src_profiles,
+            )
+
+            # don't need extra B/2 since we only care about normal component
+            Bplasma = -singular_integral(
+                eval_data,
+                eval_grid,
+                src_data,
+                src_grid,
+                "biot_savart",
+                interpolator,
+            )
+            Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
+
+            self._constants.update(
+                eval_data=eval_data,
+                Bplasma=Bplasma,
+            )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -816,11 +831,43 @@ class QuadraticFlux(_Objective):
         """
         if constants is None:
             constants = self.constants
+
+        if self._eq_fixed:
+            Bplasma = constants["Bplasma"]
+            eval_data = constants["eval_data"]
+        else:
+            eval_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._data_keys,
+                params=params,
+                transforms=constants["eval_transforms"],
+                profiles=constants["eval_profiles"],
+            )
+
+            src_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._data_keys,
+                params=params,
+                transforms=constants["src_transforms"],
+                profiles=constants["src_profiles"],
+            )
+
+            # don't need extra B/2 since we only care about normal component
+            Bplasma = -singular_integral(
+                eval_data,
+                self._eval_grid,
+                src_data,
+                self._src_grid,
+                "biot_savart",
+                constants["interpolator"],
+            )
+            Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
+
         x = jnp.array(
             [
-                constants["eval_data"]["R"],
-                constants["eval_data"]["zeta"],
-                constants["eval_data"]["Z"],
+                eval_data["R"],
+                eval_data["zeta"],
+                eval_data["Z"],
             ]
         ).T
 
@@ -828,9 +875,7 @@ class QuadraticFlux(_Objective):
             x, grid=self._field_grid, basis="rpz"
         )
 
-        f = jnp.sum(
-            (Bext + constants["Bplasma"]) * constants["eval_data"]["n_rho"], axis=-1
-        )
+        f = jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)
         return f
 
 

@@ -495,7 +495,7 @@ class TestObjectiveFunction:
         eq.solve()
         obj = QuadraticFlux(t_field, eq)
         obj.build(eq)
-        f = obj.compute()
+        f = obj.compute(params=eq.params_dict)
         np.testing.assert_allclose(f, 0)
 
         # test nonaxisymmetric surface
@@ -530,7 +530,7 @@ class TestObjectiveFunction:
             eq.surface, eval_grid=eval_grid, source_grid=source_grid
         )[0]
         obj.build(eq, verbose=0)
-        f = obj.compute()
+        f = obj.compute(params=eq.params_dict)
 
         # for this to pass with rtol=1e-3, the source resolution needs to be quite high
         np.testing.assert_allclose(f, Bnorm, rtol=1e-2, atol=1e-2)

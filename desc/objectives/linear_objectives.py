@@ -1721,7 +1721,7 @@ class FixSumModesR(_FixedObjective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    sum_weight : float, ndarray, optional
+    sum_weights : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
     modes : ndarray, optional
@@ -1889,7 +1889,7 @@ class FixSumModesZ(_FixedObjective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    sum_weight : float, ndarray, optional
+    sum_weights : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
     modes : ndarray, optional
@@ -2428,9 +2428,9 @@ class FixAnisotropy(_FixProfile):
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional

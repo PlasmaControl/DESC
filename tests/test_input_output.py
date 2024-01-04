@@ -647,7 +647,7 @@ def test_efit_to_desc(tmpdir_factory):
 
     # Now we repeat the same test for the case where sep_dev != 0
     # with pytest.warns(UserWarning):
-    eq = efit_to_desc(str(efit_file_path), M=20, sep_dev=0.02)
+    eq = efit_to_desc(str(efit_file_path), M=20, sep_dev=0.01)
     # store boundary parameters in arr1
     if eq.sym:
         d1, d2 = np.shape(eq.surface.R_basis.modes)

@@ -560,9 +560,7 @@ def test_io_SplineMagneticField(tmpdir_factory):
     Z = np.linspace(1, 2, 2)
     phi = np.linspace(1, 2, 2)
 
-    field = SplineMagneticField.from_field(
-        ToroidalMagneticField(R0=1, B0=1), R, phi, Z, period=2 * np.pi
-    )
+    field = SplineMagneticField.from_field(ToroidalMagneticField(R0=1, B0=1), R, phi, Z)
 
     field.save(tmp_path)
     field2 = load(tmp_path)
@@ -595,6 +593,7 @@ def test_efit_to_desc(tmpdir_factory):
     efit_file_path = "./tests/inputs/eqdsk_cocos.out"
     with pytest.warns(UserWarning):
         eq = efit_to_desc(str(efit_file_path), M=20)
+
     # store boundary parameters in arr1
     if eq.sym:
         d1, d2 = np.shape(eq.surface.R_basis.modes)
@@ -633,8 +632,8 @@ def test_efit_to_desc(tmpdir_factory):
             np.linalg.norm(arr1mneg[:, 3:] + arr2mneg[:, 3:]),
         ),
         0,
-        atol=2e-1,
-        rtol=1e-2,
+        atol=1e-8,
+        rtol=1e-8,
     )
     np.testing.assert_allclose(
         np.minimum(
@@ -642,5 +641,60 @@ def test_efit_to_desc(tmpdir_factory):
             np.linalg.norm(arr1mpos[:, 3:] + arr2mpos[:, 3:]),
         ),
         0,
-        atol=2e0,
+        atol=1e-8,
+        rtol=1e-8,
+    )
+
+    # Now we repeat the same test for the case where sep_dev != 0
+    # with pytest.warns(UserWarning):
+    eq = efit_to_desc(str(efit_file_path), M=20, sep_dev=0.02)
+    # store boundary parameters in arr1
+    if eq.sym:
+        d1, d2 = np.shape(eq.surface.R_basis.modes)
+        arr10 = np.zeros((d1, d2 + 1))
+        for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
+            arr10[k] = np.array([int(0), m, n, eq.Rb_lmn[k]])
+
+        d1, d2 = np.shape(eq.surface.Z_basis.modes)
+        arr11 = np.zeros((d1, d2 + 1))
+        for k, (l, m, n) in enumerate(eq.surface.Z_basis.modes):
+            arr11[k] = np.array([int(0), m, n, eq.Zb_lmn[k]])
+
+        arr1 = np.vstack([arr10, arr11])
+    else:
+        d1, d2 = np.shape(eq.surface.R_basis.modes)
+        arr1 = np.zeros((d1, d2 + 2))
+        for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
+            arr1[k] = np.array([int(0), m, n, eq.Rb_lmn[k], eq.Zb_lmn[k]])
+
+    arr1 = arr1[arr1[:, 1].argsort()]
+    arr1mneg = arr1[arr1[:, 1] < 0]
+    arr1mpos = arr1[arr1[:, 1] >= 0]
+
+    desc_input_truth = "./tests/inputs/desc_from_eqdsk_cocos_sep_dev"
+
+    # with pytest.warns(UserWarning):
+    ir2 = InputReader(cl_args=[str(desc_input_truth)])
+    arr2 = ir2.parse_inputs()[-1]["surface"]
+    arr2 = arr2[arr2[:, 1].argsort()]
+    arr2mneg = arr2[arr2[:, 1] < 0]
+    arr2mpos = arr2[arr2[:, 1] >= 0]
+
+    np.testing.assert_allclose(
+        np.minimum(
+            np.linalg.norm(arr1mneg[:, 3:] - arr2mneg[:, 3:]),
+            np.linalg.norm(arr1mneg[:, 3:] + arr2mneg[:, 3:]),
+        ),
+        0,
+        atol=1e-8,
+        rtol=1e-8,
+    )
+    np.testing.assert_allclose(
+        np.minimum(
+            np.linalg.norm(arr1mpos[:, 3:] - arr2mpos[:, 3:]),
+            np.linalg.norm(arr1mpos[:, 3:] + arr2mpos[:, 3:]),
+        ),
+        0,
+        atol=1e-8,
+        rtol=1e-8,
     )

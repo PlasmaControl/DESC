@@ -1402,25 +1402,64 @@ class VMECIO:
         f.write("!---- Pressure Parameters ----\n")
         f.write("  GAMMA = 0\n")  # pressure profile specified
         f.write("  PRES_SCALE = {}\n".format(kwargs.get("PRES_SCALE", 1)))  # AM scale
-        f.write("  AM = ")  # pressure coefficients
-        for am in eq.pressure.params:
-            f.write("{:+14.8e} ".format(am))
-        f.write("\n  PMASS_TYPE = 'power_series'\n")
+        if eq.pressure is not None:
+            pressure = eq.pressure
+        else:
+            # if kinetic profiles, fit pressure to power series
+            grid = LinearGrid(L=eq.L_grid, axis=True)
+            data = eq.compute(["rho", "p"], grid=grid)
+            rho = grid.compress(data["rho"])
+            p = grid.compress(data["p"])
+            pressure = PowerSeriesProfile.from_values(rho, p, order=10, sym=True)
+        if isinstance(pressure, PowerSeriesProfile):
+            assert pressure.sym
+            f.write("  AM = ")  # pressure power series coefficients
+            for am in pressure.params:
+                f.write("{:+14.8e} ".format(am))
+            f.write("\n  PMASS_TYPE = 'power_series'\n")
+        elif isinstance(pressure, SplineProfile):
+            f.write("  AM_AUX_S = ")  # spline knot locations
+            for r in pressure.knots:
+                f.write("{:+14.8e} ".format(r**2))  # s = rho^2
+            f.write("\n  AM_AUX_F = ")  # pressure cubic spline values
+            for am in pressure.values:
+                f.write("{:+14.8e} ".format(am))
+            f.write("\n  PMASS_TYPE = 'cubic_spline'\n")
 
         f.write("!---- Current/Iota Parameters ----\n")
         if eq.current is None:
             f.write("  NCURR = 0\n")  # rotational transform profile specified
-            f.write("  AI = ")  # iota coefficients
-            for ai in eq.iota.params:
-                f.write("{:+14.8e} ".format(ai))
-            f.write("\n  PIOTA_TYPE = 'power_series'\n")
+            if isinstance(eq.iota, PowerSeriesProfile):
+                assert eq.iota.sym
+                f.write("  AI = ")  # iota power series coefficients
+                for ai in eq.iota.params:
+                    f.write("{:+14.8e} ".format(ai))
+                f.write("\n  PIOTA_TYPE = 'power_series'\n")
+            elif isinstance(eq.iota, SplineProfile):
+                f.write("  AI_AUX_S = ")  # spline knot locations
+                for r in eq.iota.knots:
+                    f.write("{:+14.8e} ".format(r**2))  # s = rho^2
+                f.write("\n  AI_AUX_F = ")  # iota cubic spline values
+                for ai in eq.iota.values:
+                    f.write("{:+14.8e} ".format(ai))
+                f.write("\n  PIOTA_TYPE = 'cubic_spline'\n")
         else:
             f.write("  NCURR = 1\n")  # current profile specified
             f.write("  CURTOR = {}\n".format(kwargs.get("CURTOR", 1)))  # AC scale
-            f.write("  AC = ")  # current coefficients
-            for ac in eq.current.params:
-                f.write("{:+14.8e} ".format(ac))
-            f.write("\n  PCURR_TYPE = 'power_series'\n")
+            if isinstance(eq.current, PowerSeriesProfile):
+                assert eq.current.sym
+                f.write("  AC = ")  # current power series coefficients
+                for ac in eq.current.params:
+                    f.write("{:+14.8e} ".format(ac))
+                f.write("\n  PCURR_TYPE = 'power_series'\n")
+            elif isinstance(eq.current, SplineProfile):
+                f.write("  AC_AUX_S = ")  # spline knot locations
+                for r in eq.current.knots:
+                    f.write("{:+14.8e} ".format(r**2))  # s = rho^2
+                f.write("\n  AC_AUX_F = ")  # current cubic spline values
+                for ac in eq.current.values:
+                    f.write("{:+14.8e} ".format(ac))
+                f.write("\n  PCURR_TYPE = 'cubic_spline_I'\n")
 
         f.write("!---- Axis Parameters ----\n")
         # R axis

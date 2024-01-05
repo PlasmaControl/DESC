@@ -360,20 +360,17 @@ class FourierRZToroidalSurface(Surface):
         return surf
 
     @classmethod
-    def from_values(cls, coords, nodes, M, N, NFP, sym=True):
+    def from_values(cls, coords, theta, M, N, NFP, sym=True):
         """Create a surface from given R,Z coordinates in real space.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
+        coords : array-like shape(num_points,3) or Grid
             cylindrical coordinates (R,phi,Z) to fit as a FourierRZToroidalSurface
-        nodes : Grid or ndarray, shape(k,3)
-            Locations in (theta,zeta) where real space coordinates are given.
-            Expects same number of nodes as coords (N),
-            containing the theta and zeta angles corresponding to the
-            given coordinates (the rho coordinate is ignored).
-            This determines the poloidal and toroidal angle for the
-            resulting surface
+        theta : ndarray, shape(num_points,)
+            Locations in poloidal angle theta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the poloidal angle for the resulting surface.
         M : int
             poloidal resolution of basis used to fit surface with
         N : int
@@ -389,8 +386,15 @@ class FourierRZToroidalSurface(Surface):
             Surface with Fourier coefficients fitted from input coords.
 
         """
-        if not isinstance(nodes, Grid):
-            nodes = Grid(nodes, sort=False)
+        theta = np.asarray(theta)
+        assert (
+            coords.shape[0] == theta.size
+        ), "coords first dimenson and theta must have same size"
+        nodes = Grid(
+            np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
+            sort=False,
+            jitable=True,
+        )
 
         R = coords[:, 0]
         Z = coords[:, 2]

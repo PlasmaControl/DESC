@@ -1934,9 +1934,9 @@ class FourierCurrentPotentialField(
 
 
         """
-        assert (
-            int(current_helicity) == current_helicity
-        ), "current_helicity must be an integer!"
+        # assert (
+        #     int(current_helicity) == current_helicity
+        # ), "current_helicity must be an integer!"
         # maybe it is an EquilibriaFamily
         if hasattr(eq, "__len__"):
             eq = eq[-1]
@@ -2113,7 +2113,7 @@ class FourierCurrentPotentialField(
                     Bn_tot = Bn_SV + Bn_GI_and_ext_and_pl
                     chi_B = jnp.sum(Bn_tot * Bn_tot * ne_mag * eval_grid.weights)
                     B_rms = jnp.sqrt(chi_B / eq_surf_area)
-                    print(B_rms)
+                    # print(B_rms)
                     return float(B_rms) - target_Brms
 
                 lower_bound_alpha = 0
@@ -2142,7 +2142,11 @@ class FourierCurrentPotentialField(
                     A_transpose_A + alpha * jnp.eye(A.shape[1]), rhs, rcond=None
                 )
                 phi_mn_opt = result[0]
+            Bn_SV = A @ phi_mn_opt
+            Bn_tot = Bn_SV + Bn_plasma + B_GI_normal + Bn_ext
 
+            chi_B = jnp.sum(Bn_tot * Bn_tot * ne_mag * eval_grid.weights)
+            B_rms = jnp.sqrt(chi_B / eq_surf_area)
             phi_mns.append(phi_mn_opt)
 
             chi2Bs.append(chi_B)

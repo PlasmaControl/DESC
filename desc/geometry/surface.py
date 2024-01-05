@@ -360,7 +360,7 @@ class FourierRZToroidalSurface(Surface):
         return surf
 
     @classmethod
-    def from_values(cls, coords, theta, M, N, NFP, sym=True):
+    def from_values(cls, coords, theta, M, N, NFP, sym=True, check_orientation=True):
         """Create a surface from given R,Z coordinates in real space.
 
         Parameters
@@ -379,6 +379,8 @@ class FourierRZToroidalSurface(Surface):
             number of toroidal field periods for surface
         sym : bool
             True if surface is stellarator-symmetric
+        check_orientation : bool
+            whether to check left-handedness of coordinates and flip if necessary.
 
         Returns
         -------
@@ -414,6 +416,7 @@ class FourierRZToroidalSurface(Surface):
             Z_basis.modes[:, 1:],
             NFP,
             sym,
+            check_orientation=check_orientation,
         )
         return surf
 

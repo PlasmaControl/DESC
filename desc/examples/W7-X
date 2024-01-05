@@ -6,27 +6,25 @@ NFP =  5
 Psi = -2.13300000E+00
 
 # spectral resolution
-L_rad  =  6:6:24
+L_rad = 12,16,24
 M_pol  = 12
-N_tor  =  0x6, 12
-M_grid = 12, 16
-N_grid =  0x6, 16
+N_tor  =   12
+M_grid =  16
+N_grid =   16
 
 # continuation parameters
-bdry_ratio = 0x6, 0.33, 0.66, 1
-pres_ratio = 0x3, 0.33, 0.66, 1
+# none are provided, so automatic continuation will be used
+bdry_ratio=1.0
 pert_order = 2
 
-# solver tolerances
-ftol = 1e-2
-xtol = 1e-6
-gtol = 1e-4
-maxiter = 50
 
 # solver methods
 optimizer         = lsq-exact
 objective         = force
 spectral_indexing = fringe
+ftol=1e-4
+xtol= 1e-6
+maxiter=150
 
 # pressure and rotational transform profiles
 l:   0	p =   1.85596929e+05	i =  -8.56047021e-01
@@ -35,10 +33,6 @@ l:   4	p =   1.85596929e+05	i =  -6.86795128e-02
 l:   6	p =   0.00000000E+00	i =  -1.86970315e-02
 l:   8	p =   0.00000000E+00	i =   1.90561179e-02
 
-# magnetic axis initial guess
-n:   0	R0 =   5.56070000E+00	Z0 =   0.00000000E+00
-n:   1	R0 =   3.70760000E-01	Z0 =   0.00000000E+00
-n:  -1	R0 =   0.00000000E+00	Z0 =  -3.08170000E-01
 
 # fixed-boundary surface shape
 m: -11	n: -12	R1 =  -1.25396811E-06	Z1 =   0.00000000E+00

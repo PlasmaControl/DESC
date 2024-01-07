@@ -153,7 +153,7 @@ class TestFourierRZToroidalSurface:
     def test_from_values(self):
         """Test for constructing elliptical surface from values."""
         surface = get("HELIOTRON", "boundary")
-        grid = LinearGrid(M=20, N=12, sym=True, NFP=surface.NFP, endpoint=True)
+        grid = LinearGrid(M=20, N=20, sym=False, NFP=surface.NFP, endpoint=False)
         data = surface.compute(["R", "phi", "Z"], grid=grid)
 
         theta = grid.nodes[:, 1]

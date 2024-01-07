@@ -150,7 +150,7 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(data["x"][0, 2], 0)
 
     @pytest.mark.unit
-    def test_from_values(self):
+    def test_surface_from_values(self):
         """Test for constructing elliptical surface from values."""
         surface = get("HELIOTRON", "boundary")
         grid = LinearGrid(M=20, N=20, sym=False, NFP=surface.NFP, endpoint=False)
@@ -160,12 +160,7 @@ class TestFourierRZToroidalSurface:
 
         coords = np.vstack([data["R"], data["phi"], data["Z"]]).T
         surface2 = FourierRZToroidalSurface.from_values(
-            coords,
-            theta,
-            M=surface.M,
-            N=surface.N,
-            NFP=surface.NFP,
-            sym=True,
+            coords, theta, M=surface.M, N=surface.N, NFP=surface.NFP, sym=True
         )
         grid = LinearGrid(M=25, N=25, sym=False, NFP=surface.NFP)
         np.testing.assert_allclose(
@@ -173,7 +168,7 @@ class TestFourierRZToroidalSurface:
         )
 
         # with a different poloidal angle
-        theta = np.arctan2(data["Z"] - 0, data["R"] - 10)
+        theta = -np.arctan2(data["Z"] - 0, data["R"] - 10)
         surface2 = FourierRZToroidalSurface.from_values(
             coords,
             theta,

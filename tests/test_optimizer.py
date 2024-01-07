@@ -1017,3 +1017,75 @@ def test_proximal_with_PlasmaVesselDistance():
         verbose=3,
         maxiter=3,
     )
+
+    # check that works with signed distance
+    a = 0.5
+    R0 = 4
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=0.5,
+        plasma_grid=grid,
+        surface_fixed=True,
+        use_signed_distance=True,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("proximal-lsq-exact")
+    eq, result = optimizer.optimize(
+        eq,
+        objective,
+        constraints,
+        verbose=3,
+        maxiter=3,
+    )
+
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq)), 0.5, rtol=1e-2)
+
+
+@pytest.mark.slow
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_signed_PlasmaVesselDistance():
+    """Tests that signed distance works with surface optimization."""
+    eq = desc.examples.get("SOLOVEV")
+
+    constraints = (FixParameter(eq),)  # don't want eq to change
+    # circular surface
+    a = 0.5
+    R0 = 4
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    surf.change_resolution(M=2)
+
+    grid = LinearGrid(M=eq.M * 2, N=0, NFP=eq.NFP)
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=0.5,
+        surface_grid=grid,
+        plasma_grid=grid,
+        use_signed_distance=True,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=30, ftol=1e-4
+    )
+
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.5, atol=1e-2)

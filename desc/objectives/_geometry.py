@@ -7,7 +7,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz
-from desc.compute.utils import safenorm
+from desc.compute.utils import dot, safenorm
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
 
@@ -525,8 +525,10 @@ class PlasmaVesselDistance(_Objective):
         Whether to use absolute value of distance or a signed distance, with d
         being positive if the plasma is inside of the bounding surface, and
         negative if outside of the bounding surface.
-        NOTE: signed distance currently only works for circular XS or elliptical XS
-        axisymmetric winding surfaces. False by default
+        NOTE: this convention assumes that both surface and equilibrium have
+        poloidal angles defined such that they are in a right-handed coordinate
+        system with the surface normal vector pointing outwards
+        NOTE: only works with use_softmin=False currently
     surface_fixed: bool, optional
         Whether the surface the distance from the plasma is computed to
         is fixed or not. If True, the surface is fixed and its coordinates are
@@ -575,8 +577,11 @@ class PlasmaVesselDistance(_Objective):
         self._plasma_grid = plasma_grid
         self._use_softmin = use_softmin
         self._use_signed_distance = use_signed_distance
-        if use_signed_distance:
-            raise NotImplementedError("this is not yet implemented!")
+        if use_softmin and use_signed_distance:
+            warnings.warn(
+                "signed distance cannot currently" " be used with use_softmin=True!",
+                UserWarning,
+            )
         self._surface_fixed = surface_fixed
         self._alpha = alpha
         super().__init__(
@@ -628,7 +633,7 @@ class PlasmaVesselDistance(_Objective):
 
         self._dim_f = surface_grid.num_nodes
         self._equil_data_keys = ["R", "phi", "Z"]
-        self._surface_data_keys = ["x"]
+        self._surface_data_keys = ["x", "n_rho"] if self._use_signed_distance else ["x"]
 
         timer = Timer()
         if verbose > 0:
@@ -672,15 +677,15 @@ class PlasmaVesselDistance(_Objective):
         if self._surface_fixed:
             # precompute the surface coordinates
             # as the surface is fixed during the optimization
-            surface_coords = compute_fun(
+            data_surf = compute_fun(
                 self._surface,
                 self._surface_data_keys,
                 params=self._surface.params_dict,
                 transforms=surface_transforms,
                 profiles={},
                 basis="xyz",
-            )["x"]
-            self._constants["surface_coords"] = surface_coords
+            )
+            self._constants["data_surf"] = data_surf
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -723,22 +728,40 @@ class PlasmaVesselDistance(_Objective):
         )
         plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
         if self._surface_fixed:
-            surface_coords = constants["surface_coords"]
+            data_surf = constants["data_surf"]
         else:
-            surface_coords = compute_fun(
+            data_surf = compute_fun(
                 self._surface,
                 self._surface_data_keys,
                 params=surface_params,
                 transforms=constants["surface_transforms"],
                 profiles={},
                 basis="xyz",
-            )["x"]
-        d = safenorm(plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1)
+            )
+
+        surface_coords = data_surf["x"]
+        diff_vec = plasma_coords[:, None, :] - surface_coords[None, :, :]
+        d = safenorm(diff_vec, axis=-1)
 
         if self._use_softmin:  # do softmin
             return jnp.apply_along_axis(softmin, 0, d, self._alpha)
         else:  # do hardmin
-            return d.min(axis=0)
+            if not self._use_signed_distance:
+                return d.min(axis=0)
+            else:
+                min_inds = d.argmin(axis=0, keepdims=True)
+                min_ds = jnp.take_along_axis(d, min_inds, axis=0).squeeze()
+                diff_vecs_at_mins = jnp.take_along_axis(
+                    diff_vec, min_inds[..., None], axis=0
+                ).squeeze()
+                n_rho_dot_diff_vec = dot(
+                    data_surf["n_rho"], diff_vecs_at_mins, axis=-1
+                ).squeeze()
+                # we mult by -1 because diff_vec points from surface to
+                # the plasma, so
+                # if plasma is inside the surface, n_rho dot diff vec <0,
+                # but we define "plasma inside surface" as >0
+                return min_ds * jnp.sign(n_rho_dot_diff_vec) * -1
 
 
 class PlasmaVesselDistanceCircular(_Objective):

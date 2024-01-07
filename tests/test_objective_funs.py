@@ -876,6 +876,54 @@ def test_circular_plasma_vessel_distance():
 
 
 @pytest.mark.unit
+def test_signed_plasma_vessel_distance():
+    """Test calculation of signed distance from plasma to vessel."""
+    R0 = 10.0
+    a_p = 1.0
+    a_s = 2.0
+    # default eq has R0=10, a=1
+    eq = Equilibrium(M=3, N=2)
+    # surface with same R0, a=2, so true d=1 for all pts
+    surface = FourierRZToroidalSurface(
+        R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    # For equally spaced grids, should get true d=1
+    grid = LinearGrid(M=5, N=6)
+    obj = PlasmaVesselDistance(
+        eq=eq,
+        surface_grid=grid,
+        plasma_grid=grid,
+        surface=surface,
+        use_signed_distance=True,
+    )
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq, surface))
+    np.testing.assert_allclose(d, a_s - a_p)
+
+    # ensure that it works (dimension-wise) when compute_scaled is called
+    _ = obj.compute_scaled(*obj.xs(eq, surface))
+
+    # For plasma outside surface, should get signed distance
+    surface = FourierRZToroidalSurface(
+        R_lmn=[R0, a_p * 0.5],
+        Z_lmn=[-a_p * 0.5],
+        modes_R=[[0, 0], [1, 0]],
+        modes_Z=[[-1, 0]],
+    )
+    grid = LinearGrid(M=5, N=6)
+    obj = PlasmaVesselDistance(
+        eq=eq,
+        surface_grid=grid,
+        plasma_grid=grid,
+        surface=surface,
+        use_signed_distance=True,
+    )
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq, surface))
+    np.testing.assert_allclose(d, -0.5 * a_p)
+
+
+@pytest.mark.unit
 def test_mean_curvature():
     """Test for mean curvature objective function."""
     # torus should have mean curvature negative everywhere

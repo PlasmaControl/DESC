@@ -811,8 +811,13 @@ class PlasmaVesselDistanceCircular(_Objective):
         Whether to use absolute value of distance or a signed distance, with d
         being positive if the plasma is inside of the bounding surface, and
         negative if outside of the bounding surface.
-        NOTE: signed distance currently only works for circular XS or elliptical XS
-        axisymmetric winding surfaces. False by default
+    surface_fixed: bool, optional
+        Whether the surface the distance from the plasma is computed to
+        is fixed or not. If True, the surface is fixed and its radius and axis are
+        precomputed, which saves on computation time during optimization, and
+        self.things = [eq] only.
+        If False, the surface geometry parameters are computed at every iteration.
+        False by default, so that self.things = [eq, surface]
     name : str, optional
         Name of the objective function.
     """
@@ -832,6 +837,7 @@ class PlasmaVesselDistanceCircular(_Objective):
         normalize_target=True,
         plasma_grid=None,
         use_signed_distance=False,
+        surface_fixed=False,
         name="plasma-circular-vessel distance",
     ):
         if target is None and bounds is None:
@@ -839,8 +845,9 @@ class PlasmaVesselDistanceCircular(_Objective):
         self._surface = surface
         self._plasma_grid = plasma_grid
         self._use_signed_distance = use_signed_distance
+        self._surface_fixed = surface_fixed
         super().__init__(
-            things=[eq, self._surface],
+            things=[eq, self._surface] if not surface_fixed else [eq],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -885,6 +892,9 @@ class PlasmaVesselDistanceCircular(_Objective):
                 " circular toroidal bounding surfaces!"
             )
 
+        self._surface_minor_radius_coef_index = minor_radius_coef_index
+        self._surface_major_radius_coef_index = major_radius_coef_index
+
         self._surface_minor_radius = np.abs(surface.R_lmn[minor_radius_coef_index])
         self._surface_major_radius = np.abs(surface.R_lmn[major_radius_coef_index])
 
@@ -908,19 +918,10 @@ class PlasmaVesselDistanceCircular(_Objective):
             grid=plasma_grid,
             has_axis=plasma_grid.axis.size,
         )
-        # make the axis from which we will calculate minor radius for the surface
-        # i.e this is (R0_surface,0)
-        self._surface_axis_points = np.vstack(
-            [
-                self._surface_major_radius * np.ones(plasma_grid.num_nodes),
-                np.zeros(plasma_grid.num_nodes),
-            ]
-        ).T
 
         self._constants = {
             "transforms": equil_transforms,
             "equil_profiles": equil_profiles,
-            "surface_axis_points": self._surface_axis_points,
         }
 
         timer.stop("Precomputing transforms")
@@ -961,16 +962,26 @@ class PlasmaVesselDistanceCircular(_Objective):
             transforms=constants["transforms"],
             profiles=constants["equil_profiles"],
         )
+
+        if self._surface_fixed:
+            surface_major_radius = self._surface_major_radius
+            surface_minor_radius = self._surface_minor_radius
+        else:
+            surface_minor_radius = jnp.abs(
+                surface_params["R_lmn"][self._surface_minor_radius_coef_index]
+            )
+            surface_major_radius = jnp.abs(
+                surface_params["R_lmn"][self._surface_major_radius_coef_index]
+            )
+
         plasma_coords_dist_vectors = jnp.array(
-            [data["R"] - self._surface_major_radius, data["Z"]]
+            [data["R"] - surface_major_radius, data["Z"]]
         ).T
 
         # compute the minor radius of the surface at each point in the plasma grid,
         # signed to be positive if plasma inside vessel, and negative if plasma
         # outside vessel
-        d = self._surface_minor_radius - jnp.linalg.norm(
-            plasma_coords_dist_vectors, axis=-1
-        )
+        d = surface_minor_radius - jnp.linalg.norm(plasma_coords_dist_vectors, axis=-1)
         if self._use_signed_distance:
             return d
         else:

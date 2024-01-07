@@ -837,7 +837,7 @@ def test_circular_plasma_vessel_distance():
     surface = FourierRZToroidalSurface(
         R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
-    # For equally spaced grids, should get true d=1
+
     plas_grid = LinearGrid(M=5, N=6)
     obj = PlasmaVesselDistanceCircular(eq=eq, plasma_grid=plas_grid, surface=surface)
     obj.build()
@@ -868,10 +868,26 @@ def test_circular_plasma_vessel_distance():
     )
     plas_grid = LinearGrid(M=5, N=6)
     obj = PlasmaVesselDistanceCircular(
-        eq=eq, plasma_grid=plas_grid, surface=surface, use_signed_distance=True
+        eq=eq,
+        plasma_grid=plas_grid,
+        surface=surface,
+        surface_fixed=False,
+        use_signed_distance=True,
     )
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq, surface))
+    np.testing.assert_allclose(d, -0.5 * a_p)
+
+    # with surface_fixed=True
+    obj = PlasmaVesselDistanceCircular(
+        eq=eq,
+        plasma_grid=plas_grid,
+        surface=surface,
+        surface_fixed=True,
+        use_signed_distance=True,
+    )
+    obj.build()
+    d = obj.compute_unscaled(*obj.xs(eq))
     np.testing.assert_allclose(d, -0.5 * a_p)
 
 

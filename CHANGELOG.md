@@ -11,6 +11,10 @@ object e.g. optimizing only a ``FourierRZToroidalSurface`` object to have a cert
 ``Volume``.
 - Many functions from ``desc.plotting`` now also work for plotting quantities from
 ``Curve`` and ``Surface`` classes.
+- Adds ``PlasmaVesselDistanceCircular`` as an objective, which is a simpler
+way to calculate the plasma-vessel separation when the vessel is a circular
+axisymmetric torus
+- Add ``use_signed_distance`` flag to ``PlasmaVesselDistance`` and ``PlasmaVesselDistanceCircular`` which will use a signed distance as the target, which is positive when the plasma is inside of the vessel surface and negative if the plasma is outside of the vessel surface, to allow optimizer to distinguish if the equilbrium surface exits the vessel surface and guard against it by targeting a positive signed distance.
 
 v0.10.3
 -------

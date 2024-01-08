@@ -34,6 +34,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     PlasmaVesselDistance,
+    PlasmaVesselDistanceCircular,
     Volume,
     get_fixed_boundary_constraints,
 )
@@ -1045,6 +1046,36 @@ def test_signed_PlasmaVesselDistance():
         eq=eq,
         target=0.5,
         surface_grid=grid,
+        plasma_grid=grid,
+        use_signed_distance=True,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=30, ftol=1e-4
+    )
+
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.5, atol=1e-2)
+
+    # test with circular surface and changing eq
+    a = 0.75
+    R0 = 10
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    # not caring about force balance, just want the eq surface to become circular
+    eq = Equilibrium(L=2, M=2, NFP=1, sym=True)
+    constraints = (FixParameter(surf), FixPressure(eq), FixCurrent(eq), FixPsi(eq))
+    obj = PlasmaVesselDistanceCircular(
+        surface=surf,
+        eq=eq,
+        target=0.5,
         plasma_grid=grid,
         use_signed_distance=True,
     )

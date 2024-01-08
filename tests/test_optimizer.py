@@ -1024,12 +1024,12 @@ def test_proximal_with_PlasmaVesselDistance():
 @pytest.mark.optimize
 def test_signed_PlasmaVesselDistance():
     """Tests that signed distance works with surface optimization."""
-    eq = desc.examples.get("SOLOVEV")
+    eq = desc.examples.get("HELIOTRON")
 
     constraints = (FixParameter(eq),)  # don't want eq to change
     # circular surface
     a = 0.5
-    R0 = 4
+    R0 = 10
     surf = FourierRZToroidalSurface(
         R_lmn=[R0, a],
         Z_lmn=[0.0, -a],
@@ -1038,9 +1038,9 @@ def test_signed_PlasmaVesselDistance():
         sym=True,
         NFP=eq.NFP,
     )
-    surf.change_resolution(M=2)
+    surf.change_resolution(M=2, N=2)
 
-    grid = LinearGrid(M=eq.M * 2, N=0, NFP=eq.NFP)
+    grid = LinearGrid(M=eq.M * 2, N=eq.N * 2)
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
@@ -1053,7 +1053,7 @@ def test_signed_PlasmaVesselDistance():
 
     optimizer = Optimizer("lsq-exact")
     (eq, surf), result = optimizer.optimize(
-        (eq, surf), objective, constraints, verbose=3, maxiter=30, ftol=1e-4
+        (eq, surf), objective, constraints, verbose=3, maxiter=60, ftol=1e-8, xtol=1e-6
     )
 
     np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.5, atol=1e-2)
@@ -1070,7 +1070,6 @@ def test_signed_PlasmaVesselDistance():
         NFP=eq.NFP,
     )
     # not caring about force balance, just want the eq surface to become circular
-    eq = Equilibrium(L=2, M=2, NFP=1, sym=True)
     constraints = (FixParameter(surf), FixPressure(eq), FixCurrent(eq), FixPsi(eq))
     obj = PlasmaVesselDistanceCircular(
         surface=surf,

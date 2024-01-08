@@ -838,8 +838,7 @@ def test_circular_plasma_vessel_distance():
         R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
 
-    plas_grid = LinearGrid(M=5, N=6)
-    obj = PlasmaVesselDistanceCircular(eq=eq, plasma_grid=plas_grid, surface=surface)
+    obj = PlasmaVesselDistanceCircular(eq=eq, surface=surface)
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, a_s - a_p)
@@ -855,7 +854,14 @@ def test_circular_plasma_vessel_distance():
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0]],
     )
+    plas_grid = LinearGrid(M=5, N=6)
     obj = PlasmaVesselDistanceCircular(surface=surf, plasma_grid=plas_grid, eq=eq)
+    with pytest.warns(UserWarning):
+        obj.build()
+    # check warning for grid with non-unity rho
+    obj = PlasmaVesselDistanceCircular(
+        surface=surf, plasma_grid=LinearGrid(rho=np.array(0.9)), eq=eq
+    )
     with pytest.warns(UserWarning):
         obj.build()
 

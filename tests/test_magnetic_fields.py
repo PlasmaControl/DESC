@@ -557,10 +557,12 @@ class TestMagneticFields:
             modes_Z=jnp.array([[0, 0], [-1, 0]]),
             NFP=10,
         )
+        init_modes = np.array([[1, 1], [3, 3]])
+        init_coeffs = np.array([1, 1])
 
         field = FourierCurrentPotentialField(
-            Phi_mn=np.array([1, 1]),
-            modes_Phi=np.array([[1, 1], [3, 3]]),
+            Phi_mn=init_coeffs,
+            modes_Phi=init_modes,
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -568,6 +570,13 @@ class TestMagneticFields:
             NFP=10,
         )
         assert field.Phi_mn.size == field.Phi_basis.num_modes
+        inds_nonzero = []
+        for coef, modes in zip(init_coeffs, init_modes):
+            ind = field.Phi_basis.get_idx(M=modes[0], N=modes[1])
+            assert coef == field.Phi_mn[ind]
+            inds_nonzero.append(ind)
+        inds_zero = np.setdiff1d(np.arange(field.Phi_basis.num_modes), inds_nonzero)
+        np.testing.assert_allclose(field.Phi_mn[inds_zero], 0)
         # ensure can compute field at a point without incompatible size error
         field.compute_magnetic_field([10.0, 0, 0])
 

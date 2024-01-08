@@ -493,6 +493,21 @@ class TestMagneticFields:
         with pytest.raises(AssertionError):
             field.G = np.array([1, 2])
 
+        # check that we cant initialize with different size
+        # Phi_mn and Phi_modes arrays
+        with pytest.raises(AssertionError):
+            field = FourierCurrentPotentialField(
+                Phi_mn=phi_mn[0:-1],  # too short by 1
+                modes_Phi=basis.modes[:, 1:],
+                I=0,
+                G=-G,
+                R_lmn=surface.R_lmn,
+                Z_lmn=surface.Z_lmn,
+                modes_R=surface._R_basis.modes[:, 1:],
+                modes_Z=surface._Z_basis.modes[:, 1:],
+                NFP=10,
+            )
+
     def test_change_Phi_basis_fourier_current_field(self):
         """Test that change_Phi_resolution works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(

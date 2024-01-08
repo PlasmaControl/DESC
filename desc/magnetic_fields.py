@@ -1576,6 +1576,9 @@ class FourierCurrentPotentialField(
         check_orientation=True,
     ):
         Phi_mn, modes_Phi = map(np.asarray, (Phi_mn, modes_Phi))
+        assert (
+            Phi_mn.size == modes_Phi.shape[0]
+        ), "Phi_mn size and modes_Phi.shape[0] must be the same size!"
 
         assert np.issubdtype(modes_Phi.dtype, np.integer)
 

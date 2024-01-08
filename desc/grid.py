@@ -28,6 +28,7 @@ class _Grid(IOAble, ABC):
         "_M",
         "_N",
         "_NFP",
+        "_NFP_umbilic_factor",
         "_sym",
         "_nodes",
         "_spacing",
@@ -138,7 +139,7 @@ class _Grid(IOAble, ABC):
         """Scale weights sum to full volume and reduce duplicate node weights."""
         nodes = self.nodes.copy().astype(float)
         nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
-        nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))
+        nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / (self.NFP *  self.NFP_umbilic_factor)))
         # reduce weights for duplicated nodes
         _, inverse, counts = np.unique(
             nodes, axis=0, return_inverse=True, return_counts=True
@@ -200,6 +201,12 @@ class _Grid(IOAble, ABC):
     def NFP(self):
         """int: Number of (toroidal) field periods."""
         return self.__dict__.setdefault("_NFP", 1)
+
+    @property
+    def NFP_umbilic_factor(self):
+        """float: Umbilic factor for (toroidal) field periods."""
+        return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
+
 
     @property
     def sym(self):
@@ -287,8 +294,8 @@ class _Grid(IOAble, ABC):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, sym={}, node_pattern={})".format(
-                self.L, self.M, self.N, self.NFP, self.sym, self.node_pattern
+            + " (L={}, M={}, N={}, NFP={}, NFP_umbilic_factor = {}, sym={}, node_pattern={})".format(
+                self.L, self.M, self.N, self.NFP, self.NFP_umbilic_factor, self.sym, self.node_pattern
             )
         )
 
@@ -410,6 +417,7 @@ class Grid(_Grid):
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
         self._NFP = 1
+        self._NFP_umbilic_factor = 1.
         self._sym = False
         self._node_pattern = "custom"
         self._nodes, self._spacing = self._create_nodes(nodes)
@@ -465,7 +473,7 @@ class Grid(_Grid):
         """
         nodes = jnp.atleast_2d(nodes).reshape((-1, 3)).astype(float)
         # Do not alter nodes given by the user for custom grids.
-        # In particular, do not modulo nodes by 2pi or 2pi/NFP.
+        # In particular, do not modulo nodes by 2pi or 2pi/(NFP*NFP_umbilic_factor).
         # This may cause the surface_integrals() function to fail recognizing
         # surfaces outside the interval [0, 2pi] as duplicates. However, most
         # surface integral computations are done with LinearGrid anyway.
@@ -491,6 +499,9 @@ class LinearGrid(_Grid):
         Toroidal grid resolution.
     NFP : int
         Number of field periods (Default = 1).
+    NFP_umbilic_factor : float
+        Rational number of the form 1/integer with integer>=1.
+	This is needed for the umbilic torus design.
     sym : bool
         True for stellarator symmetry, False otherwise (Default = False).
     axis : bool
@@ -519,6 +530,7 @@ class LinearGrid(_Grid):
         M=None,
         N=None,
         NFP=1,
+        NFP_umbilic_factor=1.,
         sym=False,
         axis=True,
         endpoint=False,
@@ -530,6 +542,7 @@ class LinearGrid(_Grid):
         self._M = M
         self._N = N
         self._NFP = NFP
+        self._NFP_umbilic_factor = NFP_umbilic_factor
         self._sym = sym
         self._endpoint = bool(endpoint)
         self._node_pattern = "linear"
@@ -538,6 +551,7 @@ class LinearGrid(_Grid):
             M=M,
             N=N,
             NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
             axis=axis,
             endpoint=endpoint,
             rho=rho,
@@ -563,6 +577,7 @@ class LinearGrid(_Grid):
         M=None,
         N=None,
         NFP=1,
+        NFP_umbilic_factor=1,
         axis=True,
         endpoint=False,
         rho=1.0,
@@ -581,6 +596,9 @@ class LinearGrid(_Grid):
             Toroidal grid resolution.
         NFP : int
             Number of field periods (Default = 1).
+        NFP_umbilic_factor : float
+            Rational number of the form 1/integer with integer>=1.
+	    This is needed for the umbilic torus design.
         axis : bool
             True to include a point at rho=0 (default), False for rho[0] = rho[1]/2.
         endpoint : bool
@@ -606,10 +624,11 @@ class LinearGrid(_Grid):
 
         """
         self._NFP = NFP
+        self._NFP_umbilic_factor = NFP_umbilic_factor
         axis = bool(axis)
         endpoint = bool(endpoint)
         THETA_ENDPOINT = 2 * np.pi
-        ZETA_ENDPOINT = 2 * np.pi / NFP
+        ZETA_ENDPOINT = 2 * np.pi / (NFP * NFP_umbilic_factor)
 
         # rho
         if L is not None:
@@ -754,12 +773,13 @@ class LinearGrid(_Grid):
                 dz[1:-1] = z[2:] - z[:-2]
                 dz[-1] = z[0] + (ZETA_ENDPOINT - z[-2]) % ZETA_ENDPOINT
                 dz /= 2
-                dz *= NFP
+                dz *= NFP * NFP_umbilic_factor
                 if z.size == 2:
                     dz[-1] = dz[0]
                 if z[0] == 0 and z[-1] == ZETA_ENDPOINT:
                     # The cyclic distance algorithm above correctly weights
-                    # the duplicate node spacing at zeta = 0 and 2pi / NFP.
+                    # the duplicate node spacing at zeta = 0 and 
+                    # 2pi / (NFP * NFP_umbilic_factor) .
                     # However, scale_weights() is not aware of this, so we
                     # counteract the reduction that will be done there.
                     dz[0] += dz[-1]
@@ -815,13 +835,18 @@ class LinearGrid(_Grid):
             new toroidal grid resolution (N toroidal nodes)
         NFP : int
             Number of field periods.
+        NFP_umbilic_factor : float
+            Rational number of the form 1/integer with integer>=1.
+	    This is needed for the umbilic torus design.
 
         """
         if NFP is None:
             NFP = self.NFP
-        if L != self.L or M != self.M or N != self.N or NFP != self.NFP:
+        if NFP_umbilic_factor is None:
+            NFP_umbilic_factor = self.NFP_umbilic_factor
+        if L != self.L or M != self.M or N != self.N or NFP != self.NFP or NFP_umbilic_factor != self.NFP_umbilic_factor:
             self._nodes, self._spacing = self._create_nodes(
-                L=L, M=M, N=N, NFP=NFP, axis=self.axis.size > 0, endpoint=self.endpoint
+                L=L, M=M, N=N, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, axis=self.axis.size > 0, endpoint=self.endpoint
             )
             # symmetry handled in create_nodes()
             self._sort_nodes()
@@ -858,17 +883,21 @@ class QuadratureGrid(_Grid):
         toroidal grid resolution (exactly integrates toroidal modes up to order N)
     NFP : int
         number of field periods (Default = 1)
+    NFP_umbilic_factor : float
+        Rational number of the form 1/integer with integer>=1.
+	This is needed for the umbilic torus design.
 
     """
 
-    def __init__(self, L, M, N, NFP=1):
+    def __init__(self, L, M, N, NFP=1, NFP_umbilic_factor=1.):
         self._L = L
         self._M = M
         self._N = N
         self._NFP = NFP
+        self._NFP_umbilic_factor = NFP_umbilic_factor
         self._sym = False
         self._node_pattern = "quad"
-        self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
+        self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor)
         # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
         self._axis = self._find_axis()
@@ -883,7 +912,7 @@ class QuadratureGrid(_Grid):
         # quadrature weights do not need scaling
         self._weights = self.spacing.prod(axis=1)
 
-    def _create_nodes(self, L=1, M=1, N=1, NFP=1):
+    def _create_nodes(self, L=1, M=1, N=1, NFP=1, NFP_umbilic_factor=1.):
         """Create grid nodes and weights.
 
         Parameters
@@ -896,7 +925,9 @@ class QuadratureGrid(_Grid):
             toroidal grid resolution (N toroidal nodes, Default = 1)
         NFP : int
             number of field periods (Default = 1)
-
+        NFP_umbilic_factor : float
+            Rational number of the form 1/integer with integer>=1.
+	    This is needed for the umbilic torus design.
         Returns
         -------
         nodes : ndarray of float, size(num_nodes,3)
@@ -909,6 +940,7 @@ class QuadratureGrid(_Grid):
         self._M = M
         self._N = N
         self._NFP = NFP
+        self._NFP_umbilic_factor = NFP_umbilic_factor
         L = L + 1
         M = 2 * M + 1
         N = 2 * N + 1
@@ -922,7 +954,7 @@ class QuadratureGrid(_Grid):
         dt = 2 * np.pi / M * np.ones_like(t)
 
         # zeta/phi
-        z = np.linspace(0, 2 * np.pi / NFP, N, endpoint=False)
+        z = np.linspace(0, 2 * np.pi / (NFP*NFP_umbilic_factor), N, endpoint=False)
         dz = 2 * np.pi / N * np.ones_like(z)
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
@@ -940,7 +972,7 @@ class QuadratureGrid(_Grid):
 
         return nodes, spacing
 
-    def change_resolution(self, L, M, N, NFP=None):
+    def change_resolution(self, L, M, N, NFP=None, NFP_umbilic_factor=None):
         """Change the resolution of the grid.
 
         Parameters
@@ -953,12 +985,16 @@ class QuadratureGrid(_Grid):
             new toroidal grid resolution (N toroidal nodes)
         NFP : int
             Number of field periods.
-
+        NFP_umbilic_factor : float
+            Rational number of the form 1/integer with integer>=1.
+            This is needed for umbilic torus design.
         """
         if NFP is None:
             NFP = self.NFP
-        if L != self.L or M != self.M or N != self.N or NFP != self.NFP:
-            self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
+        if NFP_umbilic_factor is None:
+            NFP_umbilic_factor = self.NFP_umbilic_factor
+        if L != self.L or M != self.M or N != self.N or NFP != self.NFP or NFP_umbilic_factor != self.NFP_umbilic_factor:
+            self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor)
             self._sort_nodes()
             self._axis = self._find_axis()
             (
@@ -989,6 +1025,9 @@ class ConcentricGrid(_Grid):
         toroidal grid resolution
     NFP : int
         number of field periods (Default = 1)
+    NFP_umbilic_factor : float
+        Rational number of the form 1/integer with integer>=1.
+        This is needed for the umbilic torus design.
     sym : bool
         True for stellarator symmetry, False otherwise (Default = False)
     axis : bool
@@ -1006,15 +1045,16 @@ class ConcentricGrid(_Grid):
 
     """
 
-    def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
+    def __init__(self, L, M, N, NFP=1, NFP_umbilic_factor=1., sym=False, axis=False, node_pattern="jacobi"):
         self._L = L
         self._M = M
         self._N = N
         self._NFP = NFP
+        self._NFP_umbilic_factor = NFP_umbilic_factor
         self._sym = sym
         self._node_pattern = node_pattern
         self._nodes, self._spacing = self._create_nodes(
-            L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern
+            L=L, M=M, N=N, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, axis=axis, node_pattern=node_pattern
         )
         self._enforce_symmetry()
         self._sort_nodes()
@@ -1029,7 +1069,7 @@ class ConcentricGrid(_Grid):
         ) = self._find_unique_inverse_nodes()
         self._weights = self._scale_weights()
 
-    def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
+    def _create_nodes(self, L, M, N, NFP=1, NFP_umbilic_factor=1., axis=False, node_pattern="jacobi"):
         """Create grid nodes and weights.
 
         Parameters
@@ -1042,6 +1082,9 @@ class ConcentricGrid(_Grid):
             toroidal grid resolution
         NFP : int
             number of field periods (Default = 1)
+        NFPUfac : float
+            Rational number of the form 1/integer with integer>=1.
+            This is needed for the umbilic torus design.
         axis : bool
             True to include the magnetic axis, False otherwise (Default = False)
         node_pattern : {``'linear'``, ``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
@@ -1067,6 +1110,7 @@ class ConcentricGrid(_Grid):
         self._M = M
         self._N = N
         self._NFP = NFP
+        self._NFP_umbilic_factor = NFP_umbilic_factor
 
         def ocs(L):
             # Ramos-Lopez, et al. “Optimal Sampling Patterns for Zernike Polynomials.”
@@ -1130,7 +1174,7 @@ class ConcentricGrid(_Grid):
         dt = np.asarray(dt)
         dimzern = r.size
 
-        z = np.linspace(0, 2 * np.pi / NFP, 2 * N + 1, endpoint=False)
+        z = np.linspace(0, 2 * np.pi / (NFP * NFP_umbilic_factor), 2 * N + 1, endpoint=False)
         dz = 2 * np.pi / z.size
 
         r = np.tile(r, 2 * N + 1)
@@ -1144,7 +1188,7 @@ class ConcentricGrid(_Grid):
 
         return nodes, spacing
 
-    def change_resolution(self, L, M, N, NFP=None):
+    def change_resolution(self, L, M, N, NFP=None, NFP_umbilic_factor=None):
         """Change the resolution of the grid.
 
         Parameters
@@ -1157,16 +1201,21 @@ class ConcentricGrid(_Grid):
             new toroidal grid resolution
         NFP : int
             Number of field periods.
-
+        NFP_umbilic_factor : float
+            Rational number of the form 1/integer with integer>=1.
+            This is needed for the umbilic torus design.
         """
         if NFP is None:
             NFP = self.NFP
-        if L != self.L or M != self.M or N != self.N or NFP != self.NFP:
+        if NFP_umbilic_factor is None:
+            NFP_umbilic_factor = self.NFP_umbilic_factor
+        if L != self.L or M != self.M or N != self.N or NFP != self.NFP or self.NFP_umbilic_factor != NFP_umbilic_factor:
             self._nodes, self._spacing = self._create_nodes(
                 L=L,
                 M=M,
                 N=N,
                 NFP=NFP,
+                NFP_umbilic_factor=NFP_umbilic_factor,
                 axis=self.axis.size > 0,
                 node_pattern=self.node_pattern,
             )

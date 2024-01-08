@@ -661,13 +661,14 @@ class QuadraticFlux(_Objective):
     ):
         self._src_grid = src_grid
         self._eval_grid = eval_grid
+        self._eq = eq
         self._eq_fixed = eq_fixed
         self._s = s
         self._q = q
         self._ext_field = ext_field
         self._field_grid = field_grid
         super().__init__(
-            things=[ext_field, eq] if not eq_fixed else [ext_field],
+            things=[ext_field] if eq_fixed else [ext_field, eq],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -689,8 +690,9 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq if self._eq_fixed else self.things[1]
-        print(eq)
+        eq = self._eq if self._eq_fixed else self.things[1]
+        if eq != self._eq:
+            self._eq = eq
 
         if self._src_grid is None:
             src_grid = LinearGrid(
@@ -812,7 +814,7 @@ class QuadraticFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params=None, constants=None):
+    def compute(self, params, constants=None):
         """Compute boundary force error.
 
         Parameters

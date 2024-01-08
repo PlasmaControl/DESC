@@ -548,6 +548,29 @@ class TestMagneticFields:
         np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
         assert field.Phi_basis.sym == "sin"
 
+    def test_init_Phi_mn_fourier_current_field(self):
+        """Test initial Phi_mn size is correct for FourierCurrentPotentialField."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+
+        field = FourierCurrentPotentialField(
+            Phi_mn=np.array([1, 1]),
+            modes_Phi=np.array([[1, 1], [3, 3]]),
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+        assert field.Phi_mn.size == field.Phi_basis.num_modes
+        # ensure can compute field at a point without incompatible size error
+        field.compute_magnetic_field([10.0, 0, 0])
+
     @pytest.mark.slow
     @pytest.mark.unit
     def test_spline_field(self):

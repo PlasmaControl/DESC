@@ -1376,10 +1376,12 @@ def test_regcoil_ellipse_helical_coils():
     np.testing.assert_allclose(B_ratio, 1.0, atol=1e-3)
 
     # check against the objective method of running REGCOIL
+    # with external field providing half the TF
 
     surface_current_field2 = surface_current_field.copy()
     surface_current_field2.change_Phi_resolution(M=M_Phi, N=N_Phi, sym_Phi="sin")
     surface_current_field2.Phi_mn = np.zeros_like(surface_current_field2.Phi_mn)
+    surface_current_field2.G = surface_current_field2.G / 2
 
     constraints = (  # now fix all but Phi_mn
         FixParameter(surface_current_field2, params=["I", "G", "R_lmn", "Z_lmn"]),
@@ -1391,6 +1393,9 @@ def test_regcoil_ellipse_helical_coils():
         N=N_sgrid,
         NFP=eq.NFP,
     )
+    ext_field = ToroidalMagneticField(
+        B0=-mu_0 * (surface_current_field.G / 2) / 2 / np.pi, R0=1
+    )
     obj = SurfaceCurrentRegularizedQuadraticFlux(
         surface_current_field=surface_current_field2,
         eq=eq,
@@ -1398,6 +1403,10 @@ def test_regcoil_ellipse_helical_coils():
         source_grid=sgrid,
         alpha=1e-18,
         eq_fixed=True,
+        # negate the B0 because a negative G corresponds to a positive B toroidal
+        # and we want this to provide half the field the surface current's
+        # G is providing, in the same direction
+        external_field=ext_field,
     )
     optimizer = Optimizer("lsq-exact")
 
@@ -1414,12 +1423,68 @@ def test_regcoil_ellipse_helical_coils():
         options={"initial_trust_radius": np.inf},
     )
 
-    np.testing.assert_allclose(
-        surface_current_field2.Phi_mn,
-        surface_current_field.Phi_mn,
-        rtol=1e-5,
-        atol=1e-13,
+    coords = eq.compute(["R", "phi", "Z", "B"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    B_from_surf = surface_current_field.compute_magnetic_field(
+        coords, grid=LinearGrid(M=200, N=200), basis="rpz"
+    ) + ext_field.compute_magnetic_field(coords, basis="rpz")
+    np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
+
+    fieldR, fieldZ = trace_from_curr_pot(
+        surface_current_field,
+        eq,
+        alpha=1e-15,
+        M=50,
+        N=160,
+        ntransit=20,
+        Rs=np.linspace(0.68, 0.72, 10),
+        external_TF=ext_field,
     )
+
+    assert np.max(fieldR) < 0.73
+    assert np.min(fieldR) > 0.67
+
+    assert np.max(fieldZ) < 0.02
+    assert np.min(fieldZ) > -0.02
+
+    # test finding coils
+
+    numCoils = 15
+    coilsFilename = "./coilsfile_15.txt"
+    eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
+
+    coilset2 = find_helical_coils(
+        surface_current_field,
+        eqname,
+        desirednumcoils=numCoils,
+        coilsFilename=coilsFilename,
+        step=6,
+        save_figs=False,
+    )
+    coilset2 = coilset2.to_FourierXYZ(N=150)
+    B_from_coils = coilset2.compute_magnetic_field(
+        coords, basis="rpz"
+    ) + ext_field.compute_magnetic_field(coords, basis="rpz")
+    np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
+
+    fieldR, fieldZ = field_trace_from_coilset(
+        coilset2,
+        eq,
+        15,
+        only_return_data=True,
+        Rs=np.linspace(0.685, 0.715, 10),
+        external_TF=ext_field,
+    )
+
+    assert np.max(fieldR) < 0.73
+    assert np.min(fieldR) > 0.67
+
+    assert np.max(fieldZ) < 0.02
+    assert np.min(fieldZ) > -0.02
+
+    B_ratio = calc_BNORM_from_coilset(coilset2, eqname, 0, 1, B0=ext_field, save=False)
+    np.testing.assert_allclose(B_ratio, 1.0, atol=1e-3)
 
 
 @pytest.mark.regression

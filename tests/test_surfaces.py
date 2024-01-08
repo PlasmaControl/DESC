@@ -160,7 +160,13 @@ class TestFourierRZToroidalSurface:
 
         coords = np.vstack([data["R"], data["phi"], data["Z"]]).T
         surface2 = FourierRZToroidalSurface.from_values(
-            coords, theta, M=surface.M, N=surface.N, NFP=surface.NFP, sym=True
+            coords,
+            theta,
+            M=surface.M,
+            N=surface.N,
+            NFP=surface.NFP,
+            sym=True,
+            w=np.ones_like(theta),
         )
         grid = LinearGrid(M=25, N=25, sym=False, NFP=surface.NFP)
         np.testing.assert_allclose(

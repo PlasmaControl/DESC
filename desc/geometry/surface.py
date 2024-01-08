@@ -361,7 +361,17 @@ class FourierRZToroidalSurface(Surface):
 
     @classmethod
     def from_values(
-        cls, coords, theta, zeta=None, M=6, N=6, NFP=1, sym=True, check_orientation=True
+        cls,
+        coords,
+        theta,
+        zeta=None,
+        M=6,
+        N=6,
+        NFP=1,
+        sym=True,
+        check_orientation=True,
+        rcond=None,
+        w=None,
     ):
         """Create a surface from given R,Z coordinates in real space.
 
@@ -393,6 +403,14 @@ class FourierRZToroidalSurface(Surface):
             True if surface is stellarator-symmetric
         check_orientation : bool
             whether to check left-handedness of coordinates and flip if necessary.
+        rcond : float
+            Relative condition number of the fit. Singular values smaller than this
+            relative to the largest singular value will be ignored. The default value
+            is len(x)*eps, where eps is the relative precision of the float type, about
+            2e-16 in most cases.
+        w : array-like, shape(num_points,)
+            Weights to apply to the sample coordinates. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
 
         Returns
         -------
@@ -418,12 +436,36 @@ class FourierRZToroidalSurface(Surface):
         Z = coords[:, 2]
         R_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
         Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        if w is None:  # unweighted fit
+            transform = Transform(
+                nodes, R_basis, build=False, build_pinv=True, rcond=rcond
+            )
+            Rb_lmn = transform.fit(R)
 
-        transform = Transform(nodes, R_basis, build=False, build_pinv=True)
-        Rb_lmn = transform.fit(R)
+            transform = Transform(
+                nodes, Z_basis, build=False, build_pinv=True, rcond=rcond
+            )
+            Zb_lmn = transform.fit(Z)
+        else:  # perform weighted fit
+            # solves system A^T W A x = A^T W b
+            # where A is the transform matrix, W is the diagonal weight matrix,
+            # and b is the vector of data points
+            w = np.asarray(w)
+            W = np.diag(w**2)
+            assert w.size == R.size, "w must same length as number of points being fit"
 
-        transform = Transform(nodes, Z_basis, build=False, build_pinv=True)
-        Zb_lmn = transform.fit(Z)
+            transform = Transform(
+                nodes, R_basis, build=True, build_pinv=False, method="direct1"
+            )
+            A = transform.matrices[transform.method][0][0][0]
+            # multiple w*R since W @ R is just elementwise multiplication
+            Rb_lmn = np.linalg.lstsq(A.T @ W @ A, A.T @ (w * R), rcond=rcond)[0]
+
+            transform = Transform(
+                nodes, Z_basis, build=True, build_pinv=False, method="direct1"
+            )
+            A = transform.matrices[transform.method][0][0][0]
+            Zb_lmn = np.linalg.lstsq(A.T @ W @ A, A.T @ (w * Z), rcond=rcond)[0]
 
         surf = cls(
             Rb_lmn,

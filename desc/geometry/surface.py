@@ -76,6 +76,13 @@ class FourierRZToroidalSurface(Surface):
             np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
         )
 
+        assert (
+            R_lmn.size == modes_R.shape[0]
+        ), "R_lmn size and modes_R.shape[0] must be the same size!"
+        assert (
+            Z_lmn.size == modes_Z.shape[0]
+        ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
+
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
         assert isposint(NFP)
@@ -432,6 +439,13 @@ class ZernikeRZToroidalSection(Surface):
         R_lmn, Z_lmn, modes_R, modes_Z = map(
             np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
         )
+
+        assert (
+            R_lmn.size == modes_R.shape[0]
+        ), "R_lmn size and modes_R.shape[0] must be the same size!"
+        assert (
+            Z_lmn.size == modes_Z.shape[0]
+        ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)

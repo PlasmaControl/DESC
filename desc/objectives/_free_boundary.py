@@ -814,7 +814,7 @@ class QuadraticFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, field_params, eq_params=None, constants=None):
         """Compute boundary force error.
 
         Parameters
@@ -841,7 +841,7 @@ class QuadraticFlux(_Objective):
             eval_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,
-                params=params,
+                params=eq_params,
                 transforms=constants["eval_transforms"],
                 profiles=constants["eval_profiles"],
             )
@@ -849,7 +849,7 @@ class QuadraticFlux(_Objective):
             src_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,
-                params=params,
+                params=eq_params,
                 transforms=constants["src_transforms"],
                 profiles=constants["src_profiles"],
             )
@@ -874,7 +874,7 @@ class QuadraticFlux(_Objective):
         ).T
 
         Bext = self._ext_field.compute_magnetic_field(
-            x, grid=self._field_grid, basis="rpz"
+            x, grid=self._field_grid, basis="rpz", params=field_params
         )
 
         f = jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)

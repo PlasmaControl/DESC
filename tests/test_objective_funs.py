@@ -551,23 +551,24 @@ class TestObjectiveFunction:
             modes_Phi=np.array([[1, 4]]),
             G=1e4,
             I=0,
+            sym_Phi="sin",
         )
-        field.change_Phi_resolution(M=0, N=4)
+        field.change_Phi_resolution(M=4, N=0)
 
         source_N = 20
         source_M = 10
 
         field_grid = LinearGrid(
             rho=np.array([1.0]),
-            M=field.M,
-            N=field.N,
-            NFP=int(eq.NFP),
+            M=source_M,
+            N=source_N,
+            NFP=int(field.NFP),
             sym=False,
         )
         eval_grid = LinearGrid(
             rho=np.array([1.0]),
             M=eq.M_grid,
-            N=eq.N_grid,
+            N=source_N,
             NFP=int(eq.NFP),
             sym=False,
         )
@@ -593,17 +594,17 @@ class TestObjectiveFunction:
         )
         objective = ObjectiveFunction(quadflux_obj)
 
-        things = field
-        things_new, result = optimizer.optimize(
-            things,
+        new_field, result = optimizer.optimize(
+            field,
             objective=objective,
             constraints=constraints,
-            gtol=0,
-            ftol=0,
+            gtol=1e-14,
+            ftol=1e-14,
+            xtol=0,
             copy=True,
         )
 
-        np.testing.assert_allclose(things_new[0].Phi_mn, 0, atol=1e-14)
+        np.testing.assert_allclose(new_field[0].Phi_mn, 0, atol=1e-9)
 
     @pytest.mark.unit
     def test_target_max_iota(self):

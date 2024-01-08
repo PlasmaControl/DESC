@@ -185,6 +185,18 @@ class TestFourierRZToroidalSurface:
             surface.compute("S")["S"], surface2.compute("S")["S"], rtol=1e-3
         )
 
+        # test assert statements
+        with pytest.raises(NotImplementedError):
+            FourierRZToroidalSurface.from_values(
+                coords,
+                theta,
+                zeta=theta,
+                M=surface.M,
+                N=surface.N,
+                NFP=surface.NFP,
+                sym=True,
+            )
+
 
 class TestZernikeRZToroidalSection:
     """Tests for ZernikeRZToroidalSection class."""

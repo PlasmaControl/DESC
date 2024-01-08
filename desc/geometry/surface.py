@@ -360,7 +360,9 @@ class FourierRZToroidalSurface(Surface):
         return surf
 
     @classmethod
-    def from_values(cls, coords, theta, M, N, NFP, sym=True, check_orientation=True):
+    def from_values(
+        cls, coords, theta, zeta=None, M=6, N=6, NFP=1, sym=True, check_orientation=True
+    ):
         """Create a surface from given R,Z coordinates in real space.
 
         Parameters
@@ -371,10 +373,20 @@ class FourierRZToroidalSurface(Surface):
             Locations in poloidal angle theta where real space coordinates are given.
             Expects same number of angles as coords (num_points),
             This determines the poloidal angle for the resulting surface.
+        zeta : ndarray, shape(num_points,)
+            Locations in toroidal angle zeta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the toroidal angle for the resulting surface.
+            if None, defaults to assuming the toroidal angle is the cylindrical phi
+            and so sets zeta = phi = coords[:,1]
         M : int
-            poloidal resolution of basis used to fit surface with
+            poloidal resolution of basis used to fit surface with.
+            It is recommended to fit with M < num_theta points per toroidal plane,
+            i.e. if num_points = num_theta*num_zeta , then want to ensure M < num_theta
         N : int
             toroidal resolution of basis used to fit surface with
+            It is recommended to fit with N < num_zeta points per poloidal plane.
+            i.e. if num_points = num_theta*num_zeta , then want to ensure N < num_zeta
         NFP : int
             number of toroidal field periods for surface
         sym : bool
@@ -392,6 +404,10 @@ class FourierRZToroidalSurface(Surface):
         assert (
             coords.shape[0] == theta.size
         ), "coords first dimenson and theta must have same size"
+        if zeta is None:
+            zeta = coords[:, 1]
+        else:
+            raise NotImplementedError("zeta != phi not yet implemented")
         nodes = Grid(
             np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
             sort=False,

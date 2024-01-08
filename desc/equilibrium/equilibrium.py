@@ -57,8 +57,8 @@ class Equilibrium(IOAble, Optimizable):
         total toroidal flux (in Webers) within LCFS. Default 1.0
     NFP : int (optional)
         number of field periods Default ``surface.NFP`` or 1
-    NFPufac : float (optional)
-        number of field periods Default ``surface.NFPufac`` or 1
+    NFP_umbilic_factor : float (optional)
+        number of field periods Default ``surface.NFP_umbilic_factor`` or 1
     L : int (optional)
         Radial resolution. Default 2*M for ``spectral_indexing=='fringe'``, else M
     M : int (optional)
@@ -125,7 +125,7 @@ class Equilibrium(IOAble, Optimizable):
         "_Z_sym",
         "_Psi",
         "_NFP",
-        "_NFPufac",
+        "_NFP_umbilic_factor",
         "_L",
         "_M",
         "_N",
@@ -156,7 +156,7 @@ class Equilibrium(IOAble, Optimizable):
         self,
         Psi=1.0,
         NFP=None,
-        NFPufac=None,
+        NFP_umbilic_factor=None,
         L=None,
         M=None,
         N=None,
@@ -204,19 +204,19 @@ class Equilibrium(IOAble, Optimizable):
         errorif(
             (NFP is not None) and not isposint(NFP),
             ValueError,
-            f"NFPufac should be a positive integer, got {NFPufac}",
+            f"NFP_umbilic_factor should be a positive integer, got {NFP_umbilic_factor}",
         )
         self._NFP = int(
             setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
         )
 
         errorif(
-            (NFPufac is not None) and not ispos(NFPufac),
+            (NFP_umbilic_factor is not None) and not ispos(NFP_umbilic_factor),
             ValueError,
-            f"NFPufac should be a positive integer, got {NFPufac}",
+            f"NFP_umbilic_factor should be a positive integer, got {NFP_umbilic_factor}",
         )
-        self._NFPufac = float(
-            setdefault(NFPufac, getattr(surface, "NFPufac", getattr(axis, "NFPufac", 1)))
+        self._NFP_umbilic_factor = float(
+            setdefault(NFP_umbilic_factor, getattr(surface, "NFP_umbilic_factor", getattr(axis, "NFP_umbilic_factor", 1)))
         )
 
         # stellarator symmetry for bases
@@ -236,11 +236,11 @@ class Equilibrium(IOAble, Optimizable):
 
         # surface
         self._surface, self._bdry_mode = parse_surface(
-            surface, self.NFP, self.NFPufac, self.sym, self.spectral_indexing
+            surface, self.NFP, self.NFP_umbilic_factor, self.sym, self.spectral_indexing
         )
 
         # magnetic axis
-        self._axis = parse_axis(axis, self.NFP, self.NFPufac, self.sym, self.surface)
+        self._axis = parse_axis(axis, self.NFP, self.NFP_umbilic_factor, self.sym, self.surface)
 
         # resolution
         _assert_nonnegint(L, "L")
@@ -274,7 +274,7 @@ class Equilibrium(IOAble, Optimizable):
             M=self.M,
             N=self.N,
             NFP=self.NFP,
-            NFPufac=self.NFPufac,
+            NFP_umbilic_factor=self.NFP_umbilic_factor,
             sym=self._R_sym,
             spectral_indexing=self.spectral_indexing,
         )
@@ -283,7 +283,7 @@ class Equilibrium(IOAble, Optimizable):
             M=self.M,
             N=self.N,
             NFP=self.NFP,
-            NFPufac=self.NFPufac,
+            NFP_umbilic_factor=self.NFP_umbilic_factor,
             sym=self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
@@ -292,7 +292,7 @@ class Equilibrium(IOAble, Optimizable):
             M=self.M,
             N=self.N,
             NFP=self.NFP,
-            NFPufac=self.NFPufac,
+            NFP_umbilic_factor=self.NFP_umbilic_factor,
             sym=self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
@@ -366,11 +366,11 @@ class Equilibrium(IOAble, Optimizable):
 
         # ensure number of field periods agree before setting guesses
         eq_NFP = self.NFP
-        eq_NFPufac =  self.NFPufac,
+        eq_NFP_umbilic_factor =  self.NFP_umbilic_factor,
         surf_NFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
-        surf_NFPufac = self.surface.NFPufac if hasattr(self.surface, "NFPufac") else self.NFPufac
+        surf_NFP_umbilic_factor = self.surface.NFP_umbilic_factor if hasattr(self.surface, "NFP_umbilic_factor") else self.NFP_umbilic_factor
         axis_NFP = self._axis.NFP
-        axis_NFPufac = self._axis.NFPufac
+        axis_NFP_umbilic_factor = self._axis.NFP_umbilic_factor
         errorif(
             not (eq_NFP == surf_NFP == axis_NFP),
             ValueError,
@@ -379,10 +379,10 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         errorif(
-            not (eq_NFPufac == surf_NFPufac == axis_NFPufac),
+            not (eq_NFP_umbilic_factor == surf_NFP_umbilic_factor == axis_NFP_umbilic_factor),
             ValueError,
             "Unequal number of umbilic field period factors for equilibrium "
-            + f"{eq_NFPufac}, surface {surf_NFPufac}, and axis {axis_NFPufac}",
+            + f"{eq_NFP_umbilic_factor}, surface {surf_NFP_umbilic_factor}, and axis {axis_NFP_umbilic_factor}",
         )
 
         # make sure symmetry agrees
@@ -453,8 +453,8 @@ class Equilibrium(IOAble, Optimizable):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, NFPufac = {}sym={}, spectral_indexing={})".format(
-                self.L, self.M, self.N, self.NFP, self.NFPufac, self.sym, self.spectral_indexing
+            + " (L={}, M={}, N={}, NFP={}, NFP_umbilic_factor = {}sym={}, spectral_indexing={})".format(
+                self.L, self.M, self.N, self.NFP, self.NFP_umbilic_factor, self.sym, self.spectral_indexing
             )
         )
 
@@ -538,7 +538,7 @@ class Equilibrium(IOAble, Optimizable):
         M_grid=None,
         N_grid=None,
         NFP=None,
-        NFPufac=None,
+        NFP_umbilic_factor=None,
         sym=None,
     ):
         """Set the spectral resolution and real space grid resolution.
@@ -559,7 +559,7 @@ class Equilibrium(IOAble, Optimizable):
             Toroidal real space grid resolution.
         NFP : int
             Number of field periods.
-        NFPufac : float
+        NFP_umbilic_factor : float
             Rational number of the form 1/integer with integer>=1.
 	    This is needed for the umbilic torus design.
         sym : bool
@@ -573,7 +573,7 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
         self._NFP = int(setdefault(NFP, self.NFP))
-        self._NFPufac = float(setdefault(NFPufac, self.NFPufac))
+        self._NFP_umbilic_factor = float(setdefault(NFP_umbilic_factor, self.NFP_umbilic_factor))
         self._sym = setdefault(sym, self.sym)
 
         old_modes_R = self.R_basis.modes
@@ -581,13 +581,13 @@ class Equilibrium(IOAble, Optimizable):
         old_modes_L = self.L_basis.modes
 
         self.R_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, NFPufac=self.NFPufac, sym="cos" if self.sym else self.sym
+            self.L, self.M, self.N, NFP=self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor, sym="cos" if self.sym else self.sym
         )
         self.Z_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, NFPufac=self.NFPufac, sym="sin" if self.sym else self.sym
+            self.L, self.M, self.N, NFP=self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor, sym="sin" if self.sym else self.sym
         )
         self.L_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, NFPufac=self.NFPufac, sym="sin" if self.sym else self.sym
+            self.L, self.M, self.N, NFP=self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor, sym="sin" if self.sym else self.sym
         )
 
         for profile in [
@@ -605,9 +605,9 @@ class Equilibrium(IOAble, Optimizable):
                 p.change_resolution(max(p.basis.L, self.L))
 
         self.surface.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, NFPufac=self.NFPufac, sym=self.sym
+            self.L, self.M, self.N, NFP=self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor, sym=self.sym
         )
-        self.axis.change_resolution(self.N, NFP=self.NFP, NFPufac=self.NFPufac, sym=self.sym)
+        self.axis.change_resolution(self.N, NFP=self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor, sym=self.sym)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -642,7 +642,7 @@ class Equilibrium(IOAble, Optimizable):
         )
         if rho is not None:
             assert (rho >= 0) and (rho <= 1)
-            surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, NFPufac=self.NFPufac, rho=rho)
+            surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor, rho=rho)
             surface.change_resolution(self.M, self.N)
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
@@ -670,7 +670,7 @@ class Equilibrium(IOAble, Optimizable):
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
             surface.grid = LinearGrid(
-                rho=rho, M=2 * surface.M, N=2 * surface.N, endpoint=True, NFP=self.NFP, NFPufac=self.NFPufac
+                rho=rho, M=2 * surface.M, N=2 * surface.N, endpoint=True, NFP=self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor
             )
             return surface
 
@@ -689,7 +689,7 @@ class Equilibrium(IOAble, Optimizable):
                         surface.R_basis.modes[:, 1] == m,
                     )
                 )
-                AR[j, i] = fourier(zeta, n, self.NFP, NFPufac=self.NFPufac)
+                AR[j, i] = fourier(zeta, n, self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor)
 
             for i, (l, m, n) in enumerate(self.Z_basis.modes):
                 j = np.argwhere(
@@ -698,7 +698,7 @@ class Equilibrium(IOAble, Optimizable):
                         surface.Z_basis.modes[:, 1] == m,
                     )
                 )
-                AZ[j, i] = fourier(zeta, n, self.NFP, NFPufac=self.NFPufac)
+                AZ[j, i] = fourier(zeta, n, self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor)
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
@@ -732,7 +732,7 @@ class Equilibrium(IOAble, Optimizable):
         """
         assert kind in {"power_series", "spline", "fourier_zernike"}
         if grid is None:
-            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP, NFPufac=self.NFPufac)
+            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor)
         data = self.compute(name, grid=grid, **kwargs)
         f = data[name]
         f = grid.compress(f, surface_label="rho")
@@ -775,7 +775,7 @@ class Equilibrium(IOAble, Optimizable):
         else:  # catch cases such as axisymmetry with stellarator symmetry
             Z_n = 0
             modes_Z = 0
-        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, NFPufac=self.NFPufac, sym=self.sym)
+        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor, sym=self.sym)
         return axis
 
     def compute(
@@ -822,7 +822,7 @@ class Equilibrium(IOAble, Optimizable):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP, NFPufac=self.NFPufac)
+            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor)
         elif not isinstance(grid, _Grid):
             raise TypeError(
                 "must pass in a Grid object for argument grid!"
@@ -873,7 +873,7 @@ class Equilibrium(IOAble, Optimizable):
                 calc1d = False
 
         if calc0d and override_grid:
-            grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP, NFPufac=self.NFPufac)
+            grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor)
             data0d = compute_fun(
                 self,
                 dep0d,
@@ -893,7 +893,7 @@ class Equilibrium(IOAble, Optimizable):
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
-                NFPufac=self.NFPufac,
+                NFP_umbilic_factor=self.NFP_umbilic_factor,
                 sym=self.sym,
             )
             # Todo: Pass in data0d as a seed once there are 1d quantities that
@@ -1138,9 +1138,9 @@ class Equilibrium(IOAble, Optimizable):
         assert self.NFP == getattr(
             new, "NFP", self.NFP
         ), "Surface and Equilibrium must have the same NFP"
-        assert self.NFPufac == getattr(
-            new, "NFPufac", self.NFPufac
-        ), "Surface and Equilibrium must have the same NFPufac"
+        assert self.NFP_umbilic_factor == getattr(
+            new, "NFP_umbilic_factor", self.NFP_umbilic_factor
+        ), "Surface and Equilibrium must have the same NFP_umbilic_factor"
         new.change_resolution(self.L, self.M, self.N)
         self._surface = new
 
@@ -1156,7 +1156,7 @@ class Equilibrium(IOAble, Optimizable):
         ), f"axis should be of type FourierRZCurve or a subclass, got {new}"
         assert self.sym == new.sym, "Axis and Equilibrium must have the same symmetry"
         assert self.NFP == new.NFP, "Axis and Equilibrium must have the same NFP"
-        assert self.NFPufac == new.NFPufac, "Axis and Equilibrium must have the same NFPufac"
+        assert self.NFP_umbilic_factor == new.NFP_umbilic_factor, "Axis and Equilibrium must have the same NFP_umbilic_factor"
         new.change_resolution(self.N)
         self._axis = new
 
@@ -1192,9 +1192,9 @@ class Equilibrium(IOAble, Optimizable):
         return self._NFP
 
     @property
-    def NFPufac(self):
+    def NFP_umbilic_factor(self):
         """float: Field period Umbilic factor."""
-        return self._NFPufac
+        return self._NFP_umbilic_factor
 
     @NFP.setter
     def NFP(self, NFP):
@@ -1203,12 +1203,12 @@ class Equilibrium(IOAble, Optimizable):
         ), f"NFP should be a positive integer, got {type(NFP)}"
         self.change_resolution(NFP=NFP)
 
-    @NFPufac.setter
-    def NFPufac(self, NFPufac):
+    @NFP_umbilic_factor.setter
+    def NFP_umbilic_factor(self, NFP_umbilic_factor):
         assert (
-            isinstance(NFPufac, numbers.Real) and (NFPufac > 0)
+            isinstance(NFP_umbilic_factor, numbers.Real) and (NFP_umbilic_factor > 0)
         ), f"NFP should be a positive integer, got {type(NFP)}"
-        self.change_resolution(NFPufac=NFPufac)
+        self.change_resolution(NFP_umbilic_factor=NFP_umbilic_factor)
 
     @property
     def L(self):

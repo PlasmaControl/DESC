@@ -53,8 +53,10 @@ from desc.objectives import (
     ToroidalCurrent,
     Volume,
 )
+from desc.objectives.linear_objectives import FixParameter
 from desc.objectives.objective_funs import _Objective
 from desc.objectives.utils import softmax, softmin
+from desc.optimize.optimizer import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -534,6 +536,74 @@ class TestObjectiveFunction:
 
         # for this to pass with rtol=1e-3, the source resolution needs to be quite high
         np.testing.assert_allclose(f, Bnorm, rtol=1e-2, atol=1e-2)
+
+    def test_quadratic_flux_optimization(self):
+        """Test optimization using quadratic flux."""
+        eq = Equilibrium(M=2, L=2)
+        eq.solve(verbose=0)
+        surf = eq.surface.copy()
+        surf.R_lmn = surf.R_lmn.at[surf.R_basis.get_idx(M=1, N=0)].set(2)
+        surf.Z_lmn = surf.Z_lmn.at[surf.Z_basis.get_idx(M=-1, N=0)].set(2)
+
+        field = FourierCurrentPotentialField.from_surface(
+            surface=surf,
+            Phi_mn=np.array([1e4]),
+            modes_Phi=np.array([[1, 4]]),
+            G=1e4,
+            I=0,
+        )
+        field.change_Phi_resolution(M=0, N=4)
+
+        source_N = 20
+        source_M = 10
+
+        field_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=field.M,
+            N=field.N,
+            NFP=int(eq.NFP),
+            sym=False,
+        )
+        eval_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=int(eq.NFP),
+            sym=False,
+        )
+
+        source_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=source_M,
+            N=source_N,
+            NFP=int(eq.NFP),
+            sym=False,
+        )
+
+        constraints = (FixParameter(field, ["I", "G", "R_lmn", "Z_lmn"]),)
+        optimizer = Optimizer("lsq-exact")
+
+        quadflux_obj = QuadraticFlux(
+            ext_field=field,
+            eq=eq,
+            src_grid=source_grid,
+            eval_grid=eval_grid,
+            field_grid=field_grid,
+            eq_fixed=True,
+        )
+        objective = ObjectiveFunction(quadflux_obj)
+
+        things = field
+        things_new, result = optimizer.optimize(
+            things,
+            objective=objective,
+            constraints=constraints,
+            gtol=0,
+            ftol=0,
+            copy=True,
+        )
+
+        np.testing.assert_allclose(things_new[0].Phi_mn, 0, atol=1e-14)
 
     @pytest.mark.unit
     def test_target_max_iota(self):

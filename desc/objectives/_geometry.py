@@ -868,7 +868,7 @@ class PlasmaVesselDistanceCircular(_Objective):
 
         """
         eq = self.things[0]
-        surface = self.things[1]
+        surface = self._surface if self._surface_fixed else self.things[1]
         # if things[1] is different than self._surface, update self._surface
         if surface != self._surface:
             self._surface = surface
@@ -934,7 +934,7 @@ class PlasmaVesselDistanceCircular(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, equil_params, surface_params, constants=None):
+    def compute(self, equil_params, surface_params=None, constants=None):
         """Compute plasma-surface distance.
 
         Parameters
@@ -943,6 +943,7 @@ class PlasmaVesselDistanceCircular(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         surface_params : dict
             Dictionary of surface degrees of freedom, eg Surface.params_dict
+            Only needed if self._surface_fixed = False
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants

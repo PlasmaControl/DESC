@@ -1390,7 +1390,7 @@ class VMECIO:
         f.write("\n")
 
         f.write("!---- Grid Parameters ----\n")
-        f.write("  LASYM = {}\n".format("T" if eq.sym else "F"))  # stellarator symmetry
+        f.write("  LASYM = {}\n".format("F" if eq.sym else "T"))  # stellarator symmetry
         f.write("  NFP = {:2.0f}\n".format(eq.NFP))  # number of field periods
         # poloidal resolution
         f.write("  MPOL = {:2.0f}\n".format(kwargs.get("MPOL", eq.M + 1)))

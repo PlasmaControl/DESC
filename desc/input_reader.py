@@ -876,7 +876,7 @@ class InputReader:
         current = grid.compress(eq.compute("current", grid=grid)["current"])
 
         pres_profile = PowerSeriesProfile.from_values(
-            rho, pressure, order=10, sym=False
+            rho, pressure, order=eq.L, sym=False
         ).params
         iota_profile = PowerSeriesProfile.from_values(
             rho, iota, order=eq.L, sym=False
@@ -892,8 +892,7 @@ class InputReader:
             char = "c"
             profile = curr_profile
 
-        idxs = np.linspace(0, eq.L - 1, eq.L, dtype=int)
-        for l in idxs:
+        for l in range(eq.L):
             f.write(
                 "l: {:3d}  p = {:15.8E}  {} = {:15.8E}\n".format(
                     int(l), pres_profile[l], char, profile[l]

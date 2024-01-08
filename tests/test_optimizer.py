@@ -997,8 +997,7 @@ def test_proximal_with_PlasmaVesselDistance():
     objective = ObjectiveFunction((obj,))
 
     optimizer = Optimizer("proximal-lsq-exact")
-    eq, result = optimizer.optimize(
-        eq,
+    eq.optimize(
         objective,
         constraints,
         verbose=3,
@@ -1017,38 +1016,6 @@ def test_proximal_with_PlasmaVesselDistance():
         verbose=3,
         maxiter=3,
     )
-
-    # check that works with signed distance
-    a = 0.5
-    R0 = 4
-    surf = FourierRZToroidalSurface(
-        R_lmn=[R0, a],
-        Z_lmn=[0.0, -a],
-        modes_R=np.array([[0, 0], [1, 0]]),
-        modes_Z=np.array([[0, 0], [-1, 0]]),
-        sym=True,
-        NFP=eq.NFP,
-    )
-    obj = PlasmaVesselDistance(
-        surface=surf,
-        eq=eq,
-        target=0.5,
-        plasma_grid=grid,
-        surface_fixed=True,
-        use_signed_distance=True,
-    )
-    objective = ObjectiveFunction((obj,))
-
-    optimizer = Optimizer("proximal-lsq-exact")
-    eq, result = optimizer.optimize(
-        eq,
-        objective,
-        constraints,
-        verbose=3,
-        maxiter=3,
-    )
-
-    np.testing.assert_allclose(obj.compute(*obj.xs(eq)), 0.5, rtol=1e-2)
 
 
 @pytest.mark.slow

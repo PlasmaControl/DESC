@@ -44,7 +44,7 @@ class _Basis(IOAble, ABC):
         self._M = int(self._M)
         self._N = int(self._N)
         self._NFP = int(self._NFP)
-        self._NFP_umbilic_factor = float(self._NFP_umbilic_factor)
+        self._NFP_umbilic_factor = int(self._NFP_umbilic_factor)
         self._modes = self._modes.astype(int)
 
     def _set_up(self):
@@ -59,7 +59,7 @@ class _Basis(IOAble, ABC):
         self._M = int(self._M)
         self._N = int(self._N)
         self._NFP = int(self._NFP)
-        self._NFP_umbilic_factor = float(self._NFP_umbilic_factor)
+        self._NFP_umbilic_factor = int(self._NFP_umbilic_factor)
         self._modes = self._modes.astype(int)
 
     def _enforce_symmetry(self):
@@ -204,7 +204,7 @@ class _Basis(IOAble, ABC):
 
     @property
     def NFP_umbilic_factor(self):
-        """float: Umbilic factor field periods."""
+        """int: Umbilic factor field periods."""
         return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
 
     @property
@@ -365,8 +365,8 @@ class FourierSeries(_Basis):
         Maximum toroidal resolution.
     NFP : int
         number of field periods
-    NFP_umbilic_factor : float
-        Rational number of the form 1/integer with integer>=1.
+    NFP_umbilic_factor : int
+        Prefactor of the form 1/NFP_umbilic_fac.
 	This is needed for the umbilic torus design.
     sym : {``'cos'``, ``'sin'``, False}
         * ``'cos'`` for cos(m*t-n*z) symmetry
@@ -467,7 +467,7 @@ class FourierSeries(_Basis):
         NFP : int
             Number of field periods.
         NFP_umbilic_factor : float
-            Rational number of the form 1/integer with integer>=1.
+            Prefactor of the form 1/NFP_umbilic_factor.
             This is needed for the umbilic torus design.
         sym : bool
             Whether to enforce stellarator symmetry.
@@ -496,7 +496,7 @@ class DoubleFourierSeries(_Basis):
     NFP : int
         Number of field periods.
     NFP_umbilic_factor : float
-        Rational number of the form 1/integer with integer>=1.
+        Prefactor of the form 1/NFP_umbilic_factor. 
 	This is needed for the umbilic torus design.
     sym : {``'cos'``, ``'sin'``, ``False``}
         * ``'cos'`` for cos(m*t-n*z) symmetry
@@ -598,7 +598,7 @@ class DoubleFourierSeries(_Basis):
             n = n[nidx]
 
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
-        toroidal = fourier(z[:, np.newaxis], n, self.NFP*self.NFP_umbilic_factor, derivatives[2])
+        toroidal = fourier(z[:, np.newaxis], n, self.NFP/self.NFP_umbilic_factor, derivatives[2])
         if unique:
             poloidal = poloidal[toutidx][:, moutidx]
             toroidal = toroidal[zoutidx][:, noutidx]
@@ -617,7 +617,7 @@ class DoubleFourierSeries(_Basis):
         NFP : int
             Number of field periods.
         NFP_umbilic_factor : float
-            Rational number of the form 1/integer with integer>=1.
+            Prefactor of the form 1/NFP_umbilic_factor. 
             This is needed for the umbilic torus design.
         sym : bool
             Whether to enforce stellarator symmetry.
@@ -864,7 +864,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
     NFP : int
         Number of field periods.
     NFP_umbilic_factor : float
-        Rational number of the form 1/integer with integer>=1.
+        Prefactor of the form 1/NFP_umbilic_factor. 
         This is needed for the umbilic torus design.
     sym : {``'cos'``, ``'sin'``, ``False``}
         * ``'cos'`` for cos(m*t-n*z) symmetry
@@ -950,7 +950,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
         radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
-        toroidal = fourier(z[:, np.newaxis], n, self.NFP*self.NFP_umbilic_factor, derivatives[2])
+        toroidal = fourier(z[:, np.newaxis], n, self.NFP/self.NFP_umbilic_factor, derivatives[2])
 
         return radial * poloidal * toroidal
 
@@ -968,7 +968,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
         NFP : int
             Number of field periods.
         NFP_umbilic_factor : float
-            Rational number of the form 1/integer with integer>=1.
+            Prefactor of the form 1/NFP_umbilic_factor. 
             This is needed for the umbilic torus design.
         sym : bool
             Whether to enforce stellarator symmetry.
@@ -1006,7 +1006,7 @@ class FourierZernikeBasis(_Basis):
     NFP : int
         Number of field periods.
     NFP_umbilic_factor : float
-        Rational number of the form 1/integer with integer>=1.
+        Prefactor of the form 1/NFP_umbilic_factor. 
         This is needed for the umbilic torus design.
     sym : {``'cos'``, ``'sin'``, ``False``}
         * ``'cos'`` for cos(m*t-n*z) symmetry
@@ -1190,7 +1190,7 @@ class FourierZernikeBasis(_Basis):
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
-        toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP*self.NFP_umbilic_factor, dt=derivatives[2])
+        toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP/self.NFP_umbilic_factor, dt=derivatives[2])
         if unique:
             radial = radial[routidx][:, lmoutidx]
             poloidal = poloidal[toutidx][:, moutidx]
@@ -1212,7 +1212,7 @@ class FourierZernikeBasis(_Basis):
         NFP : int
             Number of field periods.
         NFP_umbilic_factor : float
-            Rational number of the form 1/integer with integer>=1.
+            Prefactor of the form 1/NFP_umbilic_factor. 
             This is needed for the umbilic torus design.
         sym : bool
             Whether to enforce stellarator symmetry.
@@ -1622,7 +1622,7 @@ def fourier(theta, m, NFP=1, NFP_umbilic_factor = 1, dt=0):
     NFP : int
         number of field periods (Default = 1)
     NFP_umbilic_factor : float
-        Rational number of the form 1/integer.
+        NFP prefactor of the form 1/NFP_umbilic_factor. 
 	This is needed for the umbilic torus design.
     dt : int
         order of derivative (Default = 0)

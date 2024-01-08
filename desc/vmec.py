@@ -1378,15 +1378,15 @@ class VMECIO:
         f.write("  NSTEP = {:3.0f}\n".format(kwargs.get("NITER", 250)))
         # blending parameter from previous iteration [0, 1]
         f.write("  DELT = {}\n".format(kwargs.get("DELT", 0.9)))
-        f.write("  NS_ARRAY =    ")  # number of flux surfaces
+        f.write("  NS_ARRAY =   ")  # number of flux surfaces
         for ns in kwargs.get("NS_ARRAY", [17, 33, 65, 129]):
-            f.write("{:5.0f} ".format(ns))
-        f.write("\n  NITER_ARRAY = ")  # maximum number of iterations
+            f.write(" {:5.0f}".format(ns))
+        f.write("\n  NITER_ARRAY =")  # maximum number of iterations
         for niter in kwargs.get("NITER_ARRAY", [1000, 2000, 4000, 10000]):
-            f.write("{:5.0f} ".format(niter))
-        f.write("\n  FTOL_ARRAY =  ")  # stopping tolerance
+            f.write(" {:5.0f}".format(niter))
+        f.write("\n  FTOL_ARRAY = ")  # stopping tolerance
         for ftol in kwargs.get("FTOL_ARRAY", [1e-9, 1e-10, 1e-11, 1e-12]):
-            f.write("{:5.0e} ".format(niter))
+            f.write(" {:5.0e}".format(ftol))
         f.write("\n")
 
         f.write("!---- Grid Parameters ----\n")
@@ -1413,17 +1413,17 @@ class VMECIO:
             pressure = PowerSeriesProfile.from_values(rho, p, order=10, sym=True)
         if isinstance(pressure, PowerSeriesProfile):
             assert pressure.sym
-            f.write("  AM = ")  # pressure power series coefficients
+            f.write("  AM =")  # pressure power series coefficients
             for am in pressure.params:
-                f.write("{:+14.8e} ".format(am))
+                f.write(" {:+14.8e}".format(am))
             f.write("\n  PMASS_TYPE = 'power_series'\n")
         elif isinstance(pressure, SplineProfile):
-            f.write("  AM_AUX_S = ")  # spline knot locations
+            f.write("  AM_AUX_S =")  # spline knot locations
             for r in pressure.knots:
-                f.write("{:+14.8e} ".format(r**2))  # s = rho^2
-            f.write("\n  AM_AUX_F = ")  # pressure cubic spline values
+                f.write(" {:+14.8e}".format(r**2))  # s = rho^2
+            f.write("\n  AM_AUX_F =")  # pressure cubic spline values
             for am in pressure.values:
-                f.write("{:+14.8e} ".format(am))
+                f.write(" {:+14.8e}".format(am))
             f.write("\n  PMASS_TYPE = 'cubic_spline'\n")
 
         f.write("!---- Current/Iota Parameters ----\n")
@@ -1431,34 +1431,34 @@ class VMECIO:
             f.write("  NCURR = 0\n")  # rotational transform profile specified
             if isinstance(eq.iota, PowerSeriesProfile):
                 assert eq.iota.sym
-                f.write("  AI = ")  # iota power series coefficients
+                f.write("  AI =")  # iota power series coefficients
                 for ai in eq.iota.params:
-                    f.write("{:+14.8e} ".format(ai))
+                    f.write(" {:+14.8e}".format(ai))
                 f.write("\n  PIOTA_TYPE = 'power_series'\n")
             elif isinstance(eq.iota, SplineProfile):
-                f.write("  AI_AUX_S = ")  # spline knot locations
+                f.write("  AI_AUX_S =")  # spline knot locations
                 for r in eq.iota.knots:
-                    f.write("{:+14.8e} ".format(r**2))  # s = rho^2
-                f.write("\n  AI_AUX_F = ")  # iota cubic spline values
+                    f.write(" {:+14.8e}".format(r**2))  # s = rho^2
+                f.write("\n  AI_AUX_F =")  # iota cubic spline values
                 for ai in eq.iota.values:
-                    f.write("{:+14.8e} ".format(ai))
+                    f.write(" {:+14.8e} ".format(ai))
                 f.write("\n  PIOTA_TYPE = 'cubic_spline'\n")
         else:
             f.write("  NCURR = 1\n")  # current profile specified
             f.write("  CURTOR = {}\n".format(kwargs.get("CURTOR", 1)))  # AC scale
             if isinstance(eq.current, PowerSeriesProfile):
                 assert eq.current.sym
-                f.write("  AC = ")  # current power series coefficients
+                f.write("  AC =")  # current power series coefficients
                 for ac in eq.current.params:
-                    f.write("{:+14.8e} ".format(ac))
+                    f.write(" {:+14.8e}".format(ac))
                 f.write("\n  PCURR_TYPE = 'power_series'\n")
             elif isinstance(eq.current, SplineProfile):
-                f.write("  AC_AUX_S = ")  # spline knot locations
+                f.write("  AC_AUX_S =")  # spline knot locations
                 for r in eq.current.knots:
-                    f.write("{:+14.8e} ".format(r**2))  # s = rho^2
-                f.write("\n  AC_AUX_F = ")  # current cubic spline values
+                    f.write(" {:+14.8e}".format(r**2))  # s = rho^2
+                f.write("\n  AC_AUX_F =")  # current cubic spline values
                 for ac in eq.current.values:
-                    f.write("{:+14.8e} ".format(ac))
+                    f.write(" {:+14.8e}".format(ac))
                 f.write("\n  PCURR_TYPE = 'cubic_spline_I'\n")
 
         f.write("!---- Axis Parameters ----\n")
@@ -1478,19 +1478,19 @@ class VMECIO:
         f.write("  RAXIS_CC = ")
         for rac in R0_n[eq.N :]:
             f.write("{:+14.8e} ".format(rac))
-        if eq.sym:
+        if not eq.sym:
             # R axis sine coefficients
             f.write("\n  RAXIS_CS = {:+14.8e}".format(0))
             for ras in -R0_n[0 : eq.N][::-1]:
-                f.write("{:+14.8e} ".format(ras))
+                f.write(" {:+14.8e}".format(ras))
             # Z axis cosine coefficients
-            f.write("\n  ZAXIS_CC = ")
+            f.write("\n  ZAXIS_CC =")
             for zac in Z0_n[eq.N :]:
-                f.write("{:+14.8e} ".format(zac))
+                f.write(" {:+14.8e}".format(zac))
         # Z axis sine coefficients
         f.write("\n  ZAXIS_CS = {:+14.8e}".format(0))
         for zas in -Z0_n[0 : eq.N][::-1]:
-            f.write("{:+14.8e} ".format(zas))
+            f.write(" {:+14.8e}".format(zas))
         f.write("\n")
 
         f.write("!---- Boundary Parameters ----\n")

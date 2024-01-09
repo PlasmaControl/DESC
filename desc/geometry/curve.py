@@ -274,6 +274,7 @@ class FourierRZCurve(Curve):
             inputs["axis"][:, 0].astype(int),
             inputs["axis"][:, 0].astype(int),
             inputs["NFP"],
+            inputs["NFP_umbilic_factor"],
             inputs["sym"],
         )
         return curve

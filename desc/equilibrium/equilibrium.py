@@ -38,13 +38,7 @@ from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import Timer, copy_coeffs, errorif, isposint, only1, setdefault
 
-from .coords import (
-    compute_flux_coords,
-    compute_theta_coords,
-    is_nested,
-    map_coordinates,
-    to_sfl,
-)
+from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
 from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
 
@@ -818,10 +812,15 @@ class Equilibrium(IOAble, Optimizable):
         # and compute those first on a full grid
         p = "desc.equilibrium.equilibrium.Equilibrium"
         deps = list(set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names))
+        # TODO: replace this logic with `grid_type` from data_index
         dep0d = [
             dep
             for dep in deps
-            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
+            if (
+                (data_index[p][dep]["coordinates"] == "")
+                or (data_index[p][dep]["grid_type"] == "quad")
+            )
+            and (dep not in data)
         ]
         dep1d = [
             dep
@@ -904,17 +903,17 @@ class Equilibrium(IOAble, Optimizable):
         inbasis,
         outbasis=("rho", "theta", "zeta"),
         guess=None,
+        params=None,
         period=(np.inf, np.inf, np.inf),
         tol=1e-6,
         maxiter=30,
+        full_output=False,
         **kwargs,
     ):
         """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
 
         First solves for the computational coordinates that correspond to inbasis, then
         evaluates outbasis at those locations.
-
-        NOTE: this function cannot be JIT compiled or differentiated with AD.
 
         Parameters
         ----------
@@ -929,6 +928,8 @@ class Equilibrium(IOAble, Optimizable):
             Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
             corresponding to coords in inbasis. If None, heuristics are used based on
             in basis and a nearest neighbor search on a coarse grid.
+        params : dict
+            Values of equilibrium parameters to use, eg eq.params_dict
         period : tuple of float
             Assumed periodicity for each quantity in inbasis.
             Use np.inf to denote no periodicity.
@@ -936,24 +937,49 @@ class Equilibrium(IOAble, Optimizable):
             Stopping tolerance.
         maxiter : int > 0
             Maximum number of Newton iterations
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
+            ``alpha``.
 
         Returns
         -------
         coords : ndarray, shape(k,3)
-            Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
-            for coordinates where root finding did not succeed, possibly because the
-            coordinate is not in the plasma volume.
+            Coordinates mapped from inbasis to outbasis.
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True
+
+        Notes
+        -----
+        ``guess`` must be given for this function to be compatible with ``jit``.
 
         """
         return map_coordinates(
-            self, coords, inbasis, outbasis, guess, period, tol, maxiter, **kwargs
+            self,
+            coords,
+            inbasis,
+            outbasis,
+            guess,
+            params,
+            period,
+            tol,
+            maxiter,
+            full_output,
+            **kwargs,
         )
 
-    def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
-        """Find geometric theta for given straight field line theta.
+    def compute_theta_coords(
+        self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
+    ):
+        """Find theta_DESC for given straight field line theta_PEST.
 
         Parameters
         ----------
+        eq : Equilibrium
+            Equilibrium to use
         flux_coords : ndarray, shape(k,3)
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
             point in space.
@@ -963,45 +989,29 @@ class Equilibrium(IOAble, Optimizable):
             Stopping tolerance.
         maxiter : int > 0
             maximum number of Newton iterations
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to ``root_scalar`` such as
+            ``maxiter_ls``, ``alpha``.
 
         Returns
         -------
         coords : ndarray, shape(k,3)
-            coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-            a given coordinate nan will be returned for those values
-
+            coordinates [rho,theta,zeta].
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True
         """
-        return compute_theta_coords(self, flux_coords, L_lmn, tol, maxiter)
-
-    def compute_flux_coords(
-        self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
-    ):
-        """Find the (rho, theta, zeta) that correspond to given (R, phi, Z).
-
-        Parameters
-        ----------
-        real_coords : ndarray, shape(k,3)
-            2D array of real space coordinates [R,phi,Z]. Each row is a different
-            point in space.
-        R_lmn, Z_lmn : ndarray
-            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
-        tol : float
-            Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
-        maxiter : int > 0
-            maximum number of Newton iterations
-        rhomin : float
-            minimum allowable value of rho (to avoid singularity at rho=0)
-
-        Returns
-        -------
-        flux_coords : ndarray, shape(k,3)
-            flux coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-            a given coordinate (often because it is outside the plasma boundary),
-            nan will be returned for those values
-
-        """
-        return compute_flux_coords(
-            self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
+        return compute_theta_coords(
+            self,
+            flux_coords,
+            L_lmn=L_lmn,
+            maxiter=maxiter,
+            tol=tol,
+            full_output=full_output,
+            **kwargs,
         )
 
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
@@ -2103,20 +2113,28 @@ class EquilibriaFamily(IOAble, MutableSequence):
     _io_attrs_ = ["_equilibria"]
 
     def __init__(self, *args):
-        # we use ensure_nested=False here because it is assumed the family
+        # we use ensure_nested=False here for all but the first iteration
+        # because it is assumed the family
         # will be solved with a continuation method, so there's no need for the
         # fancy coordinate mapping stuff since it will just be overwritten during
         # solve_continuation
         self.equilibria = []
         if len(args) == 1 and isinstance(args[0], list):
-            for inp in args[0]:
-                self.equilibria.append(Equilibrium(**inp, ensure_nested=False))
+            for i, inp in enumerate(args[0]):
+                # ensure that first step is nested
+                ensure_nested_bool = True if i == 0 else False
+                self.equilibria.append(
+                    Equilibrium(**inp, ensure_nested=ensure_nested_bool)
+                )
         else:
-            for arg in args:
+            for i, arg in enumerate(args):
                 if isinstance(arg, Equilibrium):
                     self.equilibria.append(arg)
                 elif isinstance(arg, dict):
-                    self.equilibria.append(Equilibrium(**arg, ensure_nested=False))
+                    ensure_nested_bool = True if i == 0 else False
+                    self.equilibria.append(
+                        Equilibrium(**arg, ensure_nested=ensure_nested_bool)
+                    )
                 else:
                     raise TypeError(
                         "Args to create EquilibriaFamily should either be "

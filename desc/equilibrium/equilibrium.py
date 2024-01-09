@@ -22,7 +22,7 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid, QuadratureGrid, _Grid
+from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -1556,7 +1556,15 @@ class Equilibrium(IOAble, Optimizable):
 
     @classmethod
     def from_near_axis(
-        cls, na_eq, r=0.1, L=None, M=8, N=None, ntheta=None, spectral_indexing="ansi"
+        cls,
+        na_eq,
+        r=0.1,
+        L=None,
+        M=8,
+        N=None,
+        ntheta=None,
+        spectral_indexing="ansi",
+        fit_grid_type="linear",
     ):
         """Initialize an Equilibrium from a near-axis solution.
 
@@ -1577,6 +1585,8 @@ class Equilibrium(IOAble, Optimizable):
             Number of poloidal grid points used in the conversion. Default 2*M+1
         spectral_indexing : str (optional)
             Type of Zernike indexing scheme to use. Default ``'ansi'``
+        fit_grid_type: {"linear","ocs"} (optional)
+            Type of grid to use for fitting. Default ``'linear'``
 
         Returns
         -------
@@ -1623,7 +1633,17 @@ class Equilibrium(IOAble, Optimizable):
         rho, _ = special.js_roots(L, 2, 2)
         # TODO: could make this an OCS grid to improve fitting, need to figure out
         # how concentric grids work with QSC
-        grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
+        if fit_grid_type == "ocs":
+            assert na_eq.nphi % 2 == 1, "na_eq.nphi must be odd for OCS grid!"
+            grid = ConcentricGrid(
+                L,
+                M=round((na_eq.nphi - 1) / 2),
+                N=round((na_eq.nphi - 1) / 2),
+                NFP=na_eq.nfp,
+                node_pattern="ocs",
+            )
+        else:
+            grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
         basis_R = FourierZernikeBasis(
             L=L,
             M=M,
@@ -1653,22 +1673,27 @@ class Equilibrium(IOAble, Optimizable):
         transform_Z = Transform(grid, basis_Z, build_pinv=True)
         transform_L = Transform(grid, basis_L, build_pinv=True)
 
-        R_1D = np.zeros((grid.num_nodes,))
-        Z_1D = np.zeros((grid.num_nodes,))
-        L_1D = np.zeros((grid.num_nodes,))
-        for rho_i in rho:
-            R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
+        if fit_grid_type == "linear":
+            R_1D = np.zeros((grid.num_nodes,))
+            Z_1D = np.zeros((grid.num_nodes,))
+            L_1D = np.zeros((grid.num_nodes,))
             phi_cyl_ax = np.linspace(
                 0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False
             )
             nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
             phi_B = phi_cyl_ax + nu_B_ax
-            nu_B = phi_B - phi0_2D
-            idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
-            R_1D[idx] = R_2D.flatten(order="F")
-            Z_1D[idx] = Z_2D.flatten(order="F")
-            L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
-
+            for rho_i in rho:
+                R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
+                nu_B = phi_B - phi0_2D
+                idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
+                R_1D[idx] = R_2D.flatten(order="F")
+                Z_1D[idx] = Z_2D.flatten(order="F")
+                L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
+        else:
+            R_1D, Z_1D, phi_1D = na_eq.to_RZ(grid.nodes)
+            nu_B_ax = na_eq.nu_spline(phi_1D)
+            phi_B = phi_1D + nu_B_ax
+            L_1D = -nu_B * na_eq.iota
         inputs["R_lmn"] = transform_R.fit(R_1D)
         inputs["Z_lmn"] = transform_Z.fit(Z_1D)
         inputs["L_lmn"] = transform_L.fit(L_1D)

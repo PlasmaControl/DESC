@@ -1,5 +1,4 @@
 """Classes for 2D surfaces embedded in 3D space."""
-
 import numbers
 import warnings
 
@@ -178,11 +177,12 @@ class FourierRZToroidalSurface(Surface):
         """Change the maximum poloidal and toroidal resolution."""
         assert (
             ((len(args) in [2, 3]) and len(kwargs) == 0)
-            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 3])
             or (len(args) == 0)
         ), (
             "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
-            + "positional arguments or only keyword arguments."
+            + "positional arguments or only keyword arguments"
+            + f"but got {len(args)} positional arguments and {len(kwargs)} kwargs."
         )
         L = kwargs.pop("L", None)
         M = kwargs.pop("M", None)

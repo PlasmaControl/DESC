@@ -540,7 +540,7 @@ class LinearGrid(_Grid):
         M=None,
         N=None,
         NFP=1,
-        NFP_umbilic_factor=1.0,
+        NFP_umbilic_factor=1,
         sym=False,
         axis=True,
         endpoint=False,
@@ -911,7 +911,7 @@ class QuadratureGrid(_Grid):
 
     """
 
-    def __init__(self, L, M, N, NFP=1, NFP_umbilic_factor=1.0):
+    def __init__(self, L, M, N, NFP=1, NFP_umbilic_factor=1):
         self._L = L
         self._M = M
         self._N = N
@@ -936,7 +936,7 @@ class QuadratureGrid(_Grid):
         # quadrature weights do not need scaling
         self._weights = self.spacing.prod(axis=1)
 
-    def _create_nodes(self, L=1, M=1, N=1, NFP=1, NFP_umbilic_factor=1.0):
+    def _create_nodes(self, L=1, M=1, N=1, NFP=1, NFP_umbilic_factor=1):
         """Create grid nodes and weights.
 
         Parameters
@@ -1085,7 +1085,7 @@ class ConcentricGrid(_Grid):
         M,
         N,
         NFP=1,
-        NFP_umbilic_factor=1.0,
+        NFP_umbilic_factor=1,
         sym=False,
         axis=False,
         node_pattern="jacobi",
@@ -1120,7 +1120,7 @@ class ConcentricGrid(_Grid):
         self._weights = self._scale_weights()
 
     def _create_nodes(
-        self, L, M, N, NFP=1, NFP_umbilic_factor=1.0, axis=False, node_pattern="jacobi"
+        self, L, M, N, NFP=1, NFP_umbilic_factor=1, axis=False, node_pattern="jacobi"
     ):
         """Create grid nodes and weights.
 

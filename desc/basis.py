@@ -461,7 +461,7 @@ class FourierSeries(_Basis):
         toroidal = fourier(
             z[:, np.newaxis],
             n,
-            self.NFP * 1.0 / self.NFP_umbilic_factor,
+            self.NFP / self.NFP_umbilic_factor,
             derivatives[2],
         )
         if unique:
@@ -617,7 +617,7 @@ class DoubleFourierSeries(_Basis):
         toroidal = fourier(
             z[:, np.newaxis],
             n,
-            self.NFP * 1.0 / self.NFP_umbilic_factor,
+            self.NFP / self.NFP_umbilic_factor,
             derivatives[2],
         )
         if unique:
@@ -1226,7 +1226,7 @@ class FourierZernikeBasis(_Basis):
         toroidal = fourier(
             z[:, np.newaxis],
             n,
-            NFP=self.NFP * 1.0 / self.NFP_umbilic_factor,
+            NFP=self.NFP / self.NFP_umbilic_factor,
             dt=derivatives[2],
         )
         if unique:
@@ -1679,7 +1679,7 @@ def fourier(theta, m, NFP=1, NFP_umbilic_factor=1, dt=0):
         jnp.asarray, (theta, m, NFP, NFP_umbilic_factor, dt)
     )
     m_pos = (m >= 0).astype(int)
-    m_abs = jnp.abs(m) * NFP * 1.0 / NFP_umbilic_factor
+    m_abs = jnp.abs(m) * NFP / NFP_umbilic_factor
     shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
     return m_abs**dt * jnp.sin(m_abs * theta + shift)
 

@@ -1833,6 +1833,7 @@ class FourierCurrentPotentialField(
         show_plots=False,
         sym_Phi=None,
         verbose=1,
+        normalize=True,
     ):
         """Runs regcoil algorithm to find the current potential for the surface.
 
@@ -1898,6 +1899,9 @@ class FourierCurrentPotentialField(
             by default False
         verbose : int, optional
             level of verbosity, if 0 will print nothing.
+        normalize : bool, optional
+            whether or not to normalize Bn when printing the Bnormal errors. If true,
+            will normalize by the average equilibrium field strength on the surface.
 
         Returns
         -------
@@ -1948,6 +1952,12 @@ class FourierCurrentPotentialField(
             source_grid = LinearGrid(M=30, N=30, NFP=self.NFP)
         if eval_grid is None:
             eval_grid = LinearGrid(M=30, N=30, NFP=self.NFP, sym=eq.sym)
+        if normalize:
+            B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
+            # just need it for normalization, so do a simple mean
+            normalization_B = jnp.mean(B_eq_surf)
+        else:
+            normalization_B = 1
 
         # plasma surface normal vector magnitude on eval grid
         ne_mag = eq.compute(["|e_theta x e_zeta|"], eval_grid)["|e_theta x e_zeta|"]
@@ -2102,13 +2112,18 @@ class FourierCurrentPotentialField(
             chi2Ks.append(chi_K)
             K_mags.append(K_mag)
             if verbose > 1:
+                Bn_print = Bn_tot / normalization_B
+                units = " (T)" if normalize else " (unitless)"
                 printstring = f"chi^2 B = {chi_B:1.5e}"
                 print(printstring)
-                printstring = f"min Bnormal = {jnp.min(np.abs(Bn_tot)):1.5e}"
+                printstring = f"min Bnormal = {jnp.min(np.abs(Bn_print)):1.5e}"
+                printstring += units
                 print(printstring)
-                printstring = f"Max Bnormal = {jnp.max(jnp.abs(Bn_tot)):1.5e}"
+                printstring = f"Max Bnormal = {jnp.max(jnp.abs(Bn_print)):1.5e}"
+                printstring += units
                 print(printstring)
-                printstring = f"Avg Bnormal = {jnp.mean(jnp.abs(Bn_tot)):1.5e}"
+                printstring = f"Avg Bnormal = {jnp.mean(jnp.abs(Bn_print)):1.5e}"
+                printstring += units
                 print(printstring)
         ncontours = 20
 

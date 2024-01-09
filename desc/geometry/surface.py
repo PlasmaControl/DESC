@@ -4,11 +4,11 @@ import numbers
 import warnings
 
 import numpy as np
-import scipy
 
-from desc.backend import jnp, put, sign
+from desc.backend import jit, jnp, put, root_scalar, sign, vmap
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.compute import xyz2rpz
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz
+from desc.compute.utils import cross, safediv
 from desc.grid import Grid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -466,54 +466,55 @@ class FourierRZToroidalSurface(Surface):
         M = base_surface.M if M is None else M
         N = base_surface.N if N is None else N
 
-        def n_and_r(grid):
-            data = base_surface.compute(
-                ["x", "e_theta", "e_zeta", "n_rho"], grid=grid, basis="xyz"
-            )
-            re = data["x"]
+        Rbasis = base_surface.R_basis
+        Zbasis = base_surface.Z_basis
 
-            n = data["n_rho"]
+        def n_and_r_jax(nodes):
+            R = Rbasis.evaluate(nodes) @ base_surface.R_lmn
+            Z = Zbasis.evaluate(nodes) @ base_surface.Z_lmn
+            R_t = Rbasis.evaluate(nodes, np.array([0, 1, 0])) @ base_surface.R_lmn
+            Z_t = Zbasis.evaluate(nodes, np.array([0, 1, 0])) @ base_surface.Z_lmn
+            R_z = Rbasis.evaluate(nodes, np.array([0, 0, 1])) @ base_surface.R_lmn
+            Z_z = Zbasis.evaluate(nodes, np.array([0, 0, 1])) @ base_surface.Z_lmn
+
+            phi = nodes[:, 2]
+            coords = jnp.stack([R, phi, Z], axis=1)
+            re = rpz2xyz(coords)
+            # NOTE: when generalized toroidal angle is implemented
+            # this must include omega
+            e_theta = jnp.array([R_t, jnp.zeros_like(R_t), Z_t]).T
+            e_zeta = jnp.array([R_z, R, Z_z]).T
+            e_theta_cross_e_zeta = cross(e_theta, e_zeta)
+            n = safediv(
+                e_theta_cross_e_zeta.T, jnp.linalg.norm(e_theta_cross_e_zeta, axis=1)
+            ).T
+            n = rpz2xyz_vec(n, phi=phi)
             r_offset = re + offset * n
-            return n, re, r_offset, data
+            return n, re, r_offset
 
-        def fun(zeta_hat, theta, zeta):
-            nodes = np.vstack((np.ones_like(theta), theta, zeta_hat)).T
-            grid = Grid(nodes)
-            n, r, r_offset, data = n_and_r(grid)
-            return np.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
+        def fun_jax(zeta_hat, theta, zeta):
+            nodes = jnp.vstack((jnp.ones_like(theta), theta, zeta_hat)).T
+            n, r, r_offset = n_and_r_jax(nodes)
+            return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
 
-        def fprime(zeta_hat, theta, zeta):
-            nodes = np.vstack((np.ones_like(theta), theta, zeta_hat)).T
-            grid = Grid(nodes)
-            _, _, r_offset, data = n_and_r(grid)
-            data = base_surface.compute(["e_zeta", "n_rho_z"], grid=grid, data=data)
-            dr_offset_dz = data["e_zeta"] + offset * data["n_rho_z"]
-            dx_offset_dz = dr_offset_dz[:, 0]
-            dy_offset_dz = dr_offset_dz[:, 1]
-            x_offset = r_offset[:, 0]
-            y_offset = r_offset[:, 1]
-
-            deriv = (
-                1
-                / (1 + (y_offset / x_offset) ** 2)
-                * (dy_offset_dz / x_offset - y_offset / x_offset**2 * dx_offset_dz)
+        vecroot = jit(
+            vmap(
+                lambda x0, *p: root_scalar(
+                    fun_jax,
+                    x0,
+                    jac=None,
+                    args=p,
+                )
             )
-            return deriv
+        )
+        zetas, (_, _) = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
 
-        zetas = []
-        fp = fprime if use_analytic_derivative else None
-        for node in grid.nodes:
-            root = scipy.optimize.fsolve(
-                fun, node[2], args=(node[1], node[2]), fprime=fp
-            )
-            zetas.append(root[0])
         zetas = np.asarray(zetas)
         nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
-        grid_offset = Grid(nodes)
-        n, re, r_offsets, _ = n_and_r(grid_offset)
+        n, re, r_offsets = n_and_r_jax(nodes)
         offset_surface = cls.from_values(
             xyz2rpz(r_offsets),
-            grid_offset,
+            nodes,
             M=M,
             N=N,
             NFP=base_surface.NFP,

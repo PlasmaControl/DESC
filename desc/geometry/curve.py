@@ -11,7 +11,7 @@ from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, ispos, isposint
+from desc.utils import copy_coeffs, errorif, isposint
 
 from .core import Curve
 
@@ -33,7 +33,7 @@ class FourierRZCurve(Curve):
         Number of field periods.
     NFP_umbilic_factor : float
         Rational number of the form 1/integer with integer>=1.
-	This is needed for the umbilic torus design.
+        This is needed for the umbilic torus design.
     sym : bool
         Whether to enforce stellarator symmetry.
     name : str
@@ -80,7 +80,7 @@ class FourierRZCurve(Curve):
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
         assert isposint(NFP)
-        assert ispos(NFP_umbilic_factor)
+        assert isposint(NFP_umbilic_factor)
 
         if sym == "auto":
             if np.all(R_n[modes_R < 0] == 0) and np.all(Z_n[modes_Z >= 0] == 0):
@@ -92,9 +92,19 @@ class FourierRZCurve(Curve):
         NZ = np.max(abs(modes_Z))
         N = max(NR, NZ)
         self._NFP = int(NFP)
-        self._NFP_umbilic_factor = float(NFP_umbilic_factor)
-        self._R_basis = FourierSeries(N, int(NFP), NFP_umbilic_factor=NFP_umbilic_factor, sym="cos" if sym else False)
-        self._Z_basis = FourierSeries(N, int(NFP), NFP_umbilic_factor=NFP_umbilic_factor, sym="sin" if sym else False)
+        self._NFP_umbilic_factor = int(NFP_umbilic_factor)
+        self._R_basis = FourierSeries(
+            N,
+            int(NFP),
+            NFP_umbilic_factor=int(NFP_umbilic_factor),
+            sym="cos" if sym else False,
+        )
+        self._Z_basis = FourierSeries(
+            N,
+            int(NFP),
+            NFP_umbilic_factor=int(NFP_umbilic_factor),
+            sym="sin" if sym else False,
+        )
 
         self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
@@ -134,8 +144,8 @@ class FourierRZCurve(Curve):
     @NFP_umbilic_factor.setter
     def NFP_umbilic_factor(self, new):
         assert (
-            isinstance(new, numbers.Real) and new > 0
-        ), f"NFP should be positive, got {type(new)}"
+            isinstance(new, numbers.Real) and int(new) == new and new > 0
+        ), f"NFP should be a positive integer, got {type(new)}"
         self.change_resolution(NFP_umbilic_factor=new)
 
     @property
@@ -148,21 +158,34 @@ class FourierRZCurve(Curve):
         if (
             ((N is not None) and (N != self.N))
             or ((NFP is not None) and (NFP != self.NFP))
-            or ((NFP_umbilic_factor is not None) and (NFP_umbilic_factor != self.NFP_umbilic_factor))
+            or (
+                (NFP_umbilic_factor is not None)
+                and (NFP_umbilic_factor != self.NFP_umbilic_factor)
+            )
             or (sym is not None)
             and (sym != self.sym)
         ):
             self._NFP = int(NFP if NFP is not None else self.NFP)
-            self._NFP_umbilic_factor = int(NFP_umbilic_factor if NFP_umbilic_factor is not None else self.NFP_umbilic_factor)
+            self._NFP_umbilic_factor = int(
+                NFP_umbilic_factor
+                if NFP_umbilic_factor is not None
+                else self.NFP_umbilic_factor
+            )
             self._sym = sym if sym is not None else self.sym
             N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(
-                N=N, NFP=self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor, sym="cos" if self.sym else self.sym
+                N=N,
+                NFP=self.NFP,
+                NFP_umbilic_factor=self.NFP_umbilic_factor,
+                sym="cos" if self.sym else self.sym,
             )
             self.Z_basis.change_resolution(
-                N=N, NFP=self.NFP, NFP_umbilic_factor=self.NFP_umbilic_factor, sym="sin" if self.sym else self.sym
+                N=N,
+                NFP=self.NFP,
+                NFP_umbilic_factor=self.NFP_umbilic_factor,
+                sym="sin" if self.sym else self.sym,
             )
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)

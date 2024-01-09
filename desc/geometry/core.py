@@ -82,12 +82,23 @@ class Curve(IOAble, Optimizable, ABC):
             names = [names]
         if grid is None:
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            NFP_umbilic_factor = self.NFP_umbilic_factor if hasattr(self, "NFP_umbilic_factor") else 1
-            grid = LinearGrid(N=2 * N + 5, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, endpoint=False)
+            NFP_umbilic_factor = (
+                self.NFP_umbilic_factor if hasattr(self, "NFP_umbilic_factor") else 1
+            )
+            grid = LinearGrid(
+                N=2 * N + 5,
+                NFP=NFP,
+                NFP_umbilic_factor=NFP_umbilic_factor,
+                endpoint=False,
+            )
         elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            NFP_umbilic_factor = self.NFP_umbilic_factor if hasattr(self, "NFP_umbilic_factor") else 1
-            grid = LinearGrid(N=grid, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, endpoint=False)
+            NFP_umbilic_factor = (
+                self.NFP_umbilic_factor if hasattr(self, "NFP_umbilic_factor") else 1
+            )
+            grid = LinearGrid(
+                N=grid, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, endpoint=False
+            )
         elif hasattr(grid, "NFP"):
             NFP = grid.NFP
         else:
@@ -117,7 +128,12 @@ class Curve(IOAble, Optimizable, ABC):
             calc0d = False
 
         if calc0d and override_grid:
-            grid0d = LinearGrid(N=2 * N + 5, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, endpoint=True)
+            grid0d = LinearGrid(
+                N=2 * N + 5,
+                NFP=NFP,
+                NFP_umbilic_factor=NFP_umbilic_factor,
+                endpoint=True,
+            )
             data0d = compute_fun(
                 self,
                 dep0d,
@@ -364,7 +380,9 @@ class Surface(IOAble, Optimizable, ABC):
                     NFP_umbilic_factor=self.NFP_umbilic_factor,
                 )
             elif hasattr(self, "zeta"):  # constant zeta surface
-                grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1, NFP_umbilic_factor=1)
+                grid = QuadratureGrid(
+                    L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1, NFP_umbilic_factor=1
+                )
                 grid._nodes[:, 2] = self.zeta
         elif not isinstance(grid, _Grid):
             raise TypeError(
@@ -413,7 +431,9 @@ class Surface(IOAble, Optimizable, ABC):
             ):
                 calc0d = False
             else:
-                grid0d = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1, NFP_umbilic_factor=1)
+                grid0d = QuadratureGrid(
+                    L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1, NFP_umbilic_factor=1
+                )
                 grid0d._nodes[:, 2] = self.zeta
 
         if calc0d and override_grid:

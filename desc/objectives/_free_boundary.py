@@ -629,7 +629,7 @@ class QuadraticFlux(_Objective):
         Collocation grid containing the nodes at which the magnetic field is being
         calculated and where to evaluate errors.
     field_grid : Grid, optional
-        Grid used to discretize ext_field (i.e. grid for the magnetic field source from
+        Grid used to discretize ext_field (e.g. grid for the magnetic field source from
         the coils).
     name : str
         Name of the objective function.
@@ -819,7 +819,9 @@ class QuadraticFlux(_Objective):
 
         Parameters
         ----------
-        params : dict
+        field_params : dict
+            Dictionary of the external field's degrees of freedom
+        eq_params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to

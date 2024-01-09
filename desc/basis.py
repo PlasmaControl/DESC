@@ -1652,7 +1652,7 @@ def chebyshev(r, l, dr=0):
 
 
 @jit
-def fourier(theta, m, NFP=1, NFP_umbilic_factor=1, dt=0):
+def fourier(theta, m, NFP=1, dt=0):
     """Fourier series.
 
     Parameters
@@ -1675,11 +1675,9 @@ def fourier(theta, m, NFP=1, NFP_umbilic_factor=1, dt=0):
         basis function(s) evaluated at specified points
 
     """
-    theta, m, NFP, NFP_umbilic_factor, dt = map(
-        jnp.asarray, (theta, m, NFP, NFP_umbilic_factor, dt)
-    )
+    theta, m, NFP, dt = map(jnp.asarray, (theta, m, NFP, dt))
     m_pos = (m >= 0).astype(int)
-    m_abs = jnp.abs(m) * NFP / NFP_umbilic_factor
+    m_abs = jnp.abs(m) * NFP
     shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
     return m_abs**dt * jnp.sin(m_abs * theta + shift)
 

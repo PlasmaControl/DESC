@@ -518,9 +518,6 @@ def isposint(x):
     """Determine if x is a strictly positive integer."""
     return isinstance(x, numbers.Real) and (x == int(x)) and (x > 0)
 
-def ispos(x):
-    """Determine if x is a strictly positive integer."""
-    return isinstance(x, numbers.Real)  and (x > 0)
 
 def errorif(cond, err=ValueError, msg=""):
     """Raise an error if condition is met.

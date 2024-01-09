@@ -217,7 +217,7 @@ class Equilibrium(IOAble, Optimizable):
             "NFP_umbilic_factor should be a"
             f" positive integer, got {NFP_umbilic_factor}",
         )
-        self._NFP_umbilic_factor = float(
+        self._NFP_umbilic_factor = int(
             setdefault(
                 NFP_umbilic_factor,
                 getattr(
@@ -377,7 +377,7 @@ class Equilibrium(IOAble, Optimizable):
 
         # ensure number of field periods agree before setting guesses
         eq_NFP = self.NFP
-        eq_NFP_umbilic_factor = (self.NFP_umbilic_factor,)
+        eq_NFP_umbilic_factor = self.NFP_umbilic_factor
         surf_NFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
         surf_NFP_umbilic_factor = (
             self.surface.NFP_umbilic_factor

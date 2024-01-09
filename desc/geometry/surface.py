@@ -7,9 +7,9 @@ import numpy as np
 
 from desc.backend import jit, jnp, put, root_scalar, sign, vmap
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import cross, safediv
-from desc.grid import Grid
+from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
@@ -417,7 +417,7 @@ class FourierRZToroidalSurface(Surface):
 
     @classmethod
     def constant_offset_surface(
-        cls, base_surface, offset, grid, M=None, N=None, use_analytic_derivative=False
+        cls, base_surface, offset, grid=None, M=None, N=None, full_output=False
     ):
         """Create a FourierRZSurface with constant offset from the given surface.
 
@@ -428,8 +428,6 @@ class FourierRZToroidalSurface(Surface):
 
         NOTE: Must have the toroidal angle as the cylindrical toroidal angle
         in order for this algorithm to work properly
-        TODO: add eq as optional argument, and modify algorithm to
-        account for toroidal stream function, if possible
 
         Parameters
         ----------
@@ -438,10 +436,12 @@ class FourierRZToroidalSurface(Surface):
         offset : float
             constant offset (in m) of the desired surface from the input surface
             offset will be in the normal direction to the surface.
-        grid : Grid
+        grid : Grid, optional
             Grid object of the points on the given surface to evaluate the
             offset points at, from which the offset surface will be created by fitting
-            offset points with the basis defined by the given M and N
+            offset points with the basis defined by the given M and N.
+            If None, defaults to a LinearGrid with M and N and NFP equal to the
+            base_surface.M and base_surface.N and base_surface.NFP
         M : int, optional
             Poloidal resolution of the basis used to fit the offset points
             to create the resulting constant offset surface, by default equal
@@ -450,21 +450,43 @@ class FourierRZToroidalSurface(Surface):
             Toroidal resolution of the basis used to fit the offset points
             to create the resulting constant offset surface, by default equal
             to base_surface.N
-        use_analytic_derivative: bool
-            use analytic derivative for the root-finding part of the constant
-            offset algorithm. This is a bit slower, and can result in different
-            surfaces than when relying on numerical derivative for the root finding.
-            By default False.
+        full_output : bool, optional
+            If True, also return a dict of useful data about the surfaces and a
+            tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
         offset_surface : FourierRZToroidalSurface
             FourierRZToroidalSurface, created from fitting points offset from the input
             surface by the given constant offset.
+        data : dict
+            dictionary containing  the following data, in the cylindrical basis:
+                ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
+                    the base_surface evaluated at the input ``grid``
+                ``x`` : (``grid.num_nodes`` x 3) array of the position vectors on
+                    the base_surface evaluated at the input ``grid``
+                ``x_offset_surface`` : (``grid.num_nodes`` x 3) array of the
+                    position vectors on the offset surface, corresponding to the
+                    ``x`` points on the base_surface (i.e. the points to which the
+                    offset surface was fit)
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True
 
         """
-        M = base_surface.M if M is None else M
-        N = base_surface.N if N is None else N
+        if grid is None:
+            grid = LinearGrid(
+                M=base_surface.M,
+                N=base_surface.N,
+                NFP=base_surface.NFP,
+                sym=base_surface.sym,
+            )
+        assert isinstance(
+            base_surface, FourierRZToroidalSurface
+        ), "base_surface must be a FourierRZToroidalSurface!"
+        M = base_surface.M if M is None else int(M)
+        N = base_surface.N if N is None else int(N)
 
         Rbasis = base_surface.R_basis
         Zbasis = base_surface.Z_basis
@@ -507,20 +529,31 @@ class FourierRZToroidalSurface(Surface):
                 )
             )
         )
-        zetas, (_, _) = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
+        zetas, (res, niter) = vecroot(
+            grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+        )
 
         zetas = np.asarray(zetas)
         nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
-        n, re, r_offsets = n_and_r_jax(nodes)
+        n, x, x_offsets = n_and_r_jax(nodes)
+
+        data = {}
+        data["n"] = xyz2rpz_vec(n, phi=nodes[:, 1])
+        data["x"] = xyz2rpz(x)
+        data["x_offset_surface"] = xyz2rpz(x_offsets)
+
         offset_surface = cls.from_values(
-            xyz2rpz(r_offsets),
+            data["x_offset_surface"],
             nodes,
             M=M,
             N=N,
             NFP=base_surface.NFP,
             sym=base_surface.sym,
         )
-        return offset_surface, n, re, r_offsets
+        if full_output:
+            return offset_surface, data, (res, niter)
+        else:
+            return offset_surface
 
 
 class ZernikeRZToroidalSection(Surface):

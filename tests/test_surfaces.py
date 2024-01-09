@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import desc.examples
+from desc.compute import rpz2xyz
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
@@ -141,14 +142,11 @@ class TestFourierRZToroidalSurface:
         s = FourierRZToroidalSurface()
         grid = LinearGrid(M=3, N=2)
         offset = 1
-        (
-            s_offset,
-            _,
-            r_surf,
-            r_offset_surf,
-        ) = FourierRZToroidalSurface.constant_offset_surface(
-            s, offset, grid, M=1, N=1, use_analytic_derivative=True
+        (s_offset, data, _) = FourierRZToroidalSurface.constant_offset_surface(
+            s, offset, grid, M=1, N=1, full_output=True
         )
+        r_offset_surf = data["x_offset_surface"]
+        r_surf = data["x"]
         dists = np.linalg.norm(r_surf - r_offset_surf, axis=1)
         np.testing.assert_allclose(dists, 1, atol=1e-16)
         R00_offset_ind = s_offset.R_basis.get_idx(M=0, N=0)
@@ -216,13 +214,13 @@ class TestFourierRZToroidalSurface:
         s = eq.surface
         grid = LinearGrid(M=4, N=4, NFP=eq.NFP)
         offset = 0.1
-        (
-            s_offset,
-            _,
-            r_surf,
-            r_offset_surf,
-        ) = FourierRZToroidalSurface.constant_offset_surface(s, offset, grid, M=2, N=2)
-        dists = np.linalg.norm(r_surf - r_offset_surf, axis=1)
+        (s_offset, data, _) = FourierRZToroidalSurface.constant_offset_surface(
+            s, offset, grid, M=2, N=2, full_output=True
+        )
+        r_offset_surf = data["x_offset_surface"]
+        r_surf = data["x"]
+
+        dists = np.linalg.norm(rpz2xyz(r_surf) - rpz2xyz(r_offset_surf), axis=1)
 
         np.testing.assert_allclose(dists, offset, atol=1e-16)
 

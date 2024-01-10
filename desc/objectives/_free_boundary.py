@@ -904,7 +904,7 @@ class BConsistencyError(_Objective):
         eval_grid=None,
         field_grid=None,
         loop=True,
-        name="Boundary error",
+        name="B consistency error",
     ):
         if target is None and bounds is None:
             target = 0
@@ -914,7 +914,7 @@ class BConsistencyError(_Objective):
         self._q = q
         self._field_grid = field_grid
         self._loop = loop
-        things = [eq]
+        things = eq
 
         super().__init__(
             things=things,
@@ -986,7 +986,6 @@ class BConsistencyError(_Objective):
         self._eq_data_keys = [
             "K_vc",
             "B",
-            "|B|^2",
             "R",
             "zeta",
             "Z",
@@ -1027,7 +1026,7 @@ class BConsistencyError(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, eq_params, constants=None):
-        """Compute boundary force error.
+        """Compute B consistency error.
 
         Parameters
         ----------
@@ -1040,7 +1039,7 @@ class BConsistencyError(_Objective):
         Returns
         -------
         f : ndarray
-            Boundary force error (N).
+            Magnetic Field vector difference (T).
 
         """
         if constants is None:

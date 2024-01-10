@@ -4,8 +4,6 @@ import numpy as np
 from scipy.constants import elementary_charge, mu_0
 
 
-# TODO: generalize this so that it will make different normalizations depending on the
-# given thing (not always an equilibrium, if just a surface)
 def compute_scaling_factors(thing):
     """Compute dimensional quantities for normalizations."""
     # local import to avoid circular import
@@ -21,6 +19,12 @@ def compute_scaling_factors(thing):
 
         scales["R0"] = R00
         scales["a"] = np.sqrt(np.abs(R10 * Z10))
+        # TODO: also implement for FourierRZToroidalSurface,
+        # need to add "A" compute fxn for that FourierRZToroidalSurface
+        if np.isclose(scales["a"], 0):
+            # R10 and Z10 can be 0 for stellarator asymmetric equilibria,
+            # just use the computed minor radius in this case
+            scales["a"] = thing.compute("a")["a"]
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
         scales["B_T"] = abs(thing.Psi) / scales["A"]
@@ -46,6 +50,12 @@ def compute_scaling_factors(thing):
 
         scales["R0"] = R00
         scales["a"] = np.sqrt(np.abs(R10 * Z10))
+        if np.isclose(scales["a"], 0):
+            # R10 and Z10 can be 0 for stellarator asymmetric equilibria,
+            # use the other coefficients in this case
+            R10 = thing.R_lmn[thing.R_basis.get_idx(M=-1, N=0)]
+            Z10 = thing.Z_lmn[thing.Z_basis.get_idx(M=1, N=0)]
+
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
 

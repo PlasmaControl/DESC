@@ -1667,7 +1667,7 @@ def test_objective_no_nangrad():
 @pytest.mark.unit
 def test_asymmetric_normalization():
     """Tests normalizations for asymmetric equilibrium."""
-    # related to PR
+    # related to PR #821
     a = 0.6
     # make a asym equilibrium with 0 for R_1_0 and Z_-1_0
     surf = FourierRZToroidalSurface(

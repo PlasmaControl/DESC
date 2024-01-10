@@ -4,6 +4,7 @@ import numbers
 import warnings
 
 import numpy as np
+import scipy
 
 from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
@@ -447,25 +448,29 @@ class FourierRZToroidalSurface(Surface):
             )
             Zb_lmn = transform.fit(Z)
         else:  # perform weighted fit
-            # solves system A^T W A x = A^T W b
-            # where A is the transform matrix, W is the diagonal weight matrix,
-            # and b is the vector of data points
+            # solves system W A x = W b
+            # where A is the transform matrix, W is the diagonal weight matrix
+            # of weights w, and b is the vector of data points
             w = np.asarray(w)
-            W = np.diag(w**2)
+            W = np.diag(w)
             assert w.size == R.size, "w must same length as number of points being fit"
 
             transform = Transform(
                 nodes, R_basis, build=True, build_pinv=False, method="direct1"
             )
-            A = transform.matrices[transform.method][0][0][0]
-            # multiple w*R since W @ R is just elementwise multiplication
-            Rb_lmn = np.linalg.lstsq(A.T @ W @ A, A.T @ (w * R), rcond=rcond)[0]
+            AR = transform.matrices[transform.method][0][0][0]
 
             transform = Transform(
                 nodes, Z_basis, build=True, build_pinv=False, method="direct1"
             )
-            A = transform.matrices[transform.method][0][0][0]
-            Zb_lmn = np.linalg.lstsq(A.T @ W @ A, A.T @ (w * Z), rcond=rcond)[0]
+            AZ = transform.matrices[transform.method][0][0][0]
+
+            A = scipy.linalg.block_diag(W @ AR, W @ AZ)
+            b = np.concatenate([w * R, w * Z])
+            x_lmn = np.linalg.lstsq(A, b, rcond=rcond)[0]
+
+            Rb_lmn = x_lmn[0 : R_basis.num_modes]
+            Zb_lmn = x_lmn[R_basis.num_modes :]
 
         surf = cls(
             Rb_lmn,

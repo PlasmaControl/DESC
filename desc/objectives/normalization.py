@@ -12,19 +12,23 @@ def compute_scaling_factors(thing):
 
     scales = {}
 
+    # lowest order poloidal modes: [+1, -1, +2, -2, ...]
+    m_modes = np.arange(1, thing.M + 1)
+    m_modes = np.vstack((m_modes, -m_modes)).flatten(order="F")
+
     if isinstance(thing, Equilibrium):
-        R10 = thing.Rb_lmn[thing.surface.R_basis.get_idx(M=1, N=0)]
-        Z10 = thing.Zb_lmn[thing.surface.Z_basis.get_idx(M=-1, N=0)]
         R00 = thing.Rb_lmn[thing.surface.R_basis.get_idx(M=0, N=0)]
+        for m in m_modes:
+            R10 = thing.Rb_lmn[thing.surface.R_basis.get_idx(M=m, N=0, error=False)]
+            if R10:
+                break
+        for m in m_modes:
+            Z10 = thing.Zb_lmn[thing.surface.Z_basis.get_idx(M=m, N=0, error=False)]
+            if Z10:
+                break
 
         scales["R0"] = R00
         scales["a"] = np.sqrt(np.abs(R10 * Z10))
-        # TODO: also implement for FourierRZToroidalSurface,
-        # need to add "A" compute fxn for that FourierRZToroidalSurface
-        if np.isclose(scales["a"], 0):
-            # R10 and Z10 can be 0 for stellarator asymmetric equilibria,
-            # just use the computed minor radius in this case
-            scales["a"] = thing.compute("a")["a"]
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
         scales["B_T"] = abs(thing.Psi) / scales["A"]
@@ -43,19 +47,20 @@ def compute_scaling_factors(thing):
         scales["Psi"] = abs(thing.Psi)
         scales["n"] = 1e19
         scales["T"] = scales["p"] / (scales["n"] * elementary_charge)
+
     elif isinstance(thing, FourierRZToroidalSurface):
-        R10 = thing.R_lmn[thing.R_basis.get_idx(M=1, N=0)]
-        Z10 = thing.Z_lmn[thing.Z_basis.get_idx(M=-1, N=0)]
         R00 = thing.R_lmn[thing.R_basis.get_idx(M=0, N=0)]
+        for m in m_modes:
+            R10 = thing.R_lmn[thing.R_basis.get_idx(M=m, N=0, error=False)]
+            if R10:
+                break
+        for m in m_modes:
+            Z10 = thing.Z_lmn[thing.Z_basis.get_idx(M=m, N=0, error=False)]
+            if Z10:
+                break
 
         scales["R0"] = R00
         scales["a"] = np.sqrt(np.abs(R10 * Z10))
-        if np.isclose(scales["a"], 0):
-            # R10 and Z10 can be 0 for stellarator asymmetric equilibria,
-            # use the other coefficients in this case
-            R10 = thing.R_lmn[thing.R_basis.get_idx(M=-1, N=0)]
-            Z10 = thing.Z_lmn[thing.Z_basis.get_idx(M=1, N=0)]
-
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
 

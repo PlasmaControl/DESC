@@ -893,7 +893,6 @@ class BConsistencyError(_Objective):
     def __init__(
         self,
         eq,
-        ext_field,
         target=None,
         bounds=None,
         weight=1,
@@ -913,7 +912,6 @@ class BConsistencyError(_Objective):
         self._eval_grid = eval_grid
         self._s = s
         self._q = q
-        self._ext_field = ext_field
         self._field_grid = field_grid
         self._loop = loop
         things = [eq]
@@ -1013,7 +1011,6 @@ class BConsistencyError(_Objective):
             "src_transforms": src_transforms,
             "src_profiles": src_profiles,
             "interpolator": interpolator,
-            "ext_field": self._ext_field,
             "quad_weights": np.sqrt(np.tile(eval_transforms["grid"].weights, 3)),
         }
 

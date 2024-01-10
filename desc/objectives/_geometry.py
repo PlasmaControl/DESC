@@ -1406,6 +1406,14 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
         Regularization parameter, 0 for no regularization. The larger this
         parameter is, the less complex the surface current will be, but the
         worse the normal field.
+    external_field : MagneticField, optional
+        MagneticField object containing the external field to consider when
+        minimizing the Bn errors. If None, the external field is assumed to be zero.
+        e.g. this could be a 1/R field representing external TF coils, or
+        it could be set of TF coils so that coil ripple is considered during
+        the optimization.
+    external_field_source_grid : Grid, optional
+        Grid object used to discretize the external field source.
     name : str, optional
         Name of the objective function.
     """
@@ -1428,6 +1436,8 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
         source_grid=None,
         eval_grid=None,
         alpha=0.0,
+        external_field=None,
+        external_field_source_grid=None,
         name="surface-current-regularized-quadratic-flux",
         eq_fixed=False,
     ):
@@ -1439,6 +1449,9 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
         self._alpha = alpha
         self._eq_fixed = eq_fixed
         self._eq = eq if eq_fixed else None
+        self._external_field = external_field
+        self._external_field_source_grid = external_field_source_grid
+
         super().__init__(
             things=[surface_current_field, eq]
             if not eq_fixed
@@ -1606,6 +1619,14 @@ class SurfaceCurrentRegularizedQuadraticFlux(_Objective):
             basis="xyz",
         )
         Bn = jnp.sum(B * data["n_rho"], axis=-1)
+
+        if self._external_field is not None:
+            B_ext = self._external_field.compute_magnetic_field(
+                plasma_coords,
+                grid=self._external_field_source_grid,
+                basis="xyz",
+            )
+            Bn += jnp.sum(B_ext * data["n_rho"], axis=-1)
 
         K_mag = safenorm(surface_data["K"], axis=-1)
         return jnp.concatenate([Bn, self._alpha * K_mag])

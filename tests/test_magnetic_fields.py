@@ -443,6 +443,56 @@ class TestMagneticFields:
         field2 = load("test_field.h5")
         assert field.eq(field2)
 
+    @pytest.mark.unit
+    def test_fourier_current_potential_field_asserts(self):
+        """Test Fourier current potential magnetic field assert statements."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        basis = DoubleFourierSeries(M=2, N=2, sym="sin")
+        phi_mn = np.ones((basis.num_modes,))
+        # make a current potential corresponding a purely poloidal current
+        G = 10  # net poloidal current
+
+        field = FourierCurrentPotentialField(
+            Phi_mn=phi_mn,
+            modes_Phi=basis.modes[:, 1:],
+            I=0,
+            G=-G,
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+        # check that we can change I,G correctly
+
+        # with scalars
+        field.I = 1
+        field.G = 2
+        np.testing.assert_allclose(field.I, 1)
+        np.testing.assert_allclose(field.G, 2)
+        # with 0D array
+        field.I = np.array(1)
+        field.G = np.array(2)
+        np.testing.assert_allclose(field.I, 1)
+        np.testing.assert_allclose(field.G, 2)
+        # with 1D array of size 1
+        field.I = np.array([1])
+        field.G = np.array([2])
+        np.testing.assert_allclose(field.I, 1)
+        np.testing.assert_allclose(field.G, 2)
+
+        # check that we can't set it with a size>1 array
+        with pytest.raises(AssertionError):
+            field.I = np.array([1, 2])
+        with pytest.raises(AssertionError):
+            field.G = np.array([1, 2])
+
     def test_change_Phi_basis_fourier_current_field(self):
         """Test that change_Phi_resolution works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(

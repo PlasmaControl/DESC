@@ -392,7 +392,10 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
 
     def __init__(self, scale, field):
-        assert np.isscalar(scale) or len(scale) == 1, "scale must be a scalar value"
+        assert (
+            np.isscalar(scale) or np.asarray(scale).size == 1
+        ), "scale must be a scalar value"
+        scale = float(scale)
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
@@ -1607,8 +1610,8 @@ class FourierCurrentPotentialField(
         self._sym_Phi = sym_Phi
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
 
-        assert np.isscalar(I) or len(I) == 1, "I must be a scalar"
-        assert np.isscalar(G) or len(G) == 1, "G must be a scalar"
+        assert np.isscalar(I) or np.asarray(I).size == 1, "I must be a scalar"
+        assert np.isscalar(G) or np.asarray(G).size == 1, "G must be a scalar"
         self._I = float(I)
         self._G = float(G)
 
@@ -1631,7 +1634,7 @@ class FourierCurrentPotentialField(
 
     @I.setter
     def I(self, new):  # noqa: E743
-        assert np.isscalar(new) or len(new) == 1, "I must be a scalar"
+        assert np.isscalar(new) or np.asarray(new).size == 1, "I must be a scalar"
         self._I = float(new)
 
     @optimizable_parameter
@@ -1642,7 +1645,7 @@ class FourierCurrentPotentialField(
 
     @G.setter
     def G(self, new):
-        assert np.isscalar(new) or len(new) == 1, "G must be a scalar"
+        assert np.isscalar(new) or np.asarray(new).size == 1, "G must be a scalar"
         self._G = float(new)
 
     @optimizable_parameter
@@ -1832,105 +1835,112 @@ class FourierCurrentPotentialField(
         sym_Phi=None,
         verbose=1,
         target_Brms=None,
+        normalize=True,
     ):
         """Runs regcoil algorithm to find the current potential for the surface.
 
-            NOTE: will set the FourierCurrentPotentialField's Phi_mn to
-            the lowest alpha value's solution, and will also set I and G
-            to the values corresponding to the input equilibrium, external_field,
-            and current_helicity.
+                    NOTE: will set the FourierCurrentPotentialField's Phi_mn to
+                    the lowest alpha value's solution, and will also set I and G
+                    to the values corresponding to the input equilibrium, external_field,
+                    and current_helicity.
 
-            TODO: Put math of algorithm here
+                    TODO: Put math of algorithm here
 
-        Parameters
-        ----------
-        eq : Equilibrium
-            Equilibrium to minimize the quadratic flux (plus regularization) on.
-        alpha : float, optional
-            regularization parameter, > 0, regularizes minimization of Bn
-            on plasma surface with minimization of current density|K| on winding
-            surface i.e. larger alpha, simpler coilset and smaller currents, but
-            worse Bn. by default 0
-        M_Phi : int, optional
-            Poloidal resolution of single-valued part of current potential,
-            by default 8
-        N_Phi : int, optional
-            Toroidal resolution of single-valued part of current potential,
-            by default 8
-        source_grid : Grid, optional
-            Source grid upon which to evaluate the surface current when calculating
-            the normal field on the plasma surface.
-        eval_grid : _type_, optional
-            Grid upon which to evaluate the normal field on the plasma surface, and
-            at which the normal field is minimized.
-        external_field: _MagneticField,
-            DESC _MagneticField object giving the magnetic field
-            provided by any coils/fields external to the winding surface.
-            e.g. can provide a TF coilset to calculate the surface current
-            which is needed to minimize Bn given this external coilset providing
-            the bulk of the required net toroidal magnetic flux, by default None
-        current_helicity : int, optional
-            Ratio of used to determine if coils are modular (0) or helical (!=0)
-            defined as (G - G_ext) / (I * NFP)  = current_helicity
-            positive current_helicity corresponds to coils which rotate in the negative
-            poloidal direction as they rotate toroidally
-        scan : bool, optional
-            Whether to scan over the regularization parameter (alpha) values,
-            in range: np.concatenate([0, np.logspace(scan_lower, scan_upper, nscan)])
-            the returned data dictionary will contain a list for Phi_mn corresponding
-            to the alphas
-        nscan : int, optional
-            number of alpha values to scan over, by default 30
-        scan_lower : int, optional
-            power of 10 (i.e. 10^(-30)) that is the
-            lower bound of the alpha values to scan over, by default -30
-        scan_upper : int, optional
-            power of 10 (i.e. 10^(-1)) that is the
-            lower bound of the alpha values to scan over, by default -1
-        scan_alphas : array, optional
-            Array of alpha values to scan over, if given when scan=True, this will be
-            used instead of the default range given by scan_lower and scan_upper,
-            by default None
-        show_plots : bool, optional
-            Whether to display analysis plots of normal field on surface,
-            current potential contours, and chi_B versus alpha and chi_K,
-            by default False
-        verbose : int, optional
-            level of verbosity, if 0 will print nothing.
-        target_Brms : float
-            if provided, will root find on lambda until the desired target Brms
-            is found.
-            if target not found after a set amount of iterations, will return an error.
+                Parameters
+                ----------
+                eq : Equilibrium
+                    Equilibrium to minimize the quadratic flux (plus regularization) on.
+                alpha : float, optional
+                    regularization parameter, > 0, regularizes minimization of Bn
+                    on plasma surface with minimization of current density|K| on winding
+                    surface i.e. larger alpha, simpler coilset and smaller currents, but
+                    worse Bn. by default 0
+                M_Phi : int, optional
+                    Poloidal resolution of single-valued part of current potential,
+                    by default 8
+                N_Phi : int, optional
+                    Toroidal resolution of single-valued part of current potential,
+                    by default 8
+                source_grid : Grid, optional
+                    Source grid upon which to evaluate the surface current when calculating
+                    the normal field on the plasma surface.
+                eval_grid : _type_, optional
+                    Grid upon which to evaluate the normal field on the plasma surface, and
+                    at which the normal field is minimized.
+                external_field: _MagneticField,
+                    DESC _MagneticField object giving the magnetic field
+                    provided by any coils/fields external to the winding surface.
+                    e.g. can provide a TF coilset to calculate the surface current
+                    which is needed to minimize Bn given this external coilset providing
+                    the bulk of the required net toroidal magnetic flux, by default None
+                current_helicity : int, optional
+                    Ratio of used to determine if coils are modular (0) or helical (!=0)
+                    defined as (G - G_ext) / (I * NFP)  = current_helicity
+                    positive current_helicity corresponds to coils which rotate in the negative
+                    poloidal direction as they rotate toroidally
+                scan : bool, optional
+                    Whether to scan over the regularization parameter (alpha) values,
+                    in range: np.concatenate([0, np.logspace(scan_lower, scan_upper, nscan)])
+                    the returned data dictionary will contain a list for Phi_mn corresponding
+                    to the alphas
+                nscan : int, optional
+                    number of alpha values to scan over, by default 30
+                scan_lower : int, optional
+                    power of 10 (i.e. 10^(-30)) that is the
+                    lower bound of the alpha values to scan over, by default -30
+                scan_upper : int, optional
+                    power of 10 (i.e. 10^(-1)) that is the
+                    lower bound of the alpha values to scan over, by default -1
+                scan_alphas : array, optional
+                    Array of alpha values to scan over, if given when scan=True, this will be
+                    used instead of the default range given by scan_lower and scan_upper,
+                    by default None
+                show_plots : bool, optional
+                    Whether to display analysis plots of normal field on surface,
+                    current potential contours, and chi_B versus alpha and chi_K,
+                    by default False
+                verbose : int, optional
+                    level of verbosity, if 0 will print nothing.
+        <<<<<<< HEAD
+                target_Brms : float
+                    if provided, will root find on lambda until the desired target Brms
+                    is found.
+                    if target not found after a set amount of iterations, will return an error.
+        =======
+                normalize : bool, optional
+                    whether or not to normalize Bn when printing the Bnormal errors. If true,
+                    will normalize by the average equilibrium field strength on the surface.
+        >>>>>>> dp/pyREGCOIL
 
-        Returns
-        -------
-        data : dict
-            Dictionary with keys ["alpha","Phi_mn", "I","G"]:
-            alpha : regularization parameter the algorithm was ran with, a float
-                    if `scan=False`, or list of float of length `nscan` if `scan=True,
-                    corresponding to the list of `Phi_mn`
-            Phi_mn : the single-valued current potential value which minimizes the Bn
-                    at the given eval_grid on the plasma, subject to regularization
-                    on the surface current magnitude govenerd by alpha.
-                    An array of length `self.Phi_basis.num_modes` if `scan=False`,
-                    or a list of arrays, with list length `nscan` if `scan=True`,
-                    corresponding to the list of regularization parameters alpha
-            I : float, net toroidal current (in Amperes) on the winding surface.
-                Governed by the `current_helicity` parameter, and is zero for
-                modular coils (`current_helicity=0`).
-            G : float, net poloidal current (in Amperes) on the winding surface.
-                Determined by the equilibrium toroidal magnetic field, as well as
-                the given external field
-            chi^2_B : quadratic flux integrated over the plasma surface.
-                a float if `scan=False`, or list of float of length
-                `nscan` if `scan=True`, corresponding to the list of `alpha`
-            chi^2_K : Current density magnitude integrated over the winding surface.
-                a float if `scan=False`, or list of float of length
-                `nscan` if `scan=True`, corresponding to the list of `alpha`
-            |K| : Current density magnitude on the winding surface, evaluated at the
-                given `source_grid`. An array of length `source_grid.num_nodes` if
-                `scan=False`, or list of arrays, with list length `nscan`,
-                if `scan=True`, corresponding to the list of `alpha`
+                Returns
+                -------
+                data : dict
+                    Dictionary with keys ["alpha","Phi_mn", "I","G"]:
+                    alpha : regularization parameter the algorithm was ran with, a float
+                            if `scan=False`, or list of float of length `nscan` if `scan=True,
+                            corresponding to the list of `Phi_mn`
+                    Phi_mn : the single-valued current potential value which minimizes the Bn
+                            at the given eval_grid on the plasma, subject to regularization
+                            on the surface current magnitude govenerd by alpha.
+                            An array of length `self.Phi_basis.num_modes` if `scan=False`,
+                            or a list of arrays, with list length `nscan` if `scan=True`,
+                            corresponding to the list of regularization parameters alpha
+                    I : float, net toroidal current (in Amperes) on the winding surface.
+                        Governed by the `current_helicity` parameter, and is zero for
+                        modular coils (`current_helicity=0`).
+                    G : float, net poloidal current (in Amperes) on the winding surface.
+                        Determined by the equilibrium toroidal magnetic field, as well as
+                        the given external field
+                    chi^2_B : quadratic flux integrated over the plasma surface.
+                        a float if `scan=False`, or list of float of length
+                        `nscan` if `scan=True`, corresponding to the list of `alpha`
+                    chi^2_K : Current density magnitude integrated over the winding surface.
+                        a float if `scan=False`, or list of float of length
+                        `nscan` if `scan=True`, corresponding to the list of `alpha`
+                    |K| : Current density magnitude on the winding surface, evaluated at the
+                        given `source_grid`. An array of length `source_grid.num_nodes` if
+                        `scan=False`, or list of arrays, with list length `nscan`,
+                        if `scan=True`, corresponding to the list of `alpha`
 
 
         """
@@ -1951,6 +1961,12 @@ class FourierCurrentPotentialField(
             source_grid = LinearGrid(M=30, N=30, NFP=self.NFP)
         if eval_grid is None:
             eval_grid = LinearGrid(M=30, N=30, NFP=self.NFP, sym=eq.sym)
+        if normalize:
+            B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
+            # just need it for normalization, so do a simple mean
+            normalization_B = jnp.mean(B_eq_surf)
+        else:
+            normalization_B = 1
 
         # plasma surface normal vector magnitude on eval grid
         ne_mag = eq.compute(["|e_theta x e_zeta|"], eval_grid)["|e_theta x e_zeta|"]
@@ -2158,13 +2174,18 @@ class FourierCurrentPotentialField(
             chi2Ks.append(chi_K)
             K_mags.append(K_mag)
             if verbose > 1:
+                Bn_print = Bn_tot / normalization_B
+                units = " (T)" if normalize else " (unitless)"
                 printstring = f"chi^2 B = {chi_B:1.5e}"
                 print(printstring)
-                printstring = f"min Bnormal = {jnp.min(np.abs(Bn_tot)):1.5e}"
+                printstring = f"min Bnormal = {jnp.min(np.abs(Bn_print)):1.5e}"
+                printstring += units
                 print(printstring)
-                printstring = f"Max Bnormal = {jnp.max(jnp.abs(Bn_tot)):1.5e}"
+                printstring = f"Max Bnormal = {jnp.max(jnp.abs(Bn_print)):1.5e}"
+                printstring += units
                 print(printstring)
-                printstring = f"Avg Bnormal = {jnp.mean(jnp.abs(Bn_tot)):1.5e}"
+                printstring = f"Avg Bnormal = {jnp.mean(jnp.abs(Bn_print)):1.5e}"
+                printstring += units
                 print(printstring)
         ncontours = 20
 

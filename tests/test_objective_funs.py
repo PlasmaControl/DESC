@@ -497,7 +497,7 @@ class TestObjectiveFunction:
         eq.solve()
         obj = QuadraticFlux(t_field, eq)
         obj.build(eq)
-        f = obj.compute(params=eq.params_dict)
+        f = obj.compute(field_params=t_field.params_dict, eq_params=eq.params_dict)
         np.testing.assert_allclose(f, 0)
 
         # test nonaxisymmetric surface
@@ -532,19 +532,21 @@ class TestObjectiveFunction:
             eq.surface, eval_grid=eval_grid, source_grid=source_grid
         )[0]
         obj.build(eq, verbose=0)
-        f = obj.compute(params=eq.params_dict)
+        f = obj.compute(field_params=t_field.params_dict, eq_params=eq.params_dict)
 
         # for this to pass with rtol=1e-3, the source resolution needs to be quite high
         np.testing.assert_allclose(f, Bnorm, rtol=1e-2, atol=1e-2)
 
     def test_quadratic_flux_optimization(self):
         """Test optimization using quadratic flux."""
+        # axisymmetric equilibrium
         eq = Equilibrium(M=2, L=2)
         eq.solve(verbose=0)
         surf = eq.surface.copy()
         surf.R_lmn = surf.R_lmn.at[surf.R_basis.get_idx(M=1, N=0)].set(2)
         surf.Z_lmn = surf.Z_lmn.at[surf.Z_basis.get_idx(M=-1, N=0)].set(2)
 
+        # nonaxisymmetric field
         field = FourierCurrentPotentialField.from_surface(
             surface=surf,
             Phi_mn=np.array([1e4]),
@@ -555,42 +557,49 @@ class TestObjectiveFunction:
         )
         field.change_Phi_resolution(M=4, N=0)
 
-        source_N = 20
-        source_M = 10
+        N = 20
+        M = 10
 
         field_grid = LinearGrid(
             rho=np.array([1.0]),
-            M=source_M,
-            N=source_N,
+            M=M,
+            N=N,
             NFP=int(field.NFP),
             sym=False,
         )
         eval_grid = LinearGrid(
             rho=np.array([1.0]),
             M=eq.M_grid,
-            N=source_N,
+            N=N,
             NFP=int(eq.NFP),
             sym=False,
         )
 
         source_grid = LinearGrid(
             rho=np.array([1.0]),
-            M=source_M,
-            N=source_N,
+            M=M,
+            N=N,
             NFP=int(eq.NFP),
             sym=False,
         )
 
+        # the optimizer will zero out the nonaxisymmetric part of the field (Phi_mn)
+        # since equilibrium is axisymmetric. So, let's fix every parameter except for
+        # phi_mn and check that Phi_mn goes to zero.
+
         constraints = (FixParameter(field, ["I", "G", "R_lmn", "Z_lmn"]),)
         optimizer = Optimizer("lsq-exact")
 
+        # using quadratic flux with a target = 0 as an objective because if
+        # Bnorm is minimized to be zero, then that means we are dealing with
+        # an axisymmetric equilibrium (which we are)
         quadflux_obj = QuadraticFlux(
             ext_field=field,
             eq=eq,
             src_grid=source_grid,
             eval_grid=eval_grid,
             field_grid=field_grid,
-            eq_fixed=True,
+            eq_fixed=True,  # fix equilibrium (second stage optimization)
         )
         objective = ObjectiveFunction(quadflux_obj)
 
@@ -600,7 +609,6 @@ class TestObjectiveFunction:
             constraints=constraints,
             gtol=1e-14,
             ftol=1e-14,
-            xtol=0,
             copy=True,
         )
 

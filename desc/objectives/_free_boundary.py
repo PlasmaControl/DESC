@@ -746,7 +746,6 @@ class QuadraticFlux(_Objective):
             obj="desc.equilibrium.equilibrium.Equilibrium",
             has_axis=False,
         )
-        params = eq.params_dict
 
         timer = Timer()
         if verbose > 0:
@@ -770,6 +769,8 @@ class QuadraticFlux(_Objective):
         )
 
         if self._eq_fixed:
+            params = eq.params_dict
+
             eval_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,

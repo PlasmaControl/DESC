@@ -23,11 +23,11 @@ def compute_scaling_factors(thing):
             for m in m_modes:
                 try:
                     x = coeffs[basis.get_idx(M=m, N=n)]
-                    if x:  # mode exists and the coefficient is non-zero
-                        break
+                    if not np.isclose(x, 0):  # mode exists and coefficient is non-zero
+                        return x
                 except ValueError:
                     pass
-        return x
+        raise ValueError("No modes found, geometry is unphysical.")
 
     if isinstance(thing, Equilibrium):
         R00 = thing.Rb_lmn[thing.surface.R_basis.get_idx(M=0, N=0)]

@@ -630,7 +630,7 @@ class QuadraticFlux(_Objective):
         calculated and where to evaluate errors.
     field_grid : Grid, optional
         Grid used to discretize ext_field (e.g. grid for the magnetic field source from
-        the coils).
+        coils).
     name : str
         Name of the objective function.
 
@@ -669,8 +669,16 @@ class QuadraticFlux(_Objective):
         self._field_grid = field_grid
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
+        if not eq_fixed and not field_fixed:
+            things = [ext_field, eq]
+        elif eq_fixed and not field_fixed:
+            things = [ext_field]
+        elif field_fixed and not eq_fixed:
+            things = [eq]
+        else:
+            raise ValueError("Cannot fix both the eq and field.")
         super().__init__(
-            things=[ext_field] if eq_fixed else [ext_field, eq],
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -698,10 +706,11 @@ class QuadraticFlux(_Objective):
             field = self.things[0]
         elif self._field_fixed:
             eq = self.things[0]
-            field = self._field
+            field = self._ext_field
         else:
             field = self.things[0]
             eq = self.things[1]
+        print(self.things)
 
         if eq != self._eq:
             self._eq = eq
@@ -763,7 +772,7 @@ class QuadraticFlux(_Objective):
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
-        print(eq)
+
         src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
         src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
         eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
@@ -821,7 +830,7 @@ class QuadraticFlux(_Objective):
             eval_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,
-                params=params,
+                params=eq.params_dict,
                 transforms=eval_transforms,
                 profiles=eval_profiles,
             )

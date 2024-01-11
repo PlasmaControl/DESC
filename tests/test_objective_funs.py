@@ -495,9 +495,9 @@ class TestObjectiveFunction:
         # test that torus (axisymmetric) Bnorm is exactly 0
         eq = Equilibrium()
         eq.solve()
-        obj = QuadraticFlux(t_field, eq)
+        obj = QuadraticFlux(t_field, eq, eq_fixed=True)
         obj.build(eq)
-        f = obj.compute(field_params=t_field.params_dict, eq_params=eq.params_dict)
+        f = obj.compute(params_1=t_field.params_dict)
         np.testing.assert_allclose(f, 0)
 
         # test nonaxisymmetric surface
@@ -527,12 +527,13 @@ class TestObjectiveFunction:
             eq,
             eval_grid=eval_grid,
             src_grid=source_grid,
+            eq_fixed=True,
         )
         Bnorm = t_field.compute_Bnormal(
             eq.surface, eval_grid=eval_grid, source_grid=source_grid
         )[0]
         obj.build(eq, verbose=0)
-        f = obj.compute(field_params=t_field.params_dict, eq_params=eq.params_dict)
+        f = obj.compute(params_1=t_field.params_dict)
 
         # for this to pass with rtol=1e-3, the source resolution needs to be quite high
         np.testing.assert_allclose(f, Bnorm, rtol=1e-2, atol=1e-2)
@@ -610,7 +611,17 @@ class TestObjectiveFunction:
             copy=True,
         )
 
-        # test with eq_fixed = False
+        # test with field_fixed=True
+        t_field = ToroidalMagneticField()
+        quadflux_obj = QuadraticFlux(
+            ext_field=t_field,
+            eq=eq,
+            src_grid=source_grid,
+            eval_grid=eval_grid,
+            field_grid=field_grid,
+            field_fixed=True,
+        )
+        # test with eq_fixed=field_fixed=False
         quadflux_obj = QuadraticFlux(
             ext_field=field,
             eq=eq,

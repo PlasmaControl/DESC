@@ -1070,12 +1070,11 @@ class BConsistencyError(_Objective):
         )
 
         # need extra factor of B/2 bc we're evaluating on the surface itself
-        B_nxB = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"]) + eval_data["B"] / 2
-
-        B_eq = eval_data["B"]
+        B_nxB_alone = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
+        B_nxB = B_nxB_alone + eval_data["B"] / 2
 
         g = eval_data["|e_theta x e_zeta|"]
-        B_err = (g * (B_eq - B_nxB).T).T.flatten(order="F")
+        B_err = (g * (B_nxB).T).T.flatten(order="F")
 
         return B_err
 

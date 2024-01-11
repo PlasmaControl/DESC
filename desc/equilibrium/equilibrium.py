@@ -863,7 +863,7 @@ class Equilibrium(IOAble, Optimizable):
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,
                 N=self.N_grid,
-                NFP=self.NFP,
+                NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
                 sym=self.sym,
             )
             # TODO: Pass in data0d as a seed once there are 1d quantities that
@@ -892,9 +892,8 @@ class Equilibrium(IOAble, Optimizable):
                 zeta=grid.nodes[grid.unique_zeta_idx, 2],
                 L=self.L_grid,
                 M=self.M_grid,
-                NFP=self.NFP,
+                NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
                 sym=self.sym,
-                axis=False,
             )
             # TODO: Pass in data0d as a seed once there are 1d quantities that
             # depend on 0d quantities in data_index.

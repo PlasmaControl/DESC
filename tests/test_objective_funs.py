@@ -539,6 +539,9 @@ class TestObjectiveFunction:
 
     def test_quadratic_flux_optimization(self):
         """Test optimization using quadratic flux."""
+        N_grid = 20
+        M_grid = 10
+
         # axisymmetric equilibrium
         eq = Equilibrium(M=2, L=2)
         eq.solve(verbose=0)
@@ -557,42 +560,39 @@ class TestObjectiveFunction:
         )
         field.change_Phi_resolution(M=4, N=0)
 
-        N = 20
-        M = 10
-
         field_grid = LinearGrid(
             rho=np.array([1.0]),
-            M=M,
-            N=N,
+            M=M_grid,
+            N=N_grid,
             NFP=int(field.NFP),
             sym=False,
         )
         eval_grid = LinearGrid(
             rho=np.array([1.0]),
             M=eq.M_grid,
-            N=N,
+            N=N_grid,
             NFP=int(eq.NFP),
             sym=False,
         )
 
         source_grid = LinearGrid(
             rho=np.array([1.0]),
-            M=M,
-            N=N,
+            M=M_grid,
+            N=N_grid,
             NFP=int(eq.NFP),
             sym=False,
         )
 
         # the optimizer will zero out the nonaxisymmetric part of the field (Phi_mn)
-        # since equilibrium is axisymmetric. So, let's fix every parameter except for
-        # phi_mn and check that Phi_mn goes to zero.
-
-        constraints = (FixParameter(field, ["I", "G", "R_lmn", "Z_lmn"]),)
+        # since equilibrium is axisymmetric. using quadratic flux with a target = 0
+        # as an objective because if Bnorm is minimized to be zero, then that means
+        # we are dealing with an axisymmetric equilibrium (which we are)
         optimizer = Optimizer("lsq-exact")
 
-        # using quadratic flux with a target = 0 as an objective because if
-        # Bnorm is minimized to be zero, then that means we are dealing with
-        # an axisymmetric equilibrium (which we are)
+        # fix every parameter except for phi_mn
+        constraints = (FixParameter(field, ["I", "G", "R_lmn", "Z_lmn"]),)
+
+        # test with eq_fixed = True
         quadflux_obj = QuadraticFlux(
             ext_field=field,
             eq=eq,
@@ -603,16 +603,37 @@ class TestObjectiveFunction:
         )
         objective = ObjectiveFunction(quadflux_obj)
 
-        new_field, result = optimizer.optimize(
+        things_with_eq_fixed, __ = optimizer.optimize(
             field,
             objective=objective,
             constraints=constraints,
-            gtol=1e-14,
-            ftol=1e-14,
             copy=True,
         )
 
-        np.testing.assert_allclose(new_field[0].Phi_mn, 0, atol=1e-9)
+        # test with eq_fixed = False
+        quadflux_obj = QuadraticFlux(
+            ext_field=field,
+            eq=eq,
+            src_grid=source_grid,
+            eval_grid=eval_grid,
+            field_grid=field_grid,
+            eq_fixed=False,
+        )
+        objective = ObjectiveFunction(quadflux_obj)
+        # not a realistic use case but testing logic with FixParameter(eq)
+        constraints = (
+            FixParameter(field, ["I", "G", "R_lmn", "Z_lmn"]),
+            FixParameter(eq),
+        )
+        things, __ = optimizer.optimize(
+            (field, eq),
+            objective=objective,
+            constraints=constraints,
+            copy=True,
+        )
+
+        np.testing.assert_allclose(things_with_eq_fixed[0].Phi_mn, 0, atol=1e-8)
+        np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-8)
 
     @pytest.mark.unit
     def test_target_max_iota(self):

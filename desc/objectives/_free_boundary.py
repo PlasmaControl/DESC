@@ -657,16 +657,18 @@ class QuadraticFlux(_Objective):
         eval_grid=None,
         field_grid=None,
         eq_fixed=False,
+        field_fixed=False,
         name="Quadratic flux",
     ):
         self._src_grid = src_grid
         self._eval_grid = eval_grid
         self._eq = eq
-        self._eq_fixed = eq_fixed
         self._s = s
         self._q = q
         self._ext_field = ext_field
         self._field_grid = field_grid
+        self._eq_fixed = eq_fixed
+        self._field_fixed = field_fixed
         super().__init__(
             things=[ext_field] if eq_fixed else [ext_field, eq],
             target=target,
@@ -690,7 +692,17 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
-        eq = self._eq if self._eq_fixed else self.things[1]
+        # TODO: should add case where both are true
+        if self._eq_fixed:
+            eq = self._eq
+            field = self.things[0]
+        elif self._field_fixed:
+            eq = self.things[0]
+            field = self._field
+        else:
+            field = self.things[0]
+            eq = self.things[1]
+
         if eq != self._eq:
             self._eq = eq
 
@@ -751,7 +763,7 @@ class QuadraticFlux(_Objective):
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
-
+        print(eq)
         src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
         src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
         eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
@@ -803,6 +815,28 @@ class QuadraticFlux(_Objective):
                 Bplasma=Bplasma,
             )
 
+        if self._field_fixed:
+            field_params = field.params_dict
+
+            eval_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._data_keys,
+                params=params,
+                transforms=eval_transforms,
+                profiles=eval_profiles,
+            )
+            x = jnp.array(
+                [
+                    eval_data["R"],
+                    eval_data["zeta"],
+                    eval_data["Z"],
+                ]
+            ).T
+            Bext = self._ext_field.compute_magnetic_field(
+                x, grid=self._field_grid, basis="rpz", params=field_params
+            )
+            self._constants.update(Bext=Bext)
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -815,7 +849,7 @@ class QuadraticFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, field_params, eq_params=None, constants=None):
+    def compute(self, params_1=None, params_2=None, constants=None):
         """Compute boundary force error.
 
         Parameters
@@ -836,6 +870,14 @@ class QuadraticFlux(_Objective):
         """
         if constants is None:
             constants = self.constants
+
+        if self._eq_fixed:
+            field_params = params_1
+        elif self._field_fixed:
+            eq_params = params_1
+        else:
+            eq_params = params_2
+            field_params = params_1
 
         if self._eq_fixed:
             Bplasma = constants["Bplasma"]
@@ -868,17 +910,19 @@ class QuadraticFlux(_Objective):
             )
             Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
 
-        x = jnp.array(
-            [
-                eval_data["R"],
-                eval_data["zeta"],
-                eval_data["Z"],
-            ]
-        ).T
-
-        Bext = self._ext_field.compute_magnetic_field(
-            x, grid=self._field_grid, basis="rpz", params=field_params
-        )
+        if self._field_fixed:
+            Bext = constants["Bext"]
+        else:
+            x = jnp.array(
+                [
+                    eval_data["R"],
+                    eval_data["zeta"],
+                    eval_data["Z"],
+                ]
+            ).T
+            Bext = self._ext_field.compute_magnetic_field(
+                x, grid=self._field_grid, basis="rpz", params=field_params
+            )
 
         f = jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)
         return f

@@ -703,12 +703,9 @@ class QuadraticFlux(_Objective):
         # TODO: should add case where both are true
         if self._eq_fixed:
             eq = self._eq
-            field = self.things[0]
         elif self._field_fixed:
             eq = self.things[0]
-            field = self._ext_field
         else:
-            field = self.things[0]
             eq = self.things[1]
         print(self.things)
 
@@ -825,26 +822,7 @@ class QuadraticFlux(_Objective):
             )
 
         if self._field_fixed:
-            field_params = field.params_dict
-
-            eval_data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                self._data_keys,
-                params=eq.params_dict,
-                transforms=eval_transforms,
-                profiles=eval_profiles,
-            )
-            x = jnp.array(
-                [
-                    eval_data["R"],
-                    eval_data["zeta"],
-                    eval_data["Z"],
-                ]
-            ).T
-            Bext = self._ext_field.compute_magnetic_field(
-                x, grid=self._field_grid, basis="rpz", params=field_params
-            )
-            self._constants.update(Bext=Bext)
+            self._constants.update(ext_field=self._ext_field)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -919,16 +897,19 @@ class QuadraticFlux(_Objective):
             )
             Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
 
+        x = jnp.array(
+            [
+                eval_data["R"],
+                eval_data["zeta"],
+                eval_data["Z"],
+            ]
+        ).T
+
         if self._field_fixed:
-            Bext = constants["Bext"]
+            Bext = constants["ext_field"].compute_magnetic_field(
+                x, grid=self._field_grid, basis="rpz"
+            )
         else:
-            x = jnp.array(
-                [
-                    eval_data["R"],
-                    eval_data["zeta"],
-                    eval_data["Z"],
-                ]
-            ).T
             Bext = self._ext_field.compute_magnetic_field(
                 x, grid=self._field_grid, basis="rpz", params=field_params
             )

@@ -1140,8 +1140,8 @@ class InputReader:
                 ]
                 inputs["M"] = numbers[0] - 1
                 inputs["L"] = numbers[0] - 1
-                inputs["L_grid"] = 2 * numbers[0]
-                inputs["M_grid"] = 2 * numbers[0]
+                inputs["L_grid"] = 2 * (numbers[0] - 1)
+                inputs["M_grid"] = 2 * (numbers[0] - 1)
             match = re.search(r"NTOR\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [

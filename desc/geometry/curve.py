@@ -219,8 +219,7 @@ class FourierRZCurve(Curve):
             Axis with given Fourier coefficients.
 
         """
-        f = open(path)
-        inputs = InputReader().parse_inputs(f)[-1]
+        inputs = InputReader().parse_inputs(path)[-1]
         curve = FourierRZCurve(
             inputs["axis"][:, 1],
             inputs["axis"][:, 2],

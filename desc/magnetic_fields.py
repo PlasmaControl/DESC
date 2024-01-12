@@ -2113,7 +2113,7 @@ class FourierCurrentPotentialField(
             K_mags.append(K_mag)
             if verbose > 1:
                 Bn_print = Bn_tot / normalization_B
-                units = " (T)" if normalize else " (unitless)"
+                units = " (T)" if not normalize else " (unitless)"
                 printstring = f"chi^2 B = {chi_B:1.5e}"
                 print(printstring)
                 printstring = f"min Bnormal = {jnp.min(np.abs(Bn_print)):1.5e}"

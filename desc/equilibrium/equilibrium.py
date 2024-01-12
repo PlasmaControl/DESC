@@ -863,7 +863,7 @@ class Equilibrium(IOAble, Optimizable):
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,
                 N=self.N_grid,
-                NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
+                NFP=self.NFP,
                 sym=self.sym,
             )
             # TODO: Pass in data0d as a seed once there are 1d quantities that

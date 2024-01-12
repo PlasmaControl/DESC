@@ -277,15 +277,7 @@ class FourierRZToroidalSurface(Surface):
 
         """
         f = open(path)
-        isVMEC = False
-        for line in f.readlines():
-            if "&INDATA" in line.upper():
-                isVMEC = True
-                break
-        if isVMEC:  # vmec input, convert to desc
-            inputs = InputReader.parse_vmec_inputs(f)[-1]
-        else:
-            inputs = InputReader().parse_inputs(f)[-1]
+        inputs = InputReader().parse_inputs(f)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
                 "boundary_ratio = {} != 1, surface may not be as expected".format(

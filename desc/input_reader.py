@@ -867,23 +867,32 @@ class InputReader:
         f.write("spectral_indexing = {}\n".format(eq._spectral_indexing))
 
         f.write("\n# pressure and rotational transform/current profiles\n")
-
         grid = LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         rho = grid.nodes[grid._unique_rho_idx, 0]
 
-        pressure = grid.compress(eq.compute("p", grid=grid)["p"])
-        iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
-        current = grid.compress(eq.compute("current", grid=grid)["current"])
+        if isinstance(eq.pressure, PowerSeriesProfile):
+            pres_profile = eq.pressure.params
+        else:
+            pressure = grid.compress(eq.compute("p", grid=grid)["p"])
+            pres_profile = PowerSeriesProfile.from_values(
+                rho, pressure, order=eq.L, sym=False
+            ).params
 
-        pres_profile = PowerSeriesProfile.from_values(
-            rho, pressure, order=eq.L, sym=False
-        ).params
-        iota_profile = PowerSeriesProfile.from_values(
-            rho, iota, order=eq.L, sym=False
-        ).params
-        curr_profile = PowerSeriesProfile.from_values(
-            rho, current, order=eq.L, sym=False
-        ).params
+        if isinstance(eq.iota, PowerSeriesProfile):
+            iota_profile = eq.iota.params
+        else:
+            iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
+            iota_profile = PowerSeriesProfile.from_values(
+                rho, iota, order=eq.L, sym=False
+            ).params
+
+        if isinstance(eq.current, PowerSeriesProfile):
+            curr_profile = eq.current.params
+        else:
+            current = grid.compress(eq.compute("current", grid=grid)["current"])
+            curr_profile = PowerSeriesProfile.from_values(
+                rho, current, order=eq.L, sym=False
+            ).params
 
         if eq.iota:
             char = "i"
@@ -900,8 +909,6 @@ class InputReader:
             )
 
         f.write("\n# fixed-boundary surface shape\n")
-
-        # boundary parameters
         if eq.sym:
             for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
                 if abs(eq.Rb_lmn[k]) > threshold:
@@ -1023,7 +1030,7 @@ class InputReader:
                 end_ind = i
         vmeclines = vmeclines[start_ind + 1 : end_ind]
 
-        ## Loop which makes multi-line inputs a single line
+        # Loop which makes multi-line inputs a single line
         vmeclines_no_multiline = []
         for line in vmeclines:
             comment = line.find("!")
@@ -1038,7 +1045,7 @@ class InputReader:
             else:  # is a multi-line input,append the line to the previous
                 vmeclines_no_multiline[-1] += " " + line
 
-        ## remove duplicate lines
+        # remove duplicate lines
         vmec_no_multiline_no_duplicates = []
         already_read_names = []
         already_read = False
@@ -1131,8 +1138,8 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                inputs["M"] = numbers[0]
-                inputs["L"] = numbers[0]
+                inputs["M"] = numbers[0] - 1
+                inputs["L"] = numbers[0] - 1
                 inputs["L_grid"] = 2 * numbers[0]
                 inputs["M_grid"] = 2 * numbers[0]
             match = re.search(r"NTOR\s*=\s*" + num_form, command, re.IGNORECASE)

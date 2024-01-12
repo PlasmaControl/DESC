@@ -28,6 +28,9 @@ from desc.objectives import (
     CurrentDensity,
     Elongation,
     Energy,
+    FixCurrent,
+    FixPressure,
+    FixPsi,
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
@@ -588,12 +591,12 @@ class TestObjectiveFunction:
         # since equilibrium is axisymmetric. using quadratic flux with a target = 0
         # as an objective because if Bnorm is minimized to be zero, then that means
         # we are dealing with an axisymmetric equilibrium (which we are)
-        optimizer = Optimizer("lsq-exact")
+        optimizer = Optimizer("proximal-lsq-exact")
 
         # fix every parameter except for phi_mn
         constraints = (FixParameter(field, ["I", "G", "R_lmn", "Z_lmn"]),)
 
-        # test with eq_fixed = True
+        # test 1: with eq_fixed = True
         quadflux_obj = QuadraticFlux(
             ext_field=field,
             eq=eq,
@@ -611,8 +614,29 @@ class TestObjectiveFunction:
             copy=True,
         )
 
-        # test with field_fixed=True
-        t_field = ToroidalMagneticField()
+        # test 2: with field_fixed=True
+
+        # axisymmetric field
+        t_field = ToroidalMagneticField(1, 1)
+
+        # non-axisymmetric equilibrium
+        N = 15
+
+        surface = FourierRZToroidalSurface(
+            R_lmn=np.array([10, 1, 0.5]),
+            Z_lmn=np.array([0, -1, -0.5]),
+            modes_R=np.array([[0, 0], [1, 0], [1, N]]),
+            modes_Z=np.array([[0, 0], [-1, 0], [-1, N]]),
+        )
+        eq = Equilibrium(surface=surface)
+        eq.solve(verbose=0)
+
+        constraints = (
+            ForceBalance(eq),
+            FixPressure(eq),
+            FixCurrent(eq),
+            FixPsi(eq),
+        )
         quadflux_obj = QuadraticFlux(
             ext_field=t_field,
             eq=eq,
@@ -621,7 +645,16 @@ class TestObjectiveFunction:
             field_grid=field_grid,
             field_fixed=True,
         )
-        # test with eq_fixed=field_fixed=False
+        objective = ObjectiveFunction(quadflux_obj)
+
+        things_with_field_fixed, __ = optimizer.optimize(
+            (eq),
+            objective=objective,
+            constraints=constraints,
+            copy=True,
+        )
+
+        # test 3: with eq_fixed=field_fixed=False
         quadflux_obj = QuadraticFlux(
             ext_field=field,
             eq=eq,

@@ -1674,6 +1674,7 @@ class Equilibrium(IOAble, Optimizable):
         transform_L = Transform(grid, basis_L, build_pinv=True)
 
         if fit_grid_type == "linear":
+            rho = grid.nodes[grid.unique_rho_idx, 0]
             R_1D = np.zeros((grid.num_nodes,))
             Z_1D = np.zeros((grid.num_nodes,))
             L_1D = np.zeros((grid.num_nodes,))
@@ -1690,10 +1691,31 @@ class Equilibrium(IOAble, Optimizable):
                 Z_1D[idx] = Z_2D.flatten(order="F")
                 L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
         else:
-            R_1D, Z_1D, phi_1D = na_eq.to_RZ(grid.nodes)
-            nu_B_ax = na_eq.nu_spline(phi_1D)
-            phi_B = phi_1D + nu_B_ax
-            L_1D = -nu_B * na_eq.iota
+            all_theta = grid.nodes[:, 1]
+            rho = grid.nodes[grid.unique_rho_idx, 0]
+            R_1D = np.zeros((grid.num_nodes,))
+            Z_1D = np.zeros((grid.num_nodes,))
+            L_1D = np.zeros((grid.num_nodes,))
+            phi_cyl_ax = np.linspace(
+                0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False
+            )
+            nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
+            phi_B = phi_cyl_ax + nu_B_ax
+            for rho_i in rho:
+                theta_nodes = all_theta[
+                    np.where(
+                        np.logical_and(
+                            grid.nodes[:, 0] == rho_i, np.isclose(grid.nodes[:, 2], 0)
+                        )
+                    )
+                ]
+                ntheta = theta_nodes.size
+                R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
+                nu_B = phi_B - phi0_2D
+                idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
+                R_1D[idx] = R_2D.flatten(order="F")
+                Z_1D[idx] = Z_2D.flatten(order="F")
+                L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
         inputs["R_lmn"] = transform_R.fit(R_1D)
         inputs["Z_lmn"] = transform_Z.fit(Z_1D)
         inputs["L_lmn"] = transform_L.fit(L_1D)

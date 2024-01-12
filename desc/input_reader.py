@@ -871,6 +871,7 @@ class InputReader:
         rho = grid.nodes[grid._unique_rho_idx, 0]
 
         if isinstance(eq.pressure, PowerSeriesProfile):
+            eq.pressure.change_resolution(eq.L)
             pres_profile = eq.pressure.params
         else:
             pressure = grid.compress(eq.compute("p", grid=grid)["p"])
@@ -879,6 +880,7 @@ class InputReader:
             ).params
 
         if isinstance(eq.iota, PowerSeriesProfile):
+            eq.iota.change_resolution(eq.L)
             iota_profile = eq.iota.params
         else:
             iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
@@ -887,6 +889,7 @@ class InputReader:
             ).params
 
         if isinstance(eq.current, PowerSeriesProfile):
+            eq.current.change_resolution(eq.L)
             curr_profile = eq.current.params
         else:
             current = grid.compress(eq.compute("current", grid=grid)["current"])

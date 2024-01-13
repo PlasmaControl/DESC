@@ -4,11 +4,14 @@ import numbers
 import warnings
 
 import numpy as np
+import scipy
 
 from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
+from desc.grid import Grid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
+from desc.transform import Transform
 from desc.utils import copy_coeffs, isposint
 
 from .core import Surface
@@ -346,6 +349,129 @@ class FourierRZToroidalSurface(Surface):
         modes_Z = np.array([[-1, 0], [0, -2], [-1, 1], [1, -2], [-1, 2]])
 
         surf = cls(R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z, NFP=NFP)
+        return surf
+
+    @classmethod
+    def from_values(
+        cls,
+        coords,
+        theta,
+        zeta=None,
+        M=6,
+        N=6,
+        NFP=1,
+        sym=True,
+        check_orientation=True,
+        rcond=None,
+        w=None,
+    ):
+        """Create a surface from given R,Z coordinates in real space.
+
+        Parameters
+        ----------
+        coords : array-like shape(num_points,3) or Grid
+            cylindrical coordinates (R,phi,Z) to fit as a FourierRZToroidalSurface
+        theta : ndarray, shape(num_points,)
+            Locations in poloidal angle theta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the poloidal angle for the resulting surface.
+        zeta : ndarray, shape(num_points,)
+            Locations in toroidal angle zeta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the toroidal angle for the resulting surface.
+            if None, defaults to assuming the toroidal angle is the cylindrical phi
+            and so sets zeta = phi = coords[:,1]
+        M : int
+            poloidal resolution of basis used to fit surface with.
+            It is recommended to fit with M < num_theta points per toroidal plane,
+            i.e. if num_points = num_theta*num_zeta , then want to ensure M < num_theta
+        N : int
+            toroidal resolution of basis used to fit surface with
+            It is recommended to fit with N < num_zeta points per poloidal plane.
+            i.e. if num_points = num_theta*num_zeta , then want to ensure N < num_zeta
+        NFP : int
+            number of toroidal field periods for surface
+        sym : bool
+            True if surface is stellarator-symmetric
+        check_orientation : bool
+            whether to check left-handedness of coordinates and flip if necessary.
+        rcond : float
+            Relative condition number of the fit. Singular values smaller than this
+            relative to the largest singular value will be ignored. The default value
+            is len(x)*eps, where eps is the relative precision of the float type, about
+            2e-16 in most cases.
+        w : array-like, shape(num_points,)
+            Weights to apply to the sample coordinates. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
+
+        Returns
+        -------
+        surface : FourierRZToroidalSurface
+            Surface with Fourier coefficients fitted from input coords.
+
+        """
+        theta = np.asarray(theta)
+        assert (
+            coords.shape[0] == theta.size
+        ), "coords first dimenson and theta must have same size"
+        if zeta is None:
+            zeta = coords[:, 1]
+        else:
+            raise NotImplementedError("zeta != phi not yet implemented")
+        nodes = Grid(
+            np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
+            sort=False,
+            jitable=True,
+        )
+
+        R = coords[:, 0]
+        Z = coords[:, 2]
+        R_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
+        Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        if w is None:  # unweighted fit
+            transform = Transform(
+                nodes, R_basis, build=False, build_pinv=True, rcond=rcond
+            )
+            Rb_lmn = transform.fit(R)
+
+            transform = Transform(
+                nodes, Z_basis, build=False, build_pinv=True, rcond=rcond
+            )
+            Zb_lmn = transform.fit(Z)
+        else:  # perform weighted fit
+            # solves system W A x = W b
+            # where A is the transform matrix, W is the diagonal weight matrix
+            # of weights w, and b is the vector of data points
+            w = np.asarray(w)
+            W = np.diag(w)
+            assert w.size == R.size, "w must same length as number of points being fit"
+
+            transform = Transform(
+                nodes, R_basis, build=True, build_pinv=False, method="direct1"
+            )
+            AR = transform.matrices[transform.method][0][0][0]
+
+            transform = Transform(
+                nodes, Z_basis, build=True, build_pinv=False, method="direct1"
+            )
+            AZ = transform.matrices[transform.method][0][0][0]
+
+            A = scipy.linalg.block_diag(W @ AR, W @ AZ)
+            b = np.concatenate([w * R, w * Z])
+            x_lmn = np.linalg.lstsq(A, b, rcond=rcond)[0]
+
+            Rb_lmn = x_lmn[0 : R_basis.num_modes]
+            Zb_lmn = x_lmn[R_basis.num_modes :]
+
+        surf = cls(
+            Rb_lmn,
+            Zb_lmn,
+            R_basis.modes[:, 1:],
+            Z_basis.modes[:, 1:],
+            NFP,
+            sym,
+            check_orientation=check_orientation,
+        )
         return surf
 
 

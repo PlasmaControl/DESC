@@ -5,6 +5,7 @@ import pytest
 
 import desc.examples
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
 
@@ -147,6 +148,60 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(data["x"][0, 1], 0, atol=1e-14)  # this is y
         np.testing.assert_allclose(data["Z"], 0)
         np.testing.assert_allclose(data["x"][0, 2], 0)
+
+    @pytest.mark.unit
+    def test_surface_from_values(self):
+        """Test for constructing elliptical surface from values."""
+        surface = get("HELIOTRON", "boundary")
+        grid = LinearGrid(M=20, N=20, sym=False, NFP=surface.NFP, endpoint=False)
+        data = surface.compute(["R", "phi", "Z"], grid=grid)
+
+        theta = grid.nodes[:, 1]
+
+        coords = np.vstack([data["R"], data["phi"], data["Z"]]).T
+        surface2 = FourierRZToroidalSurface.from_values(
+            coords,
+            theta,
+            M=surface.M,
+            N=surface.N,
+            NFP=surface.NFP,
+            sym=True,
+            w=np.ones_like(theta),
+        )
+        grid = LinearGrid(M=25, N=25, sym=False, NFP=surface.NFP)
+        np.testing.assert_allclose(
+            surface.compute("x", grid=grid)["x"], surface2.compute("x", grid=grid)["x"]
+        )
+
+        # with a different poloidal angle
+        theta = -np.arctan2(data["Z"] - 0, data["R"] - 10)
+        surface2 = FourierRZToroidalSurface.from_values(
+            coords,
+            theta,
+            M=surface.M,
+            N=surface.N,
+            NFP=surface.NFP,
+            sym=True,
+        )
+        # cannot compare x directly because thetas are different
+        np.testing.assert_allclose(
+            surface.compute("V")["V"], surface2.compute("V")["V"], rtol=1e-4
+        )
+        np.testing.assert_allclose(
+            surface.compute("S")["S"], surface2.compute("S")["S"], rtol=1e-3
+        )
+
+        # test assert statements
+        with pytest.raises(NotImplementedError):
+            FourierRZToroidalSurface.from_values(
+                coords,
+                theta,
+                zeta=theta,
+                M=surface.M,
+                N=surface.N,
+                NFP=surface.NFP,
+                sym=True,
+            )
 
 
 class TestZernikeRZToroidalSection:

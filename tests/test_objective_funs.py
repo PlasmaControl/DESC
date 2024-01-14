@@ -28,6 +28,8 @@ from desc.objectives import (
     CurrentDensity,
     Elongation,
     Energy,
+    FixBoundaryR,
+    FixBoundaryZ,
     FixCurrent,
     FixPressure,
     FixPsi,
@@ -543,18 +545,61 @@ class TestObjectiveFunction:
 
     def test_quadratic_flux_optimization(self):
         """Test optimization using quadratic flux."""
-        N_grid = 20
-        M_grid = 10
 
-        # axisymmetric equilibrium
-        eq = Equilibrium(M=2, L=2)
-        eq.solve(verbose=0)
-        surf = eq.surface.copy()
+        def get_grids(eq, field):
+            N_grid = 20
+            M_grid = 10
+
+            field_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=M_grid,
+                N=N_grid,
+                NFP=int(field.NFP)
+                if not isinstance(field, ToroidalMagneticField)
+                else 1,
+                sym=False,
+            )
+            eval_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=N_grid,
+                NFP=int(eq.NFP),
+                sym=False,
+            )
+
+            source_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=M_grid,
+                N=N_grid,
+                NFP=int(eq.NFP),
+                sym=False,
+            )
+
+            return field_grid, eval_grid, source_grid
+
+        # make axisymmetric equilibrium
+        axisym_eq = Equilibrium(M=2, L=2)
+        axisym_eq.solve(verbose=0)
+
+        # make non-axisymmetric equilibrium
+        surface = FourierRZToroidalSurface(
+            R_lmn=[1, 0.125, 0.1],
+            Z_lmn=[-0.125, -0.1],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+            NFP=4,
+        )
+        nonaxisym_eq = Equilibrium(L=4, M=4, N=4, surface=surface)
+        nonaxisym_eq.solve(verbose=0)
+
+        # make axisymmetric field
+        axisym_field = ToroidalMagneticField(1, 1)
+
+        # make nonaxisymmetric field
+        surf = axisym_eq.surface.copy()
         surf.R_lmn = surf.R_lmn.at[surf.R_basis.get_idx(M=1, N=0)].set(2)
         surf.Z_lmn = surf.Z_lmn.at[surf.Z_basis.get_idx(M=-1, N=0)].set(2)
-
-        # nonaxisymmetric field
-        field = FourierCurrentPotentialField.from_surface(
+        nonaxisym_field = FourierCurrentPotentialField.from_surface(
             surface=surf,
             Phi_mn=np.array([1e4]),
             modes_Phi=np.array([[1, 4]]),
@@ -562,41 +607,22 @@ class TestObjectiveFunction:
             I=0,
             sym_Phi="sin",
         )
-        field.change_Phi_resolution(M=4, N=0)
-
-        field_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=M_grid,
-            N=N_grid,
-            NFP=int(field.NFP),
-            sym=False,
-        )
-        eval_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=N_grid,
-            NFP=int(eq.NFP),
-            sym=False,
-        )
-
-        source_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=M_grid,
-            N=N_grid,
-            NFP=int(eq.NFP),
-            sym=False,
-        )
+        nonaxisym_field.change_Phi_resolution(M=4, N=0)
 
         # the optimizer will zero out the nonaxisymmetric part of the field (Phi_mn)
         # since equilibrium is axisymmetric. using quadratic flux with a target = 0
         # as an objective because if Bnorm is minimized to be zero, then that means
         # we are dealing with an axisymmetric equilibrium (which we are)
-        optimizer = Optimizer("proximal-lsq-exact")
+        optimizer = Optimizer("lsq-exact")
+
+        # test with eq_fixed = True
+        eq = axisym_eq.copy()
+        field = nonaxisym_field.copy()
+        field_grid, eval_grid, source_grid = get_grids(eq, field)
 
         # fix every parameter except for phi_mn
         constraints = (FixParameter(field, ["I", "G", "R_lmn", "Z_lmn"]),)
 
-        # test 1: with eq_fixed = True
         quadflux_obj = QuadraticFlux(
             ext_field=field,
             eq=eq,
@@ -614,31 +640,28 @@ class TestObjectiveFunction:
             copy=True,
         )
 
-        # test 2: with field_fixed=True
+        # test with field_fixed = True
+        field = axisym_field.copy()
+        eq = nonaxisym_eq.copy()
+        field_grid, eval_grid, source_grid = get_grids(eq, field)
 
-        # axisymmetric field
-        t_field = ToroidalMagneticField(1, 1)
+        fixed_Rb_lmn_indices = np.where(eq.Rb_lmn == 0)
+        fixed_R_modes = eq.surface.R_basis.modes[fixed_Rb_lmn_indices]
 
-        # non-axisymmetric equilibrium
-        N = 15
+        fixed_Rb_lmn_indices = np.where(eq.Zb_lmn == 0)
+        fixed_Z_modes = eq.surface.Z_basis.modes[fixed_Rb_lmn_indices]
 
-        surface = FourierRZToroidalSurface(
-            R_lmn=np.array([10, 1, 0.5]),
-            Z_lmn=np.array([0, -1, -0.5]),
-            modes_R=np.array([[0, 0], [1, 0], [1, N]]),
-            modes_Z=np.array([[0, 0], [-1, 0], [-1, N]]),
-        )
-        eq = Equilibrium(surface=surface)
-        eq.solve(verbose=0)
-
+        nonlinear_optimizer = Optimizer("proximal-lsq-exact")
         constraints = (
             ForceBalance(eq),
             FixPressure(eq),
             FixCurrent(eq),
             FixPsi(eq),
+            FixBoundaryR(eq, modes=fixed_R_modes),
+            FixBoundaryZ(eq, modes=fixed_Z_modes),
         )
         quadflux_obj = QuadraticFlux(
-            ext_field=t_field,
+            ext_field=field,
             eq=eq,
             src_grid=source_grid,
             eval_grid=eval_grid,
@@ -647,14 +670,27 @@ class TestObjectiveFunction:
         )
         objective = ObjectiveFunction(quadflux_obj)
 
-        things_with_field_fixed, __ = optimizer.optimize(
-            (eq),
+        things_with_field_fixed, __ = nonlinear_optimizer.optimize(
+            eq,
             objective=objective,
             constraints=constraints,
+            gtol=0,
+            ftol=0,
             copy=True,
         )
 
-        # test 3: with eq_fixed=field_fixed=False
+        new_Rb_lmn = things_with_field_fixed[0].Rb_lmn[
+            np.where(eq.surface.R_basis.modes[:, 2] != 0)
+        ]
+        new_Zb_lmn = things_with_field_fixed[0].Rb_lmn[
+            np.where(eq.surface.R_basis.modes[:, 2] != 0)
+        ]
+
+        # test with eq_fixed = field_fixed = False
+        eq = axisym_eq.copy()
+        field = nonaxisym_field.copy()
+        field_grid, eval_grid, source_grid = get_grids(eq, field)
+
         quadflux_obj = QuadraticFlux(
             ext_field=field,
             eq=eq,
@@ -677,6 +713,8 @@ class TestObjectiveFunction:
         )
 
         np.testing.assert_allclose(things_with_eq_fixed[0].Phi_mn, 0, atol=1e-8)
+        np.testing.assert_allclose(new_Rb_lmn, 0, atol=1e-10)
+        np.testing.assert_allclose(new_Zb_lmn, 0, atol=1e-10)
         np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-8)
 
     @pytest.mark.unit

@@ -861,8 +861,8 @@ class QuadraticFlux(_Objective):
             eq_params = params_1
             field_params = self._ext_field.params_dict
         else:
-            eq_params = params_2
             field_params = params_1
+            eq_params = params_2
 
         if not self._eq_fixed:
             eval_data = compute_fun(

@@ -609,13 +609,14 @@ class TestObjectiveFunction:
         )
         nonaxisym_field.change_Phi_resolution(M=4, N=0)
 
-        # the optimizer will zero out the nonaxisymmetric part of the field (Phi_mn)
-        # since equilibrium is axisymmetric. using quadratic flux with a target = 0
-        # as an objective because if Bnorm is minimized to be zero, then that means
-        # we are dealing with an axisymmetric equilibrium (which we are)
         optimizer = Optimizer("lsq-exact")
+        nonlinear_optimizer = Optimizer("proximal-lsq-exact")
 
-        # test with eq_fixed = True
+        # test with eq_fixed = True: the optimizer will zero out the nonaxisymmetric
+        # part of the field (Phi_mn) since equilibrium is axisymmetric. using quadratic
+        # flux with a target = 0 as an objective because if Bnorm is minimized to be
+        # zero, then that means we are dealing with an axisymmetric equilibrium
+
         eq = axisym_eq.copy()
         field = nonaxisym_field.copy()
         field_grid, eval_grid, source_grid = get_grids(eq, field)
@@ -640,18 +641,21 @@ class TestObjectiveFunction:
             copy=True,
         )
 
-        # test with field_fixed = True
+        # test with field_fixed = True: the optimizer will zero out the nonaxisymmetric
+        # part of the equilibrium (Rb_lmn) since field is axisymmetric.
+
         field = axisym_field.copy()
         eq = nonaxisym_eq.copy()
         field_grid, eval_grid, source_grid = get_grids(eq, field)
 
-        fixed_Rb_lmn_indices = np.where(eq.Rb_lmn == 0)
-        fixed_R_modes = eq.surface.R_basis.modes[fixed_Rb_lmn_indices]
+        # fix modes where Rb_lmn = 0 so optimizer only pays attention to
+        # nonaxisymmetric modes
+        zero_indices = np.where(eq.Rb_lmn == 0)
+        fixed_R_modes = eq.surface.R_basis.modes[zero_indices]
 
-        fixed_Rb_lmn_indices = np.where(eq.Zb_lmn == 0)
-        fixed_Z_modes = eq.surface.Z_basis.modes[fixed_Rb_lmn_indices]
+        zero_indices = np.where(eq.Zb_lmn == 0)
+        fixed_Z_modes = eq.surface.Z_basis.modes[zero_indices]
 
-        nonlinear_optimizer = Optimizer("proximal-lsq-exact")
         constraints = (
             ForceBalance(eq),
             FixPressure(eq),

@@ -1580,9 +1580,10 @@ class FourierCurrentPotentialField(
         name="",
         check_orientation=True,
     ):
-        self._Phi_mn = Phi_mn
-
         Phi_mn, modes_Phi = map(np.asarray, (Phi_mn, modes_Phi))
+        assert (
+            Phi_mn.size == modes_Phi.shape[0]
+        ), "Phi_mn size and modes_Phi.shape[0] must be the same size!"
 
         assert np.issubdtype(modes_Phi.dtype, np.integer)
 
@@ -1608,6 +1609,7 @@ class FourierCurrentPotentialField(
                 sym_Phi = "cos"
         self._sym_Phi = sym_Phi
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
+        self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
 
         assert np.isscalar(I) or np.asarray(I).size == 1, "I must be a scalar"
         assert np.isscalar(G) or np.asarray(G).size == 1, "G must be a scalar"

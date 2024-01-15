@@ -72,6 +72,9 @@ class FourierRZCurve(Curve):
 
         modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
 
+        assert R_n.size == modes_R.size, "R_n size and modes_R must be the same size"
+        assert Z_n.size == modes_Z.size, "Z_n size and modes_Z must be the same size"
+
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
         assert isposint(NFP)
@@ -290,6 +293,10 @@ class FourierXYZCurve(Curve):
 
         assert issubclass(modes.dtype.type, np.integer)
 
+        assert X_n.size == modes.size, "X_n and modes must be the same size"
+        assert Y_n.size == modes.size, "Y_n and modes must be the same size"
+        assert Z_n.size == modes.size, "Z_n and modes must be the same size"
+
         N = np.max(abs(modes))
         self._X_basis = FourierSeries(N, NFP=1, sym=False)
         self._Y_basis = FourierSeries(N, NFP=1, sym=False)
@@ -473,7 +480,7 @@ class FourierXYZCurve(Curve):
             errorif(
                 not np.all(np.diff(s) > 0),
                 ValueError,
-                "supplied s must be monotonically increasing!",
+                "supplied s must be monotonically increasing",
             )
             errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
             errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
@@ -533,6 +540,7 @@ class FourierPlanarCurve(Curve):
         else:
             modes = np.asarray(modes)
         assert issubclass(modes.dtype.type, np.integer)
+        assert r_n.size == modes.size, "r_n size and modes must be the same size"
 
         N = np.max(abs(modes))
         self._r_basis = FourierSeries(N, NFP=1, sym=False)
@@ -698,7 +706,7 @@ class SplineXYZCurve(Curve):
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,
-                "supplied knots must be monotonically increasing!",
+                "supplied knots must be monotonically increasing",
             )
             errorif(knots[0] < 0, ValueError, "knots must lie in [0, 2pi]")
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")
@@ -767,7 +775,7 @@ class SplineXYZCurve(Curve):
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,
-                "supplied knots must be monotonically increasing!",
+                "supplied knots must be monotonically increasing",
             )
             errorif(knots[0] < 0, ValueError, "knots must lie in [0, 2pi]")
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")

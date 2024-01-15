@@ -223,10 +223,10 @@ class TestFourierRZToroidalSurface:
         """Test constant offset algorithm for a rotating ellipse."""
         eq = desc.examples.get("HELIOTRON")
         s = eq.surface
-        grid = LinearGrid(M=4, N=4, NFP=eq.NFP)
+        s.change_resolution(M=2, N=2)
         offset = 0.1
         (s_offset, data, _) = FourierRZToroidalSurface.constant_offset_surface(
-            s, offset, grid, M=2, N=2, full_output=True
+            s, offset, grid=None, M=2, N=2, full_output=True
         )
         r_offset_surf = data["x_offset_surface"]
         r_surf = data["x"]
@@ -259,7 +259,7 @@ class TestFourierRZToroidalSurface:
 
         np.testing.assert_allclose(
             R00_offset,
-            eq.surface.R_lmn[eq.surface.R_basis.get_idx(M=0, N=0)],
+            s.R_lmn[s.R_basis.get_idx(M=0, N=0)],
             atol=1e-3,
         )
         np.testing.assert_allclose(R10_offset, -a - offset, atol=1e-2)
@@ -272,7 +272,7 @@ class TestFourierRZToroidalSurface:
 
         np.testing.assert_allclose(
             R00_offset,
-            eq.surface.R_lmn[eq.surface.R_basis.get_idx(M=0, N=0)],
+            s.R_lmn[s.R_basis.get_idx(M=0, N=0)],
             atol=1e-3,
         )
         # cannot do the same sort of distance test as the axisymmetric test
@@ -281,6 +281,16 @@ class TestFourierRZToroidalSurface:
         # so, we cannot know which points on the surface to compare to see if
         # the distance is = offset without doing rootfinding (like is done to
         # find the surface in the first place)
+
+        # we can check that that avg XS area is what we expect
+        semi_major = a + b
+        semi_minor = a - b
+        correct_offset_XS_area = np.pi * (offset + semi_major) * (offset + semi_minor)
+        np.testing.assert_allclose(
+            Equilibrium(surface=s_offset).compute("A")["A"],
+            correct_offset_XS_area,
+            rtol=2e-2,
+        )
 
     def test_position(self):
         """Tests for position on surface."""

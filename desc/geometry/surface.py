@@ -554,8 +554,8 @@ class FourierRZToroidalSurface(Surface):
         """
         if grid is None:
             grid = LinearGrid(
-                M=base_surface.M,
-                N=base_surface.N,
+                M=base_surface.M * 2,
+                N=base_surface.N * 2,
                 NFP=base_surface.NFP,
                 sym=base_surface.sym,
             )

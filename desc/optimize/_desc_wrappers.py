@@ -475,7 +475,7 @@ def _optimize_desc_stochastic(
             jac = jac + djac
         jac = jac/num_grad
 
-        return fx.T @ jac / np.linalg.norm(fx.T)
+        return fx.T @ jac
 
     result = sgd(
         objective,

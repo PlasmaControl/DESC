@@ -1014,7 +1014,7 @@ def test_regcoil_axisymmetric():
     )
 
     # test with alpha large, should have no phi_mn
-    surface_current_field, _, _, chi_B, _ = run_regcoil(
+    data = surface_current_field.run_regcoil(
         basis_M=2,
         basis_N=2,
         eqname=eq,
@@ -1022,12 +1022,11 @@ def test_regcoil_axisymmetric():
         eval_grid_N=10,
         source_grid_M=40,
         source_grid_N=40,
-        winding_surf=surf_winding,
         alpha=10,
     )
     phi_mn_opt = surface_current_field.Phi_mn
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-16)
-    np.testing.assert_allclose(chi_B, 0, atol=1e-16)
+    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-16)
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=1e-16
     )
@@ -1037,7 +1036,7 @@ def test_regcoil_axisymmetric():
     np.testing.assert_allclose(B, B_from_surf, atol=1e-4)
 
     # test with half the current given external to winding surface
-    surface_current_field, _, _, chi_B, _ = run_regcoil(
+    data = surface_current_field.run_regcoil(
         basis_M=2,
         basis_N=2,
         eqname=eq,
@@ -1046,7 +1045,6 @@ def test_regcoil_axisymmetric():
         source_grid_M=40,
         source_grid_N=40,
         alpha=10,
-        winding_surf=surf_winding,
         # negate the B0 because a negative G corresponds to a positive B toroidal
         # and we want this to provide half the field the surface current's
         # G is providing, in the same direction
@@ -1060,36 +1058,7 @@ def test_regcoil_axisymmetric():
         correct_phi / 2,
         atol=1e-9,
     )
-    np.testing.assert_allclose(chi_B, 0, atol=1e-16)
-    B_from_surf = surface_current_field.compute_magnetic_field(
-        coords, grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
-    )
-    np.testing.assert_allclose(B, B_from_surf * 2, atol=1e-4)
-
-    # test with half the current given external to winding surface
-    # using external TF argument
-    surface_current_field, _, _, chi_B, _ = run_regcoil(
-        basis_M=2,
-        basis_N=2,
-        eqname=eq,
-        eval_grid_M=10,
-        eval_grid_N=10,
-        source_grid_M=40,
-        source_grid_N=40,
-        alpha=10,
-        external_TF_fraction=0.5,
-        winding_surf=surf_winding,
-    )
-    phi_mn_opt = surface_current_field.Phi_mn
-    np.testing.assert_allclose(G / 2, surface_current_field.G, atol=1e-8)
-    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-10)
-    np.testing.assert_allclose(
-        surface_current_field.compute("Phi", grid=grid)["Phi"],
-        correct_phi / 2,
-        atol=1e-9,
-    )
-    np.testing.assert_allclose(chi_B, 0, atol=1e-16)
-
+    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-16)
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords, grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
     )
@@ -1114,12 +1083,13 @@ def test_regcoil_axisym_and_ellipse_surface():
 
     surf_winding = get("HELIOTRON").surface
     surf_winding.change_resolution(NFP=3)
+    surface_current_field = FourierCurrentPotentialField.from_surface(surf_winding)
 
     # make a simple axisymmetric vacuum equilibrium
     eq = Equilibrium(surface=surf_eq, L=2, M=2, N=0)
     eq.solve()
 
-    surface_current_field, _, _, chi_B, _ = run_regcoil(
+    data = surface_current_field.run_regcoil(
         basis_M=6,
         basis_N=6,
         eqname=eq,
@@ -1128,13 +1098,12 @@ def test_regcoil_axisym_and_ellipse_surface():
         source_grid_M=50,
         source_grid_N=50,
         alpha=0,
-        winding_surf=surf_winding,
         show_plots=False,
     )
     phi_mn_opt = surface_current_field.Phi_mn
     G = surface_current_field.G
 
-    np.testing.assert_allclose(chi_B, 0, atol=1e-7)
+    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-7)
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
@@ -1144,7 +1113,7 @@ def test_regcoil_axisym_and_ellipse_surface():
     np.testing.assert_allclose(B, B_from_surf, atol=2e-4)
 
     # test with alpha large, should have no phi_mn
-    surface_current_field, _, _, chi_B, _ = run_regcoil(
+    data = surface_current_field.run_regcoil(
         basis_M=2,
         basis_N=2,
         eqname=eq,
@@ -1159,40 +1128,9 @@ def test_regcoil_axisym_and_ellipse_surface():
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-9)
 
     # test with half the current given external to winding surface
-    # using external_TF_fraction (putting current on the wind surf)
-    surface_current_field, external_B, _, chi_B, _ = run_regcoil(
-        basis_M=6,
-        basis_N=6,
-        eqname=eq,
-        eval_grid_M=50,
-        eval_grid_N=50,
-        source_grid_M=50,
-        source_grid_N=50,
-        alpha=0,
-        winding_surf=surf_winding,
-        show_plots=False,
-        external_TF_fraction=0.5,
-    )
-    phi_mn_opt = surface_current_field.Phi_mn
-
-    np.testing.assert_allclose(G / 2, surface_current_field.G, atol=1e-8)
-    np.testing.assert_allclose(chi_B, 0, atol=1e-7)
-    coords = eq.compute(["R", "phi", "Z", "B"])
-    B = coords["B"]
-    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
-    B_from_surf = surface_current_field.compute_magnetic_field(
-        coords, grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
-    )
-    B_ext = external_B.compute_magnetic_field(
-        coords, grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
-    )
-
-    np.testing.assert_allclose(B, B_from_surf + B_ext, atol=2e-4)
-
-    # test with half the current given external to winding surface
     # in the form of a TF field
-
-    surface_current_field, external_field, _, chi_B, _ = run_regcoil(
+    external_field = ToroidalMagneticField(B0=-mu_0 * (G / 2) / 2 / np.pi, R0=1)
+    data = surface_current_field.run_regcoil(
         basis_M=6,
         basis_N=6,
         eqname=eq,
@@ -1201,15 +1139,14 @@ def test_regcoil_axisym_and_ellipse_surface():
         source_grid_M=50,
         source_grid_N=50,
         alpha=0,
-        winding_surf=surf_winding,
-        external_field=ToroidalMagneticField(B0=-mu_0 * (G / 2) / 2 / np.pi, R0=1),
+        external_field=external_field,
         verbose=2,
     )
     phi_mn_opt = surface_current_field.Phi_mn
 
     np.testing.assert_allclose(G / 2, surface_current_field.G, atol=1e-8)
 
-    np.testing.assert_allclose(chi_B, 0, atol=1e-7)
+    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-7)
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T

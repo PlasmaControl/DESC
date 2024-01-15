@@ -73,6 +73,16 @@ class TestFourierRZToroidalSurface:
         assert c.R_basis.NFP == 3
         assert c.Z_basis.NFP == 3
 
+        # test assert statement for array sizes matching
+        with pytest.raises(AssertionError):
+            c = FourierRZToroidalSurface(
+                R_lmn=np.array([1, 2, 3]), modes_R=np.array([[0, 0], [1, 0]])
+            )
+        with pytest.raises(AssertionError):
+            c = FourierRZToroidalSurface(
+                Z_lmn=np.array([1, 2, 3]), modes_Z=np.array([[0, 0], [1, 0]])
+            )
+
     @pytest.mark.unit
     def test_from_input_file(self):
         """Test reading a surface from a vmec or desc input file."""

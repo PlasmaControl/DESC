@@ -596,16 +596,7 @@ class FourierRZToroidalSurface(Surface):
             n, r, r_offset = n_and_r_jax(nodes)
             return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
 
-        vecroot = jit(
-            vmap(
-                lambda x0, *p: root_scalar(
-                    fun_jax,
-                    x0,
-                    jac=None,
-                    args=p,
-                )
-            )
-        )
+        vecroot = jit(vmap(lambda x0, *p: root_scalar(fun_jax, x0, jac=None, args=p)))
         zetas, (res, niter) = vecroot(
             grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
         )

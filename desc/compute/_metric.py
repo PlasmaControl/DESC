@@ -154,7 +154,7 @@ def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_theta x e_zeta|_z",
-    label="|e_{\\theta} \\times e_{\\zeta}|",
+    label="\\partial_{\\zeta}|e_{\\theta} \\times e_{\\zeta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant rho surface,"

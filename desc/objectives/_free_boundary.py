@@ -700,14 +700,12 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
-        # TODO: should add case where both are true
         if self._eq_fixed:
             eq = self._eq
         elif self._field_fixed:
             eq = self.things[0]
         else:
             eq = self.things[1]
-        print(self.things)
 
         if eq != self._eq:
             self._eq = eq
@@ -821,9 +819,6 @@ class QuadraticFlux(_Objective):
                 Bplasma=Bplasma,
             )
 
-        if self._field_fixed:
-            self._constants.update(ext_field=self._ext_field)
-
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -860,16 +855,16 @@ class QuadraticFlux(_Objective):
 
         if self._eq_fixed:
             field_params = params_1
+            eval_data = constants["eval_data"]
+            Bplasma = constants["Bplasma"]
         elif self._field_fixed:
             eq_params = params_1
+            field_params = self._ext_field.params_dict
         else:
             eq_params = params_2
             field_params = params_1
 
-        if self._eq_fixed:
-            Bplasma = constants["Bplasma"]
-            eval_data = constants["eval_data"]
-        else:
+        if not self._eq_fixed:
             eval_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,
@@ -905,14 +900,10 @@ class QuadraticFlux(_Objective):
             ]
         ).T
 
-        if self._field_fixed:
-            Bext = constants["ext_field"].compute_magnetic_field(
-                x, grid=self._field_grid, basis="rpz"
-            )
-        else:
-            Bext = self._ext_field.compute_magnetic_field(
-                x, grid=self._field_grid, basis="rpz", params=field_params
-            )
+        # can't pre-compute Bext because it is dependent on eval_grid
+        Bext = self._ext_field.compute_magnetic_field(
+            x, grid=self._field_grid, basis="rpz", params=field_params
+        )
 
         f = jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)
         return f

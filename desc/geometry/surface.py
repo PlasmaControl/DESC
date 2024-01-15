@@ -492,11 +492,10 @@ class FourierRZToroidalSurface(Surface):
         )
         return surf
 
-    @classmethod
     def constant_offset_surface(
-        cls, base_surface, offset, grid=None, M=None, N=None, full_output=False
+        self, offset, grid=None, M=None, N=None, full_output=False
     ):
-        """Create a FourierRZSurface with constant offset from the given surface.
+        """Create a FourierRZSurface with constant offset from the base surface (self).
 
         Implementation of algorithm described in Appendix B of
         "An improved current potential method for fast computation of
@@ -552,6 +551,7 @@ class FourierRZToroidalSurface(Surface):
             for each point. Only returned if ``full_output`` is True
 
         """
+        base_surface = self
         if grid is None:
             grid = LinearGrid(
                 M=base_surface.M * 2,
@@ -619,7 +619,7 @@ class FourierRZToroidalSurface(Surface):
         data["x"] = xyz2rpz(x)
         data["x_offset_surface"] = xyz2rpz(x_offsets)
 
-        offset_surface = cls.from_values(
+        offset_surface = FourierRZToroidalSurface.from_values(
             data["x_offset_surface"],
             theta=nodes[:, 1],
             M=M,

@@ -11,7 +11,7 @@ object e.g. optimizing only a ``FourierRZToroidalSurface`` object to have a cert
 ``Volume``.
 - Many functions from ``desc.plotting`` now also work for plotting quantities from
 ``Curve`` and ``Surface`` classes.
-- Adds class method ``constant_offset_surface`` to ``FourierRZToroidalSurface`` which creates a  surface with a specified constant offset from the given input surface.
+- Adds method ``constant_offset_surface`` to ``FourierRZToroidalSurface`` which creates a  surface with a specified constant offset from the base surface.
 
 v0.10.3
 -------

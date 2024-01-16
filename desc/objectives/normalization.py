@@ -37,14 +37,14 @@ def compute_scaling_factors(thing):
     if isinstance(thing, Equilibrium):
         R00 = thing.Rb_lmn[thing.surface.R_basis.get_idx(M=0, N=0)]
         R10 = (
-          get_lowest_mode(thing.surface.R_basis, thing.Rb_lmn)
-          if thing.bdry_mode == "lcfs"
-          else thing.Rb_lmn[thing.surface.R_basis.get_idx(L=1, M=1)]
+            get_lowest_mode(thing.surface.R_basis, thing.Rb_lmn)
+            if thing.bdry_mode == "lcfs"
+            else thing.Rb_lmn[thing.surface.R_basis.get_idx(L=1, M=1)]
         )
         Z10 = (
-          get_lowest_mode(thing.surface.Z_basis, thing.Zb_lmn)
-          if thing.bdry_mode == "lcfs"
-          else thing.Zb_lmn[thing.surface.Z_basis.get_idx(L=1, M=-1)]
+            get_lowest_mode(thing.surface.Z_basis, thing.Zb_lmn)
+            if thing.bdry_mode == "lcfs"
+            else thing.Zb_lmn[thing.surface.Z_basis.get_idx(L=1, M=-1)]
         )
 
         scales["R0"] = R00

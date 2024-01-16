@@ -443,6 +443,71 @@ class TestMagneticFields:
         field2 = load("test_field.h5")
         assert field.eq(field2)
 
+    @pytest.mark.unit
+    def test_fourier_current_potential_field_asserts(self):
+        """Test Fourier current potential magnetic field assert statements."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        basis = DoubleFourierSeries(M=2, N=2, sym="sin")
+        phi_mn = np.ones((basis.num_modes,))
+        # make a current potential corresponding a purely poloidal current
+        G = 10  # net poloidal current
+
+        field = FourierCurrentPotentialField(
+            Phi_mn=phi_mn,
+            modes_Phi=basis.modes[:, 1:],
+            I=0,
+            G=-G,
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+        # check that we can change I,G correctly
+
+        # with scalars
+        field.I = 1
+        field.G = 2
+        np.testing.assert_allclose(field.I, 1)
+        np.testing.assert_allclose(field.G, 2)
+        # with 0D array
+        field.I = np.array(1)
+        field.G = np.array(2)
+        np.testing.assert_allclose(field.I, 1)
+        np.testing.assert_allclose(field.G, 2)
+        # with 1D array of size 1
+        field.I = np.array([1])
+        field.G = np.array([2])
+        np.testing.assert_allclose(field.I, 1)
+        np.testing.assert_allclose(field.G, 2)
+
+        # check that we can't set it with a size>1 array
+        with pytest.raises(AssertionError):
+            field.I = np.array([1, 2])
+        with pytest.raises(AssertionError):
+            field.G = np.array([1, 2])
+
+        # check that we cant initialize with different size
+        # Phi_mn and Phi_modes arrays
+        with pytest.raises(AssertionError):
+            field = FourierCurrentPotentialField(
+                Phi_mn=phi_mn[0:-1],  # too short by 1
+                modes_Phi=basis.modes[:, 1:],
+                I=0,
+                G=-G,
+                R_lmn=surface.R_lmn,
+                Z_lmn=surface.Z_lmn,
+                modes_R=surface._R_basis.modes[:, 1:],
+                modes_Z=surface._Z_basis.modes[:, 1:],
+                NFP=10,
+            )
+
     def test_change_Phi_basis_fourier_current_field(self):
         """Test that change_Phi_resolution works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
@@ -497,6 +562,38 @@ class TestMagneticFields:
         np.testing.assert_allclose(abs(np.max(field.Phi_basis.modes[:, 2])), N)
         np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
         assert field.Phi_basis.sym == "sin"
+
+    def test_init_Phi_mn_fourier_current_field(self):
+        """Test initial Phi_mn size is correct for FourierCurrentPotentialField."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        init_modes = np.array([[1, 1], [3, 3]])
+        init_coeffs = np.array([1, 1])
+
+        field = FourierCurrentPotentialField(
+            Phi_mn=init_coeffs,
+            modes_Phi=init_modes,
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+        assert field.Phi_mn.size == field.Phi_basis.num_modes
+        inds_nonzero = []
+        for coef, modes in zip(init_coeffs, init_modes):
+            ind = field.Phi_basis.get_idx(M=modes[0], N=modes[1])
+            assert coef == field.Phi_mn[ind]
+            inds_nonzero.append(ind)
+        inds_zero = np.setdiff1d(np.arange(field.Phi_basis.num_modes), inds_nonzero)
+        np.testing.assert_allclose(field.Phi_mn[inds_zero], 0)
+        # ensure can compute field at a point without incompatible size error
+        field.compute_magnetic_field([10.0, 0, 0])
 
     @pytest.mark.slow
     @pytest.mark.unit

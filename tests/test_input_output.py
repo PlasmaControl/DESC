@@ -11,7 +11,7 @@ import pytest
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
-from desc.io import InputReader, efit_to_desc, hdf5Reader, hdf5Writer, load
+from desc.io import InputReader, hdf5Reader, hdf5Writer, load
 from desc.io.ascii_io import read_ascii, write_ascii
 from desc.magnetic_fields import SplineMagneticField, ToroidalMagneticField
 from desc.transform import Transform
@@ -583,7 +583,7 @@ def test_io_SplineMagneticField(tmpdir_factory):
 
 
 @pytest.mark.unit
-def test_efit_to_desc(tmpdir_factory):
+def test_efit_to_desc_input(tmpdir_factory):
     """
     Test EFIT equilibrium to DESC input conversion.
 
@@ -591,28 +591,17 @@ def test_efit_to_desc(tmpdir_factory):
     converted input DESC file with the correct desc input file
     """
     efit_file_path = "./tests/inputs/eqdsk_cocos.out"
+
+    tmpdir = tmpdir_factory.mktemp("efit_to_desc_inputs")
+    tmp_path1 = tmpdir.join("desc_from_eqdsk_true")
+    tmp_path2 = tmpdir.join("desc_from_eqdsk_bdry_dist_true")
+
+    ir1 = InputReader()
     with pytest.warns(UserWarning):
-        eq = efit_to_desc(str(efit_file_path), M=20)
+        ir1.efit_to_desc_input(str(efit_file_path), tmp_path1, M=20)
 
-    # store boundary parameters in arr1
-    if eq.sym:
-        d1, d2 = np.shape(eq.surface.R_basis.modes)
-        arr10 = np.zeros((d1, d2 + 1))
-        for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
-            arr10[k] = np.array([int(0), m, n, eq.Rb_lmn[k]])
-
-        d1, d2 = np.shape(eq.surface.Z_basis.modes)
-        arr11 = np.zeros((d1, d2 + 1))
-        for k, (l, m, n) in enumerate(eq.surface.Z_basis.modes):
-            arr11[k] = np.array([int(0), m, n, eq.Zb_lmn[k]])
-
-        arr1 = np.vstack([arr10, arr11])
-    else:
-        d1, d2 = np.shape(eq.surface.R_basis.modes)
-        arr1 = np.zeros((d1, d2 + 2))
-        for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
-            arr1[k] = np.array([int(0), m, n, eq.Rb_lmn[k], eq.Zb_lmn[k]])
-
+    ir1 = InputReader(cl_args=[str(tmp_path1)])
+    arr1 = ir1.parse_inputs()[-1]["surface"]
     arr1 = arr1[arr1[:, 1].argsort()]
     arr1mneg = arr1[arr1[:, 1] < 0]
     arr1mpos = arr1[arr1[:, 1] >= 0]
@@ -645,28 +634,11 @@ def test_efit_to_desc(tmpdir_factory):
         rtol=1e-8,
     )
 
-    # Now we repeat the same test for the case where bdry_dist != 0
-    # with pytest.warns(UserWarning):
-    eq = efit_to_desc(str(efit_file_path), M=20, bdry_dist=0.99)
-    # store boundary parameters in arr1
-    if eq.sym:
-        d1, d2 = np.shape(eq.surface.R_basis.modes)
-        arr10 = np.zeros((d1, d2 + 1))
-        for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
-            arr10[k] = np.array([int(0), m, n, eq.Rb_lmn[k]])
+    ir1 = InputReader()
+    ir1.efit_to_desc_input(str(efit_file_path), tmp_path2, M=20, bdry_dist=0.99)
 
-        d1, d2 = np.shape(eq.surface.Z_basis.modes)
-        arr11 = np.zeros((d1, d2 + 1))
-        for k, (l, m, n) in enumerate(eq.surface.Z_basis.modes):
-            arr11[k] = np.array([int(0), m, n, eq.Zb_lmn[k]])
-
-        arr1 = np.vstack([arr10, arr11])
-    else:
-        d1, d2 = np.shape(eq.surface.R_basis.modes)
-        arr1 = np.zeros((d1, d2 + 2))
-        for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
-            arr1[k] = np.array([int(0), m, n, eq.Rb_lmn[k], eq.Zb_lmn[k]])
-
+    ir1 = InputReader(cl_args=[str(tmp_path2)])
+    arr1 = ir1.parse_inputs()[-1]["surface"]
     arr1 = arr1[arr1[:, 1].argsort()]
     arr1mneg = arr1[arr1[:, 1] < 0]
     arr1mpos = arr1[arr1[:, 1] >= 0]

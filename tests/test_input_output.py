@@ -645,9 +645,9 @@ def test_efit_to_desc(tmpdir_factory):
         rtol=1e-8,
     )
 
-    # Now we repeat the same test for the case where sep_dev != 0
+    # Now we repeat the same test for the case where bdry_dist != 0
     # with pytest.warns(UserWarning):
-    eq = efit_to_desc(str(efit_file_path), M=20, sep_dev=0.01)
+    eq = efit_to_desc(str(efit_file_path), M=20, bdry_dist=0.99)
     # store boundary parameters in arr1
     if eq.sym:
         d1, d2 = np.shape(eq.surface.R_basis.modes)
@@ -671,7 +671,7 @@ def test_efit_to_desc(tmpdir_factory):
     arr1mneg = arr1[arr1[:, 1] < 0]
     arr1mpos = arr1[arr1[:, 1] >= 0]
 
-    desc_input_truth = "./tests/inputs/desc_from_eqdsk_cocos_sep_dev"
+    desc_input_truth = "./tests/inputs/desc_from_eqdsk_cocos_bdry_dist"
 
     # with pytest.warns(UserWarning):
     ir2 = InputReader(cl_args=[str(desc_input_truth)])

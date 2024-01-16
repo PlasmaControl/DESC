@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from scipy.interpolate import CubicSpline
 
 
-def efit_to_desc(g, M, N=0, L=None, sep_dev=0):
+def efit_to_desc(g, M, N=0, L=None, bdry_dist=1):
     """Create a DESC equilibrium from an EFIT geqdsk file.
 
     The equilibrium will not be solved, this just creates an equilibirum
@@ -23,10 +23,11 @@ def efit_to_desc(g, M, N=0, L=None, sep_dev=0):
         Radial resolution of the equilibrium. Used for fitting profiles.
         If None, spline profiles will be used. Otherwise they are fit
         to even power series in rho.
-    sep_dev : float
-        Deviation from separatrix. If sep_dev == 0, then the boundary
-         is read from the file.sep_dev = 1 corresponds to the magnetic axis.
-         Typical values should be 0.0 < sep_dev < 0.05
+    bdry_dist : float
+        Deviation from separatrix. If bdry_dist == 1, then the boundary
+        is the actual separatrix read from the geqdsk file.
+        bdry_dist = 0 corresponds to the magnetic axis.
+        Typical values should be 0.95 < bdry_dist < 1.0
 
     Returns
     -------
@@ -42,12 +43,13 @@ def efit_to_desc(g, M, N=0, L=None, sep_dev=0):
     from desc.transform import Transform
 
     if not isinstance(g, dict):
-        g = read_gfile(g, sep_dev=sep_dev)
+        g = read_gfile(g, bdry_dist=bdry_dist)
+
     ns = len(g["q"])
     chiN = np.linspace(0, 1, ns)
     chi_scale = g["chi_boundary"] - g["chi_axis"]
-    # chi = poloidal flux
-    # psi = toroidal flux
+    # chi is the poloidal flux
+    # psi is the toroidal flux
 
     # iota = dchi / dpsi = dchi / dchiN * dchiN / dpsi = dchiN / dpsi * (chi_scale)
     # dpsi = 1/iota dchi = q dchiN
@@ -60,14 +62,25 @@ def efit_to_desc(g, M, N=0, L=None, sep_dev=0):
 
     psi = psi_spline(chiN)
     Psi_b = psi[-1]  # boundary flux
-    psiN = psi / Psi_b
-    rho = np.sqrt(psiN)
 
-    pressure = SplineProfile(g["pres"], rho)
-    iota = SplineProfile(1 / g["q"], rho)
-    if L is not None:
-        pressure = pressure.to_powerseries(order=L, sym=True)
-        iota = iota.to_powerseries(order=L, sym=True)
+    pressure_psi = SplineProfile(g["pres"], psi)
+    iota_psi = SplineProfile(1 / g["q"], psi)
+
+    # Defining splines and recalculating important quantities if
+    # bdry_dist less than 1. Also works for bdry_dist equal to 1.
+    # For bdry_dist equal 1, all quantities *_truncated are the
+    # same as quantities without _truncated
+    chiN_truncated = np.linspace(0, bdry_dist, ns)
+    q_spline_truncated = CubicSpline(chiN_truncated, q_spline(chiN_truncated))
+
+    psi_spline_truncated = q_spline_truncated.antiderivative()
+    psi_truncated = psi_spline_truncated(chiN_truncated)
+    Psi_b_truncated = psi_truncated[-1]  # boundary flux
+    psiN_truncated = psi_truncated / Psi_b_truncated
+    rho_truncated = np.sqrt(psiN_truncated)
+
+    pressure = SplineProfile(pressure_psi(psi_truncated), rho_truncated)
+    iota = SplineProfile(iota_psi(psi_truncated), rho_truncated)
 
     nbdry = g["nbbbs"]
     rbdry = g["rbbbs"]
@@ -93,18 +106,18 @@ def efit_to_desc(g, M, N=0, L=None, sep_dev=0):
     return eq
 
 
-def read_gfile(filename, sep_dev=0):
+def read_gfile(filename, bdry_dist=1):
     """Read an EFIT geqdsk file into a dict of ndarray.
 
     Parameters
     ----------
     filename : path-like
         Path to geqdsk file.
-    sep_dev : float
-        Deviation from separatrix. If sep_dev == 0,
-        then the boundary is read from the file.
-        sep_dev = 1 corresponds to the magnetic axis.
-        Typical values should be 0.0 < sep_dev < 0.05
+    bdry_dist : float
+        Deviation from separatrix. If bdry_dist == 1, then the boundary
+        is the actual separatrix read from the geqdsk file.
+        bdry_dist = 0 corresponds to the magnetic axis.
+        Typical values should be 0.95 < bdry_dist < 1.0
 
     Returns
     -------
@@ -185,7 +198,7 @@ def read_gfile(filename, sep_dev=0):
     g["q"] = np.array([float(foo) for foo in splitarr(lines[:lines_per_profile])])
     lines = lines[lines_per_profile:]
 
-    if sep_dev == 0:  # deviation from separatrix
+    if bdry_dist == 1:  # distance of the boundary from the axis
         if len(lines) > 0:
             [g["nbbbs"], g["limitr"]] = [int(foo) for foo in lines[0].split()]
             lines = lines[1:]
@@ -203,6 +216,7 @@ def read_gfile(filename, sep_dev=0):
                 ).reshape((g["limitr"], 2))
                 g["rlimitr"], g["zlimitr"] = rzlimitr[:, 0], rzlimitr[:, 1]
             lines = lines[lines_limitr:]
+
     else:
         Rmin = g["rleft"]
         Rmax = Rmin + g["rdim"]
@@ -214,21 +228,18 @@ def read_gfile(filename, sep_dev=0):
         Zgrid = np.linspace(Zmin, Zmax, g["nh"])
 
         RR, ZZ = np.meshgrid(Rgrid, Zgrid)
-        cs = plt.contour(RR, ZZ, g["chirz"], levels=[sep_dev * g["chi_axis"]])
+        cs = plt.contour(
+            RR,
+            ZZ,
+            g["chirz"],
+            levels=[g["chi_axis"] + bdry_dist * (g["chi_boundary"] - g["chi_axis"])],
+        )
 
         # Now we extract the boundary contour from the contour plot
         v = cs.collections[0].get_paths()[0].vertices
         g["rbbbs"] = v[:, 0]
         g["zbbbs"] = v[:, 1]
         g["nbbbs"] = len(g["rbbbs"])
-
         plt.close()
-
-    # fix zero pressure
-    if np.max(np.abs(g["pres"])) == 0:
-        chio = g["chi_boundary"] - g["chi_axis"]
-        chiN = np.linspace(0, 1, g["nw"])
-        pp = g["pprime"]
-        g["pres"] = CubicSpline(chiN, pp).antiderivative()(chiN) / chio
 
     return g

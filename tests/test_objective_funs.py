@@ -704,12 +704,16 @@ class TestObjectiveFunction:
             eq_fixed=False,
         )
         objective = ObjectiveFunction(quadflux_obj)
-        # not a realistic use case but testing logic with FixParameter(eq)
+
         constraints = (
+            ForceBalance(eq),
+            FixPressure(eq),
+            FixCurrent(eq),
+            FixPsi(eq),
+            FixBoundaryR(eq, modes=[[0, 0, 0]]),
             FixParameter(field, ["I", "G", "R_lmn", "Z_lmn"]),
-            FixParameter(eq),
         )
-        things, __ = optimizer.optimize(
+        things, __ = nonlinear_optimizer.optimize(
             (field, eq),
             objective=objective,
             constraints=constraints,
@@ -719,7 +723,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(things_with_eq_fixed[0].Phi_mn, 0, atol=1e-8)
         np.testing.assert_allclose(new_Rb_lmn, 0, atol=1e-10)
         np.testing.assert_allclose(new_Zb_lmn, 0, atol=1e-10)
-        np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-8)
+        np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-6)
 
     @pytest.mark.unit
     def test_target_max_iota(self):

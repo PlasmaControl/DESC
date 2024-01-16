@@ -1446,7 +1446,7 @@ def zernike_radial_direct(r, n, m):
     return R_nm
 
 
-def zernike_radial_optimized(x, l, m, beta=0):
+def zernike_radial_optimized(r, l, m, beta=0):
     """Radial part of zernike polynomials.
 
     This version is optimized for getting rid of the
@@ -1496,9 +1496,9 @@ def zernike_radial_optimized(x, l, m, beta=0):
 
     # instead of having a changing matrix dimensions, assing
     # a matrix of zeros, and replace in place
-    init = np.zeros((len(m), len(x)))
+    init = np.zeros((len(m), len(r)))
 
-    result = zernike_radial_update(x, n_opt, m_opt, beta, init)
+    result = zernike_radial_update(r, n_opt, m_opt, beta, init)
     result = np.transpose(result)
     result = result[:, np.argsort(id0)]
 

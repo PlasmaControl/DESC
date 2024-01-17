@@ -8,8 +8,7 @@ import scipy
 
 from desc.backend import jit, jnp, put, root_scalar, sign, vmap
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
-from desc.compute.utils import cross, safediv
+from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -565,28 +564,16 @@ class FourierRZToroidalSurface(Surface):
         M = base_surface.M if M is None else int(M)
         N = base_surface.N if N is None else int(N)
 
-        Rbasis = base_surface.R_basis
-        Zbasis = base_surface.Z_basis
-
         def n_and_r_jax(nodes):
-            R = Rbasis.evaluate(nodes) @ base_surface.R_lmn
-            Z = Zbasis.evaluate(nodes) @ base_surface.Z_lmn
-            R_t = Rbasis.evaluate(nodes, np.array([0, 1, 0])) @ base_surface.R_lmn
-            Z_t = Zbasis.evaluate(nodes, np.array([0, 1, 0])) @ base_surface.Z_lmn
-            R_z = Rbasis.evaluate(nodes, np.array([0, 0, 1])) @ base_surface.R_lmn
-            Z_z = Zbasis.evaluate(nodes, np.array([0, 0, 1])) @ base_surface.Z_lmn
+            data = base_surface.compute(
+                ["X", "Y", "Z", "n_rho"],
+                grid=Grid(nodes, jitable=True, sort=False),
+                method="jitable",
+            )
 
             phi = nodes[:, 2]
-            coords = jnp.stack([R, phi, Z], axis=1)
-            re = rpz2xyz(coords)
-            # NOTE: when generalized toroidal angle is implemented
-            # this must include omega
-            e_theta = jnp.array([R_t, jnp.zeros_like(R_t), Z_t]).T
-            e_zeta = jnp.array([R_z, R, Z_z]).T
-            e_theta_cross_e_zeta = cross(e_theta, e_zeta)
-            n = safediv(
-                e_theta_cross_e_zeta.T, jnp.linalg.norm(e_theta_cross_e_zeta, axis=1)
-            ).T
+            re = jnp.vstack([data["X"], data["Y"], data["Z"]]).T
+            n = data["n_rho"]
             n = rpz2xyz_vec(n, phi=phi)
             r_offset = re + offset * n
             return n, re, r_offset

@@ -1240,10 +1240,7 @@ def test_regcoil_ellipse_helical_coils_check_B(regcoil_ellipse_helical_coils):
     """Test elliptical eq and winding surf helical coil regcoil solution."""
     (
         surface_current_field,
-        TF_B,
-        mean_Bn,
         chi_B,
-        Bn_tot,
         eq,
     ) = regcoil_ellipse_helical_coils
 
@@ -1264,10 +1261,7 @@ def test_regcoil_ellipse_helical_coils_check_field_trace(regcoil_ellipse_helical
     """Test elliptical eq and winding surf helical coil regcoil solution."""
     (
         surface_current_field,
-        TF_B,
-        mean_Bn,
-        chi_B,
-        Bn_tot,
+        _,
         eq,
     ) = regcoil_ellipse_helical_coils
 
@@ -1295,10 +1289,7 @@ def test_regcoil_ellipse_helical_coils_check_coils(regcoil_ellipse_helical_coils
     """Test elliptical eq and winding surf helical coil regcoil solution."""
     (
         surface_current_field,
-        TF_B,
-        mean_Bn,
-        chi_B,
-        Bn_tot,
+        _,
         eq,
     ) = regcoil_ellipse_helical_coils
 

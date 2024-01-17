@@ -9,8 +9,10 @@ from netCDF4 import Dataset
 
 from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.geometry import FourierRZToroidalSurface
+from desc.grid import LinearGrid
 from desc.io import load
-from desc.regcoil import run_regcoil
+from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.vmec import VMECIO
 
 
@@ -336,30 +338,29 @@ def regcoil_ellipse_and_axisym_surf():
     """Run regcoil for elliptical eq and axisymmetric surface."""
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
-    (
-        all_phi_mns,
-        alphas,
-        surface_current_field,
-        TF_B,
-        chi_B,
-        lowest_idx_without_saddles,
-    ) = run_regcoil(
-        basis_M=8,
-        basis_N=8,
-        eqname=eq,
-        eval_grid_M=20,
-        eval_grid_N=20,
-        source_grid_M=40,
-        source_grid_N=80,
-        alpha=1e-15,
-        scan=True,
-        verbose=3,
+    surf_winding = FourierRZToroidalSurface(
+        R_lmn=np.array([0.7035, 0.08]),
+        Z_lmn=np.array([-2]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
     )
-
+    surface_current_field = FourierCurrentPotentialField.from_surface(surf_winding)
+    data = surface_current_field.run_regcoil(
+        eq,
+        M_Phi=8,
+        N_Phi=8,
+        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=40, N=80, NFP=eq.NFP),
+        scan=True,
+        show_plots=False,
+        current_helicity=-1,
+    )
     return (
-        all_phi_mns,
+        data["Phi_mn"],
         surface_current_field,
-        chi_B,
+        data["chi^2_B"],
         eq,
     )
 
@@ -377,16 +378,24 @@ def regcoil_ellipse_helical_coils():
     N_sgrid = 80
     alpha = 1e-18
 
-    (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
-        basis_M=M_Phi,
-        basis_N=N_Phi,
-        eqname=eq,
-        eval_grid_M=M_egrid,
-        eval_grid_N=N_egrid,
-        source_grid_M=M_sgrid,
-        source_grid_N=N_sgrid,
+    surf_winding = FourierRZToroidalSurface(
+        R_lmn=np.array([0.7035, 0.0365]),
+        Z_lmn=np.array([-0.0365]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    surface_current_field = FourierCurrentPotentialField.from_surface(surf_winding)
+    data = surface_current_field.run_regcoil(
+        eq,
+        M_Phi=M_Phi,
+        N_Phi=N_Phi,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         alpha=alpha,
-        helicity_ratio=-2,
+        show_plots=False,
+        current_helicity=-2,
     )
 
-    return (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot, eq)
+    return (surface_current_field, data["chi_B"], eq)

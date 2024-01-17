@@ -9,6 +9,8 @@ from netCDF4 import Dataset
 
 from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.io import load
+from desc.regcoil import run_regcoil
 from desc.vmec import VMECIO
 
 
@@ -327,3 +329,64 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
     )
     desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
     return vmec, desc
+
+
+@pytest.fixture(scope="session")
+def regcoil_ellipse_and_axisym_surf():
+    """Run regcoil for elliptical eq and axisymmetric surface."""
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+
+    (
+        all_phi_mns,
+        alphas,
+        surface_current_field,
+        TF_B,
+        chi_B,
+        lowest_idx_without_saddles,
+    ) = run_regcoil(
+        basis_M=8,
+        basis_N=8,
+        eqname=eq,
+        eval_grid_M=20,
+        eval_grid_N=20,
+        source_grid_M=40,
+        source_grid_N=80,
+        alpha=1e-15,
+        scan=True,
+        verbose=3,
+    )
+
+    return (
+        all_phi_mns,
+        surface_current_field,
+        chi_B,
+        eq,
+    )
+
+
+@pytest.fixture(scope="session")
+def regcoil_ellipse_helical_coils():
+    """Run regcoil for elliptical eq and surface."""
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+
+    M_Phi = 8
+    N_Phi = 8
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 40
+    N_sgrid = 80
+    alpha = 1e-18
+
+    (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
+        basis_M=M_Phi,
+        basis_N=N_Phi,
+        eqname=eq,
+        eval_grid_M=M_egrid,
+        eval_grid_N=N_egrid,
+        source_grid_M=M_sgrid,
+        source_grid_N=N_sgrid,
+        alpha=alpha,
+        helicity_ratio=-2,
+    )
+
+    return (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot, eq)

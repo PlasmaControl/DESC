@@ -1379,13 +1379,13 @@ class VMECIO:
         # blending parameter from previous iteration [0, 1]
         f.write("  DELT = {}\n".format(kwargs.get("DELT", 0.9)))
         f.write("  NS_ARRAY =   ")  # number of flux surfaces
-        for ns in kwargs.get("NS_ARRAY", [17, 33, 65, 129]):
+        for ns in kwargs.get("NS_ARRAY", [17, 33, 65, 129, 257, 513]):
             f.write(" {:5.0f}".format(ns))
         f.write("\n  NITER_ARRAY =")  # maximum number of iterations
-        for niter in kwargs.get("NITER_ARRAY", [1000, 2000, 4000, 10000]):
+        for niter in kwargs.get("NITER_ARRAY", [1e3, 2e3, 4e3, 8e3, 1.6e4, 3.2e4]):
             f.write(" {:5.0f}".format(niter))
         f.write("\n  FTOL_ARRAY = ")  # stopping tolerance
-        for ftol in kwargs.get("FTOL_ARRAY", [1e-9, 1e-10, 1e-11, 1e-12]):
+        for ftol in kwargs.get("FTOL_ARRAY", [1e-9, 1e-10, 1e-11, 1e-12, 1e-13, 1e-14]):
             f.write(" {:5.0E}".format(ftol))
         f.write("\n")
 
@@ -1451,7 +1451,7 @@ class VMECIO:
         else:
             current = eq.current
             f.write("  NCURR = 1\n")  # current profile specified
-            f.write("  CURTOR = {}\n".format(kwargs.get("CURTOR", 1)))  # AC scale
+            f.write("  CURTOR = {:+14.8E}\n".format(float(eq.current(1))))  # AC scale
             if isinstance(current, PowerSeriesProfile) and current.sym:
                 # assert eq.current.sym
                 f.write("  AC =")  # current power series coefficients

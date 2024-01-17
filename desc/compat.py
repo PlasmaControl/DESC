@@ -109,7 +109,9 @@ def flip_helicity(eq):
     return eq
 
 
-def rescale(eq, L=("R0", None), B=("B0", None), verbose=0):
+def rescale(
+    eq, L=("R0", None), B=("B0", None), scale_pressure=True, copy=False, verbose=0
+):
     """Rescale an Equilibrium in size L and magnetic field strength B.
 
     Parameters
@@ -124,6 +126,10 @@ def rescale(eq, L=("R0", None), B=("B0", None), verbose=0):
         First element is a string denoting the magnetic field strength to scale. One of:
         {"B0", "<|B|>", "B_max"} for B on axis, volume averaged, or maximum on the LCFS.
         Second element is a float denoting the desired field. Default is no scaling.
+    scale_pressure : bool, optional
+        Whether or not to scale the pressure profile to maintain force balance.
+    copy : bool, optional
+        Whether to rescale the original equilibrium (default) or a copy.
     verbose : int
         Level of output.
 
@@ -157,6 +163,9 @@ def rescale(eq, L=("R0", None), B=("B0", None), verbose=0):
             "Field strength scale B must be one of {{'B0', '<|B|>_vol', 'B_max'}}, got "
             + B_key
         )
+
+    if copy:
+        eq = eq.copy()
 
     # size scaling
     grid_L = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
@@ -193,12 +202,13 @@ def rescale(eq, L=("R0", None), B=("B0", None), verbose=0):
     eq.Psi *= cL**2 * cB
 
     # scale pressure profile
-    if eq.pressure is not None:
-        eq.p_l *= cB**2
-    else:
-        eq.ne_l *= cB
-        eq.Te_l *= cB
-        eq.Ti_l *= cB
+    if scale_pressure:
+        if eq.pressure is not None:
+            eq.p_l *= cB**2
+        else:
+            eq.ne_l *= cB
+            eq.Te_l *= cB
+            eq.Ti_l *= cB
 
     # scale current profile
     if eq.current is not None:

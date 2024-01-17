@@ -1386,7 +1386,7 @@ class VMECIO:
             f.write(" {:5.0f}".format(niter))
         f.write("\n  FTOL_ARRAY = ")  # stopping tolerance
         for ftol in kwargs.get("FTOL_ARRAY", [1e-9, 1e-10, 1e-11, 1e-12]):
-            f.write(" {:5.0e}".format(ftol))
+            f.write(" {:5.0E}".format(ftol))
         f.write("\n")
 
         f.write("!---- Grid Parameters ----\n")
@@ -1397,7 +1397,7 @@ class VMECIO:
         # toroidal resolution
         f.write("  NTOR = {:2.0f}\n".format(kwargs.get("NTOR", eq.N)))
         # total toroidal magnetic flux (Wb)
-        f.write("  PHIEDGE = {:+14.8e}\n".format(eq.Psi))
+        f.write("  PHIEDGE = {:+14.8E}\n".format(eq.Psi))
 
         f.write("!---- Pressure Parameters ----\n")
         f.write("  GAMMA = 0\n")  # pressure profile specified
@@ -1410,55 +1410,64 @@ class VMECIO:
             data = eq.compute(["rho", "p"], grid=grid)
             rho = grid.compress(data["rho"])
             p = grid.compress(data["p"])
-            pressure = PowerSeriesProfile.from_values(rho, p, order=10, sym=True)
-        if isinstance(pressure, PowerSeriesProfile):
-            assert pressure.sym
+            pressure = PowerSeriesProfile.from_values(rho, p, order=eq.L, sym=True)
+        if isinstance(pressure, PowerSeriesProfile) and pressure.sym:
             f.write("  AM =")  # pressure power series coefficients
             for am in pressure.params:
-                f.write(" {:+14.8e}".format(am))
+                f.write(" {:+14.8E}".format(am))
             f.write("\n  PMASS_TYPE = 'power_series'\n")
-        elif isinstance(pressure, SplineProfile):
+        elif isinstance(pressure, PowerSeriesProfile) and not pressure.sym:
+            rho = np.linspace(0, 1, eq.L_grid + 1)
+            pressure = SplineProfile(values=pressure(rho), knots=rho)
+        if isinstance(pressure, SplineProfile):
             f.write("  AM_AUX_S =")  # spline knot locations
             for r in pressure.knots:
-                f.write(" {:+14.8e}".format(r**2))  # s = rho^2
+                f.write(" {:+14.8E}".format(r**2))  # s = rho^2
             f.write("\n  AM_AUX_F =")  # pressure cubic spline values
-            for am in pressure.values:
-                f.write(" {:+14.8e}".format(am))
+            for am in pressure.params:
+                f.write(" {:+14.8E}".format(am))
             f.write("\n  PMASS_TYPE = 'cubic_spline'\n")
 
         f.write("!---- Current/Iota Parameters ----\n")
         if eq.current is None:
+            iota = eq.iota
             f.write("  NCURR = 0\n")  # rotational transform profile specified
-            if isinstance(eq.iota, PowerSeriesProfile):
-                assert eq.iota.sym
+            if isinstance(iota, PowerSeriesProfile) and iota.sym:
                 f.write("  AI =")  # iota power series coefficients
-                for ai in eq.iota.params:
-                    f.write(" {:+14.8e}".format(ai))
+                for ai in iota.params:
+                    f.write(" {:+14.8E}".format(ai))
                 f.write("\n  PIOTA_TYPE = 'power_series'\n")
-            elif isinstance(eq.iota, SplineProfile):
+            elif isinstance(iota, PowerSeriesProfile) and not iota.sym:
+                rho = np.linspace(0, 1, eq.L_grid + 1)
+                iota = SplineProfile(values=iota(rho), knots=rho)
+            if isinstance(iota, SplineProfile):
                 f.write("  AI_AUX_S =")  # spline knot locations
-                for r in eq.iota.knots:
-                    f.write(" {:+14.8e}".format(r**2))  # s = rho^2
+                for r in iota.knots:
+                    f.write(" {:+14.8E}".format(r**2))  # s = rho^2
                 f.write("\n  AI_AUX_F =")  # iota cubic spline values
-                for ai in eq.iota.values:
-                    f.write(" {:+14.8e} ".format(ai))
+                for ai in iota.params:
+                    f.write(" {:+14.8E} ".format(ai))
                 f.write("\n  PIOTA_TYPE = 'cubic_spline'\n")
         else:
+            current = eq.current
             f.write("  NCURR = 1\n")  # current profile specified
             f.write("  CURTOR = {}\n".format(kwargs.get("CURTOR", 1)))  # AC scale
-            if isinstance(eq.current, PowerSeriesProfile):
-                assert eq.current.sym
+            if isinstance(current, PowerSeriesProfile) and current.sym:
+                # assert eq.current.sym
                 f.write("  AC =")  # current power series coefficients
-                for ac in eq.current.params:
-                    f.write(" {:+14.8e}".format(ac))
+                for ac in current.params:
+                    f.write(" {:+14.8E}".format(ac))
                 f.write("\n  PCURR_TYPE = 'power_series'\n")
-            elif isinstance(eq.current, SplineProfile):
+            elif isinstance(current, PowerSeriesProfile) and not current.sym:
+                rho = np.linspace(0, 1, eq.L_grid + 1)
+                current = SplineProfile(values=current(rho), knots=rho)
+            if isinstance(current, SplineProfile):
                 f.write("  AC_AUX_S =")  # spline knot locations
-                for r in eq.current.knots:
-                    f.write(" {:+14.8e}".format(r**2))  # s = rho^2
+                for r in current.knots:
+                    f.write(" {:+14.8E}".format(r**2))  # s = rho^2
                 f.write("\n  AC_AUX_F =")  # current cubic spline values
-                for ac in eq.current.values:
-                    f.write(" {:+14.8e}".format(ac))
+                for ac in current.params:
+                    f.write(" {:+14.8E}".format(ac))
                 f.write("\n  PCURR_TYPE = 'cubic_spline_I'\n")
 
         f.write("!---- Axis Parameters ----\n")
@@ -1477,20 +1486,20 @@ class VMECIO:
         # R axis cosine coefficients
         f.write("  RAXIS_CC = ")
         for rac in R0_n[eq.N :]:
-            f.write("{:+14.8e} ".format(rac))
+            f.write("{:+14.8E} ".format(rac))
         if not eq.sym:
             # R axis sine coefficients
-            f.write("\n  RAXIS_CS = {:+14.8e}".format(0))
+            f.write("\n  RAXIS_CS = {:+14.8E}".format(0))
             for ras in -R0_n[0 : eq.N][::-1]:
-                f.write(" {:+14.8e}".format(ras))
+                f.write(" {:+14.8E}".format(ras))
             # Z axis cosine coefficients
             f.write("\n  ZAXIS_CC =")
             for zac in Z0_n[eq.N :]:
-                f.write(" {:+14.8e}".format(zac))
+                f.write(" {:+14.8E}".format(zac))
         # Z axis sine coefficients
-        f.write("\n  ZAXIS_CS = {:+14.8e}".format(0))
+        f.write("\n  ZAXIS_CS = {:+14.8E}".format(0))
         for zas in -Z0_n[0 : eq.N][::-1]:
-            f.write(" {:+14.8e}".format(zas))
+            f.write(" {:+14.8E}".format(zas))
         f.write("\n")
 
         f.write("!---- Boundary Parameters ----\n")
@@ -1511,18 +1520,18 @@ class VMECIO:
                 (np.atleast_2d(M), np.atleast_2d(N), RBC, ZBS)
             ).T:
                 f.write(
-                    f"  RBC({n:3.0f},{m:3.0f}) = {rbc:+14.8e}"
-                    + f"  ZBS({n:3.0f},{m:3.0f}) = {zbs:+14.8e}\n"
+                    f"  RBC({n:3.0f},{m:3.0f}) = {rbc:+14.8E}"
+                    + f"  ZBS({n:3.0f},{m:3.0f}) = {zbs:+14.8E}\n"
                 )
         else:
             for m, n, rbc, rbs, zbc, zbs in np.vstack(
                 (np.atleast_2d(M), np.atleast_2d(N), RBC, RBS, ZBC, ZBS)
             ).T:
                 f.write(
-                    f"  RBC({n:3.0f},{m:3.0f}) = {rbc:+14.8e}"
-                    + f"  RBS({n:3.0f},{m:3.0f}) = {rbs:+14.8e}"
-                    + f"  ZBC({n:3.0f},{m:3.0f}) = {zbc:+14.8e}"
-                    + f"  ZBS({n:3.0f},{m:3.0f}) = {zbs:+14.8e}\n"
+                    f"  RBC({n:3.0f},{m:3.0f}) = {rbc:+14.8E}"
+                    + f"  RBS({n:3.0f},{m:3.0f}) = {rbs:+14.8E}"
+                    + f"  ZBC({n:3.0f},{m:3.0f}) = {zbc:+14.8E}"
+                    + f"  ZBS({n:3.0f},{m:3.0f}) = {zbs:+14.8E}\n"
                 )
 
         f.write("/")

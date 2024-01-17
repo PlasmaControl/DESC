@@ -29,8 +29,8 @@ else:
             import jax.numpy as jnp
             import jaxlib
             from jax.config import config as jax_config
-
-            jax_config.update("jax_enable_x64", True)
+            if desc_config.get("device") != "METAL":
+                jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
                     "JAX failed to detect GPU, are you sure you "
@@ -75,7 +75,22 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
-    from jax.scipy.special import gammaln, logsumexp
+    if desc_config.get("device") != "METAL":
+        from jax.scipy.special import gammaln, logsumexp
+    else:
+        @jnp.vectorize
+        def gammaln(x):
+            def body(i, xy):
+                x, y = xy
+                y *= x
+                x -= 1
+                return x, y
+            return jnp.log(jax.lax.fori_loop(1, jnp.asarray(x).astype(int), body, (x-1, 1.0))[1])
+        from scipy.special import logsumexp as scipy_logsumexp
+        @jnp.vectorize
+        def logsumexp(x):
+            return scipy_logsumexp(x).astype(np.float32)
+        
     from jax.tree_util import register_pytree_node
 
     def put(arr, inds, vals):

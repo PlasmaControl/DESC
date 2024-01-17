@@ -1379,13 +1379,13 @@ class VMECIO:
         # blending parameter from previous iteration [0, 1]
         f.write("  DELT = {}\n".format(kwargs.get("DELT", 0.9)))
         f.write("  NS_ARRAY =   ")  # number of flux surfaces
-        for ns in kwargs.get("NS_ARRAY", [17, 33, 65, 129, 257, 513]):
+        for ns in kwargs.get("NS_ARRAY", [17, 33, 65, 129]):
             f.write(" {:5.0f}".format(ns))
         f.write("\n  NITER_ARRAY =")  # maximum number of iterations
-        for niter in kwargs.get("NITER_ARRAY", [1e3, 2e3, 4e3, 8e3, 1.6e4, 3.2e4]):
+        for niter in kwargs.get("NITER_ARRAY", [1e3, 2e3, 4e3, 8e3]):
             f.write(" {:5.0f}".format(niter))
         f.write("\n  FTOL_ARRAY = ")  # stopping tolerance
-        for ftol in kwargs.get("FTOL_ARRAY", [1e-9, 1e-10, 1e-11, 1e-12, 1e-13, 1e-14]):
+        for ftol in kwargs.get("FTOL_ARRAY", [1e-9, 1e-10, 1e-11, 1e-12]):
             f.write(" {:5.0E}".format(ftol))
         f.write("\n")
 
@@ -1417,7 +1417,7 @@ class VMECIO:
                 f.write(" {:+14.8E}".format(am))
             f.write("\n  PMASS_TYPE = 'power_series'\n")
         elif isinstance(pressure, PowerSeriesProfile) and not pressure.sym:
-            rho = np.linspace(0, 1, eq.L_grid + 1)
+            rho = np.linspace(0, 1, pressure.basis.L + 1)
             pressure = SplineProfile(values=pressure(rho), knots=rho)
         if isinstance(pressure, SplineProfile):
             f.write("  AM_AUX_S =")  # spline knot locations
@@ -1438,7 +1438,7 @@ class VMECIO:
                     f.write(" {:+14.8E}".format(ai))
                 f.write("\n  PIOTA_TYPE = 'power_series'\n")
             elif isinstance(iota, PowerSeriesProfile) and not iota.sym:
-                rho = np.linspace(0, 1, eq.L_grid + 1)
+                rho = np.linspace(0, 1, iota.basis.L + 1)
                 iota = SplineProfile(values=iota(rho), knots=rho)
             if isinstance(iota, SplineProfile):
                 f.write("  AI_AUX_S =")  # spline knot locations
@@ -1451,24 +1451,28 @@ class VMECIO:
         else:
             current = eq.current
             f.write("  NCURR = 1\n")  # current profile specified
-            f.write("  CURTOR = {:+14.8E}\n".format(float(eq.current(1))))  # AC scale
+            f.write("  CURTOR = {:+14.8E}\n".format(float(current(1))))  # AC scale
             if isinstance(current, PowerSeriesProfile) and current.sym:
-                # assert eq.current.sym
                 f.write("  AC =")  # current power series coefficients
                 for ac in current.params:
                     f.write(" {:+14.8E}".format(ac))
-                f.write("\n  PCURR_TYPE = 'power_series'\n")
-            elif isinstance(current, PowerSeriesProfile) and not current.sym:
-                rho = np.linspace(0, 1, eq.L_grid + 1)
-                current = SplineProfile(values=current(rho), knots=rho)
-            if isinstance(current, SplineProfile):
+                f.write("\n  PCURR_TYPE = 'power_series_I'\n")
+            else:
+                surfs = np.linspace(0, 1, eq.L_grid + 1)
                 f.write("  AC_AUX_S =")  # spline knot locations
-                for r in current.knots:
-                    f.write(" {:+14.8E}".format(r**2))  # s = rho^2
+                for s in surfs:
+                    f.write(" {:+14.8E}".format(s))
                 f.write("\n  AC_AUX_F =")  # current cubic spline values
-                for ac in current.params:
-                    f.write(" {:+14.8E}".format(ac))
-                f.write("\n  PCURR_TYPE = 'cubic_spline_I'\n")
+                for r in np.sqrt(surfs):  # s = rho^2
+                    # dI/ds = dI/drho / (2*rho)
+                    f.write(
+                        " {:+14.8E}".format(
+                            0
+                            if np.abs(r) < np.finfo(r.dtype).eps
+                            else float(current(r, dr=1) / (2 * r))
+                        )
+                    )
+                f.write("\n  PCURR_TYPE = 'cubic_spline_Ip'\n")
 
         f.write("!---- Axis Parameters ----\n")
         # R axis

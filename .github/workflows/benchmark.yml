@@ -76,11 +76,12 @@ jobs:
           python compare_bench_results.py
           cat commit_msg.txt
       - name: comment PR with the results
-        uses: machine-learning-apps/pr-comment@master
+        uses: thollander/actions-comment-pull-request@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          path: tests/benchmarks/commit_msg.txt
+          filePath: tests/benchmarks/commit_msg.txt
+          comment_tag: benchmark
       - name: Upload benchmark data
         if: always()
         uses: actions/upload-artifact@v3

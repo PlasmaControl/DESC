@@ -131,6 +131,10 @@ class TestRZCurve:
         """Test error checking when creating FourierRZCurve."""
         with pytest.raises(ValueError):
             _ = FourierRZCurve(R_n=[])
+        with pytest.raises(AssertionError):
+            _ = FourierRZCurve(R_n=[1], modes_R=[1, 2])
+        with pytest.raises(AssertionError):
+            _ = FourierRZCurve(Z_n=[1], modes_Z=[1, 2])
 
     @pytest.mark.unit
     def test_to_FourierXYZCurve(self):
@@ -363,6 +367,16 @@ class TestFourierXYZCurve:
         with pytest.raises(ValueError):
             c.Z_n = s.Z_n
 
+    @pytest.mark.unit
+    def test_asserts(self):
+        """Test error checking when creating FourierXYZCurve."""
+        with pytest.raises(AssertionError):
+            _ = FourierXYZCurve(X_n=[1], modes=[1, 2])
+        with pytest.raises(AssertionError):
+            _ = FourierXYZCurve(Y_n=[1], modes=[1, 2])
+        with pytest.raises(AssertionError):
+            _ = FourierXYZCurve(Z_n=[1], modes=[1, 2])
+
 
 class TestPlanarCurve:
     """Tests for FourierPlanarCurve class."""
@@ -477,6 +491,8 @@ class TestPlanarCurve:
             c.center = [4]
         with pytest.raises(ValueError):
             c.normal = [4]
+        with pytest.raises(AssertionError):
+            _ = FourierPlanarCurve(r_n=[1], modes=[1, 2])
 
 
 class TestSplineXYZCurve:

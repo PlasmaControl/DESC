@@ -2121,20 +2121,28 @@ class EquilibriaFamily(IOAble, MutableSequence):
     _io_attrs_ = ["_equilibria"]
 
     def __init__(self, *args):
-        # we use ensure_nested=False here because it is assumed the family
+        # we use ensure_nested=False here for all but the first iteration
+        # because it is assumed the family
         # will be solved with a continuation method, so there's no need for the
         # fancy coordinate mapping stuff since it will just be overwritten during
         # solve_continuation
         self.equilibria = []
         if len(args) == 1 and isinstance(args[0], list):
-            for inp in args[0]:
-                self.equilibria.append(Equilibrium(**inp, ensure_nested=False))
+            for i, inp in enumerate(args[0]):
+                # ensure that first step is nested
+                ensure_nested_bool = True if i == 0 else False
+                self.equilibria.append(
+                    Equilibrium(**inp, ensure_nested=ensure_nested_bool)
+                )
         else:
-            for arg in args:
+            for i, arg in enumerate(args):
                 if isinstance(arg, Equilibrium):
                     self.equilibria.append(arg)
                 elif isinstance(arg, dict):
-                    self.equilibria.append(Equilibrium(**arg, ensure_nested=False))
+                    ensure_nested_bool = True if i == 0 else False
+                    self.equilibria.append(
+                        Equilibrium(**arg, ensure_nested=ensure_nested_bool)
+                    )
                 else:
                     raise TypeError(
                         "Args to create EquilibriaFamily should either be "

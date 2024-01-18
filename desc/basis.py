@@ -1446,7 +1446,7 @@ def zernike_radial_direct(r, n, m):
     return R_nm
 
 
-def zernike_radial_optimized(r, l, m, beta=0):
+def zernike_radial_optimized(r, l, m):
     """Radial part of zernike polynomials.
 
     This version is optimized for getting rid of the
@@ -1473,6 +1473,7 @@ def zernike_radial_optimized(r, l, m, beta=0):
     """
     m = np.abs(m)
     n = (l - m) // 2
+
     idx = np.lexsort((n, m))
     id0 = np.arange(0, len(l))
     id0 = id0[idx]
@@ -1485,14 +1486,14 @@ def zernike_radial_optimized(r, l, m, beta=0):
     n_opt = (L_max - m_opt) // 2
 
     out = np.zeros((len(r), len(m)))
-    out = zernike_radial_update(r, n_opt, m_opt, beta, out)
+    out = zernike_radial_update(r, n_opt, m_opt, out)
     out = out[:, np.argsort(id0)]
 
     return out
 
 
 @jit
-def zernike_radial_optimized_jit(r, l, m, beta=0):
+def zernike_radial_optimized_jit(r, l, m):
     """Radial part of zernike polynomials.
 
     This version is optimized for getting rid of the
@@ -1517,28 +1518,55 @@ def zernike_radial_optimized_jit(r, l, m, beta=0):
         basis function(s) evaluated at specified points
 
     """
+    out = jnp.zeros((r.size, m.size))
+    r_jacobi = 1 - 2 * r**2
     m = jnp.abs(m)
     n = (l - m) // 2
-    idx = jnp.lexsort((n, m))
-    id0 = jnp.arange(l.size)
-    id0 = id0[idx]
 
     M_max = jnp.max(m)
     L_max = jnp.max(l)
 
-    # find unique values to calculate
-    m_opt = jnp.arange(M_max)
-    n_opt = (L_max - m_opt) // 2
+    def body_inner(N, args):
+        r_jacobi, alpha, power, out, P_n1, P_n2, m, n = args
+        P_n = jacobi_poly_single(r_jacobi, N, alpha, P_n1, P_n2)
 
-    out = jnp.zeros((len(r), len(m)))
-    out = zernike_radial_update(r, n_opt, m_opt, beta, out)
-    out = out[:, jnp.argsort(id0)]
+        index = jnp.where(
+            jnp.logical_and(m == alpha, n == N),
+            jnp.arange(m.size),
+            0,
+        )
+        idx = jnp.sum(index)
+
+        out = out.at[:, idx].set((-1) ** N * power * P_n)
+        P_n2 = jnp.where(N >= 2, P_n1, P_n2)
+        P_n1 = jnp.where(N >= 2, P_n, P_n1)
+
+        return (r_jacobi, alpha, power, out, P_n1, P_n2, m, n)
+
+    def body(alpha, args):
+        r, r_jacobi, L_max, m, n, out = args
+        power = r**alpha
+        N_max = (L_max - alpha) // 2
+
+        # First 2 Jacobi Polynomials (they don't need recursion)
+        P_n2 = jacobi_poly_single(r_jacobi, 0, alpha)
+        P_n1 = jacobi_poly_single(r_jacobi, 1, alpha)
+
+        r_jacobi, alpha, power, out, P_n1, P_n2, m, n = fori_loop(
+            0, N_max + 1, body_inner, (r_jacobi, alpha, power, out, P_n1, P_n2, m, n)
+        )
+
+        return (r, r_jacobi, L_max, m, n, out)
+
+    r, r_jacobi, L_max, m, n, out = fori_loop(
+        0, M_max + 1, body, (r, r_jacobi, L_max, m, n, out)
+    )
 
     return out
 
 
 @jit
-def zernike_radial_update(x, n, alpha, beta, result):
+def zernike_radial_update(x, n, alpha, result):
     """Calculate the radial part of Zernike polynomial at points x.
 
     Parameters
@@ -1560,35 +1588,36 @@ def zernike_radial_update(x, n, alpha, beta, result):
     """
 
     def body(N, args):
-        xj, alpha, beta, power, result, P_n1, P_n2, index = args
-        P_n = jacobi_poly_single(xj, N, alpha, beta, P_n1, P_n2)
+        xj, alpha, power, result, P_n1, P_n2, index = args
+        P_n = jacobi_poly_single(xj, N, alpha, P_n1, P_n2)
         result = result.at[:, index].set((-1) ** N * power * P_n)
         index += 1
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
-        return (xj, alpha, beta, power, result, P_n1, P_n2, index)
+        return (xj, alpha, power, result, P_n1, P_n2, index)
 
     xj = 1 - 2 * x**2
     index = 0
     for i in range(alpha.size):
         m = alpha[i]
-        P_n1 = jacobi_poly_single(xj, 1, m, beta)
-        P_n2 = jacobi_poly_single(xj, 0, m, beta)
+        P_n1 = jacobi_poly_single(xj, 1, m)
+        P_n2 = jacobi_poly_single(xj, 0, m)
         power = x**m
         result = result.at[:, index].set(power * P_n2)
         index += 1
-        xj, m, beta, power, result, P_n1, P_n2, index = fori_loop(
+        xj, m, power, result, P_n1, P_n2, index = fori_loop(
             1,
             (n[i] + 1).astype(int),
             body,
-            (xj, m, beta, power, result, P_n1, P_n2, index),
+            (xj, m, power, result, P_n1, P_n2, index),
         )
 
     return result
 
 
-def jacobi_poly_single(x, n, alpha, beta, P_n1=0, P_n2=0):
+def jacobi_poly_single(x, n, alpha, P_n1=0, P_n2=0):
     """Evaluate Jacobi for single alpha and n pair."""
+    beta = 0
     c = 2 * n + alpha + beta
     a1 = 2 * n * (c - n) * (c - 2)
     a2 = (c - 1) * (c * (c - 2) * x + (alpha - beta) * (alpha + beta))

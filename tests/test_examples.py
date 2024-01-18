@@ -1170,14 +1170,12 @@ def test_regcoil_ellipse_and_axisym_surface_large_alpha(
     (all_phi_mns, surface_current_field, chi_B, eq) = regcoil_ellipse_and_axisym_surf
 
     # test with alpha large, should have very small phi_mn
-    (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
+    _ = surface_current_field.run_regcoil(
         M_Phi=2,
         N_Phi=2,
         eqname=eq,
-        eval_grid_M=10,
-        eval_grid_N=10,
-        source_grid_M=40,
-        source_grid_N=40,
+        eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         alpha=1e8,
     )
     # should be small
@@ -1471,8 +1469,8 @@ def test_regcoil_ellipse_helical_coils_pos_helicity():
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
     (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
-        M_Phi=8,
-        N_Phi=8,
+        basis_M=8,
+        basis_N=8,
         eqname=eq,
         eval_grid_M=20,
         eval_grid_N=20,
@@ -1546,8 +1544,8 @@ def test_regcoil_ellipse_modular():
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
     (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
-        M_Phi=8,
-        N_Phi=8,
+        basis_M=8,
+        basis_N=8,
         eqname=eq,
         eval_grid_M=20,
         eval_grid_N=20,

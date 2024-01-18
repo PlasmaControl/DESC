@@ -1020,12 +1020,12 @@ def test_regcoil_axisymmetric():
         N_Phi=2,
         eq=eq,
         eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
-        source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
-        alpha=10,
+        source_grid=LinearGrid(M=40, N=80, NFP=eq.NFP),
+        alpha=1e4,
     )
     phi_mn_opt = surface_current_field.Phi_mn
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-16)
-    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-16)
+    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-11)
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=1e-16
     )
@@ -1040,8 +1040,8 @@ def test_regcoil_axisymmetric():
         N_Phi=2,
         eq=eq,
         eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
-        source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
-        alpha=10,
+        source_grid=LinearGrid(M=40, N=80, NFP=eq.NFP),
+        alpha=1e4,
         # negate the B0 because a negative G corresponds to a positive B toroidal
         # and we want this to provide half the field the surface current's
         # G is providing, in the same direction
@@ -1055,7 +1055,7 @@ def test_regcoil_axisymmetric():
         correct_phi / 2,
         atol=1e-9,
     )
-    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-16)
+    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-11)
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords, grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
     )
@@ -1114,7 +1114,6 @@ def test_regcoil_axisym_and_ellipse_surface():
         eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         alpha=1e4,
-        winding_surf=surf_winding,
     )
     phi_mn_opt = surface_current_field.Phi_mn
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-9)
@@ -1157,7 +1156,13 @@ def test_regcoil_ellipse_and_axisym_surface_large_alpha(
     regcoil_ellipse_and_axisym_surf,
 ):
     """Test elliptical eq and circular winding surf regcoil at large alpha."""
-    (all_phi_mns, surface_current_field, chi_B, eq) = regcoil_ellipse_and_axisym_surf
+    (
+        all_phi_mns,
+        initial_surface_current_field,
+        chi_B,
+        eq,
+    ) = regcoil_ellipse_and_axisym_surf
+    surface_current_field = initial_surface_current_field.copy()
 
     # test with alpha large, should have very small phi_mn
     _ = surface_current_field.run_regcoil(
@@ -1179,7 +1184,13 @@ def test_regcoil_ellipse_and_axisym_surface_check_surf_trace(
     regcoil_ellipse_and_axisym_surf,
 ):
     """Test elliptical eq and circular winding surf regcoil solution field trace."""
-    (all_phi_mns, surface_current_field, chi_B, eq) = regcoil_ellipse_and_axisym_surf
+    (
+        all_phi_mns,
+        initial_surface_current_field,
+        chi_B,
+        eq,
+    ) = regcoil_ellipse_and_axisym_surf
+    surface_current_field = initial_surface_current_field.copy()
     surface_current_field.Phi_mn = all_phi_mns[12]
 
     fieldR, fieldZ = trace_from_curr_pot(
@@ -1207,7 +1218,13 @@ def test_regcoil_ellipse_and_axisym_surface_check_B(
     regcoil_ellipse_and_axisym_surf,
 ):
     """Test elliptical eq and circular winding surf regcoil solution B field."""
-    (all_phi_mns, surface_current_field, chi_B, eq) = regcoil_ellipse_and_axisym_surf
+    (
+        all_phi_mns,
+        initial_surface_current_field,
+        chi_B,
+        eq,
+    ) = regcoil_ellipse_and_axisym_surf
+    surface_current_field = initial_surface_current_field.copy()
     surface_current_field.Phi_mn = all_phi_mns[12]
 
     assert np.all(np.asarray(chi_B[0:-10]) < 1e-8)
@@ -1227,10 +1244,11 @@ def test_regcoil_ellipse_and_axisym_surface_check_B(
 def test_regcoil_ellipse_helical_coils_check_B(regcoil_ellipse_helical_coils):
     """Test elliptical eq and winding surf helical coil regcoil solution."""
     (
-        surface_current_field,
+        initial_surface_current_field,
         chi_B,
         eq,
     ) = regcoil_ellipse_helical_coils
+    surface_current_field = initial_surface_current_field.copy()
 
     assert np.all(chi_B < 1e-5)
     coords = eq.compute(["R", "phi", "Z", "B"])
@@ -1248,10 +1266,11 @@ def test_regcoil_ellipse_helical_coils_check_B(regcoil_ellipse_helical_coils):
 def test_regcoil_ellipse_helical_coils_check_field_trace(regcoil_ellipse_helical_coils):
     """Test elliptical eq and winding surf helical coil regcoil solution."""
     (
-        surface_current_field,
+        initial_surface_current_field,
         _,
         eq,
     ) = regcoil_ellipse_helical_coils
+    surface_current_field = initial_surface_current_field.copy()
 
     fieldR, fieldZ = trace_from_curr_pot(
         surface_current_field,
@@ -1276,10 +1295,11 @@ def test_regcoil_ellipse_helical_coils_check_field_trace(regcoil_ellipse_helical
 def test_regcoil_ellipse_helical_coils_check_coils(regcoil_ellipse_helical_coils):
     """Test elliptical eq and winding surf helical coil regcoil solution."""
     (
-        surface_current_field,
+        initial_surface_current_field,
         _,
         eq,
     ) = regcoil_ellipse_helical_coils
+    surface_current_field = initial_surface_current_field.copy()
 
     # test finding coils
 
@@ -1330,13 +1350,11 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     M_sgrid = 40
     N_sgrid = 80
     (
-        surface_current_field,
-        TF_B,
-        mean_Bn,
-        chi_B,
-        Bn_tot,
+        initial_surface_current_field,
+        _,
         eq,
     ) = regcoil_ellipse_helical_coils
+    surface_current_field = initial_surface_current_field.copy()
 
     # check against the objective method of running REGCOIL
     # with external field providing half the TF

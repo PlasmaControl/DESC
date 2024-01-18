@@ -1846,8 +1846,6 @@ class FourierCurrentPotentialField(
 
         TODO: Put math of algorithm here
 
-        .. |K| replace:: |K|
-
         Parameters
         ----------
         eq : Equilibrium
@@ -1912,32 +1910,34 @@ class FourierCurrentPotentialField(
         Returns
         -------
         data : dict
-            Dictionary with keys ["alpha","Phi_mn", "I","G"]:
-            alpha : regularization parameter the algorithm was ran with, a float
-                    if `scan=False`, or list of float of length `nscan` if `scan=True,
-                    corresponding to the list of `Phi_mn`
-            Phi_mn : the single-valued current potential value which minimizes the Bn
-                    at the given eval_grid on the plasma, subject to regularization
-                    on the surface current magnitude govenerd by alpha.
-                    An array of length `self.Phi_basis.num_modes` if `scan=False`,
-                    or a list of arrays, with list length `nscan` if `scan=True`,
-                    corresponding to the list of regularization parameters alpha
-            I : float, net toroidal current (in Amperes) on the winding surface.
-                Governed by the `current_helicity` parameter, and is zero for
-                modular coils (`current_helicity=0`).
-            G : float, net poloidal current (in Amperes) on the winding surface.
-                Determined by the equilibrium toroidal magnetic field, as well as
-                the given external field
-            chi^2_B : quadratic flux integrated over the plasma surface.
-                a float if `scan=False`, or list of float of length
-                `nscan` if `scan=True`, corresponding to the list of `alpha`
-            chi^2_K : Current density magnitude integrated over the winding surface.
-                a float if `scan=False`, or list of float of length
-                `nscan` if `scan=True`, corresponding to the list of `alpha`
-            |K| : Current density magnitude on the winding surface, evaluated at the
-                given `source_grid`. An array of length `source_grid.num_nodes` if
-                `scan=False`, or list of arrays, with list length `nscan`,
-                if `scan=True`, corresponding to the list of `alpha`
+            Dictionary with the following keys::
+
+                alpha : regularization parameter the algorithm was ran with, a float
+                        if `scan=False`, or list of float of length `nscan` if
+                        `scan=True`, corresponding to the list of `Phi_mn`
+                Phi_mn : the single-valued current potential coefficients which
+                        minimize the Bn at the given eval_grid on the plasma, subject
+                        to regularization on the surface current magnitude governed by
+                        alpha.
+                        An array of length `self.Phi_basis.num_modes` if `scan=False`,
+                        or a list of arrays, with list length `nscan` if `scan=True`,
+                        corresponding to the list of regularization parameters alpha
+                I : float, net toroidal current (in Amperes) on the winding surface.
+                    Governed by the `current_helicity` parameter, and is zero for
+                    modular coils (`current_helicity=0`).
+                G : float, net poloidal current (in Amperes) on the winding surface.
+                    Determined by the equilibrium toroidal magnetic field, as well as
+                    the given external field
+                chi^2_B : quadratic flux integrated over the plasma surface.
+                    a float if `scan=False`, or list of float of length
+                    `nscan` if `scan=True`, corresponding to the list of `alpha`
+                chi^2_K : Current density magnitude integrated over winding surface.
+                    a float if `scan=False`, or list of float of length
+                    `nscan` if `scan=True`, corresponding to the list of `alpha`
+                |K| : Current density magnitude on winding surface, evaluated at the
+                    given `source_grid`. An array of length `source_grid.num_nodes` if
+                    `scan=False`, or list of arrays, with list length `nscan`,
+                    if `scan=True`, corresponding to the list of `alpha`
 
 
         """

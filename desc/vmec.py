@@ -1458,12 +1458,12 @@ class VMECIO:
                     f.write(" {:+14.8E}".format(ac))
                 f.write("\n  PCURR_TYPE = 'power_series_I'\n")
             else:
-                surfs = np.linspace(0, 1, eq.L_grid + 1)
+                rho = np.linspace(0, 1, eq.L_grid + 1)
                 f.write("  AC_AUX_S =")  # spline knot locations
-                for s in surfs:
-                    f.write(" {:+14.8E}".format(s))
+                for r in rho:
+                    f.write(" {:+14.8E}".format(r**2))  # s = rho^2
                 f.write("\n  AC_AUX_F =")  # current cubic spline values
-                for r in np.sqrt(surfs):  # s = rho^2
+                for r in rho:
                     # dI/ds = dI/drho / (2*rho)
                     f.write(
                         " {:+14.8E}".format(

@@ -1502,19 +1502,19 @@ class FourierCurrentPotentialField(
 ):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
-        surface current K is assumed given by
+    surface current K is assumed given by
 
-        K = n x ∇ Φ
-        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+    K = n x ∇ Φ
+    Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
 
-        where:
-              n is the winding surface unit normal.
-              Phi is the current potential function,
-                which is a function of theta and zeta,
-                and is given as a secular linear term in theta/zeta
-                and a double Fourier series in theta/zeta.
-        This function then uses biot-savart to find the
-        B field from this current density K on the surface.
+    where:
+            n is the winding surface unit normal.
+            Phi is the current potential function,
+            which is a function of theta and zeta,
+            and is given as a secular linear term in theta/zeta
+            and a double Fourier series in theta/zeta.
+    This function then uses biot-savart to find the
+    B field from this current density K on the surface.
 
     Parameters
     ----------
@@ -1839,12 +1839,12 @@ class FourierCurrentPotentialField(
     ):
         """Runs regcoil algorithm to find the current potential for the surface.
 
-            NOTE: will set the FourierCurrentPotentialField's Phi_mn to
-            the lowest alpha value's solution, and will also set I and G
-            to the values corresponding to the input equilibrium, external_field,
-            and current_helicity.
+        NOTE: will set the FourierCurrentPotentialField's Phi_mn to
+        the lowest alpha value's solution, and will also set I and G
+        to the values corresponding to the input equilibrium, external_field,
+        and current_helicity.
 
-            TODO: Put math of algorithm here
+        TODO: Put math of algorithm here
 
         Parameters
         ----------
@@ -1852,7 +1852,7 @@ class FourierCurrentPotentialField(
             Equilibrium to minimize the quadratic flux (plus regularization) on.
         alpha : float, optional
             regularization parameter, > 0, regularizes minimization of Bn
-            on plasma surface with minimization of current density|K| on winding
+            on plasma surface with minimization of current density mag K on winding
             surface i.e. larger alpha, simpler coilset and smaller currents, but
             worse Bn. by default 0
         M_Phi : int, optional

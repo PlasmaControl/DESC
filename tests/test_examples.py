@@ -1018,11 +1018,9 @@ def test_regcoil_axisymmetric():
     data = surface_current_field.run_regcoil(
         M_Phi=2,
         N_Phi=2,
-        eqname=eq,
-        eval_grid_M=10,
-        eval_grid_N=10,
-        source_grid_M=40,
-        source_grid_N=40,
+        eq=eq,
+        eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
+        source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         alpha=10,
     )
     phi_mn_opt = surface_current_field.Phi_mn
@@ -1040,11 +1038,9 @@ def test_regcoil_axisymmetric():
     data = surface_current_field.run_regcoil(
         M_Phi=2,
         N_Phi=2,
-        eqname=eq,
-        eval_grid_M=10,
-        eval_grid_N=10,
-        source_grid_M=40,
-        source_grid_N=40,
+        eq=eq,
+        eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
+        source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         alpha=10,
         # negate the B0 because a negative G corresponds to a positive B toroidal
         # and we want this to provide half the field the surface current's
@@ -1092,11 +1088,9 @@ def test_regcoil_axisym_and_ellipse_surface():
     data = surface_current_field.run_regcoil(
         M_Phi=6,
         N_Phi=6,
-        eqname=eq,
-        eval_grid_M=50,
-        eval_grid_N=50,
-        source_grid_M=50,
-        source_grid_N=50,
+        eq=eq,
+        eval_grid=LinearGrid(M=50, N=50, NFP=eq.NFP, sym=eq.sym),
+        source_grid=LinearGrid(M=50, N=50, NFP=eq.NFP),
         alpha=0,
         show_plots=False,
     )
@@ -1116,11 +1110,9 @@ def test_regcoil_axisym_and_ellipse_surface():
     data = surface_current_field.run_regcoil(
         M_Phi=2,
         N_Phi=2,
-        eqname=eq,
-        eval_grid_M=10,
-        eval_grid_N=10,
-        source_grid_M=40,
-        source_grid_N=40,
+        eq=eq,
+        eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
+        source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         alpha=1e4,
         winding_surf=surf_winding,
     )
@@ -1133,11 +1125,9 @@ def test_regcoil_axisym_and_ellipse_surface():
     data = surface_current_field.run_regcoil(
         M_Phi=6,
         N_Phi=6,
-        eqname=eq,
-        eval_grid_M=50,
-        eval_grid_N=50,
-        source_grid_M=50,
-        source_grid_N=50,
+        eq=eq,
+        eval_grid=LinearGrid(M=50, N=50, NFP=eq.NFP, sym=eq.sym),
+        source_grid=LinearGrid(M=50, N=50, NFP=eq.NFP),
         alpha=0,
         external_field=external_field,
         verbose=2,
@@ -1173,7 +1163,7 @@ def test_regcoil_ellipse_and_axisym_surface_large_alpha(
     _ = surface_current_field.run_regcoil(
         M_Phi=2,
         N_Phi=2,
-        eqname=eq,
+        eq=eq,
         eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         alpha=1e8,

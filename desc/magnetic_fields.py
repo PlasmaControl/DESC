@@ -1901,6 +1901,8 @@ class FourierCurrentPotentialField(
             by default False
         verbose : int, optional
             level of verbosity, if 0 will print nothing.
+            1 will display jacobian timing info
+            2 will display Bn max,min,average and chi^2 values for each alpha.
         normalize : bool, optional
             whether or not to normalize Bn when printing the Bnormal errors. If true,
             will normalize by the average equilibrium field strength on the surface.
@@ -2083,7 +2085,7 @@ class FourierCurrentPotentialField(
         # calculate the Phi_mn which minimizes (chi^2_B + alpha*chi^2_K) for each alpha
         for alpha in alphas:
             printstring = f"Calculating Phi_SV for alpha = {alpha:1.5e}"
-            if verbose > 0:
+            if verbose > 1:
                 print(
                     "#" * len(printstring)
                     + "\n"

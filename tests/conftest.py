@@ -339,8 +339,8 @@ def regcoil_ellipse_and_axisym_surf():
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
     surf_winding = FourierRZToroidalSurface(
-        R_lmn=np.array([0.7035, 0.08]),
-        Z_lmn=np.array([-2]),
+        R_lmn=np.array([0.7035, 0.0365]),
+        Z_lmn=np.array([-0.0365]),
         modes_R=np.array([[0, 0], [1, 0]]),
         modes_Z=np.array([[-1, 0]]),
         sym=True,
@@ -351,7 +351,7 @@ def regcoil_ellipse_and_axisym_surf():
         eq,
         M_Phi=8,
         N_Phi=8,
-        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP, sym=True),
+        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
         source_grid=LinearGrid(M=40, N=80, NFP=eq.NFP),
         scan=True,
         show_plots=False,

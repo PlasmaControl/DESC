@@ -398,4 +398,4 @@ def regcoil_ellipse_helical_coils():
         current_helicity=-2,
     )
 
-    return (surface_current_field, data["chi_B"], eq)
+    return (surface_current_field, data["chi^2_B"], eq)

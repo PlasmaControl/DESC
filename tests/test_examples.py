@@ -1016,8 +1016,8 @@ def test_regcoil_axisymmetric():
 
     # test with alpha large, should have no phi_mn
     data = surface_current_field.run_regcoil(
-        basis_M=2,
-        basis_N=2,
+        M_Phi=2,
+        N_Phi=2,
         eqname=eq,
         eval_grid_M=10,
         eval_grid_N=10,
@@ -1038,8 +1038,8 @@ def test_regcoil_axisymmetric():
 
     # test with half the current given external to winding surface
     data = surface_current_field.run_regcoil(
-        basis_M=2,
-        basis_N=2,
+        M_Phi=2,
+        N_Phi=2,
         eqname=eq,
         eval_grid_M=10,
         eval_grid_N=10,
@@ -1090,8 +1090,8 @@ def test_regcoil_axisym_and_ellipse_surface():
     eq.solve()
 
     data = surface_current_field.run_regcoil(
-        basis_M=6,
-        basis_N=6,
+        M_Phi=6,
+        N_Phi=6,
         eqname=eq,
         eval_grid_M=50,
         eval_grid_N=50,
@@ -1114,8 +1114,8 @@ def test_regcoil_axisym_and_ellipse_surface():
 
     # test with alpha large, should have no phi_mn
     data = surface_current_field.run_regcoil(
-        basis_M=2,
-        basis_N=2,
+        M_Phi=2,
+        N_Phi=2,
         eqname=eq,
         eval_grid_M=10,
         eval_grid_N=10,
@@ -1131,8 +1131,8 @@ def test_regcoil_axisym_and_ellipse_surface():
     # in the form of a TF field
     external_field = ToroidalMagneticField(B0=-mu_0 * (G / 2) / 2 / np.pi, R0=1)
     data = surface_current_field.run_regcoil(
-        basis_M=6,
-        basis_N=6,
+        M_Phi=6,
+        N_Phi=6,
         eqname=eq,
         eval_grid_M=50,
         eval_grid_N=50,
@@ -1171,8 +1171,8 @@ def test_regcoil_ellipse_and_axisym_surface_large_alpha(
 
     # test with alpha large, should have very small phi_mn
     (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
-        basis_M=2,
-        basis_N=2,
+        M_Phi=2,
+        N_Phi=2,
         eqname=eq,
         eval_grid_M=10,
         eval_grid_N=10,
@@ -1471,8 +1471,8 @@ def test_regcoil_ellipse_helical_coils_pos_helicity():
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
     (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
-        basis_M=8,
-        basis_N=8,
+        M_Phi=8,
+        N_Phi=8,
         eqname=eq,
         eval_grid_M=20,
         eval_grid_N=20,
@@ -1546,8 +1546,8 @@ def test_regcoil_ellipse_modular():
     eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
 
     (surface_current_field, TF_B, mean_Bn, chi_B, Bn_tot,) = run_regcoil(
-        basis_M=8,
-        basis_N=8,
+        M_Phi=8,
+        N_Phi=8,
         eqname=eq,
         eval_grid_M=20,
         eval_grid_N=20,

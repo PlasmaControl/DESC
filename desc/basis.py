@@ -1477,10 +1477,6 @@ def zernike_radial_optimized(r, l, m, beta=0):
     id0 = np.arange(0, len(l))
     id0 = id0[idx]
 
-    l = l[idx]
-    m = m[idx]
-    n = n[idx]
-
     M_max = np.max(m)
     L_max = np.max(l)
 

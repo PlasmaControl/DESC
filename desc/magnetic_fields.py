@@ -1259,12 +1259,16 @@ def field_line_integrate(
 class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
-    surface current K is assumed given by
+    surface current K is assumed given by::
+
         K = n x ∇ Φ
-    where:
+
+    where::
+
             n is the winding surface unit normal.
             Phi is the current potential function,
             which is a function of theta and zeta.
+
     This function then uses biot-savart to find the
     B field from this current density K on the surface.
 
@@ -1507,12 +1511,14 @@ class FourierCurrentPotentialField(
     K = n x ∇ Φ
     Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
 
-    where:
-            n is the winding surface unit normal.
-            Phi is the current potential function,
-            which is a function of theta and zeta,
-            and is given as a secular linear term in theta/zeta
-            and a double Fourier series in theta/zeta.
+    where::
+
+        n is the winding surface unit normal.
+        Phi is the current potential function,
+        which is a function of theta and zeta,
+        and is given as a secular linear term in theta/zeta
+        and a double Fourier series in theta/zeta.
+
     This function then uses biot-savart to find the
     B field from this current density K on the surface.
 

@@ -1446,7 +1446,7 @@ class VMECIO:
                     f.write(" {:+14.8E}".format(r**2))  # s = rho^2
                 f.write("\n  AI_AUX_F =")  # iota cubic spline values
                 for ai in iota.params:
-                    f.write(" {:+14.8E} ".format(ai))
+                    f.write(" {:+14.8E}".format(ai))
                 f.write("\n  PIOTA_TYPE = 'cubic_spline'\n")
         else:
             current = eq.current

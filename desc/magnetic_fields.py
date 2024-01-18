@@ -1846,6 +1846,8 @@ class FourierCurrentPotentialField(
 
         TODO: Put math of algorithm here
 
+        .. |K| replace:: |K|
+
         Parameters
         ----------
         eq : Equilibrium

@@ -992,7 +992,7 @@ def test_regcoil_axisymmetric():
         eq,
         M_Phi=1,
         N_Phi=1,
-        alpha=1e-19,
+        alpha=0,
         show_plots=False,
     )
     chi_B = data["chi^2_B"]

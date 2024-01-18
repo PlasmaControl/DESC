@@ -1407,13 +1407,13 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
-    B_from_surf = surface_current_field.compute_magnetic_field(
+    B_from_surf = surface_current_field2.compute_magnetic_field(
         coords, grid=LinearGrid(M=200, N=200), basis="rpz"
     ) + ext_field.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
 
     fieldR, fieldZ = trace_from_curr_pot(
-        surface_current_field,
+        surface_current_field2,
         eq,
         alpha=1e-15,
         M=50,
@@ -1436,7 +1436,7 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
     coilset2 = find_helical_coils(
-        surface_current_field,
+        surface_current_field2,
         eqname,
         desirednumcoils=numCoils,
         coilsFilename=coilsFilename,

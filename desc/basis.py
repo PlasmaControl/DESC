@@ -1481,28 +1481,64 @@ def zernike_radial_optimized(r, l, m, beta=0):
     m = m[idx]
     n = n[idx]
 
+    M_max = np.max(m)
+    L_max = np.max(l)
+
     # find unique values to calculate
-    unique_values = np.unique(m)
-    opt_param = []
-    # For each unique value, find the maximum value in array2 where
-    # this value occurs in array1
-    for value in unique_values:
-        indices = np.where(m == value)
-        max_n = np.max(n[indices])
-        opt_param.append(np.array([value, max_n]))
-    opt_param = np.array(opt_param)
-    m_opt = opt_param[:, 0]
-    n_opt = opt_param[:, 1]
+    m_opt = np.arange(M_max + 1)
+    n_opt = (L_max - m_opt) // 2
 
-    # instead of having a changing matrix dimensions, assing
-    # a matrix of zeros, and replace in place
-    init = np.zeros((len(m), len(r)))
+    out = np.zeros((len(r), len(m)))
+    out = zernike_radial_update(r, n_opt, m_opt, beta, out)
+    out = out[:, np.argsort(id0)]
 
-    result = zernike_radial_update(r, n_opt, m_opt, beta, init)
-    result = np.transpose(result)
-    result = result[:, np.argsort(id0)]
+    return out
 
-    return result
+
+@jit
+def zernike_radial_optimized_jit(r, l, m, beta=0):
+    """Radial part of zernike polynomials.
+
+    This version is optimized for getting rid of the
+    redundant calculations. Actual calculations are done
+    in JIT function (zernike_radial_update), this one is for
+    matrix operations that are cumbersome in JAX.
+
+    Parameters
+    ----------
+    r : ndarray, shape(N,)
+        radial coordinates to evaluate basis
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    m : ndarray of int, shape(K,)
+        azimuthal mode number(s)
+    dr : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        basis function(s) evaluated at specified points
+
+    """
+    m = jnp.abs(m)
+    n = (l - m) // 2
+    idx = jnp.lexsort((n, m))
+    id0 = jnp.arange(l.size)
+    id0 = id0[idx]
+
+    M_max = jnp.max(m)
+    L_max = jnp.max(l)
+
+    # find unique values to calculate
+    m_opt = jnp.arange(M_max)
+    n_opt = (L_max - m_opt) // 2
+
+    out = jnp.zeros((len(r), len(m)))
+    out = zernike_radial_update(r, n_opt, m_opt, beta, out)
+    out = out[:, jnp.argsort(id0)]
+
+    return out
 
 
 @jit
@@ -1530,7 +1566,7 @@ def zernike_radial_update(x, n, alpha, beta, result):
     def body(N, args):
         xj, alpha, beta, power, result, P_n1, P_n2, index = args
         P_n = jacobi_poly_single(xj, N, alpha, beta, P_n1, P_n2)
-        result = result.at[index, :].set((-1) ** N * power * P_n)
+        result = result.at[:, index].set((-1) ** N * power * P_n)
         index += 1
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1543,7 +1579,7 @@ def zernike_radial_update(x, n, alpha, beta, result):
         P_n1 = jacobi_poly_single(xj, 1, m, beta)
         P_n2 = jacobi_poly_single(xj, 0, m, beta)
         power = x**m
-        result = result.at[index, :].set(power * P_n2)
+        result = result.at[:, index].set(power * P_n2)
         index += 1
         xj, m, beta, power, result, P_n1, P_n2, index = fori_loop(
             1,

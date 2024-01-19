@@ -1981,7 +1981,8 @@ class FourierCurrentPotentialField(
 
         # change self basis to match desired resolution
         # TODO: allow cos for this as well?
-        sym_Phi = "sin" if eq.sym else False
+        if sym_Phi is None:
+            sym_Phi = "sin" if eq.sym else False
         self.change_Phi_resolution(M=M_Phi, N=N_Phi, sym_Phi=sym_Phi)
 
         # calculate net enclosed poloidal and toroidal currents

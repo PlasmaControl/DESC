@@ -1182,29 +1182,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         with open(coilsFilename, "w") as f:
             f.writelines(lines)
 
-    @staticmethod
-    def save_coilset_as_separate_coil_files(coilset, basefilename, NFP=1, grid=None):
-        """Save coilset as individual files.
-
-        Parameters
-        ----------
-        coilset : CoilSet
-            CoilSet to save coils of.
-        basefilename : str or path-like
-            basename of the files that the coils will be saved to, in format
-            {basename}_IND.txt where IND is the index of the coil in the CoilSet
-        NFP : int, default 1
-            If > 1, assumes that the CoilSet is the coils for a coilset
-            with a discrete toroidal symmetry of NFP, and so will only
-            save the first len(coils)/NFP coils in the MAKEGRID file.
-        grid: Grid, ndarray, int,
-            Grid of sample points along each coil to save.
-            if None, will default to each coil's self._grid
-        """
-        for i, c in enumerate(coilset):
-            single_set = MixedCoilSet(c)
-            single_set.save_in_makegrid_format(f"{basefilename}_{i}.txt", NFP, grid)
-
     def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
         """Convert all coils to FourierXYZCoil representation.
 

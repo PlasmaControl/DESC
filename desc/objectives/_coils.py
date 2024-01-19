@@ -9,7 +9,6 @@ from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz, rpz2xyz_vec
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid
-from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.utils import Timer
 
 from .objective_funs import _Objective
@@ -361,7 +360,9 @@ class SurfaceCurrentRegularization(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        assert isinstance(surface_current_field, FourierCurrentPotentialField)
+        assert hasattr(
+            surface_current_field, "Phi_mn"
+        ), "surface_current_field must be a FourierCurrentPotentialField"
         self._surface_current_field = surface_current_field
         self._source_grid = source_grid
         self._alpha = alpha

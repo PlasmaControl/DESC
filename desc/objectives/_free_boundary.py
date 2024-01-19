@@ -836,10 +836,10 @@ class QuadraticFlux(_Objective):
 
         Parameters
         ----------
-        field_params : dict
-            Dictionary of the external field's degrees of freedom
-        eq_params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        params_1, params_2 : dict
+            Dictionary of the external field's or equilibrium's degrees of freedom.
+            If both the equilibrium and field are not fixed then `params_1` is the
+            field params and `params_2` is the eq params.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -853,10 +853,9 @@ class QuadraticFlux(_Objective):
         if constants is None:
             constants = self.constants
 
+        # get params based on the order of what is in `things`
         if self._eq_fixed:
             field_params = params_1
-            eval_data = constants["eval_data"]
-            Bplasma = constants["Bplasma"]
         elif self._field_fixed:
             eq_params = params_1
             field_params = self._ext_field.params_dict
@@ -864,7 +863,11 @@ class QuadraticFlux(_Objective):
             field_params = params_1
             eq_params = params_2
 
-        if not self._eq_fixed:
+        # Now, calculate Bplasma and Bext
+        if self._eq_fixed:
+            eval_data = constants["eval_data"]
+            Bplasma = constants["Bplasma"]
+        else:
             eval_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,

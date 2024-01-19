@@ -399,3 +399,75 @@ def regcoil_ellipse_helical_coils():
     )
 
     return (surface_current_field, data["chi^2_B"], eq)
+
+
+@pytest.fixture(scope="session")
+def regcoil_ellipse_helical_coils_pos_helicity():
+    """Run regcoil for elliptical eq and surface with positive helicity."""
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+
+    M_Phi = 8
+    N_Phi = 8
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 40
+    N_sgrid = 80
+    alpha = 1e-18
+
+    surf_winding = FourierRZToroidalSurface(
+        R_lmn=np.array([0.7035, 0.0365]),
+        Z_lmn=np.array([-0.0365]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    surface_current_field = FourierCurrentPotentialField.from_surface(surf_winding)
+    data = surface_current_field.run_regcoil(
+        eq,
+        M_Phi=M_Phi,
+        N_Phi=N_Phi,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        alpha=alpha,
+        show_plots=False,
+        current_helicity=2,
+    )
+
+    return (surface_current_field, data["chi^2_B"], eq)
+
+
+@pytest.fixture(scope="session")
+def regcoil_ellipse_modular_coils():
+    """Run regcoil for elliptical eq and surface with 0 current helicity (modular)."""
+    eq = load("./tests/inputs/ellNFP4_init_smallish.h5")
+
+    M_Phi = 8
+    N_Phi = 8
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 40
+    N_sgrid = 80
+    alpha = 1e-18
+
+    surf_winding = FourierRZToroidalSurface(
+        R_lmn=np.array([0.7035, 0.0365]),
+        Z_lmn=np.array([-0.0365]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    surface_current_field = FourierCurrentPotentialField.from_surface(surf_winding)
+    data = surface_current_field.run_regcoil(
+        eq,
+        M_Phi=M_Phi,
+        N_Phi=N_Phi,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        alpha=alpha,
+        show_plots=False,
+        current_helicity=0,
+    )
+
+    return (surface_current_field, data["chi^2_B"], eq)

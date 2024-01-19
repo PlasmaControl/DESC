@@ -1,6 +1,7 @@
 """Classes defining objectives for equilibrium and optimization."""
 
 from ._bootstrap import BootstrapRedlConsistency
+from ._coils import SurfaceCurrentRegularizedQuadraticFlux
 from ._equilibrium import (
     CurrentDensity,
     Energy,
@@ -18,7 +19,6 @@ from ._geometry import (
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,
-    SurfaceCurrentRegularizedQuadraticFlux,
     Volume,
 )
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent

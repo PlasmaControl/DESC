@@ -1424,7 +1424,7 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     numCoils = 15
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
-    coilset2 = surface_current_field.cut_surface_current_into_coils(
+    coilset2 = surface_current_field2.cut_surface_current_into_coils(
         desirednumcoils=numCoils,
         step=6,
     )

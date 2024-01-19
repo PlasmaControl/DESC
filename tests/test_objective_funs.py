@@ -577,7 +577,8 @@ class TestObjectiveFunction:
 
             return field_grid, eval_grid, source_grid
 
-        def build_nonaxisym_field(eq):
+        def make_nonaxisym_field(eq):
+            """Makes a nonaxisymmetric field depending on the given eq."""
             surf = eq.surface.copy()
             surf.R_lmn = surf.R_lmn.at[surf.R_basis.get_idx(M=1, N=0)].set(2)
             surf.Z_lmn = surf.Z_lmn.at[surf.Z_basis.get_idx(M=-1, N=0)].set(2)
@@ -592,6 +593,9 @@ class TestObjectiveFunction:
             nonaxisym_field.change_Phi_resolution(M=4, N=0)
 
             return nonaxisym_field
+
+        # make axisymmetric field
+        axisym_field = ToroidalMagneticField(1, 1)
 
         # make axisymmetric equilibrium
         axisym_eq = Equilibrium(M=2, L=2)
@@ -608,17 +612,13 @@ class TestObjectiveFunction:
         nonaxisym_eq = Equilibrium(L=4, M=4, N=4, surface=surface)
         nonaxisym_eq.solve(verbose=0)
 
-        # make axisymmetric field
-        axisym_field = ToroidalMagneticField(1, 1)
-
         optimizer = Optimizer("lsq-exact")
         nonlinear_optimizer = Optimizer("proximal-lsq-exact")
 
         # test 1 with eq_fixed = True: the optimizer will zero out the nonaxisymmetric
         # part of the field (Phi_mn) since equilibrium is axisymmetric.
-
         eq = axisym_eq.copy()
-        field = build_nonaxisym_field(eq)
+        field = make_nonaxisym_field(eq)
         field_grid, eval_grid, source_grid = get_grids(eq, field)
 
         # fix every parameter except for phi_mn
@@ -641,9 +641,10 @@ class TestObjectiveFunction:
             copy=True,
         )
 
+        np.testing.assert_allclose(things_with_eq_fixed[0].Phi_mn, 0, atol=1e-8)
+
         # test 2 with field_fixed=True: the optimizer will zero out the nonaxisymmetric
         # part of the equilibrium (Rb_lmn) since field is axisymmetric.
-
         field = axisym_field.copy()
         eq = nonaxisym_eq.copy()
         field_grid, eval_grid, source_grid = get_grids(eq, field)
@@ -690,10 +691,13 @@ class TestObjectiveFunction:
             np.where(eq.surface.R_basis.modes[:, 2] != 0)
         ]
 
+        np.testing.assert_allclose(new_Rb_lmn, 0, atol=1e-10)
+        np.testing.assert_allclose(new_Zb_lmn, 0, atol=1e-10)
+
         # test with eq_fixed = field_fixed = False: nonaxisymmetric field and
         # nonaxisymmetric equilibrium
         eq = Equilibrium(M=2, L=2, N=4)
-        field = build_nonaxisym_field(eq)
+        field = make_nonaxisym_field(eq)
         field_grid, eval_grid, source_grid = get_grids(eq, field)
         surface_grid = LinearGrid(
             rho=np.array([1.0]),
@@ -710,7 +714,6 @@ class TestObjectiveFunction:
             eval_grid=eval_grid,
             field_grid=field_grid,
         )
-
         plasma_vessel_obj = PlasmaVesselDistance(
             surface=field,
             eq=eq,
@@ -739,10 +742,35 @@ class TestObjectiveFunction:
             copy=True,
         )
 
-        np.testing.assert_allclose(things_with_eq_fixed[0].Phi_mn, 0, atol=1e-8)
-        np.testing.assert_allclose(new_Rb_lmn, 0, atol=1e-10)
-        np.testing.assert_allclose(new_Zb_lmn, 0, atol=1e-10)
         np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-7)
+
+        # test 4: testing a different magnetic field when field_fixed=False.
+        eq = desc.examples.get("precise_QA")
+        field = axisym_field.copy()
+        field_grid, eval_grid, source_grid = get_grids(eq, field)
+
+        constraints = (FixParameter(field, ["R0"]),)
+        quadflux_obj = QuadraticFlux(
+            ext_field=field,
+            eq=eq,
+            src_grid=source_grid,
+            eval_grid=eval_grid,
+            field_grid=field_grid,
+            eq_fixed=True,
+        )
+        objective = ObjectiveFunction(quadflux_obj)
+        things_with_vacuum, __ = nonlinear_optimizer.optimize(
+            field,
+            objective=objective,
+            constraints=constraints,
+            ftol=1e-14,
+            gtol=1e-14,
+            copy=True,
+        )
+
+        # optimizer should zero out field since that's the easiest way
+        # to get to Bnorm = 0
+        np.testing.assert_allclose(things_with_vacuum[0].B0, 0, atol=1e-3)
 
     @pytest.mark.unit
     def test_target_max_iota(self):

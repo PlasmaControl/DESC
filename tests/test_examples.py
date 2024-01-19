@@ -1393,7 +1393,6 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
 
     optimizer = Optimizer("lsq-exact")
 
-    objective = ObjectiveFunction(obj)
     (surface_current_field2,), result = optimizer.optimize(
         (surface_current_field2,),
         objective,

@@ -14,14 +14,14 @@ import desc.examples
 from desc.continuation import _solve_axisym, solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
-from desc.field_line_tracing_DESC_from_coilset import field_trace_from_coilset
-from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
-    trace_from_curr_pot,
-)
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import FourierCurrentPotentialField, ToroidalMagneticField
+from desc.magnetic_fields import (
+    FourierCurrentPotentialField,
+    ToroidalMagneticField,
+    field_line_integrate,
+)
 from desc.objectives import (
     AspectRatio,
     CurrentDensity,
@@ -1188,15 +1188,15 @@ def test_regcoil_ellipse_and_axisym_surface_check_surf_trace(
     surface_current_field = initial_surface_current_field.copy()
     surface_current_field.Phi_mn = all_phi_mns[12]
 
-    fieldR, fieldZ = trace_from_curr_pot(
-        surface_current_field,
-        eq,
-        alpha=1e-15,
-        M=50,
-        N=160,
-        ntransit=20,
-        Rs=np.linspace(0.68, 0.72, 10),
-        use_agg_backend=True,
+    ntransit = 20
+    r0 = np.linspace(0.68, 0.72, 10)
+    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
+    fieldR, fieldZ = field_line_integrate(
+        r0=r0,
+        z0=np.zeros_like(r0),
+        phis=phis,
+        field=surface_current_field,
+        grid=LinearGrid(M=50, N=60, NFP=eq.NFP),
     )
 
     assert np.max(fieldR) < 0.73
@@ -1267,14 +1267,15 @@ def test_regcoil_ellipse_helical_coils_check_field_trace(regcoil_ellipse_helical
     ) = regcoil_ellipse_helical_coils
     surface_current_field = initial_surface_current_field.copy()
 
-    fieldR, fieldZ = trace_from_curr_pot(
-        surface_current_field,
-        eq,
-        alpha=1e-15,
-        M=50,
-        N=160,
-        ntransit=20,
-        Rs=np.linspace(0.68, 0.72, 10),
+    ntransit = 20
+    r0 = np.linspace(0.68, 0.72, 10)
+    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
+    fieldR, fieldZ = field_line_integrate(
+        r0=r0,
+        z0=np.zeros_like(r0),
+        phis=phis,
+        field=surface_current_field,
+        grid=LinearGrid(M=50, N=60, NFP=eq.NFP),
     )
 
     assert np.max(fieldR) < 0.73
@@ -1311,8 +1312,14 @@ def test_regcoil_ellipse_helical_coils_check_coils(regcoil_ellipse_helical_coils
     B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
 
-    fieldR, fieldZ = field_trace_from_coilset(
-        coilset2, eq, 15, only_return_data=True, Rs=np.linspace(0.685, 0.715, 10)
+    ntransit = 15
+    r0 = np.linspace(0.685, 0.715, 10)
+    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
+    fieldR, fieldZ = field_line_integrate(
+        r0=r0,
+        z0=np.zeros_like(r0),
+        phis=phis,
+        field=coilset2,
     )
 
     assert np.max(fieldR) < 0.73
@@ -1408,15 +1415,15 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     ) + ext_field.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
 
-    fieldR, fieldZ = trace_from_curr_pot(
-        surface_current_field2,
-        eq,
-        alpha=1e-15,
-        M=50,
-        N=160,
-        ntransit=20,
-        Rs=np.linspace(0.68, 0.72, 10),
-        external_TF=ext_field,
+    ntransit = 20
+    r0 = np.linspace(0.68, 0.72, 10)
+    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
+    fieldR, fieldZ = field_line_integrate(
+        r0=r0,
+        z0=np.zeros_like(r0),
+        phis=phis,
+        field=surface_current_field2 + ext_field,
+        grid=LinearGrid(M=50, N=60, NFP=eq.NFP),
     )
 
     assert np.max(fieldR) < 0.73
@@ -1439,13 +1446,14 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     ) + ext_field.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
 
-    fieldR, fieldZ = field_trace_from_coilset(
-        coilset2,
-        eq,
-        15,
-        only_return_data=True,
-        Rs=np.linspace(0.685, 0.715, 10),
-        external_TF=ext_field,
+    ntransit = 15
+    r0 = np.linspace(0.685, 0.715, 10)
+    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
+    fieldR, fieldZ = field_line_integrate(
+        r0=r0,
+        z0=np.zeros_like(r0),
+        phis=phis,
+        field=coilset2 + ext_field,
     )
 
     assert np.max(fieldR) < 0.73
@@ -1495,14 +1503,15 @@ def test_regcoil_ellipse_helical_coils_check_field_trace_pos_helicity(
     ) = regcoil_ellipse_helical_coils_pos_helicity
     surface_current_field = initial_surface_current_field.copy()
 
-    fieldR, fieldZ = trace_from_curr_pot(
-        surface_current_field,
-        eq,
-        alpha=1e-15,
-        M=50,
-        N=160,
-        ntransit=20,
-        Rs=np.linspace(0.68, 0.72, 10),
+    ntransit = 20
+    r0 = np.linspace(0.68, 0.72, 10)
+    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
+    fieldR, fieldZ = field_line_integrate(
+        r0=r0,
+        z0=np.zeros_like(r0),
+        phis=phis,
+        field=surface_current_field,
+        grid=LinearGrid(M=50, N=60, NFP=eq.NFP),
     )
 
     assert np.max(fieldR) < 0.73
@@ -1542,8 +1551,14 @@ def test_regcoil_ellipse_helical_coils_check_coils_pos_helicity(
     B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
 
-    fieldR, fieldZ = field_trace_from_coilset(
-        coilset2, eq, 15, only_return_data=True, Rs=np.linspace(0.685, 0.715, 10)
+    ntransit = 15
+    r0 = np.linspace(0.685, 0.715, 10)
+    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
+    fieldR, fieldZ = field_line_integrate(
+        r0=r0,
+        z0=np.zeros_like(r0),
+        phis=phis,
+        field=coilset2,
     )
 
     assert np.max(fieldR) < 0.73
@@ -1593,14 +1608,15 @@ def regcoil_ellipse_modular_coils_field_trace(
     ) = regcoil_ellipse_modular_coils
     surface_current_field = initial_surface_current_field.copy()
 
-    fieldR, fieldZ = trace_from_curr_pot(
-        surface_current_field,
-        eq,
-        alpha=1e-15,
-        M=50,
-        N=160,
-        ntransit=20,
-        Rs=np.linspace(0.68, 0.72, 10),
+    ntransit = 20
+    r0 = np.linspace(0.68, 0.72, 10)
+    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
+    fieldR, fieldZ = field_line_integrate(
+        r0=r0,
+        z0=np.zeros_like(r0),
+        phis=phis,
+        field=surface_current_field,
+        grid=LinearGrid(M=50, N=60, NFP=eq.NFP),
     )
 
     assert np.max(fieldR) < 0.73

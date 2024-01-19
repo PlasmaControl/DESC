@@ -41,10 +41,11 @@ from desc.objectives import (
     ObjectiveFunction,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
-    SurfaceCurrentRegularizedQuadraticFlux,
+    SurfaceCurrentRegularization,
     Volume,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
@@ -1367,18 +1368,29 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     ext_field = ToroidalMagneticField(
         B0=-mu_0 * (surface_current_field.G / 2) / 2 / np.pi, R0=1
     )
-    obj = SurfaceCurrentRegularizedQuadraticFlux(
-        surface_current_field=surface_current_field2,
+    obj = QuadraticFlux(
+        field=surface_current_field2,
         eq=eq,
         eval_grid=eval_grid,
         source_grid=sgrid,
-        alpha=1e-18,
         eq_fixed=True,
         # negate the B0 because a negative G corresponds to a positive B toroidal
         # and we want this to provide half the field the surface current's
         # G is providing, in the same direction
         external_field=ext_field,
     )
+
+    objective = ObjectiveFunction(
+        (
+            obj,
+            SurfaceCurrentRegularization(
+                surface_current_field=surface_current_field2,
+                alpha=1e-15,
+                source_grid=sgrid,
+            ),
+        )
+    )
+
     optimizer = Optimizer("lsq-exact")
 
     objective = ObjectiveFunction(obj)

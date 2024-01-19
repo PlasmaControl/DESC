@@ -610,13 +610,20 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points
 
         """
+        if params is None:
+            B0 = self._B0
+            R0 = self._R0
+        else:
+            B0 = params["B0"]
+            R0 = params["R0"]
+
         assert basis.lower() in ["rpz", "xyz"]
         if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
             coords = xyz2rpz(coords)
-        bp = self._B0 * self._R0 / coords[:, 0]
+        bp = B0 * R0 / coords[:, 0]
         brz = jnp.zeros_like(bp)
         B = jnp.array([brz, bp, brz]).T
         if basis == "xyz":
@@ -674,13 +681,18 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points
 
         """
+        if params is None:
+            B0 = self._B0
+        else:
+            B0 = params["B0"]
+
         assert basis.lower() in ["rpz", "xyz"]
         if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
             coords = xyz2rpz(coords)
-        bz = self._B0 * jnp.ones_like(coords[:, 2])
+        bz = B0 * jnp.ones_like(coords[:, 2])
         brp = jnp.zeros_like(bz)
         B = jnp.array([brp, brp, bz]).T
         if basis == "xyz":
@@ -776,6 +788,13 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
 
         """
+        if params is None:
+            B0 = self._B0
+            R0 = self._R0
+        else:
+            B0 = params["B0"]
+            R0 = params["R0"]
+
         assert basis.lower() in ["rpz", "xyz"]
         if hasattr(coords, "nodes"):
             coords = coords.nodes
@@ -784,12 +803,12 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             coords = xyz2rpz(coords)
 
         R, phi, Z = coords.T
-        r = jnp.sqrt((R - self._R0) ** 2 + Z**2)
-        theta = jnp.arctan2(Z, R - self._R0)
+        r = jnp.sqrt((R - R0) ** 2 + Z**2)
+        theta = jnp.arctan2(Z, R - R0)
         br = -r * jnp.sin(theta)
         bp = jnp.zeros_like(br)
         bz = r * jnp.cos(theta)
-        bmag = self._B0 * self._iota / self._R0
+        bmag = B0 * self._iota / R0
         B = bmag * jnp.array([br, bp, bz]).T
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])

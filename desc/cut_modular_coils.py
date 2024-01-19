@@ -115,7 +115,7 @@ def find_modular_coils(  # noqa: C901 - FIXME: simplify this
     # TODO: if stell sym, only need 1/2 FP
 
     # TODO: change this so that  this fxn only accepts Ncoils length array
-    def find_full_coil_contours(contours, show_plots=True, ax=None, label=None, ls="-"):
+    def find_full_coil_contours(contours, show_plots=True):
         """Accepts a list of current potential contour values of length Ncoils+1.
 
         returns the theta,zeta points of each contour

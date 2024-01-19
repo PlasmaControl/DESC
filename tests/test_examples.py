@@ -13,15 +13,11 @@ from scipy.constants import mu_0
 import desc.examples
 from desc.calc_BNORM_from_coilset import calc_BNORM_from_coilset
 from desc.continuation import _solve_axisym, solve_continuation_automatic
-from desc.cut_modular_coils import find_modular_coils
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.field_line_tracing_DESC_from_coilset import field_trace_from_coilset
 from desc.field_line_tracing_DESC_with_current_potential_python_regcoil import (
     trace_from_curr_pot,
-)
-from desc.find_helical_contours_from_python_regcoil_equal_curr_line_integral import (
-    find_helical_coils,
 )
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -1305,9 +1301,7 @@ def test_regcoil_ellipse_helical_coils_check_coils(regcoil_ellipse_helical_coils
     numCoils = 15
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
-    coilset2 = find_helical_coils(
-        surface_current_field,
-        eqname,
+    coilset2 = surface_current_field.cut_surface_current_into_coils(
         desirednumcoils=numCoils,
         step=6,
     )
@@ -1428,16 +1422,11 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     # test finding coils
 
     numCoils = 15
-    coilsFilename = "./coilsfile_15.txt"
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
-    coilset2 = find_helical_coils(
-        surface_current_field2,
-        eqname,
+    coilset2 = surface_current_field.cut_surface_current_into_coils(
         desirednumcoils=numCoils,
-        coilsFilename=coilsFilename,
         step=6,
-        save_figs=False,
     )
     coilset2 = coilset2.to_FourierXYZ(N=150)
     B_from_coils = coilset2.compute_magnetic_field(
@@ -1541,9 +1530,7 @@ def test_regcoil_ellipse_helical_coils_check_coils_pos_helicity(
     numCoils = 15
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
-    coilset2 = find_helical_coils(
-        surface_current_field,
-        eqname,
+    coilset2 = surface_current_field.cut_surface_current_into_coils(
         desirednumcoils=numCoils,
         step=6,
     )
@@ -1644,8 +1631,8 @@ def test_regcoil_ellipse_modular_coils_check_coils(
 
     numCoils = 240
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
-    coilset2 = find_modular_coils(
-        surface_current_field, eqname, desirednumcoils=numCoils, step=6, save_figs=False
+    coilset2 = surface_current_field.cut_surface_current_into_coils(
+        desirednumcoils=numCoils, step=5
     )
 
     coords = eq.compute(["R", "phi", "Z", "B"])

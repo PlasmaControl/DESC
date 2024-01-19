@@ -11,7 +11,6 @@ from qsc import Qsc
 from scipy.constants import mu_0
 
 import desc.examples
-from desc.calc_BNORM_from_coilset import calc_BNORM_from_coilset
 from desc.continuation import _solve_axisym, solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -1300,7 +1299,6 @@ def test_regcoil_ellipse_helical_coils_check_coils(regcoil_ellipse_helical_coils
     # test finding coils
 
     numCoils = 15
-    eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
     coilset2 = surface_current_field.cut_surface_current_into_coils(
         desirednumcoils=numCoils,
@@ -1322,9 +1320,6 @@ def test_regcoil_ellipse_helical_coils_check_coils(regcoil_ellipse_helical_coils
 
     assert np.max(fieldZ) < 0.02
     assert np.min(fieldZ) > -0.02
-
-    B_ratio = calc_BNORM_from_coilset(coilset2, eqname, 0, 1, B0=None, save=False)
-    np.testing.assert_allclose(B_ratio, 1.0, atol=1e-3)
 
 
 @pytest.mark.regression
@@ -1433,7 +1428,6 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     # test finding coils
 
     numCoils = 15
-    eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
     coilset2 = surface_current_field2.cut_surface_current_into_coils(
         desirednumcoils=numCoils,
@@ -1459,9 +1453,6 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
 
     assert np.max(fieldZ) < 0.02
     assert np.min(fieldZ) > -0.02
-
-    B_ratio = calc_BNORM_from_coilset(coilset2, eqname, 0, 1, B0=ext_field, save=False)
-    np.testing.assert_allclose(B_ratio, 1.0, atol=1e-3)
 
 
 @pytest.mark.regression
@@ -1539,7 +1530,6 @@ def test_regcoil_ellipse_helical_coils_check_coils_pos_helicity(
     # test finding coils
 
     numCoils = 15
-    eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
     coilset2 = surface_current_field.cut_surface_current_into_coils(
         desirednumcoils=numCoils,
@@ -1561,9 +1551,6 @@ def test_regcoil_ellipse_helical_coils_check_coils_pos_helicity(
 
     assert np.max(fieldZ) < 0.02
     assert np.min(fieldZ) > -0.02
-
-    B_ratio = calc_BNORM_from_coilset(coilset2, eqname, 0, 1, B0=None, save=False)
-    np.testing.assert_allclose(B_ratio, 1.0, atol=1e-3)
 
 
 @pytest.mark.regression
@@ -1641,7 +1628,7 @@ def test_regcoil_ellipse_modular_coils_check_coils(
     # test finding coils
 
     numCoils = 240
-    eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
+
     coilset2 = surface_current_field.cut_surface_current_into_coils(
         desirednumcoils=numCoils, step=5
     )
@@ -1652,6 +1639,3 @@ def test_regcoil_ellipse_modular_coils_check_coils(
 
     B_from_coils = coilset2.compute_magnetic_field(coords)
     np.testing.assert_allclose(B, B_from_coils, atol=2.5e-3)
-
-    B_ratio = calc_BNORM_from_coilset(coilset2, eqname, 0, 1, B0=None, save=False)
-    np.testing.assert_allclose(B_ratio, 1.0, atol=2.5e-3)

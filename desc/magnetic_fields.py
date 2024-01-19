@@ -227,9 +227,11 @@ class _MagneticField(IOAble, ABC):
         Returns
         -------
         Bnorm : ndarray
-            The normal magnetic field to the surface given, of size grid.num_nodes.
+            The normal magnetic field to the surface given, as an array of
+            size ``grid.num_nodes``.
         coords: ndarray
-            the locations (in specified basis) at which the Bnormal was calculated
+            the locations (in specified basis) at which the Bnormal was calculated,
+            given as an ``(grid.num_nodes , 3)`` shaped array.
 
         """
         if isinstance(surface, EquilibriaFamily):

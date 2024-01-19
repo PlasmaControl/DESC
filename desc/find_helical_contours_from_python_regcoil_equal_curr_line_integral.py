@@ -121,7 +121,9 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             ).T,
             sort=False,
         )
-        phi_total_full = surface_current_field.compute("Phi", grid=grid)["Phi"]
+        phi_total_full = surface_current_field.compute("Phi", grid=grid)["Phi"].reshape(
+            theta_full.size, zeta_full.size, order="F"
+        )
 
         N_trial_contours = len(contours) - 1
         contour_zeta = []

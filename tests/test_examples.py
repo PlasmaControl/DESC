@@ -1303,16 +1303,13 @@ def test_regcoil_ellipse_helical_coils_check_coils(regcoil_ellipse_helical_coils
     # test finding coils
 
     numCoils = 15
-    coilsFilename = "./coilsfile_15.txt"
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
     coilset2 = find_helical_coils(
         surface_current_field,
         eqname,
         desirednumcoils=numCoils,
-        coilsFilename=coilsFilename,
         step=6,
-        save_figs=False,
     )
     coilset2 = coilset2.to_FourierXYZ(N=150)
     coords = eq.compute(["R", "phi", "Z", "B"])
@@ -1542,16 +1539,13 @@ def test_regcoil_ellipse_helical_coils_check_coils_pos_helicity(
     # test finding coils
 
     numCoils = 15
-    coilsFilename = "./coilsfile_15.txt"
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
 
     coilset2 = find_helical_coils(
         surface_current_field,
         eqname,
         desirednumcoils=numCoils,
-        coilsFilename=coilsFilename,
         step=6,
-        save_figs=False,
     )
     coilset2 = coilset2.to_FourierXYZ(N=150)
     coords = eq.compute(["R", "phi", "Z", "B"])
@@ -1649,16 +1643,9 @@ def test_regcoil_ellipse_modular_coils_check_coils(
     # test finding coils
 
     numCoils = 240
-    coilsFilename = "./coilsfile_240.txt"
     eqname = "./tests/inputs/ellNFP4_init_smallish.h5"
-
     coilset2 = find_modular_coils(
-        surface_current_field,
-        eqname,
-        desirednumcoils=numCoils,
-        coilsFilename=coilsFilename,
-        step=6,
-        save_figs=False,
+        surface_current_field, eqname, desirednumcoils=numCoils, step=6, save_figs=False
     )
 
     coords = eq.compute(["R", "phi", "Z", "B"])

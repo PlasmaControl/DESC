@@ -1,15 +1,12 @@
 """Find helical coils from surface current potential."""
-import os
-import warnings
 
 import matplotlib.pyplot as plt
 
 import desc.io
 from desc.backend import jnp
-from desc.coils import MixedCoilSet
+from desc.coils import MixedCoilSet, SplineXYZCoil
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid
-from desc.plotting import plot_3d, plot_coils
 
 # TODO: move plot stuff from modular coils to here as well
 # esp. the before/after optimization of the coils
@@ -20,9 +17,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     eqname,
     desirednumcoils=10,
     step=2,
-    coilsFilename="coils.txt",
-    dirname=".",
-    save_figs=True,
+    spline_method="cubic",
     **kwargs,
 ):
     """Find helical coils from a surface current potential.
@@ -39,18 +34,12 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     desirednumcoils : int, optional
         number of coils to discretize the surface current with, by default 10
     step : int, optional
-        Amount of points to step when saving the coil geometry
+        Amount of points to skip by when saving the coil geometry spline
         by default 2, meaning that every other point will be saved
-        if higher, less points will be saved
-    ntheta : int, optional
-        number of theta points to use in the integration to find the current
-        pertaining to each coil, by default 128
-    coilsFilename : str, optional
-        name of txt file to save coils to, by default "coils.txt"
-    dirname : str, optional
-        directory to save files to, by default "."
-    save_figs : bool, optional
-        whether to save figures, by default True
+        if higher, less points will be saved e.g. 3 saves every 3rd point
+    spline_method : str, optional
+        method of fitting to use for the spline, by default ``"cubic"``
+        see ``SplineXYZCoil`` for more info
 
     Returns
     -------
@@ -64,19 +53,11 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         eq = eqname
     if hasattr(eq, "__len__"):
         eq = eq[-1]
-    if save_figs:
-        warnings.warn(
-            "Not implemented with plotly yet, so 3D figs will show but not save",
-            UserWarning,
-        )
 
     nfp = eq.NFP
 
     net_toroidal_current = surface_current_field.I
     net_poloidal_current = surface_current_field.G
-
-    if not os.path.isdir(dirname):
-        os.mkdir(dirname)
 
     ##################################################################################
     ################# Make winding surface DESC object #######################
@@ -87,23 +68,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
 
     winding_surf = surface_current_field
 
-    ##################################################################################
-    ################# get function to calc phi_tot(theta,zeta) #######################
-    ##################################################################################
-    # fxn will accept phi_mn and its basis
-
-    def phi_tot_fun_vec(theta, zeta):
-        nodes = jnp.vstack(
-            (
-                jnp.zeros_like(theta.flatten(order="F")),
-                theta.flatten(order="F"),
-                zeta.flatten(order="F"),
-            )
-        ).T
-        grid = Grid(nodes, sort=False)
-        return surface_current_field.compute("Phi", grid=grid)["Phi"]
-
-    ##### find helicity naively ######################################################
+    ##### find helicity ######################################################
 
     if jnp.isclose(net_toroidal_current, 0):
         raise ValueError(
@@ -146,16 +111,24 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         theta_full = jnp.sort(theta_full)
         zeta_full = jnp.append(zetal_coil, 2 * jnp.pi / nfp)
         theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
-        my_tot_full = phi_tot_fun_vec(theta_full_2D, zeta_full_2D).reshape(
-            theta_full.size, zeta_full.size, order="F"
+        grid = Grid(
+            jnp.vstack(
+                (
+                    jnp.zeros_like(theta_full_2D.flatten(order="F")),
+                    theta_full_2D.flatten(order="F"),
+                    zeta_full_2D.flatten(order="F"),
+                )
+            ).T,
+            sort=False,
         )
+        phi_total_full = surface_current_field.compute("Phi", grid=grid)["Phi"]
 
         N_trial_contours = len(contours) - 1
         contour_zeta = []
         contour_theta = []
         plt.figure(figsize=(18, 10))
         cdata = plt.contour(
-            zeta_full_2D.T, theta_full_2D.T, jnp.transpose(my_tot_full), contours
+            zeta_full_2D.T, theta_full_2D.T, jnp.transpose(phi_total_full), contours
         )
 
         contour_zeta = []
@@ -183,7 +156,7 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
         plt.ylabel(r"$\theta$")
 
         # before returning, right now these are only over 1 FP
-        # should tile them s.t. they are full coils, by repeating them
+        # so must tile them s.t. they are full coils, by repeating them
         #  with a pi/NFP shift in zeta
 
         for i_contour in range(len(contour_theta)):
@@ -233,7 +206,10 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
     ################################################################
 
     def find_XYZ_points(
-        theta_pts, zeta_pts, surface, find_min_dist=None, ls="-", label=None
+        theta_pts,
+        zeta_pts,
+        surface,
+        find_min_dist=None,
     ):
         contour_X = []
         contour_Y = []
@@ -273,69 +249,41 @@ def find_helical_coils(  # noqa: C901 - FIXME: simplify this
             print(f"Minimum coil-coil separation: {minSeparation2*1000:3.2f} mm")
         return contour_X, contour_Y, contour_Z
 
-    if save_figs:
-        fig = plot_3d(eq, "|B|", figsize=(12, 12))
     contour_X, contour_Y, contour_Z = find_XYZ_points(
         contour_theta,
         contour_zeta,
         winding_surf,
         find_min_dist=True,
-        label="Final",
     )
     ################
+    coils = []
+    for j in range(len(contour_X)):
+        # make sure that the sign of the coil current is correct
+        # by dotting K with the vector along the contour
+        contour_vector = jnp.array(
+            [
+                contour_X[j][1] - contour_X[j][0],
+                contour_Y[j][1] - contour_Y[j][0],
+                contour_Z[j][1] - contour_Z[j][0],
+            ]
+        )
+        K = surface_current_field.compute(
+            "K",
+            grid=Grid(jnp.array([[0, contour_theta[j][0], contour_zeta[j][0]]])),
+            basis="xyz",
+        )["K"]
+        current_sign = jnp.sign(jnp.dot(contour_vector, K[0, :]))
+        thisCurrent = current_sign * jnp.abs(net_toroidal_current) / desirednumcoils
+        coils.append(
+            SplineXYZCoil(
+                thisCurrent,
+                contour_X[j][0::step],
+                contour_Y[j][0::step],
+                contour_Z[j][0::step],
+                method=spline_method,
+            )
+        )
 
-    # Write coils file
-    write_coil = True
-    if write_coil:
-        with open(coilsFilename, "w") as f:
-            f.write("periods " + str(nfp) + "\n")
-            f.write("begin filament\n")
-            f.write("mirror NIL\n")
-
-            for j in range(desirednumcoils):
-                N = len(contour_X[j])
-                # vector along direction of contour
-                contour_vector = jnp.array(
-                    [
-                        contour_X[j][1] - contour_X[j][0],
-                        contour_Y[j][1] - contour_Y[j][0],
-                        contour_Z[j][1] - contour_Z[j][0],
-                    ]
-                )
-                K = surface_current_field.compute(
-                    "K",
-                    grid=Grid(
-                        jnp.array([[0, contour_theta[j][0], contour_zeta[j][0]]])
-                    ),
-                    basis="xyz",
-                )["K"]
-                current_sign = jnp.sign(jnp.dot(contour_vector, K[0, :]))
-                thisCurrent = (
-                    current_sign * jnp.abs(net_toroidal_current) / desirednumcoils
-                )
-                for k in range(0, N, step):
-                    f.write(
-                        "{:14.22e} {:14.22e} {:14.22e} {:14.22e}\n".format(
-                            contour_X[j][k],
-                            contour_Y[j][k],
-                            contour_Z[j][k],
-                            thisCurrent,
-                        )
-                    )
-                # Close the loop
-                k = 0
-                f.write(
-                    "{:14.22e} {:14.22e} {:14.22e} {:14.22e} 1 Modular\n".format(
-                        contour_X[j][k], contour_Y[j][k], contour_Z[j][k], 0
-                    )
-                )
-            f.write("end\n")
-    final_coilset = MixedCoilSet.from_makegrid_coilfile(coilsFilename)
-
-    if save_figs:
-        fig = plot_coils(final_coilset, fig=fig)
-        fig.show()
-    ###################
-    print(f"Current per coil is {thisCurrent:1.4e}" f" A for {desirednumcoils} coils")
+    final_coilset = MixedCoilSet(*coils)
 
     return final_coilset

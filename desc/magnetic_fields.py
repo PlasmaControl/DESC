@@ -2244,6 +2244,7 @@ class FourierCurrentPotentialField(
                     verticalalignment="top",
                     fontsize="small",
                 )
+                # TODO: add similar plot for Bn for each alpha
 
         data["alpha"] = alphas[0] if not scan else alphas
         data["Phi_mn"] = phi_mns[0] if not scan else phi_mns

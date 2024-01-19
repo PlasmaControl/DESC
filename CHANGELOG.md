@@ -11,6 +11,20 @@ object e.g. optimizing only a ``FourierRZToroidalSurface`` object to have a cert
 ``Volume``.
 - Many functions from ``desc.plotting`` now also work for plotting quantities from
 ``Curve`` and ``Surface`` classes.
+- Adds method ``run_regcoil`` to ``FourierCurrentPotentialField`` that implements the
+REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
+    * Can specify ``current_helicity`` to determine if resulting contours correspond to
+    helical topology (``current_helicity`` not equal to 0) or
+    modular (``current_helicity``equal to 0)
+- Adds method ``cut_surface_current_into_coils`` to ``FourierCurrentPotentialField``
+which implements a coil cutting algorithm to discretize the surface current into coils
+    * works for both modular and helical coils
+- Adds two new objectives, ``QuadraticFlux`` (which minimizes Bn on plasma surface due to
+a magnetic field) and ``SurfaceCurrentRegularization`` (which minimizes ``alpha*|K|``, the
+regularization term from surface current in the REGCOIL algorithm)
+    * use of both of these functions allows for REGCOIL solutions to be obtained through
+    the optimization framework, and combined with other objectives as well.
+
 
 v0.10.3
 -------

@@ -9,6 +9,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz, rpz2xyz_vec
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid
+from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.utils import Timer
 
 from .objective_funs import _Objective
@@ -294,7 +295,7 @@ class SurfaceCurrentRegularization(_Objective):
     the REGCOIL algorithm described in [1]_.
 
     [1] Landreman, An improved current potential method for fast computation
-        of stellarator coil shapes, Nuclear Fusion 57 (2017) 126021
+        of stellarator coil shapes, Nuclear Fusion (2017)
 
     Parameters
     ----------
@@ -360,6 +361,7 @@ class SurfaceCurrentRegularization(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
+        assert isinstance(surface_current_field, FourierCurrentPotentialField)
         self._surface_current_field = surface_current_field
         self._source_grid = source_grid
         self._alpha = alpha

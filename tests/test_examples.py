@@ -1003,7 +1003,7 @@ def test_regcoil_axisymmetric():
     )
     np.testing.assert_allclose(B, B_from_surf, atol=1e-4)
 
-    grid = LinearGrid(N=10, M=10)
+    grid = LinearGrid(N=10, M=10, NFP=surface_current_field.NFP)
     correct_phi = G * grid.nodes[:, 2] / 2 / np.pi
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=5e-9
@@ -1228,7 +1228,7 @@ def test_regcoil_ellipse_and_axisym_surface_check_B(
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
-        coords, grid=LinearGrid(M=200, N=200)
+        coords, grid=LinearGrid(M=200, N=200, NFP=surface_current_field.NFP)
     )
     np.testing.assert_allclose(B, B_from_surf, atol=1e-4)
 
@@ -1250,7 +1250,9 @@ def test_regcoil_ellipse_helical_coils_check_B(regcoil_ellipse_helical_coils):
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
-        coords, grid=LinearGrid(M=200, N=200), basis="rpz"
+        coords,
+        grid=LinearGrid(M=200, N=200, NFP=surface_current_field.NFP),
+        basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
 
@@ -1411,7 +1413,9 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field2.compute_magnetic_field(
-        coords, grid=LinearGrid(M=200, N=200), basis="rpz"
+        coords,
+        grid=LinearGrid(M=200, N=200, NFP=surface_current_field.NFP),
+        basis="rpz",
     ) + ext_field.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
 
@@ -1483,7 +1487,9 @@ def test_regcoil_ellipse_helical_coils_check_B_pos_helicity(
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
-        coords, grid=LinearGrid(M=200, N=200), basis="rpz"
+        coords,
+        grid=LinearGrid(M=200, N=200, NFP=surface_current_field.NFP),
+        basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
 
@@ -1588,7 +1594,9 @@ def test_regcoil_ellipse_modular_coils_check_B(
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
-        coords, grid=LinearGrid(M=200, N=200), basis="rpz"
+        coords,
+        grid=LinearGrid(M=200, N=200, NFP=surface_current_field.NFP),
+        basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
 

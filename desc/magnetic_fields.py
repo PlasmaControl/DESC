@@ -1,6 +1,7 @@
 """Classes for magnetic fields."""
 
 from abc import ABC, abstractmethod
+from collections.abc import MutableSequence
 
 import numpy as np
 from interpax import approx_df, interp2d, interp3d
@@ -15,8 +16,9 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import IOAble
+from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, warnif
+from desc.utils import copy_coeffs, errorif, flatten_list, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -142,7 +144,7 @@ class _MagneticField(IOAble, ABC):
     _io_attrs_ = []
 
     def __mul__(self, x):
-        if np.isscalar(x):
+        if np.isscalar(x) or len(x) == 1:
             return ScaledMagneticField(x, self)
         else:
             return NotImplemented
@@ -152,7 +154,10 @@ class _MagneticField(IOAble, ABC):
 
     def __add__(self, x):
         if isinstance(x, _MagneticField):
-            return SumMagneticField(self, x)
+            if isinstance(self, SumMagneticField):
+                return SumMagneticField(*self, x)
+            else:
+                return SumMagneticField(self, x)
         else:
             return NotImplemented
 
@@ -368,7 +373,7 @@ class _MagneticField(IOAble, ABC):
         return None
 
 
-class ScaledMagneticField(_MagneticField):
+class ScaledMagneticField(_MagneticField, Optimizable):
     """Magnetic field scaled by a scalar value.
 
     ie B_new = scalar * B_old
@@ -384,15 +389,47 @@ class ScaledMagneticField(_MagneticField):
 
     _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
 
-    def __init__(self, scalar, field):
-        assert np.isscalar(scalar), "scalar must actually be a scalar value"
+    def __init__(self, scale, field):
+        assert (
+            np.isscalar(scale) or np.asarray(scale).size == 1
+        ), "scale must be a scalar value"
+        scale = float(scale)
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
             type(field)
         )
-        self._scalar = scalar
-        self._field = field
+        object.__setattr__(self, "_scale", scale)
+        object.__setattr__(self, "_field", field)
+        object.__setattr__(
+            self, "_optimizable_params", field.optimizable_params + ["scale"]
+        )
+
+    @optimizable_parameter
+    @property
+    def scale(self):
+        """float: scaling factor for magnetic field."""
+        return self._scale
+
+    @scale.setter
+    def scale(self, new):
+        assert float(new) == new, "scale must be a scalar"
+        self._scale = new
+
+    # want this class to pretend like its the underlying field
+    def __getattr__(self, attr):
+        if attr in ["_scale", "_optimizable_params"]:
+            return getattr(self, attr)
+        return getattr(self._field, attr)
+
+    def __setattr__(self, name, value):
+        if name in ["scale", "_scale", "_optimizable_params"]:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(object.__getattribute__(self, "_field"), name, value)
+
+    def __hasattr__(self, attr):
+        return hasattr(self, attr) or hasattr(self._field, attr)
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
@@ -415,12 +452,12 @@ class ScaledMagneticField(_MagneticField):
         field : ndarray, shape(N,3)
             scaled magnetic field at specified points
         """
-        return self._scalar * self._field.compute_magnetic_field(
+        return self._scale * self._field.compute_magnetic_field(
             coords, params, basis, grid
         )
 
 
-class SumMagneticField(_MagneticField):
+class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
     """Sum of two or more magnetic field sources.
 
     Parameters
@@ -432,6 +469,7 @@ class SumMagneticField(_MagneticField):
     _io_attrs = _MagneticField._io_attrs_ + ["_fields"]
 
     def __init__(self, *fields):
+        fields = flatten_list(fields, flatten_tuple=True)
         assert all(
             [isinstance(field, _MagneticField) for field in fields]
         ), "fields should each be a subclass of MagneticField, got {}".format(
@@ -484,8 +522,33 @@ class SumMagneticField(_MagneticField):
 
         return B
 
+    # dunder methods required by MutableSequence
+    def __getitem__(self, i):
+        return self._fields[i]
 
-class ToroidalMagneticField(_MagneticField):
+    def __setitem__(self, i, new_item):
+        if not isinstance(new_item, _MagneticField):
+            raise TypeError(
+                "Members of SumMagneticField must be of type MagneticField."
+            )
+        self._fields[i] = new_item
+
+    def __delitem__(self, i):
+        del self._fields[i]
+
+    def __len__(self):
+        return len(self._fields)
+
+    def insert(self, i, new_item):
+        """Insert a new field into the sum at position i."""
+        if not isinstance(new_item, _MagneticField):
+            raise TypeError(
+                "Members of SumMagneticField must be of type MagneticField."
+            )
+        self._fields.insert(i, new_item)
+
+
+class ToroidalMagneticField(_MagneticField, Optimizable):
     """Magnetic field purely in the toroidal (phi) direction.
 
     Magnitude is B0*R0/R where R0 is the major radius of the axis and B0
@@ -495,17 +558,39 @@ class ToroidalMagneticField(_MagneticField):
     ----------
     B0 : float
         field strength on axis
-    R0 : major radius of axis
+    R0 : float
+        major radius of axis
 
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0"]
 
     def __init__(self, B0, R0):
-        assert float(B0) == B0, "B0 must be a scalar"
         assert float(R0) == R0, "R0 must be a scalar"
-        self._B0 = float(B0)
-        self._R0 = float(R0)
+        self.B0 = float(B0)
+        self.R0 = float(R0)
+
+    @optimizable_parameter
+    @property
+    def R0(self):
+        """float: major radius of axis."""
+        return self._R0
+
+    @R0.setter
+    def R0(self, new):
+        assert float(new) == new, "R0 must be a scalar"
+        self._R0 = new
+
+    @optimizable_parameter
+    @property
+    def B0(self):
+        """float: field strength on axis."""
+        return self._B0
+
+    @B0.setter
+    def B0(self, new):
+        assert float(new) == new, "B0 must be a scalar"
+        self._B0 = new
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
@@ -544,7 +629,7 @@ class ToroidalMagneticField(_MagneticField):
         return B
 
 
-class VerticalMagneticField(_MagneticField):
+class VerticalMagneticField(_MagneticField, Optimizable):
     """Uniform magnetic field purely in the vertical (Z) direction.
 
     Parameters
@@ -557,8 +642,18 @@ class VerticalMagneticField(_MagneticField):
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0"]
 
     def __init__(self, B0):
-        assert np.isscalar(B0), "B0 must be a scalar"
-        self._B0 = B0
+        self.B0 = B0
+
+    @optimizable_parameter
+    @property
+    def B0(self):
+        """float: field strength."""
+        return self._B0
+
+    @B0.setter
+    def B0(self, new):
+        assert float(new) == new, "B0 must be a scalar"
+        self._B0 = new
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
@@ -598,7 +693,7 @@ class VerticalMagneticField(_MagneticField):
         return B
 
 
-class PoloidalMagneticField(_MagneticField):
+class PoloidalMagneticField(_MagneticField, Optimizable):
     """Pure poloidal magnetic field (ie in theta direction).
 
     Field strength is B0*iota*r/R0 where B0 is the toroidal field on axis,
@@ -625,12 +720,42 @@ class PoloidalMagneticField(_MagneticField):
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0", "_iota"]
 
     def __init__(self, B0, R0, iota):
-        assert np.isscalar(B0), "B0 must be a scalar"
-        assert np.isscalar(R0), "R0 must be a scalar"
-        assert np.isscalar(iota), "iota must be a scalar"
-        self._B0 = B0
-        self._R0 = R0
-        self._iota = iota
+        self.B0 = B0
+        self.R0 = R0
+        self.iota = iota
+
+    @optimizable_parameter
+    @property
+    def R0(self):
+        """float: major radius of axis."""
+        return self._R0
+
+    @R0.setter
+    def R0(self, new):
+        assert float(new) == new, "R0 must be a scalar"
+        self._R0 = new
+
+    @optimizable_parameter
+    @property
+    def B0(self):
+        """float: field strength on axis."""
+        return self._B0
+
+    @B0.setter
+    def B0(self, new):
+        assert float(new) == new, "B0 must be a scalar"
+        self._B0 = new
+
+    @optimizable_parameter
+    @property
+    def iota(self):
+        """float: desired rotational transform."""
+        return self._iota
+
+    @iota.setter
+    def iota(self, new):
+        assert float(new) == new, "iota must be a scalar"
+        self._iota = new
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
@@ -676,7 +801,7 @@ class PoloidalMagneticField(_MagneticField):
         return B
 
 
-class SplineMagneticField(_MagneticField):
+class SplineMagneticField(_MagneticField, Optimizable):
     """Magnetic field from precomputed values on a grid.
 
     Parameters
@@ -687,18 +812,20 @@ class SplineMagneticField(_MagneticField):
         phi coordinates where field is specified
     Z : array-like, size(NZ)
         Z coordinates where field is specified
-    BR : array-like, shape(NR,Nphi,NZ)
+    BR : array-like, shape(NR,Nphi,NZ,Ngroups)
         radial magnetic field on grid
-    Bphi : array-like, shape(NR,Nphi,NZ)
+    Bphi : array-like, shape(NR,Nphi,NZ,Ngroups)
         toroidal magnetic field on grid
-    BZ : array-like, shape(NR,Nphi,NZ)
+    BZ : array-like, shape(NR,Nphi,NZ,Ngroups)
         vertical magnetic field on grid
+    currents : array-like, shape(Ngroups)
+        Currents or scaling factors for each field group.
+    NFP : int, optional
+        Number of toroidal field periods.
     method : str
-        interpolation method
-    extrap : bool
-        whether to extrapolate beyond the domain of known field values or return nan
-    period : float
-        period in the toroidal direction (usually 2pi/NFP)
+        interpolation method.
+    extrap : bool, optional
+        whether to extrapolate beyond the domain of known field values or return nan.
 
     """
 
@@ -711,38 +838,70 @@ class SplineMagneticField(_MagneticField):
         "_BZ",
         "_method",
         "_extrap",
-        "_period",
         "_derivs",
         "_axisym",
+        "_currents",
+        "_NFP",
     ]
 
-    def __init__(self, R, phi, Z, BR, Bphi, BZ, method="cubic", extrap=False, period=0):
-        R, phi, Z = np.atleast_1d(R), np.atleast_1d(phi), np.atleast_1d(Z)
+    def __init__(
+        self, R, phi, Z, BR, Bphi, BZ, currents=1.0, NFP=1, method="cubic", extrap=False
+    ):
+        R, phi, Z, currents = map(jnp.atleast_1d, (R, phi, Z, currents))
         assert R.ndim == 1
         assert phi.ndim == 1
         assert Z.ndim == 1
-        BR, Bphi, BZ = np.atleast_3d(BR), np.atleast_3d(Bphi), np.atleast_3d(BZ)
-        assert BR.shape == Bphi.shape == BZ.shape == (R.size, phi.size, Z.size)
+        assert currents.ndim == 1
+        shape = (R.size, phi.size, Z.size, currents.size)
+
+        def _atleast_4d(x):
+            x = jnp.atleast_3d(x)
+            if x.ndim < 4:
+                x = x.reshape(x.shape + (1,))
+            return x
+
+        BR, Bphi, BZ = map(_atleast_4d, (BR, Bphi, BZ))
+        assert BR.shape == Bphi.shape == BZ.shape == shape
 
         self._R = R
         self._phi = phi
+        self._Z = Z
         if len(phi) == 1:
             self._axisym = True
         else:
             self._axisym = False
-        self._Z = Z
+
         self._BR = BR
         self._Bphi = Bphi
         self._BZ = BZ
 
+        self._currents = currents
+
+        self._NFP = NFP
         self._method = method
         self._extrap = extrap
-        self._period = period
 
         self._derivs = {}
         self._derivs["BR"] = self._approx_derivs(self._BR)
         self._derivs["Bphi"] = self._approx_derivs(self._Bphi)
         self._derivs["BZ"] = self._approx_derivs(self._BZ)
+
+    @property
+    def NFP(self):
+        """int: Number of toroidal field periods."""
+        return self._NFP
+
+    @optimizable_parameter
+    @property
+    def currents(self):
+        """ndarray: currents or scaling factors for each field group."""
+        return self._currents
+
+    @currents.setter
+    def currents(self, new):
+        new = jnp.atleast_1d(new)
+        assert len(new) == len(self.currents)
+        self._currents = new
 
     def _approx_derivs(self, Bi):
         tempdict = {}
@@ -771,8 +930,8 @@ class SplineMagneticField(_MagneticField):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : tuple, optional
-            unused by this method
+        params : dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None
@@ -788,6 +947,7 @@ class SplineMagneticField(_MagneticField):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
+        currents = self.currents if params is None else params["currents"]
         if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
@@ -844,7 +1004,7 @@ class SplineMagneticField(_MagneticField):
                 self._method,
                 (0, 0, 0),
                 self._extrap,
-                (None, self._period, None),
+                (None, 2 * np.pi / self.NFP, None),
                 **self._derivs["BR"],
             )
             Bphiq = interp3d(
@@ -858,7 +1018,7 @@ class SplineMagneticField(_MagneticField):
                 self._method,
                 (0, 0, 0),
                 self._extrap,
-                (None, self._period, None),
+                (None, 2 * np.pi / self.NFP, None),
                 **self._derivs["Bphi"],
             )
             BZq = interp3d(
@@ -872,18 +1032,19 @@ class SplineMagneticField(_MagneticField):
                 self._method,
                 (0, 0, 0),
                 self._extrap,
-                (None, self._period, None),
+                (None, 2 * np.pi / self.NFP, None),
                 **self._derivs["BZ"],
             )
-        B = jnp.array([BRq, Bphiq, BZq]).T
+        # BRq etc shape(nq, ngroups)
+        B = jnp.stack([BRq, Bphiq, BZq], axis=1)
+        # B shape(nq, 3, ngroups)
+        B = jnp.sum(B * currents, axis=-1)
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])
         return B
 
     @classmethod
-    def from_mgrid(
-        cls, mgrid_file, extcur=1, method="cubic", extrap=False, period=None
-    ):
+    def from_mgrid(cls, mgrid_file, extcur=1, method="cubic", extrap=False):
         """Create a SplineMagneticField from an "mgrid" file from MAKEGRID.
 
         Parameters
@@ -896,20 +1057,45 @@ class SplineMagneticField(_MagneticField):
             interpolation method
         extrap : bool
             whether to extrapolate beyond the domain of known field values or return nan
-        period : float
-            period in the toroidal direction (usually 2pi/NFP)
 
         """
-        Rgrid, pgrid, Zgrid, br, bp, bz, nfp = read_mgrid(mgrid_file, extcur)
+        mgrid = Dataset(mgrid_file, "r")
+        ir = int(mgrid["ir"][()])
+        jz = int(mgrid["jz"][()])
+        kp = int(mgrid["kp"][()])
+        nfp = mgrid["nfp"][()].data
+        nextcur = int(mgrid["nextcur"][()])
+        rMin = mgrid["rmin"][()]
+        rMax = mgrid["rmax"][()]
+        zMin = mgrid["zmin"][()]
+        zMax = mgrid["zmax"][()]
+        extcur = np.broadcast_to(extcur, nextcur)
 
-        if period is None:
-            period = 2 * np.pi / (nfp)
+        br = np.zeros([kp, jz, ir, nextcur])
+        bp = np.zeros([kp, jz, ir, nextcur])
+        bz = np.zeros([kp, jz, ir, nextcur])
+        for i in range(nextcur):
+            coil_id = "%03d" % (i + 1,)
+            br[:, :, :, i] += mgrid["br_" + coil_id][()]
+            bp[:, :, :, i] += mgrid["bp_" + coil_id][()]
+            bz[:, :, :, i] += mgrid["bz_" + coil_id][()]
+        mgrid.close()
 
-        return cls(Rgrid, pgrid, Zgrid, br, bp, bz, method, extrap, period)
+        # shift axes to correct order
+        br = np.moveaxis(br, (0, 1, 2), (1, 2, 0))
+        bp = np.moveaxis(bp, (0, 1, 2), (1, 2, 0))
+        bz = np.moveaxis(bz, (0, 1, 2), (1, 2, 0))
+
+        # re-compute grid knots in radial and vertical direction
+        Rgrid = np.linspace(rMin, rMax, ir)
+        Zgrid = np.linspace(zMin, zMax, jz)
+        pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
+
+        return cls(Rgrid, pgrid, Zgrid, br, bp, bz, extcur, nfp, method, extrap)
 
     @classmethod
     def from_field(
-        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, period=None
+        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=1
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -926,8 +1112,8 @@ class SplineMagneticField(_MagneticField):
             spline method for SplineMagneticField
         extrap : bool
             whether to extrapolate splines beyond specified R,phi,Z
-        period : float
-            period for phi coordinate. Usually 2pi/NFP
+        NFP : int, optional
+            Number of toroidal field periods.
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -942,9 +1128,10 @@ class SplineMagneticField(_MagneticField):
             BR.reshape(shp),
             BP.reshape(shp),
             BZ.reshape(shp),
-            method,
-            extrap,
-            period,
+            currents=1.0,
+            NFP=NFP,
+            method=method,
+            extrap=extrap,
         )
 
 
@@ -1571,56 +1758,6 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
     return fori_loop(0, len(ms), body, value)
 
 
-def read_mgrid(mgrid_file, extcur=1):
-    """Read an "mgrid" file from MAKEGRID and return the grid and magnetic field.
-
-    Parameters
-    ----------
-    mgrid_file : str or path-like
-        path to mgrid file in netCDF format
-    extcur : array-like
-        currents for each subset of the field
-
-    """
-    mgrid = Dataset(mgrid_file, "r")
-    ir = int(mgrid["ir"][()])
-    jz = int(mgrid["jz"][()])
-    kp = int(mgrid["kp"][()])
-    nfp = mgrid["nfp"][()].data
-    nextcur = int(mgrid["nextcur"][()])
-    rMin = mgrid["rmin"][()]
-    rMax = mgrid["rmax"][()]
-    zMin = mgrid["zmin"][()]
-    zMax = mgrid["zmax"][()]
-
-    br = np.zeros([kp, jz, ir])
-    bp = np.zeros([kp, jz, ir])
-    bz = np.zeros([kp, jz, ir])
-    extcur = np.broadcast_to(extcur, nextcur)
-    for i in range(nextcur):
-        # apply scaling by currents given in VMEC input file
-        scale = extcur[i]
-
-        # sum up contributions from different coils
-        coil_id = "%03d" % (i + 1,)
-        br[:, :, :] += scale * mgrid["br_" + coil_id][()]
-        bp[:, :, :] += scale * mgrid["bp_" + coil_id][()]
-        bz[:, :, :] += scale * mgrid["bz_" + coil_id][()]
-    mgrid.close()
-
-    # shift axes to correct order
-    br = np.moveaxis(br, (0, 1, 2), (1, 2, 0))
-    bp = np.moveaxis(bp, (0, 1, 2), (1, 2, 0))
-    bz = np.moveaxis(bz, (0, 1, 2), (1, 2, 0))
-
-    # re-compute grid knots in radial and vertical direction
-    Rgrid = np.linspace(rMin, rMax, ir)
-    Zgrid = np.linspace(zMin, zMax, jz)
-    pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
-
-    return Rgrid, pgrid, Zgrid, br, bp, bz, nfp
-
-
 class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
@@ -1862,7 +1999,9 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         )
 
 
-class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
+class FourierCurrentPotentialField(
+    _MagneticField, FourierRZToroidalSurface, Optimizable
+):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
         surface current K is assumed given by
@@ -1925,7 +2064,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     _io_attrs_ = (
         _MagneticField._io_attrs_
         + FourierRZToroidalSurface._io_attrs_
-        + ["_surface_grid", "_Phi_mn", "_I", "_G"]
+        + ["_Phi_mn", "_I", "_G", "_Phi_basis", "_M_Phi", "_N_Phi", "_sym_Phi"]
     )
 
     def __init__(
@@ -1944,9 +2083,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         name="",
         check_orientation=True,
     ):
-        self._Phi_mn = Phi_mn
-
         Phi_mn, modes_Phi = map(np.asarray, (Phi_mn, modes_Phi))
+        assert (
+            Phi_mn.size == modes_Phi.shape[0]
+        ), "Phi_mn size and modes_Phi.shape[0] must be the same size!"
 
         assert np.issubdtype(modes_Phi.dtype, np.integer)
 
@@ -1972,9 +2112,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
                 sym_Phi = "cos"
         self._sym_Phi = sym_Phi
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
+        self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
 
-        assert np.isscalar(I), "I must be a scalar"
-        assert np.isscalar(G), "G must be a scalar"
+        assert np.isscalar(I) or np.asarray(I).size == 1, "I must be a scalar"
+        assert np.isscalar(G) or np.asarray(G).size == 1, "G must be a scalar"
         self._I = float(I)
         self._G = float(G)
 
@@ -1989,6 +2130,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             check_orientation=check_orientation,
         )
 
+    @optimizable_parameter
     @property
     def I(self):  # noqa: E743
         """Net current linking the plasma and the surface toroidally."""
@@ -1996,9 +2138,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
     @I.setter
     def I(self, new):  # noqa: E743
-        assert np.isscalar(new), "I must be a scalar"
+        assert np.isscalar(new) or np.asarray(new).size == 1, "I must be a scalar"
         self._I = float(new)
 
+    @optimizable_parameter
     @property
     def G(self):
         """Net current linking the plasma and the surface poloidally."""
@@ -2006,9 +2149,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
     @G.setter
     def G(self, new):
-        assert np.isscalar(new), "G must be a scalar"
+        assert np.isscalar(new) or np.asarray(new).size == 1, "G must be a scalar"
         self._G = float(new)
 
+    @optimizable_parameter
     @property
     def Phi_mn(self):
         """Fourier coefficients describing single-valued part of potential."""
@@ -2056,8 +2200,8 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             If True, non-symmetric modes will be truncated.
 
         """
-        M = self._M_Phi or M
-        N = self._M_Phi or N
+        M = M or self._M_Phi
+        N = N or self._M_Phi
         NFP = NFP or self.NFP
         sym_Phi = sym_Phi or self.sym_Phi
 

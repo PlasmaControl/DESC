@@ -972,7 +972,7 @@ def test_regcoil_axisymmetric():
         modes_R=np.array([[0, 0], [1, 0]]),
         modes_Z=np.array([[-1, 0]]),
         sym=True,
-        NFP=3,
+        NFP=1,
     )
 
     # make a simple axisymmetric vacuum equilibrium

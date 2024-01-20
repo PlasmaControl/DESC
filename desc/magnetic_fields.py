@@ -1521,7 +1521,7 @@ def alpha(m, n):
         return (-1) ** n / (gamma(m + n + 1) * gamma(n + 1) * 2.0 ** (2 * n + m))
 
     def bool_fun(n):
-        return jnp.any(n < 0)
+        return n < 0
 
     return cond(
         bool_fun(n),
@@ -1542,7 +1542,7 @@ def alphastar(m, n):
         m, n = m_n
         return (2 * n + m) * alpha(m, n)
 
-    return cond(jnp.any(n < 0), true_fun, false_fun, (m, n))
+    return cond(n < 0, true_fun, false_fun, (m, n))
 
 
 @jit
@@ -1553,7 +1553,7 @@ def beta(m, n):
         m, n = m_n
         return gamma(m - n) / (gamma(n + 1) * 2.0 ** (2 * n - m + 1))
 
-    return cond(jnp.any(jnp.logical_or(n < 0, n >= m)), true_fun, false_fun, (m, n))
+    return cond(jnp.logical_or(n < 0, n >= m), true_fun, false_fun, (m, n))
 
 
 @jit
@@ -1564,7 +1564,7 @@ def betastar(m, n):
         m, n = m_n
         return (2 * n - m) * beta(m, n)
 
-    return cond(jnp.any(jnp.logical_or(n < 0, n >= m)), true_fun, false_fun, (m, n))
+    return cond(jnp.logical_or(n < 0, n >= m), true_fun, false_fun, (m, n))
 
 
 @jit
@@ -1578,7 +1578,7 @@ def gamma_n(m, n):
         m, n = m_n
         return alpha(m, n) / 2 * fori_loop(1, n, body_fun, 0)
 
-    return cond(jnp.any(n <= 0), true_fun, false_fun, (m, n))
+    return cond(n <= 0, true_fun, false_fun, (m, n))
 
 
 @jit
@@ -1589,7 +1589,7 @@ def gamma_nstar(m, n):
         m, n = m_n
         return (2 * n + m) * gamma_n(m, n)
 
-    return cond(jnp.any(n <= 0), true_fun, false_fun, (m, n))
+    return cond(n <= 0, true_fun, false_fun, (m, n))
 
 
 @jit

@@ -15,7 +15,7 @@ from desc.geometry import (
     SplineXYZCurve,
 )
 from desc.grid import LinearGrid
-from desc.magnetic_fields import _MagneticField
+from desc.magnetic_fields import SumMagneticField, _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.utils import equals, errorif, flatten_list
 
@@ -1247,6 +1247,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             return CoilSet(*self.coils, *other.coils)
         if isinstance(other, (list, tuple)):
             return CoilSet(*self.coils, *other)
+        elif isinstance(other, (_MagneticField)):
+            return SumMagneticField(self, other)
         raise TypeError
 
     # dunder methods required by MutableSequence

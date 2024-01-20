@@ -1692,7 +1692,7 @@ def test_asymmetric_normalization():
 @pytest.mark.unit
 def test_quadratic_flux_finite_beta_warning():
     """Tests QuadraticFlux warning for finite beta equilibrium."""
-    field = ToroidalMagneticField()
+    field = ToroidalMagneticField(1, 1)
     eq = get("DSHAPE")
     obj = QuadraticFlux(eq=eq, field=field)
     with pytest.warns(UserWarning):

@@ -9,7 +9,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz, rpz2xyz_vec
 from desc.compute.utils import safenorm
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, warnif
 
 from .objective_funs import _Objective
 
@@ -162,6 +162,22 @@ class QuadraticFlux(_Objective):
             warnings.warn("Source grid includes off-surface pts, should be rho=1")
         if not np.allclose(eval_grid.nodes[:, 0], 1):
             warnings.warn("Evaluation grid includes interior points, should be rho=1")
+
+        # ensure vacuum eq, as we don't yet support finite beta
+        pres = np.max(np.abs(eq.compute("p")["p"]))
+        curr = np.max(np.abs(eq.compute("current")["current"]))
+        warnif(
+            pres > 1e-8,
+            UserWarning,
+            f"Pressure is non-zero (max {pres} Pa), "
+            + "finite beta not supported yet.",
+        )
+        warnif(
+            curr > 1e-8,
+            UserWarning,
+            f"Current is non-zero (max {curr} A), "
+            + "finite plasma currents not supported yet.",
+        )
 
         # eval_grid.num_nodes for quad flux cost,
         self._dim_f = eval_grid.num_nodes

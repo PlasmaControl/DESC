@@ -17,6 +17,7 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.magnetic_fields import ToroidalMagneticField
 from desc.objectives import (
     AspectRatio,
     BootstrapRedlConsistency,
@@ -39,6 +40,7 @@ from desc.objectives import (
     PlasmaVesselDistance,
     Pressure,
     PrincipalCurvature,
+    QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -1685,3 +1687,13 @@ def test_asymmetric_normalization():
         assert np.all(np.isfinite(val))
     for val in scales_eq.values():
         assert np.all(np.isfinite(val))
+
+
+@pytest.mark.unit
+def test_quadratic_flux_finite_beta_warning():
+    """Tests QuadraticFlux warning for finite beta equilibrium."""
+    field = ToroidalMagneticField()
+    eq = get("DSHAPE")
+    obj = QuadraticFlux(eq=eq, field=field)
+    with pytest.warns(UserWarning):
+        obj.build()

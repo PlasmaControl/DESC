@@ -1853,7 +1853,34 @@ class FourierCurrentPotentialField(
         to the values corresponding to the input equilibrium, external_field,
         and current_helicity.
 
-        TODO: Put math of algorithm here
+        Follows algorithm of [1]_ to find the current potential Phi on the surface,
+        given a surface current::
+
+            K = n x ∇ Φ
+            Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+        The algorithm minimizes the quadratic flux on the plasma surface due to the
+        surface current and external fields::
+
+            Bn = ∫ ∫ (B . n)^2 dA
+            B = B_plasma + B_external + B_surface_current
+
+        G is fixed by the equilibrium magnetic field strength, and I is determined
+        by the desired coil topology (given by ``current_helicity``), with zero
+        helicity corresponding to modular coils, and non-zero helicity corresponding
+        to helical coils. The algorithm then finds the single-valued part of Φ
+        by minimizing the quadratic flux on the plasma surface along with a
+        regularization term on the surface current magnitude::
+
+            min_Φₛᵥ  ∫ ∫ (B . n)^2 dA + α ∫ ∫ |K|^2 dA
+
+        where α is the regularization parameter, smaller alpha corresponds to no
+        regularization (consequently, lower Bn error but more complex and large surface
+        currents) and larger alpha corresponds to more regularization (consequently,
+        higher Bn error but simpler and smaller surface currents).
+
+        [1] Landreman, An improved current potential method for fast computation
+            of stellarator coil shapes, Nuclear Fusion (2017)
 
         Parameters
         ----------
@@ -1956,6 +1983,22 @@ class FourierCurrentPotentialField(
         # maybe it is an EquilibriaFamily
         if hasattr(eq, "__len__"):
             eq = eq[-1]
+
+        # ensure vacuum eq, as we don't yet support finite beta
+        pres = np.max(np.abs(eq.compute("p")["p"]))
+        curr = np.max(np.abs(eq.compute("current")["current"]))
+        warnif(
+            pres > 1e-8,
+            UserWarning,
+            f"Pressure is non-zero (max {pres} Pa), "
+            + "finite beta not supported yet.",
+        )
+        warnif(
+            curr > 1e-8,
+            UserWarning,
+            f"Current is non-zero (max {curr} A), "
+            + "finite plasma currents not supported yet.",
+        )
 
         if external_field:  # ensure given field is an instance of _MagneticField
             assert isinstance(external_field, _MagneticField), (

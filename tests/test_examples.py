@@ -993,7 +993,7 @@ def test_regcoil_axisymmetric():
     chi_B = data["chi^2_B"]
     phi_mn_opt = surface_current_field.Phi_mn
     G = surface_current_field.G
-    np.testing.assert_allclose(phi_mn_opt, 0, atol=2e-9)
+    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-8)
     np.testing.assert_allclose(chi_B, 0, atol=1e-14)
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]

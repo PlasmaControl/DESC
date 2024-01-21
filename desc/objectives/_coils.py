@@ -145,21 +145,13 @@ class QuadraticFlux(_Objective):
         # if field is different than self._field, update
         if field != self._field:
             self._field = field
-
-        if self._source_grid is None:
-            source_grid = LinearGrid(
-                M=field._M_Phi * 3 + 1,
-                N=field._N_Phi * 3 + 1,
-                NFP=field.NFP,
-            )
-        else:
-            source_grid = self._source_grid
+        # if eq is different than self._eq, update
+        if eq != self._eq:
+            self._eq = eq
         if self._eval_grid is None:
             eval_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             eval_grid = self._eval_grid
-        if not np.allclose(source_grid.nodes[:, 0], 1):
-            warnings.warn("Source grid includes off-surface pts, should be rho=1")
         if not np.allclose(eval_grid.nodes[:, 0], 1):
             warnings.warn("Evaluation grid includes interior points, should be rho=1")
 

@@ -1860,10 +1860,12 @@ class FourierCurrentPotentialField(
             Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
 
         The algorithm minimizes the quadratic flux on the plasma surface due to the
-        surface current and external fields::
+        surface current (B_Phi_SV for field from the single valued part Φₛᵥ, and
+        B_GI for that from the secular terms I and G), plasma current, and external
+        fields::
 
             Bn = ∫ ∫ (B . n)^2 dA
-            B = B_plasma + B_external + B_surface_current
+            B = B_plasma + B_external + B_Phi_SV + B_GI
 
         G is fixed by the equilibrium magnetic field strength, and I is determined
         by the desired coil topology (given by ``current_helicity``), with zero

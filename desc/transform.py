@@ -30,13 +30,15 @@ class Transform(IOAble):
         whether to precompute the transforms now or do it later
     build_pinv : bool
         whether to precompute the pseudoinverse now or do it later
-    method : {```'auto'``, `'fft'``, ``'direct1'``, ``'direct2'``}
+    method : {```'auto'``, `'fft'``, ``'direct1'``, ``'direct2'``, ``'jitable'``}
         * ``'fft'`` uses fast fourier transforms in the zeta direction, and so must have
-          equally spaced toroidal nodes, and the same node pattern on each zeta plane
+          equally spaced toroidal nodes, and the same node pattern on each zeta plane.
         * ``'direct1'`` uses full matrices and can handle arbitrary node patterns and
           spectral bases.
-        * ``'direct2'`` uses a DFT instead of FFT that can be faster in practice
-        * ``'auto'`` selects the method based on the grid and basis resolution
+        * ``'direct2'`` uses a DFT instead of FFT that can be faster in practice.
+        * ``'jitable'`` is the same as ``'direct1'`` but avoids some checks, allowing
+          you to create transforms inside JIT compiled functions.
+        * ``'auto'`` selects the method based on the grid and basis resolution.
 
     """
 
@@ -58,10 +60,11 @@ class Transform(IOAble):
         self._rcond = rcond if rcond is not None else "auto"
 
         if (
-            np.any(self.grid.nodes[:, 2] != 0)
+            method != "jitable"
+            and grid.node_pattern != "custom"
             and self.basis.N != 0
             and self.grid.NFP != self.basis.NFP
-            and grid.node_pattern != "custom"
+            and np.any(self.grid.nodes[:, 2] != 0)
         ):
             warnings.warn(
                 colored(
@@ -106,9 +109,9 @@ class Transform(IOAble):
         """
         if isinstance(derivs, int) and derivs >= 0:
             derivatives = combination_permutation(3, derivs, False)
-        elif np.atleast_1d(derivs).ndim == 1 and len(derivs) == 3:
+        elif np.ndim(derivs) == 1 and len(derivs) == 3:
             derivatives = np.asarray(derivs).reshape((1, 3))
-        elif np.atleast_2d(derivs).ndim == 2 and np.atleast_2d(derivs).shape[1] == 3:
+        elif np.ndim(derivs) == 2 and np.atleast_2d(derivs).shape[1] == 3:
             derivatives = np.atleast_2d(derivs)
         else:
             raise NotImplementedError(
@@ -377,6 +380,12 @@ class Transform(IOAble):
                     self.grid.nodes, d, unique=True
                 )
 
+        if self.method == "jitable":
+            for d in self.derivatives:
+                self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
+                    self.grid.nodes, d, unique=False
+                )
+
         if self.method in ["fft", "direct2"]:
             temp_d = np.hstack(
                 [self.derivatives[:, :2], np.zeros((len(self.derivatives), 1))]
@@ -405,7 +414,7 @@ class Transform(IOAble):
         if self.built_pinv:
             return
         rcond = None if self.rcond == "auto" else self.rcond
-        if self.method == "direct1":
+        if self.method in ["direct1", "jitable"]:
             A = self.basis.evaluate(self.grid.nodes, np.array([0, 0, 0]))
             self.matrices["pinv"] = (
                 scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)
@@ -473,7 +482,7 @@ class Transform(IOAble):
         if len(c) == 0:
             return np.zeros(self.grid.num_nodes)
 
-        if self.method == "direct1":
+        if self.method in ["direct1", "jitable"]:
             A = self.matrices["direct1"].get(dr, {}).get(dt, {}).get(dz, {})
             if isinstance(A, dict):
                 raise ValueError(
@@ -797,6 +806,8 @@ class Transform(IOAble):
             self._check_inputs_direct2(self.grid, self.basis)
         elif method == "direct1":
             self._method = "direct1"
+        elif method == "jitable":
+            self._method = "jitable"
         else:
             raise ValueError("Unknown transform method: {}".format(method))
         if self.method != old_method:

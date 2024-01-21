@@ -4,11 +4,15 @@ import numbers
 import warnings
 
 import numpy as np
+import scipy
 
 from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
+from desc.grid import Grid
 from desc.io import InputReader
-from desc.utils import copy_coeffs
+from desc.optimizable import optimizable_parameter
+from desc.transform import Transform
+from desc.utils import copy_coeffs, isposint
 
 from .core import Surface
 
@@ -60,7 +64,6 @@ class FourierRZToroidalSurface(Surface):
         NFP=1,
         sym="auto",
         rho=1,
-        grid=None,
         name="",
         check_orientation=True,
     ):
@@ -76,9 +79,17 @@ class FourierRZToroidalSurface(Surface):
             np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
         )
 
+        assert (
+            R_lmn.size == modes_R.shape[0]
+        ), "R_lmn size and modes_R.shape[0] must be the same size!"
+        assert (
+            Z_lmn.size == modes_Z.shape[0]
+        ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
+
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
-
+        assert isposint(NFP)
+        NFP = int(NFP)
         MR = np.max(abs(modes_R[:, 0]))
         NR = np.max(abs(modes_R[:, 1]))
         MZ = np.max(abs(modes_Z[:, 0]))
@@ -113,7 +124,8 @@ class FourierRZToroidalSurface(Surface):
             warnings.warn(
                 "Left handed coordinates detected, switching sign of theta."
                 + " To avoid this warning in the future, switch the sign of all"
-                + " modes with m<0"
+                + " modes with m<0. You may also need to switch the sign of iota or"
+                + " current profiles."
             )
             self._flip_orientation()
             assert self._compute_orientation() == 1
@@ -158,7 +170,7 @@ class FourierRZToroidalSurface(Surface):
         NFP = kwargs.pop("NFP", None)
         sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
-        self._NFP = NFP if NFP is not None else self.NFP
+        self._NFP = int(NFP if NFP is not None else self.NFP)
         self._sym = sym if sym is not None else self.sym
         if L is not None:
             warnings.warn(
@@ -174,8 +186,8 @@ class FourierRZToroidalSurface(Surface):
             or ((M is not None) and (M != self.M))
             or (NFP is not None)
         ):
-            M = M if M is not None else self.M
-            N = N if N is not None else self.N
+            M = int(M if M is not None else self.M)
+            N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(
@@ -189,6 +201,7 @@ class FourierRZToroidalSurface(Surface):
             self._M = M
             self._N = N
 
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients for R."""
@@ -204,6 +217,7 @@ class FourierRZToroidalSurface(Surface):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients for Z."""
@@ -273,7 +287,12 @@ class FourierRZToroidalSurface(Surface):
 
         """
         f = open(path)
-        if "&INDATA" in f.readlines()[0]:  # vmec input, convert to desc
+        isVMEC = False
+        for line in f.readlines():
+            if "&INDATA" in line.upper():
+                isVMEC = True
+                break
+        if isVMEC:  # vmec input, convert to desc
             inputs = InputReader.parse_vmec_inputs(f)[-1]
         else:
             inputs = InputReader().parse_inputs(f)[-1]
@@ -348,6 +367,129 @@ class FourierRZToroidalSurface(Surface):
         surf = cls(R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z, NFP=NFP)
         return surf
 
+    @classmethod
+    def from_values(
+        cls,
+        coords,
+        theta,
+        zeta=None,
+        M=6,
+        N=6,
+        NFP=1,
+        sym=True,
+        check_orientation=True,
+        rcond=None,
+        w=None,
+    ):
+        """Create a surface from given R,Z coordinates in real space.
+
+        Parameters
+        ----------
+        coords : array-like shape(num_points,3) or Grid
+            cylindrical coordinates (R,phi,Z) to fit as a FourierRZToroidalSurface
+        theta : ndarray, shape(num_points,)
+            Locations in poloidal angle theta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the poloidal angle for the resulting surface.
+        zeta : ndarray, shape(num_points,)
+            Locations in toroidal angle zeta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the toroidal angle for the resulting surface.
+            if None, defaults to assuming the toroidal angle is the cylindrical phi
+            and so sets zeta = phi = coords[:,1]
+        M : int
+            poloidal resolution of basis used to fit surface with.
+            It is recommended to fit with M < num_theta points per toroidal plane,
+            i.e. if num_points = num_theta*num_zeta , then want to ensure M < num_theta
+        N : int
+            toroidal resolution of basis used to fit surface with
+            It is recommended to fit with N < num_zeta points per poloidal plane.
+            i.e. if num_points = num_theta*num_zeta , then want to ensure N < num_zeta
+        NFP : int
+            number of toroidal field periods for surface
+        sym : bool
+            True if surface is stellarator-symmetric
+        check_orientation : bool
+            whether to check left-handedness of coordinates and flip if necessary.
+        rcond : float
+            Relative condition number of the fit. Singular values smaller than this
+            relative to the largest singular value will be ignored. The default value
+            is len(x)*eps, where eps is the relative precision of the float type, about
+            2e-16 in most cases.
+        w : array-like, shape(num_points,)
+            Weights to apply to the sample coordinates. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
+
+        Returns
+        -------
+        surface : FourierRZToroidalSurface
+            Surface with Fourier coefficients fitted from input coords.
+
+        """
+        theta = np.asarray(theta)
+        assert (
+            coords.shape[0] == theta.size
+        ), "coords first dimenson and theta must have same size"
+        if zeta is None:
+            zeta = coords[:, 1]
+        else:
+            raise NotImplementedError("zeta != phi not yet implemented")
+        nodes = Grid(
+            np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
+            sort=False,
+            jitable=True,
+        )
+
+        R = coords[:, 0]
+        Z = coords[:, 2]
+        R_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
+        Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        if w is None:  # unweighted fit
+            transform = Transform(
+                nodes, R_basis, build=False, build_pinv=True, rcond=rcond
+            )
+            Rb_lmn = transform.fit(R)
+
+            transform = Transform(
+                nodes, Z_basis, build=False, build_pinv=True, rcond=rcond
+            )
+            Zb_lmn = transform.fit(Z)
+        else:  # perform weighted fit
+            # solves system W A x = W b
+            # where A is the transform matrix, W is the diagonal weight matrix
+            # of weights w, and b is the vector of data points
+            w = np.asarray(w)
+            W = np.diag(w)
+            assert w.size == R.size, "w must same length as number of points being fit"
+
+            transform = Transform(
+                nodes, R_basis, build=True, build_pinv=False, method="direct1"
+            )
+            AR = transform.matrices[transform.method][0][0][0]
+
+            transform = Transform(
+                nodes, Z_basis, build=True, build_pinv=False, method="direct1"
+            )
+            AZ = transform.matrices[transform.method][0][0][0]
+
+            A = scipy.linalg.block_diag(W @ AR, W @ AZ)
+            b = np.concatenate([w * R, w * Z])
+            x_lmn = np.linalg.lstsq(A, b, rcond=rcond)[0]
+
+            Rb_lmn = x_lmn[0 : R_basis.num_modes]
+            Zb_lmn = x_lmn[R_basis.num_modes :]
+
+        surf = cls(
+            Rb_lmn,
+            Zb_lmn,
+            R_basis.modes[:, 1:],
+            Z_basis.modes[:, 1:],
+            NFP,
+            sym,
+            check_orientation=check_orientation,
+        )
+        return surf
+
 
 class ZernikeRZToroidalSection(Surface):
     """A toroidal cross section represented by a Zernike polynomial in R,Z.
@@ -371,7 +513,7 @@ class ZernikeRZToroidalSection(Surface):
         For L>0, the indexing scheme defines order of the basis functions:
 
         ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-        decreasing size, ending in a triagle shape. For L == M,
+        decreasing size, ending in a triangle shape. For L == M,
         the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
         to the bottom of the pyramid, increasing L while keeping M constant,
         giving a "house" shape
@@ -409,7 +551,6 @@ class ZernikeRZToroidalSection(Surface):
         spectral_indexing="ansi",
         sym="auto",
         zeta=0.0,
-        grid=None,
         name="",
         check_orientation=True,
     ):
@@ -424,6 +565,13 @@ class ZernikeRZToroidalSection(Surface):
         R_lmn, Z_lmn, modes_R, modes_Z = map(
             np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
         )
+
+        assert (
+            R_lmn.size == modes_R.shape[0]
+        ), "R_lmn size and modes_R.shape[0] must be the same size!"
+        assert (
+            Z_lmn.size == modes_Z.shape[0]
+        ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
@@ -518,8 +666,8 @@ class ZernikeRZToroidalSection(Surface):
             L, M, N = args
 
         if ((L is not None) and (L != self.L)) or ((M is not None) and (M != self.M)):
-            L = L if L is not None else self.L
-            M = M if M is not None else self.M
+            L = int(L if L is not None else self.L)
+            M = int(M if M is not None else self.M)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(
@@ -533,6 +681,7 @@ class ZernikeRZToroidalSection(Surface):
             self._L = L
             self._M = M
 
+    @optimizable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients for R."""
@@ -548,6 +697,7 @@ class ZernikeRZToroidalSection(Surface):
                 + f"basis with {self.R_basis.num_modes} modes."
             )
 
+    @optimizable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients for Z."""

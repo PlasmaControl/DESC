@@ -75,7 +75,7 @@ def test_perturbation_orders(SOLOVEV):
 
     # solve for "true" high-beta solution
     eqS = eq3.copy()
-    eqS.solve(objective=objective, ftol=1e-2, verbose=3)
+    eqS.solve(ftol=1e-2, verbose=3)
 
     # evaluate equilibrium force balance
     grid = ConcentricGrid(2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, node_pattern="jacobi")
@@ -106,7 +106,7 @@ def test_perturb_with_float_without_error():
     # np.concatenate cannot concatenate 0-D arrays. This test exercises the fix.
     eq = Equilibrium()
     objective = get_equilibrium_objective(eq=eq)
-    constraints = get_fixed_boundary_constraints(eq=eq, iota=False)
+    constraints = get_fixed_boundary_constraints(eq=eq)
 
     # perturb Psi with a float
     deltas = {"Psi": float(eq.Psi)}
@@ -125,7 +125,7 @@ def test_perturb_with_float_without_error():
 def test_optimal_perturb():
     """Test that a single step of optimal_perturb doesn't mess things up."""
     # as of v0.6.1, the recover operation from optimal_perturb would give
-    # R_lmn etc that are inconsistent with Rb_lmn due to recovering x with the wrong
+    # R_lmn etc. that are inconsistent with Rb_lmn due to recovering x with the wrong
     # particular solution. Here we do a simple test to ensure the interior and boundary
     # agree
     eq1 = desc.examples.get("DSHAPE")

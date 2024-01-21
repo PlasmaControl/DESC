@@ -5,6 +5,7 @@ import pytest
 
 import desc.examples
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
 
@@ -19,6 +20,15 @@ class TestFourierRZToroidalSurface:
         grid = LinearGrid(M=24, N=24)
         area = 4 * np.pi**2 * 10
         np.testing.assert_allclose(s.compute("S", grid=grid)["S"], area)
+
+    @pytest.mark.unit
+    def test_compute_ndarray_error(self):
+        """Test raising TypeError if ndarray is passed in."""
+        s = FourierRZToroidalSurface()
+        with pytest.raises(TypeError):
+            s.compute("S", grid=1)
+        with pytest.raises(TypeError):
+            s.compute("S", grid=np.linspace(0, 1, 10))
 
     @pytest.mark.unit
     def test_normal(self):
@@ -41,19 +51,8 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 0, 5, None)
         c.set_coeffs(-1, 0, None, 2)
-        np.testing.assert_allclose(
-            c.R_lmn,
-            [
-                5,
-                1,
-            ],
-        )
-        np.testing.assert_allclose(
-            c.Z_lmn,
-            [
-                2,
-            ],
-        )
+        np.testing.assert_allclose(c.R_lmn, [5, 1])
+        np.testing.assert_allclose(c.Z_lmn, [2])
 
         s = c.copy()
         assert s.eq(c)
@@ -73,6 +72,16 @@ class TestFourierRZToroidalSurface:
         assert c.NFP == 3
         assert c.R_basis.NFP == 3
         assert c.Z_basis.NFP == 3
+
+        # test assert statement for array sizes matching
+        with pytest.raises(AssertionError):
+            c = FourierRZToroidalSurface(
+                R_lmn=np.array([1, 2, 3]), modes_R=np.array([[0, 0], [1, 0]])
+            )
+        with pytest.raises(AssertionError):
+            c = FourierRZToroidalSurface(
+                Z_lmn=np.array([1, 2, 3]), modes_Z=np.array([[0, 0], [1, 0]])
+            )
 
     @pytest.mark.unit
     def test_from_input_file(self):
@@ -137,9 +146,76 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(data["curvature_k1_rho"], 0)
         np.testing.assert_allclose(data["curvature_k2_rho"], -1)
 
+    @pytest.mark.unit
+    def test_position(self):
+        """Tests for position on surface."""
+        s = FourierRZToroidalSurface()
+        grid = LinearGrid(theta=0, zeta=np.pi)
+        data = s.compute(["x", "R", "phi", "Z"], grid=grid, basis="xyz")
+        np.testing.assert_allclose(data["R"], 11)
+        np.testing.assert_allclose(data["x"][0, 0], -11)
+        np.testing.assert_allclose(data["phi"], np.pi)
+        np.testing.assert_allclose(data["x"][0, 1], 0, atol=1e-14)  # this is y
+        np.testing.assert_allclose(data["Z"], 0)
+        np.testing.assert_allclose(data["x"][0, 2], 0)
+
+    @pytest.mark.unit
+    def test_surface_from_values(self):
+        """Test for constructing elliptical surface from values."""
+        surface = get("HELIOTRON", "boundary")
+        grid = LinearGrid(M=20, N=20, sym=False, NFP=surface.NFP, endpoint=False)
+        data = surface.compute(["R", "phi", "Z"], grid=grid)
+
+        theta = grid.nodes[:, 1]
+
+        coords = np.vstack([data["R"], data["phi"], data["Z"]]).T
+        surface2 = FourierRZToroidalSurface.from_values(
+            coords,
+            theta,
+            M=surface.M,
+            N=surface.N,
+            NFP=surface.NFP,
+            sym=True,
+            w=np.ones_like(theta),
+        )
+        grid = LinearGrid(M=25, N=25, sym=False, NFP=surface.NFP)
+        np.testing.assert_allclose(
+            surface.compute("x", grid=grid)["x"], surface2.compute("x", grid=grid)["x"]
+        )
+
+        # with a different poloidal angle
+        theta = -np.arctan2(data["Z"] - 0, data["R"] - 10)
+        surface2 = FourierRZToroidalSurface.from_values(
+            coords,
+            theta,
+            M=surface.M,
+            N=surface.N,
+            NFP=surface.NFP,
+            sym=True,
+        )
+        # cannot compare x directly because thetas are different
+        np.testing.assert_allclose(
+            surface.compute("V")["V"], surface2.compute("V")["V"], rtol=1e-4
+        )
+        np.testing.assert_allclose(
+            surface.compute("S")["S"], surface2.compute("S")["S"], rtol=1e-3
+        )
+
+        # test assert statements
+        with pytest.raises(NotImplementedError):
+            FourierRZToroidalSurface.from_values(
+                coords,
+                theta,
+                zeta=theta,
+                M=surface.M,
+                N=surface.N,
+                NFP=surface.NFP,
+                sym=True,
+            )
+
 
 class TestZernikeRZToroidalSection:
-    """Tests for ZerinkeRZTorioidalSection class."""
+    """Tests for ZernikeRZToroidalSection class."""
 
     @pytest.mark.unit
     def test_area(self):
@@ -167,19 +243,8 @@ class TestZernikeRZToroidalSection:
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 0, 5, None)
         c.set_coeffs(1, -1, None, 2)
-        np.testing.assert_allclose(
-            c.R_lmn,
-            [
-                5,
-                1,
-            ],
-        )
-        np.testing.assert_allclose(
-            c.Z_lmn,
-            [
-                2,
-            ],
-        )
+        np.testing.assert_allclose(c.R_lmn, [5, 1])
+        np.testing.assert_allclose(c.Z_lmn, [2])
         with pytest.raises(ValueError):
             c.set_coeffs(0, 0, None, 2)
         s = c.copy()
@@ -226,7 +291,9 @@ def test_surface_orientation():
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
     assert surf._compute_orientation() == -1
-    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+    eq = Equilibrium(
+        M=surf.M, N=surf.N, surface=surf, check_orientation=False, ensure_nested=False
+    )
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == -1
 
     # same surface but flipped to have positive orientation
@@ -236,7 +303,9 @@ def test_surface_orientation():
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
     assert surf._compute_orientation() == 1
-    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+    eq = Equilibrium(
+        M=surf.M, N=surf.N, surface=surf, check_orientation=False, ensure_nested=False
+    )
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == 1
 
     # this has theta=0 on inboard side and positive orientation
@@ -246,7 +315,7 @@ def test_surface_orientation():
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
     assert surf._compute_orientation() == 1
-    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf, check_orientation=False)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == 1
 
     # same but with negative orientation
@@ -256,5 +325,5 @@ def test_surface_orientation():
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
     assert surf._compute_orientation() == -1
-    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+    eq = Equilibrium(M=surf.M, N=surf.N, surface=surf, check_orientation=False)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == -1

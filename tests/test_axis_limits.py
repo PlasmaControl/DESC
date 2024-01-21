@@ -1,29 +1,35 @@
-"""Tests for compute functions evaluated at limits."""
+"""Tests for compute functions evaluated at limits.
+
+If a new quantity is added to the compute functions whose limit is not finite
+(or does not exist), simply add it to the ``not_finite_limits`` set below.
+If the limit has yet to be derived, add it to the ``not_implemented_limits`` set.
+"""
+
+import functools
 import inspect
-import re
 
 import numpy as np
 import pytest
 
-import desc.compute
 from desc.compute import data_index
-from desc.compute.data_index import _class_inheritance
-from desc.compute.utils import surface_integrals_map
+from desc.compute.utils import dot, surface_integrals_map
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.grid import LinearGrid
+from desc.objectives import GenericObjective, ObjectiveFunction
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
 # functions tend toward zero as the magnetic axis is approached and that
-# d^2𝜓/(d𝜌)^2 and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
-# Also d^n𝜓/(d𝜌)^n for n > 3 is assumed zero everywhere.
+# d²ψ/(dρ)² and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
+# Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
 zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
-
+# "current Redl" needs special treatment because it is generally not defined for all
+# configurations (giving NaN values), except it is always 0 at the magnetic axis
+not_continuous_limits = {"current Redl"}
 not_finite_limits = {
     "D_Mercier",
-    "D_current",
     "D_geodesic",
-    "D_shear",  # may not exist for all configurations
     "D_well",
     "J^theta",
     "curvature_H_rho",
@@ -56,15 +62,55 @@ not_finite_limits = {
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
 }
-
-# reliant limits will be added to this set automatically
 not_implemented_limits = {
+    # reliant limits will be added to this set automatically
+    "D_current",
+    "e^rho_rr",
+    "e^theta_rr",
+    "e^zeta_rr",
+    "e^rho_rt",
+    "e^rho_tt",
+    "e^theta_rt",
+    "e^theta_tt",
+    "e^zeta_rt",
+    "e^zeta_tt",
+    "e^rho_rz",
+    "e^rho_tz",
+    "e^rho_zz",
+    "e^theta_rz",
+    "e^theta_tz",
+    "e^theta_zz",
+    "e^zeta_rz",
+    "e^zeta_tz",
+    "e^zeta_zz",
     "iota_num_rrr",
     "iota_den_rrr",
 }
 
 
-def grow_seeds(seeds, search_space):
+def add_all_aliases(names):
+    """Add aliases to limits."""
+    all_aliases = []
+    for name in names:
+        for base_class in data_index.keys():
+            if name in data_index[base_class].keys():
+                all_aliases.append(data_index[base_class][name]["aliases"])
+
+    # flatten
+    all_aliases = [name for sublist in all_aliases for name in sublist]
+    names.update(all_aliases)
+
+    return names
+
+
+zero_limits = add_all_aliases(zero_limits)
+not_finite_limits = add_all_aliases(not_finite_limits)
+not_implemented_limits = add_all_aliases(not_implemented_limits)
+
+
+def grow_seeds(
+    seeds, search_space, parameterization="desc.equilibrium.equilibrium.Equilibrium"
+):
     """Traverse the dependency DAG for keys in search space dependent on seeds.
 
     Parameters
@@ -73,6 +119,9 @@ def grow_seeds(seeds, search_space):
         Keys to find paths toward.
     search_space : iterable
         Additional keys to consider returning.
+    parameterization: str or list of str
+        Name of desc types the method is valid for. eg 'desc.geometry.FourierXYZCurve'
+        or `desc.equilibrium.Equilibrium`.
 
     Returns
     -------
@@ -82,9 +131,7 @@ def grow_seeds(seeds, search_space):
     """
     out = seeds.copy()
     for key in search_space:
-        deps = data_index["desc.equilibrium.equilibrium.Equilibrium"][key][
-            "full_with_axis_dependencies"
-        ]["data"]
+        deps = data_index[parameterization][key]["full_with_axis_dependencies"]["data"]
         if not seeds.isdisjoint(deps):
             out.add(key)
     return out
@@ -103,14 +150,15 @@ def _skip_this(eq, name):
         or (eq.electron_temperature is None and "Te" in name)
         or (eq.electron_density is None and "ne" in name)
         or (eq.ion_temperature is None and "Ti" in name)
+        or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
-        or (eq.current is None and ("iota_num" in name or "iota_den" in name))
+        or (eq.current is None and "iota_num" in name)
     )
 
 
 def assert_is_continuous(
     eq,
-    names,
+    names=data_index["desc.equilibrium.equilibrium.Equilibrium"].keys(),
     delta=5e-5,
     rtol=1e-4,
     atol=1e-6,
@@ -124,7 +172,7 @@ def assert_is_continuous(
     ----------
     eq : Equilibrium
         The equilibrium object used for the computation.
-    names : list, str
+    names : list of str
         A list of names of the quantities to test for continuity.
     delta: float, optional
         Max distance from magnetic axis.
@@ -151,49 +199,61 @@ def assert_is_continuous(
     """
     if kwargs is None:
         kwargs = {}
-    if isinstance(names, str):
-        names = [names]
     # TODO: remove when boozer transform works with multiple surfaces
-    names = [x for x in names if not ("Boozer" in x or "_mn" in x or x == "B modes")]
+    names = [
+        name
+        for name in names
+        if not (
+            "Boozer" in name
+            or "_mn" in name
+            or name == "B modes"
+            or _skip_this(eq, name)
+        )
+    ]
 
-    num_points = 15
+    num_points = 12
     rho = np.linspace(start=0, stop=delta, num=num_points)
     grid = LinearGrid(rho=rho, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
-    assert grid.axis.size
+    axis = grid.nodes[:, 0] == 0
+    assert axis.any() and not axis.all()
     integrate = surface_integrals_map(grid, expand_out=False)
-    data = eq.compute(names, grid=grid)
+    data = eq.compute(names=names, grid=grid)
 
-    data_index_eq = data_index["desc.equilibrium.equilibrium.Equilibrium"]
+    p = "desc.equilibrium.equilibrium.Equilibrium"
     for name in names:
-        if _skip_this(eq, name) or data_index_eq[name]["coordinates"] == "":
-            # can't check continuity of global scaler quantity
+        if name in not_continuous_limits:
+            continue
+        elif name in not_finite_limits:
+            assert (np.isfinite(data[name]).T != axis).all(), name
+            continue
+        else:
+            assert np.isfinite(data[name]).all(), name
+        if (
+            data_index[p][name]["coordinates"] == ""
+            or data_index[p][name]["coordinates"] == "z"
+        ):
+            # can't check continuity of global scalar or function of toroidal angle
             continue
         # make single variable function of rho
-        if data_index_eq[name]["coordinates"] == "r":
+        if data_index[p][name]["coordinates"] == "r":
             # already single variable function of rho
             profile = grid.compress(data[name])
         else:
             # integrate out theta and zeta dependence
-            profile = np.where(
-                # True if integrand has nan on a given surface.
-                integrate(np.isnan(data[name])).astype(bool),
-                # The integration below replaces nan with 0; put them back.
-                np.nan,
-                # Norms and integrals are continuous functions, so their composition
-                # cannot disrupt existing continuity. Note that the absolute value
-                # before the integration ensures that a discontinuous integrand does
-                # not become continuous once integrated.
-                integrate(np.abs(data[name])),
-            )
+            # Norms and integrals are continuous functions, so their composition
+            # cannot disrupt existing continuity. Note that the absolute value
+            # before the integration ensures that a discontinuous integrand does
+            # not become continuous once integrated.
+            profile = integrate(np.abs(data[name]))
         fit = kwargs.get(name, {}).get("desired_at_axis", desired_at_axis)
         if fit is None:
-            if np.ndim(data_index_eq[name]["dim"]):
+            if np.ndim(data_index[p][name]["dim"]):
                 # can't polyfit tensor arrays like grad(B)
-                fit = (profile[0] + profile[1]) / 2
+                fit = profile[1]
             else:
                 # fit the data to a polynomial to extrapolate to axis
                 poly = np.polynomial.polynomial.polyfit(
-                    rho[1:], profile[1:], deg=min(5, num_points // 3)
+                    rho[1:], profile[1:], deg=min(4, num_points // 3)
                 )
                 # constant term is the same as evaluating polynomial at rho=0
                 fit = poly[0]
@@ -207,87 +267,8 @@ def assert_is_continuous(
         )
 
 
-def get_matches(fun, pattern):
-    """Return all matches of ``pattern`` in source code of function ``fun``."""
-    src = inspect.getsource(fun)
-    # attempt to remove any decorator functions
-    # (currently works without this filter, but better to be defensive)
-    src = src.partition("def ")[2]
-    # attempt to remove comments
-    src = "\n".join(line.partition("#")[0] for line in src.splitlines())
-    matches = pattern.findall(src)
-    matches = {s.strip().strip('"') for s in matches}
-    return matches
-
-
-def get_parameterization(fun, default="desc.equilibrium.equilibrium.Equilibrium"):
-    """Get parameterization of thing computed by function ``fun``."""
-    pattern = re.compile(r'parameterization=(?:\[([^]]+)]|"([^"]+)")')
-    decorator = inspect.getsource(fun).partition("def ")[0]
-    matches = pattern.findall(decorator)
-    # if list was found, split strings in list, else string was found so just get that
-    matches = [match[0].split(",") if match[0] else [match[1]] for match in matches]
-    # flatten the list
-    matches = {s.strip().strip('"') for sublist in matches for s in sublist}
-    matches.discard("")
-    return matches if matches else {default}
-
-
 class TestAxisLimits:
     """Tests for compute functions evaluated at limits."""
-
-    @pytest.mark.unit
-    def test_data_index_deps(self):
-        """Ensure developers do not add extra (or forget needed) dependencies."""
-        queried_deps = {}
-
-        pattern_names = re.compile(r"(?<!_)data\[(.*?)] =")
-        pattern_data = re.compile(r"(?<!_)data\[(.*?)]")
-        pattern_profiles = re.compile(r"profiles\[(.*?)]")
-        pattern_params = re.compile(r"params\[(.*?)]")
-        for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
-            if module_name[0] == "_":
-                for _, fun in inspect.getmembers(module, inspect.isfunction):
-                    # quantities that this function computes
-                    names = get_matches(fun, pattern_names)
-                    parameterization = get_parameterization(fun)
-                    # dependencies queried in source code of this function
-                    deps = {
-                        "data": get_matches(fun, pattern_data) - names,
-                        "profiles": get_matches(fun, pattern_profiles),
-                        "params": get_matches(fun, pattern_params),
-                    }
-                    # some functions compute multiple things, e.g. curvature
-                    for name in names:
-                        # same logic as desc.compute.data_index.py
-                        for p in parameterization:
-                            for base_class, superclasses in _class_inheritance.items():
-                                if p in superclasses or p == base_class:
-                                    queried_deps.setdefault(base_class, {})[name] = deps
-
-        for parameterization in data_index:
-            for name, val in data_index[parameterization].items():
-                err_msg = f"Parameterization: {parameterization}. Name: {name}."
-                deps = val["dependencies"]
-                data = set(deps["data"])
-                axis_limit_data = set(deps["axis_limit_data"])
-                profiles = set(deps["profiles"])
-                params = set(deps["params"])
-                # assert no duplicate dependencies
-                assert len(data) == len(deps["data"]), err_msg
-                assert len(axis_limit_data) == len(deps["axis_limit_data"]), err_msg
-                assert data.isdisjoint(axis_limit_data), err_msg
-                assert len(profiles) == len(deps["profiles"]), err_msg
-                assert len(params) == len(deps["params"]), err_msg
-                # assert correct dependencies are queried
-                assert (
-                    queried_deps[parameterization][name]["data"]
-                    == data | axis_limit_data
-                ), err_msg
-                assert (
-                    queried_deps[parameterization][name]["profiles"] == profiles
-                ), err_msg
-                assert queried_deps[parameterization][name]["params"] == params, err_msg
 
     @pytest.mark.unit
     def test_axis_limit_api(self):
@@ -307,59 +288,108 @@ class TestAxisLimits:
         assert np.isfinite(data[name]).all()
 
     @pytest.mark.unit
-    def test_limit_existence(self):
-        """Test that only quantities which lack limits do not evaluate at axis."""
-
-        def test(eq):
-            grid = LinearGrid(L=1, M=1, N=1, sym=eq.sym, NFP=eq.NFP, axis=True)
-            at_axis = grid.nodes[:, 0] == 0
-            assert at_axis.any() and not at_axis.all()
-            data = eq.compute(
-                list(data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()),
-                grid=grid,
-            )
-            for key in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
-                if _skip_this(eq, key):
-                    continue
-                is_finite = np.isfinite(data[key])
-                if key in not_finite_limits:
-                    assert np.all(is_finite.T ^ at_axis), key
-                else:
-                    assert np.all(is_finite), key
-
-        # fixed iota
-        # test(get("W7-X"))  # noqa: E800
-        # fixed current
-        # test(get("QAS"))  # noqa: E800
-
-    @pytest.mark.unit
-    def test_continuous_limits(self):
+    def test_limit_continuity(self):
         """Heuristic to test correctness of all quantities with limits."""
-        # It is possible for a discontinuity to propagate across dependencies,
-        # so this test does not make sense for keys that rely on discontinuous
-        # keys as dependencies.
-        finite_discontinuous = set()
-        continuous = (
-            data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()
-            - not_finite_limits
-        )
-        continuous -= grow_seeds(finite_discontinuous, continuous)
-
-        # The need for a weaker tolerance on these keys may be due to large
-        # derivatives near axis, finite precision error, or a subpar polynomial
-        # regression fit against which the axis limit is compared.
-        rtol = "rtol"
-        atol = "atol"
+        # The need for a weaker tolerance on these keys may be due to a subpar
+        # polynomial regression fit against which the axis limit is compared.
         weaker_tolerance = {
-            "B0_rr": {rtol: 5e-03},
-            "iota_r": {atol: 1e-4},
-            "iota_num_rr": {atol: 5e-3},
-            "alpha_r": {rtol: 1e-3},
+            "B0_rr": {"rtol": 5e-03},
+            "iota_r": {"atol": 1e-4},
+            "iota_num_rr": {"atol": 5e-3},
+            "alpha_r": {"rtol": 1e-3},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
         # same as 'weaker_tolerance | zero_limit', but works on Python 3.8 (PEP 584)
-        kwargs = dict(weaker_tolerance, **zero_map)  # noqa: F841
+        kwargs = dict(weaker_tolerance, **zero_map)
         # fixed iota
-        # assert_is_continuous(get("W7-X"), names=continuous, kwargs=kwargs) noqa: E800
+        assert_is_continuous(get("W7-X"), kwargs=kwargs)
         # fixed current
-        # assert_is_continuous(get("QAS"), names=continuous, kwargs=kwargs) noqa: E800
+        assert_is_continuous(get("NCSX"), kwargs=kwargs)
+
+    @pytest.mark.unit
+    def test_magnetic_field_is_physical(self):
+        """Test direction of magnetic field at axis limit."""
+
+        def test(eq):
+            grid = LinearGrid(rho=0, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
+            assert grid.axis.size
+            data = eq.compute(
+                ["b", "n_theta", "n_rho", "e_zeta", "g_zz", "B"], grid=grid
+            )
+            # For the rotational transform to be finite at the magnetic axis,
+            # the magnetic field must satisfy 𝐁 ⋅ 𝐞_ζ × 𝐞ᵨ = 0. This is also
+            # required for 𝐁^θ component of the field to be physical.
+            np.testing.assert_allclose(dot(data["b"], data["n_theta"]), 0, atol=1e-15)
+            # and be orthogonal with 𝐞^ρ because 𝐞^ρ is multivalued at the
+            # magnetic axis. 𝐁^ρ = 𝐁 ⋅ 𝐞^ρ must be single-valued for the
+            # magnetic field to be physical. (The direction of the vector needs
+            # to be unique).
+            np.testing.assert_allclose(dot(data["b"], data["n_rho"]), 0, atol=1e-15)
+            # and collinear with 𝐞_ζ near ρ=0
+            np.testing.assert_allclose(
+                # |𝐁_ζ| == ‖𝐁‖ ‖𝐞_ζ‖
+                np.abs(dot(data["b"], (data["e_zeta"].T / np.sqrt(data["g_zz"])).T)),
+                1,
+            )
+            # Explicitly check 𝐁 is single-valued at the magnetic axis.
+            for B in data["B"].reshape((grid.num_zeta, -1, 3)):
+                np.testing.assert_allclose(B[:, 0], B[0, 0])
+                np.testing.assert_allclose(B[:, 1], B[0, 1])
+                np.testing.assert_allclose(B[:, 2], B[0, 2])
+
+        test(get("W7-X"))
+        test(get("NCSX"))
+
+
+def _reverse_mode_unsafe_names():
+    names = data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()
+    eq = get("ESTELL")
+
+    def isalias(name):
+        return isinstance(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["fun"],
+            functools.partial,
+        )
+
+    def get_source(name):
+        return "".join(
+            inspect.getsource(
+                data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["fun"]
+            ).split("def ")[1:]
+        )
+
+    names = [
+        name
+        for name in names
+        if not (
+            "Boozer" in name
+            or "_mn" in name
+            or name == "B modes"
+            or _skip_this(eq, name)
+            or name in not_finite_limits
+            or isalias(name)
+        )
+    ]
+
+    unsafe_names = []  # things that might have nan gradient but shouldn't
+    for name in names:
+        source = get_source(name)
+        if "replace_at_axis" in source:
+            unsafe_names.append(name)
+
+    unsafe_names = sorted(unsafe_names)
+    print("Unsafe names: ", unsafe_names)
+    return unsafe_names
+
+
+@pytest.mark.parametrize("name", _reverse_mode_unsafe_names())
+def test_reverse_mode_ad_axis(name):
+    """Asserts that the rho=0 axis limits are reverse mode differentiable."""
+    eq = get("ESTELL")
+    grid = LinearGrid(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
+    eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), verbose=0)
+    obj.build(verbose=0)
+    g = obj.grad(obj.x())
+    assert not np.any(np.isnan(g))

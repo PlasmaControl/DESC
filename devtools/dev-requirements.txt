@@ -7,6 +7,8 @@ sphinx > 3.0.0
 sphinx-argparse
 sphinx_copybutton
 sphinx-rtd-theme >= 1.0, < 2.0
+sphinx-github-style >= 1.0, <= 1.1
+
 
 # linting
 black == 22.10.0

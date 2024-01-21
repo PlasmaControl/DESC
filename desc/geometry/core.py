@@ -15,18 +15,19 @@ from desc.compute.utils import (
     get_params,
     get_transforms,
 )
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
+from desc.optimizable import Optimizable
 
 
-class Curve(IOAble, ABC):
+class Curve(IOAble, Optimizable, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
     _io_attrs_ = ["_name", "shift", "rotmat"]
 
     def __init__(self, name=""):
-        self.shift = jnp.array([0, 0, 0])
-        self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        self.shift = jnp.array([0, 0, 0]).astype(float)
+        self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).astype(float)
         self.name = name
 
     @property
@@ -45,6 +46,7 @@ class Curve(IOAble, ABC):
         params=None,
         transforms=None,
         data=None,
+        override_grid=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -62,6 +64,11 @@ class Curve(IOAble, ABC):
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
+        override_grid : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -69,14 +76,23 @@ class Curve(IOAble, ABC):
             Computed quantity and intermediate variables.
 
         """
+        # set a default number of points for the SplineXYZCurve
+        N = self.N if hasattr(self, "N") else self.X.size
         if isinstance(names, str):
             names = [names]
         if grid is None:
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=True)
-        if isinstance(grid, numbers.Integral):
+            grid = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=False)
+        elif isinstance(grid, numbers.Integral):
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = LinearGrid(N=grid, NFP=NFP, endpoint=True)
+            grid = LinearGrid(N=grid, NFP=NFP, endpoint=False)
+        elif hasattr(grid, "NFP"):
+            NFP = grid.NFP
+        else:
+            raise TypeError(
+                "must pass in a Grid object or an integer for argument grid!"
+                f" instead got type {type(grid)}"
+            )
 
         if params is None:
             params = get_params(names, obj=self)
@@ -95,11 +111,11 @@ class Curve(IOAble, ABC):
         ]
         calc0d = bool(len(dep0d))
         # see if the grid we're already using will work for desired qtys
-        if calc0d and (grid.N >= 2 * self.N + 5) and isinstance(grid, LinearGrid):
+        if calc0d and (grid.N >= 2 * N + 5) and isinstance(grid, LinearGrid):
             calc0d = False
 
-        if calc0d:
-            grid0d = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=True)
+        if calc0d and override_grid:
+            grid0d = LinearGrid(N=2 * N + 5, NFP=NFP, endpoint=True)
             data0d = compute_fun(
                 self,
                 dep0d,
@@ -149,8 +165,84 @@ class Curve(IOAble, ABC):
             + " (name={})".format(self.name)
         )
 
+    def to_FourierXYZ(self, N=None, grid=None, s=None, name=""):
+        """Convert Curve to FourierXYZCurve representation.
 
-class Surface(IOAble, ABC):
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYZCurve.
+            If an integer, uses that many equally spaced points.
+        s : ndarray or "arclength"
+            arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        curve : FourierXYZCurve
+            New representation of the curve parameterized by Fourier series for X,Y,Z.
+
+        """
+        from .curve import FourierXYZCurve
+
+        if (grid is None) and (s is not None) and (not isinstance(s, str)):
+            grid = LinearGrid(zeta=s)
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return FourierXYZCurve.from_values(coords, N=N, s=s, basis="xyz", name=name)
+
+    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+        """Convert Curve to SplineXYZCurve.
+
+        Parameters
+        ----------
+        knots : ndarray or "arclength"
+            arbitrary curve parameter values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from Curve.compute("x",grid=grid))
+            If None, defaults to using an linearly spaced points in [0, 2pi) as the
+            knots. If supplied, should lie in [0,2pi].
+            Alternatively, the string "arclength" can be supplied to use the normalized
+            distance between points.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with SplineXYZCurve.
+            If an integer, uses that many equally spaced points.
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        SplineXYZCurve: SplineXYZCurve
+            New representation of the curve parameterized by a spline for X,Y,Z.
+
+        """
+        from .curve import SplineXYZCurve
+
+        if (grid is None) and (knots is not None) and (not isinstance(knots, str)):
+            grid = LinearGrid(zeta=knots)
+        coords = self.compute("x", grid=grid, basis="xyz")["x"]
+        return SplineXYZCurve.from_values(
+            coords, knots=knots, method=method, name=name, basis="xyz"
+        )
+
+    # TODO: to_rz method for converting to FourierRZCurve representation
+    # (might be impossible to parameterize some curves with toroidal angle phi)
+
+
+class Surface(IOAble, Optimizable, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
     _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]
@@ -228,6 +320,7 @@ class Surface(IOAble, ABC):
         params=None,
         transforms=None,
         data=None,
+        override_grid=True,
         **kwargs,
     ):
         """Compute the quantity given by name on grid.
@@ -245,6 +338,11 @@ class Surface(IOAble, ABC):
             Transforms for R, Z, lambda, etc. Default is to build from grid
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
+        override_grid : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
 
         Returns
         -------
@@ -265,6 +363,11 @@ class Surface(IOAble, ABC):
             elif hasattr(self, "zeta"):  # constant zeta surface
                 grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
                 grid._nodes[:, 2] = self.zeta
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object or an integer for argument grid!"
+                f" instead got type {type(grid)}"
+            )
         if params is None:
             params = get_params(names, obj=self)
         if transforms is None:
@@ -282,7 +385,7 @@ class Surface(IOAble, ABC):
         ]
         calc0d = bool(len(dep0d))
         # see if the grid we're already using will work for desired qtys
-        if calc0d and hasattr(self, "rho"):  # constant rho surface
+        if calc0d and override_grid and hasattr(self, "rho"):  # constant rho surface
             if (
                 (grid.N >= 2 * self.N + 5)
                 and (grid.M > 2 * self.M + 5)
@@ -296,7 +399,9 @@ class Surface(IOAble, ABC):
                     N=2 * self.N + 5,
                     NFP=self.NFP,
                 )
-        elif calc0d and hasattr(self, "zeta"):  # constant zeta surface
+        elif (
+            calc0d and override_grid and hasattr(self, "zeta")
+        ):  # constant zeta surface
             if (
                 (grid.L >= self.L + 1)
                 and (grid.M > 2 * self.M + 5)
@@ -307,7 +412,7 @@ class Surface(IOAble, ABC):
                 grid0d = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
                 grid0d._nodes[:, 2] = self.zeta
 
-        if calc0d:
+        if calc0d and override_grid:
             data0d = compute_fun(
                 self,
                 dep0d,

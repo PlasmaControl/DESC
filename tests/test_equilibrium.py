@@ -75,31 +75,6 @@ def test_compute_theta_coords(DSHAPE_current):
     np.testing.assert_allclose(nodes, geom_coords, rtol=1e-5, atol=1e-5)
 
 
-@pytest.mark.slow
-@pytest.mark.unit
-@pytest.mark.solve
-def test_compute_flux_coords(DSHAPE_current):
-    """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-
-    rho = np.linspace(0.01, 0.99, 200)
-    theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
-    zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
-
-    nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute(["R", "Z"], grid=Grid(nodes, sort=False))
-    real_coords = np.vstack([coords["R"].flatten(), zeta, coords["Z"].flatten()]).T
-
-    flux_coords = eq.compute_flux_coords(real_coords)
-    flux_coords = np.array(flux_coords)
-
-    # catch difference between 0 and 2*pi
-    if flux_coords[0, 1] > np.pi:  # theta[0] = 0
-        flux_coords[0, 1] = flux_coords[0, 1] - 2 * np.pi
-
-    np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)
-
-
 @pytest.mark.unit
 def test_map_coordinates():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
@@ -119,7 +94,11 @@ def test_map_coordinates():
     out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
 
     out = eq.map_coordinates(
-        in_coords, inbasis, outbasis, period=(2 * np.pi, 2 * np.pi, np.inf)
+        in_coords,
+        inbasis,
+        outbasis,
+        period=(2 * np.pi, 2 * np.pi, np.inf),
+        maxiter=40,
     )
     np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
 
@@ -156,6 +135,66 @@ def test_map_coordinates2():
         period=(np.inf, 2 * np.pi, 2 * np.pi),
     )
     assert not np.any(np.isnan(out))
+
+
+@pytest.mark.unit
+def test_map_coordinates_derivative():
+    """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
+    eq = desc.examples.get("DSHAPE")
+
+    inbasis = ["alpha", "phi", "rho"]
+    outbasis = ["rho", "theta_PEST", "zeta"]
+
+    rho = np.linspace(0.01, 0.99, 20)
+    theta = np.linspace(0, np.pi, 20, endpoint=False)
+    zeta = np.linspace(0, np.pi, 20, endpoint=False)
+
+    grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
+    in_data = eq.compute(inbasis, grid=grid)
+    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+
+    import jax
+
+    @jax.jit
+    def foo(params):
+        out = eq.map_coordinates(
+            in_coords,
+            inbasis,
+            outbasis,
+            np.array([rho, theta, zeta]).T,
+            params,
+            period=(2 * np.pi, 2 * np.pi, np.inf),
+            maxiter=40,
+        )
+        return out
+
+    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict)
+    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict)
+    for j1, j2 in zip(J1.values(), J2.values()):
+        assert ~np.any(np.isnan(j1))
+        assert ~np.any(np.isnan(j2))
+        np.testing.assert_allclose(j1, j2)
+
+    rho = np.linspace(0.01, 0.99, 200)
+    theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
+    zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
+
+    nodes = np.vstack([rho, theta, zeta]).T
+    coords = eq.compute("lambda", grid=Grid(nodes, sort=False))
+    flux_coords = nodes.copy()
+    flux_coords[:, 1] += coords["lambda"]
+
+    @jax.jit
+    def bar(L_lmn):
+        geom_coords = eq.compute_theta_coords(flux_coords, L_lmn)
+        return geom_coords
+
+    J1 = jax.jit(jax.jacfwd(bar))(eq.params_dict["L_lmn"])
+    J2 = jax.jit(jax.jacrev(bar))(eq.params_dict["L_lmn"])
+
+    assert ~np.any(np.isnan(J1))
+    assert ~np.any(np.isnan(J2))
+    np.testing.assert_allclose(J1, J2)
 
 
 @pytest.mark.slow
@@ -317,12 +356,22 @@ def test_poincare_solve_not_implemented():
         "axis": np.array([[0, 10, 0]]),
         "pressure": np.array([[0, 10], [2, 5]]),
         "iota": np.array([[0, 1], [2, 3]]),
-        "surface": np.array([[0, 0, 0, 10, 0], [1, 1, 0, 1, 1]]),
+        "surface": np.array(
+            [
+                [0, 0, 0, 10, 0],
+                [1, 1, 0, 1, 0.1],
+                [1, -1, 0, 0.2, -1],
+            ]
+        ),
     }
 
     eq = Equilibrium(**inputs)
+    assert eq.bdry_mode == "poincare"
     np.testing.assert_allclose(
-        eq.Rb_lmn, [10.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        eq.Rb_lmn, [10.0, 0.2, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    )
+    np.testing.assert_allclose(
+        eq.Zb_lmn, [0.0, -1.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     )
     with pytest.raises(NotImplementedError):
         eq.solve()
@@ -349,3 +398,13 @@ def test_change_NFP():
         eq.change_resolution(NFP=4)
         obj = get_equilibrium_objective(eq=eq)
         obj.build()
+
+
+@pytest.mark.unit
+def test_error_when_ndarray_or_integer_passed():
+    """Test that errors raise correctly when a non-Grid object is passed."""
+    eq = desc.examples.get("DSHAPE")
+    with pytest.raises(TypeError):
+        eq.compute("R", grid=1)
+    with pytest.raises(TypeError):
+        eq.compute("R", grid=np.linspace(0, 1, 10))

@@ -12,6 +12,7 @@ from .linear_objectives import (
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    FixAnisotropy,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
@@ -26,15 +27,28 @@ from .linear_objectives import (
     FixPressure,
     FixPsi,
 )
-from .nae_utils import make_RZ_cons_1st_order
+from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
 
+_PROFILE_CONSTRAINTS = {
+    "pressure": FixPressure,
+    "iota": FixIota,
+    "current": FixCurrent,
+    "electron_density": FixElectronDensity,
+    "electron_temperature": FixElectronTemperature,
+    "ion_temperature": FixIonTemperature,
+    "atomic_number": FixAtomicNumber,
+    "anisotropy": FixAnisotropy,
+}
 
-def get_equilibrium_objective(eq=None, mode="force", normalize=True):
+
+def get_equilibrium_objective(eq, mode="force", normalize=True):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
     ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
     mode : one of {"force", "forces", "energy", "vacuum"}
         which objective to return. "force" computes force residuals on unified grid.
         "forces" uses two different grids for radial and helical forces. "energy" is
@@ -67,19 +81,15 @@ def get_equilibrium_objective(eq=None, mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def get_fixed_axis_constraints(
-    eq=None, profiles=True, iota=True, kinetic=False, normalize=True
-):
+def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
     """Get the constraints necessary for a fixed-axis equilibrium problem.
 
     Parameters
     ----------
+    eq : Equilibrium
+        Equilibrium to constrain.
     profiles : bool
-        Whether to also return constraints to fix input profiles.
-    iota : bool
-        Whether to add FixIota or FixCurrent as a constraint.
-    kinetic : bool
-        Whether to add constraints to fix kinetic profiles or pressure
+        If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -95,50 +105,24 @@ def get_fixed_axis_constraints(
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
-        if kinetic:
-            constraints += (
-                FixElectronDensity(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixElectronTemperature(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixIonTemperature(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixAtomicNumber(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixPressure(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
+        for name, con in _PROFILE_CONSTRAINTS.items():
+            if getattr(eq, name) is not None:
+                constraints += (
+                    con(eq=eq, normalize=normalize, normalize_target=normalize),
+                )
 
-        if iota:
-            constraints += (
-                FixIota(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
     return constraints
 
 
-def get_fixed_boundary_constraints(
-    eq=None, profiles=True, iota=True, kinetic=False, normalize=True
-):
+def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium to constraint.
+        Equilibrium to constrain.
     profiles : bool
-        Whether to also return constraints to fix input profiles.
-    iota : bool
-        Whether to add FixIota or FixCurrent as a constraint.
-    kinetic : bool
-        Whether to also fix kinetic profiles.
+        If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -154,32 +138,12 @@ def get_fixed_boundary_constraints(
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
-        if kinetic:
-            constraints += (
-                FixElectronDensity(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixElectronTemperature(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixIonTemperature(
-                    eq=eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixAtomicNumber(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixPressure(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
+        for name, con in _PROFILE_CONSTRAINTS.items():
+            if getattr(eq, name) is not None:
+                constraints += (
+                    con(eq=eq, normalize=normalize, normalize_target=normalize),
+                )
 
-        if iota:
-            constraints += (
-                FixIota(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
-            )
     return constraints
 
 
@@ -188,10 +152,9 @@ def get_NAE_constraints(
     qsc_eq,
     order=1,
     profiles=True,
-    iota=False,
-    kinetic=False,
     normalize=True,
     N=None,
+    fix_lambda=False,
 ):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem.
 
@@ -199,66 +162,52 @@ def get_NAE_constraints(
     ----------
     desc_eq : Equilibrium
         Equilibrium to constrain behavior of
-        (assumed to be a fit from the NAE equil using .from_near_axis()).
+        (assumed to be a fit from the NAE equil using `.from_near_axis()`).
     qsc_eq : Qsc
         Qsc object defining the near-axis equilibrium to constrain behavior to.
     order : int
         order (in rho) of near-axis behavior to constrain
     profiles : bool
-        Whether to also return constraints to fix input profiles.
-    iota : bool
-        Whether to add FixIota or FixCurrent as a constraint.
-    kinetic : bool
-        Whether to also fix kinetic profiles.
+        If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
-    N : int,
+    N : int
         max toroidal resolution to constrain.
-        If None, defaults to equilibrium's toroidal resolution
+        If `None`, defaults to equilibrium's toroidal resolution
+    fix_lambda : bool or int
+        Whether to constrain lambda to match that of the NAE near-axis
+        if an `int`, fixes lambda up to that order in rho {0,1}
+        if `True`, fixes lambda up to the specified order given by `order`
 
     Returns
     -------
     constraints, tuple of _Objectives
         A list of the linear constraints used in fixed-axis problems.
     """
+    if not isinstance(fix_lambda, bool):
+        fix_lambda = int(fix_lambda)
     constraints = (
         FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=desc_eq, normalize=normalize, normalize_target=normalize),
     )
-    if profiles:
-        if kinetic:
-            constraints += (
-                FixElectronDensity(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixElectronTemperature(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixIonTemperature(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-                FixAtomicNumber(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-            )
-        else:
-            constraints += (
-                FixPressure(
-                    eq=desc_eq, normalize=normalize, normalize_target=normalize
-                ),
-            )
 
-        if iota:
-            constraints += (
-                FixIota(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-            )
-        else:
-            constraints += (
-                FixCurrent(eq=desc_eq, normalize=normalize, normalize_target=normalize),
-            )
+    if profiles:
+        for name, con in _PROFILE_CONSTRAINTS.items():
+            if getattr(desc_eq, name) is not None:
+                constraints += (
+                    con(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+                )
+
+    if fix_lambda or (fix_lambda >= 0 and type(fix_lambda) is int):
+        L_axis_constraints, _, _ = calc_zeroth_order_lambda(
+            qsc=qsc_eq, desc_eq=desc_eq, N=N
+        )
+        constraints += L_axis_constraints
     if order >= 1:  # first order constraints
-        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq, N=N)
+        constraints += make_RZ_cons_1st_order(
+            qsc=qsc_eq, desc_eq=desc_eq, N=N, fix_lambda=fix_lambda and fix_lambda > 0
+        )
     if order >= 2:  # 2nd order constraints
         raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
 

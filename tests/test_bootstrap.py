@@ -7,7 +7,8 @@ from scipy.constants import elementary_charge
 from scipy.integrate import quad
 
 import desc.io
-from desc.compute._bootstrap import _trapped_fraction, j_dot_B_Redl
+from desc.compat import rescale
+from desc.compute._bootstrap import _trapped_fraction, compute_J_dot_B_Redl
 from desc.compute._field import (
     _1_over_B_fsa,
     _B2_fsa,
@@ -15,9 +16,9 @@ from desc.compute._field import (
     _max_tz_modB,
     _min_tz_modB,
 )
-from desc.compute._geometry import _V_r_of_r
-from desc.compute.utils import compress, expand
+from desc.compute._geometry import _V_r_of_r, _V_rr_of_r
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives import (
@@ -42,18 +43,19 @@ pytest_mpl_tol = 7.8
 pytest_mpl_remove_text = True
 
 
-def trapped_fraction(grid, modB, sqrt_g):
+def trapped_fraction(grid, modB, sqrt_g, sqrt_g_r):
     """
     Helper function to test trapped fraction calculation.
 
     Function to help test the trapped fraction calculation on
-    analytic B fields rather than Equilibium objects.
+    analytic B fields rather than Equilibrium objects.
     """
-    data = {"|B|": modB, "|B|^2": modB**2, "sqrt(g)": sqrt_g}
+    data = {"|B|": modB, "|B|^2": modB**2, "sqrt(g)": sqrt_g, "sqrt(g)_r": sqrt_g_r}
     params = None
     transforms = {"grid": grid}
     profiles = None
     data = _V_r_of_r(params, transforms, profiles, data)
+    data = _V_rr_of_r(params, transforms, profiles, data)
     data = _B2_fsa(params, transforms, profiles, data)
     data = _1_over_B_fsa(params, transforms, profiles, data)
     data = _max_tz_modB(params, transforms, profiles, data)
@@ -72,59 +74,42 @@ class TestBootstrapCompute:
         M = 100
         NFP = 3
         for N in [0, 25]:
-            grid = LinearGrid(
-                rho=[0.5, 1],
-                M=M,
-                N=N,
-                NFP=NFP,
-            )
+            grid = LinearGrid(rho=[0.5, 1], M=M, N=N, NFP=NFP)
             theta = grid.nodes[:, 1]
             zeta = grid.nodes[:, 2]
-            modB = np.zeros_like(theta)
-            sqrt_g = np.zeros_like(theta)
 
-            sqrt_g[grid.inverse_rho_idx == 0] = 10.0
-            sqrt_g[grid.inverse_rho_idx == 1] = -25.0
-
-            modB = 13.0 + 2.6 * np.cos(theta)
-            modB_1 = 9.0 + 3.7 * np.sin(theta - NFP * zeta)
+            sqrt_g = np.where(grid.inverse_rho_idx == 0, 10.0, 0.0)
             mask = grid.inverse_rho_idx == 1
-            modB[mask] = modB_1[mask]
-
-            f_t_data = trapped_fraction(grid, modB, sqrt_g)
+            sqrt_g[mask] = -25.0
+            modB = np.where(
+                mask, 9.0 + 3.7 * np.sin(theta - NFP * zeta), 13.0 + 2.6 * np.cos(theta)
+            )
+            # todo: find value for sqrt_g_r value to test axis limit
+            f_t_data = trapped_fraction(grid, modB, sqrt_g, sqrt_g_r=np.nan)
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
-                f_t_data["<B^2>"],
-                expand(
-                    grid,
-                    np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2]),
+                f_t_data["<|B|^2>"],
+                grid.expand(
+                    np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2])
                 ),
             )
             np.testing.assert_allclose(
                 f_t_data["<1/|B|>"],
-                expand(
-                    grid,
-                    np.array(
-                        [
-                            1 / np.sqrt(13.0**2 - 2.6**2),
-                            1 / np.sqrt(9.0**2 - 3.7**2),
-                        ]
-                    ),
-                ),
+                grid.expand(1 / np.sqrt([13.0**2 - 2.6**2, 9.0**2 - 3.7**2])),
             )
             np.testing.assert_allclose(
                 f_t_data["min_tz |B|"],
-                expand(grid, np.array([13.0 - 2.6, 9.0 - 3.7])),
+                grid.expand(np.array([13.0 - 2.6, 9.0 - 3.7])),
                 rtol=1e-4,
             )
             np.testing.assert_allclose(
                 f_t_data["max_tz |B|"],
-                expand(grid, np.array([13.0 + 2.6, 9.0 + 3.7])),
+                grid.expand(np.array([13.0 + 2.6, 9.0 + 3.7])),
                 rtol=1e-4,
             )
             np.testing.assert_allclose(
                 f_t_data["effective r/R0"],
-                expand(grid, np.array([2.6 / 13.0, 3.7 / 9.0])),
+                grid.expand(np.array([2.6 / 13.0, 3.7 / 9.0])),
                 rtol=1e-3,
             )
 
@@ -152,60 +137,55 @@ class TestBootstrapCompute:
         fig = plt.figure()
 
         def test(N, grid_type):
-            grid = grid_type(
-                L=L,
-                M=M,
-                N=N,
-                NFP=NFP,
-            )
+            grid = grid_type(L=L, M=M, N=N, NFP=NFP)
             rho = grid.nodes[:, 0]
             theta = grid.nodes[:, 1]
             epsilon_3D = rho * epsilon_max
-            # Pick out unique values:
-            epsilon = np.array(sorted(list(set(epsilon_3D))))
+            epsilon = np.unique(epsilon_3D)
 
             # Eq (A6)   # noqa: E800
             modB = B0 / (1 + epsilon_3D * np.cos(theta))
             # For Jacobian, use eq (A7) for the theta dependence,
             # times an arbitrary overall scale factor
             sqrt_g = 6.7 * (1 + epsilon_3D * np.cos(theta))
-
-            f_t_data = trapped_fraction(grid, modB, sqrt_g)
+            # Above "Jacobian" is nonzero at magnetic axis, so set
+            # sqrt(g)_r as sqrt(g) to nullify automatic computation of
+            # limit which assumes sqrt(g) is true Jacobian and zero at the
+            # magnetic axis.
+            f_t_data = trapped_fraction(grid, modB, sqrt_g, sqrt_g_r=sqrt_g)
 
             # Eq (C18) in Kim et al:
             f_t_Kim = 1.46 * np.sqrt(epsilon) - 0.46 * epsilon
 
             np.testing.assert_allclose(
-                f_t_data["min_tz |B|"], expand(grid, B0 / (1 + epsilon))
+                f_t_data["min_tz |B|"], grid.expand(B0 / (1 + epsilon))
             )
             # Looser tolerance for Bmax since there is no grid point there:
             Bmax = B0 / (1 - epsilon)
             np.testing.assert_allclose(
-                f_t_data["max_tz |B|"], expand(grid, Bmax), rtol=0.001
+                f_t_data["max_tz |B|"], grid.expand(Bmax), rtol=0.001
             )
             np.testing.assert_allclose(
-                f_t_data["effective r/R0"], expand(grid, epsilon), rtol=1e-4
+                f_t_data["effective r/R0"], grid.expand(epsilon), rtol=1e-4
             )
             # Eq (A8):
-            fsa_B2 = B0 * B0 / np.sqrt(1 - epsilon**2)
+            fsa_B2 = B0**2 / np.sqrt(1 - epsilon**2)
             np.testing.assert_allclose(
-                f_t_data["<B^2>"],
-                expand(grid, fsa_B2),
-                rtol=1e-6,
+                f_t_data["<|B|^2>"], grid.expand(fsa_B2), rtol=1e-6
             )
             np.testing.assert_allclose(
-                f_t_data["<1/|B|>"], expand(grid, (2 + epsilon**2) / (2 * B0))
+                f_t_data["<1/|B|>"], grid.expand((2 + epsilon**2) / (2 * B0))
             )
             # Note the loose tolerance for this next test since we do not expect precise
             # agreement.
             np.testing.assert_allclose(
-                f_t_data["trapped fraction"], expand(grid, f_t_Kim), rtol=0.1, atol=0.07
+                f_t_data["trapped fraction"], grid.expand(f_t_Kim), rtol=0.1, atol=0.07
             )
 
             # Now compute f_t numerically by a different algorithm:
             modB = modB.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
             sqrt_g = sqrt_g.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
-            fourpisq = 4 * np.pi * np.pi
+            fourpisq = 4 * np.pi**2
             d_V_d_rho = np.mean(sqrt_g, axis=(0, 2)) / fourpisq
             f_t = np.zeros(grid.num_rho)
             for jr in range(grid.num_rho):
@@ -221,7 +201,7 @@ class TestBootstrapCompute:
                 f_t[jr] = 1 - 0.75 * fsa_B2[jr] * integral[0]
 
             np.testing.assert_allclose(
-                compress(grid, f_t_data["trapped fraction"])[1:],
+                grid.compress(f_t_data["trapped fraction"])[1:],
                 f_t[1:],
                 rtol=0.001,
                 atol=0.001,
@@ -229,7 +209,7 @@ class TestBootstrapCompute:
 
             plt.plot(epsilon, f_t_Kim, "b", label="Kim")
             plt.plot(
-                epsilon, compress(grid, f_t_data["trapped fraction"]), "r", label="desc"
+                epsilon, grid.compress(f_t_data["trapped fraction"]), "r", label="desc"
             )
             plt.plot(epsilon, f_t, ":g", label="Alternative algorithm")
 
@@ -287,7 +267,7 @@ class TestBootstrapCompute:
         # Sauter eq (18b)-(18c):
         nu_e = abs(
             R
-            * (6.921e-18)
+            * 6.921e-18
             * ne_rho
             * Zeff_rho
             * ln_Lambda_e
@@ -295,7 +275,7 @@ class TestBootstrapCompute:
         )
         nu_i = abs(
             R
-            * (4.90e-18)
+            * 4.90e-18
             * ni_rho
             * (Zeff_rho**4)
             * ln_Lambda_ii
@@ -443,7 +423,7 @@ class TestBootstrapCompute:
             "Te_r": Te(rho, dr=1),
             "Ti_r": Ti(rho, dr=1),
         }
-        J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+        J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
         atol = 1e-13
         rtol = 1e-13
@@ -521,7 +501,7 @@ class TestBootstrapCompute:
             # Sauter eq (18b), but without the iota factor:
             nu_e_without_iota = (
                 R
-                * (6.921e-18)
+                * 6.921e-18
                 * ne_rho
                 * Zeff_rho
                 * ln_Lambda_e
@@ -549,7 +529,7 @@ class TestBootstrapCompute:
                 "Te_r": Te(rho, dr=1),
                 "Ti_r": Ti(rho, dr=1),
             }
-            J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+            J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
             # Make sure L31, L32, and alpha are within the right range:
             np.testing.assert_array_less(J_dot_B_data["L31"], 1.05)
@@ -658,7 +638,7 @@ class TestBootstrapCompute:
                 # Sauter eq (18b), but without the q = 1/iota factor:
                 nu_e_without_iota = (
                     R
-                    * (6.921e-18)
+                    * 6.921e-18
                     * ne_rho
                     * Zeff_rho
                     * ln_Lambda_e
@@ -686,7 +666,7 @@ class TestBootstrapCompute:
                     "Te_r": Te(rho, dr=1),
                     "Ti_r": Ti(rho, dr=1),
                 }
-                J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
+                J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
 
                 L31s[j_nu_star, :] = J_dot_B_data["L31"]
                 L32s[j_nu_star, :] = J_dot_B_data["L32"]
@@ -913,12 +893,8 @@ class TestBootstrapCompute:
         )
 
         grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
-        data = eq.compute(
-            "<J*B> Redl",
-            grid=grid,
-            helicity=helicity,
-        )
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        data = eq.compute("<J*B> Redl", grid=grid, helicity=helicity)
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         # The relative error is a bit larger at the boundary, where the
         # absolute magnitude is quite small, so drop those points.
@@ -949,7 +925,7 @@ class TestBootstrapCompute:
         fig = plt.figure()
         helicity = (1, 0)
         filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
-        eq = desc.io.load(filename)
+        eq = desc.io.load(filename)[-1]
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )
@@ -1004,12 +980,8 @@ class TestBootstrapCompute:
         )
 
         grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
-        data = eq.compute(
-            "<J*B> Redl",
-            grid=grid,
-            helicity=helicity,
-        )
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        data = eq.compute("<J*B> Redl", grid=grid, helicity=helicity)
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
 
@@ -1042,7 +1014,7 @@ class TestBootstrapCompute:
         fig = plt.figure()
         helicity = (1, 4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
-        eq = desc.io.load(filename)
+        eq = desc.io.load(filename)[-1]
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )
@@ -1098,12 +1070,8 @@ class TestBootstrapCompute:
         )
 
         grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
-        data = eq.compute(
-            "<J*B> Redl",
-            grid=grid,
-            helicity=helicity,
-        )
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        data = eq.compute("<J*B> Redl", grid=grid, helicity=helicity)
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
 
@@ -1167,10 +1135,7 @@ class TestBootstrapObjectives:
         )
         # The equilibrium need not be in force balance, so no need to solve().
         grid = QuadratureGrid(
-            L=LMN_resolution,
-            M=LMN_resolution,
-            N=LMN_resolution,
-            NFP=eq.NFP,
+            L=LMN_resolution, M=LMN_resolution, N=LMN_resolution, NFP=eq.NFP
         )
         obj = ObjectiveFunction(
             BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
@@ -1229,7 +1194,7 @@ class TestBootstrapObjectives:
         integrand = (data["<J*B>"] - data["<J*B> Redl"]) / (scales["B"] * scales["J"])
         expected = 0.5 * sum(grid.weights * integrand**2) / (4 * np.pi**2)
         print(
-            "boostrap objectives for scaled configs:", results, " expected:", expected
+            "bootstrap objectives for scaled configs:", results, " expected:", expected
         )
 
         # Results are not perfectly identical because ln(Lambda) is not quite invariant.
@@ -1255,19 +1220,9 @@ class TestBootstrapObjectives:
         eq.atomic_number = 1.4
 
         def test(grid_type, kwargs, L, M, N):
-            grid = grid_type(
-                L=L,
-                M=M,
-                N=N,
-                NFP=eq.NFP,
-                **kwargs,
-            )
+            grid = grid_type(L=L, M=M, N=N, NFP=eq.NFP, **kwargs)
             obj = ObjectiveFunction(
-                BootstrapRedlConsistency(
-                    eq=eq,
-                    grid=grid,
-                    helicity=helicity,
-                ),
+                BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
             )
             obj.build()
             scalar_objective = obj.compute_scalar(obj.x(eq))
@@ -1348,7 +1303,7 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(eq=eq, kinetic=True),
+            constraints=get_fixed_boundary_constraints(eq=eq),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
@@ -1380,11 +1335,7 @@ class TestBootstrapObjectives:
             NFP=eq.NFP,
         )
         objective = ObjectiveFunction(
-            BootstrapRedlConsistency(
-                eq=eq,
-                grid=grid,
-                helicity=helicity,
-            )
+            BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
         )
         eq, _ = eq.optimize(
             verbose=3,
@@ -1400,13 +1351,9 @@ class TestBootstrapObjectives:
 
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5
-        data = eq.compute(
-            ["<J*B>", "<J*B> Redl"],
-            grid=grid,
-            helicity=helicity,
-        )
-        J_dot_B_MHD = compress(grid, data["<J*B>"])
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        data = eq.compute(["<J*B>", "<J*B> Redl"], grid=grid, helicity=helicity)
+        J_dot_B_MHD = grid.compress(data["<J*B>"])
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         assert np.max(J_dot_B_MHD) < 4e5
         assert np.max(J_dot_B_MHD) > 0
@@ -1468,7 +1415,7 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(eq=eq, kinetic=True, iota=False),
+            constraints=get_fixed_boundary_constraints(eq=eq),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
@@ -1494,18 +1441,9 @@ class TestBootstrapObjectives:
         )
 
         # grid for bootstrap consistency objective:
-        grid = QuadratureGrid(
-            L=current_L * 2,
-            M=eq.M * 2,
-            N=eq.N * 2,
-            NFP=eq.NFP,
-        )
+        grid = QuadratureGrid(L=current_L * 2, M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP)
         objective = ObjectiveFunction(
-            BootstrapRedlConsistency(
-                eq=eq,
-                grid=grid,
-                helicity=helicity,
-            )
+            BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
         )
         eq, _ = eq.optimize(
             verbose=3,
@@ -1524,13 +1462,9 @@ class TestBootstrapObjectives:
 
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5
-        data = eq.compute(
-            ["<J*B>", "<J*B> Redl"],
-            grid=grid,
-            helicity=helicity,
-        )
-        J_dot_B_MHD = compress(grid, data["<J*B>"])
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        data = eq.compute(["<J*B>", "<J*B> Redl"], grid=grid, helicity=helicity)
+        J_dot_B_MHD = grid.compress(data["<J*B>"])
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         assert np.max(J_dot_B_MHD) < 4e5
         assert np.max(J_dot_B_MHD) > 0
@@ -1620,9 +1554,9 @@ def test_bootstrap_objective_build():
         BootstrapRedlConsistency(eq=eq).build()
 
     eq = Equilibrium(
-        L=3,
-        M=3,
-        N=3,
+        L=4,
+        M=4,
+        N=4,
         NFP=2,
         electron_temperature=1e3,
         electron_density=1e21,
@@ -1631,10 +1565,101 @@ def test_bootstrap_objective_build():
     obj = BootstrapRedlConsistency(eq=eq)
     obj.build()
     # make sure default grid has the right nodes
-    assert obj._transforms["grid"].num_theta == 13
-    assert obj._transforms["grid"].num_zeta == 13
-    assert obj._transforms["grid"].num_rho == 5
+    assert obj.constants["transforms"]["grid"].num_theta == 17
+    assert obj.constants["transforms"]["grid"].num_zeta == 17
+    assert obj.constants["transforms"]["grid"].num_rho == 4
     np.testing.assert_allclose(
-        obj._transforms["grid"].nodes[obj._transforms["grid"].unique_rho_idx, 0],
-        np.array([0.2, 0.4, 0.6, 0.8, 1.0]),
+        obj.constants["transforms"]["grid"].nodes[
+            obj.constants["transforms"]["grid"].unique_rho_idx, 0
+        ],
+        np.array([0.125, 0.375, 0.625, 0.875]),
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_bootstrap_optimization_comparison_qa():
+    """Test that both methods of bootstrap optimization agree."""
+    # this same example is used in docs/notebooks/tutorials/bootstrap_current
+
+    # initial equilibrium
+    eq0 = get("precise_QA")
+    eq0 = rescale(eq0, L=("R0", 10), B=("B0", 5.86))
+    eq0.pressure = None
+    eq0.atomic_number = PowerSeriesProfile(np.array([1]), sym=True)
+    eq0.electron_density = (
+        PowerSeriesProfile(np.array([1.0, 0.0, 0.0, 0.0, 0.0, -1.0]), sym=True)
+        * 2.38e20
+    )
+    eq0.electron_temperature = (
+        PowerSeriesProfile(np.array([1.0, -1.0]), sym=True) * 9.45e3
+    )
+    eq0.ion_temperature = PowerSeriesProfile(np.array([1.0, -1.0]), sym=True) * 9.45e3
+    eq0.current = PowerSeriesProfile(np.zeros((eq0.L + 1,)), sym=False)
+    eq0, _ = eq0.solve(objective="force", optimizer="lsq-exact", verbose=3)
+    eq1 = eq0.copy()
+    eq2 = eq0.copy()
+
+    grid = LinearGrid(
+        M=eq0.M_grid,
+        N=eq0.N_grid,
+        NFP=eq0.NFP,
+        sym=eq0.sym,
+        rho=np.linspace(1 / eq0.L_grid, 1, eq0.L_grid) - 1 / (2 * eq0.L_grid),
+    )
+
+    # method 1
+    objective = ObjectiveFunction(
+        BootstrapRedlConsistency(eq=eq1, grid=grid, helicity=(1, 0)),
+        verbose=0,
+    )
+    constraints = (
+        FixAtomicNumber(eq=eq1),
+        FixBoundaryR(eq=eq1),
+        FixBoundaryZ(eq=eq1),
+        FixCurrent(eq=eq1, indices=[0, 1]),
+        FixElectronDensity(eq=eq1),
+        FixElectronTemperature(eq=eq1),
+        FixIonTemperature(eq=eq1),
+        FixPsi(eq=eq1),
+        ForceBalance(eq=eq1),
+    )
+    eq1, _ = eq1.optimize(
+        objective=objective,
+        constraints=constraints,
+        optimizer="proximal-lsq-exact",
+        maxiter=4,
+        gtol=1e-16,
+        verbose=3,
+    )
+
+    # method 2
+    niters = 3
+    for k in range(niters):
+        eq2 = eq2.copy()
+        data = eq2.compute("current Redl", grid)
+        current = grid.compress(data["current Redl"])
+        rho = grid.compress(data["rho"])
+        XX = np.fliplr(np.vander(rho, eq2.L + 1)[:, :-2])
+        eq2.c_l = np.pad(np.linalg.lstsq(XX, current, rcond=None)[0], (2, 0))
+        eq2, _ = eq2.solve(objective="force", optimizer="lsq-exact", verbose=3)
+
+    grid = LinearGrid(
+        M=eq0.M_grid,
+        N=eq0.N_grid,
+        NFP=eq0.NFP,
+        sym=eq0.sym,
+        rho=np.linspace(0.25, 0.9, 14),
+    )
+    data1 = eq1.compute(["<J*B> Redl", "<J*B>"], grid)
+    data2 = eq2.compute(["<J*B> Redl", "<J*B>"], grid)
+
+    np.testing.assert_allclose(
+        grid.compress(data1["<J*B>"]), grid.compress(data1["<J*B> Redl"]), rtol=2.1e-2
+    )
+    np.testing.assert_allclose(
+        grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=1.8e-2
+    )
+    np.testing.assert_allclose(
+        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=1.8e-2
     )

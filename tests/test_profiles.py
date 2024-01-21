@@ -49,7 +49,6 @@ class TestProfiles:
         np.testing.assert_allclose(theta_err, 0, atol=2e-11)
 
     @pytest.mark.unit
-    @pytest.mark.slow
     def test_close_values(self):
         """Test that different forms of the same profile give similar values."""
         pp = PowerSeriesProfile(
@@ -80,6 +79,28 @@ class TestProfiles:
         np.testing.assert_allclose(sp3(x), pp3(x), rtol=1e-5, atol=1e-3)
         sp4 = mp.to_spline()
         np.testing.assert_allclose(sp3(x), sp4(x), rtol=1e-5, atol=1e-2)
+
+        np.testing.assert_allclose(pp(x, dt=1), 0)
+        np.testing.assert_allclose(pp(x, dz=1), 0)
+        np.testing.assert_allclose(sp(x, dt=1), 0)
+        np.testing.assert_allclose(sp(x, dz=1), 0)
+        np.testing.assert_allclose(mp(x, dt=1), 0)
+        np.testing.assert_allclose(mp(x, dz=1), 0)
+
+    @pytest.mark.unit
+    def test_PowerSeriesProfile_even_sym(self):
+        """Test that even symmetry is enforced properly in PowerSeriesProfile."""
+        pp = PowerSeriesProfile(params=np.array([4, 0, -2, 0, 3, 0, -1]), sym="auto")
+        assert pp.sym == "even"  # auto symmetry detects it is even
+        sp = pp.to_spline()
+
+        pp_o = sp.to_powerseries(sym="auto")
+        assert not pp_o.sym  # default conversion from spline is not symmetric
+
+        pp_e = sp.to_powerseries(sym="even")
+        assert pp_e.sym == "even"  # check that even symmetry is enforced
+        # check that this matches the original parameters
+        np.testing.assert_allclose(pp.params, pp_e.params, rtol=1e-3)
 
     @pytest.mark.unit
     def test_SplineProfile_methods(self):
@@ -204,8 +225,7 @@ class TestProfiles:
 
         f = pp + sp - zp
         x = np.linspace(0, 1, 50)
-        f.grid = 50
-        np.testing.assert_allclose(f(), 3 * (pp(x)), atol=1e-3)
+        np.testing.assert_allclose(f(x), 3 * (pp(x)), atol=1e-3)
 
         params = f.params
         assert params.size == len(sp.params) + len(pp.params) + len(zp.params) + 1
@@ -217,8 +237,7 @@ class TestProfiles:
         assert params[2][0] == -1
 
         f.params = (pp.params, 2 * sp.params, zp.params)
-        f.grid = x
-        np.testing.assert_allclose(f(), 4 * (pp(x)), atol=1e-3)
+        np.testing.assert_allclose(f(x), 4 * (pp(x)), atol=1e-3)
 
     @pytest.mark.unit
     def test_product_profiles(self):
@@ -231,8 +250,7 @@ class TestProfiles:
 
         f = pp * sp * zp
         x = np.linspace(0, 1, 50)
-        f.grid = 50
-        np.testing.assert_allclose(f(), pp(x) ** 3, atol=1e-3)
+        np.testing.assert_allclose(f(x), pp(x) ** 3, atol=1e-3)
 
         params = f.params
         assert params.size == len(sp.params) + len(pp.params) + len(zp.params)
@@ -242,8 +260,7 @@ class TestProfiles:
         assert all(params[2] == zp.params)
 
         f.params = (pp.params, 2 * sp.params, zp.params)
-        f.grid = x
-        np.testing.assert_allclose(f(), 2 * pp(x) ** 3, atol=1e-3)
+        np.testing.assert_allclose(f(x), 2 * pp(x) ** 3, atol=1e-3)
 
     @pytest.mark.unit
     def test_product_profiles_derivative(self):
@@ -264,7 +281,6 @@ class TestProfiles:
 
         f = p1 * p2 * p3
         x = np.linspace(0, 1, 50)
-        f.grid = x
 
         # Below is a simpler method to compute first derivative of product series
         # than the more general combinatorics algorithm in implementation.
@@ -272,16 +288,16 @@ class TestProfiles:
         _sum = 0
         _sum_r = 0
         for profile in f._profiles:
-            result = profile.compute()
-            result_r = profile.compute(dr=1)
-            result_rr = profile.compute(dr=2)
+            result = profile(x)
+            result_r = profile(x, dr=1)
+            result_rr = profile(x, dr=2)
             _sum += result_r / result
             _sum_r += result_rr / result - (result_r / result) ** 2
-        f_r = f.compute() * _sum
-        f_rr = f_r * _sum + f.compute() * _sum_r
+        f_r = f(x) * _sum
+        f_rr = f_r * _sum + f(x) * _sum_r
 
-        np.testing.assert_allclose(f_r, f.compute(dr=1))
-        np.testing.assert_allclose(f_rr, f.compute(dr=2))
+        np.testing.assert_allclose(f_r, f(x, dr=1))
+        np.testing.assert_allclose(f_rr, f(x, dr=2))
 
     @pytest.mark.unit
     def test_scaled_profiles(self):
@@ -292,26 +308,23 @@ class TestProfiles:
 
         f = 3 * pp
         x = np.linspace(0, 1, 50)
-        f.grid = 50
-        np.testing.assert_allclose(f(), 3 * (pp(x)), atol=1e-3)
+        np.testing.assert_allclose(f(x), 3 * (pp(x)), atol=1e-3)
 
         params = f.params
         assert params[0] == 3
         assert all(params[1:] == pp.params)
 
         f.params = 2
-        f.grid = x
-        np.testing.assert_allclose(f(), 2 * (pp(x)), atol=1e-3)
+        np.testing.assert_allclose(f(x), 2 * (pp(x)), atol=1e-3)
 
         f.params = 4 * pp.params
-        f.grid = x
 
         params = f.params
         assert params.size == len(pp.params) + 1
         assert params[0] == 2
         np.testing.assert_allclose(params[1:], [4, -8, 4])
         np.testing.assert_allclose(pp.params, [1, -2, 1])
-        np.testing.assert_allclose(f(), 8 * (pp(x)), atol=1e-3)
+        np.testing.assert_allclose(f(x), 8 * (pp(x)), atol=1e-3)
 
     @pytest.mark.unit
     def test_profile_errors(self):
@@ -335,26 +348,12 @@ class TestProfiles:
             a = sp + 4
         with pytest.raises(NotImplementedError):
             a = sp * [1, 2, 3]
-        with pytest.raises(TypeError):
-            sp.grid = None
-        with pytest.raises(TypeError):
-            sp.grid = None
         with pytest.raises(ValueError):
             a = sp + pp
             a.params = pp.params
         with pytest.raises(ValueError):
             a = sp * pp
             a.params = sp.params
-
-    @pytest.mark.unit
-    def test_profile_conversion(self):
-        """Test converting to FourierZernikeProfile."""
-        pp = PowerSeriesProfile(
-            modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
-        )
-        zp = pp.to_fourierzernike(L=6, M=6, N=0)
-        x = np.linspace(0, 1, 100)
-        np.testing.assert_allclose(pp(x), zp(x), atol=1e-10)
 
     @pytest.mark.unit
     def test_default_profiles(self):
@@ -397,7 +396,7 @@ class TestProfiles:
             sym=True,
         )
         eq1.solve(
-            constraints=get_fixed_boundary_constraints(eq=eq1, kinetic=False),
+            constraints=get_fixed_boundary_constraints(eq=eq1),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq1)),
             maxiter=5,
         )
@@ -418,7 +417,7 @@ class TestProfiles:
             sym=True,
         )
         eq2.solve(
-            constraints=get_fixed_boundary_constraints(eq=eq2, kinetic=True),
+            constraints=get_fixed_boundary_constraints(eq=eq2),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq2)),
             maxiter=5,
         )

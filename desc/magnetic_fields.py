@@ -2138,6 +2138,7 @@ class FourierCurrentPotentialField(
         chi2Ks = []
         K_mags = []
         phi_mns = []
+        Bn_arrs = []
 
         # calculate the Phi_mn which minimizes (chi^2_B + alpha*chi^2_K) for each alpha
         for alpha in alphas:
@@ -2172,8 +2173,9 @@ class FourierCurrentPotentialField(
             chi_K = jnp.sum(K_mag * K_mag * ns_mag * source_grid.weights)
             chi2Ks.append(chi_K)
             K_mags.append(K_mag)
+            Bn_print = Bn_tot / normalization_B
+            Bn_arrs.append(Bn_print)
             if verbose > 1:
-                Bn_print = Bn_tot / normalization_B
                 units = " (T)" if not normalize else " (unitless)"
                 printstring = f"chi^2 B = {chi_B:1.5e}"
                 print(printstring)
@@ -2192,7 +2194,6 @@ class FourierCurrentPotentialField(
             if not scan:
                 phi_tot = self.compute("Phi", grid=source_grid)["Phi"]
                 # Bnormal plot
-                plt.figure(figsize=(10, 10))
                 plt.rcParams.update({"font.size": 26})
                 plt.figure(figsize=(8, 8))
                 plt.contourf(
@@ -2207,6 +2208,8 @@ class FourierCurrentPotentialField(
                 plt.title("Bnormal on plasma surface")
                 plt.colorbar()
                 plt.xlim([0, 2 * np.pi / eq.NFP])
+                data["fig_Bn"] = plt.gcf()
+                data["ax_Bn"] = plt.gca()
 
                 # current potential contour plot
                 plt.figure(figsize=(10, 10))
@@ -2233,6 +2236,8 @@ class FourierCurrentPotentialField(
                 plt.title("Total Current Potential on winding surface")
 
                 plt.xlim([0, 2 * np.pi / eq.NFP])
+                data["fig_Phi"] = plt.gcf()
+                data["ax_Phi"] = plt.gca()
             else:  # show composite scan over alpha plots
                 # strongly based off of Landreman's REGCOIL plotting routine:
                 # github.com/landreman/regcoil/blob/master/
@@ -2243,6 +2248,8 @@ class FourierCurrentPotentialField(
                 plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
                 plt.yscale("log")
                 plt.xscale("log")
+                data["fig_chi^2_B_vs_alpha"] = plt.gcf()
+                data["ax_chi^2_B_vs_alpha"] = plt.gca()
 
                 nlambda = len(chi2Bs)
                 max_nlambda_for_contour_plots = 16
@@ -2293,7 +2300,45 @@ class FourierCurrentPotentialField(
                     verticalalignment="top",
                     fontsize="small",
                 )
+                data["fig_scan_Phi"] = plt.gcf()
+                data["ax_scan_Phi"] = plt.gca()
                 # TODO: add similar plot for Bn for each alpha
+                plt.figure(figsize=(15, 8))
+                for whichPlot in range(numPlots):
+                    plt.subplot(numRows, numCols, whichPlot + 1)
+                    Bn = Bn_arrs[ilambda_to_plot[whichPlot] - 1]
+
+                    plt.rcParams.update({"font.size": 18})
+
+                    plt.contourf(
+                        eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
+                        eval_grid.nodes[eval_grid.unique_theta_idx, 1],
+                        (Bn).reshape(
+                            eval_grid.num_theta, eval_grid.num_zeta, order="F"
+                        ),
+                        levels=ncontours,
+                    )
+                    plt.ylabel("theta")
+                    plt.xlabel("zeta")
+                    plt.title(
+                        f"lambda= {alphas[ilambda_to_plot[whichPlot] - 1]:1.5e}"
+                        + f" index = {ilambda_to_plot[whichPlot] - 1}",
+                        fontsize="x-small",
+                    )
+                    plt.colorbar()
+                    plt.xlim([0, 2 * np.pi / eq.NFP])
+                plt.tight_layout()
+                units = " (T)" if not normalize else " (unitless)"
+                plt.figtext(
+                    0.5,
+                    0.995,
+                    "Bnormal" + units,
+                    horizontalalignment="center",
+                    verticalalignment="top",
+                    fontsize="small",
+                )
+                data["fig_scan_Bn"] = plt.gcf()
+                data["ax_scan_Bn"] = plt.gca()
 
         data["alpha"] = alphas[0] if not scan else alphas
         data["Phi_mn"] = phi_mns[0] if not scan else phi_mns

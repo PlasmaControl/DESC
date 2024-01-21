@@ -990,3 +990,59 @@ def test_plot_3d_surface():
     surf = FourierRZToroidalSurface()
     fig = plot_3d(surf, "curvature_H_rho")
     return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Bn_scan_regcoil(regcoil_ellipse_and_axisym_surf):
+    """Test Bn scan plot from run_regcoil method."""
+    (
+        data,
+        _,
+        _,
+    ) = regcoil_ellipse_and_axisym_surf
+    fig = data["fig_scan_Bn"]
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Phi_scan_regcoil(regcoil_ellipse_and_axisym_surf):
+    """Test Phi scan plot from run_regcoil method."""
+    (
+        data,
+        _,
+        _,
+    ) = regcoil_ellipse_and_axisym_surf
+    fig = data["fig_scan_Phi"]
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Bn_regcoil(regcoil_ellipse_helical_coils):
+    """Test Bn plot from run_regcoil method."""
+    (
+        data,
+        _,
+        _,
+    ) = regcoil_ellipse_helical_coils
+    fig = data["fig_Bn"]
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_Phi_regcoil(regcoil_ellipse_helical_coils):
+    """Test Phi plot from run_regcoil method."""
+    (
+        data,
+        _,
+        _,
+    ) = regcoil_ellipse_helical_coils
+    fig = data["fig_Phi"]
+
+    return fig

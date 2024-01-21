@@ -1390,6 +1390,8 @@ class MixedCoilSet(CoilSet):
             return MixedCoilSet(*self.coils, *other.coils)
         if isinstance(other, (list, tuple)):
             return MixedCoilSet(*self.coils, *other)
+        elif isinstance(other, (_MagneticField)):
+            return SumMagneticField(self, other)
         raise TypeError
 
     def __setitem__(self, i, new_item):

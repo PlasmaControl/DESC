@@ -36,6 +36,7 @@
    notebooks/tutorials/use_outputs.ipynb
    notebooks/tutorials/basic_optimization.ipynb
    notebooks/tutorials/advanced_optimization.ipynb
+   notebooks/tutorials/coil_optimization_REGCOIL.ipynb
    notebooks/tutorials/nae_constraint.ipynb
    notebooks/tutorials/bootstrap_current.ipynb
 

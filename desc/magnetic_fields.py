@@ -1212,7 +1212,7 @@ def field_line_integrate(
     z0,
     phis,
     field,
-    params={},
+    params=None,
     grid=None,
     rtol=1e-8,
     atol=1e-8,
@@ -1237,7 +1237,7 @@ def field_line_integrate(
         and the negative toroidal angle for negative Bphi
     field : MagneticField
         source of magnetic field to integrate
-    params: dict
+    params: dict, optional
         parameters passed to field
     grid : Grid, optional
         Collocation points used to discretize source field.

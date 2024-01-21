@@ -1853,7 +1853,7 @@ class FourierCurrentPotentialField(
         to the values corresponding to the input equilibrium, external_field,
         and current_helicity.
 
-        Follows algorithm of [1]_ to find the current potential Phi on the surface,
+        Follows algorithm of [1] to find the current potential Phi on the surface,
         given a surface current::
 
             K = n x ∇ Φ

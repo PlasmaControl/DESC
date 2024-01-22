@@ -11,6 +11,7 @@ object e.g. optimizing only a ``FourierRZToroidalSurface`` object to have a cert
 ``Volume``.
 - Many functions from ``desc.plotting`` now also work for plotting quantities from
 ``Curve`` and ``Surface`` classes.
+- Adds method ``constant_offset_surface`` to ``FourierRZToroidalSurface`` which creates a  surface with a specified constant offset from the base surface.
 - Adds method ``run_regcoil`` to ``FourierCurrentPotentialField`` that implements the
 REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
     * Can specify ``current_helicity`` to determine if resulting contours correspond to

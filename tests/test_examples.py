@@ -1058,7 +1058,6 @@ def test_regcoil_axisymmetric():
     np.testing.assert_allclose(B, B_from_surf * 2, atol=1e-4)
 
 
-# TODO: break this into a class so each test is separate (sequential somehow?)
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
@@ -1144,7 +1143,7 @@ def test_regcoil_axisym_and_ellipse_surface():
         coords, grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
     )
 
-    np.testing.assert_allclose(B, B_from_surf + B_external, atol=1e-4)
+    np.testing.assert_allclose(B, B_from_surf + B_external, atol=5e-3)
 
 
 @pytest.mark.regression

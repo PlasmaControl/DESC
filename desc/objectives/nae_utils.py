@@ -159,8 +159,8 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
         k_dot_Z - k_dot_phi * dZ0_dphi / R0
     )
 
-    L_1_1 = qsc.iota * (X1c * (k_dot_R) + Y1c * (tau_dot_R)) / R0
-    L_1_neg1 = qsc.iota * (X1s * (k_dot_R) + Y1s * (tau_dot_R)) / R0
+    L_1_1 = qsc.iota * (X1c * (k_dot_phi) + Y1c * (tau_dot_phi)) / R0
+    L_1_neg1 = qsc.iota * (X1s * (k_dot_phi) + Y1s * (tau_dot_phi)) / R0
 
     nfp = qsc.nfp
     if desc_eq.sym:

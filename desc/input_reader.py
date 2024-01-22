@@ -866,48 +866,41 @@ class InputReader:
         f.write(f"objective = {objective}\n")
         f.write("spectral_indexing = {}\n".format(eq._spectral_indexing))
 
-        f.write("\n# pressure and rotational transform/current profiles\n")
+        # fit profiles to power series
         grid = LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         rho = grid.nodes[grid._unique_rho_idx, 0]
-
-        if isinstance(eq.pressure, PowerSeriesProfile):
-            eq.pressure.change_resolution(eq.L)
-            pres_profile = eq.pressure.params
-        else:
+        if not isinstance(eq.pressure, PowerSeriesProfile):
             pressure = grid.compress(eq.compute("p", grid=grid)["p"])
             pres_profile = PowerSeriesProfile.from_values(
                 rho, pressure, order=eq.L, sym=False
-            ).params
-
-        if isinstance(eq.iota, PowerSeriesProfile):
-            eq.iota.change_resolution(eq.L)
-            iota_profile = eq.iota.params
-        else:
+            )
+        if not isinstance(eq.iota, PowerSeriesProfile):
             iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
             iota_profile = PowerSeriesProfile.from_values(
                 rho, iota, order=eq.L, sym=False
-            ).params
-
-        if isinstance(eq.current, PowerSeriesProfile):
-            eq.current.change_resolution(eq.L)
-            curr_profile = eq.current.params
-        else:
+            )
+        if not isinstance(eq.current, PowerSeriesProfile):
             current = grid.compress(eq.compute("current", grid=grid)["current"])
             curr_profile = PowerSeriesProfile.from_values(
                 rho, current, order=eq.L, sym=False
-            ).params
+            )
 
+        # ensure pressure and iota/current profiles are the same resolution
         if eq.iota:
             char = "i"
             profile = iota_profile
         else:
             char = "c"
             profile = curr_profile
+        L_profile = max(pres_profile.L, profile.L)
+        pres_profile.change_resolution(L=L_profile)
+        profile.change_resolution(L=L_profile)
 
-        for l in range(eq.L):
+        f.write("\n# pressure and rotational transform/current profiles\n")
+        for l in range(L_profile):
             f.write(
                 "l: {:3d}  p = {:15.8E}  {} = {:15.8E}\n".format(
-                    int(l), pres_profile[l], char, profile[l]
+                    int(l), pres_profile.params[l], char, profile.params[l]
                 )
             )
 
@@ -1092,7 +1085,7 @@ class InputReader:
         # undo the reverse so the file we write looks as expected
         vmec_no_multiline_no_duplicates.reverse()
 
-        ## read the inputs for use in DESC
+        # read the inputs for use in DESC
         for line in vmec_no_multiline_no_duplicates:
             comment = line.find("!")
             command = (line.strip() + " ")[0:comment]

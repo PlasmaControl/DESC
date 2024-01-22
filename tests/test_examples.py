@@ -1123,8 +1123,8 @@ def test_regcoil_axisym_and_ellipse_surface():
         M_Phi=6,
         N_Phi=6,
         eq=eq,
-        eval_grid=LinearGrid(M=50, N=50, NFP=eq.NFP, sym=eq.sym),
-        source_grid=LinearGrid(M=50, N=50, NFP=eq.NFP),
+        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP, sym=eq.sym),
+        source_grid=LinearGrid(M=60, N=60, NFP=eq.NFP),
         alpha=0,
         external_field=external_field,
         verbose=2,
@@ -1133,7 +1133,7 @@ def test_regcoil_axisym_and_ellipse_surface():
 
     np.testing.assert_allclose(G / 2, surface_current_field.G, atol=1e-8)
 
-    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-7)
+    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-6)
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T

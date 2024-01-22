@@ -1523,8 +1523,8 @@ def zernike_radial_optimized(r, l, m, dr=0):
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
-        dP_n2 = jnp.where(N >= 2 + dr, dP_n1, dP_n2)
-        dP_n1 = jnp.where(N >= 2 + dr, dP_n, dP_n1)
+        dP_n2 = jnp.where(N >= 3, dP_n1, dP_n2)
+        dP_n1 = jnp.where(N >= 3, dP_n, dP_n1)
 
         return (r_jacobi, alpha, r, out, (P_n1, P_n2, dP_n1, dP_n2), m, n)
 
@@ -1536,8 +1536,8 @@ def zernike_radial_optimized(r, l, m, dr=0):
         P_n1, P_n2, dP_n1, dP_n2, ddP_n1, ddP_n2 = P_past
         # Calculate Jacobi polynomial for m,n pair
         P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
-        dP_n = jacobi_poly_single(r_jacobi, N - dr, alpha + dr, dr, dP_n1, dP_n2)
-        ddP_n = jacobi_poly_single(r_jacobi, N - dr, alpha + dr, dr, ddP_n1, ddP_n2)
+        dP_n = jacobi_poly_single(r_jacobi, N - 1, alpha + 1, 1, dP_n1, dP_n2)
+        ddP_n = jacobi_poly_single(r_jacobi, N - 2, alpha + 2, 2, ddP_n1, ddP_n2)
 
         # Find the index corresponding to the original array
         index = jnp.where(
@@ -1549,21 +1549,24 @@ def zernike_radial_optimized(r, l, m, dr=0):
         # is not 0. Sum it to find the index
         idx = jnp.sum(index)
 
-        coef = gammaln(alpha + N + 1 + dr) - dr * jnp.log(2) - gammaln(alpha + N + 1)
-        coef = jnp.exp(coef)
+        coef_1 = gammaln(alpha + N + 2) - jnp.log(2) - gammaln(alpha + N + 1)
+        coef_2 = gammaln(alpha + N + 3) - 2 * jnp.log(2) - gammaln(alpha + N + 1)
+        coef_1 = jnp.exp(coef_1)
+        coef_2 = jnp.exp(coef_2)
 
         result = (
-            alpha * r ** jnp.maximum(alpha - 1, 0) * P_n
-            - coef * 4 * r ** (alpha + 1) * dP_n
+            (alpha - 1) * alpha * r ** jnp.maximum(alpha - 2, 0) * P_n
+            - coef_1 * 4 * (2 * alpha + 1) * r**alpha * dP_n
+            + coef_2 * 16 * r ** (alpha + 2) * ddP_n
         )
         out = out.at[:, idx].set((-1) ** N * result)
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
-        dP_n2 = jnp.where(N >= 2 + dr, dP_n1, dP_n2)
-        dP_n1 = jnp.where(N >= 2 + dr, dP_n, dP_n1)
-        ddP_n2 = jnp.where(N >= 2 + dr, ddP_n1, ddP_n2)
-        ddP_n1 = jnp.where(N >= 2 + dr, ddP_n, ddP_n1)
+        dP_n2 = jnp.where(N >= 3, dP_n1, dP_n2)
+        dP_n1 = jnp.where(N >= 3, dP_n, dP_n1)
+        ddP_n2 = jnp.where(N >= 4, ddP_n1, ddP_n2)
+        ddP_n1 = jnp.where(N >= 4, ddP_n, ddP_n1)
 
         return (
             r_jacobi,

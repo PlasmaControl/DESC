@@ -2214,15 +2214,6 @@ class FourierCurrentPotentialField(
                 # current potential contour plot
                 plt.figure(figsize=(10, 10))
                 plt.rcParams.update({"font.size": 18})
-                plt.contourf(
-                    source_grid.nodes[source_grid.unique_zeta_idx, 2],
-                    source_grid.nodes[source_grid.unique_theta_idx, 1],
-                    (phi_tot).reshape(
-                        source_grid.num_theta, source_grid.num_zeta, order="F"
-                    ),
-                    levels=ncontours,
-                )
-                plt.colorbar()
                 plt.contour(
                     source_grid.nodes[source_grid.unique_zeta_idx, 2],
                     source_grid.nodes[source_grid.unique_theta_idx, 1],
@@ -2231,6 +2222,7 @@ class FourierCurrentPotentialField(
                     ),
                     levels=ncontours,
                 )
+                plt.colorbar()
                 plt.ylabel("theta")
                 plt.xlabel("zeta")
                 plt.title("Total Current Potential on winding surface")

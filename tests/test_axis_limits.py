@@ -65,6 +65,8 @@ not_finite_limits = {
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
     "D_current",
+    "n_rho_z",
+    "|e_theta x e_zeta|_z",
     "e^rho_rr",
     "e^theta_rr",
     "e^zeta_rr",

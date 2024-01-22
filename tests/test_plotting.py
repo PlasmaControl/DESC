@@ -15,6 +15,7 @@ from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
 from desc.compute import data_index
 from desc.compute.utils import surface_averages
 from desc.examples import get
+from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import load
 from desc.plotting import (
@@ -64,13 +65,25 @@ def test_kwarg_future_warning(DummyStellarator):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_1d_p(SOLOVEV):
+def test_1d_p():
     """Test plotting 1d pressure profile."""
-    eq = load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = get("SOLOVEV")
     fig, ax, data = plot_1d(eq, "p", figsize=(4, 4), return_data=True)
     assert "p" in data.keys()
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_1d_elongation():
+    """Test plotting 1d elongation as a function of toroidal angle."""
+    eq = get("precise_QA")
+    grid = LinearGrid(N=20, NFP=eq.NFP)
+    fig, ax, data = plot_1d(
+        eq, "a_major/a_minor", grid=grid, figsize=(4, 4), return_data=True
+    )
+    assert "a_major/a_minor" in data.keys()
     return fig
 
 
@@ -100,11 +113,10 @@ def test_1d_fsa_consistency():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_1d_dpdr(DSHAPE_current):
+def test_1d_dpdr():
     """Test plotting 1d pressure derivative."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_current")
     fig, ax, data = plot_1d(eq, "p_r", figsize=(4, 4), return_data=True)
     assert "p_r" in data.keys()
     return fig
@@ -113,9 +125,9 @@ def test_1d_dpdr(DSHAPE_current):
 @pytest.mark.unit
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_1d_iota(DSHAPE_current):
+def test_1d_iota():
     """Test plotting 1d rotational transform."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_current")
     grid = LinearGrid(rho=0.5, theta=100, zeta=0.0)
     fig, ax, data = plot_1d(eq, "iota", grid=grid, figsize=(4, 4), return_data=True)
     assert "theta" in data.keys()
@@ -124,11 +136,10 @@ def test_1d_iota(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_1d_iota_radial(DSHAPE_current):
+def test_1d_iota_radial():
     """Test plotting 1d rotational transform."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_current")
     fig, ax, data = plot_1d(eq, "iota", figsize=(4, 4), return_data=True)
     assert "rho" in data.keys()
     assert "iota" in data.keys()
@@ -136,11 +147,10 @@ def test_1d_iota_radial(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_1d_logpsi(DSHAPE_current):
+def test_1d_logpsi():
     """Test plotting 1d flux function with log scale."""
-    eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = get("DSHAPE_current")
     fig, ax, data = plot_1d(eq, "psi", log=True, figsize=(4, 4), return_data=True)
     ax.set_ylim([1e-5, 1e0])
     assert "rho" in data.keys()
@@ -934,4 +944,48 @@ def test_plot_b_mag():
 def test_plot_surfaces_HELIOTRON():
     """Test plot surfaces of equilibrium for correctness of vartheta lines."""
     fig, ax = plot_surfaces(get("HELIOTRON"))
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_1d_curve():
+    """Test plot_1d function for Curve objects."""
+    curve = FourierXYZCurve([0, 10, 1])
+    fig, ax = plot_1d(curve, "curvature")
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_2d_surface():
+    """Test plot_2d function for Surface objects."""
+    surf = FourierRZToroidalSurface()
+    fig, ax = plot_2d(surf, "curvature_H_rho")
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_1d_surface():
+    """Test plot_1d function for Surface objects."""
+    surf = FourierRZToroidalSurface()
+    fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGrid(M=50))
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_boundary_surface():
+    """Test plot_boundary function for Surface objects."""
+    surf = FourierRZToroidalSurface()
+    fig, ax = plot_boundary(surf)
+    return fig
+
+
+@pytest.mark.unit
+def test_plot_3d_surface():
+    """Test 3d plotting of surface object."""
+    surf = FourierRZToroidalSurface()
+    fig = plot_3d(surf, "curvature_H_rho")
     return fig

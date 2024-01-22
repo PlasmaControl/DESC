@@ -1749,9 +1749,6 @@ class FourierCurrentPotentialField(
             magnetic field at specified points
 
         """
-        grid = grid or LinearGrid(
-            M=self._M_Phi * 4 + 1, N=self._N_Phi * 4 + 1, NFP=self.NFP
-        )
         return _compute_magnetic_field_from_CurrentPotentialField(
             field=self, coords=coords, params=params, basis=basis, grid=grid, data=data
         )
@@ -2708,7 +2705,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     coords = jnp.atleast_2d(coords)
     if basis == "rpz":
         coords = rpz2xyz(coords)
-    surface_grid = grid or LinearGrid(M=30, N=30, NFP=field.NFP)
+    surface_grid = grid or LinearGrid(M=60, N=60, NFP=field.NFP)
 
     # compute surface current, and store grid quantities
     # needed for integration in class

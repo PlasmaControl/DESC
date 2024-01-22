@@ -1528,6 +1528,53 @@ def zernike_radial_optimized(r, l, m, dr=0):
 
         return (r_jacobi, alpha, r, out, (P_n1, P_n2, dP_n1, dP_n2), m, n)
 
+    # USE DOT PRODUCT TO GENERALIZE DERIVATIVES
+    # something like
+    # # result equal c1*P_n + dot(c_derivative_array, dP_n_array)
+    def body_inner_d2(N, args):
+        r_jacobi, alpha, r, out, P_past, m, n = args
+        P_n1, P_n2, dP_n1, dP_n2, ddP_n1, ddP_n2 = P_past
+        # Calculate Jacobi polynomial for m,n pair
+        P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
+        dP_n = jacobi_poly_single(r_jacobi, N - dr, alpha + dr, dr, dP_n1, dP_n2)
+        ddP_n = jacobi_poly_single(r_jacobi, N - dr, alpha + dr, dr, ddP_n1, ddP_n2)
+
+        # Find the index corresponding to the original array
+        index = jnp.where(
+            jnp.logical_and(m == alpha, n == N),
+            jnp.arange(m.size),
+            0,
+        )
+        # jnp.where() will result in 1D array with 1 value which
+        # is not 0. Sum it to find the index
+        idx = jnp.sum(index)
+
+        coef = gammaln(alpha + N + 1 + dr) - dr * jnp.log(2) - gammaln(alpha + N + 1)
+        coef = jnp.exp(coef)
+
+        result = (
+            alpha * r ** jnp.maximum(alpha - 1, 0) * P_n
+            - coef * 4 * r ** (alpha + 1) * dP_n
+        )
+        out = out.at[:, idx].set((-1) ** N * result)
+
+        P_n2 = jnp.where(N >= 2, P_n1, P_n2)
+        P_n1 = jnp.where(N >= 2, P_n, P_n1)
+        dP_n2 = jnp.where(N >= 2 + dr, dP_n1, dP_n2)
+        dP_n1 = jnp.where(N >= 2 + dr, dP_n, dP_n1)
+        ddP_n2 = jnp.where(N >= 2 + dr, ddP_n1, ddP_n2)
+        ddP_n1 = jnp.where(N >= 2 + dr, ddP_n, ddP_n1)
+
+        return (
+            r_jacobi,
+            alpha,
+            r,
+            out,
+            (P_n1, P_n2, dP_n1, dP_n2, ddP_n1, ddP_n2),
+            m,
+            n,
+        )
+
     def body(alpha, args):
         r, r_jacobi, L_max, m, n, out = args
         # Maximum possible value for n for loop bound
@@ -1574,7 +1621,7 @@ def zernike_radial_optimized(r, l, m, dr=0):
                 _, _, _, out, P_past, _, _ = fori_loop(
                     0,
                     N_max + 1,
-                    body_inner,
+                    body_inner_d2,
                     (r_jacobi, alpha, r, out, P_past, m, n),
                 )
         if dr >= 3:

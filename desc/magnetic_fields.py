@@ -1,5 +1,6 @@
 """Classes for magnetic fields."""
 
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
@@ -2042,16 +2043,22 @@ class FourierCurrentPotentialField(
                 rho=jnp.array(1.0),
                 endpoint=True,
             )
-            curve_data = eq.compute(
-                ["R", "phi", "Z", "e_zeta"],
-                grid=curve_grid,
-            )
-            curve_coords = jnp.vstack(
-                (curve_data["R"], curve_data["phi"], curve_data["Z"])
-            ).T
-            ext_field_along_curve = external_field.compute_magnetic_field(
-                curve_coords, basis="rpz", grid=source_grid
-            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                # ignore warning from unequal NFP for grid and basis,
+                # as we don't know a-priori if the external field
+                # shares the same discrete symmetry as the equilibrium,
+                # so we will use a grid with NFP=1 to be safe
+                curve_data = eq.compute(
+                    ["R", "phi", "Z", "e_zeta"],
+                    grid=curve_grid,
+                )
+                curve_coords = jnp.vstack(
+                    (curve_data["R"], curve_data["phi"], curve_data["Z"])
+                ).T
+                ext_field_along_curve = external_field.compute_magnetic_field(
+                    curve_coords, basis="rpz", grid=source_grid
+                )
             # calculate covariant B_zeta = B dot e_zeta from external field
             ext_field_B_zeta = jnp.sum(
                 ext_field_along_curve * curve_data["e_zeta"], axis=-1

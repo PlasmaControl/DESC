@@ -1116,7 +1116,9 @@ def test_regcoil_axisym_and_ellipse_surface():
 
     # test with half the current given external to winding surface
     # in the form of a TF field
-    external_field = ToroidalMagneticField(B0=-mu_0 * (G / 2) / 2 / np.pi, R0=1)
+    external_field = FourierCurrentPotentialField.from_surface(
+        surf=surf_winding, G=G / 2, I=0
+    )
     data = surface_current_field.run_regcoil(
         M_Phi=6,
         N_Phi=6,

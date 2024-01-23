@@ -109,7 +109,9 @@ def flip_helicity(eq):
     return eq
 
 
-def rescale(eq, L=("R0", None), B=("B0", None), verbose=0):
+def rescale(
+    eq, L=("R0", None), B=("B0", None), scale_pressure=True, copy=False, verbose=0
+):
     """Rescale an Equilibrium in size L and magnetic field strength B.
 
     Parameters
@@ -122,8 +124,12 @@ def rescale(eq, L=("R0", None), B=("B0", None), verbose=0):
         Second element is a float denoting the desired size. Default is no scaling.
     B : tuple, (str, float)
         First element is a string denoting the magnetic field strength to scale. One of:
-        {"B0", "<|B|>", "B_max"} for B on axis, volume averaged, or maximum on the LCFS.
+        {"B0", "<B>", "B_max"} for B on axis, volume averaged, or maximum on the LCFS.
         Second element is a float denoting the desired field. Default is no scaling.
+    scale_pressure : bool, optional
+        Whether or not to scale the pressure profile to maintain force balance.
+    copy : bool, optional
+        Whether to rescale the original equilibrium (default) or a copy.
     verbose : int
         Level of output.
 
@@ -148,15 +154,18 @@ def rescale(eq, L=("R0", None), B=("B0", None), verbose=0):
     B_new = B[1]
 
     L_keys = ["R0", "a", "V"]
-    B_keys = ["B0", "<|B|>_vol", "B_max"]
+    B_keys = ["B0", "<B>", "B_max"]
 
     if L_key not in L_keys:
         raise ValueError("Size scale L must be one of {{'R0', 'a', 'V'}}, got " + L_key)
     if B_key not in B_keys:
         raise ValueError(
-            "Field strength scale B must be one of {{'B0', '<|B|>_vol', 'B_max'}}, got "
+            "Field strength scale B must be one of {{'B0', '<B>', 'B_max'}}, got "
             + B_key
         )
+
+    if copy:
+        eq = eq.copy()
 
     # size scaling
     grid_L = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
@@ -171,7 +180,7 @@ def rescale(eq, L=("R0", None), B=("B0", None), verbose=0):
         grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
         data_B = eq.compute("|B|", grid=grid_B)
         B_old = np.mean(data_B["|B|"])
-    elif B_key == "<|B|>_vol":
+    elif B_key == "<B>":
         grid_B = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         data_B = eq.compute("<|B|>_vol", grid=grid_B)
         B_old = data_B["<|B|>_vol"]
@@ -193,12 +202,13 @@ def rescale(eq, L=("R0", None), B=("B0", None), verbose=0):
     eq.Psi *= cL**2 * cB
 
     # scale pressure profile
-    if eq.pressure is not None:
-        eq.p_l *= cB**2
-    else:
-        eq.ne_l *= cB
-        eq.Te_l *= cB
-        eq.Ti_l *= cB
+    if scale_pressure:
+        if eq.pressure is not None:
+            eq.p_l *= cB**2
+        else:
+            eq.ne_l *= cB
+            eq.Te_l *= cB
+            eq.Ti_l *= cB
 
     # scale current profile
     if eq.current is not None:

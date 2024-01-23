@@ -1022,6 +1022,34 @@ def test_plot_Phi_scan_regcoil(regcoil_ellipse_and_axisym_surf):
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_chi2B_alpha_scan_regcoil(regcoil_ellipse_and_axisym_surf):
+    """Test chi^2_B vs alpha plot from run_regcoil method."""
+    (
+        data,
+        _,
+        _,
+    ) = regcoil_ellipse_and_axisym_surf
+    fig = data["fig_chi^2_B_vs_alpha"]
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_chi2B_chi2K_scan_regcoil(regcoil_ellipse_and_axisym_surf):
+    """Test chi^2_B vs chi^2_K plot from run_regcoil method."""
+    (
+        data,
+        _,
+        _,
+    ) = regcoil_ellipse_and_axisym_surf
+    fig = data["fig_chi^2_B_vs_chi^2_K"]
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_Bn_regcoil(regcoil_ellipse_helical_coils):
     """Test Bn plot from run_regcoil method."""
     (

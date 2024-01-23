@@ -67,10 +67,6 @@ class QuadraticFlux(_Objective):
     eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate the normal magnetic field at
         plasma geometry at.
-    alpha: float, optional
-        Regularization parameter, 0 for no regularization. The larger this
-        parameter is, the less complex the surface current will be, but the
-        worse the normal field.
     external_field : MagneticField, optional
         MagneticField object containing the external field to consider when
         minimizing the Bn errors. If None, the external field is assumed to be zero.
@@ -100,7 +96,6 @@ class QuadraticFlux(_Objective):
         deriv_mode="auto",
         source_grid=None,
         eval_grid=None,
-        alpha=0.0,
         external_field=None,
         external_field_source_grid=None,
         name="quadratic-flux",
@@ -111,7 +106,6 @@ class QuadraticFlux(_Objective):
         self._field = field
         self._source_grid = source_grid
         self._eval_grid = eval_grid
-        self._alpha = alpha
         self._eq_fixed = eq_fixed
         self._eq = eq if eq_fixed else None
         self._external_field = external_field

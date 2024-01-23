@@ -1946,7 +1946,8 @@ class FourierCurrentPotentialField(
         Returns
         -------
         data : dict
-            Dictionary with the following keys::
+            Dictionary with the following keys, with
+            ``"fig_XX"`` keys if ``show_plots=True``::
 
                 alpha : regularization parameter the algorithm was ran with, a float
                         if `scan=False`, or list of float of length `nscan` if
@@ -2243,20 +2244,36 @@ class FourierCurrentPotentialField(
                 plt.figure(figsize=(10, 8))
                 plt.rcParams.update({"font.size": 24})
                 plt.scatter(alphas, chi2Bs)
-                plt.xlabel("alpha (regularization parameter)")
+                plt.xlabel(r"$\alpha$ (regularization parameter)")
                 plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
                 plt.yscale("log")
                 plt.xscale("log")
                 data["fig_chi^2_B_vs_alpha"] = plt.gcf()
                 data["ax_chi^2_B_vs_alpha"] = plt.gca()
+                plt.figure(figsize=(10, 8))
+                plt.scatter(alphas, chi2Ks)
+                plt.ylabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
+                plt.xlabel(r"$\alpha$ (regularization parameter)")
+                plt.yscale("log")
+                plt.xscale("log")
+                data["fig_chi^2_K_vs_alpha"] = plt.gcf()
+                data["ax_chi^2_K_vs_alpha"] = plt.gca()
+                plt.figure(figsize=(10, 8))
+                plt.scatter(chi2Ks, chi2Bs)
+                plt.xlabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
+                plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
+                plt.yscale("log")
+                plt.xscale("log")
+                data["fig_chi^2_B_vs_chi^2_K"] = plt.gcf()
+                data["ax_chi^2_B_vs_chi^2_K"] = plt.gca()
 
-                nlambda = len(chi2Bs)
-                max_nlambda_for_contour_plots = 16
-                numPlots = min(nlambda, max_nlambda_for_contour_plots)
-                ilambda_to_plot = np.sort(
-                    list(set(map(int, np.linspace(1, nlambda, numPlots))))
+                nalpha = len(chi2Bs)
+                max_nalpha_for_contour_plots = 16
+                numPlots = min(nalpha, max_nalpha_for_contour_plots)
+                ialpha_to_plot = np.sort(
+                    list(set(map(int, np.linspace(1, nalpha, numPlots))))
                 )
-                numPlots = len(ilambda_to_plot)
+                numPlots = len(ialpha_to_plot)
 
                 numCols = int(np.ceil(np.sqrt(numPlots)))
                 numRows = int(np.ceil(numPlots * 1.0 / numCols))
@@ -2267,7 +2284,7 @@ class FourierCurrentPotentialField(
                 plt.figure(figsize=(15, 8))
                 for whichPlot in range(numPlots):
                     plt.subplot(numRows, numCols, whichPlot + 1)
-                    phi_mn_opt = phi_mns[ilambda_to_plot[whichPlot] - 1]
+                    phi_mn_opt = phi_mns[ialpha_to_plot[whichPlot] - 1]
                     self.Phi_mn = phi_mn_opt
                     phi_tot = self.compute("Phi", grid=source_grid)["Phi"]
 
@@ -2284,8 +2301,8 @@ class FourierCurrentPotentialField(
                     plt.ylabel("theta")
                     plt.xlabel("zeta")
                     plt.title(
-                        f"lambda= {alphas[ilambda_to_plot[whichPlot] - 1]:1.5e}"
-                        + f" index = {ilambda_to_plot[whichPlot] - 1}",
+                        f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
+                        + f" index = {ialpha_to_plot[whichPlot] - 1}",
                         fontsize="x-small",
                     )
                     plt.colorbar()
@@ -2305,7 +2322,7 @@ class FourierCurrentPotentialField(
                 plt.figure(figsize=(15, 8))
                 for whichPlot in range(numPlots):
                     plt.subplot(numRows, numCols, whichPlot + 1)
-                    Bn = Bn_arrs[ilambda_to_plot[whichPlot] - 1]
+                    Bn = Bn_arrs[ialpha_to_plot[whichPlot] - 1]
 
                     plt.rcParams.update({"font.size": 18})
 
@@ -2320,8 +2337,8 @@ class FourierCurrentPotentialField(
                     plt.ylabel("theta")
                     plt.xlabel("zeta")
                     plt.title(
-                        f"lambda= {alphas[ilambda_to_plot[whichPlot] - 1]:1.5e}"
-                        + f" index = {ilambda_to_plot[whichPlot] - 1}",
+                        f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
+                        + f" index = {ialpha_to_plot[whichPlot] - 1}",
                         fontsize="x-small",
                     )
                     plt.colorbar()

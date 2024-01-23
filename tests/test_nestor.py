@@ -8,6 +8,7 @@ Created on Mon Apr 12 21:14:09 2021
 import os
 
 import numpy as np
+import pytest
 from netCDF4 import Dataset
 from scipy.constants import mu_0
 
@@ -189,6 +190,7 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
     )
 
 
+@pytest.mark.unit
 def test_same_outputs(tmpdir_factory):
     """Compare python and fortran versions of nestor outputs for consistency."""
     output_dir = tmpdir_factory.mktemp("nestor_result")

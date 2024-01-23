@@ -427,7 +427,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dPsi=False,
     dRb=False,
     dZb=False,
-    dIGPhi=False,
     subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25],

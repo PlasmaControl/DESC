@@ -1475,7 +1475,7 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
             "Analytic radial derivatives of Zernike polynomials for order>4 "
             + "have not been implemented."
         )
-        
+
     def body_inner(N, args):
         r_jacobi, alpha, r, out, P_past, m, n, l = args
         P_n1, P_n2 = P_past
@@ -1484,11 +1484,8 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
 
         # Find the index corresponding to the original array
         index = jnp.where(
-            jnp.logical_and(
-                jnp.logical_and(m == alpha, n == N),
-                l == 2*N + alpha
-                ),
-            jnp.arange(1,m.size+1),
+            jnp.logical_and(jnp.logical_and(m == alpha, n == N), l == 2 * N + alpha),
+            jnp.arange(1, m.size + 1),
             0,
         )
         idx = jnp.sum(index)
@@ -1496,7 +1493,7 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
 
         result = (-1) ** N * r**alpha * P_n
         out = out.at[:, idx].set(jnp.where(idx >= 0, result, out.at[:, idx].get()))
-        
+
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
         return (r_jacobi, alpha, r, out, (P_n1, P_n2), m, n, l)
@@ -1581,7 +1578,7 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
             out,
             (P_n1, P_n2, dP_n1, dP_n2, ddP_n1, ddP_n2),
             m,
-            n, 
+            n,
             l,
         )
 
@@ -1730,7 +1727,7 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
             n,
             l,
         )
-        
+
     def body(alpha, args):
         r, r_jacobi, l, m, n, out = args
         # find l values with m values equal to alpha

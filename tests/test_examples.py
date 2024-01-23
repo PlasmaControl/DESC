@@ -1132,7 +1132,7 @@ def test_regcoil_axisym_and_ellipse_surface():
 
     np.testing.assert_allclose(G / 2, surface_current_field.G, atol=1e-8)
 
-    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-6)
+    np.testing.assert_allclose(data["chi^2_B"], 0, atol=3e-7)
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T

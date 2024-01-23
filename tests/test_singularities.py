@@ -23,7 +23,6 @@ import numpy as np
 import pytest
 
 import desc
-from desc.compute.geom_utils import xyz2rpz_vec
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.singularities import (
@@ -118,7 +117,7 @@ def test_singular_integral_vac_estell():
         loop=True,
     )
     # need extra factor of B/2 bc we're evaluating on plasma surface
-    Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"]) + eval_data["B"] / 2
+    Bplasma += eval_data["B"] / 2
     Bplasma = np.linalg.norm(Bplasma, axis=-1)
     # scale by total field magnitude
     B = Bplasma / np.mean(np.linalg.norm(eval_data["B"], axis=-1))

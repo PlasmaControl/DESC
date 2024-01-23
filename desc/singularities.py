@@ -7,7 +7,7 @@ from interpax import fft_interp2d
 
 from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.io import IOAble
 from desc.utils import isalmostequal, islinspaced
 
@@ -442,6 +442,10 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
     f, _ = fori_loop(0, src_grid.NFP, nfp_loop, (f, src_data))
 
+    # we sum distance vectors, so they need to be in xyz for that to work
+    # but then need to convert vectors back to rpz
+    if kernel.ndim == 3:
+        f = xyz2rpz_vec(f, phi=eval_data["zeta"])
     return f
 
 
@@ -512,6 +516,11 @@ def _singular_part(
     else:
         f = vmap(polar_pt_vmap)(jnp.arange(v.size)).sum(axis=0)
 
+    # we sum distance vectors, so they need to be in xyz for that to work
+    # but then need to convert vectors back to rpz
+    if kernel.ndim == 3:
+        f = xyz2rpz_vec(f, phi=eval_data["zeta"])
+
     return f
 
 
@@ -532,12 +541,12 @@ def singular_integral(
     ----------
     eval_data : dict
         Dictionary of data at evaluation points. Keys should be those required by
-        kernel as kernel.keys
+        kernel as kernel.keys. Vector data should be in rpz basis.
     eval_grid : Grid
         Points where integral transform is to be evaluated (eg unprimed coordinates).
     src_data : dict
         Dictionary of data at source points. Keys should be those required by
-        kernel as kernel.keys
+        kernel as kernel.keys. Vector data should be in rpz basis.
     src_grid : LinearGrid
         Source points for integral (eg primed coordinates). Should be linearly spaced
         rectangular grid in both theta, zeta.
@@ -551,7 +560,9 @@ def singular_integral(
         1 if f is scalar, 3 if f is a vector, etc.
         ``keys`` is a list of strings of what data is required to evaluate the kernel.
         The kernel will be called with dictionaries containing this data at source and
-        evaluation points
+        evaluation points.
+        If vector valued, the input to the kernel function will be in rpz and output
+        should be in xyz.
     interpolator : callable
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
@@ -563,7 +574,7 @@ def singular_integral(
     Returns
     -------
     f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
-        Integral transform evaluated at eval_grid.
+        Integral transform evaluated at eval_grid. Vectors are in rpz basis.
 
     """
     # sanitize inputs, we need everything as jax arrays so they can be indexed
@@ -693,12 +704,12 @@ def virtual_casing_biot_savart(
     ----------
     eval_data : dict
         Dictionary of data at evaluation points. Keys should be those required by
-        kernel as kernel.keys
+        kernel as kernel.keys. Vector data should be in rpz basis.
     eval_grid : Grid
         Points where integral transform is to be evaluated (eg unprimed coordinates).
     src_data : dict
         Dictionary of data at source points. Keys should be those required by
-        kernel as kernel.keys
+        kernel as kernel.keys. Vector data should be in rpz basis.
     src_grid : LinearGrid
         Source points for integral (eg primed coordinates). Should be linearly spaced
         rectangular grid in both theta, zeta.
@@ -713,7 +724,7 @@ def virtual_casing_biot_savart(
     Returns
     -------
     f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
-        Integral transform evaluated at eval_grid.
+        Integral transform evaluated at eval_grid. Vectors are in rpz basis.
 
     """
     return singular_integral(

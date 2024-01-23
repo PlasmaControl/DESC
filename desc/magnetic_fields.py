@@ -17,7 +17,7 @@ from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, warnif
+from desc.utils import copy_coeffs, errorif, flatten_list, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -598,8 +598,8 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : tuple, optional
-            unused by this method
+        params : dict, optional
+            Dict of values for R0 and B0.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None
@@ -613,12 +613,9 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points
 
         """
-        if params is None:
-            B0 = self._B0
-            R0 = self._R0
-        else:
-            B0 = params["B0"]
-            R0 = params["R0"]
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+        R0 = params.get("R0", self.R0)
 
         assert basis.lower() in ["rpz", "xyz"]
         if hasattr(coords, "nodes"):
@@ -668,8 +665,8 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : tuple, optional
-            unused by this method
+        params : dict, optional
+            Dict of value for B0.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None
@@ -684,10 +681,8 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points
 
         """
-        if params is None:
-            B0 = self._B0
-        else:
-            B0 = params["B0"]
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
 
         assert basis.lower() in ["rpz", "xyz"]
         if hasattr(coords, "nodes"):
@@ -775,8 +770,8 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : tuple, optional
-            unused by this method
+        params : dict, optional
+            Dict of values for B0, R0, iota.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None
@@ -791,12 +786,10 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
 
         """
-        if params is None:
-            B0 = self._B0
-            R0 = self._R0
-        else:
-            B0 = params["B0"]
-            R0 = params["R0"]
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+        R0 = params.get("R0", self.R0)
+        iota = params.get("iota", self.iota)
 
         assert basis.lower() in ["rpz", "xyz"]
         if hasattr(coords, "nodes"):
@@ -811,7 +804,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         br = -r * jnp.sin(theta)
         bp = jnp.zeros_like(br)
         bz = r * jnp.cos(theta)
-        bmag = B0 * self._iota / R0
+        bmag = B0 * iota / R0
         B = bmag * jnp.array([br, bp, bz]).T
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])

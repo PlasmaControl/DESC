@@ -406,9 +406,7 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
             k = kernel(
                 {key: val[i] for key, val in eval_data.items() if key in keys},
                 src_data,
-            )
-            if kernel.ndim == 1:  # so that broadcasting works correctly
-                k = k[:, :, None]
+            ).reshape((1, src_grid.num_nodes, kernel.ndim))
 
             rho = _rho(
                 src_theta,
@@ -423,13 +421,13 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
             eta = _chi(rho)
             k = (1 - eta)[None, :, None] * k
             f_temp = jnp.sum(k * w[None, :, None], axis=1)
-            return f_temp.squeeze()
+            return f_temp
 
         def eval_pt_loop(i, fj):
             # this calculates the effect at a single evaluation point, from all others
             # in a single field period. loop this to get all pts
             f_temp = eval_pt_vmap(i)
-            return put(fj, i, f_temp.squeeze())
+            return put(fj, i, f_temp.reshape(fj[i].shape))
 
         # vmap for inner part found more efficient than fori_loop, especially on gpu,
         # but for jacobian looped seems to be better and less memory
@@ -438,7 +436,7 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
         else:
             fj = vmap(eval_pt_vmap)(jnp.arange(eval_grid.num_nodes))
 
-        f += fj
+        f += fj.reshape((eval_grid.num_nodes, kernel.ndim))
         return f, src_data
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
@@ -495,9 +493,8 @@ def _singular_part(
             {key: val for key, val in eval_data.items() if key in keys},
             src_data_polar,
             diag=True,
-        )
-        if kernel.ndim == 1:  # so that broadcasting works correctly
-            k = k[:, None]
+        ).reshape((eval_grid.num_nodes, kernel.ndim))
+
         dS = (v[i] * src_data_polar["|e_theta x e_zeta|"])[:, None]
         fi = k * dS
         return fi
@@ -506,7 +503,7 @@ def _singular_part(
         # this calculates the effect at a single evaluation point, from all others
         # in a single field period. loop this to get all pts
         f_temp = polar_pt_vmap(i)
-        return f + f_temp.squeeze()
+        return f + f_temp.reshape((eval_grid.num_nodes, kernel.ndim))
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
     # vmap found more efficient than fori_loop, esp on gpu, but uses more memory

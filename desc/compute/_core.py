@@ -17,6 +17,11 @@ from .data_index import register_compute_fun
     profiles=[],
     coordinates="rtz",
     data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+        "desc.geometry.core.Curve",
+    ],
 )
 def _0(params, transforms, profiles, data, **kwargs):
     data["0"] = jnp.zeros(transforms["grid"].num_nodes)
@@ -2544,6 +2549,10 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _rho(params, transforms, profiles, data, **kwargs):
     data["rho"] = transforms["grid"].nodes[:, 0]
@@ -2563,6 +2572,10 @@ def _rho(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _rho_r(params, transforms, profiles, data, **kwargs):
     data["rho_r"] = jnp.ones_like(data["0"])
@@ -2582,6 +2595,10 @@ def _rho_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _rho_t(params, transforms, profiles, data, **kwargs):
     data["rho_t"] = data["0"]
@@ -2601,6 +2618,10 @@ def _rho_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _rho_z(params, transforms, profiles, data, **kwargs):
     data["rho_z"] = data["0"]
@@ -2619,6 +2640,10 @@ def _rho_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="t",
     data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _theta(params, transforms, profiles, data, **kwargs):
     data["theta"] = transforms["grid"].nodes[:, 1]
@@ -2713,6 +2738,10 @@ def _theta_PEST_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="t",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _theta_r(params, transforms, profiles, data, **kwargs):
     data["theta_r"] = data["0"]
@@ -2732,6 +2761,10 @@ def _theta_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="t",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _theta_t(params, transforms, profiles, data, **kwargs):
     data["theta_t"] = jnp.ones_like(data["0"])
@@ -2751,6 +2784,10 @@ def _theta_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="t",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _theta_z(params, transforms, profiles, data, **kwargs):
     data["theta_z"] = data["0"]
@@ -2769,6 +2806,10 @@ def _theta_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="z",
     data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _zeta(params, transforms, profiles, data, **kwargs):
     data["zeta"] = transforms["grid"].nodes[:, 2]
@@ -2787,6 +2828,10 @@ def _zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="z",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _zeta_r(params, transforms, profiles, data, **kwargs):
     data["zeta_r"] = data["0"]
@@ -2805,6 +2850,10 @@ def _zeta_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="z",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _zeta_t(params, transforms, profiles, data, **kwargs):
     data["zeta_t"] = data["0"]
@@ -2823,6 +2872,10 @@ def _zeta_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="z",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _zeta_z(params, transforms, profiles, data, **kwargs):
     data["zeta_z"] = jnp.ones_like(data["0"])

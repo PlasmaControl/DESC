@@ -116,6 +116,11 @@ class VacuumBoundaryError(_Objective):
 
         pres = np.max(np.abs(eq.compute("p")["p"]))
         curr = np.max(np.abs(eq.compute("current")["current"]))
+        errorif(
+            not np.all(grid.nodes[:, 0] == 1.0),
+            ValueError,
+            "grid contains nodes not on rho=1",
+        )
         warnif(
             pres > 1e-8,
             UserWarning,
@@ -209,7 +214,7 @@ class VacuumBoundaryError(_Objective):
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
-        # this objective is really 3 residuals concatenated so its helpful to print
+        # this objective is really 2 residuals concatenated so its helpful to print
         # them individually
         f = self.compute_unscaled(*args, **kwargs)
         # try to do weighted mean if possible
@@ -407,6 +412,16 @@ class BoundaryError(_Objective):
             eval_grid = self._eval_grid
 
         errorif(
+            not np.all(src_grid.nodes[:, 0] == 1.0),
+            ValueError,
+            "src_grid contains nodes not on rho=1",
+        )
+        errorif(
+            not np.all(eval_grid.nodes[:, 0] == 1.0),
+            ValueError,
+            "eval_grid contains nodes not on rho=1",
+        )
+        errorif(
             src_grid.sym,
             ValueError,
             "Source grids for singular integrals must be non-symmetric",
@@ -439,7 +454,6 @@ class BoundaryError(_Objective):
             "K_vc",
             "B",
             "|B|^2",
-            "B",
             "R",
             "zeta",
             "Z",

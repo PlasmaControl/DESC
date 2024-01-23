@@ -233,7 +233,11 @@ def get_NAE_constraints(
         )
     if order == 2:  # 2nd order constraints
         constraints += make_RZ_cons_2nd_order(
-            qsc=qsc_eq, desc_eq=desc_eq, N=N, bounds=bounds_second_order
+            qsc=qsc_eq,
+            desc_eq=desc_eq,
+            N=N,
+            fix_lambda=fix_lambda and fix_lambda > 1,
+            bounds=bounds_second_order,
         )
     if order > 2:
         raise NotImplementedError("NAE constraints only implemented up to O(rho^2) ")

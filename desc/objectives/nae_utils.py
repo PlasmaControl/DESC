@@ -579,21 +579,6 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
     Y1cp = qsc.d_Y1c_d_varphi * dvphi_dp
     Y1sp = qsc.d_Y1s_d_varphi * dvphi_dp
 
-    ## first order terms ##
-    R_1_1 = X1c * (k_dot_R - k_dot_phi * dR0_dphi / R0) + Y1c * (
-        tau_dot_R - tau_dot_phi * dR0_dphi / R0
-    )
-    R_1_neg1 = Y1s * (tau_dot_R - tau_dot_phi * dR0_dphi / R0) + X1s * (
-        k_dot_R - k_dot_phi * dR0_dphi / R0
-    )
-
-    Z_1_1 = X1c * (k_dot_Z - k_dot_phi * dZ0_dphi / R0) + Y1c * (
-        tau_dot_Z - tau_dot_phi * dZ0_dphi / R0
-    )
-    Z_1_neg1 = Y1s * (tau_dot_Z - tau_dot_phi * dZ0_dphi / R0) + X1s * (
-        k_dot_Z - k_dot_phi * dZ0_dphi / R0
-    )
-
     # 2nd order terms
     # expressions found from mathematica and converted to python
 
@@ -979,6 +964,35 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
     aux42 = ((R0) ** -3.0) * ((((R0) ** 2) * (((tauphi) ** 2) * ((Y1c) ** 2))) + aux41)
     R_2_0 = 0.25 * aux42
 
+    ## L2c i.e. r^2 * cos(2*theta)
+    aux0 = (kR) * ((tauphi) * (((X1s) * (Y1s)) - ((X1c) * (Y1c))))
+    aux1 = ((kR) * (((X1s) ** 2) - ((X1c) ** 2))) + (
+        (2.0 * ((R0) * (X2c))) + ((tauR) * ((X1s) * (Y1s)))
+    )
+    aux2 = (2.0 * ((R0) * ((tauphi) * (Y2c)))) + (2.0 * ((bphi) * ((R0) * (Z2cNAE))))
+    aux3 = ((tauphi) * ((tauR) * ((Y1s) ** 2))) + (
+        aux0 + (((kphi) * (aux1 - ((tauR) * ((X1c) * (Y1c))))) + aux2)
+    )
+    aux4 = ((R0) ** -2.0) * (aux3 - ((tauphi) * ((tauR) * ((Y1c) ** 2))))
+    L_2_2 = -0.5 * (qsc.iota * aux4)
+
+    ## L20 i.e. r^2
+    aux0 = (kR) * ((tauphi) * (((X1c) * (Y1c)) + ((X1s) * (Y1s))))
+    aux1 = ((tauR) * ((X1c) * (Y1c))) + ((tauR) * ((X1s) * (Y1s)))
+    aux2 = ((kR) * (((X1c) ** 2) + ((X1s) ** 2))) + ((-2.0 * ((R0) * (X20))) + aux1)
+    aux3 = (-2.0 * ((R0) * ((tauphi) * (Y20)))) + (-2.0 * ((bphi) * ((R0) * (Z20NAE))))
+    aux4 = ((tauphi) * ((tauR) * ((Y1s) ** 2))) + (aux0 + (((kphi) * aux2) + aux3))
+    aux5 = ((R0) ** -2.0) * (((tauphi) * ((tauR) * ((Y1c) ** 2))) + aux4)
+    L_2_0 = 0.5 * (qsc.iota * aux5)
+
+    ## L2s i.e. r^2 * sin(2*theta)
+    aux0 = (kR) * ((tauphi) * (((X1s) * (Y1c)) + ((X1c) * (Y1s))))
+    aux1 = ((tauR) * ((X1s) * (Y1c))) + ((tauR) * ((X1c) * (Y1s)))
+    aux2 = (2.0 * ((kR) * ((X1c) * (X1s)))) + ((-2.0 * ((R0) * (X2s))) + aux1)
+    aux3 = ((R0) * ((tauphi) * (Y2s))) + ((bphi) * ((R0) * (Z2sNAE)))
+    aux4 = ((kphi) * aux2) + (-2.0 * (aux3 - ((tauphi) * ((tauR) * ((Y1c) * (Y1s))))))
+    L_2_neg2 = 0.5 * (qsc.iota * (((R0) ** -2.0) * (aux0 + aux4)))
+
     # Fourier Transform in toroidal angle phi
     coeffs = {}
     bases = {}
@@ -994,27 +1008,19 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
         Zbasis = FourierSeries(N=N, NFP=nfp, sym=False)
         Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
         Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
+
     bases["Rbasis_cos"] = Rbasis
     bases["Rbasis_sin"] = Rbasis_sin
     bases["Zbasis_cos"] = Zbasis
     bases["Zbasis_sin"] = Zbasis_sin
+    bases["Lbasis_cos"] = Zbasis
+    bases["Lbasis_sin"] = Zbasis_sin
 
     grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
     Rtrans = Transform(grid, Rbasis, build_pinv=True, method="auto")
     Ztrans = Transform(grid, Zbasis, build_pinv=True, method="auto")
     Rtrans_sin = Transform(grid, Rbasis_sin, build_pinv=True, method="auto")
     Ztrans_sin = Transform(grid, Zbasis_sin, build_pinv=True, method="auto")
-
-    R_1_1_n = Rtrans.fit(R_1_1)
-    R_1_neg1_n = Rtrans_sin.fit(R_1_neg1)
-
-    coeffs["R_1_1_n"] = R_1_1_n
-    coeffs["R_1_neg1_n"] = R_1_neg1_n
-
-    Z_1_1_n = Ztrans_sin.fit(Z_1_1)
-    Z_1_neg1_n = Ztrans.fit(Z_1_neg1)
-    coeffs["Z_1_1_n"] = Z_1_1_n
-    coeffs["Z_1_neg1_n"] = Z_1_neg1_n
 
     # if stell sym we should be able to figure out the phi sym for each term
     # R cos terms need a cos phi basis
@@ -1038,11 +1044,19 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
     coeffs["Z_2_2_n"] = Z_2_2_n
     coeffs["Z_2_neg2_n"] = Z_2_neg2_n
 
+    L_2_0_n = Ztrans_sin.fit(L_2_0)
+    L_2_2_n = Ztrans_sin.fit(L_2_2)
+    L_2_neg2_n = Ztrans.fit(L_2_neg2)
+
+    coeffs["L_2_0_n"] = L_2_0_n
+    coeffs["L_2_2_n"] = L_2_2_n
+    coeffs["L_2_neg2_n"] = L_2_neg2_n
+
     return coeffs, bases
 
 
 def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
-    qsc, desc_eq, coeffs, bases, bounds=False
+    qsc, desc_eq, coeffs, bases, fix_lambda, bounds=False
 ):
     """Creates 2nd order NAE constraints for a DESC eq based off given qsc eq.
 
@@ -1061,6 +1075,9 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
              stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
             and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
             since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
+        fix_lambda : bool, default False
+            whether to include 2nd  order constraints to fix the O(rho) behavior
+            of lambda.
         bounds : float or False
             If not False, uses bounds on the NAE constraints instead
             of exact targets. The float is the ratio of the coefficient
@@ -1082,11 +1099,14 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
     # squared (bc is rho^2 and r^2 terms considering here)
     Rconstraints = ()
     Zconstraints = ()
+    Lconstraints = ()
 
     Rbasis_cos = bases["Rbasis_cos"]
     Rbasis_sin = bases["Rbasis_sin"]
     Zbasis_cos = bases["Zbasis_cos"]
     Zbasis_sin = bases["Zbasis_sin"]
+    Lbasis_cos = bases["Lbasis_cos"]
+    Lbasis_sin = bases["Lbasis_sin"]
 
     # R_20n i.e. L=2, M=0
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_2_0_n"]):
@@ -1227,20 +1247,96 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
             )
         Zconstraints += (Zcon,)
 
-    return Rconstraints, Zconstraints
+    if not fix_lambda:
+        return Rconstraints, Zconstraints, Lconstraints
+
+    # L_2_0n
+    for n, NAEcoeff in zip(Lbasis_sin.modes[:, 2], coeffs["L_2_0_n"]):
+        sum_weights = []
+        modes = []
+        target = NAEcoeff * r
+        for k in range(1, int(desc_eq.L / 2) + 1):
+            modes.append([2 * k, 0, n])
+            sum_weights.append([(-1) ** k * k * (k + 1)])
+        modes = np.atleast_2d(modes)
+        sum_weights = -np.atleast_1d(sum_weights)
+        if not bounds:
+            Lcon = FixSumModesLambda(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Lcon = FixSumModesLambda(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
+        Lconstraints += (Lcon,)
+    # L_2_neg2n
+    for n, NAEcoeff in zip(Lbasis_cos.modes[:, 2], coeffs["L_2_neg2_n"]):
+        sum_weights = []
+        modes = []
+        target = NAEcoeff * r
+        for k in range(1, int(desc_eq.M / 2) + 1):
+            modes.append([2 * k, -2, n])
+            sum_weights.append([(-1) ** k * k * (k + 1)])
+        modes = np.atleast_2d(modes)
+        sum_weights = -np.atleast_1d(sum_weights) / 2
+        if not bounds:
+            Lcon = FixSumModesLambda(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Lcon = FixSumModesLambda(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
+        Lconstraints += (Lcon,)
+    # L_2_2n
+    for n, NAEcoeff in zip(Lbasis_sin.modes[:, 2], coeffs["L_2_2_n"]):
+        sum_weights = []
+        modes = []
+        target = NAEcoeff * r
+        for k in range(1, int(desc_eq.M / 2) + 1):
+            modes.append([2 * k, 2, n])
+            sum_weights.append([(-1) ** k * k * (k + 1)])
+        modes = np.atleast_2d(modes)
+        sum_weights = -np.atleast_1d(sum_weights) / 2
+        if not bounds:
+            Lcon = FixSumModesLambda(
+                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            )
+        else:
+            bounds_array = np.sort([target * (1 - bounds), target * (1 + bounds)])
+            Lcon = FixSumModesLambda(
+                eq=desc_eq,
+                sum_weights=sum_weights,
+                modes=modes,
+                bounds=(bounds_array[0], bounds_array[1]),
+            )
+        Lconstraints += (Lcon,)
+
+    return Rconstraints, Zconstraints, Lconstraints
 
 
-def make_RZ_cons_2nd_order(qsc, desc_eq, N=None, bounds=False):
+def make_RZ_cons_2nd_order(qsc, desc_eq, N=None, fix_lambda=False, bounds=False):
     """Make the second order NAE constraints for a DESC equilibrium.
 
     Parameters
     ----------
         qsc (Qsc): pyQsc Qsc object to use as the NAE constraints on the DESC eq
         desc_eq (Equilibrium): desc equilibrium to constrain
+        fix_lambda : bool, default False
+            whether to include first order constraints to fix the O(rho) behavior
+            of lambda. Defaults to False.
         bounds : float or False
         If not False, uses bounds on the NAE constraints instead
-        of exact targets. The float is the ratio of the coefficient
-        magnitude to use for the bounds, e.g. (coeff*(1-ratio),coeff*(1+ratio)
+            of exact targets. The float is the ratio of the coefficient
+            magnitude to use for the bounds, e.g. (coeff*(1-ratio),coeff*(1+ratio)
 
     Returns
     -------
@@ -1255,8 +1351,8 @@ def make_RZ_cons_2nd_order(qsc, desc_eq, N=None, bounds=False):
     Zconstraints = ()
 
     coeffs, bases = _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=N)
-    Rconstraints, Zconstraints = _calc_2nd_order_constraints(
-        qsc, desc_eq, coeffs, bases, bounds=bounds
+    Rconstraints, Zconstraints, Lconstraints = _calc_2nd_order_constraints(
+        qsc, desc_eq, coeffs, bases, fix_lambda=fix_lambda, bounds=bounds
     )
 
-    return Rconstraints + Zconstraints
+    return Rconstraints + Zconstraints + Lconstraints

@@ -774,27 +774,6 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(things_with_vacuum[0].B0, 0, atol=1e-3)
 
     @pytest.mark.unit
-    def test_target_max_iota(self):
-        """Test calculation of iota profile max."""
-
-        def test(eq):
-            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
-            max_iota = jnp.max(eq.compute("iota", grid=grid)["iota"])
-            obj = RotationalTransform(
-                target=max_iota, weight=1, eq=eq, loss_function="max", grid=grid
-            )
-            obj.build()
-            max_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
-            max_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
-            max_iota_scaled = obj.compute_scaled(*obj.xs(eq))
-            np.testing.assert_allclose(max_iota, max_iota_unscaled, atol=1e-16)
-            np.testing.assert_allclose(max_iota_scaled_error, 0, atol=5e-16)
-            np.testing.assert_allclose(max_iota_scaled, max_iota, atol=5e-16)
-
-        test(get("DSHAPE"))
-        test(get("HELIOTRON"))
-
-    @pytest.mark.unit
     def test_target_mean_iota(self):
         """Test calculation of iota profile average."""
 
@@ -811,6 +790,27 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(mean_iota, mean_iota_unscaled, atol=1e-16)
             np.testing.assert_allclose(mean_iota_scaled_error, 0, atol=5e-16)
             np.testing.assert_allclose(mean_iota_scaled, mean_iota, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
+    def test_target_max_iota(self):
+        """Test calculation of iota profile max."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            max_iota = jnp.max(eq.compute("iota", grid=grid)["iota"])
+            obj = RotationalTransform(
+                target=max_iota, weight=1, eq=eq, loss_function="max", grid=grid
+            )
+            obj.build()
+            max_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
+            max_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            max_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(max_iota, max_iota_unscaled, atol=1e-16)
+            np.testing.assert_allclose(max_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(max_iota_scaled, max_iota, atol=5e-16)
 
         test(get("DSHAPE"))
         test(get("HELIOTRON"))

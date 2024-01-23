@@ -1379,13 +1379,13 @@ class VMECIO:
         # blending parameter from previous iteration [0, 1]
         f.write("  DELT = {}\n".format(kwargs.get("DELT", 0.9)))
         f.write("  NS_ARRAY =   ")  # number of flux surfaces
-        for ns in kwargs.get("NS_ARRAY", [17, 33, 65, 129]):
+        for ns in kwargs.get("NS_ARRAY", [17, 33, 65, 129, 257]):
             f.write(" {:5.0f}".format(ns))
         f.write("\n  NITER_ARRAY =")  # maximum number of iterations
-        for niter in kwargs.get("NITER_ARRAY", [1e3, 2e3, 4e3, 8e3]):
+        for niter in kwargs.get("NITER_ARRAY", [1e4, 2e4, 3e4, 4e4, 5e4]):
             f.write(" {:5.0f}".format(niter))
         f.write("\n  FTOL_ARRAY = ")  # stopping tolerance
-        for ftol in kwargs.get("FTOL_ARRAY", [1e-9, 1e-10, 1e-11, 1e-12]):
+        for ftol in kwargs.get("FTOL_ARRAY", [1e-12, 1e-12, 1e-12, 1e-12, 1e-12]):
             f.write(" {:5.0E}".format(ftol))
         f.write("\n")
 

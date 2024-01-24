@@ -507,10 +507,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f, 0)
 
         # test nonaxisymmetric surface
-        eq = get("precise_QA")
-
-        source_N = 20
-        source_M = 10
+        eq = desc.io.load("desc/examples/precise_QA_output.h5")[0]
 
         eval_grid = LinearGrid(
             rho=np.array([1.0]),
@@ -522,8 +519,8 @@ class TestObjectiveFunction:
 
         source_grid = LinearGrid(
             rho=np.array([1.0]),
-            M=source_M,
-            N=source_N,
+            M=20,
+            N=40,
             NFP=int(eq.NFP),
             sym=False,
         )
@@ -538,11 +535,10 @@ class TestObjectiveFunction:
         Bnorm = t_field.compute_Bnormal(
             eq.surface, eval_grid=eval_grid, source_grid=source_grid
         )[0]
-        obj.build(eq, verbose=0)
+        obj.build(eq)
         f = obj.compute(params_1=t_field.params_dict)
 
-        # for this to pass with rtol=1e-3, the source resolution needs to be quite high
-        np.testing.assert_allclose(f, Bnorm, rtol=1e-2, atol=1e-2)
+        np.testing.assert_allclose(f, Bnorm, atol=1e-3)
 
     def test_quadratic_flux_optimization(self):
         """Test optimization using quadratic flux."""

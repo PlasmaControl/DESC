@@ -1,5 +1,4 @@
 """Classes for spectral bases and functions for evaluation."""
-
 import functools
 from abc import ABC, abstractmethod
 from math import factorial
@@ -1482,17 +1481,10 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
         # Calculate Jacobi polynomial for m,n pair
         P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
 
-        # Find the index corresponding to the original array
-        index = jnp.where(
-            jnp.logical_and(jnp.logical_and(m == alpha, n == N), l == 2 * N + alpha),
-            jnp.arange(1, m.size + 1),
-            0,
-        )
-        idx = jnp.sum(index)
-        idx -= 1
-
-        result = (-1) ** N * r**alpha * P_n
-        out = out.at[:, idx].set(jnp.where(idx >= 0, result, out.at[:, idx].get()))
+        # Replace only if that mode exists
+        mask = jnp.logical_and(m == alpha, n == N)
+        val = (-1) ** N * r**alpha * P_n
+        out = jnp.where(mask[None, :], val[:, None], out)
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1744,7 +1736,6 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
             P_n1,
             P_n2,
         )
-
         if dr == 0:
             # Loop over every n value
             _, _, _, out, P_past, _, _, _ = fori_loop(
@@ -1817,7 +1808,6 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
     n = (l - m) // 2
 
     M_max = jnp.max(m)
-
     # Loop over every different m value. There is another nested
     # loop which will execute necessary n values.
     _, _, _, _, _, out = fori_loop(0, M_max + 1, body, (r, r_jacobi, l, m, n, out))

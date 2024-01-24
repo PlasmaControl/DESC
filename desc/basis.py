@@ -1483,8 +1483,8 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
 
         # Replace only if that mode exists
         mask = jnp.logical_and(m == alpha, n == N)
-        val = (-1) ** N * r**alpha * P_n
-        out = jnp.where(mask[None, :], val[:, None], out)
+        result = (-1) ** N * r**alpha * P_n
+        out = jnp.where(mask[None, :], result[:, None], out)
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1497,24 +1497,16 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
         P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
         dP_n = jacobi_poly_single(r_jacobi, N - dr, alpha + dr, dr, dP_n1, dP_n2)
 
-        # Find the index corresponding to the original array
-        index = jnp.where(
-            jnp.logical_and(m == alpha, n == N),
-            jnp.arange(m.size),
-            0,
-        )
-        # jnp.where() will result in 1D array with 1 value which
-        # is not 0. Sum it to find the index
-        idx = jnp.sum(index)
-
         coef = gammaln(alpha + N + 1 + dr) - dr * jnp.log(2) - gammaln(alpha + N + 1)
         coef = jnp.exp(coef)
 
-        result = (
+        result = (-1) ** N * (
             alpha * r ** jnp.maximum(alpha - 1, 0) * P_n
             - coef * 4 * r ** (alpha + 1) * dP_n
         )
-        out = out.at[:, idx].set((-1) ** N * result)
+        # Replace only if that mode exists
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask[None, :], result[:, None], out)
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1525,7 +1517,7 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
 
     # USE DOT PRODUCT TO GENERALIZE DERIVATIVES
     # something like
-    # # result equal c1*P_n + dot(c_derivative_array, dP_n_array)
+    # result equal c1*P_n + dot(c_derivative_array, dP_n_array)
     def body_inner_d2(N, args):
         r_jacobi, alpha, r, out, P_past, m, n, l = args
         P_n1, P_n2, dP_n1, dP_n2, ddP_n1, ddP_n2 = P_past
@@ -1534,27 +1526,19 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
         dP_n = jacobi_poly_single(r_jacobi, N - 1, alpha + 1, 1, dP_n1, dP_n2)
         ddP_n = jacobi_poly_single(r_jacobi, N - 2, alpha + 2, 2, ddP_n1, ddP_n2)
 
-        # Find the index corresponding to the original array
-        index = jnp.where(
-            jnp.logical_and(m == alpha, n == N),
-            jnp.arange(m.size),
-            0,
-        )
-        # jnp.where() will result in 1D array with 1 value which
-        # is not 0. Sum it to find the index
-        idx = jnp.sum(index)
-
         coef_1 = gammaln(alpha + N + 2) - jnp.log(2) - gammaln(alpha + N + 1)
         coef_2 = gammaln(alpha + N + 3) - 2 * jnp.log(2) - gammaln(alpha + N + 1)
         coef_1 = jnp.exp(coef_1)
         coef_2 = jnp.exp(coef_2)
 
-        result = (
+        result = (-1) ** N * (
             (alpha - 1) * alpha * r ** jnp.maximum(alpha - 2, 0) * P_n
             - coef_1 * 4 * (2 * alpha + 1) * r**alpha * dP_n
             + coef_2 * 16 * r ** (alpha + 2) * ddP_n
         )
-        out = out.at[:, idx].set((-1) ** N * result)
+        # Replace only if that mode exists
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask[None, :], result[:, None], out)
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1583,16 +1567,6 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
         ddP_n = jacobi_poly_single(r_jacobi, N - 2, alpha + 2, 2, ddP_n1, ddP_n2)
         dddP_n = jacobi_poly_single(r_jacobi, N - 3, alpha + 3, 3, dddP_n1, dddP_n2)
 
-        # Find the index corresponding to the original array
-        index = jnp.where(
-            jnp.logical_and(m == alpha, n == N),
-            jnp.arange(m.size),
-            0,
-        )
-        # jnp.where() will result in 1D array with 1 value which
-        # is not 0. Sum it to find the index
-        idx = jnp.sum(index)
-
         coef_1 = gammaln(alpha + N + 2) - jnp.log(2) - gammaln(alpha + N + 1)
         coef_2 = gammaln(alpha + N + 3) - 2 * jnp.log(2) - gammaln(alpha + N + 1)
         coef_3 = gammaln(alpha + N + 4) - 3 * jnp.log(2) - gammaln(alpha + N + 1)
@@ -1600,13 +1574,15 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
         coef_2 = jnp.exp(coef_2)
         coef_3 = jnp.exp(coef_3)
 
-        result = (
+        result = (-1) ** N * (
             (alpha - 2) * (alpha - 1) * alpha * r ** jnp.maximum(alpha - 3, 0) * P_n
             - coef_1 * 12 * alpha**2 * r ** jnp.maximum(alpha - 1, 0) * dP_n
             + coef_2 * 48 * (alpha + 1) * r ** (alpha + 1) * ddP_n
             - coef_3 * 64 * r ** (alpha + 3) * dddP_n
         )
-        out = out.at[:, idx].set((-1) ** N * result)
+        # Replace only if that mode exists
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask[None, :], result[:, None], out)
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1649,16 +1625,6 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
         dddP_n = jacobi_poly_single(r_jacobi, N - 3, alpha + 3, 3, dddP_n1, dddP_n2)
         ddddP_n = jacobi_poly_single(r_jacobi, N - 4, alpha + 4, 4, ddddP_n1, ddddP_n2)
 
-        # Find the index corresponding to the original array
-        index = jnp.where(
-            jnp.logical_and(m == alpha, n == N),
-            jnp.arange(m.size),
-            0,
-        )
-        # jnp.where() will result in 1D array with 1 value which
-        # is not 0. Sum it to find the index
-        idx = jnp.sum(index)
-
         coef_1 = gammaln(alpha + N + 2) - jnp.log(2) - gammaln(alpha + N + 1)
         coef_2 = gammaln(alpha + N + 3) - 2 * jnp.log(2) - gammaln(alpha + N + 1)
         coef_3 = gammaln(alpha + N + 4) - 3 * jnp.log(2) - gammaln(alpha + N + 1)
@@ -1668,7 +1634,7 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
         coef_3 = jnp.exp(coef_3)
         coef_4 = jnp.exp(coef_4)
 
-        result = (
+        result = (-1) ** N * (
             (alpha - 3)
             * (alpha - 2)
             * (alpha - 1)
@@ -1685,7 +1651,9 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
             - coef_3 * 128 * (2 * alpha + 3) * r ** (alpha + 2) * dddP_n
             + coef_4 * 256 * r ** (alpha + 4) * ddddP_n
         )
-        out = out.at[:, idx].set((-1) ** N * result)
+        # Replace only if that mode exists
+        mask = jnp.logical_and(m == alpha, n == N)
+        out = jnp.where(mask[None, :], result[:, None], out)
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)

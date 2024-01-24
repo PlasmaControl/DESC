@@ -52,8 +52,8 @@ class FourierRZToroidalSurface(Surface):
         "_Z_lmn",
         "_R_basis",
         "_Z_basis",
-        "rho",
         "_NFP",
+        "_rho",
     ]
 
     def __init__(
@@ -119,7 +119,7 @@ class FourierRZToroidalSurface(Surface):
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
         self._NFP = NFP
         self._sym = sym
-        self.rho = rho
+        self._rho = rho
 
         if check_orientation and self._compute_orientation() == -1:
             warnings.warn(
@@ -154,6 +154,15 @@ class FourierRZToroidalSurface(Surface):
     def Z_basis(self):
         """DoubleFourierSeries: Spectral basis for Z."""
         return self._Z_basis
+
+    @property
+    def rho(self):
+        """float: Flux surface label."""
+        return self._rho
+
+    @rho.setter
+    def rho(self, rho):
+        self._rho = rho
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
@@ -649,8 +658,8 @@ class ZernikeRZToroidalSection(Surface):
         "_Z_lmn",
         "_R_basis",
         "_Z_basis",
-        "zeta",
         "_spectral_indexing",
+        "_zeta",
     ]
 
     def __init__(
@@ -723,7 +732,7 @@ class ZernikeRZToroidalSection(Surface):
         self._sym = sym
         self._spectral_indexing = spectral_indexing
 
-        self.zeta = zeta
+        self._zeta = zeta
 
         if check_orientation and self._compute_orientation() == -1:
             warnings.warn(
@@ -750,6 +759,15 @@ class ZernikeRZToroidalSection(Surface):
     def Z_basis(self):
         """ZernikePolynomial: Spectral basis for Z."""
         return self._Z_basis
+
+    @property
+    def zeta(self):
+        """float: Toroidal angle."""
+        return self._zeta
+
+    @zeta.setter
+    def zeta(self, zeta):
+        self._zeta = zeta
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""

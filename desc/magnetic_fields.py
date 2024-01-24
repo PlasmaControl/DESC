@@ -2241,8 +2241,8 @@ class FourierCurrentPotentialField(
             else:  # show composite scan over alpha plots
                 # strongly based off of Landreman's REGCOIL plotting routine:
                 # github.com/landreman/regcoil/blob/master/
-                plt.figure(figsize=(10, 8))
-                plt.rcParams.update({"font.size": 24})
+                plt.figure(figsize=(16, 12))
+                plt.rcParams.update({"font.size": 20})
                 plt.scatter(alphas, chi2Bs)
                 plt.xlabel(r"$\alpha$ (regularization parameter)")
                 plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
@@ -2250,7 +2250,7 @@ class FourierCurrentPotentialField(
                 plt.xscale("log")
                 data["fig_chi^2_B_vs_alpha"] = plt.gcf()
                 data["ax_chi^2_B_vs_alpha"] = plt.gca()
-                plt.figure(figsize=(10, 8))
+                plt.figure(figsize=(16, 12))
                 plt.scatter(alphas, chi2Ks)
                 plt.ylabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
                 plt.xlabel(r"$\alpha$ (regularization parameter)")
@@ -2258,7 +2258,7 @@ class FourierCurrentPotentialField(
                 plt.xscale("log")
                 data["fig_chi^2_K_vs_alpha"] = plt.gcf()
                 data["ax_chi^2_K_vs_alpha"] = plt.gca()
-                plt.figure(figsize=(10, 8))
+                plt.figure(figsize=(16, 12))
                 plt.scatter(chi2Ks, chi2Bs)
                 plt.xlabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
                 plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
@@ -2281,7 +2281,7 @@ class FourierCurrentPotentialField(
                 ########################################################
                 # Plot total current potentials
                 ########################################################
-                plt.figure(figsize=(15, 8))
+                plt.figure(figsize=(16, 12))
                 for whichPlot in range(numPlots):
                     plt.subplot(numRows, numCols, whichPlot + 1)
                     phi_mn_opt = phi_mns[ialpha_to_plot[whichPlot] - 1]
@@ -2318,8 +2318,7 @@ class FourierCurrentPotentialField(
                 )
                 data["fig_scan_Phi"] = plt.gcf()
                 data["ax_scan_Phi"] = plt.gca()
-                # TODO: add similar plot for Bn for each alpha
-                plt.figure(figsize=(15, 8))
+                plt.figure(figsize=(16, 12))
                 for whichPlot in range(numPlots):
                     plt.subplot(numRows, numCols, whichPlot + 1)
                     Bn = Bn_arrs[ialpha_to_plot[whichPlot] - 1]

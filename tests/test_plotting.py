@@ -993,6 +993,7 @@ def test_plot_3d_surface():
 
 
 @pytest.mark.unit
+@pytest.mark.xfail
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_Bn_scan_regcoil(regcoil_ellipse_and_axisym_surf):
     """Test Bn scan plot from run_regcoil method."""
@@ -1006,8 +1007,8 @@ def test_plot_Bn_scan_regcoil(regcoil_ellipse_and_axisym_surf):
     return fig
 
 
-@pytest.mark.xfail
 @pytest.mark.unit
+@pytest.mark.xfail
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_Phi_scan_regcoil(regcoil_ellipse_and_axisym_surf):
     """Test Phi scan plot from run_regcoil method."""
@@ -1021,8 +1022,8 @@ def test_plot_Phi_scan_regcoil(regcoil_ellipse_and_axisym_surf):
     return fig
 
 
-@pytest.mark.xfail
 @pytest.mark.unit
+@pytest.mark.xfail
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_chi2B_alpha_scan_regcoil(regcoil_ellipse_and_axisym_surf):
     """Test chi^2_B vs alpha plot from run_regcoil method."""

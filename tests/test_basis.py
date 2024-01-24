@@ -263,12 +263,12 @@ class TestBasis:
             if dx >= 7:
                 return np.zeros_like(x)
 
-        l = np.array([3, 4, 6])
-        m = np.array([1, 2, 2])
+        l = np.array([3, 4, 6, 4])
+        m = np.array([1, 2, 2, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
         max_dr = 4
         desired = {
-            dr: np.array([Z3_1(r, dr), Z4_2(r, dr), Z6_2(r, dr)]).T
+            dr: np.array([Z3_1(r, dr), Z4_2(r, dr), Z6_2(r, dr), Z4_2(r, dr)]).T
             for dr in range(max_dr + 1)
         }
         radial = {dr: zernike_radial_optimized(r, l, m, dr) for dr in range(max_dr + 1)}

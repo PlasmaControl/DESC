@@ -1482,10 +1482,20 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
         # Calculate Jacobi polynomial for m,n pair
         P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
 
-        # Replace only if that mode exists
-        mask = jnp.logical_and(m == alpha, n == N)
+        # Find the index corresponding to the original array
+        # I changed arange function to get rid of 0 as index confusion
+        # so if index is full of 0s, there is no such mode
+        # (FAST BUT NEED A CHECK FOR DUPLICATE MODES)
+        index = jnp.where(
+            jnp.logical_and(m == alpha, n == N),
+            jnp.arange(1, m.size + 1),
+            0,
+        )
+        idx = jnp.sum(index)
+        # needed for proper index
+        idx -= 1
         result = (-1) ** N * r**alpha * P_n
-        out = jnp.where(mask[None, :], result[:, None], out)
+        out = out.at[:, idx].set(jnp.where(idx >= 0, result, out.at[:, idx].get()))
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1789,6 +1799,7 @@ def jacobi_poly_single(x, n, alpha, beta=0, P_n1=0, P_n2=0):
     a2 = (c - 1) * (c * (c - 2) * x + (alpha - beta) * (alpha + beta))
     a3 = 2 * (n + alpha - 1) * (n + beta - 1) * c
 
+    a1 = jnp.where(a1 == 0, 1e-6, a1)
     P_n = (a2 * P_n1 - a3 * P_n2) / a1
     # Checks for special cases
     P_n = jnp.where(n < 0, 0, P_n)

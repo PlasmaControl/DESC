@@ -15,6 +15,7 @@ from desc.basis import (
     _jacobi,
     chebyshev,
     fourier,
+    jacobi_poly_single,
     polyder_vec,
     polyval_vec,
     powers,
@@ -278,6 +279,43 @@ class TestBasis:
         for dr in range(max_dr + 1):
             np.testing.assert_allclose(radial[dr], desired[dr], err_msg=dr)
             np.testing.assert_allclose(radial_poly[dr], desired[dr], err_msg=dr)
+
+    @pytest.mark.unit
+    def test_jacobi_poly_single(self):
+        """Test Jacobi Polynomial evaluation for special cases."""
+        # https://en.wikipedia.org/wiki/Jacobi_polynomials#Special_cases
+
+        def exact(r, n, alpha, beta):
+            if n == 0:
+                return np.ones_like(r)
+            elif n == 1:
+                return (alpha + 1) + (alpha + beta + 2) * ((r - 1) / 2)
+            elif n == 2:
+                a0 = (alpha + 1) * (alpha + 2) / 2
+                a1 = (alpha + 2) * (alpha + beta + 3)
+                a2 = (alpha + beta + 3) * (alpha + beta + 4) / 2
+                z = (r - 1) / 2
+                return a0 + a1 * z + a2 * z**2
+            elif n < 0:
+                return np.zeros_like(r)
+
+        r = np.linspace(0, 1, 11)
+        # alpha and beta pairs for test
+        pairs = np.array([[2, 3], [3, 0], [1, 1], [10, 4]])
+        n_values = np.array([-1, -2, 0, 1, 2])
+
+        for pair in pairs:
+            alpha = pair[0]
+            beta = pair[1]
+            P0 = jacobi_poly_single(r, 0, alpha, beta)
+            P1 = jacobi_poly_single(r, 1, alpha, beta)
+            desired = {n: exact(r, n, alpha, beta) for n in n_values}
+            values = {
+                n: jacobi_poly_single(r, n, alpha, beta, P1, P0) for n in n_values
+            }
+
+            for n in n_values:
+                np.testing.assert_allclose(values[n], desired[n], err_msg=n)
 
     @pytest.mark.unit
     def test_fourier(self):

@@ -551,16 +551,14 @@ class TestObjectiveFunction:
                 rho=np.array([1.0]),
                 M=M_grid,
                 N=N_grid,
-                NFP=int(field.NFP)
-                if not isinstance(field, ToroidalMagneticField)
-                else 1,
+                NFP=field.NFP if not isinstance(field, ToroidalMagneticField) else 1,
                 sym=False,
             )
             eval_grid = LinearGrid(
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=N_grid,
-                NFP=int(eq.NFP),
+                NFP=eq.NFP,
                 sym=False,
             )
 
@@ -568,7 +566,7 @@ class TestObjectiveFunction:
                 rho=np.array([1.0]),
                 M=M_grid,
                 N=N_grid,
-                NFP=int(eq.NFP),
+                NFP=eq.NFP,
                 sym=False,
             )
 
@@ -700,7 +698,7 @@ class TestObjectiveFunction:
             rho=np.array([1.0]),
             M=20,
             N=20,
-            NFP=int(eq.NFP),
+            NFP=eq.NFP,
             sym=False,
         )
 

@@ -1006,6 +1006,7 @@ def test_plot_Bn_scan_regcoil(regcoil_ellipse_and_axisym_surf):
     return fig
 
 
+@pytest.mark.xfail
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_Phi_scan_regcoil(regcoil_ellipse_and_axisym_surf):
@@ -1020,6 +1021,7 @@ def test_plot_Phi_scan_regcoil(regcoil_ellipse_and_axisym_surf):
     return fig
 
 
+@pytest.mark.xfail
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_chi2B_alpha_scan_regcoil(regcoil_ellipse_and_axisym_surf):

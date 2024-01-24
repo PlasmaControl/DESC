@@ -20,6 +20,8 @@ from desc.vmec_utils import (
     zernike_to_fourier,
 )
 
+from .utils import area_difference_desc
+
 
 class TestVMECIO:
     """Tests VMECIO class."""
@@ -949,6 +951,7 @@ def test_write_vmec_input(TmpDir):
     W1 = eq1.compute("W")["W"]
 
     # check that solution matches original equilibrium
+    rho_err, theta_err = area_difference_desc(eq0, eq1)
     np.testing.assert_allclose(eq0.L, eq1.L)
     np.testing.assert_allclose(eq0.M, eq1.M)
     np.testing.assert_allclose(eq0.N, eq1.N)
@@ -959,3 +962,5 @@ def test_write_vmec_input(TmpDir):
     np.testing.assert_allclose(eq0.Rb_lmn, eq1.Rb_lmn)
     np.testing.assert_allclose(eq0.Zb_lmn, eq1.Zb_lmn)
     np.testing.assert_allclose(W0, W1)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)

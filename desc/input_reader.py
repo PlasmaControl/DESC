@@ -866,43 +866,51 @@ class InputReader:
         f.write(f"objective = {objective}\n")
         f.write("spectral_indexing = {}\n".format(eq._spectral_indexing))
 
-        f.write("\n# pressure and rotational transform/current profiles\n")
-
+        # fit profiles to power series
         grid = LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         rho = grid.nodes[grid._unique_rho_idx, 0]
+        if not isinstance(eq.pressure, PowerSeriesProfile):
+            pressure = grid.compress(eq.compute("p", grid=grid)["p"])
+            pres_profile = PowerSeriesProfile.from_values(
+                rho, pressure, order=eq.L, sym=False
+            )
+        else:
+            pres_profile = eq.pressure
+        if not isinstance(eq.iota, PowerSeriesProfile):
+            iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
+            iota_profile = PowerSeriesProfile.from_values(
+                rho, iota, order=eq.L, sym=False
+            )
+        else:
+            iota_profile = eq.iota
+        if not isinstance(eq.current, PowerSeriesProfile):
+            current = grid.compress(eq.compute("current", grid=grid)["current"])
+            curr_profile = PowerSeriesProfile.from_values(
+                rho, current, order=eq.L, sym=False
+            )
+        else:
+            curr_profile = eq.current
 
-        pressure = grid.compress(eq.compute("p", grid=grid)["p"])
-        iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
-        current = grid.compress(eq.compute("current", grid=grid)["current"])
-
-        pres_profile = PowerSeriesProfile.from_values(
-            rho, pressure, order=10, sym=False
-        ).params
-        iota_profile = PowerSeriesProfile.from_values(
-            rho, iota, order=eq.L, sym=False
-        ).params
-        curr_profile = PowerSeriesProfile.from_values(
-            rho, current, order=eq.L, sym=False
-        ).params
-
+        # ensure pressure and iota/current profiles are the same resolution
         if eq.iota:
             char = "i"
             profile = iota_profile
         else:
             char = "c"
             profile = curr_profile
+        L_profile = max(pres_profile.basis.L, profile.basis.L)
+        pres_profile.change_resolution(L=L_profile)
+        profile.change_resolution(L=L_profile)
 
-        idxs = np.linspace(0, eq.L - 1, eq.L, dtype=int)
-        for l in idxs:
+        f.write("\n# pressure and rotational transform/current profiles\n")
+        for l in range(L_profile):
             f.write(
                 "l: {:3d}  p = {:15.8E}  {} = {:15.8E}\n".format(
-                    int(l), pres_profile[l], char, profile[l]
+                    int(l), pres_profile.params[l], char, profile.params[l]
                 )
             )
 
         f.write("\n# fixed-boundary surface shape\n")
-
-        # boundary parameters
         if eq.sym:
             for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
                 if abs(eq.Rb_lmn[k]) > threshold:
@@ -1024,7 +1032,7 @@ class InputReader:
                 end_ind = i
         vmeclines = vmeclines[start_ind + 1 : end_ind]
 
-        ## Loop which makes multi-line inputs a single line
+        # Loop which makes multi-line inputs a single line
         vmeclines_no_multiline = []
         for line in vmeclines:
             comment = line.find("!")
@@ -1039,7 +1047,7 @@ class InputReader:
             else:  # is a multi-line input,append the line to the previous
                 vmeclines_no_multiline[-1] += " " + line
 
-        ## remove duplicate lines
+        # remove duplicate lines
         vmec_no_multiline_no_duplicates = []
         already_read_names = []
         already_read = False
@@ -1083,7 +1091,7 @@ class InputReader:
         # undo the reverse so the file we write looks as expected
         vmec_no_multiline_no_duplicates.reverse()
 
-        ## read the inputs for use in DESC
+        # read the inputs for use in DESC
         for line in vmec_no_multiline_no_duplicates:
             comment = line.find("!")
             command = (line.strip() + " ")[0:comment]
@@ -1132,10 +1140,10 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                inputs["M"] = numbers[0]
-                inputs["L"] = numbers[0]
-                inputs["L_grid"] = 2 * numbers[0]
-                inputs["M_grid"] = 2 * numbers[0]
+                inputs["M"] = numbers[0] - 1
+                inputs["L"] = numbers[0] - 1
+                inputs["L_grid"] = 2 * (numbers[0] - 1)
+                inputs["M_grid"] = 2 * (numbers[0] - 1)
             match = re.search(r"NTOR\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [

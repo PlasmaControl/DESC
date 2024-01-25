@@ -231,8 +231,11 @@ class Optimizer(IOAble):
                     "yellow",
                 )
             )
-
-        x0 = objective.x(*things)
+        # we have to use this cumbersome indexing in this method when passing things
+        # to objective to guard against the passed-in things having an ordering
+        # different from objective.things, to ensure the correct order is passed
+        # to the objective
+        x0 = objective.x(*[things[things.index(t)] for t in objective.things])
 
         stoptol = _get_default_tols(
             method,
@@ -305,22 +308,35 @@ class Optimizer(IOAble):
 
         # temporarily assign new stuff for printing, might get replaced later
         for thing, params in zip(objective.things, result["history"][-1]):
-            get_instance(things, type(thing)).params_dict = params
+            # more indexing here to ensure the correct params are assigned to the
+            # correct thing, as the order of things and objective.things might differ
+            ind = things.index(thing)
+            things[ind].params_dict = params
 
         if verbose > 0:
             print("Start of solver")
-            objective.print_value(objective.x(*things0))
+            # need to check index of things bc things0 contains copies of
+            # things, so they are not the same exact Python objects
+            objective.print_value(
+                objective.x(*[things0[things.index(t)] for t in objective.things])
+            )
             for con in constraints:
-                con.print_value(
-                    *con.xs(
-                        *[t0 for (t0, t) in zip(things0, things) if t in con.things]
-                    )
-                )
+                arg_inds_for_this_con = [
+                    things.index(t) for t in things if t in con.things
+                ]
+                args_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
+                con.print_value(*con.xs(*args_for_this_con))
 
             print("End of solver")
-            objective.print_value(objective.x(*things))
+            objective.print_value(
+                objective.x(*[things[things.index(t)] for t in objective.things])
+            )
             for con in constraints:
-                con.print_value(*con.xs(*[t for t in things if t in con.things]))
+                arg_inds_for_this_con = [
+                    things.index(t) for t in things if t in con.things
+                ]
+                args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
+                con.print_value(*con.xs(*args_for_this_con))
 
         if copy:
             # need to swap things and things0, since things should be unchanged

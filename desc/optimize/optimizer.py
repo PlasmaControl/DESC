@@ -231,8 +231,7 @@ class Optimizer(IOAble):
                     "yellow",
                 )
             )
-
-        x0 = objective.x(*things)
+        x0 = objective.x(*[things[things.index(t)] for t in objective.things])
 
         stoptol = _get_default_tols(
             method,
@@ -310,18 +309,29 @@ class Optimizer(IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.print_value(objective.x(*things0))
+
+            # need to check index of things bc things0 contains copies of
+            # things, so they are not the same exact Python objects
+            objective.print_value(
+                objective.x(*[things0[things.index(t)] for t in objective.things])
+            )
             for con in constraints:
-                con.print_value(
-                    *con.xs(
-                        *[t0 for (t0, t) in zip(things0, things) if t in con.things]
-                    )
-                )
+                arg_inds_for_this_con = [
+                    things.index(t) for t in things if t in con.things
+                ]
+                args_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
+                con.print_value(*con.xs(*args_for_this_con))
 
             print("End of solver")
-            objective.print_value(objective.x(*things))
+            objective.print_value(
+                objective.x(*[things[things.index(t)] for t in objective.things])
+            )
             for con in constraints:
-                con.print_value(*con.xs(*[t for t in things if t in con.things]))
+                arg_inds_for_this_con = [
+                    things.index(t) for t in things if t in con.things
+                ]
+                args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
+                con.print_value(*con.xs(*args_for_this_con))
 
         if copy:
             # need to swap things and things0, since things should be unchanged

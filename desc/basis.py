@@ -1700,7 +1700,7 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
             # Loop over every n value
             _, _, _, out, P_past, _, _ = fori_loop(
                 0,
-                N_max + 1,
+                (N_max + 1).astype(int),
                 body_inner,
                 (r_jacobi, alpha, r, out, P_past, m, n),
             )
@@ -1714,7 +1714,7 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
             if dr == 1:
                 _, _, _, out, P_past, _, _ = fori_loop(
                     0,
-                    N_max + 1,
+                    (N_max + 1).astype(int),
                     body_inner_d1,
                     (r_jacobi, alpha, r, out, P_past, m, n),
                 )
@@ -1728,7 +1728,7 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
             if dr == 2:
                 _, _, _, out, P_past, _, _ = fori_loop(
                     0,
-                    N_max + 1,
+                    (N_max + 1).astype(int),
                     body_inner_d2,
                     (r_jacobi, alpha, r, out, P_past, m, n),
                 )
@@ -1742,7 +1742,7 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
             if dr == 3:
                 _, _, _, out, P_past, _, _ = fori_loop(
                     0,
-                    N_max + 1,
+                    (N_max + 1).astype(int),
                     body_inner_d3,
                     (r_jacobi, alpha, r, out, P_past, m, n),
                 )
@@ -1755,7 +1755,7 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
             )
             _, _, _, out, P_past, _, _ = fori_loop(
                 0,
-                N_max + 1,
+                (N_max + 1).astype(int),
                 body_inner_d4,
                 (r_jacobi, alpha, r, out, P_past, m, n),
             )
@@ -1765,12 +1765,14 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
     out = jnp.zeros((r.size, m.size))
     r_jacobi = 1 - 2 * r**2
     m = jnp.abs(m)
-    n = (l - m) // 2
+    n = ((l - m) // 2).astype(int)
 
     M_max = jnp.max(m)
     # Loop over every different m value. There is another nested
     # loop which will execute necessary n values.
-    _, _, _, _, _, out = fori_loop(0, M_max + 1, body, (r, r_jacobi, l, m, n, out))
+    _, _, _, _, _, out = fori_loop(
+        0, (M_max + 1).astype(int), body, (r, r_jacobi, l, m, n, out)
+    )
 
     return out
 

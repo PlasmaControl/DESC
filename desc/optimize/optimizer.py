@@ -304,8 +304,8 @@ class Optimizer(IOAble):
             _ = result.pop(key, None)
 
         # temporarily assign new stuff for printing, might get replaced later
-        for thing, params in zip(things, result["history"][-1]):
-            thing.params_dict = params
+        for thing, params in zip(objective.things, result["history"][-1]):
+            get_instance(things, type(thing)).params_dict = params
 
         if verbose > 0:
             print("Start of solver")

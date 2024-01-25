@@ -874,16 +874,22 @@ class InputReader:
             pres_profile = PowerSeriesProfile.from_values(
                 rho, pressure, order=eq.L, sym=False
             )
+        else:
+            pres_profile = eq.pressure
         if not isinstance(eq.iota, PowerSeriesProfile):
             iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
             iota_profile = PowerSeriesProfile.from_values(
                 rho, iota, order=eq.L, sym=False
             )
+        else:
+            iota_profile = eq.iota
         if not isinstance(eq.current, PowerSeriesProfile):
             current = grid.compress(eq.compute("current", grid=grid)["current"])
             curr_profile = PowerSeriesProfile.from_values(
                 rho, current, order=eq.L, sym=False
             )
+        else:
+            curr_profile = eq.current
 
         # ensure pressure and iota/current profiles are the same resolution
         if eq.iota:
@@ -892,7 +898,7 @@ class InputReader:
         else:
             char = "c"
             profile = curr_profile
-        L_profile = max(pres_profile.L, profile.L)
+        L_profile = max(pres_profile.basis.L, profile.basis.L)
         pres_profile.change_resolution(L=L_profile)
         profile.change_resolution(L=L_profile)
 

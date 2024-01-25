@@ -231,6 +231,10 @@ class Optimizer(IOAble):
                     "yellow",
                 )
             )
+        # we have to use this cumbersome indexing in this method when passing things
+        # to objective to guard against the passed-in things having an ordering
+        # different from objective.things, to ensure the correct order is passed
+        # to the objective
         x0 = objective.x(*[things[things.index(t)] for t in objective.things])
 
         stoptol = _get_default_tols(
@@ -304,12 +308,13 @@ class Optimizer(IOAble):
 
         # temporarily assign new stuff for printing, might get replaced later
         for thing, params in zip(objective.things, result["history"][-1]):
+            # more indexing here to ensure the correct params are assigned to the
+            # correct thing, as the order of things and objective.things might differ
             ind = things.index(thing)
             things[ind].params_dict = params
 
         if verbose > 0:
             print("Start of solver")
-
             # need to check index of things bc things0 contains copies of
             # things, so they are not the same exact Python objects
             objective.print_value(

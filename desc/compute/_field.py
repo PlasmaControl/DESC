@@ -3392,7 +3392,7 @@ def _L_grad_B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="K_vc",
-    label="\\mathbf{K}_{VC} = \\mathbf{B} \\times \\mathbf{n}",
+    label="\\mathbf{K}_{VC} = \\mathbf{n} \\times \\mathbf{B}",
     units="A \\cdot m^{-1}",
     units_long="Amps / meter",
     description="Virtual casing sheet current",
@@ -3404,5 +3404,5 @@ def _L_grad_B(params, transforms, profiles, data, **kwargs):
     data=["B", "n_rho"],
 )
 def _K_vc(params, transforms, profiles, data, **kwargs):
-    data["K_vc"] = cross(data["B"], data["n_rho"]) / mu_0
+    data["K_vc"] = cross(data["n_rho"], data["B"]) / mu_0
     return data

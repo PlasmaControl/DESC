@@ -8,50 +8,9 @@ from interpax import fft_interp2d
 from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
+from desc.compute.utils import safediv, safenorm
 from desc.io import IOAble
 from desc.utils import isalmostequal, islinspaced
-
-
-def safediv(a, b, fill=0, threshold=0):
-    """Divide a/b with guards for division by zero.
-
-    Parameters
-    ----------
-    a, b : ndarray
-        Numerator and denominator.
-    fill : float, ndarray, optional
-        Value to return where b is zero.
-    threshold : float >= 0
-        How small is b allowed to be.
-    """
-    mask = jnp.abs(b) <= threshold
-    num = jnp.where(mask, fill, a)
-    den = jnp.where(mask, 1, b)
-    return num / den
-
-
-def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
-    """Like jnp.linalg.norm, but without nan gradient at x=0.
-
-    Parameters
-    ----------
-    x : ndarray
-        Vector or array to norm.
-    ord : {non-zero int, inf, -inf, ‘fro’, ‘nuc’}, optional
-        Order of norm.
-    axis : {None, int, 2-tuple of ints}, optional
-        Axis to take norm along.
-    fill : float, ndarray, optional
-        Value to return where x is zero.
-    threshold : float >= 0
-        How small is x allowed to be.
-
-    """
-    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
-    x = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = jnp.linalg.norm(x, ord=ord, axis=axis)
-    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
-    return n
 
 
 def _get_quadrature_nodes(q):
@@ -699,6 +658,28 @@ def virtual_casing_biot_savart(
     eval_data, eval_grid, src_data, src_grid, interpolator, loop=True
 ):
     """Evaluate magnetic field on surface due to sheet current on surface.
+
+    The magnetic field due to the plasma current can be written as a Biot-Savart
+    integral over the plasma volume:
+
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ 𝐉(𝐫') × (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d³𝐫'
+
+    Where 𝐉 is the plasma current density, 𝐫 is a point on the plasma surface, and 𝐫' is
+    a point in the plasma volume.
+
+    This 3D integral can be converted to a 2D integral over the plasma boundary using
+    the virtual casing principle [1]..
+
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ (𝐧' ⋅ 𝐁(𝐫')) (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d²𝐫'
+            + μ₀/4π ∫ (𝐧' × 𝐁(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫'
+            + 𝐁(𝐫)/2
+
+    Where 𝐁 is the total field on the surface and 𝐧' is the outward surface normal.
+    Because the total field is tangent, the first term in the integrand is zero leaving
+
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ K_vc(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫' + 𝐁(𝐫)/2
+
+    Where we have defined the virtual casing sheet current K_vc = 𝐧' × 𝐁(𝐫')
 
     Parameters
     ----------

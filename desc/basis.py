@@ -6,7 +6,7 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
+from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
 from desc.utils import flatten_list
 
@@ -1452,6 +1452,24 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
     This is completely JITable version of zernike_radial_optimized
     function.
 
+    There was even faster version of this code but that doesn't have checks
+    for duplicate modes
+
+    # Find the index corresponding to the original array
+    # I changed arange function to get rid of 0 as index confusion
+    # so if index is full of 0s, there is no such mode
+    # (FAST BUT NEED A CHECK FOR DUPLICATE MODES)
+    index = jnp.where(
+        jnp.logical_and(m == alpha, n == N),
+        jnp.arange(1, m.size + 1),
+        0,
+    )
+    idx = jnp.sum(index)
+    # needed for proper index
+    idx -= 1
+    result = (-1) ** N * r**alpha * P_n
+    out = out.at[:, idx].set(jnp.where(idx >= 0, result, out.at[:, idx].get()))
+
     Parameters
     ----------
     r : ndarray, shape(N,)
@@ -1475,27 +1493,31 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
             + "have not been implemented."
         )
 
+    def falseFun(args):
+        _, _, out = args
+        return out
+
+    def trueFun(args):
+        idx, result, out = args
+        out = out.at[:, idx].set(result)
+        return out
+
+    def update(x, args):
+        m, n, alpha, N, result, out = args
+        idx = jnp.where(jnp.logical_and(m[x] == alpha, n[x] == N), x, -1)
+        out = cond(idx >= 0, trueFun, falseFun, (idx, result, out))
+        return (m, n, alpha, N, result, out)
+
     # Zeroth Derivative
     def body_inner(N, args):
         r_jacobi, alpha, r, out, P_past, m, n = args
         P_n1, P_n2 = P_past
         # Calculate Jacobi polynomial for m,n pair
         P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
-
-        # Find the index corresponding to the original array
-        # I changed arange function to get rid of 0 as index confusion
-        # so if index is full of 0s, there is no such mode
-        # (FAST BUT NEED A CHECK FOR DUPLICATE MODES)
-        index = jnp.where(
-            jnp.logical_and(m == alpha, n == N),
-            jnp.arange(1, m.size + 1),
-            0,
-        )
-        idx = jnp.sum(index)
-        # needed for proper index
-        idx -= 1
         result = (-1) ** N * r**alpha * P_n
-        out = out.at[:, idx].set(jnp.where(idx >= 0, result, out.at[:, idx].get()))
+
+        # All the checks necessary (FAST BUT NOT THE FASTEST)
+        _, _, _, _, _, out = fori_loop(0, m.size, update, (m, n, alpha, N, result, out))
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1516,9 +1538,7 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
             alpha * r ** jnp.maximum(alpha - 1, 0) * P_n
             - coef * 4 * r ** (alpha + 1) * dP_n
         )
-        # Replace only if that mode exists
-        mask = jnp.logical_and(m == alpha, n == N)
-        out = jnp.where(mask[None, :], result[:, None], out)
+        _, _, _, _, _, out = fori_loop(0, m.size, update, (m, n, alpha, N, result, out))
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1546,9 +1566,7 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
             - coef_1 * 4 * (2 * alpha + 1) * r**alpha * dP_n
             + coef_2 * 16 * r ** (alpha + 2) * ddP_n
         )
-        # Replace only if that mode exists
-        mask = jnp.logical_and(m == alpha, n == N)
-        out = jnp.where(mask[None, :], result[:, None], out)
+        _, _, _, _, _, out = fori_loop(0, m.size, update, (m, n, alpha, N, result, out))
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1590,9 +1608,7 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
             + coef_2 * 48 * (alpha + 1) * r ** (alpha + 1) * ddP_n
             - coef_3 * 64 * r ** (alpha + 3) * dddP_n
         )
-        # Replace only if that mode exists
-        mask = jnp.logical_and(m == alpha, n == N)
-        out = jnp.where(mask[None, :], result[:, None], out)
+        _, _, _, _, _, out = fori_loop(0, m.size, update, (m, n, alpha, N, result, out))
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1661,9 +1677,7 @@ def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
             - coef_3 * 128 * (2 * alpha + 3) * r ** (alpha + 2) * dddP_n
             + coef_4 * 256 * r ** (alpha + 4) * ddddP_n
         )
-        # Replace only if that mode exists
-        mask = jnp.logical_and(m == alpha, n == N)
-        out = jnp.where(mask[None, :], result[:, None], out)
+        _, _, _, _, _, out = fori_loop(0, m.size, update, (m, n, alpha, N, result, out))
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)

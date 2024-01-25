@@ -1762,6 +1762,10 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
 
         return (r, r_jacobi, l, m, n, out)
 
+    r = jnp.atleast_1d(r)
+    m = jnp.atleast_1d(m)
+    l = jnp.atleast_1d(l)
+
     out = jnp.zeros((r.size, m.size))
     r_jacobi = 1 - 2 * r**2
     m = jnp.abs(m)

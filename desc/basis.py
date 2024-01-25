@@ -1412,39 +1412,6 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
     return polyval_vec(coeffs, r, prec=prec).T
 
 
-def zernike_radial_direct(r, n, m):
-    """Radial part of zernike polynomials. Modified Prata's algorithm."""
-    R = np.zeros((n, m))  # R_nmk
-
-    M = 10  # dummy number for now
-    for n in range(M):
-        K_1 = 2 * n / (m + n)
-        K_2 = 1 - K_1
-
-        R[n, n] = r**n
-
-        for m in range(n - 2, 1, -2):
-            R[n, m] = r * K_1 * R[n - 1, m - 1] + K_2 * R[n - 2, m]
-
-            if n % 2 == 0:
-                R[n, 0] = 2 * r * R[n - 1, 1] - R[n - 2, 0]
-
-            R_nm = np.sum([R * r**k for k in range(M)])
-
-    # not sure if this part is needed
-    R_k = np.zeros((n - m) / 2)
-    for k in range((n - m) / 2):
-        R_k[k] += (
-            (-1) ** ((n - k) / 2)
-            * factorial((n + k) / 2)
-            / factorial((n - k) / 2)
-            * factorial((k + abs(m)) / 2)
-            * factorial((k - abs(m)) / 2)
-        )
-
-    return R_nm
-
-
 @functools.partial(jit, static_argnums=3)
 def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
     """Radial part of zernike polynomials.

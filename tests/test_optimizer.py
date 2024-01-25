@@ -1017,3 +1017,60 @@ def test_proximal_with_PlasmaVesselDistance():
         verbose=3,
         maxiter=3,
     )
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_optimize_multiple_things_different_order():
+    """Tests that optimizing multiple things works regardless of order of things."""
+    # tests fix for GH issue #828
+    # only ensuring that it runs without errors, no need to check results
+    eq = desc.examples.get("SOLOVEV")
+
+    constraints = (
+        FixPressure(eq=eq),  # fix pressure profile
+        FixIota(eq=eq),  # fix rotational transform profile
+        FixPsi(eq=eq),  # fix total toroidal magnetic flux
+    )
+    # circular surface
+    a = 2
+    R0 = 4
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+
+    grid = LinearGrid(M=eq.M, N=0, NFP=eq.NFP)
+    obj = PlasmaVesselDistance(
+        surface=surf, eq=eq, target=0.5, plasma_grid=grid, surface_fixed=False
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    # ensure it runs when (eq,surf) are passed
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf),
+        objective,
+        constraints,
+        verbose=3,
+        maxiter=2,
+    )
+
+    # re-create objective for fresh start
+    obj = PlasmaVesselDistance(
+        surface=surf, eq=eq, target=0.5, plasma_grid=grid, surface_fixed=False
+    )
+    objective = ObjectiveFunction((obj,))
+    # ensure it runs when (surf,eq) are passed which is opposite
+    # order that objective.things is
+    (surf, eq), result = optimizer.optimize(
+        (surf, eq),
+        objective,
+        constraints,
+        verbose=3,
+        maxiter=2,
+    )

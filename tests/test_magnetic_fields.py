@@ -744,8 +744,6 @@ class TestMagneticFields:
     @pytest.mark.unit
     def test_spline_field_jit(self):
         """Test that the spline field can be passed to a jitted function."""
-        field = SplineMagneticField.from_mgrid
-
         extcur = [4700.0, 1000.0]
         mgrid = "tests/inputs/mgrid_test.nc"
         field = SplineMagneticField.from_mgrid(mgrid, extcur)

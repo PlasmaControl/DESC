@@ -785,7 +785,7 @@ class ZernikePolynomial(_Basis):
             lm = lm[lmidx]
             m = m[midx]
 
-        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r, lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
 
         if unique:
@@ -1149,7 +1149,7 @@ class FourierZernikeBasis(_Basis):
             m = m[midx]
             n = n[nidx]
 
-        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        radial = zernike_radial(r, lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
         toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
         if unique:
@@ -1413,11 +1413,13 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
 
 
 @functools.partial(jit, static_argnums=3)
-def zernike_radial_optimized(r, l, m, dr=0):  # noqa: C901
+def zernike_radial(r, l, m, dr=0):  # noqa: C901
     """Radial part of zernike polynomials.
 
-    This is completely JITable version of zernike_radial_optimized
-    function.
+    Calculates Radial part of Zernike Polynomials using Jacobi recursion relation
+    by getting rid of the redundant calculations for appropriate modes. This version
+    is almost the same as zernike_radial_old function but way faster and more
+    accurate.
 
     There was even faster version of this code but that doesn't have checks
     for duplicate modes
@@ -1790,7 +1792,7 @@ def jacobi_poly_single(x, n, alpha, beta=0, P_n1=0, P_n2=0):
 
 
 @functools.partial(jit, static_argnums=3)
-def zernike_radial(r, l, m, dr=0):
+def zernike_radial_old(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
     Evaluates basis functions using JAX and a stable

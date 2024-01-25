@@ -71,8 +71,8 @@ class QuadraticFlux(_Objective):
         MagneticField object containing the external field to consider when
         minimizing the Bn errors. If None, the external field is assumed to be zero.
         e.g. this could be a 1/R field representing external TF coils, or
-        it could be set of TF coils so that coil ripple is considered during
-        the optimization.
+        it could be set of discrete TF coils so that coil ripple is considered during
+        the optimization of the ``field`` object.
     external_field_source_grid : Grid, optional
         Grid object used to discretize the external field source.
     name : str, optional

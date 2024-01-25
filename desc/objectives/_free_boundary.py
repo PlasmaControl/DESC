@@ -571,7 +571,6 @@ class BoundaryError(_Objective):
             )
             src_data["K_vc"] += sheet_src_data["K"]
 
-        # this is in cartesian
         Bplasma = -virtual_casing_biot_savart(
             eval_data,
             constants["eval_transforms"]["grid"],
@@ -581,7 +580,7 @@ class BoundaryError(_Objective):
             loop=self._loop,
         )
         # need extra factor of B/2 bc we're evaluating on plasma surface
-        Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"]) + eval_data["B"] / 2
+        Bplasma = Bplasma + eval_data["B"] / 2
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(
             x, grid=self._field_grid, basis="rpz"

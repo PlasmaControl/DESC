@@ -7,7 +7,7 @@ from interpax import fft_interp2d
 
 from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.io import IOAble
 from desc.utils import isalmostequal, islinspaced
 
@@ -406,9 +406,7 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
             k = kernel(
                 {key: val[i] for key, val in eval_data.items() if key in keys},
                 src_data,
-            )
-            if kernel.ndim == 1:  # so that broadcasting works correctly
-                k = k[:, :, None]
+            ).reshape((1, src_grid.num_nodes, kernel.ndim))
 
             rho = _rho(
                 src_theta,
@@ -423,13 +421,13 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
             eta = _chi(rho)
             k = (1 - eta)[None, :, None] * k
             f_temp = jnp.sum(k * w[None, :, None], axis=1)
-            return f_temp.squeeze()
+            return f_temp
 
         def eval_pt_loop(i, fj):
             # this calculates the effect at a single evaluation point, from all others
             # in a single field period. loop this to get all pts
             f_temp = eval_pt_vmap(i)
-            return put(fj, i, f_temp.squeeze())
+            return put(fj, i, f_temp.reshape(fj[i].shape))
 
         # vmap for inner part found more efficient than fori_loop, especially on gpu,
         # but for jacobian looped seems to be better and less memory
@@ -438,12 +436,16 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
         else:
             fj = vmap(eval_pt_vmap)(jnp.arange(eval_grid.num_nodes))
 
-        f += fj
+        f += fj.reshape((eval_grid.num_nodes, kernel.ndim))
         return f, src_data
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
     f, _ = fori_loop(0, src_grid.NFP, nfp_loop, (f, src_data))
 
+    # we sum distance vectors, so they need to be in xyz for that to work
+    # but then need to convert vectors back to rpz
+    if kernel.ndim == 3:
+        f = xyz2rpz_vec(f, phi=eval_data["zeta"])
     return f
 
 
@@ -495,9 +497,8 @@ def _singular_part(
             {key: val for key, val in eval_data.items() if key in keys},
             src_data_polar,
             diag=True,
-        )
-        if kernel.ndim == 1:  # so that broadcasting works correctly
-            k = k[:, None]
+        ).reshape((eval_grid.num_nodes, kernel.ndim))
+
         dS = (v[i] * src_data_polar["|e_theta x e_zeta|"])[:, None]
         fi = k * dS
         return fi
@@ -506,7 +507,7 @@ def _singular_part(
         # this calculates the effect at a single evaluation point, from all others
         # in a single field period. loop this to get all pts
         f_temp = polar_pt_vmap(i)
-        return f + f_temp.squeeze()
+        return f + f_temp.reshape((eval_grid.num_nodes, kernel.ndim))
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
     # vmap found more efficient than fori_loop, esp on gpu, but uses more memory
@@ -514,6 +515,11 @@ def _singular_part(
         f = fori_loop(0, v.size, polar_pt_loop, f)
     else:
         f = vmap(polar_pt_vmap)(jnp.arange(v.size)).sum(axis=0)
+
+    # we sum distance vectors, so they need to be in xyz for that to work
+    # but then need to convert vectors back to rpz
+    if kernel.ndim == 3:
+        f = xyz2rpz_vec(f, phi=eval_data["zeta"])
 
     return f
 
@@ -535,12 +541,12 @@ def singular_integral(
     ----------
     eval_data : dict
         Dictionary of data at evaluation points. Keys should be those required by
-        kernel as kernel.keys
+        kernel as kernel.keys. Vector data should be in rpz basis.
     eval_grid : Grid
         Points where integral transform is to be evaluated (eg unprimed coordinates).
     src_data : dict
         Dictionary of data at source points. Keys should be those required by
-        kernel as kernel.keys
+        kernel as kernel.keys. Vector data should be in rpz basis.
     src_grid : LinearGrid
         Source points for integral (eg primed coordinates). Should be linearly spaced
         rectangular grid in both theta, zeta.
@@ -554,7 +560,9 @@ def singular_integral(
         1 if f is scalar, 3 if f is a vector, etc.
         ``keys`` is a list of strings of what data is required to evaluate the kernel.
         The kernel will be called with dictionaries containing this data at source and
-        evaluation points
+        evaluation points.
+        If vector valued, the input to the kernel function will be in rpz and output
+        should be in xyz.
     interpolator : callable
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
@@ -566,7 +574,7 @@ def singular_integral(
     Returns
     -------
     f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
-        Integral transform evaluated at eval_grid.
+        Integral transform evaluated at eval_grid. Vectors are in rpz basis.
 
     """
     # sanitize inputs, we need everything as jax arrays so they can be indexed
@@ -696,12 +704,12 @@ def virtual_casing_biot_savart(
     ----------
     eval_data : dict
         Dictionary of data at evaluation points. Keys should be those required by
-        kernel as kernel.keys
+        kernel as kernel.keys. Vector data should be in rpz basis.
     eval_grid : Grid
         Points where integral transform is to be evaluated (eg unprimed coordinates).
     src_data : dict
         Dictionary of data at source points. Keys should be those required by
-        kernel as kernel.keys
+        kernel as kernel.keys. Vector data should be in rpz basis.
     src_grid : LinearGrid
         Source points for integral (eg primed coordinates). Should be linearly spaced
         rectangular grid in both theta, zeta.
@@ -716,7 +724,7 @@ def virtual_casing_biot_savart(
     Returns
     -------
     f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
-        Integral transform evaluated at eval_grid.
+        Integral transform evaluated at eval_grid. Vectors are in rpz basis.
 
     """
     return singular_integral(

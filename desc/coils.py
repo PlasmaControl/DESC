@@ -6,7 +6,7 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import jit, jnp, tree_stack, tree_unstack, vmap
+from desc.backend import jit, jnp, scan, tree_stack, tree_unstack, vmap
 from desc.compute import get_params, rpz2xyz, xyz2rpz_vec
 from desc.geometry import (
     FourierPlanarCurve,
@@ -855,11 +855,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             for par, coil in zip(params, self):
                 par["current"] = coil.current
 
-        B = vmap(
-            lambda x: self[0].compute_magnetic_field(
+        coords = jnp.atleast_2d(coords)
+
+        def body(B, x):
+            B += self[0].compute_magnetic_field(
                 coords, params=x, basis=basis, grid=grid
             )
-        )(tree_stack(params)).sum(axis=0)
+            return B, None
+
+        B = scan(body, jnp.zeros(coords.shape), tree_stack(params))[0]
 
         return B
 

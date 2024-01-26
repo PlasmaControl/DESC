@@ -496,6 +496,8 @@ def singular_integral(
 
     eg f(θ, ζ) = ∫ ∫ K(θ, ζ, θ', ζ') g(θ', ζ') dθ' dζ'
 
+    Uses method by Malhotra et. al. [1]_ [2]_
+
     Parameters
     ----------
     eval_data : dict
@@ -534,6 +536,13 @@ def singular_integral(
     -------
     f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
         Integral transform evaluated at eval_grid. Vectors are in rpz basis.
+
+    References
+    ----------
+    .. [1] Malhotra, Dhairya, et al. "Efficient high-order singular quadrature schemes
+       in magnetic fusion." Plasma Physics and Controlled Fusion 62.2 (2019): 024004.
+    .. [2] Malhotra, Dhairya, et al. "Taylor states in stellarators: A fast high-order
+       boundary integral solver." Journal of Computational Physics 397 (2019): 108791.
 
     """
     # sanitize inputs, we need everything as jax arrays so they can be indexed
@@ -668,7 +677,7 @@ def virtual_casing_biot_savart(
     a point in the plasma volume.
 
     This 3D integral can be converted to a 2D integral over the plasma boundary using
-    the virtual casing principle [1]..
+    the virtual casing principle [1]_
 
     𝐁ᵥ(𝐫) = μ₀/4π ∫ (𝐧' ⋅ 𝐁(𝐫')) (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d²𝐫'
             + μ₀/4π ∫ (𝐧' × 𝐁(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫'
@@ -706,6 +715,11 @@ def virtual_casing_biot_savart(
     -------
     f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
         Integral transform evaluated at eval_grid. Vectors are in rpz basis.
+
+    References
+    ----------
+    .. [1] Hanson, James D. "The virtual-casing principle and Helmholtz’s theorem."
+       Plasma Physics and Controlled Fusion 57.11 (2015): 115006.
 
     """
     return singular_integral(

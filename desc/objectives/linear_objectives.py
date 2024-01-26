@@ -3418,15 +3418,6 @@ class FixNearAxis(_FixedObjective):
         if self._fix_lambda:
             fL = jnp.dot(self._A_lam, params["L_lmn"]).squeeze() - self._target_lam
             fL = fL.squeeze()
-            f = jnp.concatenate([fR, fZ, fL])
-        else:
-            f = jnp.concatenate([fR, fZ])
-        # try to do weighted mean if possible
-        constants = kwargs.get("constants", self.constants)
-        if constants is None:
-            w = jnp.ones_like(f)
-        else:
-            w = constants["quad_weights"]
 
         def _print(fmt, fmax, fmin, fmean, units):
 
@@ -3456,11 +3447,9 @@ class FixNearAxis(_FixedObjective):
             formats.append("Fixed Near-Axis Lambda Behavior Error: {:10.3e} ")
             units.append("(dimensionless)")
             fs.append(fL)
-        nn = f.size // len(formats)
         for i, (fmt, unit) in enumerate(zip(formats, units)):
             fi = fs[i]
-            wi = w[i * nn : (i + 1) * nn]
             fmax = jnp.max(fi)
             fmin = jnp.min(fi)
-            fmean = jnp.mean(fi * wi) / jnp.mean(wi)
+            fmean = jnp.mean(fi)
             _print(fmt, fmax, fmin, fmean, unit)

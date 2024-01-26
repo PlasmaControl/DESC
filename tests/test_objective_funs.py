@@ -638,8 +638,8 @@ class TestObjectiveFunction:
 
         np.testing.assert_allclose(things_with_eq_fixed[0].Phi_mn, 0, atol=1e-8)
 
-        # test 2 with field_fixed=True: the optimizer will zero out the nonaxisymmetric
-        # part of the equilibrium (Rb_lmn) since field is axisymmetric.
+        # test 2 with field_fixed=True: the optimizer will get rid of the
+        # nonaxisymmetric modes through zeroing out the associated Rb_lmn values.
         field = axisym_field.copy()
         eq = nonaxisym_eq.copy()
         field_grid, eval_grid, source_grid = get_grids(eq, field)
@@ -689,7 +689,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(new_Rb_lmn, 0, atol=1e-10)
         np.testing.assert_allclose(new_Zb_lmn, 0, atol=1e-10)
 
-        # test with eq_fixed = field_fixed = False: nonaxisymmetric field and
+        # test 3 with eq_fixed = field_fixed = False: nonaxisymmetric field and
         # nonaxisymmetric equilibrium
         eq = Equilibrium(M=2, L=2, N=4)
         field = make_nonaxisym_field(eq)
@@ -709,6 +709,8 @@ class TestObjectiveFunction:
             eval_grid=eval_grid,
             field_grid=field_grid,
         )
+
+        # keep equilibrium within winding surface
         plasma_vessel_obj = PlasmaVesselDistance(
             surface=field,
             eq=eq,
@@ -739,7 +741,7 @@ class TestObjectiveFunction:
 
         np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-7)
 
-        # test 4: testing a different magnetic field when field_fixed=False.
+        # test 4: testing an analytical magnetic field when field_fixed=False.
         eq = desc.examples.get("precise_QA")
         field = axisym_field.copy()
         field_grid, eval_grid, source_grid = get_grids(eq, field)

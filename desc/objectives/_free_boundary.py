@@ -636,14 +636,18 @@ class QuadraticFlux(_Objective):
         of the local singular grid with respect to the global grid, q is the order of
         integration on the local grid
     src_grid : Grid, optional
-        Collocation grid containing the nodes for plasma source terms and where
-        to evaluate errors.
+        Collocation grid containing the nodes for plasma source terms.
     eval_grid : Grid, optional
-        Collocation grid containing the nodes at which the magnetic field is being
-        calculated and where to evaluate errors.
+        Collocation grid containing the nodes on the plasma surface at which the
+        magnetic field is being calculated and where to evaluate Bn errors.
     field_grid : Grid, optional
         Grid used to discretize ext_field (e.g. grid for the magnetic field source from
         coils).
+    eq_fixed : bool
+        Whether or not the equilibrium's DOF (params) change during optimization.
+        If true, Bplasma will be precomputed in build().
+    field_fixed : bool
+        Whether or not the external field's DOF (params) change during optimization.
     name : str
         Name of the objective function.
 

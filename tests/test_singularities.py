@@ -110,7 +110,7 @@ def test_singular_integral_vac_estell():
     q = k // 2 + int(np.sqrt(k))
 
     interpolator = FFTInterpolator(eval_grid, src_grid, s, q)
-    Bplasma = -virtual_casing_biot_savart(
+    Bplasma = virtual_casing_biot_savart(
         eval_data,
         eval_grid,
         src_data,

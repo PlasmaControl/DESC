@@ -566,7 +566,7 @@ class TestObjectiveFunction:
                 rho=np.array([1.0]),
                 M=M_grid,
                 N=N_grid,
-                NFP=eq.NFP,
+                NFP=int(eq.NFP),
                 sym=False,
             )
 

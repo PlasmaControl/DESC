@@ -721,14 +721,7 @@ class Equilibrium(IOAble, Optimizable):
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
-            surface.grid = LinearGrid(
-                rho=rho,
-                M=2 * surface.M,
-                N=2 * surface.N,
-                endpoint=True,
-                NFP=self.NFP,
-                NFP_umbilic_factor=self.NFP_umbilic_factor,
-            )
+
             return surface
 
         if zeta is not None:
@@ -764,12 +757,6 @@ class Equilibrium(IOAble, Optimizable):
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
-            surface.grid = LinearGrid(
-                L=2 * surface.L,
-                M=2 * surface.M,
-                zeta=zeta,
-                endpoint=True,
-            )
             return surface
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):

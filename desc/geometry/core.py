@@ -76,8 +76,6 @@ class Curve(IOAble, Optimizable, ABC):
             Computed quantity and intermediate variables.
 
         """
-        # set a default number of points for the SplineXYZCurve
-        N = self.N if hasattr(self, "N") else self.X.size
         if isinstance(names, str):
             names = [names]
         if grid is None:
@@ -110,7 +108,9 @@ class Curve(IOAble, Optimizable, ABC):
         if params is None:
             params = get_params(names, obj=self)
         if transforms is None:
-            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+            transforms = get_transforms(
+                names, obj=self, grid=grid, jitable=True, **kwargs
+            )
         if data is None:
             data = {}
         profiles = {}
@@ -124,7 +124,7 @@ class Curve(IOAble, Optimizable, ABC):
         ]
         calc0d = bool(len(dep0d))
         # see if the grid we're already using will work for desired qtys
-        if calc0d and (grid.N >= 2 * N + 5) and isinstance(grid, LinearGrid):
+        if calc0d and (grid.N >= 2 * self.N + 5) and isinstance(grid, LinearGrid):
             calc0d = False
 
         if calc0d and override_grid:
@@ -138,7 +138,9 @@ class Curve(IOAble, Optimizable, ABC):
                 self,
                 dep0d,
                 params=params,
-                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
+                transforms=get_transforms(
+                    dep0d, obj=self, grid=grid0d, jitable=True, **kwargs
+                ),
                 profiles={},
                 data=None,
                 **kwargs,

@@ -266,11 +266,7 @@ class FourierRZCurve(Curve):
             Axis with given Fourier coefficients.
 
         """
-        f = open(path)
-        if "&INDATA" in f.readlines()[0].upper():  # vmec input, convert to desc
-            inputs = InputReader.parse_vmec_inputs(f)[-1]
-        else:
-            inputs = InputReader().parse_inputs(f)[-1]
+        inputs = InputReader().parse_inputs(path)[-1]
         curve = FourierRZCurve(
             inputs["axis"][:, 1],
             inputs["axis"][:, 2],

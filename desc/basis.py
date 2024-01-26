@@ -1472,29 +1472,29 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
         return out
 
     def update(x, args):
-        m, n, alpha, N, result, out = args
+        alpha, N, result, out = args
         idx = jnp.where(jnp.logical_and(m[x] == alpha, n[x] == N), x, -1)
         out = cond(idx >= 0, trueFun, falseFun, (idx, result, out))
-        return (m, n, alpha, N, result, out)
+        return (alpha, N, result, out)
 
     # Zeroth Derivative
     def body_inner(N, args):
-        r_jacobi, alpha, r, out, P_past, m, n = args
+        alpha, out, P_past = args
         P_n1, P_n2 = P_past
         # Calculate Jacobi polynomial for m,n pair
         P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
         result = (-1) ** N * r**alpha * P_n
 
         # All the checks necessary (FAST BUT NOT THE FASTEST)
-        _, _, _, _, _, out = fori_loop(0, m.size, update, (m, n, alpha, N, result, out))
+        _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
-        return (r_jacobi, alpha, r, out, (P_n1, P_n2), m, n)
+        return (alpha, out, (P_n1, P_n2))
 
     # First Derivative
     def body_inner_d1(N, args):
-        r_jacobi, alpha, r, out, P_past, m, n = args
+        alpha, out, P_past = args
         P_n1, P_n2, dP_n1, dP_n2 = P_past
         # Calculate Jacobi polynomial for m,n pair
         P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
@@ -1507,18 +1507,18 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
             alpha * r ** jnp.maximum(alpha - 1, 0) * P_n
             - coef * 4 * r ** (alpha + 1) * dP_n
         )
-        _, _, _, _, _, out = fori_loop(0, m.size, update, (m, n, alpha, N, result, out))
+        _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
         dP_n2 = jnp.where(N >= 3, dP_n1, dP_n2)
         dP_n1 = jnp.where(N >= 3, dP_n, dP_n1)
 
-        return (r_jacobi, alpha, r, out, (P_n1, P_n2, dP_n1, dP_n2), m, n)
+        return (alpha, out, (P_n1, P_n2, dP_n1, dP_n2))
 
     # Second Derivative
     def body_inner_d2(N, args):
-        r_jacobi, alpha, r, out, P_past, m, n = args
+        alpha, out, P_past = args
         P_n1, P_n2, dP_n1, dP_n2, ddP_n1, ddP_n2 = P_past
         # Calculate Jacobi polynomial for m,n pair
         P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
@@ -1535,7 +1535,7 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
             - coef_1 * 4 * (2 * alpha + 1) * r**alpha * dP_n
             + coef_2 * 16 * r ** (alpha + 2) * ddP_n
         )
-        _, _, _, _, _, out = fori_loop(0, m.size, update, (m, n, alpha, N, result, out))
+        _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1545,18 +1545,14 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
         ddP_n1 = jnp.where(N >= 4, ddP_n, ddP_n1)
 
         return (
-            r_jacobi,
             alpha,
-            r,
             out,
             (P_n1, P_n2, dP_n1, dP_n2, ddP_n1, ddP_n2),
-            m,
-            n,
         )
 
     # Third Derivative
     def body_inner_d3(N, args):
-        r_jacobi, alpha, r, out, P_past, m, n = args
+        alpha, out, P_past = args
         P_n1, P_n2, dP_n1, dP_n2, ddP_n1, ddP_n2, dddP_n1, dddP_n2 = P_past
         # Calculate Jacobi polynomial for m,n pair
         P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
@@ -1577,7 +1573,7 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
             + coef_2 * 48 * (alpha + 1) * r ** (alpha + 1) * ddP_n
             - coef_3 * 64 * r ** (alpha + 3) * dddP_n
         )
-        _, _, _, _, _, out = fori_loop(0, m.size, update, (m, n, alpha, N, result, out))
+        _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1589,18 +1585,14 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
         dddP_n1 = jnp.where(N >= 5, dddP_n, dddP_n1)
 
         return (
-            r_jacobi,
             alpha,
-            r,
             out,
             (P_n1, P_n2, dP_n1, dP_n2, ddP_n1, ddP_n2, dddP_n1, dddP_n2),
-            m,
-            n,
         )
 
     # Fourth Derivative
     def body_inner_d4(N, args):
-        r_jacobi, alpha, r, out, P_past, m, n = args
+        alpha, out, P_past = args
         (
             P_n1,
             P_n2,
@@ -1646,7 +1638,7 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
             - coef_3 * 128 * (2 * alpha + 3) * r ** (alpha + 2) * dddP_n
             + coef_4 * 256 * r ** (alpha + 4) * ddddP_n
         )
-        _, _, _, _, _, out = fori_loop(0, m.size, update, (m, n, alpha, N, result, out))
+        _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
         P_n2 = jnp.where(N >= 2, P_n1, P_n2)
         P_n1 = jnp.where(N >= 2, P_n, P_n1)
@@ -1660,9 +1652,7 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
         ddddP_n1 = jnp.where(N >= 6, ddddP_n, ddddP_n1)
 
         return (
-            r_jacobi,
             alpha,
-            r,
             out,
             (
                 P_n1,
@@ -1676,12 +1666,10 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
                 ddddP_n1,
                 ddddP_n2,
             ),
-            m,
-            n,
         )
 
     def body(alpha, args):
-        r, r_jacobi, l, m, n, out = args
+        out = args
         # find l values with m values equal to alpha
         l_alpha = jnp.where(m == alpha, l, 0)
         # find the maximum among them
@@ -1698,11 +1686,11 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
         )
         if dr == 0:
             # Loop over every n value
-            _, _, _, out, P_past, _, _ = fori_loop(
+            _, out, _ = fori_loop(
                 0,
                 (N_max + 1).astype(int),
                 body_inner,
-                (r_jacobi, alpha, r, out, P_past, m, n),
+                (alpha, out, P_past),
             )
         if dr >= 1:
             dP_n2 = jacobi_poly_single(r_jacobi, 0, alpha + 1, beta=1)
@@ -1712,11 +1700,11 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
                 dP_n2,
             )
             if dr == 1:
-                _, _, _, out, P_past, _, _ = fori_loop(
+                _, out, _ = fori_loop(
                     0,
                     (N_max + 1).astype(int),
                     body_inner_d1,
-                    (r_jacobi, alpha, r, out, P_past, m, n),
+                    (alpha, out, P_past),
                 )
         if dr >= 2:
             ddP_n2 = jacobi_poly_single(r_jacobi, 0, alpha + 2, beta=2)
@@ -1726,11 +1714,11 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
                 ddP_n2,
             )
             if dr == 2:
-                _, _, _, out, P_past, _, _ = fori_loop(
+                _, out, _ = fori_loop(
                     0,
                     (N_max + 1).astype(int),
                     body_inner_d2,
-                    (r_jacobi, alpha, r, out, P_past, m, n),
+                    (alpha, out, P_past),
                 )
         if dr >= 3:
             dddP_n2 = jacobi_poly_single(r_jacobi, 0, alpha + 3, beta=3)
@@ -1740,11 +1728,11 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
                 dddP_n2,
             )
             if dr == 3:
-                _, _, _, out, P_past, _, _ = fori_loop(
+                _, out, _ = fori_loop(
                     0,
                     (N_max + 1).astype(int),
                     body_inner_d3,
-                    (r_jacobi, alpha, r, out, P_past, m, n),
+                    (alpha, out, P_past),
                 )
         if dr == 4:
             ddddP_n2 = jacobi_poly_single(r_jacobi, 0, alpha + 4, beta=4)
@@ -1753,14 +1741,14 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
                 ddddP_n1,
                 ddddP_n2,
             )
-            _, _, _, out, P_past, _, _ = fori_loop(
+            _, out, _ = fori_loop(
                 0,
                 (N_max + 1).astype(int),
                 body_inner_d4,
-                (r_jacobi, alpha, r, out, P_past, m, n),
+                (alpha, out, P_past),
             )
 
-        return (r, r_jacobi, l, m, n, out)
+        return out
 
     r = jnp.atleast_1d(r)
     m = jnp.atleast_1d(m)
@@ -1774,9 +1762,7 @@ def zernike_radial(r, l, m, dr=0):  # noqa: C901
     M_max = jnp.max(m)
     # Loop over every different m value. There is another nested
     # loop which will execute necessary n values.
-    _, _, _, _, _, out = fori_loop(
-        0, (M_max + 1).astype(int), body, (r, r_jacobi, l, m, n, out)
-    )
+    out = fori_loop(0, (M_max + 1).astype(int), body, (out))
 
     return out
 

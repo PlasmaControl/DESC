@@ -302,6 +302,7 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         def body(k, x_lmn):
             l, m, n = b_modes[k]
             scale = zernike_radial(coord, abs(m), m)
+            scale = scale.flatten()
             # index of basis mode with lowest radial power (l = |m|)
             mask0 = (x_modes == jnp.array([abs(m), m, n])).all(axis=1)
             x_lmn = jnp.where(mask0, b_lmn[k] / scale, x_lmn)
@@ -311,6 +312,7 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
 
         # now overwrite stuff to deal with the axis
         scale = zernike_radial(coord, 0, 0)
+        scale = scale.flatten()
         for k, (l, m, n) in enumerate(b_basis.modes):
             if m != 0:
                 continue

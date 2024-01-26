@@ -137,7 +137,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         Parameters
         ----------
         x : ndarray
-            State vector, either full or reduced.
+            Reduced state vector (e.g. from calling self.x(*things)).
         per_objective : bool
             Whether to return param dicts for each objective (default) or for each
             unique optimizable thing.
@@ -417,7 +417,6 @@ class ProximalProjection(ObjectiveFunction):
         self._eq = eq
 
     def _set_eq_state_vector(self):
-
         full_args = self._eq.optimizable_params.copy()
         self._args = self._eq.optimizable_params.copy()
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:

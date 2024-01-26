@@ -387,7 +387,7 @@ class ObjectiveFunction(IOAble):
         """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
         things = things or self.things
-        assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
+        assert all([type(t1) == type(t2) for t1, t2 in zip(things, self.things)])
         xs = [t.pack_params(t.params_dict) for t in things]
         return jnp.concatenate(xs)
 
@@ -763,7 +763,6 @@ class _Objective(IOAble, ABC):
         deriv_mode="auto",
         name=None,
     ):
-
         if self._scalar:
             assert self._coordinates == ""
         assert np.all(np.asarray(weight) > 0)

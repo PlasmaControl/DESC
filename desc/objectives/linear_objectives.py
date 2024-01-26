@@ -3238,3 +3238,229 @@ class FixPsi(_FixedObjective):
 
         """
         return params["Psi"]
+
+
+class FixNearAxis(_FixedObjective):
+    """Fixes an equilibrium's near-axis behavior.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    nae_eq : Qsc
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to.
+    order : int
+        order (in rho) of near-axis behavior to constrain
+    fix_lambda : bool or int
+        Whether to constrain lambda to match that of the NAE near-axis
+        if an `int`, fixes lambda up to that order in rho {0,1}
+        if `True`, fixes lambda up to the specified order given by `order`
+    N : int
+        max toroidal resolution to constrain.
+        If `None`, defaults to equilibrium's toroidal resolution
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Unused for this objective as these will be
+        automatically set according to the ``nae_eq``
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+        Unused for this objective, as target will be automatically
+        set according to the ``nae_eq``
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        Unused by this objective
+    sum_weights : float, ndarray, optional
+        Weights on the coefficients in the sum, should be same length as modes.
+        Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
+        Unused by this objective
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
+        len(weight) = len(modes).
+        If True uses all of the Equilibrium's modes.
+        Must be either True or specified as an array
+        Unused by this objective
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _target_arg = "R_lmn"  # unused by this objective
+    _fixed = False  # not "diagonal", since its fixing a sum
+    _units = "(m)"  # techincally is (m) and unitless
+    _print_value_fmt = "Fixed-Near-Axis Behavior error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        nae_eq,
+        order=1,
+        fix_lambda=False,
+        N=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        sum_weights=None,
+        modes=True,
+        name="Fix Near Axis Behavior",
+    ):
+
+        self._nae_eq = nae_eq
+        self._order = order
+        self._fix_lambda = fix_lambda
+        self._N = N
+        self._modes = modes
+        self._sum_weights = sum_weights
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from .getters import _get_NAE_constraints
+
+        eq = self.things[0]
+
+        cons = _get_NAE_constraints(
+            eq,
+            self._nae_eq,
+            order=self._order,
+            N=self._N,
+            fix_lambda=self._fix_lambda,
+        )
+        for con in cons:
+            con.build(use_jit=use_jit, verbose=0)
+        self._A_R = np.stack([con._A for con in cons if con._target_arg == "R_lmn"])
+        self._target_R = np.concatenate(
+            [con.target for con in cons if con._target_arg == "R_lmn"]
+        )
+        self._A_Z = np.vstack([con._A for con in cons if con._target_arg == "Z_lmn"])
+        self._target_Z = np.concatenate(
+            [con.target for con in cons if con._target_arg == "Z_lmn"]
+        )
+        self._target = np.concatenate(
+            [self._target_R.squeeze(), self._target_Z.squeeze()]
+        )
+        if self._fix_lambda:
+            self._A_lam = np.vstack(
+                [con._A for con in cons if con._target_arg == "L_lmn"]
+            )
+            self._target_lam = np.concatenate(
+                [con.target for con in cons if con._target_arg == "L_lmn"]
+            )
+            self._target = np.concatenate([self._target, self._target_lam.squeeze()])
+
+        self._dim_f = self.target.size
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed near axis behavior errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed near axis behavior errors.
+
+        """
+        fR = jnp.dot(self._A_R, params["R_lmn"]).squeeze()
+        fZ = jnp.dot(self._A_Z, params["Z_lmn"]).squeeze()
+        if self._fix_lambda:
+            fL = jnp.dot(self._A_lam, params["L_lmn"]).squeeze()
+            f = jnp.concatenate([fR, fZ, fL])
+        else:
+            f = jnp.concatenate([fR, fZ])
+        return f
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        # this objective is really 3 residuals concatenated so its helpful to print
+        # them individually
+        params = self._maybe_array_to_params(*args)[0]
+        fR = jnp.dot(self._A_R, params["R_lmn"]).squeeze() - self._target_R
+        fR = fR.squeeze()
+        fZ = jnp.dot(self._A_Z, params["Z_lmn"]).squeeze() - self._target_Z
+        fZ = fZ.squeeze()
+        if self._fix_lambda:
+            fL = jnp.dot(self._A_lam, params["L_lmn"]).squeeze() - self._target_lam
+            fL = fL.squeeze()
+            f = jnp.concatenate([fR, fZ, fL])
+        else:
+            f = jnp.concatenate([fR, fZ])
+        # try to do weighted mean if possible
+        constants = kwargs.get("constants", self.constants)
+        if constants is None:
+            w = jnp.ones_like(f)
+        else:
+            w = constants["quad_weights"]
+
+        def _print(fmt, fmax, fmin, fmean, units):
+
+            print("Maximum " + fmt.format(fmax) + units)
+            print("Minimum " + fmt.format(fmin) + units)
+            print("Average " + fmt.format(fmean) + units)
+
+            if self._normalize and units != "(dimensionless)":
+                print(
+                    "Maximum " + fmt.format(fmax / self.normalization) + "(normalized)"
+                )
+                print(
+                    "Minimum " + fmt.format(fmin / self.normalization) + "(normalized)"
+                )
+                print(
+                    "Average " + fmt.format(fmean / self.normalization) + "(normalized)"
+                )
+
+        formats = [
+            "Fixed Near-Axis R Behavior Error: {:10.3e} ",
+            "Fixed Near-Axis Z Behavior Error: {:10.3e} ",
+        ]
+        units = ["(m)", "(m)"]
+        fs = [fR, fZ]
+
+        if self._fix_lambda:
+            formats.append("Fixed Near-Axis Lambda Behavior Error: {:10.3e} ")
+            units.append("(dimensionless)")
+            fs.append(fL)
+        nn = f.size // len(formats)
+        for i, (fmt, unit) in enumerate(zip(formats, units)):
+            fi = fs[i]
+            wi = w[i * nn : (i + 1) * nn]
+            fmax = jnp.max(fi)
+            fmin = jnp.min(fi)
+            fmean = jnp.mean(fi * wi) / jnp.mean(wi)
+            _print(fmt, fmax, fmin, fmean, unit)

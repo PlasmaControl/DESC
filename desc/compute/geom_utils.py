@@ -43,6 +43,8 @@ def rotation_matrix(axis, angle=None):
         angle = jnp.linalg.norm(axis)
     axis = axis / jnp.linalg.norm(axis)
     R1 = jnp.cos(angle) * jnp.eye(3)
+    if not angle:
+        return R1  # if angle=0, no rotation (R1 = identity matrix)
     R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
     R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
     return R1 + R2 + R3
@@ -152,17 +154,3 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
         return cart
 
     return inner(vec, phi)
-
-
-def _rotation_matrix_from_normal(normal):
-    nx, ny, nz = normal
-    nxny = jnp.sqrt(nx**2 + ny**2)
-    R = jnp.array(
-        [
-            [ny / nxny, -nx / nxny, 0],
-            [nx * nx / nxny, ny * nz / nxny, -nxny],
-            [nx, ny, nz],
-        ]
-    ).T
-    R = jnp.where(nxny == 0, jnp.eye(3), R)
-    return R

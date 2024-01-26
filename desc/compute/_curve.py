@@ -3,13 +3,7 @@ from interpax import interp1d
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import (
-    _rotation_matrix_from_normal,
-    rpz2xyz,
-    rpz2xyz_vec,
-    xyz2rpz,
-    xyz2rpz_vec,
-)
+from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from .utils import cross, dot
 
 
@@ -184,15 +178,18 @@ def _Z_Curve(params, transforms, profiles, data, **kwargs):
     basis="basis",
 )
 def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
-    # create planar curve at z==0
+    # create planar curve at Z==0
     r = transforms["r"].transform(params["r_n"], dz=0)
     Z = jnp.zeros_like(r)
     X = r * jnp.cos(data["s"])
     Y = r * jnp.sin(data["s"])
     coords = jnp.array([X, Y, Z]).T
     # rotate into place
-    R = _rotation_matrix_from_normal(params["normal"])
-    coords = jnp.matmul(coords, R.T) + params["center"]
+    Zaxis = jnp.array([0, 0, 1])  # 2D curve in X-Y plane has normal = +Z axis
+    axis = cross(Zaxis, params["normal"])
+    angle = jnp.arccos(dot(Zaxis, params["normal"]) / jnp.linalg.norm(params["normal"]))
+    A = rotation_matrix(axis=axis, angle=angle)
+    coords = jnp.matmul(coords, A.T) + params["center"]
     coords = jnp.matmul(coords, params["rotmat"].T) + params["shift"]
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz(coords)
@@ -224,7 +221,10 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     dY = dr * jnp.sin(data["s"]) + r * jnp.cos(data["s"])
     dZ = jnp.zeros_like(dX)
     coords = jnp.array([dX, dY, dZ]).T
-    A = _rotation_matrix_from_normal(params["normal"])
+    Zaxis = jnp.array([0, 0, 1])  # 2D curve in X-Y plane has normal = +Z axis
+    axis = cross(Zaxis, params["normal"])
+    angle = jnp.arccos(dot(Zaxis, params["normal"]) / jnp.linalg.norm(params["normal"]))
+    A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].T)
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -269,7 +269,10 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     )
     d2Z = jnp.zeros_like(d2X)
     coords = jnp.array([d2X, d2Y, d2Z]).T
-    A = _rotation_matrix_from_normal(params["normal"])
+    Zaxis = jnp.array([0, 0, 1])  # 2D curve in X-Y plane has normal = +Z axis
+    axis = cross(Zaxis, params["normal"])
+    angle = jnp.arccos(dot(Zaxis, params["normal"]) / jnp.linalg.norm(params["normal"]))
+    A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].T)
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -321,7 +324,10 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     )
     d3Z = jnp.zeros_like(d3X)
     coords = jnp.array([d3X, d3Y, d3Z]).T
-    A = _rotation_matrix_from_normal(params["normal"])
+    Zaxis = jnp.array([0, 0, 1])  # 2D curve in X-Y plane has normal = +Z axis
+    axis = cross(Zaxis, params["normal"])
+    angle = jnp.arccos(dot(Zaxis, params["normal"]) / jnp.linalg.norm(params["normal"]))
+    A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].T)
     if kwargs.get("basis", "rpz").lower() == "rpz":

@@ -382,6 +382,19 @@ class TestPlanarCurve:
     """Tests for FourierPlanarCurve class."""
 
     @pytest.mark.unit
+    def test_rotation(self):
+        """Test rotation of planar curve."""
+        cx = FourierPlanarCurve(center=[0, 0, 0], normal=[1, 0, 0], r_n=1)
+        cy = FourierPlanarCurve(center=[0, 0, 0], normal=[0, 1, 0], r_n=1)
+        cz = FourierPlanarCurve(center=[0, 0, 0], normal=[0, 0, 1], r_n=1)
+        datax = cx.compute("x", grid=20, basis="xyz")
+        datay = cy.compute("x", grid=20, basis="xyz")
+        dataz = cz.compute("x", grid=20, basis="xyz")
+        np.testing.assert_allclose(datax["x"][:, 0], 0)  # only in the Y-Z plane
+        np.testing.assert_allclose(datay["x"][:, 1], 0)  # only in the X-Z plane
+        np.testing.assert_allclose(dataz["x"][:, 2], 0)  # only in the X-Y plane
+
+    @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""
         c = FourierPlanarCurve(modes=[0])

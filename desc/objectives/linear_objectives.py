@@ -3328,20 +3328,19 @@ class FixNearAxisR(_FixedObjective):
         from .getters import _get_NAE_constraints
 
         eq = self.things[0]
-        if self._nae_eq is not None:
-            cons = _get_NAE_constraints(
-                eq,
-                self._nae_eq,
-                order=self._order,
-                N=self._N,
-            )
-            for con in cons:
-                if con._target_arg == "R_lmn":
-                    con.build(use_jit=use_jit, verbose=0)
-            self._A = np.stack([con._A for con in cons if con._target_arg == "R_lmn"])
-            self._target = np.concatenate(
-                [con.target for con in cons if con._target_arg == "R_lmn"]
-            ).squeeze()
+        cons = _get_NAE_constraints(
+            eq,
+            self._nae_eq,
+            order=self._order,
+            N=self._N,
+        )
+        for con in cons:
+            if con._target_arg == "R_lmn":
+                con.build(use_jit=use_jit, verbose=0)
+        self._A = np.stack([con._A for con in cons if con._target_arg == "R_lmn"])
+        self._target = np.concatenate(
+            [con.target for con in cons if con._target_arg == "R_lmn"]
+        ).squeeze()
 
         self._dim_f = self.target.size
 
@@ -3461,20 +3460,19 @@ class FixNearAxisZ(_FixedObjective):
         from .getters import _get_NAE_constraints
 
         eq = self.things[0]
-        if self._nae_eq is not None:
-            cons = _get_NAE_constraints(
-                eq,
-                self._nae_eq,
-                order=self._order,
-                N=self._N,
-            )
-            for con in cons:
-                if con._target_arg == "Z_lmn":
-                    con.build(use_jit=use_jit, verbose=0)
-            self._A = np.stack([con._A for con in cons if con._target_arg == "Z_lmn"])
-            self._target = np.concatenate(
-                [con.target for con in cons if con._target_arg == "Z_lmn"]
-            ).squeeze()
+        cons = _get_NAE_constraints(
+            eq,
+            self._nae_eq,
+            order=self._order,
+            N=self._N,
+        )
+        for con in cons:
+            if con._target_arg == "Z_lmn":
+                con.build(use_jit=use_jit, verbose=0)
+        self._A = np.stack([con._A for con in cons if con._target_arg == "Z_lmn"])
+        self._target = np.concatenate(
+            [con.target for con in cons if con._target_arg == "Z_lmn"]
+        ).squeeze()
 
         self._dim_f = self.target.size
 
@@ -3588,22 +3586,21 @@ class FixNearAxisLambda(_FixedObjective):
         from .getters import _get_NAE_constraints
 
         eq = self.things[0]
-        if self._nae_eq is not None:
-            cons = _get_NAE_constraints(
-                eq,
-                self._nae_eq,
-                order=self._order,
-                N=self._N,
-                fix_lambda=self._order,
-            )
-            for con in cons:
-                if con._target_arg == "L_lmn":
-                    con.build(use_jit=use_jit, verbose=0)
-            self._A = np.vstack([con._A for con in cons if con._target_arg == "L_lmn"])
-            self._target_lam = np.concatenate(
-                [con.target for con in cons if con._target_arg == "L_lmn"]
-            )
-            self._target = np.concatenate([self._target, self._target_lam.squeeze()])
+        cons = _get_NAE_constraints(
+            eq,
+            self._nae_eq,
+            order=self._order,
+            N=self._N,
+            fix_lambda=self._order,
+        )
+        for con in cons:
+            if con._target_arg == "L_lmn":
+                con.build(use_jit=use_jit, verbose=0)
+        self._A = np.vstack([con._A for con in cons if con._target_arg == "L_lmn"])
+        self._target_lam = np.concatenate(
+            [con.target for con in cons if con._target_arg == "L_lmn"]
+        )
+        self._target = np.concatenate([self._target, self._target_lam.squeeze()])
 
         self._dim_f = self.target.size
 

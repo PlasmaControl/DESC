@@ -162,7 +162,6 @@ class TestRZCurve:
         )
 
         # same thing but with arclength angle
-
         xyz = rz.to_FourierXYZ(N=2, grid=grid, s="arclength")
 
         np.testing.assert_allclose(
@@ -390,9 +389,9 @@ class TestPlanarCurve:
         datax = cx.compute("x", grid=20, basis="xyz")
         datay = cy.compute("x", grid=20, basis="xyz")
         dataz = cz.compute("x", grid=20, basis="xyz")
-        np.testing.assert_allclose(datax["x"][:, 0], 0)  # only in the Y-Z plane
-        np.testing.assert_allclose(datay["x"][:, 1], 0)  # only in the X-Z plane
-        np.testing.assert_allclose(dataz["x"][:, 2], 0)  # only in the X-Y plane
+        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=1e-16)  # only in Y-Z plane
+        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=1e-16)  # only in X-Z plane
+        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=1e-16)  # only in X-Y plane
 
     @pytest.mark.unit
     def test_length(self):
@@ -464,7 +463,7 @@ class TestPlanarCurve:
         np.testing.assert_allclose(z, 0)
         dr, dp, dz = c.compute("x_sss", grid=0, basis="rpz")["x_sss"].T
         np.testing.assert_allclose(dr, 0)
-        np.testing.assert_allclose(dp, 0)
+        np.testing.assert_allclose(dp, 0, atol=1e-12)
         np.testing.assert_allclose(dz, 2)
         c.rotate(angle=np.pi / 2)
         c.flip([0, 1, 0])

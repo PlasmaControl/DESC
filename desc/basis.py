@@ -1828,7 +1828,7 @@ def zernike_radial_unified(r, l, m, dr=0):
         out = cond(idx >= 0, trueFun, falseFun, (idx, result, out))
         return (alpha, N, result, out)
 
-    def body_inner_derivative(N, args):
+    def body_inner(N, args):
         alpha, out, P_past = args
         P_n2 = P_past[0]
         P_n1 = P_past[1]
@@ -1849,7 +1849,7 @@ def zernike_radial_unified(r, l, m, dr=0):
         coef = jnp.exp(
             gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
         )
-
+        # TODO: A version without if statements are possible
         if dr == 0:
             result = (-1) ** N * r**alpha * P_n[0]
         elif dr == 1:
@@ -1926,7 +1926,7 @@ def zernike_radial_unified(r, l, m, dr=0):
 
         # Loop over every n value
         _, out, _ = fori_loop(
-            0, (N_max + 1).astype(int), body_inner_derivative, (alpha, out, P_past)
+            0, (N_max + 1).astype(int), body_inner, (alpha, out, P_past)
         )
         return out
 

@@ -1933,6 +1933,7 @@ def zernike_radial(r, l, m, dr=0):
     r = jnp.atleast_1d(r)
     m = jnp.atleast_1d(m)
     l = jnp.atleast_1d(l)
+    dr = int(dr)
 
     out = jnp.zeros((r.size, m.size))
     r_jacobi = 1 - 2 * r**2

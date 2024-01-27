@@ -166,8 +166,9 @@ def get_NAE_constraints(
     desc_eq : Equilibrium
         Equilibrium to constrain behavior of
         (assumed to be a fit from the NAE equil using `.from_near_axis()`).
-    qsc_eq : Qsc
+    qsc_eq : Qsc, optional
         Qsc object defining the near-axis equilibrium to constrain behavior to.
+        if None, will instead fix the current near-axis behavior of the ``desc_eq``
     order : int
         order (in rho) of near-axis behavior to constrain
     profiles : bool

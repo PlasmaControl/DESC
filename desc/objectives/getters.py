@@ -24,7 +24,9 @@ from .linear_objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
-    FixNearAxis,
+    FixNearAxisLambda,
+    FixNearAxisR,
+    FixNearAxisZ,
     FixPressure,
     FixPsi,
 )
@@ -200,15 +202,31 @@ def get_NAE_constraints(
                 )
 
     constraints += (
-        FixNearAxis(
+        FixNearAxisR(
             eq=desc_eq,
             nae_eq=qsc_eq,
             N=N,
             order=order,
-            fix_lambda=fix_lambda,
+            normalize=normalize,
+        ),
+        FixNearAxisZ(
+            eq=desc_eq,
+            nae_eq=qsc_eq,
+            N=N,
+            order=order,
             normalize=normalize,
         ),
     )
+    if fix_lambda or (fix_lambda >= 0 and type(fix_lambda) is int):
+        constraints += (
+            FixNearAxisLambda(
+                eq=desc_eq,
+                nae_eq=qsc_eq,
+                N=N,
+                order=int(fix_lambda),
+                normalize=normalize,
+            ),
+        )
 
     return constraints
 
@@ -222,7 +240,9 @@ def _get_NAE_constraints(
 ):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem.
 
-    NOTE:
+    NOTE: This will return tuples of FixSumModes__, this is not intended to be directly
+    used by the user. Instead, call the ``get_NAE_constraints`` function, or use the
+    FixNearAxis{R,Z,Lambda} objectives along with the FixAxis{R,Z} objectives.
 
     Parameters
     ----------

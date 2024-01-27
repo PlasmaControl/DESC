@@ -3340,7 +3340,7 @@ class FixNearAxisR(_FixedObjective):
                     con.build(use_jit=use_jit, verbose=0)
             self._A = np.stack([con._A for con in cons if con._target_arg == "R_lmn"])
             self._target = np.concatenate(
-                [con.target.squeeze() for con in cons if con._target_arg == "R_lmn"]
+                [con.target for con in cons if con._target_arg == "R_lmn"]
             ).squeeze()
 
         self._dim_f = self.target.size
@@ -3473,7 +3473,7 @@ class FixNearAxisZ(_FixedObjective):
                     con.build(use_jit=use_jit, verbose=0)
             self._A = np.stack([con._A for con in cons if con._target_arg == "Z_lmn"])
             self._target = np.concatenate(
-                [con.target.squeeze() for con in cons if con._target_arg == "Z_lmn"]
+                [con.target for con in cons if con._target_arg == "Z_lmn"]
             ).squeeze()
 
         self._dim_f = self.target.size

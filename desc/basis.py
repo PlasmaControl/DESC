@@ -461,7 +461,8 @@ class FourierSeries(_Basis):
         toroidal = fourier(
             z[:, np.newaxis],
             n,
-            self.NFP / self.NFP_umbilic_factor,
+            self.NFP,
+            self.NFP_umbilic_factor,
             derivatives[2],
         )
         if unique:
@@ -613,12 +614,15 @@ class DoubleFourierSeries(_Basis):
             m = m[midx]
             n = n[nidx]
 
-        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+        poloidal = fourier(
+            t[:, np.newaxis], m, NFP=1, NFP_umbilic_factor=1, dt=derivatives[1]
+        )
         toroidal = fourier(
             z[:, np.newaxis],
             n,
-            self.NFP / self.NFP_umbilic_factor,
-            derivatives[2],
+            NFP=self.NFP,
+            NFP_umbilic_factor=self.NFP_umbilic_factor,
+            dt=derivatives[2],
         )
         if unique:
             poloidal = poloidal[toutidx][:, moutidx]
@@ -838,7 +842,7 @@ class ZernikePolynomial(_Basis):
             m = m[midx]
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
-        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+        poloidal = fourier(t[:, np.newaxis], m, 1, 1, derivatives[1])
 
         if unique:
             radial = radial[routidx][:, lmoutidx]
@@ -974,9 +978,9 @@ class ChebyshevDoubleFourierBasis(_Basis):
         l, m, n = modes.T
 
         radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
-        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+        poloidal = fourier(t[:, np.newaxis], m, 1, 1, derivatives[1])
         toroidal = fourier(
-            z[:, np.newaxis], n, self.NFP / self.NFP_umbilic_factor, derivatives[2]
+            z[:, np.newaxis], n, self.NFP, self.NFP_umbilic_factor, derivatives[2]
         )
 
         return radial * poloidal * toroidal
@@ -1222,11 +1226,12 @@ class FourierZernikeBasis(_Basis):
             n = n[nidx]
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
-        poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
+        poloidal = fourier(t[:, np.newaxis], m, 1, 1, dt=derivatives[1])
         toroidal = fourier(
             z[:, np.newaxis],
             n,
-            NFP=self.NFP / self.NFP_umbilic_factor,
+            NFP=self.NFP,
+            NFP_umbilic_factor=self.NFP_umbilic_factor,
             dt=derivatives[2],
         )
         if unique:
@@ -1652,7 +1657,7 @@ def chebyshev(r, l, dr=0):
 
 
 @jit
-def fourier(theta, m, NFP=1, dt=0):
+def fourier(theta, m, NFP=1, NFP_umbilic_factor=1, dt=0):
     """Fourier series.
 
     Parameters
@@ -1663,7 +1668,7 @@ def fourier(theta, m, NFP=1, dt=0):
         poloidal/toroidal mode number(s)
     NFP : int
         number of field periods (Default = 1)
-    NFP_umbilic_factor : float
+    NFP_umbilic_factor : int
         NFP prefactor of the form 1/NFP_umbilic_factor.
         This is needed for the umbilic torus design.
     dt : int
@@ -1675,9 +1680,11 @@ def fourier(theta, m, NFP=1, dt=0):
         basis function(s) evaluated at specified points
 
     """
-    theta, m, NFP, dt = map(jnp.asarray, (theta, m, NFP, dt))
+    theta, m, NFP, NFP_umbilic_factor, dt = map(
+        jnp.asarray, (theta, m, NFP, NFP_umbilic_factor, dt)
+    )
     m_pos = (m >= 0).astype(int)
-    m_abs = jnp.abs(m) * NFP
+    m_abs = jnp.abs(m) * NFP / NFP_umbilic_factor
     shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
     return m_abs**dt * jnp.sin(m_abs * theta + shift)
 

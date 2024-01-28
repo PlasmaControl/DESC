@@ -115,6 +115,7 @@ class ForceBalance(_Objective):
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
+                NFP_umbilic_factor=eq.NFP_umbilic_factor,
                 sym=eq.sym,
                 axis=False,
             )

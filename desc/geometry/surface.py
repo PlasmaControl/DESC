@@ -1,4 +1,6 @@
 """Classes for 2D surfaces embedded in 3D space."""
+
+import pdb
 import numbers
 import warnings
 
@@ -485,7 +487,6 @@ class FourierRZToroidalSurface(Surface):
             sort=False,
             jitable=True,
         )
-
         R = coords[:, 0]
         Z = coords[:, 2]
         R_basis = DoubleFourierSeries(
@@ -502,6 +503,7 @@ class FourierRZToroidalSurface(Surface):
             NFP_umbilic_factor=NFP_umbilic_factor,
             sym="sin" if sym else False,
         )
+
         if w is None:  # unweighted fit
             transform = Transform(
                 nodes, R_basis, build=False, build_pinv=True, rcond=rcond

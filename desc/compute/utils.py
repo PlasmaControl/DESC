@@ -653,6 +653,13 @@ def _get_grid_surface(grid, surface_label):
             grid.nodes[grid.unique_zeta_idx[-1], 2]
             == 2 * np.pi / (grid.NFP / grid.NFP_umbilic_factor),
         )
+
+    try:
+        has_endpoint_dupe = has_endpoint_dupe[0]
+    except:
+        pass
+
+
     return unique_size, inverse_idx, spacing, has_endpoint_dupe
 
 

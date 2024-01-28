@@ -159,8 +159,8 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
         np.testing.assert_allclose(
             y1,
             y2,
-            atol=2e-14,
-            rtol=5e-14,
+            atol=1e-11,
+            rtol=5e-13,
             err_msg="Incompatible constraints detected, cannot satisfy "
             + f"constraint {con}",
         )

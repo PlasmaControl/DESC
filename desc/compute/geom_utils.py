@@ -39,14 +39,16 @@ def rotation_matrix(axis, angle=None):
         Matrix to rotate points in cartesian (X,Y,Z) coordinates
 
     """
+    # FIXME: does not work with AD
     axis = jnp.asarray(axis)
+    norm = jnp.linalg.norm(axis)
     if angle is None:
-        angle = jnp.linalg.norm(axis)
-    axis = axis / jnp.linalg.norm(axis)
+        angle = norm
+    axis = jnp.nan_to_num(axis / norm)
     R1 = jnp.cos(angle) * jnp.eye(3)
     R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
     R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
-    return R1 + jnp.nan_to_num(R2 + R3)  # if axis=[0, 0, 0], R2 & R3 are NaN
+    return R1 + R2 + R3
 
 
 def xyz2rpz(pts):

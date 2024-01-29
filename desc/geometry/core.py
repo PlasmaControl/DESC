@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.geom_utils import reflection_matrix, rotation_matrix
@@ -26,10 +25,8 @@ class Curve(IOAble, Optimizable, ABC):
     _io_attrs_ = ["_name", "_shift", "_rotmat"]
 
     def __init__(self, name=""):
-        self._shift = jnp.array([0, 0, 0]).astype(float)
-        self._rotmat = (
-            jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).astype(float).flatten()
-        )
+        self._shift = np.array([0, 0, 0])
+        self._rotmat = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).flatten()
         self._name = name
 
     @optimizable_parameter
@@ -172,7 +169,7 @@ class Curve(IOAble, Optimizable, ABC):
 
     def translate(self, displacement=[0, 0, 0]):
         """Translate the curve by a rigid displacement in x, y, z."""
-        self.shift += jnp.asarray(displacement)
+        self.shift += np.asarray(displacement)
 
     def rotate(self, axis=[0, 0, 1], angle=0):
         """Rotate the curve by a fixed angle about axis in xyz coordinates."""

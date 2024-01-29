@@ -280,10 +280,10 @@ class SurfaceCurrentRegularization(_Objective):
 
     compute::
 
-        alpha*(|K|)^2
+        w*(|K|)^2
 
-    where K is the winding surface current density, and alpha is the
-    regularization parameter.
+    where K is the winding surface current density, and w is the
+    regularization parameter (the weight on this objective)
 
     This is intended to be used with a surface current::
 
@@ -312,6 +312,10 @@ class SurfaceCurrentRegularization(_Objective):
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
+        When used with QuadraticFlux objective, this acts as the regularization
+        parameter, with 0 corresponding to no regularization. The larger this
+        parameter is, the less complex the surface current will be, but the
+        worse the normal field.
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
         Note: has no effect on this objective.
@@ -334,10 +338,6 @@ class SurfaceCurrentRegularization(_Objective):
         the winding surface. If used in conjunction with the QuadraticFlux objective,
         with the same ``source_grid``, this replicates the REGCOIL algorithm described
         in [1]_.
-    alpha: float, optional
-        Regularization parameter, 0 for no regularization. The larger this
-        parameter is, the less complex the surface current will be, but the
-        worse the normal field.
     name : str, optional
         Name of the objective function.
     """
@@ -357,7 +357,6 @@ class SurfaceCurrentRegularization(_Objective):
         loss_function=None,
         deriv_mode="auto",
         source_grid=None,
-        alpha=0.0,
         name="surface-current-regularization",
     ):
         if target is None and bounds is None:
@@ -367,7 +366,6 @@ class SurfaceCurrentRegularization(_Objective):
         ), "surface_current_field must be a FourierCurrentPotentialField"
         self._surface_current_field = surface_current_field
         self._source_grid = source_grid
-        self._alpha = alpha
 
         super().__init__(
             things=[surface_current_field],
@@ -393,9 +391,6 @@ class SurfaceCurrentRegularization(_Objective):
 
         """
         surface_current_field = self.things[0]
-        # if surface_current_field is different than self._surface_current_field, update
-        if surface_current_field != self._surface_current_field:
-            self._surface_current_field = surface_current_field
 
         if self._source_grid is None:
             source_grid = LinearGrid(
@@ -440,8 +435,6 @@ class SurfaceCurrentRegularization(_Objective):
 
         Parameters
         ----------
-        equil_params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         surface_params : dict
             Dictionary of surface degrees of freedom,
             eg FourierCurrentPotential.params_dict
@@ -452,8 +445,7 @@ class SurfaceCurrentRegularization(_Objective):
         Returns
         -------
         f : ndarray
-            The regularization parameter times the surface current
-            density magnitude on the source surface.
+            The surface current density magnitude on the source surface.
 
         """
         if constants is None:
@@ -469,4 +461,4 @@ class SurfaceCurrentRegularization(_Objective):
         )
 
         K_mag = safenorm(surface_data["K"], axis=-1)
-        return self._alpha * K_mag
+        return K_mag

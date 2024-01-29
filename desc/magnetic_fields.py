@@ -2624,7 +2624,6 @@ class FourierCurrentPotentialField(
             theta_pts,
             zeta_pts,
             surface,
-            find_min_dist=None,
         ):
             contour_X = []
             contour_Y = []
@@ -2647,31 +2646,12 @@ class FourierCurrentPotentialField(
                     jnp.vstack((coords[:, 0], coords[:, 1], coords[:, 2])).T
                 )
 
-            # Find the point of minimum separation
-            if find_min_dist:
-                minSeparation2 = 1.0e20
-                for whichCoil1 in range(desirednumcoils):
-                    coords1 = coil_coords[whichCoil1]
-                    for whichCoil2 in range(whichCoil1):
-                        coords2 = coil_coords[whichCoil2]
-
-                        d = jnp.linalg.norm(
-                            coords1[:, None, :] - coords2[None, :, :],
-                            axis=-1,
-                        )
-                        # for whichPoint in range(len(contour_X[whichCoil1])):
-                        this_minSeparation2 = jnp.min(d)
-                        if this_minSeparation2 < minSeparation2:
-                            minSeparation2 = this_minSeparation2
-
-                print(f"Minimum coil-coil separation: {minSeparation2*1000:3.2f} mm")
             return contour_X, contour_Y, contour_Z
 
         contour_X, contour_Y, contour_Z = find_XYZ_points(
             contour_theta,
             contour_zeta,
             winding_surf,
-            find_min_dist=True,
         )
         ################################################################
         # Create CoilSet object

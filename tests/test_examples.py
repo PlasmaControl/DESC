@@ -1395,7 +1395,7 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
             obj,
             SurfaceCurrentRegularization(
                 surface_current_field=surface_current_field2,
-                alpha=1e-15,
+                weight=1e-15,
                 source_grid=sgrid,
             ),
         )

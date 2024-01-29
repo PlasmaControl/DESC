@@ -1787,7 +1787,33 @@ def jacobi_poly_single(x, n, alpha, beta=0, P_n1=0, P_n2=0):
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
-    Trial for cleaner version of zernike_radial function.
+    Calculates Radial part of Zernike Polynomials using Jacobi recursion relation
+    by getting rid of the redundant calculations for appropriate modes. This version
+    is almost the same as zernike_radial_old function but way faster and more
+    accurate. First version of this function is zernike_radial_separate which has
+    many function for each derivative definition. User can refer that for clarity.
+
+    There was even faster version of this code but that doesn't have checks
+    for duplicate modes
+
+    # Find the index corresponding to the original array
+    # I changed arange function to get rid of 0 as index confusion
+    # so if index is full of 0s, there is no such mode
+    # (FAST BUT NEED A CHECK FOR DUPLICATE MODES)
+    index = jnp.where(
+        jnp.logical_and(m == alpha, n == N),
+        jnp.arange(1, m.size + 1),
+        0,
+    )
+    idx = jnp.sum(index)
+    # needed for proper index
+    idx -= 1
+    result = (-1) ** N * r**alpha * P_n
+    out = out.at[:, idx].set(jnp.where(idx >= 0, result, out.at[:, idx].get()))
+
+    Above part replaces the matrix update conducted by following code,
+
+    _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
     Parameters
     ----------
@@ -1841,7 +1867,7 @@ def zernike_radial(r, l, m, dr=0):
             )
             return (N, alpha, P_n1, P_n2, P_n)
 
-        # Calculate Jacobi polynomial and derivatives for m,n pair
+        # Calculate Jacobi polynomial and derivatives for (m,n)
         _, _, _, _, P_n = fori_loop(
             0, dr + 1, find_inter_jacobi, (N, alpha, P_n1, P_n2, P_n)
         )
@@ -1849,7 +1875,7 @@ def zernike_radial(r, l, m, dr=0):
         coef = jnp.exp(
             gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
         )
-        # TODO: A version without if statements are possible
+        # TODO: A version without if statements are possible?
         if dr == 0:
             result = (-1) ** N * r**alpha * P_n[0]
         elif dr == 1:
@@ -1894,6 +1920,7 @@ def zernike_radial(r, l, m, dr=0):
             )
         _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
+        # Shift past values if needed
         mask = N >= 2 + dxs
         P_n2 = jnp.where(mask[:, None], P_n1, P_n2)
         P_n1 = jnp.where(mask[:, None], P_n, P_n1)
@@ -1921,6 +1948,8 @@ def zernike_radial(r, l, m, dr=0):
             return (alpha, P_past)
 
         # First 2 Jacobi Polynomials (they don't need recursion)
+        # P_past stores last 2 Jacobi polynomials (and required derivatives)
+        # evaluated at given r points
         P_past = jnp.zeros((2, dr + 1, r.size))
         _, P_past = fori_loop(0, dr + 1, find_init_jacobi, (alpha, P_past))
 

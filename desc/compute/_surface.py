@@ -750,7 +750,7 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="K^theta",
-    label="\\mathbf{K}",
+    label="K^{\\theta}",
     units="A/m^2",
     units_long="Amperes per square meter",
     description="Contravariant poloidal component of surface current density, defined "
@@ -773,7 +773,7 @@ def _K_sup_theta_CurrentPotentialField(params, transforms, profiles, data, **kwa
 
 @register_compute_fun(
     name="K^zeta",
-    label="\\mathbf{K}",
+    label="K^{\\zeta}",
     units="A/m^2",
     units_long="Amperes per square meter",
     description="Contravariant toroidal component of surface current density, defined "

@@ -301,7 +301,7 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         # first do all the m != 0 modes, easiest since no special logic needed
         def body(k, x_lmn):
             l, m, n = b_modes[k]
-            scale = scales[k]
+            scale = scales[0, k]
             # index of basis mode with lowest radial power (l = |m|)
             mask0 = (x_modes == jnp.array([abs(m), m, n])).all(axis=1)
             x_lmn = jnp.where(mask0, b_lmn[k] / scale, x_lmn)

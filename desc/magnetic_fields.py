@@ -1151,6 +1151,29 @@ class SplineMagneticField(_MagneticField, Optimizable):
             extrap=extrap,
         )
 
+    def tree_flatten(self):
+        """Convert DESC objects to JAX pytrees."""
+        # the default flattening method in the IOAble base class assumes all floats
+        # are non-static, but for the periodic BC to work we need the period to be
+        # a static value, so we override the default tree flatten/unflatten method
+        # so that we can pass a SplineMagneticField into a jitted function such as
+        # an objective.
+        static = ["_method", "_extrap", "_period", "_axisym"]
+        children = {key: val for key, val in self.__dict__.items() if key not in static}
+        aux_data = tuple(
+            [(key, val) for key, val in self.__dict__.items() if key in static]
+        )
+        return ((children,), aux_data)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        """Recreate a DESC object from JAX pytree."""
+        obj = cls.__new__(cls)
+        obj.__dict__.update(children[0])
+        for kv in aux_data:
+            setattr(obj, kv[0], kv[1])
+        return obj
+
 
 class ScalarPotentialField(_MagneticField):
     """Magnetic field due to a scalar magnetic potential in cylindrical coordinates.

@@ -37,7 +37,7 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
         FourierSeries basis corresponding to L_0_n coefficients
 
     """
-    nfp = desc_eq.nfp
+    nfp = desc_eq.NFP
     if N is None:
         N = desc_eq.N
     else:

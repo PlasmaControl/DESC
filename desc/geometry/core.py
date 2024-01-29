@@ -17,18 +17,46 @@ from desc.compute.utils import (
 )
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
-from desc.optimizable import Optimizable
+from desc.optimizable import Optimizable, optimizable_parameter
 
 
 class Curve(IOAble, Optimizable, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
-    _io_attrs_ = ["_name", "shift", "rotmat"]
+    _io_attrs_ = ["_name", "_shift", "_rotmat"]
 
     def __init__(self, name=""):
-        self.shift = jnp.array([0, 0, 0]).astype(float)
-        self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).astype(float)
-        self.name = name
+        self._shift = jnp.array([0, 0, 0]).astype(float)
+        self._rotmat = (
+            jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).astype(float).flatten()
+        )
+        self._name = name
+
+    @optimizable_parameter
+    @property
+    def shift(self):
+        """Displacement of curve in X, Y, Z."""
+        return self._shift
+
+    @shift.setter
+    def shift(self, new):
+        if len(new) == 3:
+            self._shift = np.asarray(new)
+        else:
+            raise ValueError("shift should be a 3 element vector, got {}".format(new))
+
+    @optimizable_parameter
+    @property
+    def rotmat(self):
+        """Rotation matrix of curve in X, Y, Z."""
+        return self._rotmat
+
+    @rotmat.setter
+    def rotmat(self, new):
+        if len(new) == 9:
+            self._rotmat = np.asarray(new)
+        else:
+            self._rotmat = np.asarray(new.flatten())
 
     @property
     def name(self):

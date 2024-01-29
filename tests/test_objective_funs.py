@@ -576,16 +576,15 @@ class TestObjectiveFunction:
             """Makes a nonaxisymmetric field depending on the given eq."""
             surf = eq.surface.copy()
             surf.R_lmn = surf.R_lmn.at[surf.R_basis.get_idx(M=1, N=0)].set(2)
-            surf.Z_lmn = surf.Z_lmn.at[surf.Z_basis.get_idx(M=-1, N=0)].set(2)
+            surf.Z_lmn = surf.Z_lmn.at[surf.Z_basis.get_idx(M=-1, N=0)].set(-2)
             nonaxisym_field = FourierCurrentPotentialField.from_surface(
                 surface=surf,
                 Phi_mn=np.array([1e4]),
-                modes_Phi=np.array([[1, 4]]),
+                modes_Phi=np.array([[-1, 0]]),
                 G=1e4,
                 I=0,
                 sym_Phi="sin",
             )
-            nonaxisym_field.change_Phi_resolution(M=4, N=0)
 
             return nonaxisym_field
 
@@ -634,6 +633,8 @@ class TestObjectiveFunction:
             objective=objective,
             constraints=constraints,
             copy=True,
+            ftol=1e-14,
+            gtol=1e-14,
         )
 
         np.testing.assert_allclose(things_with_eq_fixed[0].Phi_mn, 0, atol=1e-8)

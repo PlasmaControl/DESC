@@ -1691,7 +1691,7 @@ class Equilibrium(IOAble, Optimizable):
             idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
             R_1D[idx] = R_2D.flatten(order="F")
             Z_1D[idx] = Z_2D.flatten(order="F")
-            L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
+            L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
 
         inputs["R_lmn"] = transform_R.fit(R_1D)
         inputs["Z_lmn"] = transform_Z.fit(Z_1D)

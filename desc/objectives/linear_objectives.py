@@ -3597,10 +3597,9 @@ class FixNearAxisLambda(_FixedObjective):
             if con._target_arg == "L_lmn":
                 con.build(use_jit=use_jit, verbose=0)
         self._A = np.vstack([con._A for con in cons if con._target_arg == "L_lmn"])
-        self._target_lam = np.concatenate(
+        self._target = np.concatenate(
             [con.target for con in cons if con._target_arg == "L_lmn"]
         )
-        self._target = np.concatenate([self._target, self._target_lam.squeeze()])
 
         self._dim_f = self.target.size
 

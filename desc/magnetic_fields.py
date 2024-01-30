@@ -1147,6 +1147,11 @@ class SplineMagneticField(_MagneticField, Optimizable):
 
     def tree_flatten(self):
         """Convert DESC objects to JAX pytrees."""
+        # the default flattening method in the IOAble base class assumes all floats
+        # are non-static, but for the periodic BC to work we need the period to be
+        # a static value, so we override the default tree flatten/unflatten method
+        # so that we can pass a SplineMagneticField into a jitted function such as
+        # an objective.
         static = ["_method", "_extrap", "_period", "_axisym"]
         children = {key: val for key, val in self.__dict__.items() if key not in static}
         aux_data = tuple(

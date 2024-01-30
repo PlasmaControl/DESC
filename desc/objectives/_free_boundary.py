@@ -23,7 +23,19 @@ from .normalization import compute_scaling_factors
 
 
 class VacuumBoundaryError(_Objective):
-    """Target B*n = 0 and B^2_in - B^2_out = 0 on LCFS.
+    """Target for free boundary conditions on LCFS for vacuum equilibrium.
+
+    Computes the residuals of the following:
+
+    𝐁ₒᵤₜ ⋅ 𝐧 = 0
+    𝐁ₒᵤₜ² - 𝐁ᵢₙ² = 0
+
+    Where 𝐁ᵢₙ is the total field inside the LCFS (from fixed boundary calculation)
+    𝐁ₒᵤₜ is the total field outside the LCFS (from coils)
+    𝐧 is the outward surface normal.
+
+    (Technically for vacuum equilibria the second condition is redundant with the first,
+    but including it makes things more robust).
 
     Parameters
     ----------
@@ -277,12 +289,28 @@ class VacuumBoundaryError(_Objective):
 
 
 class BoundaryError(_Objective):
-    """Target B*n = 0 and B^2_plasma + p - B^2_ext = 0 on LCFS.
+    """Target for free boundary conditions on LCFS for finite beta equilibrium.
 
-    Uses virtual casing to find plasma component of B and penalizes
-    (B_coil + B_plasma)*n and jump in total pressure.
+    Computes the residual of the following:
 
-    Optionally includes sheet current term for finite beta equilibria.
+    𝐁ₒᵤₜ ⋅ 𝐧 = 0
+    𝐁ₒᵤₜ² - 𝐁ᵢₙ² - p = 0
+    μ₀∇Φ − 𝐧 × [𝐁ₒᵤₜ − 𝐁ᵢₙ]
+
+    Where 𝐁ᵢₙ is the total field inside the LCFS (from fixed boundary calculation)
+    𝐁ₒᵤₜ is the total field outside the LCFS (from coils and virtual casing principle),
+    𝐧 is the outward surface normal, p is the plasma pressure, and Φ is the surface
+    current potential on the LCFS.
+
+    The third equation is only included if a sheet current is supplied, otherwise it
+    is trivially satisfied. If it is known that the external field accurately reproduces
+    the target equilibrium with low normal field error and pressure at the edge is zero,
+    then the sheet current will generally be negligible and can be omitted to save
+    effort.
+
+    This objective also works for vacuum equilibria, though in that case
+    VacuumBoundaryError will be much faster as it avoids the singular virtual casing
+    integral.
 
     Parameters
     ----------
@@ -571,7 +599,7 @@ class BoundaryError(_Objective):
             )
             src_data["K_vc"] += sheet_src_data["K"]
 
-        Bplasma = -virtual_casing_biot_savart(
+        Bplasma = virtual_casing_biot_savart(
             eval_data,
             constants["eval_transforms"]["grid"],
             src_data,
@@ -936,7 +964,6 @@ class BoundaryErrorNESTOR(_Objective):
     then calculates the pressure mismatch across the boundary:
 
         1/2mu0*(B_vac + B_coil)^2 - 1/2mu0*B_plasma^2 - p
-
 
     Parameters
     ----------

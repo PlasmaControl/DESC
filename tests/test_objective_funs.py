@@ -56,6 +56,7 @@ from desc.objectives import (
     RotationalTransform,
     Shear,
     ToroidalCurrent,
+    VacuumBoundaryError,
     Volume,
 )
 from desc.objectives.linear_objectives import FixParameter
@@ -472,6 +473,23 @@ class TestObjectiveFunction:
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
         obj = BoundaryError(eq, coilset, field_grid=coil_grid)
+        obj.build()
+        f = obj.compute_scaled_error(*obj.xs(eq))
+        n = len(f) // 2
+        # first n should be B*n errors
+        np.testing.assert_allclose(f[:n], 0, atol=1e-4)
+        # next n should be B^2 errors
+        np.testing.assert_allclose(f[n : 2 * n], 0, atol=4e-2)
+
+    @pytest.mark.unit
+    def test_boundary_error_vacuum(self):
+        """Test calculation of vacuum boundary error."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+        obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
         obj.build()
         f = obj.compute_scaled_error(*obj.xs(eq))
         n = len(f) // 2
@@ -1366,6 +1384,81 @@ def test_boundary_error_print(capsys):
     coil_grid = LinearGrid(N=20)
     eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
 
+    obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
+    obj.build()
+
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
+    n = len(f) // 2
+    f1 = f[:n]
+    f2 = f[n:]
+    obj.print_value(*obj.xs(eq))
+    out = capsys.readouterr()
+
+    corr_out = str(
+        "Precomputing transforms\n"
+        + "Maximum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
+        + "(T)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
+        + "(T)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
+        + "(T)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.max(f1 / obj.normalization)
+        )
+        + "(normalized)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.min(f1 / obj.normalization)
+        )
+        + "(normalized)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.mean(f1 / obj.normalization)
+        )
+        + "(normalized)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
+        + "(T^2)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
+        + "(T^2)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
+        + "(T^2)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.max(f2 / obj.normalization)
+        )
+        + "(normalized)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.min(f2 / obj.normalization)
+        )
+        + "(normalized)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.mean(f2 / obj.normalization)
+        )
+        + "(normalized)"
+        + "\n"
+    )
+    assert out.out == corr_out
+
     obj = BoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
@@ -1440,6 +1533,7 @@ def test_boundary_error_print(capsys):
         + "\n"
     )
     assert out.out == corr_out
+
     sheet_current = FourierCurrentPotentialField()
     sheet_current.change_resolution(M=eq.M, N=eq.N, NFP=eq.NFP, sym=eq.sym)
     obj = BoundaryError(eq, coilset, sheet_current, field_grid=coil_grid)

@@ -26,7 +26,9 @@ import desc
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.singularities import (
+    DFTInterpolator,
     FFTInterpolator,
+    _get_quadrature_nodes,
     singular_integral,
     virtual_casing_biot_savart,
 )
@@ -108,7 +110,7 @@ def test_singular_integral_vac_estell():
     q = k // 2 + int(np.sqrt(k))
 
     interpolator = FFTInterpolator(eval_grid, src_grid, s, q)
-    Bplasma = -virtual_casing_biot_savart(
+    Bplasma = virtual_casing_biot_savart(
         eval_data,
         eval_grid,
         src_data,
@@ -124,3 +126,39 @@ def test_singular_integral_vac_estell():
     # this isn't a perfect vacuum equilibrium (|J| ~ 1e3 A/m^2), so increasing
     # resolution of singular integral won't really make Bplasma less.
     np.testing.assert_array_less(B, 0.05)
+
+
+@pytest.mark.unit
+def test_biest_interpolators():
+    """Test that FFT and DFT interpolation gives same result for standard grids."""
+    sgrid = LinearGrid(0, 5, 6)
+    egrid = LinearGrid(0, 4, 7)
+    s = 3
+    q = 4
+    r, w, dr, dw = _get_quadrature_nodes(q)
+    interp1 = FFTInterpolator(egrid, sgrid, s, q)
+    interp2 = DFTInterpolator(egrid, sgrid, s, q)
+
+    f = lambda t, z: np.sin(4 * t) + np.cos(3 * z)
+
+    src_dtheta = sgrid.spacing[:, 1]
+    src_dzeta = sgrid.spacing[:, 2] / sgrid.NFP
+    src_theta = sgrid.nodes[:, 1]
+    src_zeta = sgrid.nodes[:, 2]
+    eval_theta = egrid.nodes[:, 1]
+    eval_zeta = egrid.nodes[:, 2]
+
+    h_t = np.mean(src_dtheta)
+    h_z = np.mean(src_dzeta)
+
+    for i in range(len(r)):
+        dt = s / 2 * h_t * r[i] * np.sin(w[i])
+        dz = s / 2 * h_z * r[i] * np.cos(w[i])
+        theta_i = eval_theta + dt
+        zeta_i = eval_zeta + dz
+        ff = f(theta_i, zeta_i)
+
+        g1 = interp1(f(src_theta, src_zeta), i)
+        g2 = interp2(f(src_theta, src_zeta), i)
+        np.testing.assert_allclose(g1, g2)
+        np.testing.assert_allclose(g1, ff)

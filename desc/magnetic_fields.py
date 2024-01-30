@@ -1736,16 +1736,16 @@ class FourierCurrentPotentialField(
             If None, defaults to current NFP.
             Note: will change the NFP of the surface geometry as well as the
             Phi basis.
-        sym_Phi :  {"cos","sin",False}
+        sym_Phi :  {"auto","cos","sin",False}
             whether to enforce a given symmetry for the DoubleFourierSeries part of the
-            current potential. Defaults to current ``self.sym_Phi``.
+            current potential. Default is "auto" which enforces if modes are symmetric.
             If True, non-symmetric modes will be truncated.
 
         """
         M = M or self._M_Phi
         N = N or self._M_Phi
         NFP = NFP or self.NFP
-        sym_Phi = sym_Phi if sym_Phi is not None else self.sym_Phi
+        sym_Phi = sym_Phi or self.sym_Phi
 
         Phi_modes_old = self.Phi_basis.modes
         self.Phi_basis.change_resolution(M=M, N=N, NFP=self.NFP, sym=sym_Phi)
@@ -1870,6 +1870,9 @@ class FourierCurrentPotentialField(
         current_helicity=0,
         external_field=None,
         scan=False,
+        nscan=30,
+        scan_lower=-30,
+        scan_upper=-1,
         scan_alphas=None,
         show_plots=False,
         sym_Phi=None,
@@ -1951,17 +1954,22 @@ class FourierCurrentPotentialField(
             in range: np.concatenate([0, np.logspace(scan_lower, scan_upper, nscan)])
             the returned data dictionary will contain a list for Phi_mn corresponding
             to the alphas
+        nscan : int, optional
+            number of alpha values to scan over, by default 30
+        scan_lower : int, optional
+            power of 10 (i.e. 10^(-30)) that is the
+            lower bound of the alpha values to scan over, by default -30
+        scan_upper : int, optional
+            power of 10 (i.e. 10^(-1)) that is the
+            lower bound of the alpha values to scan over, by default -1
         scan_alphas : array, optional
-            Array of alpha values to scan over, if given when scan=True,
-            by default is `np.concatenate([np.array([0]),np.logspace(-30,-1,30)])`
+            Array of alpha values to scan over, if given when scan=True, this will be
+            used instead of the default range given by scan_lower and scan_upper,
+            by default None
         show_plots : bool, optional
             Whether to display analysis plots of normal field on surface,
             current potential contours, and chi_B versus alpha and chi_K,
             by default False
-        sym_Phi :  {"cos","sin",False}
-            whether to enforce a given symmetry for the DoubleFourierSeries part of the
-            current potential. Defaults to current ``self.sym_Phi``. If True,
-            non-symmetric modes will be truncated.
         verbose : int, optional
             level of verbosity, if 0 will print nothing.
             1 will display jacobian timing info
@@ -1977,35 +1985,31 @@ class FourierCurrentPotentialField(
             ``"fig_XX"`` keys if ``show_plots=True``::
 
                 alpha : regularization parameter the algorithm was ran with, a float
-                        if `scan=False`, or list of float of length `scan_alphas.size`
-                        if `scan=True`, corresponding to the list of `Phi_mn`.
+                        if `scan=False`, or list of float of length `nscan` if
+                        `scan=True`, corresponding to the list of `Phi_mn`
                 Phi_mn : the single-valued current potential coefficients which
                         minimize the Bn at the given eval_grid on the plasma, subject
                         to regularization on the surface current magnitude governed by
                         alpha.
                         An array of length `self.Phi_basis.num_modes` if `scan=False`,
-                        or a list of arrays, with list length `scan_alphas.size` if
-                        `scan=True`, corresponding to the list of regularization
-                        parameters alpha.
+                        or a list of arrays, with list length `nscan` if `scan=True`,
+                        corresponding to the list of regularization parameters alpha
                 I : float, net toroidal current (in Amperes) on the winding surface.
                     Governed by the `current_helicity` parameter, and is zero for
                     modular coils (`current_helicity=0`).
                 G : float, net poloidal current (in Amperes) on the winding surface.
                     Determined by the equilibrium toroidal magnetic field, as well as
-                    the given external field.
+                    the given external field
                 chi^2_B : quadratic flux integrated over the plasma surface.
                     a float if `scan=False`, or list of float of length
-                    `scan_alphas.size` if `scan=True`, corresponding to the list
-                    of `alpha`.
+                    `nscan` if `scan=True`, corresponding to the list of `alpha`
                 chi^2_K : Current density magnitude integrated over winding surface.
                     a float if `scan=False`, or list of float of length
-                    `scan_alphas.size` if `scan=True`, corresponding to the list of
-                    `alpha`.
+                    `nscan` if `scan=True`, corresponding to the list of `alpha`
                 |K| : Current density magnitude on winding surface, evaluated at the
                     given `source_grid`. An array of length `source_grid.num_nodes` if
-                    `scan=False`, or list of arrays, with list length
-                    `scan_alphas.size`, if `scan=True`, corresponding to the list of
-                    `alpha`.
+                    `scan=False`, or list of arrays, with list length `nscan`,
+                    if `scan=True`, corresponding to the list of `alpha`
 
 
         """
@@ -2033,15 +2037,15 @@ class FourierCurrentPotentialField(
         )
 
         if external_field:  # ensure given field is an instance of _MagneticField
-            assert hasattr(external_field, "compute_magnetic_field"), (
+            assert isinstance(external_field, _MagneticField), (
                 "Expected"
                 + "MagneticField for argument external_field,"
                 + f" got type {type(external_field)} "
             )
         if source_grid is None:
-            source_grid = LinearGrid(M=30, N=30, NFP=eq.NFP)
+            source_grid = LinearGrid(M=30, N=30, NFP=self.NFP)
         if eval_grid is None:
-            eval_grid = LinearGrid(M=30, N=30, NFP=eq.NFP, sym=eq.sym)
+            eval_grid = LinearGrid(M=30, N=30, NFP=self.NFP, sym=eq.sym)
         if normalize:
             B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
             # just need it for normalization, so do a simple mean
@@ -2054,10 +2058,14 @@ class FourierCurrentPotentialField(
         # winding surface normal vector magnitude on source grid
         ns_mag = self.compute(["|e_theta x e_zeta|"], source_grid)["|e_theta x e_zeta|"]
 
+        # change self basis to match desired resolution
+        # TODO: allow cos for this as well?
+        if sym_Phi is None:
+            sym_Phi = "sin" if eq.sym else False
         self.change_Phi_resolution(M=M_Phi, N=N_Phi, sym_Phi=sym_Phi)
 
         # calculate net enclosed poloidal and toroidal currents
-        G_tot = -(eq.compute("G", grid=eval_grid)["G"][0] / mu_0 * 2 * jnp.pi)
+        G_tot = -(eq.compute("G", grid=source_grid)["G"][0] / mu_0 * 2 * jnp.pi)
 
         if external_field:
             # calculate the portion of G provided by external field
@@ -2164,7 +2172,7 @@ class FourierCurrentPotentialField(
 
         if scan:
             scan_alphas = scan_alphas or jnp.concatenate(
-                (jnp.array([0.0]), jnp.logspace(-30, -1, 30))
+                (jnp.array([0.0]), jnp.logspace(scan_lower, scan_upper, nscan))
             )
         alphas = [alpha] if not scan else scan_alphas
 
@@ -2423,16 +2431,19 @@ class FourierCurrentPotentialField(
             DESC CoilSet object that is a discretization of the input
             surface current on the given winding surface
         """
-        nfp = self.Phi_basis.NFP
+        surface_current_field = self
+        nfp = surface_current_field.Phi_basis.NFP
 
-        net_toroidal_current = self.I
-        net_poloidal_current = self.G
+        net_toroidal_current = surface_current_field.I
+        net_poloidal_current = surface_current_field.G
         assert not jnp.isclose(net_toroidal_current, 0) or not jnp.isclose(
             net_poloidal_current, 0
         ), (
             "Detected both net toroidal and poloidal current are both zero, "
             "this function cannot find windowpane coils"
         )
+
+        winding_surf = surface_current_field
 
         ################################################################
         # find current helicity
@@ -2520,7 +2531,7 @@ class FourierCurrentPotentialField(
             ).T,
             sort=False,
         )
-        phi_total_full = self.compute("Phi", grid=grid)["Phi"].reshape(
+        phi_total_full = surface_current_field.compute("Phi", grid=grid)["Phi"].reshape(
             theta_full.size, zeta_full.size, order="F"
         )
 
@@ -2640,7 +2651,7 @@ class FourierCurrentPotentialField(
         contour_X, contour_Y, contour_Z = find_XYZ_points(
             contour_theta,
             contour_zeta,
-            self,
+            winding_surf,
         )
         ################################################################
         # Create CoilSet object
@@ -2661,7 +2672,7 @@ class FourierCurrentPotentialField(
                         contour_Z[j][1] - contour_Z[j][0],
                     ]
                 )
-                K = self.compute(
+                K = surface_current_field.compute(
                     "K",
                     grid=Grid(
                         jnp.array([[0, contour_theta[j][0], contour_zeta[j][0]]])

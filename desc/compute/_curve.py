@@ -658,7 +658,6 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# FIXME: finish writing math for this one
 @register_compute_fun(
     name="x_ss",
     label="\\partial_{ss} \\mathbf{x}",
@@ -699,12 +698,30 @@ def _x_ss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwa
         grid=grid,
         method="jitable",
     )
+    d2R = (
+        data_surf["R_tt"] * data["theta_s"] ** 2
+        + data_surf["R_zz"] * data["zeta_s"] ** 2
+        + 2 * data_surf["R_tz"] * data["zeta_s"] * data["theta_s"]
+        + data_surf["R_t"] * data["theta_ss"]
+        + data_surf["R_z"] * data["zeta_ss"]
+    )
+    d2phi = (
+        data_surf["phi_tt"] * data["theta_s"] ** 2
+        + data_surf["phi_zz"] * data["zeta_s"] ** 2
+        + 2 * data_surf["phi_tz"] * data["zeta_s"] * data["theta_s"]
+        + data_surf["phi_t"] * data["theta_ss"]
+        + data_surf["phi_z"] * data["zeta_ss"]
+    )
+    d2Z = (
+        data_surf["Z_tt"] * data["theta_s"] ** 2
+        + data_surf["Z_zz"] * data["zeta_s"] ** 2
+        + 2 * data_surf["Z_tz"] * data["zeta_s"] * data["theta_s"]
+        + data_surf["Z_t"] * data["theta_ss"]
+        + data_surf["Z_z"] * data["zeta_ss"]
+    )
+
     coords = jnp.stack(
-        [
-            data_surf["R_t"] * data["theta_s"] + data_surf["R_z"] * data["zeta_s"],
-            data_surf["phi_t"] * data["theta_s"] + data_surf["phi_z"] * data["zeta_s"],
-            data_surf["Z_t"] * data["theta_s"] + data_surf["Z_z"] * data["zeta_s"],
-        ],
+        [d2R, d2phi, d2Z],
         axis=1,
     )
     # convert to xyz for displacement and rotation

@@ -854,3 +854,213 @@ class SplineXYZCurve(Curve):
         return SplineXYZCurve(
             coords[:, 0], coords[:, 1], coords[:, 2], knots, method, name
         )
+
+
+class FourierRZWindingSurfaceCurve(Curve):
+    """Curve parameterized by Fourier series for theta,zeta in terms of parameter s.
+
+    This curve will lie on the given winding surface, parameterized by a
+    Fourier series given by Rb_mn and Zb_mn.
+
+    Based off of work by Joao Biu and Rogerio Jorge
+    https://github.com/hiddenSymmetries/simsopt/pull/289
+
+    Parameters
+    ----------
+    surface : FourierRZToroidalSurface
+        Winding surface that the curve will lie on.
+    theta_n, zeta_n: array-like
+        Fourier coefficients for theta, zeta in terms of curve parameter s.
+    modes_theta : array-like, optional
+        Mode numbers associated with theta_n. If not given defaults to [-n:n].
+    modes_zeta : array-like, optional
+        Mode numbers associated with zeta_n, If not given defaults to [-n:n]].
+    sym_theta : {"cos", "sin", False}, optional
+        Whether to enforce symmetry for the theta(t) Fourier series. Defaults to "sin"
+    sym_zeta : {"cos", "sin", False}, optional
+        Whether to enforce symmetry for the zeta(t) Fourier series. Defaults to "sin"
+    name : str
+        Name for this curve.
+
+    """
+
+    _io_attrs_ = Curve._io_attrs_ + [
+        "_theta_n",
+        "_theta_n",
+        "_theta_basis",
+        "_zeta_basis",
+        "_surface",
+    ]
+
+    def __init__(
+        self,
+        surface,
+        theta_n=1,
+        zeta_n=1,
+        modes_theta=None,
+        modes_zeta=None,
+        sym_theta="sin",
+        sym_zeta="sin",
+        name="",
+    ):
+        super().__init__(name)
+        assert hasattr(surface, "rho"), (
+            "surface must be a FourierRZToroidalSurface"
+            f"object, instead got type {type(surface)}"
+        )
+        self._surface = surface
+        theta_n, zeta_n = np.atleast_1d(theta_n), np.atleast_1d(zeta_n)
+        if modes_theta is None:
+            modes_theta = np.arange(-(theta_n.size // 2), theta_n.size // 2 + 1)
+        if modes_zeta is None:
+            modes_zeta = np.arange(-(zeta_n.size // 2), zeta_n.size // 2 + 1)
+
+        if theta_n.size == 0:
+            raise ValueError("At least 1 coefficient for theta must be supplied")
+        if zeta_n.size == 0:
+            zeta_n = np.array([0.0])
+            modes_zeta = np.array([0])
+
+        modes_theta, modes_zeta = np.asarray(modes_theta), np.asarray(modes_zeta)
+
+        assert (
+            theta_n.size == modes_theta.size
+        ), "theta_n size and modes_theta must be the same size"
+        assert (
+            zeta_n.size == modes_zeta.size
+        ), "zeta_n size and modes_zeta must be the same size"
+
+        assert issubclass(modes_theta.dtype.type, np.integer)
+        assert issubclass(modes_zeta.dtype.type, np.integer)
+
+        self._sym_theta = sym_theta
+        self._sym_zeta = sym_zeta
+        Ntheta = np.max(abs(modes_theta))
+        Nzeta = np.max(abs(modes_zeta))
+        N = max(Ntheta, Nzeta)
+        NFP = surface.NFP
+        self._theta_basis = FourierSeries(N, int(NFP), sym=sym_theta)
+        self._zeta_basis = FourierSeries(N, int(NFP), sym=sym_zeta)
+
+        self._theta_n = copy_coeffs(theta_n, modes_theta, self.theta_basis.modes[:, 2])
+        self._zeta_n = copy_coeffs(zeta_n, modes_zeta, self.zeta_basis.modes[:, 2])
+
+    @property
+    def surface(self):
+        """The surface this curve lies on."""
+        return self._surface
+
+    @property
+    def sym(self):
+        """Whether the surface this curve lies on has stellarator symmetry."""
+        return self.surface.sym
+
+    @property
+    def sym_theta(self):
+        """Type of this curve's theta series symmetry."""
+        return self._sym_theta
+
+    @property
+    def sym_zeta(self):
+        """Type of this curve's zeta series symmetry."""
+        return self._sym_zeta
+
+    @property
+    def theta_basis(self):
+        """Spectral basis for theta Fourier series."""
+        return self._theta_basis
+
+    @property
+    def zeta_basis(self):
+        """Spectral basis for zeta Fourier series."""
+        return self._zeta_basis
+
+    @property
+    def NFP(self):
+        """Number of field periods."""
+        return self.surface.NFP
+
+    @property
+    def N(self):
+        """Maximum mode number."""
+        return max(self.theta_basis.N, self.zeta_basis.N)
+
+    def change_resolution(self, N=None, NFP=None, sym=None):
+        """Change the maximum toroidal resolution."""
+        if (
+            ((N is not None) and (N != self.N))
+            or ((NFP is not None) and (NFP != self.NFP))
+            or (sym is not None)
+            and (sym != self.sym)
+        ):
+            self._NFP = int(NFP if NFP is not None else self.NFP)
+            self._sym = sym if sym is not None else self.sym
+            N = int(N if N is not None else self.N)
+            theta_modes_old = self.theta_basis.modes
+            zeta_modes_old = self.zeta_basis.modes
+            self.theta_basis.change_resolution(N=N, NFP=self.NFP, sym=self.sym_theta)
+            self.zeta_basis.change_resolution(N=N, NFP=self.NFP, sym=self.sym_zeta)
+            self.theta_n = copy_coeffs(
+                self.theta_n, theta_modes_old, self.theta_basis.modes
+            )
+            self.zeta_n = copy_coeffs(
+                self.zeta_n, zeta_modes_old, self.zeta_basis.modes
+            )
+
+    def get_coeffs(self, n):
+        """Get Fourier coefficients for given mode number(s)."""
+        n = np.atleast_1d(n).astype(int)
+        theta = np.zeros_like(n).astype(float)
+        zeta = np.zeros_like(n).astype(float)
+
+        idxtheta = np.where(n[:, np.newaxis] == self.theta_basis.modes[:, 2])
+        idxzeta = np.where(n[:, np.newaxis] == self.zeta_basis.modes[:, 2])
+
+        theta[idxtheta[0]] = self.theta_n[idxtheta[1]]
+        zeta[idxzeta[0]] = self.zeta_n[idxzeta[1]]
+        return theta, zeta
+
+    def set_coeffs(self, n, theta=None, zeta=None):
+        """Set specific Fourier coefficients."""
+        n, theta, zeta = np.atleast_1d(n), np.atleast_1d(theta), np.atleast_1d(zeta)
+        theta = np.broadcast_to(theta, n.shape)
+        zeta = np.broadcast_to(zeta, n.shape)
+        for nn, thetatheta, zetazeta in zip(n, theta, zeta):
+            if thetatheta is not None:
+                idxtheta = self.theta_basis.get_idx(0, 0, nn)
+                self.theta_n = put(self.theta_n, idxtheta, thetatheta)
+            if zetazeta is not None:
+                idxzeta = self.zeta_basis.get_idx(0, 0, nn)
+                self.zeta_n = put(self.zeta_n, idxzeta, zetazeta)
+
+    @optimizable_parameter
+    @property
+    def theta_n(self):
+        """Spectral coefficients for theta."""
+        return self._theta_n
+
+    @theta_n.setter
+    def theta_n(self, new):
+        if len(new) == self.theta_basis.num_modes:
+            self._theta_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"theta_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.theta_basis.num_modes} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def zeta_n(self):
+        """Spectral coefficients for zeta."""
+        return self._zeta_n
+
+    @zeta_n.setter
+    def zeta_n(self, new):
+        if len(new) == self.zeta_basis.num_modes:
+            self._zeta_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"zeta_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.zeta_basis.num_modes} modes"
+            )

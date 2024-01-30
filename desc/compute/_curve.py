@@ -1,6 +1,7 @@
 from interpax import interp1d
 
 from desc.backend import jnp
+from desc.grid import Grid
 
 from .data_index import register_compute_fun
 from .geom_utils import (
@@ -371,6 +372,183 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="theta",
+    label="\\theta",
+    units="~",
+    units_long="None",
+    description="Poloidal angle along the curve.",
+    dim=1,
+    params=["theta_n", "surface"],
+    transforms={
+        "theta": [[0, 0, 0]],
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+)
+def _theta_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    data["theta"] = transforms["grid"].nodes[:, 2] + transforms["theta"].transform(
+        params["theta_n"], dz=0
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="theta_s",
+    label="\\partial_s \\theta",
+    units="~",
+    units_long="None",
+    description="Poloidal angle along the curve, derivative wrt curve parameter s.",
+    dim=1,
+    params=["theta_n", "surface"],
+    transforms={
+        "theta": [[0, 0, 1]],
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+)
+def _theta_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    data["theta_s"] = jnp.ones_like(transforms["grid"].nodes[:, 2]) + transforms[
+        "theta"
+    ].transform(params["theta_n"], dz=1)
+
+    return data
+
+
+@register_compute_fun(
+    name="theta_ss",
+    label="\\partial^2_s \\theta",
+    units="~",
+    units_long="None",
+    description="Poloidal angle along the curve, 2nd derivative wrt curve parameter s.",
+    dim=1,
+    params=["theta_n", "surface"],
+    transforms={
+        "theta": [[0, 0, 2]],
+    },
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+)
+def _theta_ss_FourierRZWindingSurfaceCurve(
+    params, transforms, profiles, data, **kwargs
+):
+    data["theta_ss"] = transforms["theta"].transform(params["theta_n"], dz=2)
+
+    return data
+
+
+@register_compute_fun(
+    name="zeta",
+    label="\\theta",
+    units="~",
+    units_long="None",
+    description="Toroidal angle along the curve.",
+    dim=1,
+    params=["zeta_n", "surface"],
+    transforms={
+        "zeta": [[0, 0, 0]],
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+)
+def _zeta_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    data["zeta"] = transforms["grid"].nodes[:, 2] + transforms["zeta"].transform(
+        params["zeta_n"], dz=0
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="zeta_s",
+    label="\\partial_s \\zeta",
+    units="~",
+    units_long="None",
+    description="Toroidal angle along the curve, derivative wrt curve parameter s.",
+    dim=1,
+    params=["zeta_n", "surface"],
+    transforms={
+        "zeta": [[0, 0, 1]],
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+)
+def _zeta_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    data["zeta_s"] = jnp.ones_like(transforms["grid"].nodes[:, 2]) + transforms[
+        "zeta"
+    ].transform(params["zeta_n"], dz=1)
+
+    return data
+
+
+@register_compute_fun(
+    name="zeta_ss",
+    label="\\partial^2_s \\zeta",
+    units="~",
+    units_long="None",
+    description="Toroidal angle along the curve, 2nd derivative wrt curve parameter s.",
+    dim=1,
+    params=["zeta_n", "surface"],
+    transforms={
+        "zeta": [[0, 0, 2]],
+    },
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+)
+def _zeta_ss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    data["zeta_ss"] = transforms["zeta"].transform(params["zeta_n"], dz=2)
+
+    return data
+
+
+@register_compute_fun(
+    name="x",
+    label="\\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve",
+    dim=3,
+    params=["surface", "rotmat", "shift"],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["theta", "zeta"],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+    basis="basis",
+)
+def _x_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
+    grid = Grid(nodes, sort=False, jitable=True)
+    data_surf = params["surface"].compute(
+        ["R", "phi", "Z"], grid=grid, method="jitable"
+    )
+    coords = jnp.stack([data_surf["R"], data_surf["phi"], data_surf["Z"]], axis=1)
+    # convert to xyz for displacement and rotation
+    coords = rpz2xyz(coords)
+    coords = coords @ params["rotmat"].T + params["shift"][jnp.newaxis, :]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        coords = xyz2rpz(coords)
+    data["x"] = coords
+    return data
+
+
+@register_compute_fun(
     name="x_s",
     label="\\partial_{s} \\mathbf{x}",
     units="m",
@@ -400,6 +578,44 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coords = coords @ params["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
+    data["x_s"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="x_s",
+    label="\\partial_{s} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, first derivative",
+    dim=3,
+    params=["surface", "rotmat", "shift"],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["theta", "theta_s", "zeta", "zeta_s"],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+    basis="basis",
+)
+def _x_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
+    grid = Grid(nodes, sort=False, jitable=True)
+    data_surf = params["surface"].compute(
+        ["R_t", "R_z", "phi", "phi_z", "Z_t", "Z_z"], grid=grid, method="jitable"
+    )
+    coords = jnp.stack(
+        [
+            data_surf["R_t"] * data["theta_s"] + data_surf["R_z"] * data["zeta_s"],
+            data_surf["phi_t"] * data["theta_s"] + data_surf["phi_z"] * data["zeta_s"],
+            data_surf["Z_t"] * data["theta_s"] + data_surf["Z_z"] * data["zeta_s"],
+        ],
+        axis=1,
+    )
+    # convert to xyz for displacement and rotation
+    coords = rpz2xyz_vec(coords, phi=data_surf["phi"])
+    coords = coords @ params["rotmat"].T + params["shift"][jnp.newaxis, :]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        coords = xyz2rpz(coords)
     data["x_s"] = coords
     return data
 
@@ -442,6 +658,64 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+# FIXME: finish writing math for this one
+@register_compute_fun(
+    name="x_ss",
+    label="\\partial_{ss} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, second derivative",
+    dim=3,
+    params=["surface", "rotmat", "shift"],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["theta", "theta_s", "theta_ss", "zeta", "zeta_s", "zeta_ss"],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+    basis="basis",
+)
+def _x_ss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
+    grid = Grid(nodes, sort=False, jitable=True)
+    data_surf = params["surface"].compute(
+        [
+            "R_tt",
+            "R_t",
+            "R_z",
+            "R_zz",
+            "R_tz",
+            "phi",
+            "phi_z",
+            "phi_zz",
+            "phi_t",
+            "phi_tt",
+            "phi_tz",
+            "Z_tt",
+            "Z_t",
+            "Z_z",
+            "Z_zz",
+            "Z_tz",
+        ],
+        grid=grid,
+        method="jitable",
+    )
+    coords = jnp.stack(
+        [
+            data_surf["R_t"] * data["theta_s"] + data_surf["R_z"] * data["zeta_s"],
+            data_surf["phi_t"] * data["theta_s"] + data_surf["phi_z"] * data["zeta_s"],
+            data_surf["Z_t"] * data["theta_s"] + data_surf["Z_z"] * data["zeta_s"],
+        ],
+        axis=1,
+    )
+    # convert to xyz for displacement and rotation
+    coords = rpz2xyz_vec(coords, phi=data_surf["phi"])
+    coords = coords @ params["rotmat"].T + params["shift"][jnp.newaxis, :]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        coords = xyz2rpz(coords)
+    data["x_ss"] = coords
+    return data
+
+
 @register_compute_fun(
     name="x_sss",
     label="\\partial_{sss} \\mathbf{x}",
@@ -477,6 +751,47 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["x_sss"] = coords
+    return data
+
+
+# FIXME: write out math for this one
+@register_compute_fun(
+    name="x_sss",
+    label="\\partial_{ss} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, first derivative",
+    dim=3,
+    params=["surface", "rotmat", "shift"],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["theta", "theta_s", "zeta", "zeta_s"],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+    basis="basis",
+)
+def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
+    grid = Grid(nodes, sort=False, jitable=True)
+    data_surf = params["surface"].compute(
+        ["R_tt", "R_t", "R_z", "phi", "phi_z", "Z_t", "Z_z"],
+        grid=grid,
+        method="jitable",
+    )
+    coords = jnp.stack(
+        [
+            data_surf["R_t"] * data["theta_s"] + data_surf["R_z"] * data["zeta_s"],
+            data_surf["phi_t"] * data["theta_s"] + data_surf["phi_z"] * data["zeta_s"],
+            data_surf["Z_t"] * data["theta_s"] + data_surf["Z_z"] * data["zeta_s"],
+        ],
+        axis=1,
+    )
+    # convert to xyz for displacement and rotation
+    coords = rpz2xyz_vec(coords, phi=data_surf["phi"])
+    coords = coords @ params["rotmat"].T + params["shift"][jnp.newaxis, :]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        coords = xyz2rpz(coords)
+    data["x_s"] = coords
     return data
 
 

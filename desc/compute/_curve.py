@@ -423,10 +423,11 @@ def _theta_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **
 
 @register_compute_fun(
     name="theta_ss",
-    label="\\partial^2_s \\theta",
+    label="\\partial_{ss} \\theta",
     units="~",
     units_long="None",
-    description="Poloidal angle along the curve, 2nd derivative wrt curve parameter s.",
+    description="Poloidal angle along the curve, second derivative "
+    "wrt curve parameter s.",
     dim=1,
     params=["theta_n", "surface"],
     transforms={
@@ -443,6 +444,29 @@ def _theta_ss_FourierRZWindingSurfaceCurve(
     data["theta_ss"] = transforms["theta"].transform(params["theta_n"], dz=2)
 
     return data
+
+
+@register_compute_fun(
+    name="theta_sss",
+    label="\\partial_{sss} \\theta",
+    units="~",
+    units_long="None",
+    description="Poloidal angle along the curve, third derivative wrt"
+    " curve parameter s.",
+    dim=1,
+    params=["theta_n", "surface"],
+    transforms={
+        "theta": [[0, 0, 3]],
+    },
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+)
+def _theta_sss_FourierRZWindingSurfaceCurve(
+    params, transforms, profiles, data, **kwargs
+):
+    data["theta_sss"] = transforms["theta"].transform(params["theta_n"], dz=3)
 
 
 @register_compute_fun(
@@ -497,10 +521,11 @@ def _zeta_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **k
 
 @register_compute_fun(
     name="zeta_ss",
-    label="\\partial^2_s \\zeta",
+    label="\\partial_{ss} \\zeta",
     units="~",
     units_long="None",
-    description="Toroidal angle along the curve, 2nd derivative wrt curve parameter s.",
+    description="Toroidal angle along the curve, second derivative"
+    " wrt curve parameter s.",
     dim=1,
     params=["zeta_n", "surface"],
     transforms={
@@ -513,6 +538,31 @@ def _zeta_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **k
 )
 def _zeta_ss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
     data["zeta_ss"] = transforms["zeta"].transform(params["zeta_n"], dz=2)
+
+    return data
+
+
+@register_compute_fun(
+    name="zeta_sss",
+    label="\\partial_{sss} \\zeta",
+    units="~",
+    units_long="None",
+    description="Toroidal angle along the curve, third derivative"
+    " wrt curve parameter s.",
+    dim=1,
+    params=["zeta_n", "surface"],
+    transforms={
+        "zeta": [[0, 0, 3]],
+    },
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
+)
+def _zeta_sss_FourierRZWindingSurfaceCurve(
+    params, transforms, profiles, data, **kwargs
+):
+    data["zeta_sss"] = transforms["zeta"].transform(params["zeta_n"], dz=3)
 
     return data
 

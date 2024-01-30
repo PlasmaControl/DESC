@@ -159,8 +159,13 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
         k_dot_Z - k_dot_phi * dZ0_dphi / R0
     )
 
-    L_1_1 = qsc.iota * (X1c * (k_dot_phi) + Y1c * (tau_dot_phi)) / R0
-    L_1_neg1 = qsc.iota * (X1s * (k_dot_phi) + Y1s * (tau_dot_phi)) / R0
+    # from integrating eqn A20 in
+    # Constructing stellarators with quasisymmetry to high order 2019
+    #  Landreman and Sengupta
+    # take derivative of that integral to form nu_0_prime
+    nu_0_p_plus_1 = qsc.B0 / qsc.G0 * qsc.d_l_d_phi
+    L_1_1 = qsc.iota * (X1c * (k_dot_phi) + Y1c * (tau_dot_phi)) / R0 * nu_0_p_plus_1
+    L_1_neg1 = qsc.iota * (X1s * (k_dot_phi) + Y1s * (tau_dot_phi)) / R0 * nu_0_p_plus_1
 
     nfp = qsc.nfp
     if desc_eq.sym:

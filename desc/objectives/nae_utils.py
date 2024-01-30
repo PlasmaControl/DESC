@@ -134,6 +134,7 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
         since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry.
     """
     phi = qsc.phi
+    dphi = phi[1] - phi[0]
 
     R0 = qsc.R0_func(phi)
     dR0_dphi = qsc.R0p
@@ -182,10 +183,11 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
     # from integrating eqn A20 in
     # Constructing stellarators with quasisymmetry to high order 2019
     #  Landreman and Sengupta
-    # take derivative of that integral to form nu_0_prime
-    nu_0_p_plus_1 = qsc.B0 / qsc.G0 * qsc.d_l_d_phi
-    L_1_1 = qsc.iota * (X1c * (k_dot_phi) + Y1c * (tau_dot_phi)) / R0 * nu_0_p_plus_1
-    L_1_neg1 = qsc.iota * (X1s * (k_dot_phi) + Y1s * (tau_dot_phi)) / R0 * nu_0_p_plus_1
+    # take derivative of that form d(nu0)_dphi
+    nu_0 = np.cumsum(qsc.B0 / qsc.G0 * qsc.d_l_d_phi - 1) * np.ones_like(phi) * dphi
+    nu0p = np.diff(np.append(nu_0, nu_0[0])) / dphi
+    L_1_1 = qsc.iota * (X1c * (k_dot_phi) + Y1c * (tau_dot_phi)) / R0 * (nu0p + 1)
+    L_1_neg1 = qsc.iota * (X1s * (k_dot_phi) + Y1s * (tau_dot_phi)) / R0 * (nu0p + 1)
 
     nfp = qsc.nfp
     if desc_eq.sym:

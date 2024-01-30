@@ -25,8 +25,8 @@ class Curve(IOAble, Optimizable, ABC):
     _io_attrs_ = ["_name", "_shift", "_rotmat"]
 
     def __init__(self, name=""):
-        self._shift = np.array([0, 0, 0])
-        self._rotmat = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).flatten()
+        self._shift = np.array([0, 0, 0], dtype=float)
+        self._rotmat = np.eye(3, dtype=float).flatten()
         self._name = name
 
     @optimizable_parameter

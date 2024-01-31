@@ -2165,8 +2165,10 @@ class FourierCurrentPotentialField(
         rhs = -(Bn_plasma + Bn_ext + B_GI_normal).T @ A
 
         if scan:
-            scan_alphas = scan_alphas or jnp.concatenate(
-                (jnp.array([0.0]), jnp.logspace(-30, -1, 30))
+            scan_alphas = (
+                scan_alphas
+                if scan_alphas is not None
+                else jnp.concatenate((jnp.array([0.0]), jnp.logspace(-30, -1, 30)))
             )
         alphas = [alpha] if not scan else scan_alphas
 

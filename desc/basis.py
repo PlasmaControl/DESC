@@ -1733,7 +1733,8 @@ def FourierZernike_to_PoincareZernikePolynomial(X_lmn_3D, basis_3D, zeta=0):
 
     Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates
     the coefficients at the zeta=0 cross-section, returning a 2D ZernikePolynomial
-    basis and its coefficients X_lmn_2D
+    basis and its coefficients X_lmn_2D. The output dimension will not be the same,
+    only toroidal mode will be N=0.
 
     Parameters
     ----------
@@ -1829,6 +1830,7 @@ def FourierZernike_to_FourierZernike_no_N_modes(X_lmn_3D, basis_3D, zeta=0):
     Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates the
     coefficients at the zeta=0 cross-section, returning the same 3D FourierZernike
     basis but with zero toroidal dependence s.t. the zeta=0 XS is the same as the input
+    so X_lmn_no_N = 0 for N != 0. Input and output array sizes are the same.
 
     Parameters
     ----------

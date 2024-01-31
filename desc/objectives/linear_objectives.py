@@ -493,7 +493,6 @@ class BoundaryLambdaSelfConsistency(_FixedObjective):
         Name of the objective function.
     """
 
-    _target_arg = "L_lmn"
     _units = "(dimensionless)"
     _print_value_fmt = "Lambda boundary self consistency error: {:10.3e}"
 
@@ -528,22 +527,14 @@ class BoundaryLambdaSelfConsistency(_FixedObjective):
         L_modes = eq.L_basis.modes
         dim_L = eq.L_basis.num_modes
 
-        if (
-            self.target is None
-        ):  # uses current eq's value of lambda at specified zeta as constraint
-            Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
-                eq.L_lmn,
-                eq.L_basis,
-                zeta=self._zeta,
-            )  # Currently this method doesn't support 2 different Poincare BC
-            Lb_modes = Lb_basis.modes
-            self._dim_f = Lb_basis.num_modes
-            self.target = Lb_lmn
-
+        if self.target is None:
+            Lb_modes = eq.Lb_basis.modes
+            self._dim_f = eq.Lb_basis.num_modes
+            self.target = eq.Lb_lmn
         self._A = np.zeros((self._dim_f, dim_L))
 
         if self._zeta == 0:
-            for i, (l, m, n) in enumerate(Lb_modes):
+            for i, (l, m, n) in enumerate(Lb_modes):  # eq.Lb_basis.modes   Lb_modes
                 j = np.argwhere(
                     np.logical_and(
                         (L_modes[:, :-1] == [l, m]).all(axis=1),

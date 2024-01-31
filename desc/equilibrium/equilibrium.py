@@ -13,6 +13,7 @@ from termcolor import colored
 from desc.backend import jnp
 from desc.basis import (
     FourierZernike_to_FourierZernike_no_N_modes,
+    FourierZernike_to_PoincareZernikePolynomial,
     FourierZernikeBasis,
     fourier,
     zernike_radial,
@@ -24,6 +25,7 @@ from desc.compute.utils import get_data_deps, get_params, get_profiles, get_tran
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
+    PoincareSurface,
     Surface,
     ZernikeRZToroidalSection,
 )
@@ -744,7 +746,7 @@ class Equilibrium(IOAble, Optimizable):
         return axis
 
     def set_poincare_equilibrium(self, zeta=0):
-        """Sets the equilibrium for solving Poincare BC problem.
+        """Sets the equilibrium for solving Poincare BC from an existing equilibrium.
 
         Parameters
         ----------
@@ -759,9 +761,17 @@ class Equilibrium(IOAble, Optimizable):
         eq_poincare : Equilibrium
             Separate Equilibrium object to be used for Poincare BC problem
         """
-        surface = self.get_surface_at(zeta=zeta / self.NFP)
+        surf = self.get_surface_at(zeta=zeta / self.NFP)
         Lb_lmn, Lb_basis = FourierZernike_to_FourierZernike_no_N_modes(
             self.L_lmn, self.L_basis, zeta
+        )
+        Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
+            Lb_lmn,
+            Lb_basis,
+            zeta=zeta,
+        )
+        surface = PoincareSurface(
+            surface=surf, L_lmn=Lb_lmn, L_basis=Lb_basis, zeta=zeta
         )
 
         eq_poincare = Equilibrium(
@@ -780,9 +790,8 @@ class Equilibrium(IOAble, Optimizable):
             bdry_mode="poincare",
             spectral_indexing=self._spectral_indexing,
         )
-        eq_poincare.L_lmn = (
-            Lb_lmn  # initialize the poincare eq with the lambda of the original eq
-        )
+
+        eq_poincare.change_resolution(eq_poincare.L, eq_poincare.M, eq_poincare.N)
         eq_poincare.axis = eq_poincare.get_axis()
         return eq_poincare
 
@@ -1338,6 +1347,24 @@ class Equilibrium(IOAble, Optimizable):
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
+
+    @property
+    def Lb_lmn(self):
+        """ndarray: Spectral coefficients of Lambda at the boundary."""
+        return self.surface.L_lmn
+
+    @Lb_lmn.setter
+    def Lb_lmn(self, Lb_lmn):
+        self.surface.L_lmn = Lb_lmn
+
+    @property
+    def Lb_basis(self):
+        """ndarray: Spectral coefficients of Lambda at the boundary."""
+        return self.surface.L_basis
+
+    @Lb_basis.setter
+    def Lb_basis(self, Lb_basis):
+        self.surface.L_basis = Lb_basis
 
     @optimizable_parameter
     @property

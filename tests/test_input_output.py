@@ -485,8 +485,6 @@ def test_pickle_io(DSHAPE_current, tmpdir_factory):
     assert equals(eqf, peqf)
 
 
-# TODO: remove once the retry git action is fixed
-@pytest.mark.xfail
 @pytest.mark.unit
 @pytest.mark.solve
 def test_ascii_io(DSHAPE_current, tmpdir_factory):

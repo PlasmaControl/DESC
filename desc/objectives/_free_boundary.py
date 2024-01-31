@@ -7,7 +7,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms, xyz2rpz_vec
+from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective
@@ -857,7 +857,6 @@ class QuadraticFlux(_Objective):
                 "biot_savart",
                 interpolator,
             )
-            Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
 
             self._constants.update(
                 eval_data=eval_data,
@@ -938,7 +937,6 @@ class QuadraticFlux(_Objective):
                 "biot_savart",
                 constants["interpolator"],
             )
-            Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
 
         x = jnp.array(
             [

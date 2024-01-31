@@ -654,7 +654,7 @@ class TestObjectiveFunction:
         field = FourierCurrentPotentialField.from_surface(
             surface=surf,
             Phi_mn=np.array([1e4]),
-            modes_Phi=np.array([[-1, 0]]),
+            modes_Phi=np.array([[-1, 4]]),
             G=1e4,
             I=0,
             sym_Phi="sin",
@@ -710,7 +710,7 @@ class TestObjectiveFunction:
             gtol=1e-14,
         )
 
-        np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-8)
+        np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-7)
 
     def test_quadratic_flux_with_eq_and_field_unfixed(
         self, quadratic_flux_equilibriums

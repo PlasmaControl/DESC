@@ -44,12 +44,12 @@ dependencies:
   # testing and benchmarking
   - markupsafe = 2.0.1
   - nbmake
-  - pytest >= 5.0.0
+  - pytest = 8.0.0
   - pytest-benchmark
   - pytest-cov >= 2.6.0
   - pytest-monitor
   - pytest-mpl = 0.16.1
-  - pytest-split
+  - pytest-split == 0.8.2
   - shapely >= 1.8.2
 
   # building

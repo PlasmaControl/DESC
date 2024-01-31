@@ -83,7 +83,6 @@ class Optimizer(IOAble):
         maxiter=None,
         options=None,
         copy=False,
-        zeta=None,
     ):
         """Optimize an objective function.
 
@@ -187,7 +186,6 @@ class Optimizer(IOAble):
             linear_constraints = maybe_add_self_consistency(
                 eq,
                 linear_constraints,
-                zeta=zeta,
             )
 
         if len(linear_constraints):

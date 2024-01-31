@@ -242,9 +242,7 @@ class BoundaryRSelfConsistency(_Objective):
         eq,
         surface_label=None,
         name="self_consistency R",
-        zeta=0,
     ):
-        self._zeta = zeta or 0
         self._surface_label = surface_label
         super().__init__(
             things=eq,
@@ -282,7 +280,7 @@ class BoundaryRSelfConsistency(_Objective):
                 )
                 self._A[j, i] = zernike_radial(surf, l, m)
         elif eq.bdry_mode == "poincare":
-            if self._zeta == 0:
+            if eq.surface.zeta == 0:
                 for i, (l, m, n) in enumerate(modes):
                     j = np.argwhere(
                         np.logical_and(
@@ -291,7 +289,7 @@ class BoundaryRSelfConsistency(_Objective):
                         )
                     )
                     self._A[i, j] = 1
-            elif self._zeta == np.pi:
+            elif eq.surface.zeta == np.pi:
                 for i, (l, m, n) in enumerate(modes):
                     j1 = np.argwhere(
                         np.logical_and(
@@ -315,7 +313,7 @@ class BoundaryRSelfConsistency(_Objective):
                     self._A[i, j2] = 1
             else:
                 raise ValueError(
-                    f"Zeta value must be 0 or pi. The given value is {self._zeta}"
+                    f"Zeta value must be 0 or pi. The given value is {eq.surface.zeta}"
                 )
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -371,9 +369,7 @@ class BoundaryZSelfConsistency(_Objective):
         eq,
         surface_label=None,
         name="self_consistency Z",
-        zeta=0,
     ):
-        self._zeta = zeta or 0
         self._surface_label = surface_label
         super().__init__(
             things=eq,
@@ -413,7 +409,7 @@ class BoundaryZSelfConsistency(_Objective):
                 )
                 self._A[j, i] = zernike_radial(surf, l, m)
         elif eq.bdry_mode == "poincare":
-            if self._zeta == 0:
+            if eq.surface.zeta == 0:
                 for i, (l, m, n) in enumerate(modes):
                     j = np.argwhere(
                         np.logical_and(
@@ -422,7 +418,7 @@ class BoundaryZSelfConsistency(_Objective):
                         )
                     )
                     self._A[i, j] = 1
-            elif self._zeta == np.pi:
+            elif eq.surface.zeta == np.pi:
                 for i, (l, m, n) in enumerate(modes):
                     j1 = np.argwhere(
                         np.logical_and(
@@ -446,7 +442,7 @@ class BoundaryZSelfConsistency(_Objective):
                     self._A[i, j2] = 1
             else:
                 raise ValueError(
-                    f"Zeta value must be 0 or pi. The given value is {self._zeta}"
+                    f"Zeta value must be 0 or pi. The given value is {eq.surface.zeta}"
                 )
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -503,9 +499,7 @@ class BoundaryLambdaSelfConsistency(_FixedObjective):
         bounds=None,
         weight=1,
         name="poincare lambda",
-        zeta=0,
     ):
-        self._zeta = zeta or 0
         self._args = ["L_lmn"]
         super().__init__(
             things=eq, target=target, bounds=bounds, weight=weight, name=name
@@ -533,7 +527,7 @@ class BoundaryLambdaSelfConsistency(_FixedObjective):
             self.target = eq.Lb_lmn
         self._A = np.zeros((self._dim_f, dim_L))
 
-        if self._zeta == 0:
+        if eq.surface.zeta == 0:
             for i, (l, m, n) in enumerate(Lb_modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -542,7 +536,7 @@ class BoundaryLambdaSelfConsistency(_FixedObjective):
                     )
                 )
                 self._A[i, j] = 1
-        elif self._zeta == np.pi:
+        elif eq.surface.zeta == np.pi:
             for i, (l, m, n) in enumerate(Lb_modes):
                 j1 = np.argwhere(
                     np.logical_and(
@@ -566,8 +560,8 @@ class BoundaryLambdaSelfConsistency(_FixedObjective):
                 self._A[i, j2] = 1
         else:
             raise ValueError(
-                f"Unvalid zeta value! Only 0 or pi is supported! zeta ={self._zeta}"
-                + "is given!"
+                "Unvalid zeta value! Only 0 or pi is supported! zeta ="
+                + f"{eq.surface.zeta} is given!"
             )
 
         if self.target is not None:

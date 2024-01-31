@@ -1794,7 +1794,6 @@ class Equilibrium(IOAble, Optimizable):
         options=None,
         verbose=1,
         copy=False,
-        zeta=None,
     ):
         """Solve to find the equilibrium configuration.
 
@@ -1871,7 +1870,6 @@ class Equilibrium(IOAble, Optimizable):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
-            zeta=zeta,
             copy=copy,
         )
 

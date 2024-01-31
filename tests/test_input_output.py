@@ -496,7 +496,7 @@ def test_ascii_io(DSHAPE_current, tmpdir_factory):
         sym=True
     )
     write_ascii(tmp_path, eq1)
-    with pytest.warns(UserWarning):
+    with pytest.warns(UserWarning, match="not an even power series"):
         eq2 = read_ascii(tmp_path)
     assert np.allclose(eq1.R_lmn, eq2.R_lmn)
     assert np.allclose(eq1.Z_lmn, eq2.Z_lmn)

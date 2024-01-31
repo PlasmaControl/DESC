@@ -534,7 +534,7 @@ class BoundaryLambdaSelfConsistency(_FixedObjective):
         self._A = np.zeros((self._dim_f, dim_L))
 
         if self._zeta == 0:
-            for i, (l, m, n) in enumerate(Lb_modes):  # eq.Lb_basis.modes   Lb_modes
+            for i, (l, m, n) in enumerate(Lb_modes):
                 j = np.argwhere(
                     np.logical_and(
                         (L_modes[:, :-1] == [l, m]).all(axis=1),

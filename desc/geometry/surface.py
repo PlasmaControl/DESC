@@ -885,7 +885,7 @@ class ZernikeRZToroidalSection(Surface):
 
 
 class PoincareSurface(ZernikeRZToroidalSection):
-    """A toroidal cross section represented by a Zernike polynomial in R,Z.
+    """UPDATE DOCSTRING.
 
     Parameters
     ----------
@@ -964,8 +964,6 @@ class PoincareSurface(ZernikeRZToroidalSection):
             self._L = max(surface.L, LL)
             self._M = max(surface.M, ML)
             self._N = surface.N
-            self.R_basis.change_resolution(L=self.L, M=self.M)
-            self.Z_basis.change_resolution(L=self.L, M=self.M)
             self._spectral_indexing = surface.spectral_indexing
             self._zeta = surface.zeta
             self._sym = surface._sym

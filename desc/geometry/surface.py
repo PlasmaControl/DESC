@@ -6,9 +6,10 @@ import warnings
 import numpy as np
 import scipy
 
-from desc.backend import jnp, put, sign
+from desc.backend import jit, jnp, put, root_scalar, sign, vmap
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.grid import Grid
+from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
@@ -51,8 +52,8 @@ class FourierRZToroidalSurface(Surface):
         "_Z_lmn",
         "_R_basis",
         "_Z_basis",
-        "rho",
         "_NFP",
+        "_rho",
     ]
 
     def __init__(
@@ -118,7 +119,7 @@ class FourierRZToroidalSurface(Surface):
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
         self._NFP = NFP
         self._sym = sym
-        self.rho = rho
+        self._rho = rho
 
         if check_orientation and self._compute_orientation() == -1:
             warnings.warn(
@@ -153,6 +154,15 @@ class FourierRZToroidalSurface(Surface):
     def Z_basis(self):
         """DoubleFourierSeries: Spectral basis for Z."""
         return self._Z_basis
+
+    @property
+    def rho(self):
+        """float: Flux surface label."""
+        return self._rho
+
+    @rho.setter
+    def rho(self, rho):
+        self._rho = rho
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
@@ -286,16 +296,7 @@ class FourierRZToroidalSurface(Surface):
             Surface with given Fourier coefficients.
 
         """
-        f = open(path)
-        isVMEC = False
-        for line in f.readlines():
-            if "&INDATA" in line.upper():
-                isVMEC = True
-                break
-        if isVMEC:  # vmec input, convert to desc
-            inputs = InputReader.parse_vmec_inputs(f)[-1]
-        else:
-            inputs = InputReader().parse_inputs(f)[-1]
+        inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
                 "boundary_ratio = {} != 1, surface may not be as expected".format(
@@ -490,6 +491,125 @@ class FourierRZToroidalSurface(Surface):
         )
         return surf
 
+    def constant_offset_surface(
+        self, offset, grid=None, M=None, N=None, full_output=False
+    ):
+        """Create a FourierRZSurface with constant offset from the base surface (self).
+
+        Implementation of algorithm described in Appendix B of
+        "An improved current potential method for fast computation of
+        stellarator coil shapes", Landreman (2017)
+        https://iopscience.iop.org/article/10.1088/1741-4326/aa57d4
+
+        NOTE: Must have the toroidal angle as the cylindrical toroidal angle
+        in order for this algorithm to work properly
+
+        Parameters
+        ----------
+        base_surface : FourierRZToroidalSurface
+            Surface from which the constant offset surface will be found.
+        offset : float
+            constant offset (in m) of the desired surface from the input surface
+            offset will be in the normal direction to the surface.
+        grid : Grid, optional
+            Grid object of the points on the given surface to evaluate the
+            offset points at, from which the offset surface will be created by fitting
+            offset points with the basis defined by the given M and N.
+            If None, defaults to a LinearGrid with M and N and NFP equal to the
+            base_surface.M and base_surface.N and base_surface.NFP
+        M : int, optional
+            Poloidal resolution of the basis used to fit the offset points
+            to create the resulting constant offset surface, by default equal
+            to base_surface.M
+        N : int, optional
+            Toroidal resolution of the basis used to fit the offset points
+            to create the resulting constant offset surface, by default equal
+            to base_surface.N
+        full_output : bool, optional
+            If True, also return a dict of useful data about the surfaces and a
+            tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+
+        Returns
+        -------
+        offset_surface : FourierRZToroidalSurface
+            FourierRZToroidalSurface, created from fitting points offset from the input
+            surface by the given constant offset.
+        data : dict
+            dictionary containing  the following data, in the cylindrical basis:
+                ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
+                    the base_surface evaluated at the input ``grid``
+                ``x`` : (``grid.num_nodes`` x 3) array of the position vectors on
+                    the base_surface evaluated at the input ``grid``
+                ``x_offset_surface`` : (``grid.num_nodes`` x 3) array of the
+                    position vectors on the offset surface, corresponding to the
+                    ``x`` points on the base_surface (i.e. the points to which the
+                    offset surface was fit)
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True
+
+        """
+        base_surface = self
+        if grid is None:
+            grid = LinearGrid(
+                M=base_surface.M * 2,
+                N=base_surface.N * 2,
+                NFP=base_surface.NFP,
+                sym=base_surface.sym,
+            )
+        assert isinstance(
+            base_surface, FourierRZToroidalSurface
+        ), "base_surface must be a FourierRZToroidalSurface!"
+        M = base_surface.M if M is None else int(M)
+        N = base_surface.N if N is None else int(N)
+
+        def n_and_r_jax(nodes):
+            data = base_surface.compute(
+                ["X", "Y", "Z", "n_rho"],
+                grid=Grid(nodes, jitable=True, sort=False),
+                method="jitable",
+            )
+
+            phi = nodes[:, 2]
+            re = jnp.vstack([data["X"], data["Y"], data["Z"]]).T
+            n = data["n_rho"]
+            n = rpz2xyz_vec(n, phi=phi)
+            r_offset = re + offset * n
+            return n, re, r_offset
+
+        def fun_jax(zeta_hat, theta, zeta):
+            nodes = jnp.vstack((jnp.ones_like(theta), theta, zeta_hat)).T
+            n, r, r_offset = n_and_r_jax(nodes)
+            return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
+
+        vecroot = jit(vmap(lambda x0, *p: root_scalar(fun_jax, x0, jac=None, args=p)))
+        zetas, (res, niter) = vecroot(
+            grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+        )
+
+        zetas = np.asarray(zetas)
+        nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
+        n, x, x_offsets = n_and_r_jax(nodes)
+
+        data = {}
+        data["n"] = xyz2rpz_vec(n, phi=nodes[:, 1])
+        data["x"] = xyz2rpz(x)
+        data["x_offset_surface"] = xyz2rpz(x_offsets)
+
+        offset_surface = FourierRZToroidalSurface.from_values(
+            data["x_offset_surface"],
+            theta=nodes[:, 1],
+            M=M,
+            N=N,
+            NFP=base_surface.NFP,
+            sym=base_surface.sym,
+        )
+        if full_output:
+            return offset_surface, data, (res, niter)
+        else:
+            return offset_surface
+
 
 class ZernikeRZToroidalSection(Surface):
     """A toroidal cross section represented by a Zernike polynomial in R,Z.
@@ -538,8 +658,8 @@ class ZernikeRZToroidalSection(Surface):
         "_Z_lmn",
         "_R_basis",
         "_Z_basis",
-        "zeta",
         "_spectral_indexing",
+        "_zeta",
     ]
 
     def __init__(
@@ -612,7 +732,7 @@ class ZernikeRZToroidalSection(Surface):
         self._sym = sym
         self._spectral_indexing = spectral_indexing
 
-        self.zeta = zeta
+        self._zeta = zeta
 
         if check_orientation and self._compute_orientation() == -1:
             warnings.warn(
@@ -639,6 +759,15 @@ class ZernikeRZToroidalSection(Surface):
     def Z_basis(self):
         """ZernikePolynomial: Spectral basis for Z."""
         return self._Z_basis
+
+    @property
+    def zeta(self):
+        """float: Toroidal angle."""
+        return self._zeta
+
+    @zeta.setter
+    def zeta(self, zeta):
+        self._zeta = zeta
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""

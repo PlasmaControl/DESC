@@ -378,7 +378,7 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Poloidal angle along the curve.",
     dim=1,
-    params=["theta_n", "surface", "secular_theta"],
+    params=["theta_n", "secular_theta"],
     transforms={
         "theta": [[0, 0, 0]],
         "grid": [],
@@ -403,7 +403,7 @@ def _theta_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
     units_long="None",
     description="Poloidal angle along the curve, derivative wrt curve parameter s.",
     dim=1,
-    params=["theta_n", "surface", "secular_theta"],
+    params=["theta_n", "secular_theta"],
     transforms={
         "theta": [[0, 0, 1]],
         "grid": [],
@@ -429,7 +429,7 @@ def _theta_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **
     description="Poloidal angle along the curve, second derivative "
     "wrt curve parameter s.",
     dim=1,
-    params=["theta_n", "surface"],
+    params=["theta_n"],
     transforms={
         "theta": [[0, 0, 2]],
     },
@@ -454,7 +454,9 @@ def _theta_ss_FourierRZWindingSurfaceCurve(
     description="Poloidal angle along the curve, third derivative wrt"
     " curve parameter s.",
     dim=1,
-    params=["theta_n", "surface"],
+    params=[
+        "theta_n",
+    ],
     transforms={
         "theta": [[0, 0, 3]],
     },
@@ -476,7 +478,7 @@ def _theta_sss_FourierRZWindingSurfaceCurve(
     units_long="None",
     description="Toroidal angle along the curve.",
     dim=1,
-    params=["zeta_n", "surface", "secular_zeta"],
+    params=["zeta_n", "secular_zeta"],
     transforms={
         "zeta": [[0, 0, 0]],
         "grid": [],
@@ -501,7 +503,7 @@ def _zeta_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwa
     units_long="None",
     description="Toroidal angle along the curve, derivative wrt curve parameter s.",
     dim=1,
-    params=["zeta_n", "surface", "secular_zeta"],
+    params=["zeta_n", "secular_zeta"],
     transforms={
         "zeta": [[0, 0, 1]],
         "grid": [],
@@ -527,7 +529,7 @@ def _zeta_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **k
     description="Toroidal angle along the curve, second derivative"
     " wrt curve parameter s.",
     dim=1,
-    params=["zeta_n", "surface"],
+    params=["zeta_n"],
     transforms={
         "zeta": [[0, 0, 2]],
     },
@@ -550,7 +552,7 @@ def _zeta_ss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **
     description="Toroidal angle along the curve, third derivative"
     " wrt curve parameter s.",
     dim=1,
-    params=["zeta_n", "surface"],
+    params=["zeta_n"],
     transforms={
         "zeta": [[0, 0, 3]],
     },

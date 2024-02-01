@@ -11,6 +11,7 @@ from desc.equilibrium.initial_guess import _initial_guess_surface
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
+    PoincareSurface,
     ZernikeRZToroidalSection,
 )
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
@@ -177,7 +178,7 @@ class TestConstructor:
         )
 
         eq = Equilibrium(**inputs)
-        assert eq.bdry_mode == "poincare"
+        assert isinstance(eq.surface, PoincareSurface)
         np.testing.assert_allclose(
             eq.Rb_lmn, [10.0, 0.2, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         )

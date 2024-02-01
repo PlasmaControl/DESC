@@ -1933,8 +1933,8 @@ class OmnigenousField(Optimizable, IOAble):
         if B_lm is None:
             self._B_lm = np.concatenate(
                 (
-                    np.ones((self.M_B,)),
-                    np.zeros((self.L_B * self.M_B,)),
+                    np.ones((self.M_B,)),  # constant |B| = 1 T
+                    np.zeros((self.L_B * self.M_B,)),  # same field on all flux surfaces
                 )
             )
         else:
@@ -1947,13 +1947,15 @@ class OmnigenousField(Optimizable, IOAble):
             self._x_lmn = x_lmn
 
         # TODO: should we not allow some types of helicity?
+        helicity_sign = sign(helicity[0]) * sign(helicity[1])
         warnif(
-            self.helicity != (0, self.NFP) and self.helicity[0] != 1,
+            self.helicity != (0, self.NFP * helicity_sign)
+            and abs(self.helicity[0]) != 1,
             UserWarning,
             "Typical helicity (M,N) has M=1.",
         )
         warnif(
-            self.helicity != (1, 0) and self.helicity[1] != self.NFP,
+            self.helicity != (helicity_sign, 0) and abs(self.helicity[1]) != self.NFP,
             UserWarning,
             "Typical helicity (M,N) has N=NFP.",
         )

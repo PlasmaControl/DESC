@@ -591,8 +591,10 @@ class Omnigenity(_Objective):
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
     eta_weight : float, optional
-        Weight applied to the bottom of the magnetic well (B_min) relative to the top
-        of the magnetic well (B_max). Default = 1, which weights all points equally.
+        Magnitude of relative weight as a function of η. Used to weight the minimum of
+        the magnetic well (B_min at η=0) relative to the maximum (B_max at η=±π/2).
+        For example, `eta_weight = 2` will weight the nodes at B_min twice as much as
+        the nodes at B_max. Default value of 1 weights all nodes equally.
     eq_fixed: bool, optional
         Whether the Equilibrium `eq` is fixed or not.
         If True, the equilibrium is fixed and its values are precomputed, which saves on
@@ -712,6 +714,11 @@ class Omnigenity(_Objective):
         errorif(field_grid.sym, msg="field_grid must not be symmetric")
         errorif(eq_grid.num_rho != 1, msg="eq_grid must be a single surface")
         errorif(field_grid.num_rho != 1, msg="field_grid must be a single surface")
+        errorif(
+            eq_grid.nodes[eq_grid.unique_rho_idx, 0]
+            != field_grid.nodes[field_grid.unique_rho_idx, :],
+            msg="eq_grid and field_grid must be the same surface",
+        )
 
         timer = Timer()
         if verbose > 0:
@@ -732,9 +739,8 @@ class Omnigenity(_Objective):
             grid=field_grid,
         )
 
-        # compute returns points on the grid of the field
-        # (dim_f = field_grid.num_nodes)
-        # so set quad_weights to the surface grid
+        # compute returns points on the grid of the field (dim_f = field_grid.num_nodes)
+        # so set quad_weights to the field grid
         # to avoid it being incorrectly set in the super build
         w = field_grid.weights
         w *= jnp.sqrt(field_grid.num_nodes)
@@ -784,17 +790,20 @@ class Omnigenity(_Objective):
 
         Parameters
         ----------
-        eq_params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        field_params : dict
-            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
+        params_1 : dict
+            If eq_fixed=True, dictionary of field degrees of freedom,
+            eg OmnigenousField.params_dict. Otherwise, dictionary of equilibrium degrees
+            of freedom, eg Equilibrium.params_dict.
+        params_2 : dict
+            If eq_fixed=False and field_fixed=False, dictionary of field degrees of
+            freedom, eg OmnigenousField.params_dict. Otherwise None.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
 
         Returns
         -------
-        f : ndarray
+        omnigenity_error : ndarray
             Omnigenity error at each node (T).
 
         """
@@ -836,7 +845,7 @@ class Omnigenity(_Objective):
                 iota=eq_data["iota"][0],
             )
 
-        # additional computation
+        # additional computations that cannot be part of the regular compute API
         nodes = jnp.vstack(
             (
                 jnp.zeros_like(field_data["theta_B"]),
@@ -847,11 +856,11 @@ class Omnigenity(_Objective):
         B_eta_alpha = jnp.matmul(
             constants["eq_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
         )
-        omnigenity = B_eta_alpha - field_data["|B|_omni"]
+        omnigenity_error = B_eta_alpha - field_data["|B|_omni"]
         weights = (self.eta_weight + 1) / 2 + (self.eta_weight - 1) / 2 * jnp.cos(
             field_data["eta"]
         )
-        return omnigenity * weights
+        return omnigenity_error * weights
 
 
 class Isodynamicity(_Objective):

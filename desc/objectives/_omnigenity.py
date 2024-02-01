@@ -783,7 +783,8 @@ class Omnigenity(_Objective):
             # average |B| on axis
             self._normalization = jnp.mean(field.B_lm[: field.M_B])
             errorif(
-                self.normalization < 0, "|B| on axis is negative! Check B_lm input."
+                self.normalization <= 0,
+                "|B| on axis is not positive! Check B_lm input.",
             )
 
         super().build(use_jit=use_jit, verbose=verbose)

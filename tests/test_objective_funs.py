@@ -622,13 +622,12 @@ class TestQuadraticFlux:
         return nonaxisym_field
 
     @pytest.mark.unit
-    def test_quadratic_flux(self):
+    def test_quadratic_flux(self, quadratic_flux_equilibriums):
         """Test calculation of quadratic flux on the boundary."""
         t_field = ToroidalMagneticField(1, 1)
 
         # test that torus (axisymmetric) Bnorm is exactly 0
-        eq = Equilibrium()
-        eq.solve()
+        __, eq, __ = quadratic_flux_equilibriums
         obj = QuadraticFlux(t_field, eq, eq_fixed=True)
         obj.build(eq)
         f = obj.compute(params_1=t_field.params_dict)

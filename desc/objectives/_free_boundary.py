@@ -962,8 +962,7 @@ class QuadraticFlux(_Objective):
         Bext = self._ext_field.compute_magnetic_field(
             x, grid=self._field_grid, basis="rpz", params=field_params
         )
-        print(f"{np.shape(Bext)=}")
-        print(f"{np.shape(Bplasma)=}")
+
         f = jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)
         return f
 

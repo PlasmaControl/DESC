@@ -99,6 +99,35 @@ class TestCoil:
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit
+    def test_adding_MagneticField_with_Coil_or_CoilSet(self):
+        """Test MagneticField plus Coil/CoilSet and vice versa."""
+        R = 2
+        y = 1
+        I = 1e7
+        B_Z = 2  # add constant vertical field of 2T
+        By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        B_true = np.array([0, By_true, 2])
+        coil = FourierXYZCoil(I)
+        coilset = CoilSet(coil)
+        mixedcoilset = MixedCoilSet(coil)
+
+        field1 = coil + VerticalMagneticField(B_Z)
+        field2 = VerticalMagneticField(B_Z) + coil
+        # coilset + magnetic field (tests __radd__ of field)
+        field3 = coilset + VerticalMagneticField(B_Z)
+        field4 = VerticalMagneticField(B_Z) + coilset
+        field5 = mixedcoilset + VerticalMagneticField(B_Z)
+        field6 = VerticalMagneticField(B_Z) + mixedcoilset
+
+        for i, field in enumerate([field1, field2, field3, field4, field5, field6]):
+            B_approx = field.compute_magnetic_field(
+                Grid([[10, y, 0], [10, -y, 0]]), basis="xyz", grid=100
+            )[0]
+            np.testing.assert_allclose(
+                B_true, B_approx, rtol=1e-3, atol=1e-10, err_msg=f"field {i}"
+            )
+
+    @pytest.mark.unit
     def test_converting_coil_types(self):
         """Test conversions between coil representations."""
         s = np.linspace(0, 2 * np.pi, 100, endpoint=False)

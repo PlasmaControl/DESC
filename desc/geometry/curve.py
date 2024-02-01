@@ -457,7 +457,9 @@ class FourierXYZCurve(Curve):
         Y = coords_xyz[:, 1]
         Z = coords_xyz[:, 2]
 
-        X, Y, Z, closedX, closedY, closedZ, _ = _unclose_curve(X, Y, Z)
+        X, Y, Z, closedX, closedY, closedZ, input_curve_was_closed = _unclose_curve(
+            X, Y, Z
+        )
 
         if isinstance(s, str):
             assert s == "arclength", f"got unknown specification for s {s}"
@@ -473,6 +475,7 @@ class FourierXYZCurve(Curve):
             s = np.linspace(0, 2 * np.pi, X.size, endpoint=False)
         else:
             s = np.atleast_1d(s)
+            s = s[:-1] if input_curve_was_closed else s
             errorif(
                 not np.all(np.diff(s) > 0),
                 ValueError,
@@ -484,9 +487,9 @@ class FourierXYZCurve(Curve):
         grid = LinearGrid(zeta=s, NFP=1, sym=False)
         basis = FourierSeries(N=N, NFP=1, sym=False)
         transform = Transform(grid, basis, build_pinv=True)
-        X_n = transform.fit(coords_xyz[:, 0])
-        Y_n = transform.fit(coords_xyz[:, 1])
-        Z_n = transform.fit(coords_xyz[:, 2])
+        X_n = transform.fit(X)
+        Y_n = transform.fit(Y)
+        Z_n = transform.fit(Z)
         return FourierXYZCurve(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
 
 

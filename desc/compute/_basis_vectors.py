@@ -4421,6 +4421,44 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="n_rho_z",
+    label="\\partial_{\\zeta}\\hat{\\mathbf{n}}_{\\rho}",
+    units="~",
+    units_long="None",
+    description="Unit vector normal to constant rho surface (direction of e^rho),"
+    " derivative wrt toroidal angle",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta",
+        "e_theta_z",
+        "e_zeta",
+        "e_zeta_z",
+        "|e_theta x e_zeta|",
+        "|e_theta x e_zeta|_z",
+        "n_rho",
+    ],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _n_rho_z(params, transforms, profiles, data, **kwargs):
+    data["n_rho_z"] = (
+        cross(data["e_theta_z"], data["e_zeta"])
+        + cross(data["e_theta"], data["e_zeta_z"])
+    ) / data["|e_theta x e_zeta|"][:, None] - data["n_rho"] / (
+        data["|e_theta x e_zeta|"][:, None]
+    ) * (
+        data["|e_theta x e_zeta|_z"][:, None]
+    )
+    return data
+
+
+@register_compute_fun(
     name="n_theta",
     label="\\hat{\\mathbf{n}}_{\\theta}",
     units="~",

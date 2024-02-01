@@ -613,7 +613,9 @@ class TestMagneticFields:
         )
         eq = get("DSHAPE")  # equilibrium with finite beta and current
         with pytest.warns(UserWarning):
-            field.run_regcoil(eq)
+            field.run_regcoil(
+                eq, source_grid=LinearGrid(M=1), eval_grid=LinearGrid(M=1), verbose=0
+            )
 
     @pytest.mark.slow
     @pytest.mark.unit

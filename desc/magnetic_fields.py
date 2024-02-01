@@ -2039,9 +2039,9 @@ class FourierCurrentPotentialField(
                 + f" got type {type(external_field)} "
             )
         if source_grid is None:
-            source_grid = LinearGrid(M=30, N=30, NFP=eq.NFP)
+            source_grid = LinearGrid(M=30, N=30, NFP=int(eq.NFP))
         if eval_grid is None:
-            eval_grid = LinearGrid(M=30, N=30, NFP=eq.NFP, sym=eq.sym)
+            eval_grid = LinearGrid(M=30, N=30, NFP=int(eq.NFP), sym=eq.sym)
         if normalize:
             B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
             # just need it for normalization, so do a simple mean
@@ -2068,7 +2068,7 @@ class FourierCurrentPotentialField(
                 G_ext = external_field.G
             except AttributeError:
                 curve_grid = LinearGrid(
-                    N=eq.NFP * 1000,
+                    N=int(eq.NFP) * 1000,
                     theta=jnp.array(jnp.pi),
                     rho=jnp.array(1.0),
                     endpoint=True,

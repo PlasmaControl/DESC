@@ -1081,7 +1081,7 @@ class FourierRZWindingSurfaceCurve(Curve):
     @property
     def secular_theta(self):
         """Secular (in t) coefficient for theta."""
-        return self._theta_n
+        return self._secular_theta
 
     @secular_theta.setter
     def secular_theta(self, new):
@@ -1091,7 +1091,7 @@ class FourierRZWindingSurfaceCurve(Curve):
     @property
     def secular_zeta(self):
         """Secular (in t) coefficient for zeta."""
-        return self._zeta_n
+        return self._secular_zeta
 
     @secular_zeta.setter
     def secular_zeta(self, new):

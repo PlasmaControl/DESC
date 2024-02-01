@@ -11,6 +11,8 @@ from desc.compute import get_params, rpz2xyz, xyz2rpz_vec
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierRZToroidalSurface,
+    FourierRZWindingSurfaceCurve,
     FourierXYZCurve,
     SplineXYZCurve,
 )
@@ -343,6 +345,66 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         name="",
     ):
         super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
+
+
+class FourierRZWindingSurfaceCoil(_Coil, FourierRZWindingSurfaceCurve):
+    """Coil parameterized by Fourier series for theta,zeta in terms of parameter s.
+
+    This curve will lie on the given winding surface, parameterized by a
+    Fourier series given by Rb_mn and Zb_mn.
+
+    Parameters
+    ----------
+    current : float
+        current through coil, in Amperes
+    surface : FourierRZToroidalSurface
+        Winding surface that the coil will lie on.
+    theta_n, zeta_n: array-like
+        Fourier coefficients for theta, zeta in terms of curve parameter s.
+    modes_theta : array-like, optional
+        Mode numbers associated with theta_n. If not given defaults to [-n:n].
+    modes_zeta : array-like, optional
+        Mode numbers associated with zeta_n, If not given defaults to [-n:n]].
+    sym_theta : {"cos", "sin", False}, optional
+        Whether to enforce symmetry for the theta(t) Fourier series. Defaults to "sin"
+    sym_zeta : {"cos", "sin", False}, optional
+        Whether to enforce symmetry for the zeta(t) Fourier series. Defaults to "sin"
+    name : str
+        Name for this coil.
+
+    """
+
+    _io_attrs_ = _Coil._io_attrs_ + FourierRZWindingSurfaceCurve._io_attrs_
+
+    def __init__(
+        self,
+        current=1,
+        surface=None,
+        theta_n=1,
+        zeta_n=1,
+        secular_theta=1.0,
+        secular_zeta=1.0,
+        modes_theta=None,
+        modes_zeta=None,
+        sym_theta="sin",
+        sym_zeta="sin",
+        name="",
+    ):
+        if surface is None:
+            surface = FourierRZToroidalSurface()
+        super().__init__(
+            current,
+            surface,
+            theta_n,
+            zeta_n,
+            secular_theta,
+            secular_zeta,
+            modes_theta,
+            modes_zeta,
+            sym_theta,
+            sym_zeta,
+            name,
+        )
 
 
 class FourierXYZCoil(_Coil, FourierXYZCurve):

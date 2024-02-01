@@ -1112,3 +1112,18 @@ def test_optimize_multiple_things_different_order():
     # ensure eq did not change
     for key in eq.params_dict.keys():
         np.testing.assert_allclose(eq2.params_dict[key], eq.params_dict[key])
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_optimize_with_single_constraint():
+    """Tests that Optimizer.optimize prints afterwards with a single constraint."""
+    eq = Equilibrium()
+    optimizer = Optimizer("lsq-exact")
+    objectective = ObjectiveFunction(GenericObjective("|B|", eq))
+    constraints = FixParameter(  # Psi is not constrained
+        eq, ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "p_l", "c_l"]
+    )
+
+    # test depends on verbose > 0
+    optimizer.optimize(eq, objective=objectective, constraints=constraints, verbose=2)

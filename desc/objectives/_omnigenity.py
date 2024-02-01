@@ -714,9 +714,10 @@ class Omnigenity(_Objective):
         errorif(field_grid.sym, msg="field_grid must not be symmetric")
         errorif(eq_grid.num_rho != 1, msg="eq_grid must be a single surface")
         errorif(field_grid.num_rho != 1, msg="field_grid must be a single surface")
+        print()
         errorif(
             eq_grid.nodes[eq_grid.unique_rho_idx, 0]
-            != field_grid.nodes[field_grid.unique_rho_idx, :],
+            != field_grid.nodes[field_grid.unique_rho_idx, 0],
             msg="eq_grid and field_grid must be the same surface",
         )
 
@@ -783,7 +784,7 @@ class Omnigenity(_Objective):
             # average |B| on axis
             self._normalization = jnp.mean(field.B_lm[: field.M_B])
             errorif(
-                self.normalization <= 0,
+                self._normalization <= 0,
                 "|B| on axis is not positive! Check B_lm input.",
             )
 

@@ -1,5 +1,7 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
+from desc.geometry import PoincareSurface
+
 from ._equilibrium import (
     CurrentDensity,
     Energy,
@@ -232,7 +234,9 @@ def maybe_add_self_consistency(eq, constraints):
         constraints += (BoundaryRSelfConsistency(eq=eq),)
     if not _is_any_instance(constraints, BoundaryZSelfConsistency):
         constraints += (BoundaryZSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, BoundaryLambdaSelfConsistency):
+    if not _is_any_instance(constraints, BoundaryLambdaSelfConsistency) and isinstance(
+        eq.surface, PoincareSurface
+    ):
         constraints += (BoundaryLambdaSelfConsistency(eq=eq),)
     if not _is_any_instance(constraints, FixLambdaGauge):
         constraints += (FixLambdaGauge(eq=eq),)

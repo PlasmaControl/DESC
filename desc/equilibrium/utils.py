@@ -79,8 +79,6 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
     surface : Surface
         Parsed surface object, either FourierRZToroidalSurface or
         ZernikeRZToroidalSection.
-    bdry_mode : str
-        Either "lcfs" or "poincare"
     """
     if isinstance(surface, Surface):
         surface = surface
@@ -111,11 +109,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
     else:
         raise TypeError("Got unknown surface type {}".format(surface))
 
-    if isinstance(surface, FourierRZToroidalSurface):
-        bdry_mode = "lcfs"
-    if isinstance(surface, ZernikeRZToroidalSection):
-        bdry_mode = "poincare"
-    return surface, bdry_mode
+    return surface
 
 
 def parse_axis(axis, NFP=1, sym=True, surface=None):

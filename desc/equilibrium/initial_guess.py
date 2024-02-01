@@ -101,7 +101,6 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
                 eq.Rb_lmn,
                 eq.surface.R_basis,
                 axisR,
-                eq.bdry_mode,
                 coord,
             )
             eq.Z_lmn = _initial_guess_surface(
@@ -109,7 +108,6 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
                 eq.Zb_lmn,
                 eq.surface.Z_basis,
                 axisZ,
-                eq.bdry_mode,
                 coord,
             )
         else:
@@ -253,7 +251,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
     return eq
 
 
-def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=None):
+def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, coord=None):
     """Create an initial guess from boundary coefficients and a magnetic axis guess.
 
     Parameters
@@ -266,11 +264,6 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         basis of the boundary surface (for Rb or Zb)
     axis : ndarray, shape(num_modes,2)
         coefficients of the magnetic axis. axis[i, :] = [n, x0].
-        Only used for 'lcfs' boundary mode. Defaults to m=0 modes of boundary
-    mode : str
-        One of 'lcfs', 'poincare'.
-        Whether the boundary condition is specified by the last closed flux surface
-        (rho=1) or the Poincare section (zeta=0).
     coord : float or None
         Surface label (ie, rho, zeta, etc.) for supplied surface.
 
@@ -285,14 +278,13 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
     b_lmn = jnp.asarray(b_lmn)
     x_lmn = jnp.zeros((x_basis.num_modes,))
 
-    if mode is None:
-        # auto-detect based on mode numbers
-        if np.all(b_basis.modes[:, 0] == 0):
-            mode = "lcfs"
-        elif np.all(b_basis.modes[:, 2] == 0):
-            mode = "poincare"
-        else:
-            raise ValueError("Surface should have either l=0 or n=0")
+    if np.all(b_basis.modes[:, 0] == 0):
+        mode = "lcfs"
+    elif np.all(b_basis.modes[:, 2] == 0):
+        mode = "poincare"
+    else:
+        raise ValueError("Surface should have either l=0 or n=0")
+
     if mode == "lcfs":
         if coord is None:
             coord = 1.0

@@ -18,7 +18,7 @@ from desc.basis import (
     zernike_radial,
     zernike_radial_coeffs,
 )
-from desc.geometry import ZernikeRZToroidalSection
+from desc.geometry import FourierRZToroidalSurface, PoincareSurface
 from desc.utils import errorif, setdefault
 
 from .normalization import compute_scaling_factors
@@ -270,7 +270,7 @@ class BoundaryRSelfConsistency(_Objective):
         self._dim_f = eq.surface.R_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
 
-        if eq.bdry_mode == "lcfs":
+        if isinstance(eq.surface, FourierRZToroidalSurface):
             for i, (l, m, n) in enumerate(eq.R_basis.modes):
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
                 surf = (
@@ -279,7 +279,7 @@ class BoundaryRSelfConsistency(_Objective):
                     else self._surface_label
                 )
                 self._A[j, i] = zernike_radial(surf, l, m)
-        elif eq.bdry_mode == "poincare":
+        elif isinstance(eq.surface, PoincareSurface):
             if eq.surface.zeta == 0:
                 for i, (l, m, n) in enumerate(modes):
                     j = np.argwhere(
@@ -399,7 +399,7 @@ class BoundaryZSelfConsistency(_Objective):
         self._dim_f = eq.surface.Z_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
 
-        if eq.bdry_mode == "lcfs":
+        if isinstance(eq.surface, FourierRZToroidalSurface):
             for i, (l, m, n) in enumerate(eq.Z_basis.modes):
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
                 surf = (
@@ -408,7 +408,7 @@ class BoundaryZSelfConsistency(_Objective):
                     else self._surface_label
                 )
                 self._A[j, i] = zernike_radial(surf, l, m)
-        elif eq.bdry_mode == "poincare":
+        elif isinstance(eq.surface, PoincareSurface):
             if eq.surface.zeta == 0:
                 for i, (l, m, n) in enumerate(modes):
                     j = np.argwhere(
@@ -602,12 +602,10 @@ class SecondBoundaryRSelfConsistency(_Objective):
         zeta=0,
         surface=None,
     ):
-        if isinstance(surface, ZernikeRZToroidalSection):
+        if isinstance(surface, PoincareSurface):
             self._surface = surface
         else:
-            raise TypeError(
-                "Second surface has to be defined as ZernikeRZToroidalSection"
-            )
+            raise TypeError("Second surface has to be defined as PoincareSurface")
         self._zeta = zeta or 0
         self._surface_label = surface_label
         self._args = ["R_lmn"]
@@ -639,7 +637,7 @@ class SecondBoundaryRSelfConsistency(_Objective):
         self._dim_f = self._surface.R_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
 
-        if eq.bdry_mode == "poincare":
+        if isinstance(eq.surface, PoincareSurface):
             if self._zeta == 0:
                 for i, (l, m, n) in enumerate(modes):
                     j = np.argwhere(
@@ -713,12 +711,10 @@ class SecondBoundaryZSelfConsistency(_Objective):
         zeta=0,
         surface=None,
     ):
-        if isinstance(surface, ZernikeRZToroidalSection):
+        if isinstance(surface, PoincareSurface):
             self._surface = surface
         else:
-            raise TypeError(
-                "Second surface has to be defined as ZernikeRZToroidalSection"
-            )
+            raise TypeError("Second surface has to be defined as PoincareSurface")
         self._zeta = zeta or 0
         self._surface_label = surface_label
         self._args = ["Z_lmn"]
@@ -750,7 +746,7 @@ class SecondBoundaryZSelfConsistency(_Objective):
         self._dim_f = self._surface.Z_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
 
-        if eq.bdry_mode == "poincare":
+        if isinstance(eq.surface, PoincareSurface):
             if self._zeta == 0:
                 for i, (l, m, n) in enumerate(modes):
                     j = np.argwhere(

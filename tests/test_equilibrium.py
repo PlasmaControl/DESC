@@ -401,7 +401,6 @@ def test_poincare_sfl_bc(
         M_grid=eq.M_grid,  # real space poloidal resolution, slightly oversampled
         N_grid=eq.N_grid,  # real space toroidal resolution
         sym=True,  # explicitly enforce stellarator symmetry
-        bdry_mode="poincare",
         spectral_indexing=eq.spectral_indexing,
     )
     eq_poin.L_lmn = (

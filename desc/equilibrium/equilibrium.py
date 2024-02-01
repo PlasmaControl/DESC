@@ -150,7 +150,6 @@ class Equilibrium(IOAble, Optimizable):
         "_atomic_number",
         "_anisotropy",
         "_spectral_indexing",
-        "_bdry_mode",
         "_L_grid",
         "_M_grid",
         "_N_grid",
@@ -229,7 +228,7 @@ class Equilibrium(IOAble, Optimizable):
         self._Z_sym = "sin" if self.sym else False
 
         # surface
-        self._surface, self._bdry_mode = parse_surface(
+        self._surface = parse_surface(
             surface, self.NFP, self.sym, self.spectral_indexing
         )
 
@@ -787,7 +786,6 @@ class Equilibrium(IOAble, Optimizable):
             M_grid=self.M_grid,  # real space poloidal resolution, slightly oversampled
             N_grid=self.N_grid,  # real space toroidal resolution
             sym=True,  # explicitly enforce stellarator symmetry
-            bdry_mode="poincare",
             spectral_indexing=self._spectral_indexing,
         )
 
@@ -1215,15 +1213,6 @@ class Equilibrium(IOAble, Optimizable):
     def sym(self):
         """bool: Whether this equilibrium is stellarator symmetric."""
         return self._sym
-
-    @property
-    def bdry_mode(self):
-        """str: Method for specifying boundary condition."""
-        return self._bdry_mode
-
-    @bdry_mode.setter
-    def bdry_mode(self, bdry_mode):
-        self._bdry_mode = bdry_mode
 
     @optimizable_parameter
     @property

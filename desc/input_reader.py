@@ -178,7 +178,6 @@ class InputReader:
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
-            "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
             "current": np.atleast_2d((0, 0.0)),
@@ -378,11 +377,6 @@ class InputReader:
                     + "in a python script."
                 )
                 flag = True
-            match = re.search(r"bdry_mode", argument, re.IGNORECASE)
-            if match:
-                inputs["bdry_mode"] = words[0].lower()
-                flag = True
-                # TODO: set bdry_mode automatically based on bdry coeffs
 
             # coefficient indices
             match = re.search(r"l\s*:\s*" + num_form, command, re.IGNORECASE)

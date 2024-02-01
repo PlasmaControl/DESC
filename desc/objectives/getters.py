@@ -119,7 +119,6 @@ def get_fixed_boundary_constraints(
     eq,
     profiles=True,
     normalize=True,
-    poincare_lambda=False,
 ):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
@@ -146,8 +145,6 @@ def get_fixed_boundary_constraints(
         FixBoundaryZ(eq=eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
-    if poincare_lambda:
-        constraints += (BoundaryLambdaSelfConsistency(eq=eq),)
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
@@ -235,6 +232,8 @@ def maybe_add_self_consistency(eq, constraints):
         constraints += (BoundaryRSelfConsistency(eq=eq),)
     if not _is_any_instance(constraints, BoundaryZSelfConsistency):
         constraints += (BoundaryZSelfConsistency(eq=eq),)
+    if not _is_any_instance(constraints, BoundaryLambdaSelfConsistency):
+        constraints += (BoundaryLambdaSelfConsistency(eq=eq),)
     if not _is_any_instance(constraints, FixLambdaGauge):
         constraints += (FixLambdaGauge(eq=eq),)
     if not _is_any_instance(constraints, AxisRSelfConsistency):

@@ -703,6 +703,7 @@ class QuadraticFlux(_Objective):
         field_grid=None,
         eq_fixed=False,
         field_fixed=False,
+        vacuum=False,
         name="Quadratic flux",
     ):
         self._src_grid = src_grid
@@ -714,6 +715,7 @@ class QuadraticFlux(_Objective):
         self._field_grid = field_grid
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
+        self._vacuum = vacuum
         if not eq_fixed and not field_fixed:
             things = [ext_field, eq]
         elif eq_fixed and not field_fixed:
@@ -829,21 +831,29 @@ class QuadraticFlux(_Objective):
             quad_weights=w,
         )
 
-        if self._eq_fixed:
-            params = eq.params_dict
-
+        if self._vacuum:
             eval_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,
-                params=params,
+                params=eq.params_dict,
                 transforms=eval_transforms,
                 profiles=eval_profiles,
             )
+            Bplasma = np.zeros(np.shape(eval_grid.nodes))
+            self._constants.update(Bplasma=Bplasma, eval_data=eval_data)
 
+        elif self._eq_fixed:
+            eval_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._data_keys,
+                params=eq.params_dict,
+                transforms=eval_transforms,
+                profiles=eval_profiles,
+            )
             src_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,
-                params=params,
+                params=eq.params_dict,
                 transforms=src_transforms,
                 profiles=src_profiles,
             )
@@ -908,7 +918,7 @@ class QuadraticFlux(_Objective):
             eq_params = params_2
 
         # Now, calculate Bplasma and Bext
-        if self._eq_fixed:
+        if self._eq_fixed or self._vacuum:
             eval_data = constants["eval_data"]
             Bplasma = constants["Bplasma"]
         else:
@@ -950,7 +960,8 @@ class QuadraticFlux(_Objective):
         Bext = self._ext_field.compute_magnetic_field(
             x, grid=self._field_grid, basis="rpz", params=field_params
         )
-
+        print(f"{np.shape(Bext)=}")
+        print(f"{np.shape(Bplasma)=}")
         f = jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)
         return f
 

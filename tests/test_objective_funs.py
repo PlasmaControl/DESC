@@ -864,6 +864,24 @@ class TestObjectiveFunction:
         # to get to Bnorm = 0
         np.testing.assert_allclose(things[0].B0, 0, atol=1e-3)
 
+    def test_quadratic_flux_vacuum(self, quadratic_flux_equilibriums):
+        """Test vacuum flag."""
+        # equilibrium that has Bplasma != 0
+        eq, __, __ = quadratic_flux_equilibriums
+        t_field = ToroidalMagneticField(1, 1)
+
+        obj = QuadraticFlux(
+            t_field,
+            eq,
+            eq_fixed=True,
+            vacuum=True,
+        )
+        Bnorm = t_field.compute_Bnormal(eq.surface)[0]
+        obj.build(eq)
+        f = obj.compute(params_1=t_field.params_dict)
+
+        np.testing.assert_allclose(f, Bnorm, atol=1e-14)
+
     @pytest.mark.unit
     def test_target_mean_iota(self):
         """Test calculation of iota profile average."""

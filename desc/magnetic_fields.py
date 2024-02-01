@@ -1854,12 +1854,12 @@ class FourierCurrentPotentialField(
 
 
 class OmnigenousField(Optimizable, IOAble):
-    """Model field with perfect omnigenity.
+    """A magnetic field with perfect omnigenity (but is not necessarily analytic).
 
     Notes
     -----
-    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in flux
-    coordinates, not vector B in lab coordinates.
+    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in
+    computational coordinates, not vector B in lab coordinates.
 
     Parameters
     ----------

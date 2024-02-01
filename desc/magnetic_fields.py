@@ -1861,63 +1861,89 @@ class OmnigenousField(Optimizable, IOAble):
     Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in flux
     coordinates, not vector B in lab coordinates.
 
+    Parameters
+    ----------
+    L_B : int
+        Resolution of the radial Chebyshev polynomials for magnetic well parameters.
+    M_B : int
+        Number of monotonic spline knots per surface of the magnetic well parameters.
+    L_x : int
+        Resolution of the radial Chebyshev polynomials for the omnigenity parameters.
+    M_x : int
+        Resolution of the Fourier series in eta for the omnigenity parameters.
+    N_x : int
+        Resolution of the Fourier series in alpha for the omnigenity parameters.
+    NFP : int
+        Number of field periods.
+    helicity : tuple, optional
+        Type of pseudo-symmetry (M, N). Default = toroidal contours (1, 0).
+    B_lm : ndarray, optional
+        Magnetic well parameters describing |B|(ρ,η). These values are a flattened 2D
+        array of shape (L_B + 1, M_B), where the rows are Chebyshev coefficients
+        corresponding to the modes in `B_basis` for the radial variation, and the
+        columns are the values of |B| atlinearly spaced monotonic spline knots.
+        If not supplied, `B_lm` defaults to a constant field of 1 T.
+    x_lmn : ndarray, optional
+        Omnigenity parameters describing h(ρ,η,α). The coefficients correspond to the
+        modes in `x_basis`. If not supplied, `x_lmn` defaults to zero for all modes.
+
     """
 
     _io_attrs_ = [
-        "_L_well",
-        "_M_well",
-        "_L_shift",
-        "_M_shift",
-        "_N_shift",
+        "_L_B",
+        "_M_B",
+        "_L_x",
+        "_M_x",
+        "_N_x",
         "_NFP",
         "_helicity",
-        "_well_basis",
-        "_shift_basis",
+        "_B_basis",
+        "_x_basis",
         "_B_lm",
         "_x_lmn",
     ]
 
     def __init__(
         self,
-        L_well=0,
-        M_well=2,
-        L_shift=0,
-        M_shift=0,
-        N_shift=0,
+        L_B=0,
+        M_B=2,
+        L_x=0,
+        M_x=0,
+        N_x=0,
         NFP=1,
         helicity=(1, 0),
         B_lm=None,
         x_lmn=None,
     ):
-        self._L_well = int(L_well)
-        self._M_well = int(M_well)
-        self._L_shift = int(L_shift)
-        self._M_shift = int(M_shift)
-        self._N_shift = int(N_shift)
+        self._L_B = int(L_B)
+        self._M_B = int(M_B)
+        self._L_x = int(L_x)
+        self._M_x = int(M_x)
+        self._N_x = int(N_x)
         self._NFP = int(NFP)
         self.helicity = helicity
-        self._well_basis = ChebyshevPolynomial(L=self.L_well)
-        self._shift_basis = ChebyshevDoubleFourierBasis(
-            L=self.L_shift,
-            M=self.M_shift,
-            N=self.N_shift,
+        self._B_basis = ChebyshevPolynomial(L=self.L_B)
+        self._x_basis = ChebyshevDoubleFourierBasis(
+            L=self.L_x,
+            M=self.M_x,
+            N=self.N_x,
             NFP=self.NFP,
             sym="cos(t)",
         )
         if B_lm is None:
             self._B_lm = np.concatenate(
                 (
-                    np.ones((self.M_well,)),
-                    np.zeros((self.L_well * self.M_well,)),
+                    np.ones((self.M_B,)),
+                    np.zeros((self.L_B * self.M_B,)),
                 )
             )
         else:
-            assert len(B_lm) == (self.L_well + 1) * self.M_well
+            assert len(B_lm) == (self.L_B + 1) * self.M_B
             self._B_lm = B_lm
         if x_lmn is None:
-            self._x_lmn = np.zeros(self.shift_basis.num_modes)
+            self._x_lmn = np.zeros(self.x_basis.num_modes)
         else:
-            assert len(x_lmn) == self.shift_basis.num_modes
+            assert len(x_lmn) == self.x_basis.num_modes
             self._x_lmn = x_lmn
 
         # TODO: should we not allow some types of helicity?
@@ -1934,75 +1960,74 @@ class OmnigenousField(Optimizable, IOAble):
 
     def change_resolution(
         self,
-        L_well=None,
-        M_well=None,
-        L_shift=None,
-        M_shift=None,
-        N_shift=None,
+        L_B=None,
+        M_B=None,
+        L_x=None,
+        M_x=None,
+        N_x=None,
         NFP=None,
     ):
         """Set the spectral resolution of well and shift terms.
 
         Parameters
         ----------
-        L_well : int
+        L_B : int
             Radial resolution of the magnetic well parameters B_lm.
-        M_well : int
+        M_B : int
             Number of spline points in the magnetic well parameters B_lm.
-        L_shift : int
+        L_x : int
             Radial resolution of x_lmn.
-        M_shift : int
+        M_x : int
             Poloidal resolution of x_lmn.
-        N_shift : int
+        N_x : int
             Toroidal resolution of x_lmn.
         NFP : int
             Number of field periods.
 
         """
-        old_L_well = self.L_well
+        old_L_B = self.L_B
 
         self._NFP = setdefault(NFP, self.NFP)
-        self._L_well = setdefault(L_well, self.L_well)
-        self._M_well = setdefault(M_well, self.M_well)
-        self._L_shift = setdefault(L_shift, self.L_shift)
-        self._M_shift = setdefault(M_shift, self.M_shift)
-        self._N_shift = setdefault(N_shift, self.N_shift)
+        self._L_B = setdefault(L_B, self.L_B)
+        self._M_B = setdefault(M_B, self.M_B)
+        self._L_x = setdefault(L_x, self.L_x)
+        self._M_x = setdefault(M_x, self.M_x)
+        self._N_x = setdefault(N_x, self.N_x)
 
         # change well parameters and basis
         rho = (  # Chebyshev-Gauss-Lobatto nodes
-            1
-            - np.cos(np.arange(old_L_well // 2, old_L_well + 1, 1) * np.pi / old_L_well)
+            1 - np.cos(np.arange(old_L_B // 2, old_L_B + 1, 1) * np.pi / old_L_B)
         ) / 2
         nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
 
-        transform_fwd = self.well_basis.evaluate(nodes)
+        transform_fwd = self.B_basis.evaluate(nodes)
         transform_rev = scipy.linalg.pinv(transform_fwd)
-        B_old = transform_fwd @ self.B_lm.reshape((old_L_well + 1, -1))
+        B_old = transform_fwd @ self.B_lm.reshape((old_L_B + 1, -1))
 
         eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])
-        eta_new = np.linspace(0, jnp.pi / 2, num=self.M_well)
+        eta_new = np.linspace(0, jnp.pi / 2, num=self.M_B)
 
-        B_new = np.zeros((old_L_well + 1, self.M_well))
-        for i in range(old_L_well + 1):
+        B_new = np.zeros((old_L_B + 1, self.M_B))
+        for i in range(old_L_B + 1):
             B_new[i, :] = interp1d(eta_new, eta_old, B_old[i, :], method="monotonic-0")
         B_lm_old = transform_rev @ B_new
 
-        old_modes_well = self.well_basis.modes
-        self.well_basis.change_resolution(self.L_well)
+        old_modes_well = self.B_basis.modes
+        self.B_basis.change_resolution(self.L_B)
 
-        B_lm_new = np.zeros((self.L_well + 1, self.M_well))
-        for j in range(self.M_well):
+        B_lm_new = np.zeros((self.L_B + 1, self.M_B))
+        for j in range(self.M_B):
             B_lm_new[:, j] = copy_coeffs(
-                B_lm_old[:, j], old_modes_well, self.well_basis.modes
+                B_lm_old[:, j], old_modes_well, self.B_basis.modes
             )
         self._B_lm = B_lm_new.flatten()
 
         # change shift parameters and basis
-        old_modes_shift = self.shift_basis.modes
-        self.shift_basis.change_resolution(
-            self.L_shift, self.M_shift, self.N_shift, NFP=self.NFP, sym="cos(t)"
+        old_modes_shift = self.x_basis.modes
+        self.x_basis.change_resolution(
+            self.L_x, self.M_x, self.N_x, NFP=self.NFP, sym="cos(t)"
         )
-        self._x_lmn = copy_coeffs(self.x_lmn, old_modes_shift, self.shift_basis.modes)
+        self._x_lmn = copy_coeffs(self.x_lmn, old_modes_shift, self.x_basis.modes)
 
     def compute(
         self,
@@ -2043,7 +2068,7 @@ class OmnigenousField(Optimizable, IOAble):
             names = [names]
         if grid is None:
             grid = LinearGrid(
-                theta=2 * self.M_well, N=2 * self.N_shift, NFP=self.NFP, sym=False
+                theta=2 * self.M_B, N=2 * self.N_x, NFP=self.NFP, sym=False
             )
         elif not isinstance(grid, _Grid):
             raise TypeError(
@@ -2077,39 +2102,39 @@ class OmnigenousField(Optimizable, IOAble):
         return self._NFP
 
     @property
-    def L_well(self):
+    def L_B(self):
         """int: Radial resolution of the magnetic well parameters well_l."""
-        return self._L_well
+        return self._L_B
 
     @property
-    def M_well(self):
+    def M_B(self):
         """int: Number of spline points in the magnetic well parameters well_l."""
-        return self._M_well
+        return self._M_B
 
     @property
-    def L_shift(self):
+    def L_x(self):
         """int: Radial resolution of x_lmn."""
-        return self._L_shift
+        return self._L_x
 
     @property
-    def M_shift(self):
+    def M_x(self):
         """int: Poloidal resolution of x_lmn."""
-        return self._M_shift
+        return self._M_x
 
     @property
-    def N_shift(self):
+    def N_x(self):
         """int: Toroidal resolution of x_lmn."""
-        return self._N_shift
+        return self._N_x
 
     @property
-    def well_basis(self):
+    def B_basis(self):
         """ChebyshevPolynomial: Spectral basis for B_lm."""
-        return self._well_basis
+        return self._B_basis
 
     @property
-    def shift_basis(self):
+    def x_basis(self):
         """FourierZernikeBasis: Spectral basis for x_lmn."""
-        return self._shift_basis
+        return self._x_basis
 
     @optimizable_parameter
     @property

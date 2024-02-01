@@ -17,6 +17,10 @@ from .data_index import register_compute_fun
     profiles=[],
     coordinates="",
     data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.magnetic_fields.OmnigenousField",
+    ],
 )
 def _NFP(params, transforms, profiles, data, **kwargs):
     data["NFP"] = transforms["grid"].NFP

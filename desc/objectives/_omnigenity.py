@@ -590,7 +590,7 @@ class Omnigenity(_Objective):
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
-    well_weight : float, optional
+    eta_weight : float, optional
         Weight applied to the bottom of the magnetic well (B_min) relative to the top
         of the magnetic well (B_max). Default = 1, which weights all points equally.
     eq_fixed: bool, optional
@@ -627,7 +627,7 @@ class Omnigenity(_Objective):
         field_grid=None,
         M_booz=None,
         N_booz=None,
-        well_weight=1,
+        eta_weight=1,
         eq_fixed=False,
         field_fixed=False,
         name="omnigenity",
@@ -641,7 +641,7 @@ class Omnigenity(_Objective):
         self.helicity = field.helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
-        self.well_weight = well_weight
+        self.eta_weight = eta_weight
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
         if not eq_fixed or field_fixed:
@@ -695,7 +695,7 @@ class Omnigenity(_Objective):
 
         if self._field_grid is None:
             field_grid = LinearGrid(
-                theta=2 * field.M_well, N=2 * field.N_shift, NFP=field.NFP, sym=False
+                theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
             )
         else:
             field_grid = self._field_grid
@@ -775,7 +775,7 @@ class Omnigenity(_Objective):
 
         if self._normalize:
             # average |B| on axis
-            self._normalization = jnp.mean(field.B_lm[: field.M_well])
+            self._normalization = jnp.mean(field.B_lm[: field.M_B])
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -823,7 +823,7 @@ class Omnigenity(_Objective):
                 profiles=constants["eq_profiles"],
             )
         if self._field_fixed:
-            # FIXME: update this data with new iota from the equilibrium
+            # FIXME: update this data with new iota from the equilibriumht
             field_data = constants["field_data"]
         else:
             field_data = compute_fun(
@@ -848,7 +848,7 @@ class Omnigenity(_Objective):
             constants["eq_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
         )
         omnigenity = B_eta_alpha - field_data["|B|_omni"]
-        weights = (self.well_weight + 1) / 2 + (self.well_weight - 1) / 2 * jnp.cos(
+        weights = (self.eta_weight + 1) / 2 + (self.eta_weight - 1) / 2 * jnp.cos(
             field_data["eta"]
         )
         return omnigenity * weights

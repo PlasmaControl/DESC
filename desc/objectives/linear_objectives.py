@@ -3502,7 +3502,7 @@ class FixOmniBmax(_FixedObjective):
         """
         field = self.things[0]
 
-        basis = field.shift_basis
+        basis = field.x_basis
         self._dim_f = int(basis.num_modes / (basis.M + 1))
 
         self._A = np.zeros((self._dim_f, basis.num_modes))

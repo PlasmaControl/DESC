@@ -837,13 +837,7 @@ def test_omnigenity_qa():
     eq.solve()
 
     field = OmnigenousField(
-        L_well=1,
-        M_well=4,
-        L_shift=1,
-        M_shift=1,
-        N_shift=1,
-        NFP=eq.NFP,
-        helicity=(1, 0),
+        L_B=1, M_B=4, L_x=1, M_x=1, N_x=1, NFP=eq.NFP, helicity=(1, 0)
     )
 
     eq_axis_grid = LinearGrid(rho=1e-2, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
@@ -927,11 +921,11 @@ def test_omnigenity_optimization():
 
     # omnigenity optimization
     field = OmnigenousField(
-        L_well=1,
-        M_well=3,
-        L_shift=1,
-        M_shift=1,
-        N_shift=1,
+        L_B=1,
+        M_B=3,
+        L_x=1,
+        M_x=1,
+        N_x=1,
         NFP=eq.NFP,
         helicity=(0, eq.NFP),
         B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),

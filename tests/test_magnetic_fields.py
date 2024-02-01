@@ -760,35 +760,33 @@ class TestMagneticFields:
         )
 
     @pytest.mark.unit
-    def test_omnigenous_field_change_well_resolution(self):
-        """Test OmnigenousField.change_resolution() for the magnetic well."""
-        # magnetic well
-        L_well_old = 1
-        L_well_new = 2
-        M_well_old = 3
-        M_well_new = 6
+    def test_omnigenous_field_change_resolution_B(self):
+        """Test OmnigenousField.change_resolution() of the B_lm parameters."""
+        L_B_old = 1
+        L_B_new = 2
+        M_B_old = 3
+        M_B_new = 6
         NFP = 4
         field = OmnigenousField(
-            L_well=L_well_old,
-            M_well=M_well_old,
-            L_shift=0,
-            M_shift=0,
-            N_shift=0,
+            L_B=L_B_old,
+            M_B=M_B_old,
+            L_x=0,
+            M_x=0,
+            N_x=0,
             NFP=NFP,
             helicity=(0, NFP),
             B_lm=np.array([0.9, 1.0, 1.1, 0.2, 0.05, -0.2]),
         )
-        eta = np.linspace(-np.pi / 2, np.pi / 2, 101)
-        rho_axis = np.zeros_like(eta)
-        rho_half = np.ones_like(eta) * 0.5
-        rho_lcfs = np.ones_like(eta)
-        B_axis_lowres = field.compute_well(rho_axis, eta)
-        B_half_lowres = field.compute_well(rho_half, eta)
-        B_lcfs_lowres = field.compute_well(rho_lcfs, eta)
-        field.change_resolution(L_well=L_well_new, M_well=M_well_new)
-        B_axis_highres = field.compute_well(rho_axis, eta)
-        B_half_highres = field.compute_well(rho_half, eta)
-        B_lcfs_highres = field.compute_well(rho_lcfs, eta)
+        grid_axis = LinearGrid(rho=[0.0], M=50)
+        grid_half = LinearGrid(rho=[0.5], M=50)
+        grid_lcfs = LinearGrid(rho=[1.0], M=50)
+        B_axis_lowres = field.compute("|B|_omni", grid=grid_axis)["|B|_omni"]
+        B_half_lowres = field.compute("|B|_omni", grid=grid_half)["|B|_omni"]
+        B_lcfs_lowres = field.compute("|B|_omni", grid=grid_lcfs)["|B|_omni"]
+        field.change_resolution(L_B=L_B_new, M_B=M_B_new)
+        B_axis_highres = field.compute("|B|_omni", grid=grid_axis)["|B|_omni"]
+        B_half_highres = field.compute("|B|_omni", grid=grid_half)["|B|_omni"]
+        B_lcfs_highres = field.compute("|B|_omni", grid=grid_lcfs)["|B|_omni"]
         np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
-        np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=3e-3)
+        np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)

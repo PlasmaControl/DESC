@@ -1256,11 +1256,11 @@ def test_compute_everything():
             )
         ),
         "desc.magnetic_fields.OmnigenousField": OmnigenousField(
-            L_well=0,
-            M_well=4,
-            L_shift=0,
-            M_shift=1,
-            N_shift=1,
+            L_B=0,
+            M_B=4,
+            L_x=0,
+            M_x=1,
+            N_x=1,
             NFP=2,
             helicity=(0, 2),
             B_lm=np.array([0.8, 0.9, 1.1, 1.2]),

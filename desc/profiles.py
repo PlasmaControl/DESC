@@ -5,12 +5,12 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import scipy.optimize
+from interpax import interp1d
 
 from desc.backend import jit, jnp, put, sign
 from desc.basis import FourierZernikeBasis, PowerSeries, polyder_vec, polyval_vec
 from desc.derivatives import Derivative
 from desc.grid import Grid, _Grid
-from desc.interpolate import interp1d
 from desc.io import IOAble
 from desc.utils import combination_permutation, copy_coeffs, multinomial_coefficients
 

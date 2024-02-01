@@ -11,7 +11,7 @@ from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif
+from desc.utils import copy_coeffs, errorif, isposint
 
 from .core import Curve
 
@@ -72,8 +72,12 @@ class FourierRZCurve(Curve):
 
         modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
 
+        assert R_n.size == modes_R.size, "R_n size and modes_R must be the same size"
+        assert Z_n.size == modes_Z.size, "Z_n size and modes_Z must be the same size"
+
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
+        assert isposint(NFP)
 
         if sym == "auto":
             if np.all(R_n[modes_R < 0] == 0) and np.all(Z_n[modes_Z >= 0] == 0):
@@ -84,9 +88,9 @@ class FourierRZCurve(Curve):
         NR = np.max(abs(modes_R))
         NZ = np.max(abs(modes_Z))
         N = max(NR, NZ)
-        self._NFP = NFP
-        self._R_basis = FourierSeries(N, NFP, sym="cos" if sym else False)
-        self._Z_basis = FourierSeries(N, NFP, sym="sin" if sym else False)
+        self._NFP = int(NFP)
+        self._R_basis = FourierSeries(N, int(NFP), sym="cos" if sym else False)
+        self._Z_basis = FourierSeries(N, int(NFP), sym="sin" if sym else False)
 
         self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
@@ -131,9 +135,9 @@ class FourierRZCurve(Curve):
             or (sym is not None)
             and (sym != self.sym)
         ):
-            self._NFP = NFP if NFP is not None else self.NFP
+            self._NFP = int(NFP if NFP is not None else self.NFP)
             self._sym = sym if sym is not None else self.sym
-            N = N if N is not None else self.N
+            N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(
@@ -289,6 +293,10 @@ class FourierXYZCurve(Curve):
 
         assert issubclass(modes.dtype.type, np.integer)
 
+        assert X_n.size == modes.size, "X_n and modes must be the same size"
+        assert Y_n.size == modes.size, "Y_n and modes must be the same size"
+        assert Z_n.size == modes.size, "Z_n and modes must be the same size"
+
         N = np.max(abs(modes))
         self._X_basis = FourierSeries(N, NFP=1, sym=False)
         self._Y_basis = FourierSeries(N, NFP=1, sym=False)
@@ -320,6 +328,7 @@ class FourierXYZCurve(Curve):
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
         if (N is not None) and (N != self.N):
+            N = int(N)
             Xmodes_old = self.X_basis.modes
             Ymodes_old = self.Y_basis.modes
             Zmodes_old = self.Z_basis.modes
@@ -471,7 +480,7 @@ class FourierXYZCurve(Curve):
             errorif(
                 not np.all(np.diff(s) > 0),
                 ValueError,
-                "supplied s must be monotonically increasing!",
+                "supplied s must be monotonically increasing",
             )
             errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
             errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
@@ -531,6 +540,7 @@ class FourierPlanarCurve(Curve):
         else:
             modes = np.asarray(modes)
         assert issubclass(modes.dtype.type, np.integer)
+        assert r_n.size == modes.size, "r_n size and modes must be the same size"
 
         N = np.max(abs(modes))
         self._r_basis = FourierSeries(N, NFP=1, sym=False)
@@ -552,6 +562,7 @@ class FourierPlanarCurve(Curve):
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
         if (N is not None) and (N != self.N):
+            N = int(N)
             modes_old = self.r_basis.modes
             self.r_basis.change_resolution(N=N)
             self.r_n = copy_coeffs(self.r_n, modes_old, self.r_basis.modes)
@@ -695,7 +706,7 @@ class SplineXYZCurve(Curve):
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,
-                "supplied knots must be monotonically increasing!",
+                "supplied knots must be monotonically increasing",
             )
             errorif(knots[0] < 0, ValueError, "knots must lie in [0, 2pi]")
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")
@@ -704,6 +715,7 @@ class SplineXYZCurve(Curve):
         self._knots = knots
         self.method = method
 
+    @optimizable_parameter
     @property
     def X(self):
         """Coordinates for X."""
@@ -719,6 +731,7 @@ class SplineXYZCurve(Curve):
                 + f"got {len(new)} X values for {len(self.knots)} knots"
             )
 
+    @optimizable_parameter
     @property
     def Y(self):
         """Coordinates for Y."""
@@ -734,6 +747,7 @@ class SplineXYZCurve(Curve):
                 + f"got {len(new)} Y values for {len(self.knots)} knots"
             )
 
+    @optimizable_parameter
     @property
     def Z(self):
         """Coordinates for Z."""
@@ -761,7 +775,7 @@ class SplineXYZCurve(Curve):
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,
-                "supplied knots must be monotonically increasing!",
+                "supplied knots must be monotonically increasing",
             )
             errorif(knots[0] < 0, ValueError, "knots must lie in [0, 2pi]")
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")

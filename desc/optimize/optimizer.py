@@ -136,6 +136,8 @@ class Optimizer(IOAble):
 
         Returns
         -------
+        things : list,
+            list of optimized things
         res : OptimizeResult
             The optimization result represented as a ``OptimizeResult`` object.
             Important attributes are: ``x`` the solution array, ``success`` a
@@ -145,12 +147,15 @@ class Optimizer(IOAble):
 
         """
         things = flatten_list(things, flatten_tuple=True)
-
+        things0 = [t.copy() for t in things]
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
 
         # eq may be None
         eq = get_instance(things, Equilibrium)
+        if eq is not None:
+            # save these for later
+            eq_params_init = eq.params_dict.copy()
 
         options = {} if options is None else options
         # TODO: document options
@@ -164,7 +169,7 @@ class Optimizer(IOAble):
         )
 
         # make sure everything is built
-        if not objective.built:
+        if objective is not None and not objective.built:
             objective.build(use_jit=False,verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
             nonlinear_constraint.build(verbose=verbose)
@@ -176,10 +181,10 @@ class Optimizer(IOAble):
             assert set(objective.things) == set(nonlinear_constraint.things)
         assert set(objective.things) == set(things)
 
-        # wrap to handle linear constraints
         if not isinstance(objective, ProximalProjection) and eq is not None:
             # need to include self consistency constraints
             linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
+        # wrap to handle linear constraints
         if len(linear_constraints):
             objective = LinearConstraintProjection(objective, linear_constraints)
             objective.build(verbose=verbose)
@@ -277,6 +282,9 @@ class Optimizer(IOAble):
             objective = objective._objective
 
         if isinstance(objective, ProximalProjection):
+            # reset eq params to initial
+            if eq is not None:
+                eq.params_dict = eq_params_init
             result["history"] = objective.history
             objective = objective._objective
         else:
@@ -295,23 +303,33 @@ class Optimizer(IOAble):
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x())
-            for con in constraints:
-                con.print_value(*con.xs())
-
-        if copy:
-            things = [thing.copy() for thing in things]
-
+        # temporarily assign new stuff for printing, might get replaced later
         for thing, params in zip(things, result["history"][-1]):
             thing.params_dict = params
 
         if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x())
+            print("Start of solver")
+            objective.print_value(objective.x(*things0))
             for con in constraints:
-                con.print_value(*con.xs())
+                con.print_value(
+                    *con.xs(
+                        *[t0 for (t0, t) in zip(things0, things) if t in con.things]
+                    )
+                )
+
+            print("End of solver")
+            objective.print_value(objective.x(*things))
+            for con in constraints:
+                con.print_value(*con.xs(*[t for t in things if t in con.things]))
+
+        if copy:
+            # need to swap things and things0, since things should be unchanged
+            for t, t0 in zip(things, things0):
+                init_params = t0.params_dict.copy()
+                final_params = t.params_dict.copy()
+                t.params_dict = init_params
+                t0.params_dict = final_params
+            return things0, result
 
         return things, result
 
@@ -345,11 +363,15 @@ def _parse_constraints(constraints):
     """
     if not isinstance(constraints, (tuple, list)):
         constraints = (constraints,)
+    # we treat linear bound constraints as nonlinear since they can't be easily
+    # factorized like linear equality constraints
     linear_constraints = tuple(
-        constraint for constraint in constraints if constraint.linear
+        constraint
+        for constraint in constraints
+        if (constraint.linear and (constraint.bounds is None))
     )
     nonlinear_constraints = tuple(
-        constraint for constraint in constraints if not constraint.linear
+        constraint for constraint in constraints if constraint not in linear_constraints
     )
     # check for incompatible constraints
     if any(isinstance(lc, FixCurrent) for lc in linear_constraints) and any(
@@ -372,7 +394,7 @@ def _maybe_wrap_nonlinear_constraints(
 ):
     """Use ProximalProjection to handle nonlinear constraints."""
     if eq is None:  # not deal with an equilibrium problem -> no ProximalProjection
-        return eq, nonlinear_constraint
+        return objective, nonlinear_constraint
     wrapper, method = _parse_method(method)
     if nonlinear_constraint is None:
         if wrapper is not None:

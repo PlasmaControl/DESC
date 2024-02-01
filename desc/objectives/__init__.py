@@ -9,11 +9,12 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import GenericObjective, ObjectiveFromUser
+from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
     BScaleLength,
     Elongation,
+    GoodCoordinates,
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,

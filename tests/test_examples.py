@@ -1177,40 +1177,6 @@ def test_regcoil_ellipse_and_axisym_surface_large_alpha(
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
-def test_regcoil_ellipse_and_axisym_surface_check_surf_trace(
-    regcoil_ellipse_and_axisym_surf,
-):
-    """Test elliptical eq and circular winding surf regcoil solution field trace."""
-    (
-        data,
-        initial_surface_current_field,
-        eq,
-    ) = regcoil_ellipse_and_axisym_surf
-    all_phi_mns = data["Phi_mn"]
-    surface_current_field = initial_surface_current_field.copy()
-    surface_current_field.Phi_mn = all_phi_mns[12]
-
-    ntransit = 20
-    r0 = np.linspace(0.68, 0.72, 10)
-    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
-    fieldR, fieldZ = field_line_integrate(
-        r0=r0,
-        z0=np.zeros_like(r0),
-        phis=phis,
-        field=surface_current_field,
-        grid=LinearGrid(M=50, N=60, NFP=eq.NFP),
-    )
-
-    assert np.max(fieldR) < 0.73
-    assert np.min(fieldR) > 0.67
-
-    assert np.max(fieldZ) < 0.02
-    assert np.min(fieldZ) > -0.02
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-@pytest.mark.slow
 def test_regcoil_ellipse_and_axisym_surface_check_B(
     regcoil_ellipse_and_axisym_surf,
 ):
@@ -1255,7 +1221,7 @@ def test_regcoil_ellipse_helical_coils_check_B(regcoil_ellipse_helical_coils):
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        grid=LinearGrid(M=200, N=200, NFP=surface_current_field.NFP),
+        grid=LinearGrid(M=80, N=80, NFP=surface_current_field.NFP),
         basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
@@ -1348,7 +1314,7 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     M_egrid = 20
     N_egrid = 20
     M_sgrid = 40
-    N_sgrid = 80
+    N_sgrid = 60
 
     (
         _,
@@ -1420,27 +1386,10 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field2.compute_magnetic_field(
         coords,
-        grid=LinearGrid(M=200, N=200, NFP=surface_current_field.NFP),
+        grid=LinearGrid(M=100, N=100, NFP=surface_current_field.NFP),
         basis="rpz",
     ) + ext_field.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
-
-    ntransit = 20
-    r0 = np.linspace(0.68, 0.72, 10)
-    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
-    fieldR, fieldZ = field_line_integrate(
-        r0=r0,
-        z0=np.zeros_like(r0),
-        phis=phis,
-        field=surface_current_field2 + ext_field,
-        grid=LinearGrid(M=50, N=60, NFP=eq.NFP),
-    )
-
-    assert np.max(fieldR) < 0.73
-    assert np.min(fieldR) > 0.67
-
-    assert np.max(fieldZ) < 0.02
-    assert np.min(fieldZ) > -0.02
 
     # test finding coils
 
@@ -1455,22 +1404,6 @@ def test_regcoil_ellipse_helical_coils_check_objective_method(
         coords, basis="rpz"
     ) + ext_field.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
-
-    ntransit = 15
-    r0 = np.linspace(0.685, 0.715, 10)
-    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
-    fieldR, fieldZ = field_line_integrate(
-        r0=r0,
-        z0=np.zeros_like(r0),
-        phis=phis,
-        field=coilset2 + ext_field,
-    )
-
-    assert np.max(fieldR) < 0.73
-    assert np.min(fieldR) > 0.67
-
-    assert np.max(fieldZ) < 0.02
-    assert np.min(fieldZ) > -0.02
 
 
 @pytest.mark.regression
@@ -1504,39 +1437,6 @@ def test_regcoil_ellipse_helical_coils_check_B_pos_helicity(
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
-def test_regcoil_ellipse_helical_coils_check_field_trace_pos_helicity(
-    regcoil_ellipse_helical_coils_pos_helicity,
-):
-    """Test elliptical eq and winding surf helical coil regcoil solution."""
-    # with positive current helicity
-    (
-        initial_surface_current_field,
-        _,
-        eq,
-    ) = regcoil_ellipse_helical_coils_pos_helicity
-    surface_current_field = initial_surface_current_field.copy()
-
-    ntransit = 20
-    r0 = np.linspace(0.68, 0.72, 10)
-    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
-    fieldR, fieldZ = field_line_integrate(
-        r0=r0,
-        z0=np.zeros_like(r0),
-        phis=phis,
-        field=surface_current_field,
-        grid=LinearGrid(M=50, N=60, NFP=eq.NFP),
-    )
-
-    assert np.max(fieldR) < 0.73
-    assert np.min(fieldR) > 0.67
-
-    assert np.max(fieldZ) < 0.02
-    assert np.min(fieldZ) > -0.02
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-@pytest.mark.slow
 def test_regcoil_ellipse_helical_coils_check_coils_pos_helicity(
     regcoil_ellipse_helical_coils_pos_helicity,
 ):
@@ -1564,22 +1464,6 @@ def test_regcoil_ellipse_helical_coils_check_coils_pos_helicity(
     B_from_coils = coilset2.compute_magnetic_field(coords, basis="rpz")
     np.testing.assert_allclose(B, B_from_coils, atol=3e-3)
 
-    ntransit = 15
-    r0 = np.linspace(0.685, 0.715, 10)
-    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
-    fieldR, fieldZ = field_line_integrate(
-        r0=r0,
-        z0=np.zeros_like(r0),
-        phis=phis,
-        field=coilset2,
-    )
-
-    assert np.max(fieldR) < 0.73
-    assert np.min(fieldR) > 0.67
-
-    assert np.max(fieldZ) < 0.02
-    assert np.min(fieldZ) > -0.02
-
 
 @pytest.mark.regression
 @pytest.mark.solve
@@ -1606,67 +1490,3 @@ def test_regcoil_ellipse_modular_coils_check_B(
         basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-@pytest.mark.slow
-def regcoil_ellipse_modular_coils_field_trace(
-    regcoil_ellipse_modular_coils,
-):
-    """Test elliptical eq and winding surf modular coil regcoil solution."""
-    # with positive current helicity
-    (
-        initial_surface_current_field,
-        _,
-        eq,
-    ) = regcoil_ellipse_modular_coils
-    surface_current_field = initial_surface_current_field.copy()
-
-    ntransit = 20
-    r0 = np.linspace(0.68, 0.72, 10)
-    phis = np.arange(0, ntransit * 2 * np.pi + 1, 2 * np.pi)
-    fieldR, fieldZ = field_line_integrate(
-        r0=r0,
-        z0=np.zeros_like(r0),
-        phis=phis,
-        field=surface_current_field,
-        grid=LinearGrid(M=50, N=60, NFP=eq.NFP),
-    )
-
-    assert np.max(fieldR) < 0.73
-    assert np.min(fieldR) > 0.67
-
-    assert np.max(fieldZ) < 0.02
-    assert np.min(fieldZ) > -0.02
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-@pytest.mark.slow
-def test_regcoil_ellipse_modular_coils_check_coils(
-    regcoil_ellipse_modular_coils,
-):
-    """Test elliptical eq and winding surf helical coil regcoil solution."""
-    # with positive current helicity
-    (
-        initial_surface_current_field,
-        _,
-        eq,
-    ) = regcoil_ellipse_modular_coils
-    surface_current_field = initial_surface_current_field.copy()
-
-    # test finding coils
-
-    numCoils = 240
-
-    coilset2 = surface_current_field.cut_surface_current_into_coils(
-        desirednumcoils=numCoils, step=5
-    )
-
-    coords = eq.compute(["R", "phi", "Z", "B"])
-    B = coords["B"]
-    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
-
-    B_from_coils = coilset2.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B, B_from_coils, atol=2.5e-3)

@@ -676,6 +676,8 @@ class QuadraticFlux(_Objective):
         If true, Bplasma will be precomputed in build().
     field_fixed : bool
         Whether or not the external field's DOF (params) change during optimization.
+    vacuum : bool
+        If true, Bplasma is set to zero.
     name : str
         Name of the objective function.
 

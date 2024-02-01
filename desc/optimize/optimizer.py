@@ -146,6 +146,8 @@ class Optimizer(IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
+        if not isinstance(constraints, (tuple, list)):
+            constraints = (constraints,)
         things = flatten_list(things, flatten_tuple=True)
         things0 = [t.copy() for t in things]
         # need local import to avoid circular dependencies

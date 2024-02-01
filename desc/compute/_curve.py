@@ -378,7 +378,7 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Poloidal angle along the curve.",
     dim=1,
-    params=["theta_n", "surface"],
+    params=["theta_n", "surface", "secular_theta"],
     transforms={
         "theta": [[0, 0, 0]],
         "grid": [],
@@ -389,9 +389,9 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
 )
 def _theta_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
-    data["theta"] = transforms["grid"].nodes[:, 2] + transforms["theta"].transform(
-        params["theta_n"], dz=0
-    )
+    data["theta"] = params["secular_theta"] * transforms["grid"].nodes[
+        :, 2
+    ] + transforms["theta"].transform(params["theta_n"], dz=0)
 
     return data
 
@@ -403,7 +403,7 @@ def _theta_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
     units_long="None",
     description="Poloidal angle along the curve, derivative wrt curve parameter s.",
     dim=1,
-    params=["theta_n", "surface"],
+    params=["theta_n", "surface", "secular_theta"],
     transforms={
         "theta": [[0, 0, 1]],
         "grid": [],
@@ -414,9 +414,9 @@ def _theta_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
     parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
 )
 def _theta_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
-    data["theta_s"] = jnp.ones_like(transforms["grid"].nodes[:, 2]) + transforms[
-        "theta"
-    ].transform(params["theta_n"], dz=1)
+    data["theta_s"] = params["secular_theta"] * jnp.ones_like(
+        transforms["grid"].nodes[:, 2]
+    ) + transforms["theta"].transform(params["theta_n"], dz=1)
 
     return data
 
@@ -476,7 +476,7 @@ def _theta_sss_FourierRZWindingSurfaceCurve(
     units_long="None",
     description="Toroidal angle along the curve.",
     dim=1,
-    params=["zeta_n", "surface"],
+    params=["zeta_n", "surface", "secular_zeta"],
     transforms={
         "zeta": [[0, 0, 0]],
         "grid": [],
@@ -487,9 +487,9 @@ def _theta_sss_FourierRZWindingSurfaceCurve(
     parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
 )
 def _zeta_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
-    data["zeta"] = transforms["grid"].nodes[:, 2] + transforms["zeta"].transform(
-        params["zeta_n"], dz=0
-    )
+    data["zeta"] = params["secular_zeta"] * transforms["grid"].nodes[:, 2] + transforms[
+        "zeta"
+    ].transform(params["zeta_n"], dz=0)
 
     return data
 
@@ -501,7 +501,7 @@ def _zeta_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwa
     units_long="None",
     description="Toroidal angle along the curve, derivative wrt curve parameter s.",
     dim=1,
-    params=["zeta_n", "surface"],
+    params=["zeta_n", "surface", "secular_zeta"],
     transforms={
         "zeta": [[0, 0, 1]],
         "grid": [],
@@ -512,9 +512,9 @@ def _zeta_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwa
     parameterization="desc.geometry.curve.FourierRZWindingSurfaceCurve",
 )
 def _zeta_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs):
-    data["zeta_s"] = jnp.ones_like(transforms["grid"].nodes[:, 2]) + transforms[
-        "zeta"
-    ].transform(params["zeta_n"], dz=1)
+    data["zeta_s"] = params["secular_zeta"] * jnp.ones_like(
+        transforms["grid"].nodes[:, 2]
+    ) + transforms["zeta"].transform(params["zeta_n"], dz=1)
 
     return data
 

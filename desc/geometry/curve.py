@@ -871,6 +871,12 @@ class FourierRZWindingSurfaceCurve(Curve):
         Winding surface that the curve will lie on.
     theta_n, zeta_n: array-like
         Fourier coefficients for theta, zeta in terms of curve parameter s.
+    secular_theta : float, optional
+        secular term in theta(t) series, defaults to 1.0
+        if 0, curve will not close poloidally, only toroidally.
+    secular_zeta : float, optional
+        secular term in zeta(t) series, defaults to 1.0
+        if 0, curve will not close toroidally, only poloidally
     modes_theta : array-like, optional
         Mode numbers associated with theta_n. If not given defaults to [-n:n].
     modes_zeta : array-like, optional
@@ -887,6 +893,8 @@ class FourierRZWindingSurfaceCurve(Curve):
     _io_attrs_ = Curve._io_attrs_ + [
         "_theta_n",
         "_theta_n",
+        "_secular_theta",
+        "_secular_zeta",
         "_theta_basis",
         "_zeta_basis",
         "_surface",
@@ -897,6 +905,8 @@ class FourierRZWindingSurfaceCurve(Curve):
         surface,
         theta_n=1,
         zeta_n=1,
+        secular_theta=1.0,
+        secular_zeta=1.0,
         modes_theta=None,
         modes_zeta=None,
         sym_theta="sin",
@@ -944,6 +954,8 @@ class FourierRZWindingSurfaceCurve(Curve):
 
         self._theta_n = copy_coeffs(theta_n, modes_theta, self.theta_basis.modes[:, 2])
         self._zeta_n = copy_coeffs(zeta_n, modes_zeta, self.zeta_basis.modes[:, 2])
+        self._secular_theta = float(secular_theta)
+        self._secular_zeta = float(secular_zeta)
 
     @property
     def surface(self):
@@ -1064,3 +1076,23 @@ class FourierRZWindingSurfaceCurve(Curve):
                 f"zeta_n should have the same size as the basis, got {len(new)} for "
                 + f"basis with {self.zeta_basis.num_modes} modes"
             )
+
+    @optimizable_parameter
+    @property
+    def secular_theta(self):
+        """Secular (in t) coefficient for theta."""
+        return self._theta_n
+
+    @secular_theta.setter
+    def secular_theta(self, new):
+        self._secular_theta = float(new)
+
+    @optimizable_parameter
+    @property
+    def secular_zeta(self):
+        """Secular (in t) coefficient for zeta."""
+        return self._zeta_n
+
+    @secular_zeta.setter
+    def secular_zeta(self, new):
+        self._secular_zeta = float(new)

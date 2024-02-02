@@ -414,14 +414,16 @@ class BoundaryError(_Objective):
 
         """
         eq = self.things[0]
-        M_grid = eq.M_grid
-        N_grid = eq.N_grid if eq.N > 0 else M_grid
+
         if self._src_grid is None:
+            # for axisymmetry we still need to know about toroidal effects, so its
+            # cheapest to pretend there are extra field periods
+            src_NFP = eq.NFP if eq.N > 0 else 64
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
-                M=M_grid,
-                N=N_grid,
-                NFP=int(eq.NFP),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=src_NFP,
                 sym=False,
             )
         else:
@@ -430,8 +432,8 @@ class BoundaryError(_Objective):
         if self._eval_grid is None:
             eval_grid = LinearGrid(
                 rho=np.array([1.0]),
-                M=M_grid,
-                N=N_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
                 NFP=int(eq.NFP),
                 sym=False,
             )
@@ -454,10 +456,10 @@ class BoundaryError(_Objective):
             "Source grids for singular integrals must be non-symmetric",
         )
         if self._s is None:
-            k = min(src_grid.num_theta, src_grid.num_zeta)
-            self._s = k // 2 + int(np.sqrt(k))
+            k = min(src_grid.num_theta, src_grid.num_zeta * src_grid.NFP)
+            self._s = k - 1
         if self._q is None:
-            k = min(src_grid.num_theta, src_grid.num_zeta)
+            k = min(src_grid.num_theta, src_grid.num_zeta * src_grid.NFP)
             self._q = k // 2 + int(np.sqrt(k))
 
         try:

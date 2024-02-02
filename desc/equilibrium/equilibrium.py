@@ -378,6 +378,11 @@ class Equilibrium(IOAble, Optimizable):
             self.set_initial_guess(ensure_nested=ensure_nested)
         if check_orientation:
             ensure_positive_jacobian(self)
+        errorif(
+            len(kwargs),
+            TypeError,
+            f"Equilibrium got unexpected kwargs: {kwargs.keys()}",
+        )
 
     def _set_up(self):
         """Set unset attributes after loading.

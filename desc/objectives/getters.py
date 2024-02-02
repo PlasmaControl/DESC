@@ -19,6 +19,7 @@ from .linear_objectives import (
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
+    FixBoundaryLambda,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
@@ -147,6 +148,10 @@ def get_fixed_boundary_constraints(
         FixBoundaryZ(eq=eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
+    if isinstance(eq.surface, PoincareSurface):
+        constraints += (
+            FixBoundaryLambda(eq=eq, normalize=normalize, normalize_target=normalize),
+        )
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:

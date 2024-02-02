@@ -1023,6 +1023,7 @@ class PoincareSurface(ZernikeRZToroidalSection):
     def L_basis(self, L_basis):
         self._L_basis = L_basis
 
+    @optimizable_parameter
     @property
     def L_lmn(self):
         """ndarray: Spectral coefficients for Lambda."""

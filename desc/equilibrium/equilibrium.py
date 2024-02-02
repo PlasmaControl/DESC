@@ -423,6 +423,7 @@ class Equilibrium(IOAble, Optimizable):
             "Za_n",
             "Rb_lmn",
             "Zb_lmn",
+            "Lb_lmn",
         )
         assert sorted(args) == sorted(arg_order)
         return [arg for arg in arg_order if arg in args]
@@ -1337,10 +1338,12 @@ class Equilibrium(IOAble, Optimizable):
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
 
+    @optimizable_parameter
     @property
     def Lb_lmn(self):
         """ndarray: Spectral coefficients of Lambda at the boundary."""
-        return self.surface.L_lmn
+        if isinstance(self.surface, PoincareSurface):
+            return self.surface.L_lmn
 
     @Lb_lmn.setter
     def Lb_lmn(self, Lb_lmn):

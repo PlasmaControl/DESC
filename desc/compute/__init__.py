@@ -39,6 +39,7 @@ from . import (
     _qs,
     _stability,
     _surface,
+    _particle
 )
 from .data_index import data_index
 from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec

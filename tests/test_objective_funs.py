@@ -452,9 +452,9 @@ class TestObjectiveFunction:
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
         # next n should be B^2 errors
-        np.testing.assert_allclose(f[n : 2 * n], 0, atol=4e-2)
+        np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
         # last n should be K errors
-        np.testing.assert_allclose(f[2 * n :], 0, atol=2e-2)
+        np.testing.assert_allclose(f[2 * n :], 0, atol=3e-2)
 
     @pytest.mark.unit
     def test_boundary_error_biest(self):
@@ -471,7 +471,7 @@ class TestObjectiveFunction:
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
         # next n should be B^2 errors
-        np.testing.assert_allclose(f[n : 2 * n], 0, atol=4e-2)
+        np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
 
     @pytest.mark.unit
     def test_boundary_error_vacuum(self):

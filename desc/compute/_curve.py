@@ -901,7 +901,7 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
             + data["theta_ss"] * data_surf["R_tz"]
             + data["theta_s"] ** 2 * data_surf["R_ttz"]
         )
-        + (data["theta_s"] ** 3) * data["R_ttt"]
+        + (data["theta_s"] ** 3) * data_surf["R_ttt"]
     )
     d3phi = (
         data["zeta_sss"] * data_surf["phi_t"]
@@ -921,7 +921,7 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
             + data["theta_ss"] * data_surf["phi_tz"]
             + data["theta_s"] ** 2 * data_surf["phi_ttz"]
         )
-        + (data["theta_s"] ** 3) * data["phi_ttt"]
+        + (data["theta_s"] ** 3) * data_surf["phi_ttt"]
     )
     d3Z = (
         data["zeta_sss"] * data_surf["Z_t"]
@@ -941,7 +941,7 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
             + data["theta_ss"] * data_surf["Z_tz"]
             + data["theta_s"] ** 2 * data_surf["Z_ttz"]
         )
-        + (data["theta_s"] ** 3) * data["Z_ttt"]
+        + (data["theta_s"] ** 3) * data_surf["Z_ttt"]
     )
     coords = jnp.stack(
         [d3R, d3phi, d3Z],

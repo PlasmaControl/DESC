@@ -15,6 +15,7 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.magnetic_fields import SplineMagneticField
 from desc.objectives import (
     AspectRatio,
     CurrentDensity,
@@ -36,6 +37,7 @@ from desc.objectives import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
+    VacuumBoundaryError,
     Volume,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
@@ -873,6 +875,44 @@ def test_only_non_eq_optimization():
     )
     surf = surf[0]
     np.testing.assert_allclose(obj.compute(*obj.xs(surf)), 1, atol=1e-5)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_freeb_vacuum():
+    """Test for free boundary vacuum stellarator."""
+    extcur = [4700.0, 1000.0]
+    ext_field = SplineMagneticField.from_mgrid(
+        "tests/inputs/mgrid_test.nc", extcur=extcur
+    )
+    surf = FourierRZToroidalSurface(
+        R_lmn=[0.70, 0.10],
+        modes_R=[[0, 0], [1, 0]],
+        Z_lmn=[-0.10],
+        modes_Z=[[-1, 0]],
+        NFP=5,
+    )
+
+    eq = Equilibrium(M=6, N=6, Psi=-0.035, surface=surf)
+    eq.solve()
+    constraints = (
+        ForceBalance(eq=eq),
+        FixCurrent(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    objective = ObjectiveFunction(VacuumBoundaryError(eq=eq, ext_field=ext_field))
+    eq, out = eq.optimize(
+        objective,
+        constraints,
+        optimizer="proximal-lsq-exact",
+        verbose=3,
+        options={},
+    )
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_test_freeb.nc")
+
+    np.testing.assert_allclose(rho_err[:, -1], 0, atol=4e-2)  # only check rho=1
 
 
 class TestGetExample:

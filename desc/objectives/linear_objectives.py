@@ -470,7 +470,7 @@ class BoundaryZSelfConsistency(_Objective):
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 
 
-class BoundaryLambdaSelfConsistency(_FixedObjective):
+class BoundaryLambdaSelfConsistency(_Objective):
     """Enforces lambda values at zeta=0 XS (i.e. prescribes the SFL angle vartheta).
 
     Parameters
@@ -489,6 +489,9 @@ class BoundaryLambdaSelfConsistency(_FixedObjective):
         Name of the objective function.
     """
 
+    _scalar = False
+    _linear = True
+    _fixed = False
     _units = "(dimensionless)"
     _print_value_fmt = "Lambda boundary self consistency error: {:10.3e}"
 
@@ -498,7 +501,7 @@ class BoundaryLambdaSelfConsistency(_FixedObjective):
         target=None,
         bounds=None,
         weight=1,
-        name="poincare lambda",
+        name="self_consistency lambda",
     ):
         self._args = ["L_lmn"]
         super().__init__(

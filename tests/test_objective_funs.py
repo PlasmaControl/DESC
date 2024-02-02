@@ -48,6 +48,7 @@ from desc.objectives import (
     ToroidalCurrent,
     Volume,
 )
+from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
@@ -1661,3 +1662,26 @@ def test_objective_no_nangrad():
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), str(objective)
+
+
+@pytest.mark.unit
+def test_asymmetric_normalization():
+    """Tests normalizations for asymmetric equilibrium."""
+    # related to PR #821
+    a = 0.6
+    # make a asym equilibrium with 0 for R_1_0 and Z_-1_0
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, -a],
+        Z_lmn=[0, -a],
+        modes_R=np.array([[0, 0], [-1, 0]]),
+        modes_Z=np.array([[0, 0], [1, 0]]),
+        sym=False,
+    )
+    eq = Equilibrium(surface=surf)
+    scales_surf = compute_scaling_factors(surf)
+    scales_eq = compute_scaling_factors(eq)
+
+    for val in scales_surf.values():
+        assert np.all(np.isfinite(val))
+    for val in scales_eq.values():
+        assert np.all(np.isfinite(val))

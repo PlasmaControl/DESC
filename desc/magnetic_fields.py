@@ -17,7 +17,7 @@ from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, warnif
+from desc.utils import copy_coeffs, errorif, flatten_list, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -159,6 +159,9 @@ class _MagneticField(IOAble, ABC):
                 return SumMagneticField(self, x)
         else:
             return NotImplemented
+
+    def __radd__(self, x):
+        return self + x
 
     def __neg__(self):
         return ScaledMagneticField(-1, self)
@@ -389,7 +392,10 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
 
     def __init__(self, scale, field):
-        assert np.isscalar(scale) or len(scale) == 1, "scale must be a scalar value"
+        assert (
+            np.isscalar(scale) or np.asarray(scale).size == 1
+        ), "scale must be a scalar value"
+        scale = float(scale)
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
@@ -595,8 +601,8 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : tuple, optional
-            unused by this method
+        params : dict, optional
+            Dict of values for R0 and B0.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None
@@ -610,13 +616,17 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points
 
         """
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+        R0 = params.get("R0", self.R0)
+
         assert basis.lower() in ["rpz", "xyz"]
         if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
             coords = xyz2rpz(coords)
-        bp = self._B0 * self._R0 / coords[:, 0]
+        bp = B0 * R0 / coords[:, 0]
         brz = jnp.zeros_like(bp)
         B = jnp.array([brz, bp, brz]).T
         if basis == "xyz":
@@ -658,8 +668,8 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : tuple, optional
-            unused by this method
+        params : dict, optional
+            Dict of value for B0.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None
@@ -674,13 +684,16 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points
 
         """
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+
         assert basis.lower() in ["rpz", "xyz"]
         if hasattr(coords, "nodes"):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
             coords = xyz2rpz(coords)
-        bz = self._B0 * jnp.ones_like(coords[:, 2])
+        bz = B0 * jnp.ones_like(coords[:, 2])
         brp = jnp.zeros_like(bz)
         B = jnp.array([brp, brp, bz]).T
         if basis == "xyz":
@@ -760,8 +773,8 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         ----------
         coords : array-like shape(N,3) or Grid
             cylindrical or cartesian coordinates
-        params : tuple, optional
-            unused by this method
+        params : dict, optional
+            Dict of values for B0, R0, iota.
         basis : {"rpz", "xyz"}
             basis for input coordinates and returned magnetic field
         grid : Grid, int or None
@@ -776,6 +789,11 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
 
         """
+        params = setdefault(params, {})
+        B0 = params.get("B0", self.B0)
+        R0 = params.get("R0", self.R0)
+        iota = params.get("iota", self.iota)
+
         assert basis.lower() in ["rpz", "xyz"]
         if hasattr(coords, "nodes"):
             coords = coords.nodes
@@ -784,12 +802,12 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             coords = xyz2rpz(coords)
 
         R, phi, Z = coords.T
-        r = jnp.sqrt((R - self._R0) ** 2 + Z**2)
-        theta = jnp.arctan2(Z, R - self._R0)
+        r = jnp.sqrt((R - R0) ** 2 + Z**2)
+        theta = jnp.arctan2(Z, R - R0)
         br = -r * jnp.sin(theta)
         bp = jnp.zeros_like(br)
         bz = r * jnp.cos(theta)
-        bmag = self._B0 * self._iota / self._R0
+        bmag = B0 * iota / R0
         B = bmag * jnp.array([br, bp, bz]).T
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])
@@ -1129,6 +1147,29 @@ class SplineMagneticField(_MagneticField, Optimizable):
             method=method,
             extrap=extrap,
         )
+
+    def tree_flatten(self):
+        """Convert DESC objects to JAX pytrees."""
+        # the default flattening method in the IOAble base class assumes all floats
+        # are non-static, but for the periodic BC to work we need the period to be
+        # a static value, so we override the default tree flatten/unflatten method
+        # so that we can pass a SplineMagneticField into a jitted function such as
+        # an objective.
+        static = ["_method", "_extrap", "_period", "_axisym"]
+        children = {key: val for key, val in self.__dict__.items() if key not in static}
+        aux_data = tuple(
+            [(key, val) for key, val in self.__dict__.items() if key in static]
+        )
+        return ((children,), aux_data)
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        """Recreate a DESC object from JAX pytree."""
+        obj = cls.__new__(cls)
+        obj.__dict__.update(children[0])
+        for kv in aux_data:
+            setattr(obj, kv[0], kv[1])
+        return obj
 
 
 class ScalarPotentialField(_MagneticField):
@@ -1572,9 +1613,10 @@ class FourierCurrentPotentialField(
         name="",
         check_orientation=True,
     ):
-        self._Phi_mn = Phi_mn
-
         Phi_mn, modes_Phi = map(np.asarray, (Phi_mn, modes_Phi))
+        assert (
+            Phi_mn.size == modes_Phi.shape[0]
+        ), "Phi_mn size and modes_Phi.shape[0] must be the same size!"
 
         assert np.issubdtype(modes_Phi.dtype, np.integer)
 
@@ -1600,9 +1642,10 @@ class FourierCurrentPotentialField(
                 sym_Phi = "cos"
         self._sym_Phi = sym_Phi
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
+        self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
 
-        assert np.isscalar(I) or len(I) == 1, "I must be a scalar"
-        assert np.isscalar(G) or len(G) == 1, "G must be a scalar"
+        assert np.isscalar(I) or np.asarray(I).size == 1, "I must be a scalar"
+        assert np.isscalar(G) or np.asarray(G).size == 1, "G must be a scalar"
         self._I = float(I)
         self._G = float(G)
 
@@ -1625,7 +1668,7 @@ class FourierCurrentPotentialField(
 
     @I.setter
     def I(self, new):  # noqa: E743
-        assert np.isscalar(new) or len(new) == 1, "I must be a scalar"
+        assert np.isscalar(new) or np.asarray(new).size == 1, "I must be a scalar"
         self._I = float(new)
 
     @optimizable_parameter
@@ -1636,7 +1679,7 @@ class FourierCurrentPotentialField(
 
     @G.setter
     def G(self, new):
-        assert np.isscalar(new) or len(new) == 1, "G must be a scalar"
+        assert np.isscalar(new) or np.asarray(new).size == 1, "G must be a scalar"
         self._G = float(new)
 
     @optimizable_parameter

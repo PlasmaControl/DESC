@@ -66,7 +66,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     for name in names:
         if name not in data_index[p]:
             raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
-    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma", "basis", "vpar", "m_q", "mu"}
+    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma", "basis", "method", "vpar", "m_q", "mu"}
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
@@ -327,7 +327,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
     from desc.basis import DoubleFourierSeries
     from desc.transform import Transform
 
-    method = "jitable" if jitable else "auto"
+    method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys, obj, has_axis=grid.axis.size)
     transforms = {"grid": grid}

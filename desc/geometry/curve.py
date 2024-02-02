@@ -72,6 +72,9 @@ class FourierRZCurve(Curve):
 
         modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
 
+        assert R_n.size == modes_R.size, "R_n size and modes_R must be the same size"
+        assert Z_n.size == modes_Z.size, "Z_n size and modes_Z must be the same size"
+
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
         assert isposint(NFP)
@@ -219,11 +222,7 @@ class FourierRZCurve(Curve):
             Axis with given Fourier coefficients.
 
         """
-        f = open(path)
-        if "&INDATA" in f.readlines()[0].upper():  # vmec input, convert to desc
-            inputs = InputReader.parse_vmec_inputs(f)[-1]
-        else:
-            inputs = InputReader().parse_inputs(f)[-1]
+        inputs = InputReader().parse_inputs(path)[-1]
         curve = FourierRZCurve(
             inputs["axis"][:, 1],
             inputs["axis"][:, 2],
@@ -289,6 +288,10 @@ class FourierXYZCurve(Curve):
             modes = np.asarray(modes)
 
         assert issubclass(modes.dtype.type, np.integer)
+
+        assert X_n.size == modes.size, "X_n and modes must be the same size"
+        assert Y_n.size == modes.size, "Y_n and modes must be the same size"
+        assert Z_n.size == modes.size, "Z_n and modes must be the same size"
 
         N = np.max(abs(modes))
         self._X_basis = FourierSeries(N, NFP=1, sym=False)
@@ -454,7 +457,9 @@ class FourierXYZCurve(Curve):
         Y = coords_xyz[:, 1]
         Z = coords_xyz[:, 2]
 
-        X, Y, Z, closedX, closedY, closedZ, _ = _unclose_curve(X, Y, Z)
+        X, Y, Z, closedX, closedY, closedZ, input_curve_was_closed = _unclose_curve(
+            X, Y, Z
+        )
 
         if isinstance(s, str):
             assert s == "arclength", f"got unknown specification for s {s}"
@@ -470,10 +475,11 @@ class FourierXYZCurve(Curve):
             s = np.linspace(0, 2 * np.pi, X.size, endpoint=False)
         else:
             s = np.atleast_1d(s)
+            s = s[:-1] if input_curve_was_closed else s
             errorif(
                 not np.all(np.diff(s) > 0),
                 ValueError,
-                "supplied s must be monotonically increasing!",
+                "supplied s must be monotonically increasing",
             )
             errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
             errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
@@ -481,9 +487,9 @@ class FourierXYZCurve(Curve):
         grid = LinearGrid(zeta=s, NFP=1, sym=False)
         basis = FourierSeries(N=N, NFP=1, sym=False)
         transform = Transform(grid, basis, build_pinv=True)
-        X_n = transform.fit(coords_xyz[:, 0])
-        Y_n = transform.fit(coords_xyz[:, 1])
-        Z_n = transform.fit(coords_xyz[:, 2])
+        X_n = transform.fit(X)
+        Y_n = transform.fit(Y)
+        Z_n = transform.fit(Z)
         return FourierXYZCurve(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
 
 
@@ -533,6 +539,7 @@ class FourierPlanarCurve(Curve):
         else:
             modes = np.asarray(modes)
         assert issubclass(modes.dtype.type, np.integer)
+        assert r_n.size == modes.size, "r_n size and modes must be the same size"
 
         N = np.max(abs(modes))
         self._r_basis = FourierSeries(N, NFP=1, sym=False)
@@ -698,7 +705,7 @@ class SplineXYZCurve(Curve):
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,
-                "supplied knots must be monotonically increasing!",
+                "supplied knots must be monotonically increasing",
             )
             errorif(knots[0] < 0, ValueError, "knots must lie in [0, 2pi]")
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")
@@ -767,7 +774,7 @@ class SplineXYZCurve(Curve):
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,
-                "supplied knots must be monotonically increasing!",
+                "supplied knots must be monotonically increasing",
             )
             errorif(knots[0] < 0, ValueError, "knots must lie in [0, 2pi]")
             errorif(knots[-1] > 2 * np.pi, ValueError, "knots must lie in [0, 2pi]")

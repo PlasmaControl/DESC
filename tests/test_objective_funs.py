@@ -853,13 +853,13 @@ class TestQuadraticFlux:
         obj = QuadraticFlux(
             t_field,
             eq,
-            eq_fixed=True,
             vacuum=True,
         )
         Bnorm = t_field.compute_Bnormal(eq.surface)[0]
         obj.build(eq)
         f = obj.compute(params_1=t_field.params_dict)
 
+        # check that they're the same since we set Bplasma = 0
         np.testing.assert_allclose(f, Bnorm, atol=1e-14)
 
 

@@ -790,7 +790,7 @@ class Equilibrium(IOAble, Optimizable):
             spectral_indexing=self._spectral_indexing,
         )
 
-        eq_poincare.change_resolution(eq_poincare.L, eq_poincare.M, eq_poincare.N)
+        eq_poincare.change_resolution(self.L, self.M, self.N)
         eq_poincare.axis = eq_poincare.get_axis()
         return eq_poincare
 
@@ -1344,6 +1344,8 @@ class Equilibrium(IOAble, Optimizable):
         """ndarray: Spectral coefficients of Lambda at the boundary."""
         if isinstance(self.surface, PoincareSurface):
             return self.surface.L_lmn
+        else:
+            return np.empty(0)
 
     @Lb_lmn.setter
     def Lb_lmn(self, Lb_lmn):
@@ -1352,7 +1354,10 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def Lb_basis(self):
         """ndarray: Spectral coefficients of Lambda at the boundary."""
-        return self.surface.L_basis
+        if isinstance(self.surface, PoincareSurface):
+            return self.surface.L_basis
+        else:
+            return np.empty(0)
 
     @Lb_basis.setter
     def Lb_basis(self, Lb_basis):

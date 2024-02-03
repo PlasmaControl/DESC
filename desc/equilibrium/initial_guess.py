@@ -7,7 +7,7 @@ import numpy as np
 
 from desc.backend import fori_loop, jit, jnp, put
 from desc.basis import zernike_radial
-from desc.geometry import FourierRZCurve, Surface
+from desc.geometry import FourierRZCurve, PoincareSurface, Surface
 from desc.grid import Grid, _Grid
 from desc.io import load
 from desc.objectives import (
@@ -110,6 +110,12 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
                 axisZ,
                 coord,
             )
+            if isinstance(eq.surface, PoincareSurface):
+                eq.L_lmn = _initial_guess_surface(
+                    eq.L_basis,
+                    eq.Lb_lmn,
+                    eq.surface.L_basis,
+                )
         else:
             raise ValueError(
                 "set_initial_guess called with no arguments, "

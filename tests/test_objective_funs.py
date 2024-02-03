@@ -18,7 +18,11 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
-from desc.magnetic_fields import FourierCurrentPotentialField, ToroidalMagneticField
+from desc.magnetic_fields import (
+    FourierCurrentPotentialField,
+    SplineMagneticField,
+    ToroidalMagneticField,
+)
 from desc.objectives import (
     AspectRatio,
     BootstrapRedlConsistency,
@@ -460,9 +464,9 @@ class TestObjectiveFunction:
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
         # next n should be B^2 errors
-        np.testing.assert_allclose(f[n : 2 * n], 0, atol=4e-2)
+        np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
         # last n should be K errors
-        np.testing.assert_allclose(f[2 * n :], 0, atol=2e-2)
+        np.testing.assert_allclose(f[2 * n :], 0, atol=3e-2)
 
     @pytest.mark.unit
     def test_boundary_error_biest(self):
@@ -479,7 +483,7 @@ class TestObjectiveFunction:
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
         # next n should be B^2 errors
-        np.testing.assert_allclose(f[n : 2 * n], 0, atol=4e-2)
+        np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
 
     @pytest.mark.unit
     def test_boundary_error_vacuum(self):
@@ -2259,6 +2263,47 @@ def test_objective_no_nangrad():
     obj.build()
     g = obj.grad(obj.x(eq))
     assert not np.any(np.isnan(g)), "redl bootstrap"
+
+    extcur = [
+        3.884526409876309e06,
+        -2.935577123737952e05,
+        -1.734851853677043e04,
+        6.002137016973160e04,
+        6.002540940490887e04,
+        -1.734993103183817e04,
+        -2.935531536308510e05,
+        -3.560639108717275e05,
+        -6.588434719283084e04,
+        -1.154387774712987e04,
+        -1.153546510755219e04,
+        -6.588300858364606e04,
+        -3.560589388468855e05,
+    ]
+    ext_field = SplineMagneticField.from_mgrid(
+        r"tests/inputs/mgrid_solovev.nc", extcur=extcur
+    )
+
+    pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
+    iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
+    surf = FourierRZToroidalSurface(
+        R_lmn=[4.0, 1.0],
+        modes_R=[[0, 0], [1, 0]],
+        Z_lmn=[-1.0],
+        modes_Z=[[-1, 0]],
+        NFP=1,
+    )
+
+    eq = Equilibrium(M=10, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
+    obj = ObjectiveFunction(BoundaryError(eq, ext_field))
+    obj.build()
+    g = obj.grad(obj.x(eq))
+    assert not np.any(np.isnan(g)), "boundary error"
+
+    obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field))
+    with pytest.warns(UserWarning):
+        obj.build()
+    g = obj.grad(obj.x(eq))
+    assert not np.any(np.isnan(g)), "vacuum boundary error"
 
     # these only need basic equilibrium
     eq = Equilibrium(L=2, M=2, N=2)

@@ -459,6 +459,74 @@ class Volume(_Objective):
         return data["V"]
 
 
+class CoilLength(_Objective):
+    """Coil length."""
+
+    def __init__(
+        self,
+        coil,
+        target=0,
+        bounds=None,
+        weight=1,
+        normalize=None,
+        normalize_target=None,
+        loss_function=None,
+        deriv_mode=None,
+        name="coil-length",
+    ):
+        super().__init__(
+            things=coil,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Bob be building."""
+        coil = self.things[0]
+        self._data_keys = ["length"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        grid = LinearGrid()
+        profiles = get_profiles(self._data_keys, obj=coil, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=coil, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build()
+
+    def compute(self, params, constants=None):
+        """Compute length of coil."""
+        if constants is None:
+            constants = self._constants
+
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+
+        f = data["length"]
+        return f
+
+
 class PlasmaVesselDistance(_Objective):
     """Target the distance between the plasma and a surrounding surface.
 

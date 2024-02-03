@@ -160,6 +160,9 @@ class _MagneticField(IOAble, ABC):
         else:
             return NotImplemented
 
+    def __radd__(self, x):
+        return self + x
+
     def __neg__(self):
         return ScaledMagneticField(-1, self)
 

@@ -38,6 +38,7 @@
    notebooks/tutorials/advanced_optimization.ipynb
    notebooks/tutorials/nae_constraint.ipynb
    notebooks/tutorials/bootstrap_current.ipynb
+   notebooks/tutorials/poincare_boundary_condition.ipynb
 
 .. toctree::
    :maxdepth: 1

@@ -1685,3 +1685,13 @@ def test_asymmetric_normalization():
         assert np.all(np.isfinite(val))
     for val in scales_eq.values():
         assert np.all(np.isfinite(val))
+
+
+@pytest.mark.unit
+def test_force_balance_axis_error():
+    """Test that ForceBalance objective yields an error if the grid contains axis."""
+    eq = Equilibrium()
+    grid = LinearGrid(L=2, M=2, N=2, axis=True)
+    obj = ObjectiveFunction(ForceBalance(eq, grid=grid))
+    with pytest.raises(ValueError):
+        obj.build()

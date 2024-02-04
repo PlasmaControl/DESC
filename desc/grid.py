@@ -1517,15 +1517,18 @@ def _meshgrid_expand(x, rho_size, theta_size, zeta_size, surface_label="rho"):
         "the meshgrid as shown in the example code in the docstring."
     )
     if surface_label == "rho":
+        assert len(x) == rho_size
         return jnp.tile(
             jnp.repeat(x, zeta_size, total_repeat_length=rho_size * zeta_size),
             theta_size,
         )
     if surface_label == "theta":
+        assert len(x) == theta_size
         return jnp.repeat(
             x,
             rho_size * zeta_size,
             total_repeat_length=rho_size * theta_size * zeta_size,
         )
     if surface_label == "zeta":
+        assert len(x) == zeta_size
         return jnp.tile(x, rho_size * theta_size)

@@ -1496,9 +1496,7 @@ def bounce_average(eq, lambdas, rho=None, alpha=None, resolution=20):
             Bounce average evaluated at ``lambdas`` for every field line.
 
         """
-        den = bi("1", lambdas)
-        num = bi(name, lambdas)
-        G = jnp.reshape(num.ravel() / den.ravel(), den.shape)
+        G = bi(name, lambdas) / bi("1", lambdas)
         return G
 
     return _bounce_average

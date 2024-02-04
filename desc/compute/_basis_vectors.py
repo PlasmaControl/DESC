@@ -517,7 +517,7 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["e_rho", "e_phi", "sqrt(g)_PEST"],
 )
-def _e_sup_theta_pest(params, transforms, profiles, data, **kwargs):
+def _e_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
     data["e^theta_PEST"] = (
         cross(data["e_phi"], data["e_rho"]).T / data["sqrt(g)_PEST"]
     ).T

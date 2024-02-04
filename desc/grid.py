@@ -1511,6 +1511,11 @@ def _meshgrid_expand(x, rho_size, theta_size, zeta_size, surface_label="rho"):
         ``x`` expanded to match the meshgrid pattern.
 
     """
+    assert surface_label in {"rho", "theta", "zeta"}, (
+        "These labels need not correspond to DESC coordinates. "
+        "They should correspond to the order the arrays were given to construct "
+        "the meshgrid as shown in the example code in the docstring."
+    )
     if surface_label == "rho":
         return jnp.tile(
             jnp.repeat(x, zeta_size, total_repeat_length=rho_size * zeta_size),

@@ -1496,8 +1496,7 @@ def bounce_average(eq, lambdas, rho=None, alpha=None, resolution=20):
             Bounce average evaluated at ``lambdas`` for every field line.
 
         """
-        G = bi(name, lambdas) / bi("1", lambdas)
-        return G
+        return bi(name) / bi("1")
 
     return _bounce_average
 

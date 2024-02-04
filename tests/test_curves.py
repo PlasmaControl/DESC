@@ -160,9 +160,30 @@ class TestRZCurve:
             xyz.compute("x", basis="xyz", grid=grid)["x"],
             atol=1e-12,
         )
+        # same thing but pass in a closed grid
+        grid = LinearGrid(N=20, endpoint=True)
+        xyz = rz.to_FourierXYZ(N=2, grid=grid, s=grid.nodes[:, 2])
+
+        np.testing.assert_allclose(
+            rz.compute("curvature", grid=grid)["curvature"],
+            xyz.compute("curvature", grid=grid)["curvature"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("torsion", grid=grid)["torsion"],
+            xyz.compute("torsion", grid=grid)["torsion"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("length", grid=grid)["length"],
+            xyz.compute("length", grid=grid)["length"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("x", grid=grid, basis="xyz")["x"],
+            xyz.compute("x", basis="xyz", grid=grid)["x"],
+            atol=1e-12,
+        )
 
         # same thing but with arclength angle
-
+        grid = LinearGrid(N=20, endpoint=False)
         xyz = rz.to_FourierXYZ(N=2, grid=grid, s="arclength")
 
         np.testing.assert_allclose(

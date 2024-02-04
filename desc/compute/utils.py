@@ -5,10 +5,11 @@ import inspect
 import warnings
 
 import numpy as np
+from numpy.polynomial.chebyshev import chebgauss
 from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
-from desc.grid import ConcentricGrid, LinearGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid
 
 from .data_index import data_index
 
@@ -1323,6 +1324,189 @@ def surface_min(grid, x, surface_label="rho"):
     # The above implementation was benchmarked to be more efficient than
     # alternatives without explicit loops in GitHub pull request #501.
     return grid.expand(mins, surface_label)
+
+
+def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
+    """Returns a method to compute the bounce integral of any quantity.
+
+    The bounce integral is defined as F_ℓ(λ) = ∫ f(ℓ) / √(1 − λ |B|) dℓ, where
+        dℓ parameterizes the distance along the field line,
+        λ is a constant proportional to the magnetic moment over energy,
+        |B| is the norm of the magnetic field,
+        f(ℓ) is the quantity to integrate along the field line,
+        and the endpoints of the integration are at the bounce points.
+    For a particle with fixed λ, bounce points are defined to be the location
+    on the field line such that the particle's velocity parallel to the
+    magnetic field is zero, i.e. λ |B| = 1.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium on which the bounce integral is defined.
+    lambdas : ndarray
+        λ values to evaluate the bounce integral at.
+    rho : int
+        Unique flux surface label coordinates.
+    alpha : ndarray
+        Unique field line label coordinates over a constant rho surface.
+    resolution : int
+        Number of quadrature points used to compute the bounce integral.
+
+    Returns
+    -------
+    bi : callable
+        This callable method computes the bounce integral F_ℓ(λ) for every
+        specified field line ℓ (constant rho and alpha), for every λ value in
+        ``lambdas``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        bi = bounce_integral(eq, lambdas)
+        F = bi(name)
+
+    """
+    if rho is None:
+        rho = jnp.linspace(0, 1, 10)
+    if alpha is None:
+        alpha = jnp.linspace(0, 2 * jnp.pi, 20)
+
+    # Use Gauss-Chebyshev quadrature as the integrand blows up at integration boundary.
+    x, w = chebgauss(deg=resolution)
+    # TODO: Write code to compute bounce points given lambda.
+    #  Vectorize it for multiple lambdas. Then vectorize coordinate mapping logic
+    #  for multiple lambdas. For now, let's pretend bounce points do not depend on
+    #  lambda so that bounce_point() returns either one or two numbers for
+    #  endpoints of all the integrals.
+    bp = bounce_point(eq, lambdas)
+    if bp.size == 1:
+        zeta = -2 * bp * jnp.arcsin(x) / jnp.pi
+    else:
+        zeta = (2 * jnp.arcsin(x) / jnp.pi - 1) / 2 * (bp[1] - bp[0]) + bp[1]
+
+    r, a, z = jnp.meshgrid(rho, alpha, zeta, copy=False, indexing="ij")
+    r, a, z = r.ravel(), a.ravel(), z.ravel()
+    # Now we map these Clebsch-Type field-line coordinates to DESC coordinates.
+    # Note that the rotational transform can be computed apriori because it is a single
+    # variable function of rho, and the coordinate mapping does not change rho. Once
+    # this is known, it is simple to compute theta_PEST from alpha. Then we transform
+    # from straight field-line coordinates to DESC coordinates with the method
+    # compute_theta_coords. This is preferred over transforming from Clebsch-Type
+    # coordinates to DESC coordinates directly with the more general method
+    # map_coordinates. That method requires an initial guess to be compatible with JIT,
+    # and generating a reasonable initial guess requires computing the rotational
+    # transform to approximate theta_PEST and the poloidal stream function anyway.
+    # TODO: In general, Linear Grid construction is not jit compatible.
+    #  This issue can be worked around with a specific routine for this.
+    lg = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    iota = lg.compress(eq.compute("iota", grid=lg)["iota"])
+    iota = jnp.tile(
+        jnp.repeat(iota, zeta.size, total_repeat_length=rho.size * zeta.size),
+        alpha.size,
+    )
+    sfl_coords = jnp.column_stack([r, (a + iota * z) % (2 * jnp.pi), z])
+    desc_coords = eq.compute_theta_coords(sfl_coords)
+    grid = Grid(desc_coords, jitable=True)
+    data = eq.compute(names=["B^zeta", "|B|"], grid=grid, override_grid=False)
+
+    def _bounce_integral(name):
+        """Compute the bounce integral of the named quantity.
+
+        Parameters
+        ----------
+        name : ndarray
+            Name of quantity in ``data_index`` to compute the bounce integral of.
+
+        Returns
+        -------
+        F : ndarray, shape(lambdas.size, alpha.size, rho.size)
+            Bounce integral evaluated at ``lambdas`` for every field line.
+
+        """
+        f = eq.compute(name, grid=grid, override_grid=False, data=data)[name]
+        # If lambdas.size is large, we should loop to save memory.
+        F = f / (data["B^zeta"] * jnp.sqrt(1 - lambdas[:, jnp.newaxis] * data["|B|"]))
+        F = jnp.sum(F.reshape(lambdas.size, -1, zeta.size) * w, axis=-1)
+        F = F.reshape(lambdas.size, alpha.size, rho.size)
+        if bp.size == 1:
+            F *= -jnp.pi / (2 * bp[0])
+        else:
+            F *= jnp.pi / (bp[1] - bp[0])
+        return F
+
+    return _bounce_integral
+
+
+def bounce_average(eq, lambdas, rho=None, alpha=None, resolution=20):
+    """Returns a method to compute the bounce average of any quantity.
+
+    The bounce average is defined as
+    G_ℓ(λ) = (∫ g(ℓ) / √(1 − λ |B|) dℓ) / (∫ 1 / √(1 − λ |B|) dℓ), where
+        dℓ parameterizes the distance along the field line,
+        λ is a constant proportional to the magnetic moment over energy,
+        |B| is the norm of the magnetic field,
+        g(ℓ) is the quantity to integrate along the field line,
+        and the endpoints of the integration are at the bounce points.
+    For a particle with fixed λ, bounce points are defined to be the location
+    on the field line such that the particle's velocity parallel to the
+    magnetic field is zero, i.e. λ |B| = 1.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium on which the bounce integral is defined.
+    lambdas : ndarray
+        λ values to evaluate the bounce integral at.
+    rho : int
+        Unique flux surface label coordinates.
+    alpha : ndarray
+        Unique field line label coordinates over a constant rho surface.
+    resolution : int
+        Number of quadrature points used to compute the bounce integral.
+
+    Returns
+    -------
+    ba : callable
+        This callable method computes the bounce integral G_ℓ(λ) for every
+        specified field line ℓ (constant rho and alpha), for every λ value in
+        ``lambdas``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        ba = bounce_average(eq, lambdas)
+        G = ba(name)
+
+    """
+    bi = bounce_integral(eq, lambdas, rho, alpha, resolution)
+
+    def _bounce_average(name):
+        """Compute the bounce average of the named quantity.
+
+        Parameters
+        ----------
+        name : ndarray
+            Name of quantity in ``data_index`` to compute the bounce average of.
+
+        Returns
+        -------
+        G : ndarray, shape(lambdas.size, alpha.size, rho.size)
+            Bounce average evaluated at ``lambdas`` for every field line.
+
+        """
+        den = bi("1", lambdas)
+        num = bi(name, lambdas)
+        G = jnp.reshape(num.ravel() / den.ravel(), den.shape)
+        return G
+
+    return _bounce_average
+
+
+def bounce_point(eq, lambdas):
+    """Todo."""
+    return np.array([])
 
 
 # defines the order in which objective arguments get concatenated into the state vector

@@ -599,6 +599,10 @@ else:  # pragma: no cover
         """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""
         return np.bincount(x, weights, minlength)
 
+    def repeat(a, repeats, axis=None, total_repeat_length=None):
+        """Same as np.repeat but with a dummy parameter to match jnp.repeat API."""
+        return np.repeat(a, repeats, axis)
+
     def custom_jvp(fun, *args, **kwargs):
         """Dummy function for custom_jvp without JAX."""
         fun.defjvp = lambda *args, **kwargs: None

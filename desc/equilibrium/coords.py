@@ -40,8 +40,7 @@ def map_coordinates(  # noqa: C901
     eq : Equilibrium
         Equilibrium to use
     coords : ndarray, shape(k,3)
-        2D array of input coordinates. Each row is a different
-        point in space.
+        2D array of input coordinates. Each row is a different point in space.
     inbasis, outbasis : tuple of str
         Labels for input and output coordinates, eg ("R", "phi", "Z") or
         ("rho", "alpha", "zeta") or any combination thereof. Labels should be the

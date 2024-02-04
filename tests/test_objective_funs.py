@@ -12,6 +12,7 @@ from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
 from desc.backend import jnp
+from desc.coils import FourierPlanarCoil
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -21,6 +22,7 @@ from desc.objectives import (
     AspectRatio,
     BootstrapRedlConsistency,
     BScaleLength,
+    CoilLength,
     CurrentDensity,
     Elongation,
     Energy,
@@ -492,6 +494,15 @@ class TestObjectiveFunction:
 
         test(get("DSHAPE"))
         test(get("HELIOTRON"))
+
+    @pytest.mark.unit
+    def test_coil_length(self):
+        """Tests coil length."""
+        coil = FourierPlanarCoil(r_n=1)
+        obj = CoilLength(coil)
+        obj.build()
+        f = obj.compute(params=coil.params_dict)
+        np.testing.assert_allclose(f, 2 * np.pi, rtol=1e-8)
 
 
 @pytest.mark.unit

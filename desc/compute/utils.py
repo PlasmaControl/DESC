@@ -9,7 +9,7 @@ from numpy.polynomial.chebyshev import chebgauss
 from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
-from desc.grid import ConcentricGrid, Grid, LinearGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, _meshgrid_expand
 
 from .data_index import data_index
 
@@ -1345,7 +1345,7 @@ def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
         Equilibrium on which the bounce integral is defined.
     lambdas : ndarray
         λ values to evaluate the bounce integral at.
-    rho : int
+    rho : ndarray
         Unique flux surface label coordinates.
     alpha : ndarray
         Unique field line label coordinates over a constant rho surface.
@@ -1400,15 +1400,19 @@ def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
     # TODO: In general, Linear Grid construction is not jit compatible.
     #  This issue can be worked around with a specific routine for this.
     lg = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-    iota = lg.compress(eq.compute("iota", grid=lg)["iota"])
-    iota = jnp.tile(
-        jnp.repeat(iota, zeta.size, total_repeat_length=rho.size * zeta.size),
-        alpha.size,
-    )
-    sfl_coords = jnp.column_stack([r, (a + iota * z) % (2 * jnp.pi), z])
+    lg_data = eq.compute("iota", grid=lg)
+    p = "desc.equilibrium.equilibrium.Equilibrium"
+    data = {
+        d: _meshgrid_expand(lg.compress(lg_data[d]), rho.size, alpha.size, zeta.size)
+        for d in get_data_deps("iota", obj=p)
+        if data_index[p][d]["coordinates"] == "r"
+    }
+    sfl_coords = jnp.column_stack([r, (a + data["iota"] * z) % (2 * jnp.pi), z])
     desc_coords = eq.compute_theta_coords(sfl_coords)
     grid = Grid(desc_coords, jitable=True)
-    data = eq.compute(names=["B^zeta", "|B|"], grid=grid, override_grid=False)
+    data = eq.compute(
+        names=["B^zeta", "|B|"], grid=grid, data=data, override_grid=False
+    )
 
     def _bounce_integral(name):
         """Compute the bounce integral of the named quantity.
@@ -1458,7 +1462,7 @@ def bounce_average(eq, lambdas, rho=None, alpha=None, resolution=20):
         Equilibrium on which the bounce integral is defined.
     lambdas : ndarray
         λ values to evaluate the bounce integral at.
-    rho : int
+    rho : ndarray
         Unique flux surface label coordinates.
     alpha : ndarray
         Unique field line label coordinates over a constant rho surface.

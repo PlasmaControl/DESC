@@ -854,7 +854,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
-
+        if hasattr(coords, "nodes"):
+            coords = coords.nodes
         coords = jnp.atleast_2d(coords)
 
         def body(B, x):
@@ -1251,7 +1252,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             return CoilSet(*self.coils, *other.coils)
         if isinstance(other, (list, tuple)):
             return CoilSet(*self.coils, *other)
-        raise TypeError
+        else:
+            return NotImplemented
 
     # dunder methods required by MutableSequence
     def __getitem__(self, i):
@@ -1392,7 +1394,8 @@ class MixedCoilSet(CoilSet):
             return MixedCoilSet(*self.coils, *other.coils)
         if isinstance(other, (list, tuple)):
             return MixedCoilSet(*self.coils, *other)
-        raise TypeError
+        else:
+            return NotImplemented
 
     def __setitem__(self, i, new_item):
         if not isinstance(new_item, _Coil):

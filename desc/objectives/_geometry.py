@@ -465,13 +465,13 @@ class CoilLength(_Objective):
     def __init__(
         self,
         coil,
-        target=0,
+        target=2 * np.pi,
         bounds=None,
         weight=1,
-        normalize=None,
-        normalize_target=None,
+        normalize=True,
+        normalize_target=True,
         loss_function=None,
-        deriv_mode=None,
+        deriv_mode="auto",
         name="coil-length",
     ):
         super().__init__(
@@ -487,8 +487,11 @@ class CoilLength(_Objective):
         )
 
     def build(self, use_jit=True, verbose=1):
-        """Bob be building."""
+        """Build objective function."""
         coil = self.things[0]
+        self._dim_f = 1
+        # TODO: is this the correct data key?
+        # seems like it because it gives the circumference of a circular coil?
         self._data_keys = ["length"]
 
         timer = Timer()
@@ -496,7 +499,9 @@ class CoilLength(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        grid = LinearGrid()
+        grid = LinearGrid(L=4, M=4)
+        # TODO: what grid is supposed to be used here?
+        # TODO: am I supposed to use obj=coil?
         profiles = get_profiles(self._data_keys, obj=coil, grid=grid)
         transforms = get_transforms(self._data_keys, obj=coil, grid=grid)
         self._constants = {
@@ -508,13 +513,15 @@ class CoilLength(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build()
+        super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute length of coil."""
         if constants is None:
             constants = self._constants
 
+        # TODO: gets KeyError with 'rotmat' when computing 'x_s'.
+        # why does coil.compute("length") work and not this?
         data = compute_fun(
             self.things[0],
             self._data_keys,

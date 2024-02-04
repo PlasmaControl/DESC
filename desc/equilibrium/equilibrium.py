@@ -11,13 +11,7 @@ from scipy.constants import mu_0
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import (
-    FourierZernike_to_FourierZernike_no_N_modes,
-    FourierZernike_to_PoincareZernikePolynomial,
-    FourierZernikeBasis,
-    fourier,
-    zernike_radial,
-)
+from desc.basis import FourierZernikeBasis, fourier, get_basis_poincare, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -762,14 +756,7 @@ class Equilibrium(IOAble, Optimizable):
             Separate Equilibrium object to be used for Poincare BC problem
         """
         surf = self.get_surface_at(zeta=zeta / self.NFP)
-        Lb_lmn, Lb_basis = FourierZernike_to_FourierZernike_no_N_modes(
-            self.L_lmn, self.L_basis, zeta
-        )
-        Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
-            Lb_lmn,
-            Lb_basis,
-            zeta=zeta,
-        )
+        Lb_lmn, Lb_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
         surface = PoincareSurface(
             surface=surf, L_lmn=Lb_lmn, L_basis=Lb_basis, zeta=zeta
         )

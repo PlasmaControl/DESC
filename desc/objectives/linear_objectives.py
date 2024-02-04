@@ -13,11 +13,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import (
-    FourierZernike_to_PoincareZernikePolynomial,
-    zernike_radial,
-    zernike_radial_coeffs,
-)
+from desc.basis import get_basis_poincare, zernike_radial, zernike_radial_coeffs
 from desc.geometry import FourierRZToroidalSurface, PoincareSurface
 from desc.utils import errorif, setdefault
 
@@ -854,7 +850,7 @@ class SecondBoundaryLambdaSelfConsistency(_FixedObjective):
         dim_L = eq.L_basis.num_modes
 
         if self.target is None:
-            Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
+            Lb_lmn, Lb_basis = get_basis_poincare(
                 self._Lb2_lmn,
                 self._Lb2_basis,
                 zeta=self._zeta,

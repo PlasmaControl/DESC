@@ -10,13 +10,13 @@ from desc.basis import (
     DoubleFourierSeries,
     FourierSeries,
     FourierZernike_to_FourierZernike_no_N_modes,
-    FourierZernike_to_PoincareZernikePolynomial,
     FourierZernikeBasis,
     PowerSeries,
     ZernikePolynomial,
     _jacobi,
     chebyshev,
     fourier,
+    get_basis_poincare,
     polyder_vec,
     polyval_vec,
     powers,
@@ -404,13 +404,11 @@ class TestBasis:
 
 
 @pytest.mark.unit
-def test_FourierZernike_to_PoincareZernikePolynomial():
+def test_get_basis_poincare():
     """Test FourierZernike to ZernikePolynomial utility function."""
     eq = get("HELIOTRON")
     eq.L_lmn = np.random.rand(*np.shape(eq.L_lmn))
-    L_lmn_2d, L_ZP_zeta0_basis = FourierZernike_to_PoincareZernikePolynomial(
-        eq.L_lmn, eq.L_basis
-    )
+    L_lmn_2d, L_ZP_zeta0_basis = get_basis_poincare(eq.L_lmn, eq.L_basis)
     grid = LinearGrid(L=50, M=50, zeta=0)
     transf = Transform(grid=grid, basis=L_ZP_zeta0_basis, derivs=0)
     L_2D = transf.transform(L_lmn_2d)

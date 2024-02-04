@@ -1728,7 +1728,7 @@ def zernike_norm(l, m):
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
 
 
-def FourierZernike_to_PoincareZernikePolynomial(X_lmn_3D, basis_3D, zeta=0):
+def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
     """Convert 3D FourierZernikeBasis to 2D ZernikePolynomial at zeta=0.
 
     Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates

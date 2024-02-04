@@ -11,12 +11,7 @@ from netCDF4 import Dataset
 import desc.examples
 from desc.__main__ import main
 from desc.backend import sign
-from desc.basis import (
-    FourierZernike_to_FourierZernike_no_N_modes,
-    FourierZernike_to_PoincareZernikePolynomial,
-)
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.geometry import ZernikeRZToroidalSection
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.objectives import (
@@ -374,38 +369,7 @@ def test_poincare_sfl_bc(
     """Test fixed poincare+lambda solve."""
     # solve an equilibrium with R,Z and lambda specified on zeta=0 surface
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-
-    Rb_lmn, Rb_basis = FourierZernike_to_PoincareZernikePolynomial(eq.R_lmn, eq.R_basis)
-    Zb_lmn, Zb_basis = FourierZernike_to_PoincareZernikePolynomial(eq.Z_lmn, eq.Z_basis)
-    Lb_lmn, Lb_basis = FourierZernike_to_FourierZernike_no_N_modes(
-        eq.L_lmn, eq.L_basis, zeta=0
-    )
-
-    surf = ZernikeRZToroidalSection(
-        R_lmn=Rb_lmn,
-        modes_R=Rb_basis.modes[:, :2].astype(int),
-        Z_lmn=Zb_lmn,
-        modes_Z=Zb_basis.modes[:, :2].astype(int),
-        spectral_indexing=eq._spectral_indexing,
-    )
-    eq_poin = Equilibrium(
-        surface=surf,
-        pressure=eq.pressure,
-        iota=eq.iota,
-        Psi=eq.Psi,  # flux (in Webers) within the last closed flux surface
-        NFP=eq.NFP,  # number of field periods
-        L=eq.L,  # radial spectral resolution
-        M=eq.M,  # poloidal spectral resolution
-        N=eq.N,  # toroidal spectral resolution
-        L_grid=eq.L_grid,  # real space radial resolution, slightly oversampled
-        M_grid=eq.M_grid,  # real space poloidal resolution, slightly oversampled
-        N_grid=eq.N_grid,  # real space toroidal resolution
-        sym=True,  # explicitly enforce stellarator symmetry
-        spectral_indexing=eq.spectral_indexing,
-    )
-    eq_poin.L_lmn = (
-        Lb_lmn  # initialize the poincare eq with the lambda of the original eq
-    )
+    eq_poin = eq.set_poincare_equilibrium()
 
     eq_poin.change_resolution(
         eq_poin.L, eq_poin.M, 1

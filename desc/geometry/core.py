@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.geom_utils import reflection_matrix, rotation_matrix
@@ -17,18 +16,44 @@ from desc.compute.utils import (
 )
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
-from desc.optimizable import Optimizable
+from desc.optimizable import Optimizable, optimizable_parameter
 
 
 class Curve(IOAble, Optimizable, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
-    _io_attrs_ = ["_name", "shift", "rotmat"]
+    _io_attrs_ = ["_name", "_shift", "_rotmat"]
 
     def __init__(self, name=""):
-        self.shift = jnp.array([0, 0, 0]).astype(float)
-        self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).astype(float)
-        self.name = name
+        self._shift = np.array([0, 0, 0], dtype=float)
+        self._rotmat = np.eye(3, dtype=float).flatten()
+        self._name = name
+
+    @optimizable_parameter
+    @property
+    def shift(self):
+        """Displacement of curve in X, Y, Z."""
+        return self._shift
+
+    @shift.setter
+    def shift(self, new):
+        if len(new) == 3:
+            self._shift = np.asarray(new)
+        else:
+            raise ValueError("shift should be a 3 element vector, got {}".format(new))
+
+    @optimizable_parameter
+    @property
+    def rotmat(self):
+        """Rotation matrix of curve in X, Y, Z."""
+        return self._rotmat
+
+    @rotmat.setter
+    def rotmat(self, new):
+        if len(new) == 9:
+            self._rotmat = np.asarray(new)
+        else:
+            self._rotmat = np.asarray(new.flatten())
 
     @property
     def name(self):
@@ -142,20 +167,20 @@ class Curve(IOAble, Optimizable, ABC):
         )
         return data
 
-    def translate(self, displacement=[0, 0, 0]):
-        """Translate the curve by a rigid displacement in x, y, z."""
-        self.shift += jnp.asarray(displacement)
+    def translate(self, displacement):
+        """Translate the curve by a rigid displacement in X, Y, Z."""
+        self.shift = self.shift + np.asarray(displacement)
 
-    def rotate(self, axis=[0, 0, 1], angle=0):
-        """Rotate the curve by a fixed angle about axis in xyz coordinates."""
-        R = rotation_matrix(axis, angle)
-        self.rotmat = R @ self.rotmat
+    def rotate(self, axis):
+        """Rotate the curve about axis in X, Y, Z coordinates."""
+        R = rotation_matrix(np.asarray(axis))
+        self.rotmat = (R @ self.rotmat.reshape(3, 3)).flatten()
         self.shift = self.shift @ R.T
 
     def flip(self, normal):
         """Flip the curve about the plane with specified normal."""
-        F = reflection_matrix(normal)
-        self.rotmat = F @ self.rotmat
+        F = reflection_matrix(np.asarray(normal))
+        self.rotmat = (F @ self.rotmat.reshape(3, 3)).flatten()
         self.shift = self.shift @ F.T
 
     def __repr__(self):

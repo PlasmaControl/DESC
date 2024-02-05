@@ -1,17 +1,6 @@
 Changelog
 =========
 
-- `Equilibrium.map_coordinates` is now differentiable.
-- Removes method `Equilibrium.compute_flux_coordinates` as it is now redundant with the
-more general `Equilibrium.map_coordinates`.
-- Allows certain objectives to target ``FourierRZToroidalSurface`` objects as well as
-``Equilibrium`` objects, such as ``MeanCurvature``, ``MeanCurvature``, and ``Volume``.
-- Allow optimizations where the only object being optimized is not an ``Equilibrium``
-object e.g. optimizing only a ``FourierRZToroidalSurface`` object to have a certain
-``Volume``.
-- Many functions from ``desc.plotting`` now also work for plotting quantities from
-``Curve`` and ``Surface`` classes.
-- Adds method ``constant_offset_surface`` to ``FourierRZToroidalSurface`` which creates a  surface with a specified constant offset from the base surface.
 - Adds method ``run_regcoil`` to ``FourierCurrentPotentialField`` that implements the
 REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
     * Can specify ``current_helicity`` to determine if resulting contours correspond to
@@ -25,6 +14,40 @@ a magnetic field) and ``SurfaceCurrentRegularization`` (which minimizes ``alpha*
 regularization term from surface current in the REGCOIL algorithm)
     * use of both of these functions allows for REGCOIL solutions to be obtained through
     the optimization framework, and combined with other objectives as well.
+
+
+v0.10.4
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.10.3...v0.10.4)
+
+- `Equilibrium.map_coordinates` is now differentiable.
+- Removes method `Equilibrium.compute_flux_coordinates` as it is now redundant with the
+more general `Equilibrium.map_coordinates`.
+- Allows certain objectives to target ``FourierRZToroidalSurface`` objects as well as
+``Equilibrium`` objects, such as ``MeanCurvature``, ``PrincipalCurvature``, and ``Volume``.
+- Allow optimizations where the only object being optimized is not an ``Equilibrium``
+object e.g. optimizing only a ``FourierRZToroidalSurface`` object to have a certain
+``Volume``.
+- Many functions from ``desc.plotting`` now also work for plotting quantities from
+``Curve`` and ``Surface`` classes.
+- Adds method ``FourierRZToroidalSurface.constant_offset_surface`` which creates
+a  surface with a specified constant offset from the base surface.
+- Adds method ``FourierRZToroidalSurface.from_values``  to create a surface by fitting
+(R,phi,Z) points, along with a user-defined poloidal angle theta which sets the poloidal
+angle for the created surface
+- Adds new objective ``LinearObjectiveFromUser`` for custom linear constraints.
+- `elongation` is now computed as a function of zeta rather than a single global scalar.
+- Adds `beta_vol` and `betaxis` to VMEC output.
+- Reorder steps in `solve_continuation_automatic` to avoid finite pressure tokamak with
+zero current.
+- Fix error in lambda o(rho) constraint for near axis behavior.
+- Fix bug when optimizing with only a single constraint.
+- Fix some bugs causing NaN in reverse mode AD for some objectives.
+- Fix incompatible array shapes when user supplies initial guess for lagrange multipliers
+for augmented lagrangian optimizers.
+- Fix a bug caused when optimizing multiple objects at the same time and the order of
+the objects gets mixed up.
 
 
 v0.10.3

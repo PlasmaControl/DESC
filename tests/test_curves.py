@@ -25,7 +25,7 @@ class TestRZCurve:
             c.compute("length", grid=20)["length"], 10 * 2 * np.pi
         )
         c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
             c.compute("length", grid=20)["length"], 10 * 2 * np.pi
@@ -37,7 +37,7 @@ class TestRZCurve:
         c = FourierRZCurve()
         np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 10)
         c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 10)
 
@@ -47,7 +47,7 @@ class TestRZCurve:
         c = FourierRZCurve()
         np.testing.assert_allclose(c.compute("torsion", grid=20)["torsion"], 0)
         c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute("torsion", grid=20)["torsion"], 0)
 
@@ -62,7 +62,7 @@ class TestRZCurve:
         np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         data = c.compute(
@@ -81,7 +81,7 @@ class TestRZCurve:
         np.testing.assert_allclose(x, 10)
         np.testing.assert_allclose(y, 0)
         np.testing.assert_allclose(z, 0)
-        c.rotate(angle=np.pi / 2)
+        c.rotate([0, 0, np.pi / 2])
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         r, p, z = c.compute("x", grid=0, basis="rpz")["x"].T
@@ -267,7 +267,7 @@ class TestFourierXYZCurve:
             c.compute("length", grid=20)["length"], 2 * 2 * np.pi
         )
         c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
             c.compute("length", grid=20)["length"], 2 * 2 * np.pi
@@ -279,7 +279,7 @@ class TestFourierXYZCurve:
         c = FourierXYZCurve()
         np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
         c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
 
@@ -291,7 +291,7 @@ class TestFourierXYZCurve:
             c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
         )
         c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
             c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
@@ -308,7 +308,7 @@ class TestFourierXYZCurve:
         np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         data = c.compute(
@@ -327,7 +327,7 @@ class TestFourierXYZCurve:
         np.testing.assert_allclose(x, 12)
         np.testing.assert_allclose(y, 0)
         np.testing.assert_allclose(z, 0)
-        c.rotate(angle=np.pi / 2)
+        c.rotate([0, 0, np.pi / 2])
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         r, p, z = c.compute("x", grid=0, basis="rpz")["x"].T
@@ -405,6 +405,19 @@ class TestPlanarCurve:
     """Tests for FourierPlanarCurve class."""
 
     @pytest.mark.unit
+    def test_rotation(self):
+        """Test rotation of planar curve."""
+        cx = FourierPlanarCurve(center=[0, 0, 0], normal=[1, 0, 0], r_n=1)
+        cy = FourierPlanarCurve(center=[0, 0, 0], normal=[0, 1, 0], r_n=1)
+        cz = FourierPlanarCurve(center=[0, 0, 0], normal=[0, 0, 1], r_n=1)
+        datax = cx.compute("x", grid=20, basis="xyz")
+        datay = cy.compute("x", grid=20, basis="xyz")
+        dataz = cz.compute("x", grid=20, basis="xyz")
+        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=1e-16)  # only in Y-Z plane
+        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=1e-16)  # only in X-Z plane
+        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=1e-16)  # only in X-Y plane
+
+    @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""
         c = FourierPlanarCurve(modes=[0])
@@ -412,7 +425,7 @@ class TestPlanarCurve:
             c.compute("length", grid=20)["length"], 2 * 2 * np.pi
         )
         c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
             c.compute("length", grid=20)["length"], 2 * 2 * np.pi
@@ -424,7 +437,7 @@ class TestPlanarCurve:
         c = FourierPlanarCurve()
         np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
         c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
 
@@ -436,7 +449,7 @@ class TestPlanarCurve:
             c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
         )
         c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
             c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
@@ -453,7 +466,7 @@ class TestPlanarCurve:
         np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         data = c.compute(
@@ -474,9 +487,9 @@ class TestPlanarCurve:
         np.testing.assert_allclose(z, 0)
         dr, dp, dz = c.compute("x_sss", grid=0, basis="rpz")["x_sss"].T
         np.testing.assert_allclose(dr, 0)
-        np.testing.assert_allclose(dp, 0)
+        np.testing.assert_allclose(dp, 0, atol=1e-12)
         np.testing.assert_allclose(dz, 2)
-        c.rotate(angle=np.pi / 2)
+        c.rotate([0, 0, np.pi / 2])
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         x, y, z = c.compute("x", grid=0, basis="xyz")["x"].T
@@ -560,7 +573,7 @@ class TestSplineXYZCurve:
                 err_msg=f"Failed at {method}",
             )
             c.translate([1, 1, 1])
-            c.rotate(angle=np.pi)
+            c.rotate([0, 0, np.pi])
             c.flip([0, 1, 0])
             np.testing.assert_allclose(
                 c.compute("length", grid=npts)["length"],
@@ -585,7 +598,7 @@ class TestSplineXYZCurve:
                 err_msg=f"Failed at {method}",
             )
             c.translate([1, 1, 1])
-            c.rotate(angle=np.pi)
+            c.rotate([0, 0, np.pi])
             c.flip([0, 1, 0])
             np.testing.assert_allclose(
                 c.compute("length", grid=npts)["length"],
@@ -631,7 +644,7 @@ class TestSplineXYZCurve:
         np.testing.assert_allclose(x, R)
         np.testing.assert_allclose(y, 0, atol=1e-15)
         np.testing.assert_allclose(z, 0, atol=1e-15)
-        c.rotate(angle=np.pi / 2)
+        c.rotate([0, 0, np.pi / 2])
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         r, p, z = c.compute("x", grid=Grid(np.array([[0.0, 0.0, 0.0]])), basis="rpz")[
@@ -652,7 +665,7 @@ class TestSplineXYZCurve:
             c.compute("curvature", grid=10)["curvature"][1:-1], 1 / 10, atol=1e-3
         )
         c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
             c.compute("curvature", grid=10)["curvature"][1:-1], 1 / 10, atol=1e-3
@@ -669,7 +682,7 @@ class TestSplineXYZCurve:
             c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
         )
         c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
+        c.rotate([0, 0, np.pi])
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
             c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12

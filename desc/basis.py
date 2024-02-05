@@ -6,7 +6,7 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign
+from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign, switch
 from desc.io import IOAble
 from desc.utils import flatten_list
 
@@ -1784,7 +1784,7 @@ def jacobi_poly_single(x, n, alpha, beta=0, P_n1=0, P_n2=0):
 
 
 @custom_jvp
-@functools.partial(jit, static_argnums=3)
+@jit
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
@@ -1833,18 +1833,11 @@ def zernike_radial(r, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    if dr > 4:
-        raise NotImplementedError(
-            "Analytic radial derivatives of Zernike polynomials for order>4 "
-            + "have not been implemented."
-        )
-
-    dxs = jnp.arange(0, int(dr + 1))
-    return _zernike_radial_vectorized(r, l, m, dxs)
+    return _zernike_radial_vectorized(r, l, m, dr)
 
 
 @functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
-def _zernike_radial_vectorized(r, l, m, dxs):
+def _zernike_radial_vectorized(r, l, m, dr):
     # need this to be separate so that we can have a default value for dr and not
     # vectorize over it.
     def update(i, args):
@@ -1867,7 +1860,7 @@ def _zernike_radial_vectorized(r, l, m, dxs):
         alpha, out, P_past = args
         P_n2 = P_past[0]
         P_n1 = P_past[1]
-        P_n = jnp.zeros(dxs.size)
+        P_n = jnp.zeros(MAXDR + 1)
 
         def find_inter_jacobi(dx, args):
             N, alpha, P_n1, P_n2, P_n = args
@@ -1878,7 +1871,7 @@ def _zernike_radial_vectorized(r, l, m, dxs):
 
         # Calculate Jacobi polynomial and derivatives for (m,n)
         _, _, _, _, P_n = fori_loop(
-            0, dxs.size, find_inter_jacobi, (N, alpha, P_n1, P_n2, P_n)
+            0, MAXDR + 1, find_inter_jacobi, (N, alpha, P_n1, P_n2, P_n)
         )
 
         coef = jnp.exp(
@@ -1917,8 +1910,9 @@ def _zernike_radial_vectorized(r, l, m, dxs):
             - coef[3] * 128 * (2 * alpha + 3) * x ** (alpha + 2) * P_n[3]
             + coef[4] * 256 * x ** (alpha + 4) * P_n[4]
         )
-        branches = [branch0, branch1, branch2, branch3, branch4]
-        result = branches[dxs.size - 1](r)
+        branch5 = lambda x: jnp.nan
+        branches = [branch0, branch1, branch2, branch3, branch4, branch5]
+        result = switch(dr, branches, r)
         _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
         # Shift past values if needed
@@ -1951,8 +1945,8 @@ def _zernike_radial_vectorized(r, l, m, dxs):
         # First 2 Jacobi Polynomials (they don't need recursion)
         # P_past stores last 2 Jacobi polynomials (and required derivatives)
         # evaluated at given r points
-        P_past = jnp.zeros((2, dxs.size))
-        _, P_past = fori_loop(0, dxs.size, find_init_jacobi, (alpha, P_past))
+        P_past = jnp.zeros((2, MAXDR + 1))
+        _, P_past = fori_loop(0, MAXDR + 1, find_init_jacobi, (alpha, P_past))
 
         # Loop over every n value
         _, out, _ = fori_loop(
@@ -1967,6 +1961,9 @@ def _zernike_radial_vectorized(r, l, m, dxs):
     r_jacobi = 1 - 2 * r**2
     m = jnp.abs(m)
     n = ((l - m) // 2).astype(int)
+
+    MAXDR = 4
+    dxs = jnp.arange(0, MAXDR + 1)
 
     M_max = jnp.max(m)
     # Loop over every different m value. There is another nested

@@ -1784,7 +1784,7 @@ def jacobi_poly_single(x, n, alpha, beta=0, P_n1=0, P_n2=0):
 
 
 @custom_jvp
-@jit
+@functools.partial(jit, static_argnums=3)
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
@@ -1833,11 +1833,12 @@ def zernike_radial(r, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    return _zernike_radial_vectorized(r, l, m, dr)
+    dxs = jnp.arange(0, dr + 1)
+    return _zernike_radial_vectorized(r, l, m, dxs)
 
 
 @functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
-def _zernike_radial_vectorized(r, l, m, dr):
+def _zernike_radial_vectorized(r, l, m, dxs):
     # need this to be separate so that we can have a default value for dr and not
     # vectorize over it.
     def update(i, args):
@@ -1860,7 +1861,7 @@ def _zernike_radial_vectorized(r, l, m, dr):
         alpha, out, P_past = args
         P_n2 = P_past[0]
         P_n1 = P_past[1]
-        P_n = jnp.zeros(MAXDR + 1)
+        P_n = jnp.zeros(dxs.size)
 
         def find_inter_jacobi(dx, args):
             N, alpha, P_n1, P_n2, P_n = args
@@ -1871,48 +1872,48 @@ def _zernike_radial_vectorized(r, l, m, dr):
 
         # Calculate Jacobi polynomial and derivatives for (m,n)
         _, _, _, _, P_n = fori_loop(
-            0, dr + 1, find_inter_jacobi, (N, alpha, P_n1, P_n2, P_n)
+            0, dxs.size, find_inter_jacobi, (N, alpha, P_n1, P_n2, P_n)
         )
 
         coef = jnp.exp(
             gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
         )
-        branch0 = lambda: (-1) ** N * r**alpha * P_n[0]
-        branch1 = lambda: (-1) ** N * (
-            alpha * r ** jnp.maximum(alpha - 1, 0) * P_n[0]
-            - coef[1] * 4 * r ** (alpha + 1) * P_n[1]
+        branch0 = lambda x: (-1) ** N * x**alpha * P_n[0]
+        branch1 = lambda x: (-1) ** N * (
+            alpha * x ** jnp.maximum(alpha - 1, 0) * P_n[0]
+            - coef[1] * 4 * x ** (alpha + 1) * P_n[1]
         )
-        branch2 = lambda: (-1) ** N * (
-            (alpha - 1) * alpha * r ** jnp.maximum(alpha - 2, 0) * P_n[0]
-            - coef[1] * 4 * (2 * alpha + 1) * r**alpha * P_n[1]
-            + coef[2] * 16 * r ** (alpha + 2) * P_n[2]
+        branch2 = lambda x: (-1) ** N * (
+            (alpha - 1) * alpha * x ** jnp.maximum(alpha - 2, 0) * P_n[0]
+            - coef[1] * 4 * (2 * alpha + 1) * x**alpha * P_n[1]
+            + coef[2] * 16 * x ** (alpha + 2) * P_n[2]
         )
-        branch3 = lambda: (-1) ** N * (
-            (alpha - 2) * (alpha - 1) * alpha * r ** jnp.maximum(alpha - 3, 0) * P_n[0]
-            - coef[1] * 12 * alpha**2 * r ** jnp.maximum(alpha - 1, 0) * P_n[1]
-            + coef[2] * 48 * (alpha + 1) * r ** (alpha + 1) * P_n[2]
-            - coef[3] * 64 * r ** (alpha + 3) * P_n[3]
+        branch3 = lambda x: (-1) ** N * (
+            (alpha - 2) * (alpha - 1) * alpha * x ** jnp.maximum(alpha - 3, 0) * P_n[0]
+            - coef[1] * 12 * alpha**2 * x ** jnp.maximum(alpha - 1, 0) * P_n[1]
+            + coef[2] * 48 * (alpha + 1) * x ** (alpha + 1) * P_n[2]
+            - coef[3] * 64 * x ** (alpha + 3) * P_n[3]
         )
-        branch4 = lambda: (-1) ** N * (
+        branch4 = lambda x: (-1) ** N * (
             (alpha - 3)
             * (alpha - 2)
             * (alpha - 1)
             * alpha
-            * r ** jnp.maximum(alpha - 4, 0)
+            * x ** jnp.maximum(alpha - 4, 0)
             * P_n[0]
             - coef[1]
             * 8
             * alpha
             * (2 * alpha**2 - 3 * alpha + 1)
-            * r ** jnp.maximum(alpha - 2, 0)
+            * x ** jnp.maximum(alpha - 2, 0)
             * P_n[1]
-            + coef[2] * 48 * (2 * alpha**2 + 2 * alpha + 1) * r**alpha * P_n[2]
-            - coef[3] * 128 * (2 * alpha + 3) * r ** (alpha + 2) * P_n[3]
-            + coef[4] * 256 * r ** (alpha + 4) * P_n[4]
+            + coef[2] * 48 * (2 * alpha**2 + 2 * alpha + 1) * x**alpha * P_n[2]
+            - coef[3] * 128 * (2 * alpha + 3) * x ** (alpha + 2) * P_n[3]
+            + coef[4] * 256 * x ** (alpha + 4) * P_n[4]
         )
-        branch5 = lambda: jnp.nan
+        branch5 = lambda x: jnp.nan
         branches = [branch0, branch1, branch2, branch3, branch4, branch5]
-        result = switch(dr, branches)
+        result = switch(dxs.size - 1, branches, r)
         _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
         # Shift past values if needed
@@ -1945,8 +1946,8 @@ def _zernike_radial_vectorized(r, l, m, dr):
         # First 2 Jacobi Polynomials (they don't need recursion)
         # P_past stores last 2 Jacobi polynomials (and required derivatives)
         # evaluated at given r points
-        P_past = jnp.zeros((2, MAXDR + 1))
-        _, P_past = fori_loop(0, MAXDR + 1, find_init_jacobi, (alpha, P_past))
+        P_past = jnp.zeros((2, dxs.size))
+        _, P_past = fori_loop(0, dxs.size, find_init_jacobi, (alpha, P_past))
 
         # Loop over every n value
         _, out, _ = fori_loop(
@@ -1956,16 +1957,11 @@ def _zernike_radial_vectorized(r, l, m, dr):
 
     m = jnp.atleast_1d(m)
     l = jnp.atleast_1d(l)
-    dr = jnp.asarray(dr).astype(int)
 
     out = jnp.zeros(m.size)
     r_jacobi = 1 - 2 * r**2
     m = jnp.abs(m)
     n = ((l - m) // 2).astype(int)
-    # probably a better way to handle this but this works for now with minimal
-    # extra computation
-    MAXDR = 4
-    dxs = jnp.arange(0, MAXDR + 1)
 
     M_max = jnp.max(m)
     # Loop over every different m value. There is another nested

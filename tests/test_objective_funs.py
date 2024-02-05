@@ -1696,3 +1696,13 @@ def test_asymmetric_normalization():
         assert np.all(np.isfinite(val))
     for val in scales_eq.values():
         assert np.all(np.isfinite(val))
+
+
+@pytest.mark.unit
+def test_force_balance_axis_error():
+    """Test that ForceBalance objective is not NaN if the grid contains axis."""
+    eq = get("SOLOVEV")
+    grid = LinearGrid(L=2, M=2, N=2, axis=True)
+    obj = ForceBalance(eq, grid=grid)
+    obj.build()
+    assert not np.any(np.isnan(obj.compute_unscaled(*obj.xs(eq))))

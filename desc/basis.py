@@ -6,7 +6,7 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign
+from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign, switch
 from desc.io import IOAble
 from desc.utils import flatten_list
 
@@ -1784,7 +1784,7 @@ def jacobi_poly_single(x, n, alpha, beta=0, P_n1=0, P_n2=0):
 
 
 @custom_jvp
-@functools.partial(jit, static_argnums=3)
+@jit
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
@@ -1818,7 +1818,7 @@ def zernike_radial(r, l, m, dr=0):
 
     Parameters
     ----------
-    r : ndarray, shape(N,)
+    r : ndarray, shape(...,)
         radial coordinates to evaluate basis
     l : ndarray of int, shape(K,)
         radial mode number(s)
@@ -1829,7 +1829,7 @@ def zernike_radial(r, l, m, dr=0):
 
     Returns
     -------
-    out : ndarray, shape(N,K)
+    out : ndarray, shape(...,K)
         basis function(s) evaluated at specified points
 
     """
@@ -1838,13 +1838,8 @@ def zernike_radial(r, l, m, dr=0):
 
 @functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
 def _zernike_radial_vectorized(r, l, m, dr):
-
-    if dr > 4:
-        raise NotImplementedError(
-            "Analytic radial derivatives of Zernike polynomials for order>4 "
-            + "have not been implemented."
-        )
-
+    # need this to be separate so that we can have a default value for dr and not
+    # vectorize over it.
     def update(i, args):
         alpha, N, result, out = args
         idx = jnp.where(jnp.logical_and(m[i] == alpha, n[i] == N), i, -1)
@@ -1865,7 +1860,7 @@ def _zernike_radial_vectorized(r, l, m, dr):
         alpha, out, P_past = args
         P_n2 = P_past[0]
         P_n1 = P_past[1]
-        P_n = jnp.zeros(dr + 1)
+        P_n = jnp.zeros(MAXDR + 1)
 
         def find_inter_jacobi(dx, args):
             N, alpha, P_n1, P_n2, P_n = args
@@ -1882,49 +1877,42 @@ def _zernike_radial_vectorized(r, l, m, dr):
         coef = jnp.exp(
             gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
         )
-        # TODO: A version without if statements are possible?
-        if dr == 0:
-            result = (-1) ** N * r**alpha * P_n[0]
-        elif dr == 1:
-            result = (-1) ** N * (
-                alpha * r ** jnp.maximum(alpha - 1, 0) * P_n[0]
-                - coef[1] * 4 * r ** (alpha + 1) * P_n[1]
-            )
-        elif dr == 2:
-            result = (-1) ** N * (
-                (alpha - 1) * alpha * r ** jnp.maximum(alpha - 2, 0) * P_n[0]
-                - coef[1] * 4 * (2 * alpha + 1) * r**alpha * P_n[1]
-                + coef[2] * 16 * r ** (alpha + 2) * P_n[2]
-            )
-        elif dr == 3:
-            result = (-1) ** N * (
-                (alpha - 2)
-                * (alpha - 1)
-                * alpha
-                * r ** jnp.maximum(alpha - 3, 0)
-                * P_n[0]
-                - coef[1] * 12 * alpha**2 * r ** jnp.maximum(alpha - 1, 0) * P_n[1]
-                + coef[2] * 48 * (alpha + 1) * r ** (alpha + 1) * P_n[2]
-                - coef[3] * 64 * r ** (alpha + 3) * P_n[3]
-            )
-        elif dr == 4:
-            result = (-1) ** N * (
-                (alpha - 3)
-                * (alpha - 2)
-                * (alpha - 1)
-                * alpha
-                * r ** jnp.maximum(alpha - 4, 0)
-                * P_n[0]
-                - coef[1]
-                * 8
-                * alpha
-                * (2 * alpha**2 - 3 * alpha + 1)
-                * r ** jnp.maximum(alpha - 2, 0)
-                * P_n[1]
-                + coef[2] * 48 * (2 * alpha**2 + 2 * alpha + 1) * r**alpha * P_n[2]
-                - coef[3] * 128 * (2 * alpha + 3) * r ** (alpha + 2) * P_n[3]
-                + coef[4] * 256 * r ** (alpha + 4) * P_n[4]
-            )
+        branch0 = lambda: (-1) ** N * r**alpha * P_n[0]
+        branch1 = lambda: (-1) ** N * (
+            alpha * r ** jnp.maximum(alpha - 1, 0) * P_n[0]
+            - coef[1] * 4 * r ** (alpha + 1) * P_n[1]
+        )
+        branch2 = lambda: (-1) ** N * (
+            (alpha - 1) * alpha * r ** jnp.maximum(alpha - 2, 0) * P_n[0]
+            - coef[1] * 4 * (2 * alpha + 1) * r**alpha * P_n[1]
+            + coef[2] * 16 * r ** (alpha + 2) * P_n[2]
+        )
+        branch3 = lambda: (-1) ** N * (
+            (alpha - 2) * (alpha - 1) * alpha * r ** jnp.maximum(alpha - 3, 0) * P_n[0]
+            - coef[1] * 12 * alpha**2 * r ** jnp.maximum(alpha - 1, 0) * P_n[1]
+            + coef[2] * 48 * (alpha + 1) * r ** (alpha + 1) * P_n[2]
+            - coef[3] * 64 * r ** (alpha + 3) * P_n[3]
+        )
+        branch4 = lambda: (-1) ** N * (
+            (alpha - 3)
+            * (alpha - 2)
+            * (alpha - 1)
+            * alpha
+            * r ** jnp.maximum(alpha - 4, 0)
+            * P_n[0]
+            - coef[1]
+            * 8
+            * alpha
+            * (2 * alpha**2 - 3 * alpha + 1)
+            * r ** jnp.maximum(alpha - 2, 0)
+            * P_n[1]
+            + coef[2] * 48 * (2 * alpha**2 + 2 * alpha + 1) * r**alpha * P_n[2]
+            - coef[3] * 128 * (2 * alpha + 3) * r ** (alpha + 2) * P_n[3]
+            + coef[4] * 256 * r ** (alpha + 4) * P_n[4]
+        )
+        branch5 = lambda: jnp.nan
+        branches = [branch0, branch1, branch2, branch3, branch4, branch5]
+        result = switch(dr, branches)
         _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
         # Shift past values if needed
@@ -1957,8 +1945,8 @@ def _zernike_radial_vectorized(r, l, m, dr):
         # First 2 Jacobi Polynomials (they don't need recursion)
         # P_past stores last 2 Jacobi polynomials (and required derivatives)
         # evaluated at given r points
-        P_past = jnp.zeros((2, dr + 1))
-        _, P_past = fori_loop(0, dr + 1, find_init_jacobi, (alpha, P_past))
+        P_past = jnp.zeros((2, MAXDR + 1))
+        _, P_past = fori_loop(0, MAXDR + 1, find_init_jacobi, (alpha, P_past))
 
         # Loop over every n value
         _, out, _ = fori_loop(
@@ -1968,13 +1956,16 @@ def _zernike_radial_vectorized(r, l, m, dr):
 
     m = jnp.atleast_1d(m)
     l = jnp.atleast_1d(l)
-    dr = int(dr)
+    dr = jnp.asarray(dr).astype(int)
 
     out = jnp.zeros(m.size)
     r_jacobi = 1 - 2 * r**2
     m = jnp.abs(m)
     n = ((l - m) // 2).astype(int)
-    dxs = jnp.arange(0, dr + 1)
+    # probably a better way to handle this but this works for now with minimal
+    # extra computation
+    MAXDR = 4
+    dxs = jnp.arange(0, MAXDR + 1)
 
     M_max = jnp.max(m)
     # Loop over every different m value. There is another nested

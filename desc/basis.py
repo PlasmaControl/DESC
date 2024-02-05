@@ -6,7 +6,7 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign, switch
+from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
 from desc.utils import flatten_list
 
@@ -1833,7 +1833,13 @@ def zernike_radial(r, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    dxs = jnp.arange(0, dr + 1)
+    if dr > 4:
+        raise NotImplementedError(
+            "Analytic radial derivatives of Zernike polynomials for order>4 "
+            + "have not been implemented."
+        )
+
+    dxs = jnp.arange(0, int(dr + 1))
     return _zernike_radial_vectorized(r, l, m, dxs)
 
 
@@ -1911,9 +1917,8 @@ def _zernike_radial_vectorized(r, l, m, dxs):
             - coef[3] * 128 * (2 * alpha + 3) * x ** (alpha + 2) * P_n[3]
             + coef[4] * 256 * x ** (alpha + 4) * P_n[4]
         )
-        branch5 = lambda x: jnp.nan
-        branches = [branch0, branch1, branch2, branch3, branch4, branch5]
-        result = switch(dxs.size - 1, branches, r)
+        branches = [branch0, branch1, branch2, branch3, branch4]
+        result = branches[dxs.size - 1](r)
         _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
         # Shift past values if needed

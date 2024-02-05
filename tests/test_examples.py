@@ -578,7 +578,7 @@ def test_NAE_QSC_solve():
             verbose=3,
             ftol=1e-2,
             objective=obj,
-            maxiter=100,
+            maxiter=175,
             xtol=1e-6,
             constraints=constraints,
         )

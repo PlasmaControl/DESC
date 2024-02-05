@@ -8,6 +8,7 @@ from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
+from desc.input_reader import InputReader
 from desc.io import load
 from desc.transform import Transform
 from desc.vmec import VMECIO
@@ -20,6 +21,8 @@ from desc.vmec_utils import (
     vmec_boundary_subspace,
     zernike_to_fourier,
 )
+
+from .utils import area_difference_desc
 
 
 class TestVMECIO:
@@ -1360,3 +1363,49 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
             np.testing.assert_allclose(
                 file.variables[key], file_cpp.variables[key], err_msg=key
             )
+
+
+@pytest.mark.solve
+def test_write_vmec_input(TmpDir):
+    """Test generated VMEC input file gives the original equilibrium when solved."""
+    # write VMEC input file
+    fname = str(TmpDir.join("input.SOLOVEV"))
+    eq0 = get("SOLOVEV")
+    W0 = eq0.compute("W")["W"]
+    VMECIO.write_vmec_input(eq0, fname)
+
+    # read VMEC input file and override defaults to match desc/examples/SOLOVEV
+    ir = InputReader()
+    inputs = ir.parse_inputs(fname)
+    inputs[0]["spectral_indexing"] = "fringe"
+    inputs[0]["L"] = 24
+
+    # solve from VMEC input file
+    fam = EquilibriaFamily(inputs)
+    fam.solve_continuation(
+        objective=inputs[0]["objective"],
+        optimizer=inputs[0]["optimizer"],
+        pert_order=[inp["pert_order"] for inp in inputs],
+        ftol=[inp["ftol"] for inp in inputs],
+        xtol=[inp["xtol"] for inp in inputs],
+        gtol=[inp["gtol"] for inp in inputs],
+        maxiter=[inp["maxiter"] for inp in inputs],
+        verbose=2,
+    )
+    eq1 = fam[-1]
+    W1 = eq1.compute("W")["W"]
+
+    # check that solution matches original equilibrium
+    rho_err, theta_err = area_difference_desc(eq0, eq1)
+    np.testing.assert_allclose(eq0.L, eq1.L)
+    np.testing.assert_allclose(eq0.M, eq1.M)
+    np.testing.assert_allclose(eq0.N, eq1.N)
+    np.testing.assert_allclose(eq0.NFP, eq1.NFP)
+    np.testing.assert_allclose(eq0.Psi, eq1.Psi)
+    np.testing.assert_allclose(eq0.p_l, eq1.p_l)
+    np.testing.assert_allclose(eq0.i_l, eq1.i_l)
+    np.testing.assert_allclose(eq0.Rb_lmn, eq1.Rb_lmn)
+    np.testing.assert_allclose(eq0.Zb_lmn, eq1.Zb_lmn)
+    np.testing.assert_allclose(W0, W1)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)

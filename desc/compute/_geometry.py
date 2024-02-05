@@ -342,7 +342,6 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="z",
     data=["rho", "sqrt(g)", "g_tt", "R"],
-    grid_type="quad",
 )
 def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     max_rho = jnp.max(data["rho"])

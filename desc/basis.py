@@ -1956,6 +1956,7 @@ def _zernike_radial_vectorized(r, l, m, dr):
 
     m = jnp.atleast_1d(m)
     l = jnp.atleast_1d(l)
+    dr = jnp.asarray(dr).astype(int)
 
     out = jnp.zeros(m.size)
     r_jacobi = 1 - 2 * r**2

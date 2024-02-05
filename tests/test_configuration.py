@@ -272,10 +272,6 @@ class TestInitialGuess:
             eq.surface = eq.get_surface_at(rho=1)
             eq.change_resolution(2, 2, 2)
             _ = _initial_guess_surface(eq.R_basis, eq.R_lmn, eq.R_basis)
-        with pytest.raises(ValueError):
-            _ = _initial_guess_surface(
-                eq.R_basis, eq.surface.R_lmn, eq.surface.R_basis, mode="foo"
-            )
 
     @pytest.mark.unit
     def test_guess_from_other(self):

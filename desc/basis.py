@@ -1732,7 +1732,7 @@ def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
     """Convert 3D FourierZernikeBasis to 2D ZernikePolynomial at zeta=0.
 
     Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates
-    the coefficients at the zeta=0 cross-section, returning a 2D ZernikePolynomial
+    the coefficients at the zeta=0 or Pi cross-section, returning a 2D ZernikePolynomial
     basis and its coefficients X_lmn_2D. The output dimension will not be the same,
     only toroidal mode will be N=0.
 

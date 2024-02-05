@@ -15,9 +15,11 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.magnetic_fields import ToroidalMagneticField, VerticalMagneticField
 from desc.objectives import (
     AspectRatio,
     CurrentDensity,
+    DummyFields,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
@@ -943,3 +945,29 @@ class TestGetExample:
                 -1.36284423e07,
             ],
         )
+
+
+@pytest.mark.unit
+def test_dummy_for_optimizing_collections():
+    """Test with a dummy objective for optimizing collections."""
+    eq = Equilibrium()
+    tf = ToroidalMagneticField(1, 2)
+    pf = VerticalMagneticField(3)
+    field = tf + pf
+
+    objective = ObjectiveFunction(
+        DummyFields(
+            field, eq, target=2, eval_grid=LinearGrid(rho=np.array(1.0), M=2, N=0)
+        )
+    )
+    optimizer = Optimizer("lsq-exact")
+    # somehow fix just the R0 of the toroidal field, unsure of the API for it yet
+    # so this fails
+    constraints = FixParameter(field, [["R0"], [None]])
+
+    # optimize for a dummy objective (Bphi / BZ), to just test out the framework
+    (field,), _ = optimizer.optimize(
+        (field,), objective, constraints, ftol=0, verbose=3
+    )
+
+    np.testing.assert_allclose(field[0].B0 / field[1].B0, 0, atol=1e-5)

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz_vec, xyz2rpz_vec
 from desc.examples import get
@@ -907,3 +907,20 @@ def test_dommaschk_fit_vertical_and_toroidal_field():
             np.testing.assert_allclose(coef, 0, atol=1e-14)
     for name in ["b_arr", "c_arr", "d_arr"]:
         np.testing.assert_allclose(B._params[name], 0, atol=1e-14)
+
+    @pytest.mark.unit
+    def test_spline_field_jit(self):
+        """Test that the spline field can be passed to a jitted function."""
+        extcur = [4700.0, 1000.0]
+        mgrid = "tests/inputs/mgrid_test.nc"
+        field = SplineMagneticField.from_mgrid(mgrid, extcur)
+
+        x = jnp.array([0.70, 0, 0])
+
+        @jit
+        def foo(field, x):
+            return field.compute_magnetic_field(x)
+
+        np.testing.assert_allclose(
+            foo(field, x), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
+        )

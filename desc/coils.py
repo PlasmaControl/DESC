@@ -6,7 +6,7 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import jit, jnp, tree_stack, tree_unstack, vmap
+from desc.backend import jit, jnp, scan, tree_stack, tree_unstack, vmap
 from desc.compute import get_params, rpz2xyz, xyz2rpz_vec
 from desc.geometry import (
     FourierPlanarCurve,
@@ -854,12 +854,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
+        if hasattr(coords, "nodes"):
+            coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
 
-        B = vmap(
-            lambda x: self[0].compute_magnetic_field(
+        def body(B, x):
+            B += self[0].compute_magnetic_field(
                 coords, params=x, basis=basis, grid=grid
             )
-        )(tree_stack(params)).sum(axis=0)
+            return B, None
+
+        B = scan(body, jnp.zeros(coords.shape), tree_stack(params))[0]
 
         return B
 
@@ -1247,7 +1252,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             return CoilSet(*self.coils, *other.coils)
         if isinstance(other, (list, tuple)):
             return CoilSet(*self.coils, *other)
-        raise TypeError
+        else:
+            return NotImplemented
 
     # dunder methods required by MutableSequence
     def __getitem__(self, i):
@@ -1388,7 +1394,8 @@ class MixedCoilSet(CoilSet):
             return MixedCoilSet(*self.coils, *other.coils)
         if isinstance(other, (list, tuple)):
             return MixedCoilSet(*self.coils, *other)
-        raise TypeError
+        else:
+            return NotImplemented
 
     def __setitem__(self, i, new_item):
         if not isinstance(new_item, _Coil):

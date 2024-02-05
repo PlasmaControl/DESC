@@ -605,7 +605,7 @@ def _e_sup_helical_mag(params, transforms, profiles, data, **kwargs):
     label="|\\sqrt{g}(B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta)|",
     units="T \\cdot m^{2}",
     units_long="Tesla * square meter",
-    description="Magnitude of helical basis vector",
+    description="Magnitude of helical basis vector weighted by 3-D volume Jacobian",
     dim=1,
     params=[],
     transforms={},

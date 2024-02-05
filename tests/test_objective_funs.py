@@ -1690,7 +1690,7 @@ def test_asymmetric_normalization():
 @pytest.mark.unit
 def test_force_balance_axis_error():
     """Test that ForceBalance objective is not NaN if the grid contains axis."""
-    eq = get("DSHAPE")
+    eq = get("SOLOVEV")
     grid = LinearGrid(L=2, M=2, N=2, axis=True)
     obj = ForceBalance(eq, grid=grid)
     obj.build()

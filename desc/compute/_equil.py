@@ -573,11 +573,12 @@ def _e_sup_helical(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B^theta", "B^zeta", "e^theta*sqrt(g)", "e^zeta"],
+    data=["B^theta", "B^zeta", "e^theta*sqrt(g)", "e^zeta", "sqrt(g)"],
 )
 def _e_sup_helical_times_sqrt_g(params, transforms, profiles, data, **kwargs):
     data["e^helical*sqrt(g)"] = (
-        data["B^zeta"] * data["e^theta*sqrt(g)"].T - data["B^theta"] * data["e^zeta"].T
+        data["B^zeta"] * data["e^theta*sqrt(g)"].T
+        - (data["sqrt(g)"] * data["B^theta"]) * data["e^zeta"].T
     ).T
     return data
 

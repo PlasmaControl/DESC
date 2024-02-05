@@ -1068,7 +1068,7 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
                 quant_cpp_from_booz,
                 data[name],
                 rtol=2e-5,
-                err_msg=f"{name} at surf index {surf_index}",
+                err_msg=f"{name} at surf index {surf_index} from cpp",
             )
 
     # test misc quantities
@@ -1286,7 +1286,7 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
                 quant_cpp_from_booz,
                 data[name],
                 rtol=3e-6,
-                err_msg=f"{name} at surf index {surf_index}",
+                err_msg=f"{name} at surf index {surf_index} from cpp",
             )
 
     for key in list(file_cpp.variables.keys()):

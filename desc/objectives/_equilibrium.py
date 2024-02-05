@@ -4,7 +4,7 @@ from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import ConcentricGrid, QuadratureGrid
-from desc.utils import Timer, errorif
+from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -121,19 +121,13 @@ class ForceBalance(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            jnp.any(jnp.isclose(grid.nodes[:, 0], 0.0)),
-            ValueError,
-            "grid contains nodes at rho=0, force error not well-defined on-axis.",
-        )
-
         self._dim_f = 2 * grid.num_nodes
         self._data_keys = [
             "F_rho",
             "|grad(rho)|",
             "sqrt(g)",
             "F_helical",
-            "|e^helical|",
+            "|e^helical*sqrt(g)|",
         ]
 
         timer = Timer()
@@ -186,7 +180,7 @@ class ForceBalance(_Objective):
             profiles=constants["profiles"],
         )
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
-        fb = data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
+        fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
 
         return jnp.concatenate([fr, fb])
 

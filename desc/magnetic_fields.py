@@ -1312,7 +1312,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         Parameters
         ----------
             field (MagneticField or callable or ndarray): magnetic field to fit
-                if callable, must accept (num_nodes,3) ndarray as argument
+                if callable, must accept (num_nodes,3) array of rpz coords as argument
                     and output (num_nodes,3) as the B field in cylindrical rpz basis.
                 if ndarray, must be an ndarray of the magnetic field in rpz,
                     of shape (num_nodes,3) with the columns being (B_R, B_phi, B_Z)

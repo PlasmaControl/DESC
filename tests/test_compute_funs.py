@@ -1319,8 +1319,7 @@ def test_compute_everything():
                         err_msg=f"Parameterization: {p}. Name: {name}.",
                     )
                 except AssertionError as e:
-                    error = False
-                    update_master_data = True
+                    error = True
                     print(e)
             else:
                 # We can compute a new quantity now, so we should update the

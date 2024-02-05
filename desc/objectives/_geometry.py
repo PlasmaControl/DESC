@@ -490,8 +490,6 @@ class CoilLength(_Objective):
         """Build objective function."""
         coil = self.things[0]
         self._dim_f = 1
-        # TODO: is this the correct data key?
-        # seems like it because it gives the circumference of a circular coil?
         self._data_keys = ["length"]
 
         timer = Timer()
@@ -499,9 +497,7 @@ class CoilLength(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        grid = LinearGrid(L=4, M=4)
-        # TODO: what grid is supposed to be used here?
-        # TODO: am I supposed to use obj=coil?
+        grid = LinearGrid(N=32)
         profiles = get_profiles(self._data_keys, obj=coil, grid=grid)
         transforms = get_transforms(self._data_keys, obj=coil, grid=grid)
         self._constants = {
@@ -520,8 +516,6 @@ class CoilLength(_Objective):
         if constants is None:
             constants = self._constants
 
-        # TODO: gets KeyError with 'rotmat' when computing 'x_s'.
-        # why does coil.compute("length") work and not this?
         data = compute_fun(
             self.things[0],
             self._data_keys,

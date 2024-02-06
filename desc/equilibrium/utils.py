@@ -8,8 +8,8 @@ from desc.backend import jnp
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
+    PoincareSurface,
     Surface,
-    ZernikeRZToroidalSection,
 )
 from desc.profiles import PowerSeriesProfile, _Profile
 from desc.utils import isnonnegint
@@ -96,13 +96,13 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
                 check_orientation=False,
             )
         elif np.all(surface[:, 2] == 0):
-            surface = ZernikeRZToroidalSection(
-                surface[:, 3],
-                surface[:, 4],
-                surface[:, :2].astype(int),
-                surface[:, :2].astype(int),
-                spectral_indexing,
-                sym,
+            surface = PoincareSurface(
+                R_lmn=surface[:, 3],
+                Z_lmn=surface[:, 4],
+                modes_R=surface[:, :2].astype(int),
+                modes_Z=surface[:, :2].astype(int),
+                spectral_indexing=spectral_indexing,
+                sym=sym,
             )
         else:
             raise ValueError("boundary should either have l=0 or n=0")
@@ -154,7 +154,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
                 ],
                 NFP=NFP,
             )
-        elif isinstance(surface, ZernikeRZToroidalSection):
+        elif isinstance(surface, PoincareSurface):
             # FIXME: include m=0 l!=0 modes
             axis = FourierRZCurve(
                 R_n=surface.R_lmn[

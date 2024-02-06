@@ -758,7 +758,7 @@ class Equilibrium(IOAble, Optimizable):
         surf = self.get_surface_at(zeta=zeta / self.NFP)
         Lb_lmn, Lb_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
         surface = PoincareSurface(
-            surface=surf, L_lmn=Lb_lmn, L_basis=Lb_basis, zeta=zeta
+            surface=surf, L_lmn=Lb_lmn, modes_L=Lb_basis.modes, zeta=zeta
         )
 
         eq_poincare = Equilibrium(

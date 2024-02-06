@@ -941,7 +941,7 @@ class PoincareSurface(ZernikeRZToroidalSection):
         L_lmn=None,
         modes_R=None,
         modes_Z=None,
-        L_basis=None,
+        modes_L=None,
         spectral_indexing="ansi",
         sym="auto",
         zeta=0.0,
@@ -951,16 +951,23 @@ class PoincareSurface(ZernikeRZToroidalSection):
         if (
             isinstance(surface, ZernikeRZToroidalSection)
             and L_lmn is not None
-            and L_basis is not None
+            and modes_L is not None
         ):
+            LL = np.max(abs(modes_L[:, 0]))
+            ML = np.max(abs(modes_L[:, 1]))
+            L_basis = ZernikePolynomial(
+                L=max(LL, ML),
+                M=max(LL, ML),
+                spectral_indexing=surface.spectral_indexing,
+                sym="sin" if surface.sym else False,
+            )
+
             self._R_basis = surface.R_basis
             self._Z_basis = surface.Z_basis
             self._L_basis = L_basis
             self._R_lmn = surface.R_lmn
             self._Z_lmn = surface.Z_lmn
             self._L_lmn = L_lmn
-            LL = np.max(abs(L_basis.modes[:, 0]))
-            ML = np.max(abs(L_basis.modes[:, 1]))
             self._L = max(surface.L, LL)
             self._M = max(surface.M, ML)
             self._N = surface.N
@@ -970,11 +977,20 @@ class PoincareSurface(ZernikeRZToroidalSection):
             self.name = name
         else:
             # UPDATE THIS PART FOR GENERAL USE
+            if R_lmn is None:
+                R_lmn = np.array([10, 1])
+                modes_R = np.array([[0, 0], [1, 1]])
+            if Z_lmn is None:
+                Z_lmn = np.array([0, -1])
+                modes_Z = np.array([[0, 0], [1, -1]])
             if L_lmn is None:
                 L_lmn = np.array([0, -1])
                 modes_L = np.array([[0, 0], [1, -1]])
             if modes_L is None:
                 modes_L = modes_R
+            if modes_Z is None:
+                modes_Z = modes_R
+
             L_lmn, modes_L = map(np.asarray, (L_lmn, modes_L))
 
             assert (
@@ -995,14 +1011,10 @@ class PoincareSurface(ZernikeRZToroidalSection):
                 check_orientation=check_orientation,
             )
 
-            LR = np.max(abs(modes_R[:, 0]))
-            MR = np.max(abs(modes_R[:, 1]))
-            LZ = np.max(abs(modes_Z[:, 0]))
-            MZ = np.max(abs(modes_Z[:, 1]))
             LL = np.max(abs(modes_L[:, 0]))
             ML = np.max(abs(modes_L[:, 1]))
-            self._L = max(LR, LZ, LL)
-            self._M = max(MR, MZ, ML)
+            self._L = max(self.L, LL)
+            self._M = max(self.M, ML)
 
             self._L_basis = ZernikePolynomial(
                 L=max(LL, ML),

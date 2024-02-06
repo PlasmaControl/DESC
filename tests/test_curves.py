@@ -233,7 +233,7 @@ class TestRZCurve:
         path = "tests/inputs/input.QSC_r2_5.5_desc"
 
         curve1 = FourierRZCurve.from_input_file(path)
-        curve2 = Equilibrium(**InputReader(path).inputs[0]).axis
+        curve2 = Equilibrium(**InputReader(path).inputs[0], check_kwargs=False).axis
         curve1.change_resolution(curve2.N)
 
         np.testing.assert_allclose(curve1.R_n, curve2.R_n)
@@ -245,7 +245,7 @@ class TestRZCurve:
 
         with pytest.warns(UserWarning):
             curve3 = FourierRZCurve.from_input_file(path)
-            curve4 = Equilibrium(**InputReader(path).inputs[0]).axis
+            curve4 = Equilibrium(**InputReader(path).inputs[0], check_kwargs=False).axis
         curve3.change_resolution(curve4.N)
 
         np.testing.assert_allclose(curve3.R_n, curve4.R_n)

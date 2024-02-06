@@ -62,7 +62,7 @@ class TestRZCurve:
         np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
-        c.rotate([0, 0, np.pi])
+        c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         data = c.compute(

@@ -178,8 +178,6 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
     xp_ = objective.unpack_state(xp, False)
     for con in constraints:
         xpi = [xp_[i] for i, t in enumerate(objective.things) if t in con.things]
-        if not xpi:
-            continue  # if no particular solution bc things is not constrained
         y1 = con.compute_unscaled(*xpi)
         y2 = con.target
         y1, y2 = np.broadcast_arrays(y1, y2)

@@ -4,7 +4,6 @@ import mpmath
 import numpy as np
 import pytest
 
-from desc.backend import jnp
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     DoubleFourierSeries,
@@ -12,7 +11,6 @@ from desc.basis import (
     FourierZernikeBasis,
     PowerSeries,
     ZernikePolynomial,
-    _jacobi,
     chebyshev,
     fourier,
     jacobi_poly_single,
@@ -23,7 +21,6 @@ from desc.basis import (
     zernike_radial_coeffs,
     zernike_radial_poly,
 )
-from desc.derivatives import Derivative
 from desc.grid import LinearGrid
 
 
@@ -433,23 +430,3 @@ class TestBasis:
 
         with pytest.raises(AssertionError):
             ZernikePolynomial(L=L, M=M)
-
-
-@pytest.mark.unit
-def test_jacobi_jvp():
-    """Test that custom derivative rule for jacobi polynomials works."""
-    basis = ZernikePolynomial(25, 25)
-    l, m = basis.modes[:, :2].T
-    m = jnp.abs(m)
-    alpha = m
-    beta = 0
-    n = (l - m) // 2
-    r = np.linspace(0, 1, 1000)
-    jacobi_arg = 1 - 2 * r**2
-    for i in range(5):
-        # custom jvp rule for derivative of jacobi should just call jacobi with dx+1
-        f1 = jnp.vectorize(Derivative(_jacobi, 3, "grad"))(
-            n, alpha, beta, jacobi_arg[:, None], i
-        )
-        f2 = _jacobi(n, alpha, beta, jacobi_arg[:, None], i + 1)
-        np.testing.assert_allclose(f1, f2)

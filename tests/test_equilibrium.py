@@ -15,6 +15,7 @@ from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.objectives import get_equilibrium_objective
+from desc.profiles import PowerSeriesProfile
 
 from .utils import area_difference, compute_coords
 
@@ -436,3 +437,13 @@ def test_error_when_ndarray_or_integer_passed():
         eq.compute("R", grid=1)
     with pytest.raises(TypeError):
         eq.compute("R", grid=np.linspace(0, 1, 10))
+
+
+@pytest.mark.unit
+def test_equilibrium_unused_kwargs():
+    """Test that invalid kwargs raise an error, for gh issue #850."""
+    pres = PowerSeriesProfile()
+    curr = PowerSeriesProfile()
+    with pytest.raises(TypeError):
+        _ = Equilibrium(pres=pres, curr=curr)
+    _ = Equilibrium(pressure=pres, current=curr)

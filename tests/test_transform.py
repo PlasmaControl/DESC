@@ -460,9 +460,22 @@ class TestTransform:
 
         g = LinearGrid(rho=2, theta=2, zeta=2, NFP=2)
         b = DoubleFourierSeries(M=2, N=2)
-        with pytest.warns(UserWarning, match="nodes complete 1 full field period"):
+        # this actually will emit 2 warnings, one for the NFP for
+        # basis and grid not matching, and one for nodes completing 1 full period
+        # we will catch the UserWarning generically then check each message
+        with pytest.warns(
+            UserWarning
+        ) as record:  # , match="nodes complete 1 full field period"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
+        NFP_grid_basis_warning_exists = False
+        nodes_warning_exists = False
+        for r in record:
+            if "Unequal number of field periods" in str(r.message):
+                NFP_grid_basis_warning_exists = True
+            if "nodes complete 1 full field period" in str(r.message):
+                nodes_warning_exists = True
+        assert NFP_grid_basis_warning_exists and nodes_warning_exists
 
         g = LinearGrid(rho=2, theta=2, zeta=2)
         b = DoubleFourierSeries(M=1, N=1)

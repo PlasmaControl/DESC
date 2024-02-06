@@ -733,6 +733,11 @@ class SplineProfile(_Profile):
         return s
 
     @property
+    def knots(self):
+        """ndarray: Knot locations."""
+        return self._knots
+
+    @property
     def params(self):
         """ndarray: Parameters for computation."""
         return self._params
@@ -771,7 +776,7 @@ class SplineProfile(_Profile):
         if dt != 0 or dz != 0:
             return jnp.zeros_like(grid.nodes[:, 0])
         xq = grid.nodes[grid.unique_rho_idx, 0]
-        x = self._knots
+        x = self.knots
         f = params
         fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
         return fq[grid.inverse_rho_idx]

@@ -1,10 +1,10 @@
 from interpax import interp1d
 
-from desc.backend import cond, jnp
+from desc.backend import jnp
 
 from .data_index import register_compute_fun
 from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
-from .utils import cross, dot
+from .utils import cross, dot, safenormalize
 
 
 @register_compute_fun(
@@ -186,16 +186,9 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([X, Y, Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    norm = jnp.linalg.norm(params["normal"])
-    angle = jnp.arccos(dot(Zaxis, params["normal"]) / norm)
-    eps = 1e2 * jnp.finfo(angle.dtype).eps
-    axis = cond(
-        jnp.all(jnp.abs(angle) < eps),
-        lambda _: jnp.zeros_like(Zaxis),
-        lambda _: cross(Zaxis, params["normal"]) / (norm * jnp.sin(angle)) * angle,
-        None,
-    )
-    A = rotation_matrix(axis=axis)
+    axis = cross(Zaxis, params["normal"])
+    angle = jnp.arccos(dot(Zaxis, safenormalize(params["normal"])))
+    A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T) + params["center"]
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -230,16 +223,9 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([dX, dY, dZ]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    norm = jnp.linalg.norm(params["normal"])
-    angle = jnp.arccos(dot(Zaxis, params["normal"]) / norm)
-    eps = 1e2 * jnp.finfo(angle.dtype).eps
-    axis = cond(
-        jnp.all(jnp.abs(angle) < eps),
-        lambda _: jnp.zeros_like(Zaxis),
-        lambda _: cross(Zaxis, params["normal"]) / (norm * jnp.sin(angle)) * angle,
-        None,
-    )
-    A = rotation_matrix(axis=axis)
+    axis = cross(Zaxis, params["normal"])
+    angle = jnp.arccos(dot(Zaxis, safenormalize(params["normal"])))
+    A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -288,16 +274,9 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([d2X, d2Y, d2Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    norm = jnp.linalg.norm(params["normal"])
-    angle = jnp.arccos(dot(Zaxis, params["normal"]) / norm)
-    eps = 1e2 * jnp.finfo(angle.dtype).eps
-    axis = cond(
-        jnp.all(jnp.abs(angle) < eps),
-        lambda _: jnp.zeros_like(Zaxis),
-        lambda _: cross(Zaxis, params["normal"]) / (norm * jnp.sin(angle)) * angle,
-        None,
-    )
-    A = rotation_matrix(axis=axis)
+    axis = cross(Zaxis, params["normal"])
+    angle = jnp.arccos(dot(Zaxis, safenormalize(params["normal"])))
+    A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -353,16 +332,9 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([d3X, d3Y, d3Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    norm = jnp.linalg.norm(params["normal"])
-    angle = jnp.arccos(dot(Zaxis, params["normal"]) / norm)
-    eps = 1e2 * jnp.finfo(angle.dtype).eps
-    axis = cond(
-        jnp.all(jnp.abs(angle) < eps),
-        lambda _: jnp.zeros_like(Zaxis),
-        lambda _: cross(Zaxis, params["normal"]) / (norm * jnp.sin(angle)) * angle,
-        None,
-    )
-    A = rotation_matrix(axis=axis)
+    axis = cross(Zaxis, params["normal"])
+    angle = jnp.arccos(dot(Zaxis, safenormalize(params["normal"])))
+    A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     if kwargs.get("basis", "rpz").lower() == "rpz":

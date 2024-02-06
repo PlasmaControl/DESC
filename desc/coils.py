@@ -817,17 +817,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         return tree_unstack(data)
 
-    def translate(self, displacement):
+    def translate(self, *args, **kwargs):
         """Translate the coils along an axis."""
-        [coil.translate(displacement) for coil in self.coils]
+        [coil.translate(*args, **kwargs) for coil in self.coils]
 
-    def rotate(self, axis):
+    def rotate(self, *args, **kwargs):
         """Rotate the coils about an axis."""
-        [coil.rotate(axis) for coil in self.coils]
+        [coil.rotate(*args, **kwargs) for coil in self.coils]
 
-    def flip(self, normal):
+    def flip(self, *args, **kwargs):
         """Flip the coils across a plane."""
-        [coil.flip(normal) for coil in self.coils]
+        [coil.flip(*args, **kwargs) for coil in self.coils]
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
@@ -894,12 +894,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
-        axis = jnp.asarray(axis)
         phi = jnp.linspace(0, angle, n, endpoint=endpoint)
         coils = []
         for i in range(n):
             coili = coil.copy()
-            coili.rotate(axis / jnp.linalg.norm(axis) * phi[i])
+            coili.rotate(axis=axis, angle=phi[i])
             coili.current = currents[i]
             coils.append(coili)
         return cls(*coils)
@@ -929,8 +928,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
         displacement = jnp.asarray(displacement)
-        coils = []
         a = jnp.linspace(0, 1, n, endpoint=endpoint)
+        coils = []
         for i in range(n):
             coili = coil.copy()
             coili.translate(a[i] * displacement)
@@ -980,7 +979,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             coils = coils + flipped_coils
         for k in range(0, NFP):
             coil = coils.copy()
-            coil.rotate([0, 0, 2 * jnp.pi * k / NFP])
+            coil.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
             coilset.append(coil)
 
         return cls(*coilset)

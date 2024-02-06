@@ -46,11 +46,11 @@ def rotation_matrix(axis, angle=None):
     axis = safenormalize(axis)
     if angle is None:
         angle = norm
-    eps = 1e2 * jnp.finfo(angle.dtype).eps
+    eps = 1e2 * jnp.finfo(axis.dtype).eps
     R1 = jnp.cos(angle) * jnp.eye(3)
     R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
     R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
-    return jnp.where(norm < eps, R1, R1 + R2 + R3)
+    return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
 
 
 def xyz2rpz(pts):

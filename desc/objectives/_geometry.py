@@ -1349,7 +1349,7 @@ class DummyFields(_Objective):
     fields : MagneticField
         MagneticField object.
     eq : Equilibrium
-        eq to target iota from fields in.
+        eq to calc coords to target Bphi over BZ from fields at.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -1374,8 +1374,10 @@ class DummyFields(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    grid : Grid, optional
+    eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
+    source_grid : Grid, optional
+        Grid to discretize field objects with.
     name : str, optional
         Name of the objective function.
 
@@ -1398,7 +1400,7 @@ class DummyFields(_Objective):
         deriv_mode="auto",
         eval_grid=None,
         source_grid=None,
-        name="mag field iota",
+        name="Bphi over BZ",
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)

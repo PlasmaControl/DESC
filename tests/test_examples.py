@@ -951,23 +951,26 @@ class TestGetExample:
 def test_dummy_for_optimizing_collections():
     """Test with a dummy objective for optimizing collections."""
     eq = Equilibrium()
-    tf = ToroidalMagneticField(1, 2)
-    pf = VerticalMagneticField(3)
+    tf = ToroidalMagneticField(1.0, 11.0)
+    pf = VerticalMagneticField(4.0)
     field = tf + pf
 
+    # use grid with only points at R=11m (same as the TF field R0)
+    # so that the end result should be TF B0 / VF B0 = 2
     objective = ObjectiveFunction(
         DummyFields(
-            field, eq, target=2, eval_grid=LinearGrid(rho=np.array(1.0), M=2, N=0)
+            field,
+            eq,
+            target=2,
+            eval_grid=LinearGrid(rho=np.array(1.0), theta=np.array(0.0), N=1),
         )
     )
     optimizer = Optimizer("lsq-exact")
-    # somehow fix just the R0 of the toroidal field, unsure of the API for it yet
-    # so this fails
-    constraints = FixParameter(field, [["R0"], [None]])
+    constraints = (FixParameter(field, [["R0"], []]),)
 
     # optimize for a dummy objective (Bphi / BZ), to just test out the framework
     (field,), _ = optimizer.optimize(
         (field,), objective, constraints, ftol=0, verbose=3
     )
 
-    np.testing.assert_allclose(field[0].B0 / field[1].B0, 0, atol=1e-5)
+    np.testing.assert_allclose(field[0].B0 / field[1].B0, 2)

@@ -283,8 +283,6 @@ def DummyStellarator(tmpdir_factory):
             ],
         ),
         "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
-        "objective": "force",
-        "optimizer": "lsq-exact",
     }
     eq = Equilibrium(**inputs)
     eq.save(output_path)

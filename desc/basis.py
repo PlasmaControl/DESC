@@ -1412,32 +1412,23 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
     return polyval_vec(coeffs, r, prec=prec).T
 
 
-def jacobi_poly_single(x, n, alpha, beta=0, P_n1=0, P_n2=0):
-    """Evaluate Jacobi for single alpha and n pair."""
-    c = 2 * n + alpha + beta
-    a1 = 2 * n * (c - n) * (c - 2)
-    a2 = (c - 1) * (c * (c - 2) * x + (alpha - beta) * (alpha + beta))
-    a3 = 2 * (n + alpha - 1) * (n + beta - 1) * c
-
-    a1 = jnp.where(a1 == 0, 1e-6, a1)
-    P_n = (a2 * P_n1 - a3 * P_n2) / a1
-    # Checks for special cases
-    P_n = jnp.where(n < 0, 0, P_n)
-    P_n = jnp.where(n == 0, 1, P_n)
-    P_n = jnp.where(n == 1, (alpha + 1) + (alpha + beta + 2) * (x - 1) / 2, P_n)
-    return P_n
-
-
 @custom_jvp
 @jit
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
     Calculates Radial part of Zernike Polynomials using Jacobi recursion relation
-    by getting rid of the redundant calculations for appropriate modes. This version
-    is almost the same as zernike_radial_old function but way faster and more
-    accurate. First version of this function is zernike_radial_separate which has
-    many function for each derivative definition. User can refer that for clarity.
+    by getting rid of the redundant calculations for appropriate modes.
+    https://en.wikipedia.org/wiki/Jacobi_polynomials#Recurrence_relations
+
+    For the derivatives, the following formula is used with above recursion relation,
+    https://en.wikipedia.org/wiki/Jacobi_polynomials#Derivatives
+
+    Used formulas are also in the zerike_eval.ipynb notebook in docs.
+
+    This function can be made faster. However, JAX reverse mode AD causes problems.
+    In future, we may use vmap() instead of jnp.vectorize() to be able to set dr as
+    static argument, and not calculate every derivative even thoguh not asked.
 
     Parameters
     ----------
@@ -1461,8 +1452,8 @@ def zernike_radial(r, l, m, dr=0):
 
 @functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
 def _zernike_radial_vectorized(r, l, m, dr):
-    # need this to be separate so that we can have a default value for dr and not
-    # vectorize over it.
+    """Calculation of Radial part of Zernike polynomials."""
+
     def update(i, args):
         alpha, N, result, out = args
         idx = jnp.where(jnp.logical_and(m[i] == alpha, n[i] == N), i, -1)
@@ -1481,9 +1472,9 @@ def _zernike_radial_vectorized(r, l, m, dr):
 
     def body_inner(N, args):
         alpha, out, P_past = args
-        P_n2 = P_past[0]
-        P_n1 = P_past[1]
-        P_n = jnp.zeros(MAXDR + 1)
+        P_n2 = P_past[0]  # Jacobi at N-2
+        P_n1 = P_past[1]  # Jacobi at N-1
+        P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
 
         def find_inter_jacobi(dx, args):
             N, alpha, P_n1, P_n2, P_n = args
@@ -1492,30 +1483,42 @@ def _zernike_radial_vectorized(r, l, m, dr):
             )
             return (N, alpha, P_n1, P_n2, P_n)
 
-        # Calculate Jacobi polynomial and derivatives for (m,n)
+        # Calculate Jacobi polynomial and derivatives for (alpha,N)
         _, _, _, _, P_n = fori_loop(
             0, MAXDR + 1, find_inter_jacobi, (N, alpha, P_n1, P_n2, P_n)
         )
 
+        # Calculate coefficients for derivatives. coef[0] will never be used. Jax
+        # doesn't have Gamma function directly, that's why we calculate Logarithm of
+        # Gamma function and then exponentiate it.
         coef = jnp.exp(
             gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
         )
+
+        # Since we cannot make dr static, we cannot use if statement. Instead define
+        # functions and execute only the function at dr th index
+
+        # 0th Derivative of Zernike Radial
         branch0 = lambda x: (-1) ** N * x**alpha * P_n[0]
+        # 1th Derivative of Zernike Radial
         branch1 = lambda x: (-1) ** N * (
             alpha * x ** jnp.maximum(alpha - 1, 0) * P_n[0]
             - coef[1] * 4 * x ** (alpha + 1) * P_n[1]
         )
+        # 2nd Derivative of Zernike Radial
         branch2 = lambda x: (-1) ** N * (
             (alpha - 1) * alpha * x ** jnp.maximum(alpha - 2, 0) * P_n[0]
             - coef[1] * 4 * (2 * alpha + 1) * x**alpha * P_n[1]
             + coef[2] * 16 * x ** (alpha + 2) * P_n[2]
         )
+        # 3rd Derivative of Zernike Radial
         branch3 = lambda x: (-1) ** N * (
             (alpha - 2) * (alpha - 1) * alpha * x ** jnp.maximum(alpha - 3, 0) * P_n[0]
             - coef[1] * 12 * alpha**2 * x ** jnp.maximum(alpha - 1, 0) * P_n[1]
             + coef[2] * 48 * (alpha + 1) * x ** (alpha + 1) * P_n[2]
             - coef[3] * 64 * x ** (alpha + 3) * P_n[3]
         )
+        # 4th Derivative of Zernike Radial
         branch4 = lambda x: (-1) ** N * (
             (alpha - 3)
             * (alpha - 2)
@@ -1533,15 +1536,22 @@ def _zernike_radial_vectorized(r, l, m, dr):
             - coef[3] * 128 * (2 * alpha + 3) * x ** (alpha + 2) * P_n[3]
             + coef[4] * 256 * x ** (alpha + 4) * P_n[4]
         )
+        # if dr is greater than 4, this will be executed
         branch5 = lambda x: jnp.nan
         branches = [branch0, branch1, branch2, branch3, branch4, branch5]
+        # Only calculate the function at dr th index with input r
         result = switch(dr, branches, r)
+        # Check if the calculated values is in the given modes
         _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
 
         # Shift past values if needed
+        # For derivative order dx, if N is smaller than 2+dx, then only the initial
+        # value calculated by find_init_jacobi function will be used. So, if you update
+        # P_n's, preceeding values will be wrong.
         mask = N >= 2 + dxs
         P_n2 = jnp.where(mask, P_n1, P_n2)
         P_n1 = jnp.where(mask, P_n, P_n1)
+        # Form updated P_past matrix
         P_past = P_past.at[0, :].set(P_n2)
         P_past = P_past.at[1, :].set(P_n1)
 
@@ -1555,11 +1565,14 @@ def _zernike_radial_vectorized(r, l, m, dr):
         # Maximum possible value for n for loop bound
         N_max = (L_max - alpha) // 2
 
+        # Find initial values of Jacobi Polynomial and derivatives
         def find_init_jacobi(dx, args):
             alpha, P_past = args
+            # Jacobi for n=0
             P_past = P_past.at[0, dx].set(
                 jacobi_poly_single(r_jacobi, 0, alpha + dx, beta=dx)
             )
+            # Jacobi for n=1
             P_past = P_past.at[1, dx].set(
                 jacobi_poly_single(r_jacobi, 1, alpha + dx, beta=dx)
             )
@@ -1577,15 +1590,19 @@ def _zernike_radial_vectorized(r, l, m, dr):
         )
         return out
 
+    # Make inputs 1D arrays in case they aren't
     m = jnp.atleast_1d(m)
     l = jnp.atleast_1d(l)
     dr = jnp.asarray(dr).astype(int)
 
+    # From the vectorization, the overall output will be (r.size, m.size)
     out = jnp.zeros(m.size)
     r_jacobi = 1 - 2 * r**2
     m = jnp.abs(m)
     n = ((l - m) // 2).astype(int)
 
+    # This part can be better implemented. Try to make dr as static argument
+    # jnp.vectorize doesn't allow it to be static
     MAXDR = 4
     dxs = jnp.arange(0, MAXDR + 1)
 
@@ -1594,6 +1611,23 @@ def _zernike_radial_vectorized(r, l, m, dr):
     # loop which will execute necessary n values.
     out = fori_loop(0, (M_max + 1).astype(int), body, (out))
     return out
+
+
+def jacobi_poly_single(x, n, alpha, beta=0, P_n1=0, P_n2=0):
+    """Evaluate Jacobi for single alpha and n pair."""
+    c = 2 * n + alpha + beta
+    a1 = 2 * n * (c - n) * (c - 2)
+    a2 = (c - 1) * (c * (c - 2) * x + (alpha - beta) * (alpha + beta))
+    a3 = 2 * (n + alpha - 1) * (n + beta - 1) * c
+
+    # Check if a1 is 0, to prevent division by 0
+    a1 = jnp.where(a1 == 0, 1e-6, a1)
+    P_n = (a2 * P_n1 - a3 * P_n2) / a1
+    # Checks for special cases
+    P_n = jnp.where(n < 0, 0, P_n)
+    P_n = jnp.where(n == 0, 1, P_n)
+    P_n = jnp.where(n == 1, (alpha + 1) + (alpha + beta + 2) * (x - 1) / 2, P_n)
+    return P_n
 
 
 @zernike_radial.defjvp

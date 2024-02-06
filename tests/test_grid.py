@@ -530,8 +530,6 @@ class TestGrid:
             "iota": np.array([[0, 0]]),
             "surface": np.array([[0, 0, 0, R, 0], [0, 1, 0, r, 0], [0, -1, 0, 0, -r]]),
             "spectral_indexing": "ansi",
-            "bdry_mode": "lcfs",
-            "node_pattern": "quad",
         }
 
         eq = Equilibrium(**inputs)

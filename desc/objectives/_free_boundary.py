@@ -69,7 +69,7 @@ class VacuumBoundaryError(_Objective):
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary Error: {:10.3e} "
-    _units = "(T)"
+    _units = "(mixed units)"
     _coordinates = "rtz"
 
     def __init__(
@@ -177,7 +177,11 @@ class VacuumBoundaryError(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+            Bn_norm = np.ones(grid.num_nodes) * scales["B"] * scales["R0"] * scales["a"]
+            B2_norm = (
+                np.ones(grid.num_nodes) * scales["B"] ** 2 * scales["R0"] * scales["a"]
+            )
+            self._normalization = np.concatenate([Bn_norm, B2_norm])
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -195,7 +199,8 @@ class VacuumBoundaryError(_Objective):
         Returns
         -------
         f : ndarray
-            Boundary force error (N).
+            Boundary error. First half is √g𝐁⋅𝐧 in T*m^2, second half is
+            √g[[B²]] in T^2*m^2.
 
         """
         if constants is None:
@@ -237,7 +242,7 @@ class VacuumBoundaryError(_Objective):
 
         abserr = jnp.all(self.target == 0)
 
-        def _print(fmt, fmax, fmin, fmean, units):
+        def _print(fmt, fmax, fmin, fmean, norm, units):
 
             print(
                 "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
@@ -253,19 +258,19 @@ class VacuumBoundaryError(_Objective):
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmax / self.normalization)
+                    + fmt.format(fmax / norm)
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmin / self.normalization)
+                    + fmt.format(fmin / norm)
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmean / self.normalization)
+                    + fmt.format(fmean / norm)
                     + "(normalized)"
                 )
 
@@ -275,7 +280,8 @@ class VacuumBoundaryError(_Objective):
         ]
         units = ["(T)", "(T^2)"]
         nn = f.size // 2
-        for i, (fmt, unit) in enumerate(zip(formats, units)):
+        norms = [self.normalization[0], self.normalization[nn]]
+        for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean
@@ -284,7 +290,7 @@ class VacuumBoundaryError(_Objective):
             fmax = jnp.max(fi)
             fmin = jnp.min(fi)
             fmean = jnp.mean(fi * wi) / jnp.mean(wi)
-            _print(fmt, fmax, fmin, fmean, unit)
+            _print(fmt, fmax, fmin, fmean, norm, unit)
 
 
 class BoundaryError(_Objective):
@@ -356,7 +362,7 @@ class BoundaryError(_Objective):
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary Error: {:10.3e} "
-    _units = "(T)"
+    _units = "(mixed units)"
     _coordinates = "rtz"
 
     def __init__(
@@ -540,7 +546,18 @@ class BoundaryError(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+            Bn_norm = (
+                np.ones(eval_grid.num_nodes) * scales["B"] * scales["R0"] * scales["a"]
+            )
+            B2_norm = (
+                np.ones(eval_grid.num_nodes)
+                * scales["B"] ** 2
+                * scales["R0"]
+                * scales["a"]
+            )
+            self._normalization = np.concatenate([Bn_norm, B2_norm])
+            if self._sheet_current:
+                self._normalization = np.concatenate([self._normalization, Bn_norm])
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -560,7 +577,9 @@ class BoundaryError(_Objective):
         Returns
         -------
         f : ndarray
-            Boundary force error (N).
+            Boundary error. First half is √g𝐁⋅𝐧 in T*m^2, second half is
+            √g[[B² + 2μ₀p]] in T^2*m^2. If sheet current is included, third half is
+            √g||μ₀𝐊 − 𝐧 × [𝐁]|| in T*m^2
 
         """
         if constants is None:
@@ -646,7 +665,7 @@ class BoundaryError(_Objective):
 
         abserr = jnp.all(self.target == 0)
 
-        def _print(fmt, fmax, fmin, fmean, units):
+        def _print(fmt, fmax, fmin, fmean, norm, units):
 
             print(
                 "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
@@ -662,19 +681,19 @@ class BoundaryError(_Objective):
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmax / self.normalization)
+                    + fmt.format(fmax / norm)
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmin / self.normalization)
+                    + fmt.format(fmin / norm)
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmean / self.normalization)
+                    + fmt.format(fmean / norm)
                     + "(normalized)"
                 )
 
@@ -686,11 +705,17 @@ class BoundaryError(_Objective):
         units = ["(T)", "(T^2)", "(T)"]
         if self._sheet_current:
             nn = f.size // 3
+            norms = [
+                self.normalization[0],
+                self.normalization[nn],
+                self.normalization[-1],
+            ]
         else:
             nn = f.size // 2
             formats = formats[:-1]
             units = units[:-1]
-        for i, (fmt, unit) in enumerate(zip(formats, units)):
+            norms = [self.normalization[0], self.normalization[nn]]
+        for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean
@@ -699,7 +724,7 @@ class BoundaryError(_Objective):
             fmax = jnp.max(fi)
             fmin = jnp.min(fi)
             fmean = jnp.mean(fi * wi) / jnp.mean(wi)
-            _print(fmt, fmax, fmin, fmean, unit)
+            _print(fmt, fmax, fmin, fmean, norm, unit)
 
 
 class BoundaryErrorNESTOR(_Objective):

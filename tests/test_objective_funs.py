@@ -1125,19 +1125,19 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
-            np.max(f1 / obj.normalization)
+            np.max(f1 / obj.normalization[0])
         )
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
-            np.min(f1 / obj.normalization)
+            np.min(f1 / obj.normalization[0])
         )
         + "(normalized)"
         + "\n"
         + "Average absolute "
         + "Boundary normal field error: {:10.3e} ".format(
-            np.mean(f1 / obj.normalization)
+            np.mean(f1 / obj.normalization[0])
         )
         + "(normalized)"
         + "\n"
@@ -1155,19 +1155,19 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.max(f2 / obj.normalization)
+            np.max(f2 / obj.normalization[-1])
         )
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.min(f2 / obj.normalization)
+            np.min(f2 / obj.normalization[-1])
         )
         + "(normalized)"
         + "\n"
         + "Average absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.mean(f2 / obj.normalization)
+            np.mean(f2 / obj.normalization[-1])
         )
         + "(normalized)"
         + "\n"
@@ -1200,19 +1200,19 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
-            np.max(f1 / obj.normalization)
+            np.max(f1 / obj.normalization[0])
         )
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
-            np.min(f1 / obj.normalization)
+            np.min(f1 / obj.normalization[0])
         )
         + "(normalized)"
         + "\n"
         + "Average absolute "
         + "Boundary normal field error: {:10.3e} ".format(
-            np.mean(f1 / obj.normalization)
+            np.mean(f1 / obj.normalization[0])
         )
         + "(normalized)"
         + "\n"
@@ -1230,19 +1230,19 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.max(f2 / obj.normalization)
+            np.max(f2 / obj.normalization[-1])
         )
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.min(f2 / obj.normalization)
+            np.min(f2 / obj.normalization[-1])
         )
         + "(normalized)"
         + "\n"
         + "Average absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.mean(f2 / obj.normalization)
+            np.mean(f2 / obj.normalization[-1])
         )
         + "(normalized)"
         + "\n"
@@ -1278,19 +1278,19 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
-            np.max(f1 / obj.normalization)
+            np.max(f1 / obj.normalization[0])
         )
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
-            np.min(f1 / obj.normalization)
+            np.min(f1 / obj.normalization[0])
         )
         + "(normalized)"
         + "\n"
         + "Average absolute "
         + "Boundary normal field error: {:10.3e} ".format(
-            np.mean(f1 / obj.normalization)
+            np.mean(f1 / obj.normalization[0])
         )
         + "(normalized)"
         + "\n"
@@ -1308,19 +1308,19 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.max(f2 / obj.normalization)
+            np.max(f2 / obj.normalization[n])
         )
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.min(f2 / obj.normalization)
+            np.min(f2 / obj.normalization[n])
         )
         + "(normalized)"
         + "\n"
         + "Average absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
-            np.mean(f2 / obj.normalization)
+            np.mean(f2 / obj.normalization[n])
         )
         + "(normalized)"
         + "\n"
@@ -1337,15 +1337,21 @@ def test_boundary_error_print(capsys):
         + "(T)"
         + "\n"
         + "Maximum absolute "
-        + "Boundary field jump error: {:10.3e} ".format(np.max(f3 / obj.normalization))
+        + "Boundary field jump error: {:10.3e} ".format(
+            np.max(f3 / obj.normalization[-1])
+        )
         + "(normalized)"
         + "\n"
         + "Minimum absolute "
-        + "Boundary field jump error: {:10.3e} ".format(np.min(f3 / obj.normalization))
+        + "Boundary field jump error: {:10.3e} ".format(
+            np.min(f3 / obj.normalization[-1])
+        )
         + "(normalized)"
         + "\n"
         + "Average absolute "
-        + "Boundary field jump error: {:10.3e} ".format(np.mean(f3 / obj.normalization))
+        + "Boundary field jump error: {:10.3e} ".format(
+            np.mean(f3 / obj.normalization[-1])
+        )
         + "(normalized)"
         + "\n"
     )

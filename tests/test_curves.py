@@ -7,6 +7,7 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierRZWindingSurfaceCurve,
     FourierXYZCurve,
     SplineXYZCurve,
 )
@@ -252,6 +253,129 @@ class TestRZCurve:
         np.testing.assert_allclose(curve3.Z_n, curve4.Z_n)
         np.testing.assert_allclose(curve3.NFP, curve4.NFP)
         np.testing.assert_allclose(curve3.sym, curve4.sym)
+
+
+class TestRZWindingSurfaceCurve:
+    """Tests for FourierRZWindingSurfaceCurve class."""
+
+    @pytest.mark.unit
+    def test_length(self):
+        """Test length of circular curve."""
+        c = FourierRZWindingSurfaceCurve()
+        # by default the curve is a poloidally closed curve at constant zeta
+        a = 1  # default minor radius of the surface
+        np.testing.assert_allclose(
+            c.compute("length", grid=20)["length"], a * 2 * np.pi
+        )
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(
+            c.compute("length", grid=20)["length"], a * 2 * np.pi
+        )
+
+    @pytest.mark.unit
+    def test_curvature(self):
+        """Test curvature of circular curve."""
+        c = FourierRZWindingSurfaceCurve()
+        # by default the curve is a poloidally closed curve at constant zeta
+        a = 1  # default minor radius of the surface
+        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / a)
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / a)
+
+    @pytest.mark.unit
+    def test_torsion(self):
+        """Test torsion of circular curve."""
+        c = FourierRZWindingSurfaceCurve()
+        # by default the curve is a poloidally closed curve at constant zeta
+        np.testing.assert_allclose(c.compute("torsion", grid=20)["torsion"], 0)
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(c.compute("torsion", grid=20)["torsion"], 0)
+
+    @pytest.mark.unit
+    def test_frenet(self):
+        """Test frenet-serret frame of circular curve."""
+        c = FourierRZWindingSurfaceCurve(secular_theta=0.0, secular_zeta=1.0)
+        # the curve is a toroidally closed curve at constant theta
+        data = c.compute(
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="rpz", grid=0
+        )
+        T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
+        np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        c.translate([1, 1, 1])
+        data = c.compute(
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
+        )
+        T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
+        np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
+
+    @pytest.mark.unit
+    def test_coords(self):
+        """Test lab frame coordinates of circular curve."""
+        c = FourierRZWindingSurfaceCurve(secular_theta=0.0, secular_zeta=1.0)
+        # the curve is a toroidally closed curve at constant theta
+        x, y, z = c.compute("x", grid=0, basis="xyz")["x"].T
+        np.testing.assert_allclose(x, 11)
+        np.testing.assert_allclose(y, 0)
+        np.testing.assert_allclose(z, 0)
+
+    @pytest.mark.unit
+    def test_misc(self):
+        """Test getting/setting misc attributes of FourierRZWindingSurfaceCurve."""
+        c = FourierRZWindingSurfaceCurve()
+
+        theta_n, zeta_n = c.get_coeffs(0)
+        np.testing.assert_allclose(theta_n, 0)
+        np.testing.assert_allclose(zeta_n, 0)
+        c.set_coeffs(0, 5, None)
+        np.testing.assert_allclose(c.theta_n, [5])
+        np.testing.assert_allclose(c.zeta_n, [])
+
+        s = c.copy()
+        assert s.eq(c)
+
+        c.change_resolution(5)
+        assert c.N == 5
+        c.set_coeffs(-1, None, 2)
+        np.testing.assert_allclose(c.theta_n, [5, 0, 0, 0, 0, 0])
+        np.testing.assert_allclose(c.zeta_n, [0, 0, 0, 0, 2])
+
+        with pytest.raises(ValueError):
+            c.theta_n = s.theta_n
+        with pytest.raises(ValueError):
+            c.zeta_n = s.zeta_n
+
+        c.name = "my curve"
+        assert "my" in c.name
+        assert c.name in str(c)
+        assert "FourierRZWindingSurfaceCurve" in str(c)
+        assert c.sym
+
+        c.NFP = 3
+        assert c.NFP == 3
+        assert c.R_basis.NFP == 3
+        assert c.Z_basis.NFP == 3
+
+    @pytest.mark.unit
+    def test_asserts(self):
+        """Test error checking when creating FourierRZWindingSurfaceCurve."""
+        with pytest.raises(ValueError):
+            _ = FourierRZWindingSurfaceCurve(theta_n=[])
+        with pytest.raises(AssertionError):
+            _ = FourierRZWindingSurfaceCurve(theta_n=[1], modes_theta=[1, 2])
+        with pytest.raises(AssertionError):
+            _ = FourierRZWindingSurfaceCurve(zeta_n=[1], modes_zeta=[1, 2])
 
 
 class TestFourierXYZCurve:

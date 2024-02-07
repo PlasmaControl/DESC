@@ -878,7 +878,7 @@ class FourierRZWindingSurfaceCurve(Curve):
         secular term in theta(t) series, defaults to 1.0
         if 0, curve will not close poloidally, only toroidally.
     secular_zeta : float, optional
-        secular term in zeta(t) series, defaults to 1.0
+        secular term in zeta(t) series, defaults to 0.0
         if 0, curve will not close toroidally, only poloidally
     modes_theta : array-like, optional
         Mode numbers associated with theta_n. If not given defaults to [-n:n].
@@ -905,11 +905,11 @@ class FourierRZWindingSurfaceCurve(Curve):
 
     def __init__(
         self,
-        surface,
-        theta_n=1,
-        zeta_n=1,
+        surface=None,
+        theta_n=[0],
+        zeta_n=[0],
         secular_theta=1.0,
-        secular_zeta=1.0,
+        secular_zeta=0.0,
         modes_theta=None,
         modes_zeta=None,
         sym_theta="sin",
@@ -917,6 +917,10 @@ class FourierRZWindingSurfaceCurve(Curve):
         name="",
     ):
         super().__init__(name)
+        if surface is None:
+            from .surface import FourierRZToroidalSurface
+
+            surface = FourierRZToroidalSurface()
         assert hasattr(surface, "rho"), (
             "surface must be a FourierRZToroidalSurface"
             f"object, instead got type {type(surface)}"

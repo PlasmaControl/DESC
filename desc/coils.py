@@ -17,7 +17,7 @@ from desc.geometry import (
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.utils import equals, errorif, flatten_list
+from desc.utils import equals, errorif, flatten_list, warnif
 
 
 @jit
@@ -717,7 +717,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     ----------
     coils : Coil or array-like of Coils
         Collection of coils. Must all be the same type and resolution.
-    currents : float or array-like of float
+    currents : float or array-like of float (optional)
         Currents in each coil, or a single current shared by all coils in the set.
     NFP : int (optional)
         Number of field periods for enforcing field period symmetry. Default = 1.
@@ -730,12 +730,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
 
-    def __init__(self, coils, currents, NFP=1, sym=False, name=""):
+    def __init__(self, *coils, currents=None, NFP=1, sym=False, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
         self._coils = list(coils)
-        self.current = currents
+        if currents is not None:
+            self.current = currents
         self._NFP = NFP
         self._sym = sym
         self._name = str(name)
@@ -866,6 +867,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         -------
         field : ndarray, shape(n,3)
             magnetic field at specified points, in either rpz or xyz coordinates
+
         """
         if params is None:
             params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
@@ -953,7 +955,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return cls(*coils)
 
     @classmethod
-    def from_symmetry(cls, coils, NFP, sym=False):
+    def from_symmetry(cls, coils, NFP=1, sym=False):
         """Create a coil group by reflection and symmetry.
 
         Given coils over one field period, repeat coils NFP times between
@@ -965,22 +967,38 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         Parameters
         ----------
         coils : Coil, CoilGroup, Coilset
-            base coil or collection of coils to repeat
-        NFP : int
-            number of field periods
-        sym : bool
-            whether coils should be stellarator symmetric
+            Coil or collection of coils in one field period or half field period.
+        NFP : int (optional)
+            Number of field periods for enforcing field period symmetry. Default = 1.
+        sym : bool (optional)
+            Whether to enforce stellarator symmetry. Default = False.
+
         """
         if not isinstance(coils, CoilSet):
             coils = CoilSet(coils)
 
         [_check_type(coil, coils[0]) for coil in coils]
 
+        # check toroidal extent of coils to be repeated
+        maxphi = 2 * np.pi / NFP / (sym + 1)
+        data = coils.compute("phi")
+        for i, cdata in enumerate(data):
+            errorif(
+                np.any(cdata["phi"] > maxphi),
+                ValueError,
+                f"coil {i} exceeds the toroidal extent for NFP={NFP} and sym={sym}",
+            )
+            warnif(
+                np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps),
+                UserWarning,
+                f"coil {i} is on the symmetry plane phi=0",
+            )
+
         coilset = []
         if sym:
             # first reflect/flip original coilset
-            # ie, given coils [1,2,3] at angles [0, pi/6, 2pi/6]
-            # we want a new set like [1,2,3,flip(3),flip(2),flip(1)]
+            # ie, given coils [1, 2, 3] at angles [0, pi/6, 2pi/6]
+            # we want a new set like [1, 2, 3, flip(3), flip(2), flip(1)]
             # at [0, pi/6, 2pi/6, 3pi/6, 4pi/6, 5pi/6]
             flipped_coils = []
             normal = jnp.array([-jnp.sin(jnp.pi / NFP), jnp.cos(jnp.pi / NFP), 0])
@@ -991,10 +1009,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 fcoil.current = -1 * coil.current
                 flipped_coils.append(fcoil)
             coils = coils + flipped_coils
+        # next rotate the coilset for each field period
         for k in range(0, NFP):
-            coil = coils.copy()
-            coil.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
-            coilset.append(coil)
+            rotated_coils = coils.copy()
+            rotated_coils.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
+            coilset += rotated_coils
 
         return cls(*coilset)
 

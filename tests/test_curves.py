@@ -485,7 +485,7 @@ class TestPlanarCurve:
         np.testing.assert_allclose(z, 0)
         dr, dp, dz = c.compute("x_sss", grid=0, basis="rpz")["x_sss"].T
         np.testing.assert_allclose(dr, 0)
-        np.testing.assert_allclose(dp, 0, atol=1e-12)
+        np.testing.assert_allclose(dp, 0, atol=1e-14)
         np.testing.assert_allclose(dz, 2)
         c.rotate([0, 0, np.pi / 2])
         c.flip([0, 1, 0])

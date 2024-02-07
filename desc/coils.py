@@ -894,12 +894,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
-        axis = jnp.asarray(axis)
         phi = jnp.linspace(0, angle, n, endpoint=endpoint)
         coils = []
         for i in range(n):
             coili = coil.copy()
-            coili.rotate(axis / jnp.linalg.norm(axis) * phi[i])
+            coili.rotate(axis=axis, angle=phi[i])
             coili.current = currents[i]
             coils.append(coili)
         return cls(*coils)
@@ -929,8 +928,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
         displacement = jnp.asarray(displacement)
-        coils = []
         a = jnp.linspace(0, 1, n, endpoint=endpoint)
+        coils = []
         for i in range(n):
             coili = coil.copy()
             coili.translate(a[i] * displacement)

@@ -512,6 +512,7 @@ def _theta_sss_FourierRZWindingSurfaceCurve(
     params, transforms, profiles, data, **kwargs
 ):
     data["theta_sss"] = transforms["theta"].transform(params["theta_n"], dz=3)
+    return data
 
 
 @register_compute_fun(
@@ -716,12 +717,9 @@ def _x_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwar
     )
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=data_surf["phi"])
-    coords = (
-        jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
-        + params["shift"][jnp.newaxis, :]
-    )
+    coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz(coords)
+        coords = xyz2rpz_vec(coords, phi=data_surf["phi"])
     data["x_s"] = coords
     return data
 
@@ -784,26 +782,36 @@ def _x_ss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwa
     grid = Grid(nodes, sort=False, jitable=True)
     data_surf = transforms["surface"].compute(
         [
-            "R_tt",
-            "R_t",
-            "R_z",
-            "R_zz",
-            "R_tz",
+            "e_theta",
+            "e_theta_t",
+            "e_theta_z",
+            "e_zeta",
+            "e_zeta_t",
+            "e_zeta_z",
             "phi",
             "phi_z",
-            "phi_zz",
             "phi_t",
-            "phi_tt",
-            "phi_tz",
-            "Z_tt",
-            "Z_t",
-            "Z_z",
-            "Z_zz",
-            "Z_tz",
         ],
         grid=grid,
         method="jitable",
+        basis="rpz",
     )
+    # first derivs
+    data_surf["R_t"] = data_surf["e_theta"][:, 0]
+    data_surf["Z_t"] = data_surf["e_theta"][:, 2]
+    data_surf["R_z"] = data_surf["e_zeta"][:, 0]
+    data_surf["Z_z"] = data_surf["e_zeta"][:, 2]
+    # second derivs
+    data_surf["R_tt"] = data_surf["e_theta_t"][:, 0]
+    data_surf["phi_tt"] = data_surf["e_theta_t"][:, 1]
+    data_surf["Z_tt"] = data_surf["e_theta_t"][:, 2]
+    data_surf["R_tz"] = data_surf["e_theta_z"][:, 0]
+    data_surf["phi_tz"] = data_surf["e_theta_z"][:, 1]
+    data_surf["Z_tz"] = data_surf["e_theta_z"][:, 2]
+    data_surf["R_zz"] = data_surf["e_zeta_z"][:, 0]
+    data_surf["phi_zz"] = data_surf["e_zeta_z"][:, 1]
+    data_surf["Z_zz"] = data_surf["e_zeta_z"][:, 2]
+
     d2R = (
         data_surf["R_tt"] * data["theta_s"] ** 2
         + data_surf["R_zz"] * data["zeta_s"] ** 2
@@ -832,12 +840,9 @@ def _x_ss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwa
     )
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=data_surf["phi"])
-    coords = (
-        jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
-        + params["shift"][jnp.newaxis, :]
-    )
+    coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz(coords)
+        coords = xyz2rpz_vec(coords, phi=data_surf["phi"])
     data["x_ss"] = coords
     return data
 
@@ -909,37 +914,53 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
     grid = Grid(nodes, sort=False, jitable=True)
     data_surf = transforms["surface"].compute(
         [
-            "R_ttt",
-            "R_tt",
-            "R_t",
-            "R_z",
-            "R_zz",
-            "R_zzz",
-            "R_tz",
-            "R_ttz",
-            "R_tzz",
-            "phi_ttt",
-            "phi_tt",
-            "phi_t",
+            "e_theta",
+            "e_theta_t",
+            "e_theta_z",
+            "e_theta_tt",
+            "e_theta_tz",
+            "e_theta_zz",
+            "e_zeta",
+            "e_zeta_t",
+            "e_zeta_z",
+            "e_zeta_zz",
+            "phi",
             "phi_z",
-            "phi_zz",
-            "phi_zzz",
-            "phi_tz",
-            "phi_ttz",
-            "phi_tzz",
-            "Z_ttt",
-            "Z_tt",
-            "Z_t",
-            "Z_z",
-            "Z_zz",
-            "Z_zzz",
-            "Z_tz",
-            "Z_ttz",
-            "Z_tzz",
+            "phi_t",
         ],
         grid=grid,
         method="jitable",
+        basis="rpz",
     )
+    # first derivs
+    data_surf["R_t"] = data_surf["e_theta"][:, 0]
+    data_surf["Z_t"] = data_surf["e_theta"][:, 2]
+    data_surf["R_z"] = data_surf["e_zeta"][:, 0]
+    data_surf["Z_z"] = data_surf["e_zeta"][:, 2]
+    # second derivs
+    data_surf["R_tt"] = data_surf["e_theta_t"][:, 0]
+    data_surf["phi_tt"] = data_surf["e_theta_t"][:, 1]
+    data_surf["Z_tt"] = data_surf["e_theta_t"][:, 2]
+    data_surf["R_tz"] = data_surf["e_theta_z"][:, 0]
+    data_surf["phi_tz"] = data_surf["e_theta_z"][:, 1]
+    data_surf["Z_tz"] = data_surf["e_theta_z"][:, 2]
+    data_surf["R_zz"] = data_surf["e_zeta_z"][:, 0]
+    data_surf["phi_zz"] = data_surf["e_zeta_z"][:, 1]
+    data_surf["Z_zz"] = data_surf["e_zeta_z"][:, 2]
+    # third derivs
+    data_surf["R_ttt"] = data_surf["e_theta_tt"][:, 0]
+    data_surf["phi_ttt"] = data_surf["e_theta_tt"][:, 1]
+    data_surf["Z_ttt"] = data_surf["e_theta_tt"][:, 2]
+    data_surf["R_ttz"] = data_surf["e_theta_tz"][:, 0]
+    data_surf["phi_ttz"] = data_surf["e_theta_tz"][:, 1]
+    data_surf["Z_ttz"] = data_surf["e_theta_tz"][:, 2]
+    data_surf["R_tzz"] = data_surf["e_theta_zz"][:, 0]
+    data_surf["phi_tzz"] = data_surf["e_theta_zz"][:, 1]
+    data_surf["Z_tzz"] = data_surf["e_theta_zz"][:, 2]
+    data_surf["R_zzz"] = data_surf["e_zeta_zz"][:, 0]
+    data_surf["phi_zzz"] = data_surf["e_zeta_zz"][:, 1]
+    data_surf["Z_zzz"] = data_surf["e_zeta_zz"][:, 2]
+
     d3R = (
         data["zeta_sss"] * data_surf["R_t"]
         + (data["zeta_s"] ** 3) * data_surf["R_zzz"]
@@ -958,7 +979,7 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
             + data["theta_ss"] * data_surf["R_tz"]
             + data["theta_s"] ** 2 * data_surf["R_ttz"]
         )
-        + (data["theta_s"] ** 3) * data["R_ttt"]
+        + (data["theta_s"] ** 3) * data_surf["R_ttt"]
     )
     d3phi = (
         data["zeta_sss"] * data_surf["phi_t"]
@@ -978,7 +999,7 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
             + data["theta_ss"] * data_surf["phi_tz"]
             + data["theta_s"] ** 2 * data_surf["phi_ttz"]
         )
-        + (data["theta_s"] ** 3) * data["phi_ttt"]
+        + (data["theta_s"] ** 3) * data_surf["phi_ttt"]
     )
     d3Z = (
         data["zeta_sss"] * data_surf["Z_t"]
@@ -998,7 +1019,7 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
             + data["theta_ss"] * data_surf["Z_tz"]
             + data["theta_s"] ** 2 * data_surf["Z_ttz"]
         )
-        + (data["theta_s"] ** 3) * data["Z_ttt"]
+        + (data["theta_s"] ** 3) * data_surf["Z_ttt"]
     )
     coords = jnp.stack(
         [d3R, d3phi, d3Z],
@@ -1006,12 +1027,9 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
     )
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=data_surf["phi"])
-    coords = (
-        jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
-        + params["shift"][jnp.newaxis, :]
-    )
+    coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     if kwargs.get("basis", "rpz").lower() == "rpz":
-        coords = xyz2rpz(coords)
+        coords = xyz2rpz_vec(coords, phi=data_surf["phi"])
     data["x_sss"] = coords
     return data
 
@@ -1585,6 +1603,7 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     data=["ds", "x_s"],
     parameterization=[
         "desc.geometry.curve.FourierRZCurve",
+        "desc.geometry.curve.FourierRZWindingSurfaceCurve",
         "desc.geometry.curve.FourierXYZCurve",
         "desc.geometry.curve.FourierPlanarCurve",
     ],

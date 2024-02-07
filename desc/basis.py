@@ -1486,22 +1486,6 @@ def zernike_radial(r, l, m, dr=0):
 def _zernike_radial_vectorized(r, l, m, dr):
     """Calculation of Radial part of Zernike polynomials."""
 
-    def update(i, args):
-        alpha, N, result, out = args
-        idx = jnp.where(jnp.logical_and(m[i] == alpha, n[i] == N), i, -1)
-
-        def falseFun(args):
-            _, _, out = args
-            return out
-
-        def trueFun(args):
-            idx, result, out = args
-            out = out.at[idx].set(result)
-            return out
-
-        out = cond(idx >= 0, trueFun, falseFun, (idx, result, out))
-        return (alpha, N, result, out)
-
     def body_inner(N, args):
         alpha, out, P_past = args
         P_n2 = P_past[0]  # Jacobi at N-2
@@ -1511,7 +1495,9 @@ def _zernike_radial_vectorized(r, l, m, dr):
         # Only calculate the function at dr th index with input r
         result = (-1) ** N * r**alpha * P_n
         # Check if the calculated values is in the given modes
-        _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
+        _, _, _, _, _, out = fori_loop(
+            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
+        )
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -1715,25 +1701,46 @@ def zernike_norm(l, m):
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
 
 
+def find_intermadiate_jacobi(dx, args):
+    """Finds Jacobi function and its derivatives for nth loop."""
+    r_jacobi, N, alpha, P_n1, P_n2, P_n = args
+    P_n = P_n.at[dx].set(
+        jacobi_poly_single(r_jacobi, N - dx, alpha + dx, dx, P_n1[dx], P_n2[dx])
+    )
+    return (r_jacobi, N, alpha, P_n1, P_n2, P_n)
+
+
+def update_zernike_output(i, args):
+    """Updates Zernike radial output, if the mode is in the inputs."""
+    m, n, alpha, N, result, out = args
+    idx = jnp.where(jnp.logical_and(m[i] == alpha, n[i] == N), i, -1)
+
+    def falseFun(args):
+        _, _, out = args
+        return out
+
+    def trueFun(args):
+        idx, result, out = args
+        out = out.at[idx].set(result)
+        return out
+
+    out = cond(idx >= 0, trueFun, falseFun, (idx, result, out))
+    return (m, n, alpha, N, result, out)
+
+
+def find_initial_jacobi(dx, args):
+    """Finds initial values of Jacobi Polynomial and derivatives."""
+    r_jacobi, alpha, P_past = args
+    # Jacobi for n=0
+    P_past = P_past.at[0, dx].set(jacobi_poly_single(r_jacobi, 0, alpha + dx, beta=dx))
+    # Jacobi for n=1
+    P_past = P_past.at[1, dx].set(jacobi_poly_single(r_jacobi, 1, alpha + dx, beta=dx))
+    return (r_jacobi, alpha, P_past)
+
+
 @functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
 def _zernike_radial_vectorized_d1(r, l, m, dr):
     """Calculation of Radial part of Zernike polynomials."""
-
-    def update(i, args):
-        alpha, N, result, out = args
-        idx = jnp.where(jnp.logical_and(m[i] == alpha, n[i] == N), i, -1)
-
-        def falseFun(args):
-            _, _, out = args
-            return out
-
-        def trueFun(args):
-            idx, result, out = args
-            out = out.at[idx].set(result)
-            return out
-
-        out = cond(idx >= 0, trueFun, falseFun, (idx, result, out))
-        return (alpha, N, result, out)
 
     def body_inner(N, args):
         alpha, out, P_past = args
@@ -1741,32 +1748,28 @@ def _zernike_radial_vectorized_d1(r, l, m, dr):
         P_n1 = P_past[1]  # Jacobi at N-1
         P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
 
-        def find_inter_jacobi(dx, args):
-            N, alpha, P_n1, P_n2, P_n = args
-            P_n = P_n.at[dx].set(
-                jacobi_poly_single(r_jacobi, N - dx, alpha + dx, dx, P_n1[dx], P_n2[dx])
-            )
-            return (N, alpha, P_n1, P_n2, P_n)
-
         # Calculate Jacobi polynomial and derivatives for (alpha,N)
-        _, _, _, _, P_n = fori_loop(
-            0, MAXDR + 1, find_inter_jacobi, (N, alpha, P_n1, P_n2, P_n)
+        _, _, _, _, _, P_n = fori_loop(
+            0,
+            MAXDR + 1,
+            find_intermadiate_jacobi,
+            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
         )
-
         # Calculate coefficients for derivatives. coef[0] will never be used. Jax
         # doesn't have Gamma function directly, that's why we calculate Logarithm of
         # Gamma function and then exponentiate it.
         coef = jnp.exp(
             gammaln(alpha + N + 1 + dxs) - dxs * jnp.log(2) - gammaln(alpha + N + 1)
         )
-
         # 1th Derivative of Zernike Radial
         result = (-1) ** N * (
             alpha * r ** jnp.maximum(alpha - 1, 0) * P_n[0]
             - coef[1] * 4 * r ** (alpha + 1) * P_n[1]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
+        _, _, _, _, _, out = fori_loop(
+            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
+        )
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -1789,24 +1792,13 @@ def _zernike_radial_vectorized_d1(r, l, m, dr):
         # Maximum possible value for n for loop bound
         N_max = (L_max - alpha) // 2
 
-        # Find initial values of Jacobi Polynomial and derivatives
-        def find_init_jacobi(dx, args):
-            alpha, P_past = args
-            # Jacobi for n=0
-            P_past = P_past.at[0, dx].set(
-                jacobi_poly_single(r_jacobi, 0, alpha + dx, beta=dx)
-            )
-            # Jacobi for n=1
-            P_past = P_past.at[1, dx].set(
-                jacobi_poly_single(r_jacobi, 1, alpha + dx, beta=dx)
-            )
-            return (alpha, P_past)
-
         # First 2 Jacobi Polynomials (they don't need recursion)
         # P_past stores last 2 Jacobi polynomials (and required derivatives)
         # evaluated at given r points
         P_past = jnp.zeros((2, MAXDR + 1))
-        _, P_past = fori_loop(0, MAXDR + 1, find_init_jacobi, (alpha, P_past))
+        _, _, P_past = fori_loop(
+            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
+        )
 
         # Loop over every n value
         _, out, _ = fori_loop(
@@ -1841,38 +1833,18 @@ def _zernike_radial_vectorized_d1(r, l, m, dr):
 def _zernike_radial_vectorized_d2(r, l, m, dr):
     """Calculation of Radial part of Zernike polynomials."""
 
-    def update(i, args):
-        alpha, N, result, out = args
-        idx = jnp.where(jnp.logical_and(m[i] == alpha, n[i] == N), i, -1)
-
-        def falseFun(args):
-            _, _, out = args
-            return out
-
-        def trueFun(args):
-            idx, result, out = args
-            out = out.at[idx].set(result)
-            return out
-
-        out = cond(idx >= 0, trueFun, falseFun, (idx, result, out))
-        return (alpha, N, result, out)
-
     def body_inner(N, args):
         alpha, out, P_past = args
         P_n2 = P_past[0]  # Jacobi at N-2
         P_n1 = P_past[1]  # Jacobi at N-1
         P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
 
-        def find_inter_jacobi(dx, args):
-            N, alpha, P_n1, P_n2, P_n = args
-            P_n = P_n.at[dx].set(
-                jacobi_poly_single(r_jacobi, N - dx, alpha + dx, dx, P_n1[dx], P_n2[dx])
-            )
-            return (N, alpha, P_n1, P_n2, P_n)
-
         # Calculate Jacobi polynomial and derivatives for (alpha,N)
-        _, _, _, _, P_n = fori_loop(
-            0, MAXDR + 1, find_inter_jacobi, (N, alpha, P_n1, P_n2, P_n)
+        _, _, _, _, _, P_n = fori_loop(
+            0,
+            MAXDR + 1,
+            find_intermadiate_jacobi,
+            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
         )
 
         # Calculate coefficients for derivatives. coef[0] will never be used. Jax
@@ -1888,7 +1860,9 @@ def _zernike_radial_vectorized_d2(r, l, m, dr):
             + coef[2] * 16 * r ** (alpha + 2) * P_n[2]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
+        _, _, _, _, _, out = fori_loop(
+            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
+        )
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -1911,24 +1885,13 @@ def _zernike_radial_vectorized_d2(r, l, m, dr):
         # Maximum possible value for n for loop bound
         N_max = (L_max - alpha) // 2
 
-        # Find initial values of Jacobi Polynomial and derivatives
-        def find_init_jacobi(dx, args):
-            alpha, P_past = args
-            # Jacobi for n=0
-            P_past = P_past.at[0, dx].set(
-                jacobi_poly_single(r_jacobi, 0, alpha + dx, beta=dx)
-            )
-            # Jacobi for n=1
-            P_past = P_past.at[1, dx].set(
-                jacobi_poly_single(r_jacobi, 1, alpha + dx, beta=dx)
-            )
-            return (alpha, P_past)
-
         # First 2 Jacobi Polynomials (they don't need recursion)
         # P_past stores last 2 Jacobi polynomials (and required derivatives)
         # evaluated at given r points
         P_past = jnp.zeros((2, MAXDR + 1))
-        _, P_past = fori_loop(0, MAXDR + 1, find_init_jacobi, (alpha, P_past))
+        _, _, P_past = fori_loop(
+            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
+        )
 
         # Loop over every n value
         _, out, _ = fori_loop(
@@ -1963,38 +1926,18 @@ def _zernike_radial_vectorized_d2(r, l, m, dr):
 def _zernike_radial_vectorized_d3(r, l, m, dr):
     """Calculation of Radial part of Zernike polynomials."""
 
-    def update(i, args):
-        alpha, N, result, out = args
-        idx = jnp.where(jnp.logical_and(m[i] == alpha, n[i] == N), i, -1)
-
-        def falseFun(args):
-            _, _, out = args
-            return out
-
-        def trueFun(args):
-            idx, result, out = args
-            out = out.at[idx].set(result)
-            return out
-
-        out = cond(idx >= 0, trueFun, falseFun, (idx, result, out))
-        return (alpha, N, result, out)
-
     def body_inner(N, args):
         alpha, out, P_past = args
         P_n2 = P_past[0]  # Jacobi at N-2
         P_n1 = P_past[1]  # Jacobi at N-1
         P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
 
-        def find_inter_jacobi(dx, args):
-            N, alpha, P_n1, P_n2, P_n = args
-            P_n = P_n.at[dx].set(
-                jacobi_poly_single(r_jacobi, N - dx, alpha + dx, dx, P_n1[dx], P_n2[dx])
-            )
-            return (N, alpha, P_n1, P_n2, P_n)
-
         # Calculate Jacobi polynomial and derivatives for (alpha,N)
-        _, _, _, _, P_n = fori_loop(
-            0, MAXDR + 1, find_inter_jacobi, (N, alpha, P_n1, P_n2, P_n)
+        _, _, _, _, _, P_n = fori_loop(
+            0,
+            MAXDR + 1,
+            find_intermadiate_jacobi,
+            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
         )
 
         # Calculate coefficients for derivatives. coef[0] will never be used. Jax
@@ -2012,7 +1955,9 @@ def _zernike_radial_vectorized_d3(r, l, m, dr):
             - coef[3] * 64 * r ** (alpha + 3) * P_n[3]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
+        _, _, _, _, _, out = fori_loop(
+            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
+        )
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -2035,24 +1980,13 @@ def _zernike_radial_vectorized_d3(r, l, m, dr):
         # Maximum possible value for n for loop bound
         N_max = (L_max - alpha) // 2
 
-        # Find initial values of Jacobi Polynomial and derivatives
-        def find_init_jacobi(dx, args):
-            alpha, P_past = args
-            # Jacobi for n=0
-            P_past = P_past.at[0, dx].set(
-                jacobi_poly_single(r_jacobi, 0, alpha + dx, beta=dx)
-            )
-            # Jacobi for n=1
-            P_past = P_past.at[1, dx].set(
-                jacobi_poly_single(r_jacobi, 1, alpha + dx, beta=dx)
-            )
-            return (alpha, P_past)
-
         # First 2 Jacobi Polynomials (they don't need recursion)
         # P_past stores last 2 Jacobi polynomials (and required derivatives)
         # evaluated at given r points
         P_past = jnp.zeros((2, MAXDR + 1))
-        _, P_past = fori_loop(0, MAXDR + 1, find_init_jacobi, (alpha, P_past))
+        _, _, P_past = fori_loop(
+            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
+        )
 
         # Loop over every n value
         _, out, _ = fori_loop(
@@ -2087,38 +2021,18 @@ def _zernike_radial_vectorized_d3(r, l, m, dr):
 def _zernike_radial_vectorized_d4(r, l, m, dr):
     """Calculation of Radial part of Zernike polynomials."""
 
-    def update(i, args):
-        alpha, N, result, out = args
-        idx = jnp.where(jnp.logical_and(m[i] == alpha, n[i] == N), i, -1)
-
-        def falseFun(args):
-            _, _, out = args
-            return out
-
-        def trueFun(args):
-            idx, result, out = args
-            out = out.at[idx].set(result)
-            return out
-
-        out = cond(idx >= 0, trueFun, falseFun, (idx, result, out))
-        return (alpha, N, result, out)
-
     def body_inner(N, args):
         alpha, out, P_past = args
         P_n2 = P_past[0]  # Jacobi at N-2
         P_n1 = P_past[1]  # Jacobi at N-1
         P_n = jnp.zeros(MAXDR + 1)  # Jacobi at N
 
-        def find_inter_jacobi(dx, args):
-            N, alpha, P_n1, P_n2, P_n = args
-            P_n = P_n.at[dx].set(
-                jacobi_poly_single(r_jacobi, N - dx, alpha + dx, dx, P_n1[dx], P_n2[dx])
-            )
-            return (N, alpha, P_n1, P_n2, P_n)
-
         # Calculate Jacobi polynomial and derivatives for (alpha,N)
-        _, _, _, _, P_n = fori_loop(
-            0, MAXDR + 1, find_inter_jacobi, (N, alpha, P_n1, P_n2, P_n)
+        _, _, _, _, _, P_n = fori_loop(
+            0,
+            MAXDR + 1,
+            find_intermadiate_jacobi,
+            (r_jacobi, N, alpha, P_n1, P_n2, P_n),
         )
 
         # Calculate coefficients for derivatives. coef[0] will never be used. Jax
@@ -2147,7 +2061,9 @@ def _zernike_radial_vectorized_d4(r, l, m, dr):
             + coef[4] * 256 * r ** (alpha + 4) * P_n[4]
         )
         # Check if the calculated values is in the given modes
-        _, _, _, out = fori_loop(0, m.size, update, (alpha, N, result, out))
+        _, _, _, _, _, out = fori_loop(
+            0, m.size, update_zernike_output, (m, n, alpha, N, result, out)
+        )
 
         # Shift past values if needed
         # For derivative order dx, if N is smaller than 2+dx, then only the initial
@@ -2170,24 +2086,13 @@ def _zernike_radial_vectorized_d4(r, l, m, dr):
         # Maximum possible value for n for loop bound
         N_max = (L_max - alpha) // 2
 
-        # Find initial values of Jacobi Polynomial and derivatives
-        def find_init_jacobi(dx, args):
-            alpha, P_past = args
-            # Jacobi for n=0
-            P_past = P_past.at[0, dx].set(
-                jacobi_poly_single(r_jacobi, 0, alpha + dx, beta=dx)
-            )
-            # Jacobi for n=1
-            P_past = P_past.at[1, dx].set(
-                jacobi_poly_single(r_jacobi, 1, alpha + dx, beta=dx)
-            )
-            return (alpha, P_past)
-
         # First 2 Jacobi Polynomials (they don't need recursion)
         # P_past stores last 2 Jacobi polynomials (and required derivatives)
         # evaluated at given r points
         P_past = jnp.zeros((2, MAXDR + 1))
-        _, P_past = fori_loop(0, MAXDR + 1, find_init_jacobi, (alpha, P_past))
+        _, _, P_past = fori_loop(
+            0, MAXDR + 1, find_initial_jacobi, (r_jacobi, alpha, P_past)
+        )
 
         # Loop over every n value
         _, out, _ = fori_loop(

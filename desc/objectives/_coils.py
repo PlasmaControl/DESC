@@ -924,7 +924,7 @@ class ToroidalFlux(_Objective):
         if self._eq_fixed:
             data = eq.compute(["R", "phi", "Z", "|e_rho x e_theta|"], grid=eval_grid)
 
-            plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
         if not self._eq_fixed:
             self._constants = {

@@ -1,7 +1,12 @@
 """Classes defining objectives for equilibrium and optimization."""
 
 from ._bootstrap import BootstrapRedlConsistency
-from ._coils import CoilsetMinDistance, QuadraticFlux, SurfaceCurrentRegularization
+from ._coils import (
+    CoilsetCurvature,
+    CoilsetMinDistance,
+    QuadraticFlux,
+    SurfaceCurrentRegularization,
+)
 from ._equilibrium import (
     CurrentDensity,
     Energy,

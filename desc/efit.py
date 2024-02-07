@@ -253,9 +253,6 @@ class EFITIO:
         inputs["L"] = L
         inputs["M"] = M
         inputs["N"] = N
-        inputs["L_grid"] = 2 * L
-        inputs["M_grid"] = 2 * M
-        inputs["N_grid"] = 2 * N
 
         eq = Equilibrium(**inputs)
 

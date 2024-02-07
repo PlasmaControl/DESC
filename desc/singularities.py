@@ -106,7 +106,7 @@ class FFTInterpolator(_BIESTInterpolator):
     ----------
     eval_grid, src_grid : Grid
         Evaluation and source points for the integral transform.
-        src_grid should be a LinearGrid
+        Both should be LinearGrid without stellarator symmetry.
     s : int
         Extent of polar grid in number of src grid points. Same as "M" in the
         original Malhotra papers.
@@ -152,6 +152,9 @@ class FFTInterpolator(_BIESTInterpolator):
         assert isalmostequal(
             eval_grid.nodes[:, 0]
         ), "singular integration requires eval grid on a single surface"
+        assert np.all(src_grid.nodes[:, 0] == eval_grid.nodes[0, 0]) and np.all(
+            eval_grid.nodes[:, 0] == src_grid.nodes[0, 0]
+        ), "singular integration requires source and eval grids on the same surface."
         assert eval_grid.num_nodes == (
             eval_grid.num_theta * eval_grid.num_zeta
         ), "singular integration requires a tensor product grid in theta and zeta"
@@ -228,7 +231,7 @@ class DFTInterpolator(_BIESTInterpolator):
     ----------
     eval_grid, src_grid : Grid
         Evaluation and source points for the integral transform.
-        src_grid should be a LinearGrid
+        src_grid should be a LinearGrid without stellarator symmetry.
     s : int
         Extent of polar grid in number of src grid points. Same as "M" in the
         original Malhotra papers.
@@ -264,6 +267,9 @@ class DFTInterpolator(_BIESTInterpolator):
         assert islinspaced(
             src_zeta, axis=0
         ), "singular integration requires source nodes be equally spaced in zeta"
+        assert np.all(src_grid.nodes[:, 0] == eval_grid.nodes[0, 0]) and np.all(
+            eval_grid.nodes[:, 0] == src_grid.nodes[0, 0]
+        ), "singular integration requires source and eval grids on the same surface."
 
         self._eval_grid = eval_grid
         self._src_grid = src_grid
@@ -323,12 +329,12 @@ class DFTInterpolator(_BIESTInterpolator):
 
 
 def _chi(rho):
-    """Partition of unity function."""
+    """Partition of unity function. Eq 39 in [2]."""
     return jnp.exp(-36 * jnp.abs(rho) ** 8)
 
 
 def _rho(theta, zeta, theta0, zeta0, dtheta, dzeta, s):
-    """Polar grid radial coordinate."""
+    """Polar grid radial coordinate. Argument of Chi in eq. 36 in [2]."""
     dt = abs(theta - theta0)
     dz = abs(zeta - zeta0)
     dt = jnp.minimum(dt, 2 * np.pi - dt)
@@ -337,7 +343,10 @@ def _rho(theta, zeta, theta0, zeta0, dtheta, dzeta, s):
 
 
 def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=False):
-    """Integrate kernel over non-singular points."""
+    """Integrate kernel over non-singular points.
+
+    Generally follows sec 3.2.1 of [2].
+    """
     assert isinstance(src_grid.NFP, int)
     src_theta = src_grid.nodes[:, 1]
     src_zeta = src_grid.nodes[:, 2]
@@ -377,7 +386,7 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
                 s,
             )
 
-            eta = _chi(rho)
+            eta = _chi(rho)  # from eq 36 of [2]
             k = (1 - eta)[None, :, None] * k
             f_temp = jnp.sum(k * w[None, :, None], axis=1)
             return f_temp
@@ -401,6 +410,8 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
     f, _ = fori_loop(0, src_grid.NFP, nfp_loop, (f, src_data))
 
+    # undo rotation of src_zeta
+    src_data["zeta"] = src_zeta
     # we sum distance vectors, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz
     if kernel.ndim == 3:
@@ -419,7 +430,13 @@ def _singular_part(
     interpolator,
     loop=False,
 ):
-    """Integrate singular point by interpolating to polar grid."""
+    """Integrate singular point by interpolating to polar grid.
+
+    Generally follows sec 3.2.2 of [2], with the following differences:
+
+    - hyperparameter M replaced by s
+    - density sigma / function f is absorbed into kernel.
+    """
     src_dtheta = src_grid.spacing[:, 1]
     src_dzeta = src_grid.spacing[:, 2] / src_grid.NFP
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
@@ -431,13 +448,15 @@ def _singular_part(
     h_z = jnp.mean(src_dzeta)
 
     eta = _chi(r)
+    # integrand of eq 38 in [2] except stuff that needs to be interpolated
     v = eta * s**2 * h_t * h_z / 4 * abs(r) * dr * dw
     keys = list(set(["|e_theta x e_zeta|"] + kernel.keys))
     fsrc = [src_data[key] for key in keys]
 
     def polar_pt_vmap(i):
-        # evaluate the effect from a single polar node around each singular point
-        # on that singular point. Polar grids from other singularities have no effect
+        # evaluate the effect from a single polar node around each eval point
+        # on that eval point. Polar grids from other singularities have no effect
+        # See sec 3.2.2 of [2]
         dt = s / 2 * h_t * r[i] * jnp.sin(w[i])
         dz = s / 2 * h_z * r[i] * jnp.cos(w[i])
         theta_i = eval_theta + dt
@@ -496,6 +515,9 @@ def singular_integral(
 
     eg f(θ, ζ) = ∫ ∫ K(θ, ζ, θ', ζ') g(θ', ζ') dθ' dζ'
 
+    Where K(θ, ζ, θ', ζ') is the (singular) kernel and g(θ', ζ') is the metric on the
+    surface. See eq. 3.7 in [1]_, but we have absorbed the density σ into K
+
     Uses method by Malhotra et. al. [1]_ [2]_
 
     Parameters
@@ -512,9 +534,14 @@ def singular_integral(
         Source points for integral (eg primed coordinates). Should be linearly spaced
         rectangular grid in both theta, zeta.
     kernel : str or callable
-        Kernel function to evaluate. Should take 3 arguments:
-            eval_data : dict of data at evaluation points
-            src_data : dict of data at source points
+        Kernel function to evaluate. If str, one of the following:
+            '1_over_r' : 1 / |𝐫 − 𝐫'|
+            'nr_over_r3' : 𝐧⋅(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
+            'biot_savart' : μ₀/4π 𝐊×(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
+            'biot_savart_A' : μ₀/4π 𝐊 / |𝐫 − 𝐫'|
+        If callable, should take 3 arguments:
+            eval_data : dict of data at evaluation points (primed)
+            src_data : dict of data at source points (unprimed)
             diag : boolean, whether to evaluate full cross interactions or just diagonal
         If a callable, should also have the attributes ``ndim`` and ``keys`` defined.
         ``ndim`` is an integer representing the dimensionality of the output function f,

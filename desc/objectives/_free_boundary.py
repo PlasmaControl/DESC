@@ -58,7 +58,7 @@ class VacuumBoundaryError(_Objective):
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate error at.
+        Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
     field_grid : Grid, optional
         Grid used to discretize ext_field.
     name : str
@@ -347,8 +347,9 @@ class BoundaryError(_Objective):
         of the local singular grid with respect to the global grid, q is the order of
         integration on the local grid
     src_grid, eval_grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at for source terms and where
-        to evaluate errors.
+        Collocation grid containing the nodes to evaluate at for source terms for Biot-
+        Savart integral and where to evaluate errors. src_grid should not be stellarator
+        symmetric, and both should be at rho=1.
     field_grid : Grid, optional
         Grid used to discretize ext_field.
     loop : bool

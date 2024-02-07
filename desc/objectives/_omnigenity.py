@@ -548,7 +548,7 @@ class Omnigenity(_Objective):
     and are computed on a collocation grid in (ρ,η,α) coordinates.
 
     This objective assumes that the collocation point (θ=0,ζ=0) lies on the contour of
-    maximum field strength |B|=B_max.
+    maximum field strength ||B||=B_max.
 
     Parameters
     ----------

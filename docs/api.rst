@@ -257,7 +257,6 @@ Plotting
     desc.plotting.plot_fsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo
-    desc.plotting.plot_omnigenous_field
     desc.plotting.plot_qs_error
     desc.plotting.plot_section
     desc.plotting.plot_surfaces

@@ -1878,10 +1878,10 @@ class OmnigenousField(Optimizable, IOAble):
     helicity : tuple, optional
         Type of pseudo-symmetry (M, N). Default = toroidal contours (1, 0).
     B_lm : ndarray, optional
-        Magnetic well parameters describing |B|(ρ,η). These values are a flattened 2D
+        Magnetic well parameters describing ||B||(ρ,η). These values are a flattened 2D
         array of shape (L_B + 1, M_B), where the rows are Chebyshev coefficients
         corresponding to the modes in `B_basis` for the radial variation, and the
-        columns are the values of |B| atlinearly spaced monotonic spline knots.
+        columns are the values of ||B|| atlinearly spaced monotonic spline knots.
         If not supplied, `B_lm` defaults to a constant field of 1 T.
     x_lmn : ndarray, optional
         Omnigenity parameters describing h(ρ,η,α). The coefficients correspond to the

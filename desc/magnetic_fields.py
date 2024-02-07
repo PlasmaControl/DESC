@@ -484,6 +484,12 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             [type(field) for field in fields]
         )
         self._fields = fields
+        offset = jnp.concatenate(
+            [jnp.array([0]), jnp.cumsum(jnp.array([s.dim_x for s in self]))[:-1]]
+        )
+        # store split indices for unpacking
+        # as a numpy array to avoid jax issues later
+        self._split_idx = np.asarray(offset)
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.

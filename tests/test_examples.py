@@ -20,11 +20,13 @@ from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     ToroidalMagneticField,
+    VerticalMagneticField,
     field_line_integrate,
 )
 from desc.objectives import (
     AspectRatio,
     CurrentDensity,
+    DummyFields,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
@@ -1490,3 +1492,32 @@ def test_regcoil_ellipse_modular_coils_check_B(
         basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
+
+
+@pytest.mark.unit
+def test_dummy_for_optimizing_collections():
+    """Test with a dummy objective for optimizing collections."""
+    eq = Equilibrium()
+    tf = ToroidalMagneticField(1.0, 11.0)
+    pf = VerticalMagneticField(4.0)
+    field = tf + pf
+
+    # use grid with only points at R=11m (same as the TF field R0)
+    # so that the end result should be TF B0 / VF B0 = 2
+    objective = ObjectiveFunction(
+        DummyFields(
+            field,
+            eq,
+            target=2,
+            eval_grid=LinearGrid(rho=np.array(1.0), theta=np.array(0.0), N=1),
+        )
+    )
+    optimizer = Optimizer("lsq-exact")
+    constraints = (FixParameter(field, [["R0"], []]),)
+
+    # optimize for a dummy objective (Bphi / BZ), to just test out the framework
+    (field,), _ = optimizer.optimize(
+        (field,), objective, constraints, ftol=0, verbose=3
+    )
+
+    np.testing.assert_allclose(field[0].B0 / field[1].B0, 2)

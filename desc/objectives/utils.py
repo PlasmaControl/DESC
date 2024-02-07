@@ -8,6 +8,7 @@ import warnings
 import numpy as np
 
 from desc.backend import cond, jnp, logsumexp, put
+from desc.optimizable import OptimizableCollection
 from desc.utils import Index, flatten_list, svd_inv_null
 
 
@@ -81,19 +82,43 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
         xz = _tree_zeros_like([t.params_dict for t in con.things])
         # computing A matrix for each constraint for each thing in the optimization
         for thing in objective.things:
-            if thing in con.things:
-                A_ = con.jac_scaled(*xz)[con.things.index(thing)]
+            if not isinstance(thing, OptimizableCollection):
+                if thing in con.things:
+                    A_ = con.jac_scaled(*xz)[con.things.index(thing)]
+                else:
+                    A_ = {
+                        arg: jnp.zeros((con.dim_f, dimx))
+                        for arg, dimx in thing.dimensions.items()
+                    }
+                args = (
+                    objective._args
+                    if prox_flag and isinstance(thing, Equilibrium)
+                    else thing.optimizable_params
+                )
+                A_per_thing.append(jnp.hstack([A_[arg] for arg in args]))
+
             else:
-                A_ = {
-                    arg: jnp.zeros((con.dim_f, dimx))
-                    for arg, dimx in thing.dimensions.items()
-                }
-            args = (
-                objective._args
-                if prox_flag and isinstance(thing, Equilibrium)
-                else thing.optimizable_params
-            )
-            A_per_thing.append(jnp.hstack([A_[arg] for arg in args]))
+                A_per_subthing = []
+                # it is an optimizable collection, loop through its sub-objects
+                for subthing in thing:
+                    if subthing in con._subthings:
+                        # this returns a tuple of length 1 for some reason?
+                        A_ = con.jac_scaled(*xz)[0][con._subthings.index(subthing)]
+                    else:
+                        A_ = {
+                            arg: jnp.zeros((con.dim_f, dimx))
+                            for arg, dimx in subthing.dimensions.items()
+                        }
+                    args = (
+                        objective._args
+                        if prox_flag and isinstance(subthing, Equilibrium)
+                        else subthing.optimizable_params
+                    )
+                    # form the A per each sub-object in the collection
+                    A_per_subthing.append(jnp.hstack([A_[arg] for arg in args]))
+                # the A for the full object will just be the stacking of each sub-A
+                A_per_thing.append(jnp.hstack([A__ for A__ in A_per_subthing]))
+
         # using obj.compute instead of obj.target to allow for correct scale/weight
         b_ = -con.compute_scaled_error(*xz)
         A.append(A_per_thing)

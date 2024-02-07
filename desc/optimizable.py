@@ -194,8 +194,17 @@ class OptimizableCollection(Optimizable):
         p : list dict
             list of dictionary of ndarray of optimizable parameters.
         """
-        split_idx = jnp.cumsum(jnp.array([s.dim_x for s in self]))
-        xs = jnp.split(x, split_idx)
+        # want to define self._split_idx when the OptimizableCollection is created,
+        # maybe add a super init that gets called?
+        # to avoid JAX tracer complaints about having variable lengths...
+        # currently defined in init of SumMagneticField (for testing)
+        split_idx = self._split_idx
+        xf = [x[split_idx[-1] :]]
+        if len(self) > 1:
+            xs = [x[idx:idxx] for idx, idxx in zip(split_idx[0:-1], split_idx[1:])] + xf
+        else:
+            xs = xf
+
         params = [s.unpack_params(xi) for s, xi in zip(self, xs)]
         return params
 

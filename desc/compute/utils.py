@@ -1375,7 +1375,7 @@ def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
     # Use Gauss-Chebyshev quadrature as the integrand blows up at integration boundary.
     x, w = chebgauss(deg=resolution)
     # TODO: Write code to compute bounce points given lambda.
-    #  Vectorize it for multiple lambdas. Then vectorize coordinate mapping logic
+    #  Then vectorize coordinate mapping logic
     #  for multiple lambdas. For now, let's pretend bounce points do not depend on
     #  lambda so that bounce_point() returns either one or two numbers for
     #  endpoints of all the integrals.
@@ -1401,11 +1401,11 @@ def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
     #  This issue can be worked around with a specific routine for this.
     lg = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     lg_data = eq.compute("iota", grid=lg)
-    p = "desc.equilibrium.equilibrium.Equilibrium"
     data = {
         d: _meshgrid_expand(lg.compress(lg_data[d]), rho.size, alpha.size, zeta.size)
-        for d in get_data_deps("iota", obj=p)
-        if data_index[p][d]["coordinates"] == "r"
+        for d in lg_data
+        if data_index["desc.equilibrium.equilibrium.Equilibrium"][d]["coordinates"]
+        == "r"
     }
     sfl_coords = jnp.column_stack([r, (a + data["iota"] * z) % (2 * jnp.pi), z])
     desc_coords = eq.compute_theta_coords(sfl_coords)
@@ -1507,6 +1507,9 @@ def bounce_average(eq, lambdas, rho=None, alpha=None, resolution=20):
 
 def bounce_point(eq, lambdas):
     """Todo."""
+    # coordinate mapping with dense field line grid to get b on field lines
+    # bounce point idx  np.nonzero(jnp.diff(jnp.sign(lambdas[:, jnp.newaxis] - B))
+    # downsample to course grid and return
     return np.array([])
 
 

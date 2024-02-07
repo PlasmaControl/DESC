@@ -1740,7 +1740,7 @@ def find_initial_jacobi(dx, args):
 
 @functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
 def _zernike_radial_vectorized_d1(r, l, m, dr):
-    """Calculation of Radial part of Zernike polynomials."""
+    """First derivative calculation of Radial part of Zernike polynomials."""
 
     def body_inner(N, args):
         alpha, out, P_past = args
@@ -1831,7 +1831,7 @@ def _zernike_radial_vectorized_d1(r, l, m, dr):
 
 @functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
 def _zernike_radial_vectorized_d2(r, l, m, dr):
-    """Calculation of Radial part of Zernike polynomials."""
+    """Second derivative calculation of Radial part of Zernike polynomials."""
 
     def body_inner(N, args):
         alpha, out, P_past = args
@@ -1924,7 +1924,7 @@ def _zernike_radial_vectorized_d2(r, l, m, dr):
 
 @functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
 def _zernike_radial_vectorized_d3(r, l, m, dr):
-    """Calculation of Radial part of Zernike polynomials."""
+    """Third derivative calculation of Radial part of Zernike polynomials."""
 
     def body_inner(N, args):
         alpha, out, P_past = args
@@ -2019,7 +2019,7 @@ def _zernike_radial_vectorized_d3(r, l, m, dr):
 
 @functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")
 def _zernike_radial_vectorized_d4(r, l, m, dr):
-    """Calculation of Radial part of Zernike polynomials."""
+    """Fourth derivative calculation of Radial part of Zernike polynomials."""
 
     def body_inner(N, args):
         alpha, out, P_past = args

@@ -716,21 +716,28 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     Parameters
     ----------
     coils : Coil or array-like of Coils
-        collection of coils. Must all be the same type and resolution.
+        Collection of coils. Must all be the same type and resolution.
     currents : float or array-like of float
-        currents in each coil, or a single current shared by all coils in the set
+        Currents in each coil, or a single current shared by all coils in the set.
+    NFP : int (optional)
+        Number of field periods for enforcing field period symmetry. Default = 1.
+    sym : bool (optional)
+        Whether to enforce stellarator symmetry. Default = False.
     name : str
-        name of this CoilSet
+        Name of this CoilSet.
 
     """
 
-    _io_attrs_ = _Coil._io_attrs_ + ["_coils"]
+    _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
 
-    def __init__(self, *coils, name=""):
+    def __init__(self, coils, currents, NFP=1, sym=False, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
         self._coils = list(coils)
+        self.current = currents
+        self._NFP = NFP
+        self._sym = sym
         self._name = str(name)
 
     @property
@@ -746,6 +753,16 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def coils(self):
         """list: coils in the coilset."""
         return self._coils
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @property
+    def sym(self):
+        """bool: Whether this coil set is stellarator symmetric."""
+        return self._sym
 
     @property
     def current(self):

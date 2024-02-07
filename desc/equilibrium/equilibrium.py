@@ -1975,7 +1975,7 @@ class Equilibrium(IOAble, Optimizable):
                 print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
             # perturb + solve
-            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit,) = optimal_perturb(
+            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit) = optimal_perturb(
                 self,
                 constraint,
                 objective,

@@ -504,9 +504,7 @@ def _singular_part(
 
 def singular_integral(
     eval_data,
-    eval_grid,
     src_data,
-    src_grid,
     kernel,
     interpolator,
     loop=False,
@@ -523,16 +521,13 @@ def singular_integral(
     Parameters
     ----------
     eval_data : dict
-        Dictionary of data at evaluation points. Keys should be those required by
-        kernel as kernel.keys. Vector data should be in rpz basis.
-    eval_grid : Grid
-        Points where integral transform is to be evaluated (eg unprimed coordinates).
+        Dictionary of data at evaluation points (eval_grid passed to interpolator).
+        Keys should be those required by kernel as kernel.keys. Vector data should be
+        in rpz basis.
     src_data : dict
-        Dictionary of data at source points. Keys should be those required by
-        kernel as kernel.keys. Vector data should be in rpz basis.
-    src_grid : LinearGrid
-        Source points for integral (eg primed coordinates). Should be linearly spaced
-        rectangular grid in both theta, zeta.
+        Dictionary of data at source points (src_grid passed to interpolator). Keys
+        should be those required by kernel as kernel.keys. Vector data should be in
+        rpz basis.
     kernel : str or callable
         Kernel function to evaluate. If str, one of the following:
             '1_over_r' : 1 / |𝐫 − 𝐫'|
@@ -581,6 +576,7 @@ def singular_integral(
         kernel = kernels[kernel]
 
     s, q = interpolator.s, interpolator.q
+    eval_grid, src_grid = interpolator._eval_grid, interpolator._src_grid
 
     out2 = _singular_part(
         eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator, loop
@@ -690,9 +686,7 @@ kernels = {
 }
 
 
-def virtual_casing_biot_savart(
-    eval_data, eval_grid, src_data, src_grid, interpolator, loop=True
-):
+def virtual_casing_biot_savart(eval_data, src_data, interpolator, loop=True):
     """Evaluate magnetic field on surface due to sheet current on surface.
 
     The magnetic field due to the plasma current can be written as a Biot-Savart
@@ -720,16 +714,13 @@ def virtual_casing_biot_savart(
     Parameters
     ----------
     eval_data : dict
-        Dictionary of data at evaluation points. Keys should be those required by
-        kernel as kernel.keys. Vector data should be in rpz basis.
-    eval_grid : Grid
-        Points where integral transform is to be evaluated (eg unprimed coordinates).
+        Dictionary of data at evaluation points (eval_grid passed to interpolator).
+        Keys should be those required by kernel as kernel.keys. Vector data should be
+        in rpz basis.
     src_data : dict
-        Dictionary of data at source points. Keys should be those required by
-        kernel as kernel.keys. Vector data should be in rpz basis.
-    src_grid : LinearGrid
-        Source points for integral (eg primed coordinates). Should be linearly spaced
-        rectangular grid in both theta, zeta.
+        Dictionary of data at source points (src_grid passed to interpolator). Keys
+        should be those required by kernel as kernel.keys. Vector data should be in
+        rpz basis.
     interpolator : callable
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
@@ -751,9 +742,7 @@ def virtual_casing_biot_savart(
     """
     return singular_integral(
         eval_data,
-        eval_grid,
         src_data,
-        src_grid,
         _kernel_biot_savart,
         interpolator,
         loop,

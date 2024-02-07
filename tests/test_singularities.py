@@ -72,9 +72,7 @@ def test_singular_integral_greens_id():
 
         err = singular_integral(
             eval_data,
-            eval_grid,
             src_data,
-            src_grid,
             "nr_over_r3",
             interpolator,
             loop=True,
@@ -112,9 +110,7 @@ def test_singular_integral_vac_estell():
     interpolator = FFTInterpolator(eval_grid, src_grid, s, q)
     Bplasma = virtual_casing_biot_savart(
         eval_data,
-        eval_grid,
         src_data,
-        src_grid,
         interpolator,
         loop=True,
     )

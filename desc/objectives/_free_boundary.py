@@ -622,9 +622,7 @@ class BoundaryError(_Objective):
 
         Bplasma = virtual_casing_biot_savart(
             eval_data,
-            constants["eval_transforms"]["grid"],
             src_data,
-            constants["src_transforms"]["grid"],
             constants["interpolator"],
             loop=self._loop,
         )

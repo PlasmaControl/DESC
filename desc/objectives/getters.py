@@ -230,16 +230,16 @@ def maybe_add_self_consistency(thing, constraints):
         and hasattr(thing, "Zb_lmn")
         and hasattr(thing, "L_lmn")
     ):
-        if not _is_any_instance(constraints, AxisRSelfConsistency):
-            constraints += (AxisRSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, AxisZSelfConsistency):
-            constraints += (AxisZSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, BoundaryRSelfConsistency):
             constraints += (BoundaryRSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, BoundaryZSelfConsistency):
             constraints += (BoundaryZSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, FixLambdaGauge):
             constraints += (FixLambdaGauge(eq=thing),)
+        if not _is_any_instance(constraints, AxisRSelfConsistency):
+            constraints += (AxisRSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, AxisZSelfConsistency):
+            constraints += (AxisZSelfConsistency(eq=thing),)
 
     # Curve
     elif hasattr(thing, "shift") and hasattr(thing, "rotmat"):

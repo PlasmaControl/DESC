@@ -469,6 +469,7 @@ def _theta_sss_FourierRZWindingSurfaceCurve(
     params, transforms, profiles, data, **kwargs
 ):
     data["theta_sss"] = transforms["theta"].transform(params["theta_n"], dz=3)
+    return data
 
 
 @register_compute_fun(
@@ -877,8 +878,6 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
             "e_zeta",
             "e_zeta_t",
             "e_zeta_z",
-            "e_zeta_tt",
-            "e_zeta_tz",
             "e_zeta_zz",
             "phi",
             "phi_z",
@@ -910,9 +909,9 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
     data_surf["R_ttz"] = data_surf["e_theta_tz"][:, 0]
     data_surf["phi_ttz"] = data_surf["e_theta_tz"][:, 1]
     data_surf["Z_ttz"] = data_surf["e_theta_tz"][:, 2]
-    data_surf["R_tzz"] = data_surf["e_zeta_tz"][:, 0]
-    data_surf["phi_tzz"] = data_surf["e_zeta_tz"][:, 1]
-    data_surf["Z_tzz"] = data_surf["e_zeta_tz"][:, 2]
+    data_surf["R_tzz"] = data_surf["e_theta_zz"][:, 0]
+    data_surf["phi_tzz"] = data_surf["e_theta_zz"][:, 1]
+    data_surf["Z_tzz"] = data_surf["e_theta_zz"][:, 2]
     data_surf["R_zzz"] = data_surf["e_zeta_zz"][:, 0]
     data_surf["phi_zzz"] = data_surf["e_zeta_zz"][:, 1]
     data_surf["Z_zzz"] = data_surf["e_zeta_zz"][:, 2]

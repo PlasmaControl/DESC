@@ -476,6 +476,67 @@ def _e_theta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
 
 
 @register_compute_fun(
+    name="e_theta_tt",
+    label="\\partial^2_{\\theta} \\mathbf{e}_{\\theta\\theta}",
+    units="m",
+    units_long="meters",
+    description="Covariant poloidal basis vector, 2nd derivative wrt poloidal angle",
+    dim=3,
+    params=["R_lmn", "Z_lmn"],
+    transforms={
+        "R": [[0, 3, 0]],
+        "Z": [[0, 3, 0]],
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    basis="basis",
+)
+def _e_theta_tt_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    R = transforms["R"].transform(params["R_lmn"], dt=3)
+    Z = transforms["Z"].transform(params["Z_lmn"], dt=3)
+    phi = jnp.zeros(transforms["grid"].num_nodes)
+    coords = jnp.stack([R, phi, Z], axis=1)
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
+    data["e_theta_tt"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="e_theta_tz",
+    label="\\partial_{\\theta\\zeta} \\mathbf{e}_{\\theta}",
+    units="m",
+    units_long="meters",
+    description="Covariant poloidal basis vector, 2nd derivative wrt poloidal angle"
+    " and toroidal angle",
+    dim=3,
+    params=["R_lmn", "Z_lmn"],
+    transforms={
+        "R": [[0, 2, 1]],
+        "Z": [[0, 2, 1]],
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    basis="basis",
+)
+def _e_theta_tz_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    R = transforms["R"].transform(params["R_lmn"], dt=2, dz=1)
+    Z = transforms["Z"].transform(params["Z_lmn"], dt=2, dz=1)
+    phi = jnp.zeros(transforms["grid"].num_nodes)
+    coords = jnp.stack([R, phi, Z], axis=1)
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
+    data["e_theta_tz"] = coords
+    return data
+
+
+@register_compute_fun(
     name="e_theta_z",
     label="\\partial_{\\zeta} \\mathbf{e}_{\\theta}",
     units="m",
@@ -502,6 +563,36 @@ def _e_theta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
     if kwargs.get("basis", "rpz").lower() == "xyz":
         coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
     data["e_theta_z"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="e_theta_zz",
+    label="\\partial_{\\zeta\\zeta} \\mathbf{e}_{\\theta}",
+    units="m",
+    units_long="meters",
+    description="Covariant poloidal basis vector, 2nd derivative wrt toroidal angle",
+    dim=3,
+    params=["R_lmn", "Z_lmn"],
+    transforms={
+        "R": [[0, 1, 2]],
+        "Z": [[0, 1, 2]],
+        "grid": [],
+    },
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    basis="basis",
+)
+def _e_theta_zz_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    dR = transforms["R"].transform(params["R_lmn"], dt=1, dz=2)
+    dZ = transforms["Z"].transform(params["Z_lmn"], dt=1, dz=2)
+    dphi = jnp.zeros(transforms["grid"].num_nodes)
+    coords = jnp.stack([dR, dphi, dZ], axis=1)
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
+    data["e_theta_zz"] = coords
     return data
 
 

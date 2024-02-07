@@ -609,6 +609,44 @@ else:  # pragma: no cover
         fun.defjvps = lambda *args, **kwargs: None
         return fun
 
+    def tanh_sinh_quadrature(N, quad_limit=3.16):
+        """
+        tanh_sinh quadrature.
+
+        This function outputs the quadrature points and weights
+        for a tanh-sinh quadrature.
+
+        ∫₋₁¹ f(x) dx = Σ wₖ f(xₖ)
+
+        Parameters
+        ----------
+        N: int
+            Number of quadrature points, preferable odd
+        quad_limit: float
+            The range of quadrature points to be mapped.
+            Larger quad_limit implies better result but limited due to overflow in sinh
+
+        Returns
+        -------
+        x_k : numpy array
+            Quadrature points
+        w_k : numpy array
+            Quadrature weights
+
+        """
+        initial_points = np.linspace(-quad_limit, quad_limit, N)
+        h = np.diff(initial_points)[0]
+        x_k = np.tanh(0.5 * np.pi * np.sinh(initial_points))
+        w_k = (
+            0.5
+            * np.pi
+            * h
+            * np.cosh(initial_points)
+            / (np.cosh(0.5 * np.pi * np.sinh(initial_points))) ** 2
+        )
+
+        return x_k, w_k
+
     def root_scalar(
         fun,
         x0,

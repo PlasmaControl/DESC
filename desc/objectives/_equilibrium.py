@@ -127,7 +127,7 @@ class ForceBalance(_Objective):
             "|grad(rho)|",
             "sqrt(g)",
             "F_helical",
-            "|e^helical|",
+            "|e^helical*sqrt(g)|",
         ]
 
         timer = Timer()
@@ -180,7 +180,7 @@ class ForceBalance(_Objective):
             profiles=constants["profiles"],
         )
         fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
-        fb = data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
+        fb = data["F_helical"] * data["|e^helical*sqrt(g)|"]
 
         return jnp.concatenate([fr, fb])
 

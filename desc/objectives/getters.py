@@ -223,20 +223,26 @@ def maybe_add_self_consistency(thing, constraints):
         return any([isinstance(t, cls) for t in things])
 
     # Equilibrium
-    if hasattr(thing, "_Rb_lmn") and hasattr(thing, "_Zb_lmn"):
+    if (
+        hasattr(thing, "Ra_n")
+        and hasattr(thing, "Za_n")
+        and hasattr(thing, "Rb_lmn")
+        and hasattr(thing, "Zb_lmn")
+        and hasattr(thing, "L_lmn")
+    ):
+        if not _is_any_instance(constraints, AxisRSelfConsistency):
+            constraints += (AxisRSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, AxisZSelfConsistency):
+            constraints += (AxisZSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, BoundaryRSelfConsistency):
             constraints += (BoundaryRSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, BoundaryZSelfConsistency):
             constraints += (BoundaryZSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, FixLambdaGauge):
             constraints += (FixLambdaGauge(eq=thing),)
-        if not _is_any_instance(constraints, AxisRSelfConsistency):
-            constraints += (AxisRSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, AxisZSelfConsistency):
-            constraints += (AxisZSelfConsistency(eq=thing),)
 
     # Curve
-    elif hasattr(thing, "_shift") and hasattr(thing, "_rotmat"):
+    elif hasattr(thing, "shift") and hasattr(thing, "rotmat"):
         if not _is_any_instance(constraints, FixCurveShift):
             constraints += (FixCurveShift(curve=thing),)
         if not _is_any_instance(constraints, FixCurveRotation):

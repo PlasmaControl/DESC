@@ -1,6 +1,7 @@
 """Classes defining objectives for equilibrium and optimization."""
 
 from ._bootstrap import BootstrapRedlConsistency
+from ._coils import ToroidalFlux
 from ._equilibrium import (
     CurrentDensity,
     Energy,

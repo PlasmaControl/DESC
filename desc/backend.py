@@ -71,6 +71,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     switch = jax.lax.switch
     while_loop = jax.lax.while_loop
     vmap = jax.vmap
+    scan = jax.lax.scan
     bincount = jnp.bincount
     from jax import custom_jvp
     from jax.experimental.ode import odeint
@@ -554,6 +555,45 @@ else:  # pragma: no cover
             return np.stack([fun(fun_input) for fun_input in fun_inputs], axis=out_axes)
 
         return fun_vmap
+
+    def scan(f, init, xs, length=None, reverse=False, unroll=1):
+        """Scan a function over leading array axes while carrying along state.
+
+        Parameters
+        ----------
+        f : callable
+            Python function to be scanned of type c -> a -> (c, b), meaning that f
+            accepts two arguments where the first is a value of the loop carry and the
+            second is a slice of xs along its leading axis, and that f returns a pair
+            where the first element represents a new value for the loop carry and the
+            second represents a slice of the output.
+        init : ndarray
+            an initial loop carry value of type c.
+        xs : ndarray
+            the value of type [a] over which to scan along the leading axis.
+        length : int, optional
+            optional integer specifying the number of loop iterations, which must agree
+            with the sizes of leading axes of the arrays in xs (but can be used to
+            perform scans where no input xs are needed).
+        reverse : bool
+            optional boolean specifying whether to run the scan iteration forward
+            (the default) or in reverse, equivalent to reversing the leading axes of
+            the arrays in both xs and in ys.
+        unroll : int, optional
+            optional positive int specifying, in the underlying operation of the scan
+            primitive, how many scan iterations to unroll within a single iteration
+            of a loop.
+        """
+        if xs is None:
+            xs = [None] * length
+        carry = init
+        ys = []
+        if reverse:
+            xs = xs[::-1]
+        for x in xs:
+            carry, y = f(carry, x)
+            ys.append(y)
+        return carry, np.stack(ys)
 
     def bincount(x, weights=None, minlength=None, length=None):
         """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""

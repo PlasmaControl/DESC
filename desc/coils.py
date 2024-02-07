@@ -967,7 +967,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             **kwargs,
         )
         # set some large value for initial separation
-        minSeparation2 = 1.0e20
+        minSeparation2 = 1e20
         for whichCoil1 in range(len(self)):
             coords1 = coil_coords[whichCoil1]["x"]
             for whichCoil2 in range(whichCoil1):
@@ -978,9 +978,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     axis=-1,
                 )
 
-                this_minSeparation2 = jnp.min(d)
-                if this_minSeparation2 < minSeparation2:
-                    minSeparation2 = this_minSeparation2
+                minSeparation2 = jnp.min(jnp.array([jnp.min(d), minSeparation2]))
 
         return minSeparation2
 
@@ -1427,6 +1425,12 @@ class MixedCoilSet(CoilSet):
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         self._coils = list(coils)
         self._name = str(name)
+        offset = jnp.concatenate(
+            [jnp.array([0]), jnp.cumsum(jnp.array([s.dim_x for s in self]))[:-1]]
+        )
+        # store split indices for unpacking
+        # as a numpy array to avoid jax issues later
+        self._split_idx = np.asarray(offset)
 
     def compute(
         self,

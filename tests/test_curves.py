@@ -160,9 +160,30 @@ class TestRZCurve:
             xyz.compute("x", basis="xyz", grid=grid)["x"],
             atol=1e-12,
         )
+        # same thing but pass in a closed grid
+        grid = LinearGrid(N=20, endpoint=True)
+        xyz = rz.to_FourierXYZ(N=2, grid=grid, s=grid.nodes[:, 2])
+
+        np.testing.assert_allclose(
+            rz.compute("curvature", grid=grid)["curvature"],
+            xyz.compute("curvature", grid=grid)["curvature"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("torsion", grid=grid)["torsion"],
+            xyz.compute("torsion", grid=grid)["torsion"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("length", grid=grid)["length"],
+            xyz.compute("length", grid=grid)["length"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("x", grid=grid, basis="xyz")["x"],
+            xyz.compute("x", basis="xyz", grid=grid)["x"],
+            atol=1e-12,
+        )
 
         # same thing but with arclength angle
-
+        grid = LinearGrid(N=20, endpoint=False)
         xyz = rz.to_FourierXYZ(N=2, grid=grid, s="arclength")
 
         np.testing.assert_allclose(
@@ -212,7 +233,7 @@ class TestRZCurve:
         path = "tests/inputs/input.QSC_r2_5.5_desc"
 
         curve1 = FourierRZCurve.from_input_file(path)
-        curve2 = Equilibrium(**InputReader(path).inputs[0]).axis
+        curve2 = Equilibrium(**InputReader(path).inputs[0], check_kwargs=False).axis
         curve1.change_resolution(curve2.N)
 
         np.testing.assert_allclose(curve1.R_n, curve2.R_n)
@@ -224,7 +245,7 @@ class TestRZCurve:
 
         with pytest.warns(UserWarning):
             curve3 = FourierRZCurve.from_input_file(path)
-            curve4 = Equilibrium(**InputReader(path).inputs[0]).axis
+            curve4 = Equilibrium(**InputReader(path).inputs[0], check_kwargs=False).axis
         curve3.change_resolution(curve4.N)
 
         np.testing.assert_allclose(curve3.R_n, curve4.R_n)

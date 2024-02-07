@@ -358,6 +358,7 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
     h_t = jnp.mean(src_dtheta)
     h_z = jnp.mean(src_dzeta)
 
+    src_phi = src_data["phi"]
     keys = kernel.keys
 
     def nfp_loop(j, f_data):
@@ -365,6 +366,7 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
         # summing over field periods
         f, src_data = f_data
         src_data["zeta"] = (src_zeta + j * 2 * np.pi / src_grid.NFP) % (2 * np.pi)
+        src_data["phi"] = (src_phi + j * 2 * np.pi / src_grid.NFP) % (2 * np.pi)
 
         # nest this def to avoid having to pass the modified src_data around the loop
         # easier to just close over it and let JAX figure it out
@@ -412,10 +414,11 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
 
     # undo rotation of src_zeta
     src_data["zeta"] = src_zeta
+    src_data["phi"] = src_phi
     # we sum distance vectors, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz
     if kernel.ndim == 3:
-        f = xyz2rpz_vec(f, phi=eval_data["zeta"])
+        f = xyz2rpz_vec(f, phi=eval_data["phi"])
     return f
 
 
@@ -451,6 +454,8 @@ def _singular_part(
     # integrand of eq 38 in [2] except stuff that needs to be interpolated
     v = eta * s**2 * h_t * h_z / 4 * abs(r) * dr * dw
     keys = list(set(["|e_theta x e_zeta|"] + kernel.keys))
+    if "phi" in keys:
+        keys += ["omega"]
     fsrc = [src_data[key] for key in keys]
 
     def polar_pt_vmap(i):
@@ -465,8 +470,12 @@ def _singular_part(
         # data interpolated to each eval pt offset by dt,dz
         src_data_polar = {key: interpolator(val, i) for key, val in zip(keys, fsrc)}
 
+        # can't interpolate phi directly since its not periodic, so we interpolate
+        # omega and add it back in
         src_data_polar["zeta"] = zeta_i
         src_data_polar["theta"] = theta_i
+        if "phi" in keys:
+            src_data_polar["phi"] = zeta_i + src_data_polar["omega"]
 
         # eval pts x src pts for 1 polar grid offset
         # only need diagonal term because polar grid points
@@ -497,7 +506,7 @@ def _singular_part(
     # we sum distance vectors, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz
     if kernel.ndim == 3:
-        f = xyz2rpz_vec(f, phi=eval_data["zeta"])
+        f = xyz2rpz_vec(f, phi=eval_data["phi"])
 
     return f
 
@@ -588,32 +597,32 @@ def singular_integral(
 def _kernel_nr_over_r3(eval_data, src_data, diag=False):
     # n * r / |r|^3
     src_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
+        rpz2xyz(jnp.array([src_data["R"], src_data["phi"], src_data["Z"]]).T)
     )
     eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T)
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
     )
     if diag:
         dx = eval_x - src_x
     else:
         dx = eval_x[:, None] - src_x[None]
-    n = rpz2xyz_vec(src_data["e^rho"], phi=src_data["zeta"])
+    n = rpz2xyz_vec(src_data["e^rho"], phi=src_data["phi"])
     n = n / jnp.linalg.norm(n, axis=-1)[:, None]
     r = safenorm(dx, axis=-1)
     return safediv(jnp.sum(n * dx, axis=-1), r**3)
 
 
 _kernel_nr_over_r3.ndim = 1
-_kernel_nr_over_r3.keys = ["R", "zeta", "Z", "e^rho"]
+_kernel_nr_over_r3.keys = ["R", "phi", "Z", "e^rho"]
 
 
 def _kernel_1_over_r(eval_data, src_data, diag=False):
     # 1/ |r|
     src_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
+        rpz2xyz(jnp.array([src_data["R"], src_data["phi"], src_data["Z"]]).T)
     )
     eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T)
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
     )
     if diag:
         dx = eval_x - src_x
@@ -624,22 +633,22 @@ def _kernel_1_over_r(eval_data, src_data, diag=False):
 
 
 _kernel_1_over_r.ndim = 1
-_kernel_1_over_r.keys = ["R", "zeta", "Z"]
+_kernel_1_over_r.keys = ["R", "phi", "Z"]
 
 
 def _kernel_biot_savart(eval_data, src_data, diag=False):
     # K x r / |r|^3
     src_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
+        rpz2xyz(jnp.array([src_data["R"], src_data["phi"], src_data["Z"]]).T)
     )
     eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T)
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
     )
     if diag:
         dx = eval_x - src_x
     else:
         dx = eval_x[:, None] - src_x[None]
-    K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["zeta"])
+    K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["phi"])
     num = jnp.cross(K, dx, axis=-1)
     r = safenorm(dx, axis=-1)
     if diag:
@@ -650,22 +659,22 @@ def _kernel_biot_savart(eval_data, src_data, diag=False):
 
 
 _kernel_biot_savart.ndim = 3
-_kernel_biot_savart.keys = ["R", "zeta", "Z", "K_vc"]
+_kernel_biot_savart.keys = ["R", "phi", "Z", "K_vc"]
 
 
 def _kernel_biot_savart_A(eval_data, src_data, diag=False):
     # K  / |r|
     src_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
+        rpz2xyz(jnp.array([src_data["R"], src_data["phi"], src_data["Z"]]).T)
     )
     eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T)
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
     )
     if diag:
         dx = eval_x - src_x
     else:
         dx = eval_x[:, None] - src_x[None]
-    K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["zeta"])
+    K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["phi"])
     r = safenorm(dx, axis=-1)
     if diag:
         r = r[:, None]
@@ -675,7 +684,7 @@ def _kernel_biot_savart_A(eval_data, src_data, diag=False):
 
 
 _kernel_biot_savart_A.ndim = 3
-_kernel_biot_savart_A.keys = ["R", "zeta", "Z", "K_vc"]
+_kernel_biot_savart_A.keys = ["R", "phi", "Z", "K_vc"]
 
 
 kernels = {

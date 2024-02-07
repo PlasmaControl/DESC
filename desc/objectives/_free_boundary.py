@@ -148,7 +148,7 @@ class VacuumBoundaryError(_Objective):
         self._eq_data_keys = [
             "B",
             "R",
-            "zeta",
+            "phi",
             "Z",
             "n_rho",
             "|e_theta x e_zeta|",
@@ -212,7 +212,7 @@ class VacuumBoundaryError(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        x = jnp.array([data["R"], data["zeta"], data["Z"]]).T
+        x = jnp.array([data["R"], data["phi"], data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(
             x, grid=self._field_grid, basis="rpz"
         )
@@ -491,7 +491,7 @@ class BoundaryError(_Objective):
             "B",
             "|B|^2",
             "R",
-            "zeta",
+            "phi",
             "Z",
             "e^rho",
             "n_rho",
@@ -628,7 +628,7 @@ class BoundaryError(_Objective):
         )
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma = Bplasma + eval_data["B"] / 2
-        x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
+        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(
             x, grid=self._field_grid, basis="rpz"
         )

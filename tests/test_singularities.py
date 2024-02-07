@@ -93,7 +93,7 @@ def test_singular_integral_vac_estell():
         "B",
         "|B|^2",
         "R",
-        "zeta",
+        "phi",
         "Z",
         "e^rho",
         "n_rho",

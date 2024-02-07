@@ -8,6 +8,7 @@ import numpy as np
 
 from desc.backend import jit, jnp, scan, tree_stack, tree_unstack, vmap
 from desc.compute import get_params, rpz2xyz, xyz2rpz_vec
+from desc.compute.geom_utils import rotation_matrix
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -847,43 +848,58 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(self, nodes, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(n,3) or Grid
-            coordinates to evaluate field at [R,phi,Z] or [x,y,z]
+        nodes : array-like shape(n,3) or Grid
+            Nodes to evaluate field at in [R, phi, Z] or [X, Y, Z] coordinates.
         params : dict or array-like of dict, optional
-            parameters to pass to curves, either the same for all curves,
-            or one for each member
+            Parameters to pass to coils, either the same for all coils or one for each.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
+            Basis for input coordinates and returned magnetic field.
         grid : Grid, int or None or array-like, optional
-            Grid used to discretize coil, the same for all coils. If an integer, uses
-            that many equally spaced points.
+            Grid used to discretize coil, the same for all coils.
+            If an integer, uses that many equally spaced points.
 
         Returns
         -------
         field : ndarray, shape(n,3)
-            magnetic field at specified points, in either rpz or xyz coordinates
+            Magnetic field at specified nodes, in [R, phi, Z] or [X, Y, Z] coordinates.
 
         """
+        if hasattr(nodes, "nodes"):
+            nodes = nodes.nodes
+        nodes = jnp.atleast_2d(nodes)
         if params is None:
             params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
-        if hasattr(coords, "nodes"):
-            coords = coords.nodes
-        coords = jnp.atleast_2d(coords)
+        assert basis in ["rpz", "xyz"]
 
-        def body(B, x):
-            B += self[0].compute_magnetic_field(
-                coords, params=x, basis=basis, grid=grid
-            )
-            return B, None
+        # sum B contributions from each field period
+        B = jnp.zeros_like(nodes)
+        for k in range(self.NFP):
+            if basis == "rpz":
+                nodes_nfp = jnp.array(
+                    [
+                        nodes[:, 0],
+                        nodes[:, 1] + 2 * jnp.pi * k / self.NFP,
+                        nodes[:, 2],
+                    ]
+                ).T
+            else:
+                R = rotation_matrix(axis=[0, 0, 1], angle=2 * jnp.pi * k / self.NFP)
+                nodes_nfp = (R @ nodes.T).T
 
-        B = scan(body, jnp.zeros(coords.shape), tree_stack(params))[0]
+            def body(B, x):
+                B += self[0].compute_magnetic_field(
+                    nodes_nfp, params=x, basis=basis, grid=grid
+                )
+                return B, None
+
+            B += scan(body, jnp.zeros(nodes_nfp.shape), tree_stack(params))[0]
 
         return B
 

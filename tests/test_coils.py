@@ -222,12 +222,14 @@ class TestCoilSet:
     @pytest.mark.unit
     def test_symmetry_magnetic_field(self):
         """Tests that compute magnetic field is correct from symmetry."""
-        eq = get("precise_QA")
+        eq = get("precise_QA")  # TODO: use precise QH for higher NFP
         minor_radius = eq.compute("a")["a"]
+
+        sym = False  # FIXME: make work with stellarator symmetry and change to eq.sym
 
         # initialize CoilSet with symmetry
         num_coils = 3  # number of unique coils per half field period
-        grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+        grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (sym + 1))
         data_center = eq.axis.compute("x", grid=grid, basis="xyz")
         data_normal = eq.compute("e^zeta", grid=grid)
         centers = data_center["x"]
@@ -235,19 +237,33 @@ class TestCoilSet:
         coils = []
         for k in range(1, 2 * num_coils + 1, 2):
             coil = FourierPlanarCoil(
-                current=1,
+                current=1e6,
                 center=centers[k, :],
                 normal=normals[k, :],
                 r_n=[0, minor_radius + 0.5, 0],
             )
             coils.append(coil)
-        sym_coilset = CoilSet(coils, NFP=eq.NFP, sym=eq.sym)
+        sym_coilset = CoilSet(coils, NFP=eq.NFP, sym=sym)
 
         # equivalent CoilSet without symmetry
-        asym_coilset = CoilSet.from_symmetry(sym_coilset, NFP=eq.NFP, sym=eq.sym)
+        asym_coilset = CoilSet.from_symmetry(sym_coilset, NFP=eq.NFP, sym=sym)
 
-        # TODO: check that sym_coilset and asym_coilset compute same field
-        assert asym_coilset
+        # test that both coil sets compute the same field on the plasma surface
+        grid = LinearGrid(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=1, sym=False)
+        with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
+            data = eq.compute(["phi", "R", "X", "Y", "Z"], grid)
+
+        # test in (R, phi, Z) coordinates
+        nodes_rpz = np.array([data["R"], data["phi"], data["Z"]]).T
+        B_sym_rpz = sym_coilset.compute_magnetic_field(nodes_rpz, basis="rpz")
+        B_asym_rpz = asym_coilset.compute_magnetic_field(nodes_rpz, basis="rpz")
+        np.testing.assert_allclose(B_sym_rpz, B_asym_rpz, atol=1e-14)
+
+        # test in (X, Y, Z) coordinates
+        nodes_xyz = np.array([data["X"], data["Y"], data["Z"]]).T
+        B_sym_xyz = sym_coilset.compute_magnetic_field(nodes_xyz, basis="xyz")
+        B_asym_xyz = asym_coilset.compute_magnetic_field(nodes_xyz, basis="xyz")
+        np.testing.assert_allclose(B_sym_xyz, B_asym_xyz, atol=1e-14)
 
     @pytest.mark.unit
     def test_properties(self):

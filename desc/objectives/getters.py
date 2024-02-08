@@ -249,10 +249,10 @@ def maybe_add_self_consistency(thing, constraints):
             constraints += (BoundaryRSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, BoundaryZSelfConsistency):
             constraints += (BoundaryZSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, BoundaryLambdaSelfConsistency) and isinstance(
-            eq.surface, PoincareSurface
-        ):
-            constraints += (BoundaryLambdaSelfConsistency(eq=eq),)
+        if not _is_any_instance(
+            constraints, BoundaryLambdaSelfConsistency
+        ) and isinstance(thing.surface, PoincareSurface):
+            constraints += (BoundaryLambdaSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, FixLambdaGauge):
             constraints += (FixLambdaGauge(eq=thing),)
         if not _is_any_instance(constraints, AxisRSelfConsistency):

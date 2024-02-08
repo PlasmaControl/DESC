@@ -354,7 +354,6 @@ def regcoil_ellipse_and_axisym_surf():
         eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
         source_grid=LinearGrid(M=40, N=80, NFP=eq.NFP),
         scan=True,
-        show_plots=True,  # TODO: add tests for the plots
         current_helicity=-1,
     )
     return (data, surface_current_field, eq)
@@ -390,7 +389,6 @@ def regcoil_ellipse_helical_coils():
         source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         alpha=alpha,
         current_helicity=-2,
-        show_plots=True,
     )
 
     return (data, surface_current_field, eq)
@@ -425,7 +423,6 @@ def regcoil_ellipse_helical_coils_pos_helicity():
         eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         alpha=alpha,
-        show_plots=False,
         current_helicity=2,
     )
 
@@ -461,7 +458,6 @@ def regcoil_ellipse_modular_coils():
         eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         alpha=alpha,
-        show_plots=False,
         current_helicity=0,
     )
 

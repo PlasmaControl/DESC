@@ -1957,10 +1957,6 @@ class FourierCurrentPotentialField(
         scan_alphas : array, optional
             Array of alpha values to scan over, if given when scan=True,
             by default is `np.concatenate([np.array([0]),np.logspace(-30,-1,30)])`
-        show_plots : bool, optional
-            Whether to display analysis plots of normal field on surface,
-            current potential contours, and chi_B versus alpha and chi_K,
-            by default False
         sym_Phi :  {"cos","sin",False}
             whether to enforce a given symmetry for the DoubleFourierSeries part of the
             current potential. Defaults to ``"sin""`` if eq.sym is True else False.
@@ -1976,8 +1972,7 @@ class FourierCurrentPotentialField(
         Returns
         -------
         data : dict
-            Dictionary with the following keys, with
-            ``"fig_XX"`` keys if ``show_plots=True``::
+            Dictionary with the following keys,::
 
                 alpha : regularization parameter the algorithm was ran with, a float
                         if `scan=False`, or list of float of length `scan_alphas.size`
@@ -2216,7 +2211,7 @@ class FourierCurrentPotentialField(
             chi2Ks.append(chi_K)
             K_mags.append(K_mag)
             Bn_print = Bn_tot / normalization_B
-            Bn_arrs.append(Bn_print)
+            Bn_arrs.append(Bn_tot)
             if verbose > 1:
                 units = " (T)" if not normalize else " (unitless)"
                 printstring = f"chi^2 B = {chi_B:1.5e}"
@@ -2230,165 +2225,6 @@ class FourierCurrentPotentialField(
                 printstring = f"Avg Bnormal = {jnp.mean(jnp.abs(Bn_print)):1.5e}"
                 printstring += units
                 print(printstring)
-        ncontours = 20
-
-        if show_plots:
-            if not scan:
-                phi_tot = self.compute("Phi", grid=source_grid)["Phi"]
-                # Bnormal plot
-                plt.rcParams.update({"font.size": 26})
-                plt.figure(figsize=(8, 8))
-                plt.contourf(
-                    eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
-                    eval_grid.nodes[eval_grid.unique_theta_idx, 1],
-                    (Bn_tot).reshape(
-                        eval_grid.num_theta, eval_grid.num_zeta, order="F"
-                    ),
-                )
-                plt.ylabel("theta")
-                plt.xlabel("zeta")
-                plt.title("Bnormal on plasma surface")
-                plt.colorbar()
-                plt.xlim([0, 2 * np.pi / eq.NFP])
-                data["fig_Bn"] = plt.gcf()
-                data["ax_Bn"] = plt.gca()
-
-                # current potential contour plot
-                plt.figure(figsize=(10, 10))
-                plt.rcParams.update({"font.size": 18})
-                plt.contour(
-                    source_grid.nodes[source_grid.unique_zeta_idx, 2],
-                    source_grid.nodes[source_grid.unique_theta_idx, 1],
-                    (phi_tot).reshape(
-                        source_grid.num_theta, source_grid.num_zeta, order="F"
-                    ),
-                    levels=ncontours,
-                )
-                plt.colorbar()
-                plt.ylabel("theta")
-                plt.xlabel("zeta")
-                plt.title("Total Current Potential on winding surface")
-
-                plt.xlim([0, 2 * np.pi / eq.NFP])
-                data["fig_Phi"] = plt.gcf()
-                data["ax_Phi"] = plt.gca()
-            else:  # show composite scan over alpha plots
-                # strongly based off of Landreman's REGCOIL plotting routine:
-                # github.com/landreman/regcoil/blob/master/
-                plt.figure(figsize=(16, 12))
-                plt.rcParams.update({"font.size": 20})
-                plt.scatter(alphas, chi2Bs)
-                plt.xlabel(r"$\alpha$ (regularization parameter)")
-                plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
-                plt.yscale("log")
-                plt.xscale("log")
-                data["fig_chi^2_B_vs_alpha"] = plt.gcf()
-                data["ax_chi^2_B_vs_alpha"] = plt.gca()
-                plt.figure(figsize=(16, 12))
-                plt.scatter(alphas, chi2Ks)
-                plt.ylabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
-                plt.xlabel(r"$\alpha$ (regularization parameter)")
-                plt.yscale("log")
-                plt.xscale("log")
-                data["fig_chi^2_K_vs_alpha"] = plt.gcf()
-                data["ax_chi^2_K_vs_alpha"] = plt.gca()
-                plt.figure(figsize=(16, 12))
-                plt.scatter(chi2Ks, chi2Bs)
-                plt.xlabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
-                plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
-                plt.yscale("log")
-                plt.xscale("log")
-                data["fig_chi^2_B_vs_chi^2_K"] = plt.gcf()
-                data["ax_chi^2_B_vs_chi^2_K"] = plt.gca()
-
-                nalpha = len(chi2Bs)
-                max_nalpha_for_contour_plots = 16
-                numPlots = min(nalpha, max_nalpha_for_contour_plots)
-                ialpha_to_plot = np.sort(
-                    list(set(map(int, np.linspace(1, nalpha, numPlots))))
-                )
-                numPlots = len(ialpha_to_plot)
-
-                numCols = int(np.ceil(np.sqrt(numPlots)))
-                numRows = int(np.ceil(numPlots * 1.0 / numCols))
-
-                ########################################################
-                # Plot total current potentials
-                ########################################################
-                plt.figure(figsize=(16, 12))
-                for whichPlot in range(numPlots):
-                    plt.subplot(numRows, numCols, whichPlot + 1)
-                    phi_mn_opt = phi_mns[ialpha_to_plot[whichPlot] - 1]
-                    self.Phi_mn = phi_mn_opt
-                    phi_tot = self.compute("Phi", grid=source_grid)["Phi"]
-
-                    plt.rcParams.update({"font.size": 18})
-
-                    plt.contour(
-                        source_grid.nodes[source_grid.unique_zeta_idx, 2],
-                        source_grid.nodes[source_grid.unique_theta_idx, 1],
-                        (phi_tot).reshape(
-                            source_grid.num_theta, source_grid.num_zeta, order="F"
-                        ),
-                        levels=ncontours,
-                    )
-                    plt.ylabel("theta")
-                    plt.xlabel("zeta")
-                    plt.title(
-                        f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
-                        + f" index = {ialpha_to_plot[whichPlot] - 1}",
-                        fontsize="x-small",
-                    )
-                    plt.colorbar()
-                    plt.xlim([0, 2 * np.pi / eq.NFP])
-                plt.tight_layout()
-                plt.figtext(
-                    0.5,
-                    0.995,
-                    "Total Current Potential",
-                    horizontalalignment="center",
-                    verticalalignment="top",
-                    fontsize="small",
-                )
-                data["fig_scan_Phi"] = plt.gcf()
-                data["ax_scan_Phi"] = plt.gca()
-                plt.figure(figsize=(16, 12))
-                for whichPlot in range(numPlots):
-                    plt.subplot(numRows, numCols, whichPlot + 1)
-                    Bn = Bn_arrs[ialpha_to_plot[whichPlot] - 1]
-
-                    plt.rcParams.update({"font.size": 18})
-
-                    plt.contourf(
-                        eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
-                        eval_grid.nodes[eval_grid.unique_theta_idx, 1],
-                        (Bn).reshape(
-                            eval_grid.num_theta, eval_grid.num_zeta, order="F"
-                        ),
-                        levels=ncontours,
-                    )
-                    plt.ylabel("theta")
-                    plt.xlabel("zeta")
-                    plt.title(
-                        f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
-                        + f" index = {ialpha_to_plot[whichPlot] - 1}",
-                        fontsize="x-small",
-                    )
-                    plt.colorbar()
-                    plt.xlim([0, 2 * np.pi / eq.NFP])
-                plt.tight_layout()
-                units = " (T)" if not normalize else " (unitless)"
-                plt.figtext(
-                    0.5,
-                    0.995,
-                    "Bnormal" + units,
-                    horizontalalignment="center",
-                    verticalalignment="top",
-                    fontsize="small",
-                )
-                data["fig_scan_Bn"] = plt.gcf()
-                data["ax_scan_Bn"] = plt.gca()
-
         data["alpha"] = alphas[0] if not scan else alphas
         data["Phi_mn"] = phi_mns[0] if not scan else phi_mns
         data["I"] = I
@@ -2396,6 +2232,7 @@ class FourierCurrentPotentialField(
         data["chi^2_B"] = chi2Bs[0] if not scan else chi2Bs
         data["chi^2_K"] = chi2Ks[0] if not scan else chi2Ks
         data["|K|"] = K_mags[0] if not scan else K_mags
+        data["Bn_total"] = Bn_tot[0] if not scan else K_mags
 
         self.Phi_mn = phi_mns[0]
 

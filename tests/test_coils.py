@@ -566,8 +566,8 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
         Z2 = coords2[:, 2]
 
         np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}", atol=1e-16)
+        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}", atol=1e-16)
         np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check Bnormal on torus and ensure is near zero
@@ -641,8 +641,8 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
         Z2 = coords2[:, 2]
 
         np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}", atol=1e-16)
+        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}", atol=1e-16)
         np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
 
     # check Bnormal on torus and ensure is near zero

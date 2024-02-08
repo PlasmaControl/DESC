@@ -23,6 +23,8 @@ from .linear_objectives import (
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixCurveRotation,
+    FixCurveShift,
     FixElectronDensity,
     FixElectronTemperature,
     FixIonTemperature,
@@ -229,24 +231,40 @@ def get_NAE_constraints(
     return constraints
 
 
-def maybe_add_self_consistency(eq, constraints):
+def maybe_add_self_consistency(thing, constraints):
     """Add self consistency constraints if needed."""
 
     def _is_any_instance(things, cls):
         return any([isinstance(t, cls) for t in things])
 
-    if not _is_any_instance(constraints, BoundaryRSelfConsistency):
-        constraints += (BoundaryRSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, BoundaryZSelfConsistency):
-        constraints += (BoundaryZSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, BoundaryLambdaSelfConsistency) and isinstance(
-        eq.surface, PoincareSurface
+    # Equilibrium
+    if (
+        hasattr(thing, "Ra_n")
+        and hasattr(thing, "Za_n")
+        and hasattr(thing, "Rb_lmn")
+        and hasattr(thing, "Zb_lmn")
+        and hasattr(thing, "L_lmn")
     ):
-        constraints += (BoundaryLambdaSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, FixLambdaGauge):
-        constraints += (FixLambdaGauge(eq=eq),)
-    if not _is_any_instance(constraints, AxisRSelfConsistency):
-        constraints += (AxisRSelfConsistency(eq=eq),)
-    if not _is_any_instance(constraints, AxisZSelfConsistency):
-        constraints += (AxisZSelfConsistency(eq=eq),)
+        if not _is_any_instance(constraints, BoundaryRSelfConsistency):
+            constraints += (BoundaryRSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, BoundaryZSelfConsistency):
+            constraints += (BoundaryZSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, BoundaryLambdaSelfConsistency) and isinstance(
+            eq.surface, PoincareSurface
+        ):
+            constraints += (BoundaryLambdaSelfConsistency(eq=eq),)
+        if not _is_any_instance(constraints, FixLambdaGauge):
+            constraints += (FixLambdaGauge(eq=thing),)
+        if not _is_any_instance(constraints, AxisRSelfConsistency):
+            constraints += (AxisRSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, AxisZSelfConsistency):
+            constraints += (AxisZSelfConsistency(eq=thing),)
+
+    # Curve
+    elif hasattr(thing, "shift") and hasattr(thing, "rotmat"):
+        if not _is_any_instance(constraints, FixCurveShift):
+            constraints += (FixCurveShift(curve=thing),)
+        if not _is_any_instance(constraints, FixCurveRotation):
+            constraints += (FixCurveRotation(curve=thing),)
+
     return constraints

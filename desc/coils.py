@@ -817,17 +817,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         return tree_unstack(data)
 
-    def translate(self, *args, **kwargs):
+    def translate(self, displacement):
         """Translate the coils along an axis."""
-        [coil.translate(*args, **kwargs) for coil in self.coils]
+        [coil.translate(displacement) for coil in self.coils]
 
-    def rotate(self, *args, **kwargs):
+    def rotate(self, axis):
         """Rotate the coils about an axis."""
-        [coil.rotate(*args, **kwargs) for coil in self.coils]
+        [coil.rotate(axis) for coil in self.coils]
 
-    def flip(self, *args, **kwargs):
+    def flip(self, normal):
         """Flip the coils across a plane."""
-        [coil.flip(*args, **kwargs) for coil in self.coils]
+        [coil.flip(normal) for coil in self.coils]
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
         """Compute magnetic field at a set of points.
@@ -979,7 +979,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             coils = coils + flipped_coils
         for k in range(0, NFP):
             coil = coils.copy()
-            coil.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
+            coil.rotate([0, 0, 2 * jnp.pi * k / NFP])
             coilset.append(coil)
 
         return cls(*coilset)

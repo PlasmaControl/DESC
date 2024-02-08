@@ -885,7 +885,7 @@ def test_plot_coils():
     NFP = 4
     I = 1
     coil = FourierXYZCoil()
-    coil.rotate([0, 0, np.pi / N])
+    coil.rotate(angle=np.pi / N)
     coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
     coils.grid = 100
     coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)

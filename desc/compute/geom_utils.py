@@ -31,8 +31,9 @@ def rotation_matrix(axis, angle=None):
     Parameters
     ----------
     axis : array-like, shape(3,)
-        Axis of rotation, in cartesian (X,Y,Z) coordinates.
-        The norm of the vector is the angle of rotation, in radians.
+        Axis of rotation, in cartesian (X,Y,Z) coordinates
+    angle : float or None
+        Angle to rotate by, in radians. If None, use norm of axis vector.
 
     Returns
     -------

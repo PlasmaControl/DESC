@@ -34,7 +34,7 @@ class TestProfiles:
         input_path = "./tests/inputs/SOLOVEV"
         ir = InputReader(input_path)
 
-        eq1 = Equilibrium(**ir.inputs[-1])
+        eq1 = Equilibrium(**ir.inputs[-1], check_kwargs=False)
         eq2 = eq1.copy()
         eq2.pressure = eq1.pressure.to_spline()
         eq2.iota = eq1.iota.to_spline()

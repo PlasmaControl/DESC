@@ -6,7 +6,7 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import jit, jnp, tree_stack, tree_unstack, vmap
+from desc.backend import jit, jnp, scan, tree_stack, tree_unstack, vmap
 from desc.compute import get_params, rpz2xyz, xyz2rpz_vec
 from desc.geometry import (
     FourierPlanarCurve,
@@ -854,12 +854,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
+        if hasattr(coords, "nodes"):
+            coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
 
-        B = vmap(
-            lambda x: self[0].compute_magnetic_field(
+        def body(B, x):
+            B += self[0].compute_magnetic_field(
                 coords, params=x, basis=basis, grid=grid
             )
-        )(tree_stack(params)).sum(axis=0)
+            return B, None
+
+        B = scan(body, jnp.zeros(coords.shape), tree_stack(params))[0]
 
         return B
 
@@ -878,21 +883,22 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         axis : array-like, shape(3,)
             axis to rotate about
         angle : float
-            total rotational extend of coil set.
+            total rotational extent of coil set
         n : int
             number of copies of original coil
         endpoint : bool
             whether to include a coil at final angle
+
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
+        phi = jnp.linspace(0, angle, n, endpoint=endpoint)
         coils = []
-        phis = jnp.linspace(0, angle, n, endpoint=endpoint)
         for i in range(n):
             coili = coil.copy()
-            coili.rotate(axis, angle=phis[i])
+            coili.rotate(axis=axis, angle=phi[i])
             coili.current = currents[i]
             coils.append(coili)
         return cls(*coils)
@@ -915,14 +921,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             number of copies of original coil
         endpoint : bool
             whether to include a coil at final point
+
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
         displacement = jnp.asarray(displacement)
-        coils = []
         a = jnp.linspace(0, 1, n, endpoint=endpoint)
+        coils = []
         for i in range(n):
             coili = coil.copy()
             coili.translate(a[i] * displacement)
@@ -948,6 +955,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             number of field periods
         sym : bool
             whether coils should be stellarator symmetric
+
         """
         if not isinstance(coils, CoilSet):
             coils = CoilSet(coils)
@@ -1247,7 +1255,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             return CoilSet(*self.coils, *other.coils)
         if isinstance(other, (list, tuple)):
             return CoilSet(*self.coils, *other)
-        raise TypeError
+        else:
+            return NotImplemented
 
     # dunder methods required by MutableSequence
     def __getitem__(self, i):
@@ -1388,7 +1397,8 @@ class MixedCoilSet(CoilSet):
             return MixedCoilSet(*self.coils, *other.coils)
         if isinstance(other, (list, tuple)):
             return MixedCoilSet(*self.coils, *other)
-        raise TypeError
+        else:
+            return NotImplemented
 
     def __setitem__(self, i, new_item):
         if not isinstance(new_item, _Coil):

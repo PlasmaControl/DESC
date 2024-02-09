@@ -1017,3 +1017,113 @@ def test_proximal_with_PlasmaVesselDistance():
         verbose=3,
         maxiter=3,
     )
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_optimize_multiple_things_different_order():
+    """Tests that optimizing multiple things works regardless of order of things."""
+    # tests fix for GH issue #828
+    # optimize a circular surface to be a certain distance from a circular eq
+
+    eq = Equilibrium()
+    a_eq = 1  # eq minor radius
+
+    # circular surface
+    a = 3
+    R0 = 10
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    constraints = (
+        # don't let eq vary
+        FixParameter(eq),
+        # only let the minor radius of the surface vary
+        FixParameter(surf, params=["R_lmn"], indices=surf.R_basis.get_idx(M=0, N=0)),
+    )
+
+    target_dist = 1
+
+    grid = LinearGrid(M=10, N=0, NFP=eq.NFP)
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=target_dist,
+        plasma_grid=grid,
+        surface_grid=grid,
+        surface_fixed=False,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+
+    # ensure it runs when (eq,surf) are passed
+    (eq1, surf1), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=15, copy=True
+    )
+    # ensure surface changed correctly
+    np.testing.assert_allclose(
+        surf1.R_lmn[surf1.R_basis.get_idx(M=1, N=0)], a_eq + target_dist
+    )
+    np.testing.assert_allclose(
+        surf1.Z_lmn[surf1.Z_basis.get_idx(M=-1, N=0)], -a_eq - target_dist
+    )
+
+    np.testing.assert_allclose(surf1.R_lmn[surf1.R_basis.get_idx(M=0, N=0)], R0)
+    # ensure eq did not change
+    for key in eq.params_dict.keys():
+        np.testing.assert_allclose(eq1.params_dict[key], eq.params_dict[key])
+
+    # fresh start
+    constraints = (
+        # don't let eq vary
+        FixParameter(eq),
+        # only let the minor radius of the surface vary
+        FixParameter(surf, params=["R_lmn"], indices=surf.R_basis.get_idx(M=0, N=0)),
+    )
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=target_dist,
+        plasma_grid=grid,
+        surface_grid=grid,
+        surface_fixed=False,
+    )
+    objective = ObjectiveFunction((obj,))
+    # ensure it runs when (surf,eq) are passed which is opposite
+    # the order of objective.things
+    (surf2, eq2), result = optimizer.optimize(
+        (surf, eq), objective, constraints, verbose=3, maxiter=15, copy=True
+    )
+
+    # ensure surface changed correctly
+    np.testing.assert_allclose(
+        surf2.R_lmn[surf2.R_basis.get_idx(M=1, N=0)], a_eq + target_dist
+    )
+    np.testing.assert_allclose(
+        surf2.Z_lmn[surf2.Z_basis.get_idx(M=-1, N=0)], -a_eq - target_dist
+    )
+    np.testing.assert_allclose(surf2.R_lmn[surf2.R_basis.get_idx(M=0, N=0)], R0)
+    # ensure eq did not change
+    for key in eq.params_dict.keys():
+        np.testing.assert_allclose(eq2.params_dict[key], eq.params_dict[key])
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_optimize_with_single_constraint():
+    """Tests that Optimizer.optimize prints afterwards with a single constraint."""
+    eq = Equilibrium()
+    optimizer = Optimizer("lsq-exact")
+    objectective = ObjectiveFunction(GenericObjective("|B|", eq))
+    constraints = FixParameter(  # Psi is not constrained
+        eq, ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "p_l", "c_l"]
+    )
+
+    # test depends on verbose > 0
+    optimizer.optimize(eq, objective=objectective, constraints=constraints, verbose=2)

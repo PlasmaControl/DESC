@@ -887,7 +887,7 @@ class FixLambdaGauge(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _units = "(radians)"
+    _units = "(rad)"
     _print_value_fmt = "lambda gauge error: {:10.3e} "
 
     def __init__(
@@ -981,7 +981,7 @@ class FixThetaSFL(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
-    _units = "(radians)"
+    _units = "(rad)"
     _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
     def __init__(self, eq, name="Theta SFL"):
@@ -1595,7 +1595,7 @@ class FixModeLambda(_FixedObjective):
     """
 
     _target_arg = "L_lmn"
-    _units = "(dimensionless)"
+    _units = "(rad)"
     _print_value_fmt = "Fixed-lambda modes error: {:10.3e} "
 
     def __init__(
@@ -2063,7 +2063,7 @@ class FixSumModesLambda(_FixedObjective):
 
     _fixed = False  # not "diagonal", since its fixing a sum
     _target_arg = "L_lmn"
-    _units = "(dimensionless)"
+    _units = "(rad)"
     _print_value_fmt = "Fixed-lambda sum modes error: {:10.3e} "
 
     def __init__(
@@ -3502,7 +3502,7 @@ class FixOmniBmax(_FixedObjective):
         """
         field = self.things[0]
 
-        basis = field.shift_basis
+        basis = field.x_basis
         self._dim_f = int(basis.num_modes / (basis.M + 1))
 
         self._A = np.zeros((self._dim_f, basis.num_modes))

@@ -530,8 +530,6 @@ class TestGrid:
             "iota": np.array([[0, 0]]),
             "surface": np.array([[0, 0, 0, R, 0], [0, 1, 0, r, 0], [0, -1, 0, 0, -r]]),
             "spectral_indexing": "ansi",
-            "bdry_mode": "lcfs",
-            "node_pattern": "quad",
         }
 
         eq = Equilibrium(**inputs)
@@ -622,7 +620,6 @@ class TestGrid:
     @pytest.mark.unit
     def test_symmetry_volume_integral(self):
         """Test volume integral of a symmetric function."""
-
         # Currently, midpoint rule is false for LinearGrid made with L=number.
         def test(grid, midpoint_rule=False):
             r = grid.nodes[:, 0]

@@ -89,8 +89,6 @@ def test_LambdaGauge_asym():
             ],
         ),
         "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
-        "objective": "force",
-        "optimizer": "lsq-exact",
     }
     eq = Equilibrium(**inputs)
     lam_con = FixLambdaGauge(eq)

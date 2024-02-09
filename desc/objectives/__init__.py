@@ -28,7 +28,12 @@ from ._omnigenity import (
     QuasisymmetryTwoTerm,
 )
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
-from ._stability import BallooningStability, NewcombMetric, MagneticWell, MercierStability
+from ._stability import (
+    BallooningStability,
+    MagneticWell,
+    MercierStability,
+    NewcombMetric,
+)
 from .getters import (
     get_equilibrium_objective,
     get_fixed_axis_constraints,
@@ -48,6 +53,8 @@ from .linear_objectives import (
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixCurveRotation,
+    FixCurveShift,
     FixElectronDensity,
     FixElectronTemperature,
     FixIonTemperature,

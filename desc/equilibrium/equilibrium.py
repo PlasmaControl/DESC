@@ -378,6 +378,12 @@ class Equilibrium(IOAble, Optimizable):
             self.set_initial_guess(ensure_nested=ensure_nested)
         if check_orientation:
             ensure_positive_jacobian(self)
+        if kwargs.get("check_kwargs", True):
+            errorif(
+                len(kwargs),
+                TypeError,
+                f"Equilibrium got unexpected kwargs: {kwargs.keys()}",
+            )
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -638,9 +644,6 @@ class Equilibrium(IOAble, Optimizable):
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
-            surface.grid = LinearGrid(
-                rho=rho, M=2 * surface.M, N=2 * surface.N, endpoint=True, NFP=self.NFP
-            )
             return surface
 
         if zeta is not None:
@@ -672,12 +675,6 @@ class Equilibrium(IOAble, Optimizable):
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
-            surface.grid = LinearGrid(
-                L=2 * surface.L,
-                M=2 * surface.M,
-                zeta=zeta,
-                endpoint=True,
-            )
             return surface
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):
@@ -1647,7 +1644,7 @@ class Equilibrium(IOAble, Optimizable):
                 "M": M,
                 "N": N,
                 "sym": not na_eq.lasym,
-                "spectral_indexing ": spectral_indexing,
+                "spectral_indexing": spectral_indexing,
                 "pressure": np.array([[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]),
                 "iota": None,
                 "current": np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]]),
@@ -2165,7 +2162,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 # ensure that first step is nested
                 ensure_nested_bool = True if i == 0 else False
                 self.equilibria.append(
-                    Equilibrium(**inp, ensure_nested=ensure_nested_bool)
+                    Equilibrium(
+                        **inp, ensure_nested=ensure_nested_bool, check_kwargs=False
+                    )
                 )
         else:
             for i, arg in enumerate(args):
@@ -2174,7 +2173,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 elif isinstance(arg, dict):
                     ensure_nested_bool = True if i == 0 else False
                     self.equilibria.append(
-                        Equilibrium(**arg, ensure_nested=ensure_nested_bool)
+                        Equilibrium(
+                            **arg, ensure_nested=ensure_nested_bool, check_kwargs=False
+                        )
                     )
                 else:
                     raise TypeError(

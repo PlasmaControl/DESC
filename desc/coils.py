@@ -147,7 +147,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(new)
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(self, grid, params=None, basis="rpz", source_grid=None):
         """Compute magnetic field at a set of points.
 
         The coil current may be overridden by including `current`
@@ -155,13 +155,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         Parameters
         ----------
-        coords : array-like shape(n,3) or Grid
-            coordinates to evaluate field at [R,phi,Z] or [x,y,z]
-        params : dict, optional
-            parameters to pass to curve
+        grid : array-like shape(n,3) or Grid
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Parameters to pass to Curve.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
 
@@ -176,25 +176,28 @@ class _Coil(_MagneticField, Optimizable, ABC):
         tangents provided by the underlying curve class. Convergence should be
         exponential in the number of points used to discretize the curve, though curl(B)
         may not be zero if not fully converged.
+
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if hasattr(coords, "nodes"):
-            coords = coords.nodes
-        coords = jnp.atleast_2d(coords)
+        if hasattr(grid, "nodes"):
+            grid = grid.nodes
+        grid = jnp.atleast_2d(grid)
         if basis == "rpz":
-            coords = rpz2xyz(coords)
+            grid = rpz2xyz(grid)
         if params is None:
             current = self.current
         else:
             current = params.pop("current", self.current)
 
-        data = self.compute(["x", "x_s", "ds"], grid=grid, params=params, basis="xyz")
+        data = self.compute(
+            ["x", "x_s", "ds"], grid=source_grid, params=params, basis="xyz"
+        )
         B = biot_savart_quad(
-            coords, data["x"], data["x_s"] * data["ds"][:, None], current
+            grid, data["x"], data["x_s"] * data["ds"][:, None], current
         )
 
         if basis == "rpz":
-            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+            B = xyz2rpz_vec(B, x=grid[:, 0], y=grid[:, 1])
         return B
 
     def __repr__(self):
@@ -564,7 +567,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
     ):
         super().__init__(current, X, Y, Z, knots, method, name)
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(self, grid, params=None, basis="rpz", source_grid=None):
         """Compute magnetic field at a set of points.
 
         The coil current may be overridden by including `current`
@@ -572,13 +575,13 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
         Parameters
         ----------
-        coords : array-like shape(n,3) or Grid
-            coordinates to evaluate field at [R,phi,Z] or [x,y,z]
-        params : dict, optional
-            parameters to pass to curve
+        grid : array-like shape(n,3) or Grid
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Parameters to pass to Curve.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
 
@@ -592,19 +595,20 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         Discretizes the coil into straight segments between grid points, and uses the
         Hanson-Hirshman expression for exact field from a straight segment. Convergence
         is approximately quadratic in the number of coil points.
+
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if hasattr(coords, "nodes"):
-            coords = coords.nodes
-        coords = jnp.atleast_2d(coords)
+        if hasattr(grid, "nodes"):
+            grid = grid.nodes
+        grid = jnp.atleast_2d(grid)
         if basis == "rpz":
-            coords = rpz2xyz(coords)
+            grid = rpz2xyz(grid)
         if params is None:
             current = self.current
         else:
             current = params.pop("current", self.current)
 
-        data = self.compute(["x"], grid=grid, params=params, basis="xyz")
+        data = self.compute(["x"], grid=source_grid, params=params, basis="xyz")
         # need to make sure the curve is closed. If it's already closed, this doesn't
         # do anything (effectively just adds a segment of zero length which has no
         # effect on the overall result)
@@ -615,10 +619,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         # coils curvature which is a 2nd derivative of the position, and doing that
         # with only possibly c1 cubic splines is inaccurate, so we don't do it
         # (for now, maybe in the future?)
-        B = biot_savart_hh(coords, coil_pts_start, coil_pts_end, current)
+        B = biot_savart_hh(grid, coil_pts_start, coil_pts_end, current)
 
         if basis == "rpz":
-            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+            B = xyz2rpz_vec(B, x=grid[:, 0], y=grid[:, 1])
         return B
 
     @classmethod
@@ -848,54 +852,56 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
-    def compute_magnetic_field(self, nodes, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(self, grid, params=None, basis="rpz", source_grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        nodes : array-like shape(n,3) or Grid
-            Nodes to evaluate field at in [R, phi, Z] or [X, Y, Z] coordinates.
+        grid : array-like shape(n,3) or Grid
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for each.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        grid : Grid, int or None or array-like, optional
-            Grid used to discretize coil, the same for all coils.
-            If an integer, uses that many equally spaced points.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
 
         Returns
         -------
         field : ndarray, shape(n,3)
-            Magnetic field at specified nodes, in [R, phi, Z] or [X, Y, Z] coordinates.
+            Magnetic field at specified nodes, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
-        if hasattr(nodes, "nodes"):
-            nodes = nodes.nodes
-        nodes = jnp.atleast_2d(nodes)
+        if hasattr(grid, "nodes"):
+            grid = grid.nodes
+        grid = jnp.atleast_2d(grid)
         if params is None:
             params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
-        assert basis in ["rpz", "xyz"]
+        assert basis.lower() in ["rpz", "xyz"]
 
         # sum B contributions from each field period
-        B = jnp.zeros_like(nodes)
+        B = jnp.zeros_like(grid)
         for k in range(self.NFP):
             if basis == "rpz":
                 nodes_nfp = jnp.array(
                     [
-                        nodes[:, 0],
-                        nodes[:, 1] + 2 * jnp.pi * k / self.NFP,
-                        nodes[:, 2],
+                        grid[:, 0],
+                        grid[:, 1] + 2 * jnp.pi * k / self.NFP,
+                        grid[:, 2],
                     ]
                 ).T
+                print(nodes_nfp[:, 1])
             else:
                 R = rotation_matrix(axis=[0, 0, 1], angle=2 * jnp.pi * k / self.NFP)
-                nodes_nfp = (R @ nodes.T).T
+                nodes_nfp = (R @ grid.T).T
+                print(jnp.arctan2(nodes_nfp[:, 1], nodes_nfp[:, 0]))
 
             def body(B, x):
                 B += self[0].compute_magnetic_field(
-                    nodes_nfp, params=x, basis=basis, grid=grid
+                    nodes_nfp, params=x, basis=basis, source_grid=source_grid
                 )
                 return B, None
 
@@ -1007,7 +1013,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 f"coil {i} exceeds the toroidal extent for NFP={NFP} and sym={sym}",
             )
             warnif(
-                np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps),
+                sym and np.any(cdata["phi"] < np.finfo(cdata["phi"].dtype).eps),
                 UserWarning,
                 f"coil {i} is on the symmetry plane phi=0",
             )
@@ -1412,22 +1418,20 @@ class MixedCoilSet(CoilSet):
             )
         ]
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(self, grid, params=None, basis="rpz", source_grid=None):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(n,3) or Grid
-            coordinates to evaluate field at [R,phi,Z] or [x,y,z]
+        grid : array-like shape(n,3) or Grid
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
         params : dict or array-like of dict, optional
-            parameters to pass to curves, either the same for all curves,
-            or one for each member
+            Parameters to pass to coils, either the same for all coils or one for each.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None or array-like, optional
-            Grid used to discretize coil, either the same for all coils or one for each
-            member of the coilset. If an integer, uses that many equally spaced
-            points.
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize coils. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
 
         Returns
         -------
@@ -1435,11 +1439,11 @@ class MixedCoilSet(CoilSet):
             magnetic field at specified points, in either rpz or xyz coordinates
         """
         params = self._make_arraylike(params)
-        grid = self._make_arraylike(grid)
+        source_grid = self._make_arraylike(source_grid)
 
         B = 0
-        for coil, par, grd in zip(self.coils, params, grid):
-            B += coil.compute_magnetic_field(coords, par, basis, grd)
+        for coil, par, grd in zip(self.coils, params, source_grid):
+            B += coil.compute_magnetic_field(grid, par, basis, grd)
 
         return B
 

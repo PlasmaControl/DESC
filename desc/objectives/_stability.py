@@ -449,7 +449,6 @@ class BallooningStability(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["ideal_ball_gamma2"]
-        #self._data_keys = ["Newcomb_metric"]
 
         self._args = get_params(
             self._iota_keys + self._len_keys + self._data_keys,
@@ -543,7 +542,6 @@ class BallooningStability(_Objective):
         )
 
         return data["ideal_ball_gamma2"]
-        #return data["Newcomb_metric"]
 
 
 class NewcombMetric(_Objective):
@@ -752,5 +750,3 @@ class NewcombMetric(_Objective):
         )
 
         return data["Newcomb_metric"]
-
-

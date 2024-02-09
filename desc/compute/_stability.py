@@ -445,7 +445,6 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, *kwargs):
 
     psi_b = params["Psi"] / (2 * np.pi)
     a_N = data["a"]
-    #a_N = 0.2
     B_N = 2 * psi_b / a_N**2
 
     N_zeta0 = int(15)
@@ -725,13 +724,7 @@ def _Newcomb_metric(params, transforms, profiles, data, *kwargs):
     Y0 = Y0.at[i0, j0].set(Y[i0, j0, first_negative_indices[i0, j0]])
     Y0 = jnp.where(first_negative_indices != -1, 0, Y0)
 
-    #data2 = jnp.min(
-    #    ((X0 - phi[0]) / (phi[-1] - phi[0])) ** 2 + jnp.tanh(jnp.cbrt(Y0[:, :]))
-    #)
-
-    data2 = jnp.min(
-        1 + jnp.tanh(jnp.cbrt(Y0[:, :]))
-    )
+    data2 = jnp.min(1 + jnp.tanh(jnp.cbrt(Y0[:, :])))
 
     data3 = 2 * (2 - data2)
 

@@ -593,11 +593,11 @@ def test_io_OmnigenousField(tmpdir_factory):
     tmp_path = tmpdir.join("omnigenous_test.h5")
 
     field1 = OmnigenousField(
-        L_well=1,
-        M_well=4,
-        L_shift=0,
-        M_shift=1,
-        N_shift=1,
+        L_B=1,
+        M_B=4,
+        L_x=0,
+        M_x=1,
+        N_x=1,
         NFP=4,
         helicity=(1, 4),
         B_lm=np.array([0.8, 0.9, 1.1, 1.2, 0, 0, 0, 0]),

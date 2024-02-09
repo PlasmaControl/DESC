@@ -2452,7 +2452,7 @@ def plot_boozer_surface(
         fig, ax = plot_boozer_surface(eq)
 
     """
-    if hasattr(eq, "_well_basis"):
+    if hasattr(eq, "_B_basis"):
         # eq is really an OmnigenousField
         grid_kwargs = {
             "rho": rho,
@@ -3867,7 +3867,7 @@ def _plot_omnigenous_field(
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
     if fill:
-        im = ax.tricontour(zeta_B, theta_B, B, **contourf_kwargs)
+        im = ax.tricontourf(zeta_B, theta_B, B, **contourf_kwargs)
     else:
         im = ax.tricontour(zeta_B, theta_B, B, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)

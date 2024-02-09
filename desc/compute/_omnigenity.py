@@ -68,7 +68,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_theta_mn", "B_zeta_mn"],
+    data=["B_theta_mn", "B_zeta_mn", "NFP"],
 )
 def _w_mn(params, transforms, profiles, data, **kwargs):
     w_mn = jnp.zeros((transforms["w"].basis.num_modes,))
@@ -76,7 +76,6 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     Bn = transforms["B"].basis.modes[:, 2]
     wm = transforms["w"].basis.modes[:, 1]
     wn = transforms["w"].basis.modes[:, 2]
-    NFP = transforms["w"].basis.NFP
     # indices of matching modes in w and B bases
     # need to use np instead of jnp here as jnp.where doesn't work under jit
     # even if the args are static
@@ -85,7 +84,9 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
         (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
     )
     w_mn = put(w_mn, iw, sign(wn[iw]) * data["B_theta_mn"][ib] / jnp.abs(wm[iw]))
-    w_mn = put(w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(NFP * wn[jw]))
+    w_mn = put(
+        w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(data["NFP"] * wn[jw])
+    )
     data["w_Boozer_mn"] = w_mn
     return data
 
@@ -378,12 +379,12 @@ def _eta(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["NFP"],
     parameterization="desc.magnetic_fields.OmnigenousField",
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
     # zeta is used as a placeholder for alpha (field line label)
-    data["alpha"] = transforms["grid"].nodes[:, 2] * transforms["grid"].NFP
+    data["alpha"] = transforms["grid"].nodes[:, 2] * data["NFP"]
     return data
 
 
@@ -395,7 +396,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     description="Omnigenity symmetry angle",
     dim=1,
     params=["x_lmn"],
-    transforms={"shift": [[0, 0, 0]]},
+    transforms={"x": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=["rho", "alpha", "eta"],
@@ -404,7 +405,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
 def _omni_angle(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], data["eta"], data["alpha"]]).T
     data["h"] = (
-        transforms["shift"].basis.evaluate(nodes) @ params["x_lmn"]
+        transforms["x"].basis.evaluate(nodes) @ params["x_lmn"]
         + 2 * data["eta"]
         + jnp.pi
     )
@@ -458,17 +459,17 @@ def _omni_map(params, transforms, profiles, data, **kwargs):
     description="Magnitude of omnigenous magnetic field",
     dim=1,
     params=["B_lm"],
-    transforms={"well": [[0, 0, 0]]},
+    transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=["eta"],
     parameterization="desc.magnetic_fields.OmnigenousField",
 )
-def _B_well(params, transforms, profiles, data, **kwargs):
-    # reshaped to size (L_well, M_well)
-    B_lm = params["B_lm"].reshape((transforms["well"].basis.L + 1, -1))
+def _B_omni(params, transforms, profiles, data, **kwargs):
+    # reshaped to size (L_B, M_B)
+    B_lm = params["B_lm"].reshape((transforms["B"].basis.L + 1, -1))
     # assuming single flux surface, so only take first row (single node)
-    B_input = (transforms["well"].matrices["direct1"][0][0][0] @ B_lm)[0, :]
+    B_input = (transforms["B"].matrices["direct1"][0][0][0] @ B_lm)[0, :]
     B_input = jnp.sort(B_input)  # sort to ensure monotonicity
     eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
 

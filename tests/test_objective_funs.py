@@ -1617,11 +1617,11 @@ def test_compute_scalar_resolution():  # noqa: C901
     eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
     eq, _ = eq.solve(objective="vacuum", verbose=3)
     field = OmnigenousField(
-        L_well=0,
-        M_well=2,
-        L_shift=0,
-        M_shift=0,
-        N_shift=0,
+        L_B=0,
+        M_B=2,
+        L_x=0,
+        M_x=0,
+        N_x=0,
         NFP=eq.NFP,
         helicity=(0, eq.NFP),
         B_lm=np.array([0.8, 1.2]),

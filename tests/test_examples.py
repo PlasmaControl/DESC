@@ -837,23 +837,17 @@ def test_omnigenity_qa():
     eq.solve()
 
     field = OmnigenousField(
-        L_well=1,
-        M_well=4,
-        L_shift=1,
-        M_shift=1,
-        N_shift=1,
-        NFP=eq.NFP,
-        helicity=(1, 0),
+        L_B=1, M_B=4, L_x=1, M_x=1, N_x=1, NFP=eq.NFP, helicity=(1, 0)
     )
 
     eq_axis_grid = LinearGrid(rho=1e-2, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
     eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
 
     field_axis_grid = LinearGrid(
-        rho=1e-2, theta=2 * field.M_well, N=2 * field.N_shift, NFP=field.NFP, sym=False
+        rho=1e-2, theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
     )
     field_lcfs_grid = LinearGrid(
-        rho=1.0, theta=2 * field.M_well, N=2 * field.N_shift, NFP=field.NFP, sym=False
+        rho=1.0, theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
     )
 
     objective = ObjectiveFunction(
@@ -885,9 +879,9 @@ def test_omnigenity_qa():
         verbose=3,
     )
 
-    B_lm = field.B_lm.reshape((field.well_basis.L + 1, -1))
-    B0 = field.well_basis.evaluate(np.array([[0, 0, 0]])) @ B_lm
-    B1 = field.well_basis.evaluate(np.array([[1, 0, 0]])) @ B_lm
+    B_lm = field.B_lm.reshape((field.B_basis.L + 1, -1))
+    B0 = field.B_basis.evaluate(np.array([[0, 0, 0]])) @ B_lm
+    B1 = field.B_basis.evaluate(np.array([[1, 0, 0]])) @ B_lm
 
     # x_lmn=0 because the equilibrium is QS
     np.testing.assert_allclose(field.x_lmn, 0, atol=1e-12)
@@ -927,11 +921,11 @@ def test_omnigenity_optimization():
 
     # omnigenity optimization
     field = OmnigenousField(
-        L_well=1,
-        M_well=3,
-        L_shift=1,
-        M_shift=1,
-        N_shift=1,
+        L_B=1,
+        M_B=3,
+        L_x=1,
+        M_x=1,
+        N_x=1,
         NFP=eq.NFP,
         helicity=(0, eq.NFP),
         B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),
@@ -941,8 +935,8 @@ def test_omnigenity_optimization():
         B_lm = params["B_lm"]
         f = jnp.array(
             [
-                B_lm[0] - B_lm[field.M_well],  # B_min on axis
-                B_lm[field.M_well - 1] - B_lm[-1],  # B_max on axis
+                B_lm[0] - B_lm[field.M_B],  # B_min on axis
+                B_lm[field.M_B - 1] - B_lm[-1],  # B_max on axis
             ]
         )
         return f
@@ -962,14 +956,14 @@ def test_omnigenity_optimization():
                 eq=eq,
                 eq_grid=eq_half_grid,
                 field_grid=field_half_grid,
-                well_weight=1,
+                eta_weight=1,
             ),
             Omnigenity(
                 field=field,
                 eq=eq,
                 eq_grid=eq_lcfs_grid,
                 field_grid=field_lcfs_grid,
-                well_weight=2,
+                eta_weight=2,
             ),
         )
     )
@@ -979,9 +973,7 @@ def test_omnigenity_optimization():
         FixCurrent(eq=eq),
         FixPsi(eq=eq),
         FixOmniBmax(field=field),
-        FixOmniShift(
-            field=field, indices=np.where(field.shift_basis.modes[:, 1] == 0)[0]
-        ),
+        FixOmniShift(field=field, indices=np.where(field.x_basis.modes[:, 1] == 0)[0]),
         LinearObjectiveFromUser(mirrorRatio, field, target=[0.8, 1.2]),
     )
     optimizer = Optimizer("lsq-auglag")

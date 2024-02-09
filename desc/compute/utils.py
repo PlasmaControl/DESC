@@ -67,13 +67,13 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
         if name not in data_index[p]:
             raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
     allowed_kwargs = {
+        "basis",
+        "gamma",
         "helicity",
+        "iota",
         "M_booz",
         "N_booz",
-        "gamma",
-        "basis",
         "method",
-        "iota",
     }
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:

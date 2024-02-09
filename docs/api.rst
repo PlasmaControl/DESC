@@ -195,6 +195,7 @@ Objective Functions
     desc.objectives.MercierStability
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
+    desc.objectives.Omnigenity
     desc.objectives.PlasmaVesselDistance
     desc.objectives.Pressure
     desc.objectives.PrincipalCurvature
@@ -256,7 +257,6 @@ Plotting
     desc.plotting.plot_fsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo
-    desc.plotting.plot_omnigenous_field
     desc.plotting.plot_qs_error
     desc.plotting.plot_section
     desc.plotting.plot_surfaces

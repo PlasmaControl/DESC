@@ -91,9 +91,11 @@ class TestGrid:
             theta = np.linspace(
                 0,
                 2 * np.pi,
-                (ntheta + endpoint + 1) // 2 * 2 - endpoint
-                if (sym and ntheta > 1)
-                else ntheta,
+                (
+                    (ntheta + endpoint + 1) // 2 * 2 - endpoint
+                    if (sym and ntheta > 1)
+                    else ntheta
+                ),
                 endpoint=endpoint,
             )
             if sym and ntheta > 1:
@@ -620,6 +622,15 @@ class TestGrid:
     @pytest.mark.unit
     def test_symmetry_volume_integral(self):
         """Test volume integral of a symmetric function."""
+        L = [3, 3, 5, 3]
+        M = [3, 6, 5, 7]
+        N = [2, 2, 2, 2]
+        NFP = [5, 3, 5, 3]
+        sym = np.array([True, True, False, False])
+        # to test code not tested on grids made with M=.
+        even_number = 4
+        n_theta = even_number - sym
+
         # Currently, midpoint rule is false for LinearGrid made with L=number.
         def test(grid, midpoint_rule=False):
             r = grid.nodes[:, 0]
@@ -651,9 +662,11 @@ class TestGrid:
                 expected_integral,
                 true_integral,
                 rtol=0,
-                atol=midpoint_rule_error_bound / 4
-                if midpoint_rule
-                else right_riemann_error_bound / 3,
+                atol=(
+                    midpoint_rule_error_bound / 4
+                    if midpoint_rule
+                    else right_riemann_error_bound / 3
+                ),
                 err_msg=type(grid),
             )
             np.testing.assert_allclose(
@@ -662,15 +675,6 @@ class TestGrid:
                 rtol=1e-15,
                 err_msg=type(grid),
             )
-
-        L = [3, 3, 5, 3]
-        M = [3, 6, 5, 7]
-        N = [2, 2, 2, 2]
-        NFP = [5, 3, 5, 3]
-        sym = np.array([True, True, False, False])
-        # to test code not tested on grids made with M=.
-        even_number = 4
-        n_theta = even_number - sym
 
         for i in range(len(L)):
             test(LinearGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))

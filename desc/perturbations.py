@@ -9,6 +9,7 @@ from desc.compute import profile_names
 from desc.objectives import (
     AxisRSelfConsistency,
     AxisZSelfConsistency,
+    BoundaryLambdaSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     get_fixed_boundary_constraints,
@@ -65,6 +66,20 @@ def get_deltas(things1, things2):  # noqa: C901
                 deltas["Ra_n"] = a2.R_n - a1.R_n
             if not jnp.allclose(a2.Z_n, a1.Z_n):
                 deltas["Za_n"] = a2.Z_n - a1.Z_n
+
+    if "surface_poincare" in things1:
+        s1 = things1.pop("surface_poincare")
+        s2 = things2.pop("surface_poincare")
+        if s1 is not None and s2 is not None:
+            s1 = s1.copy()
+            s2 = s2.copy()
+            s1.change_resolution(s2.L, s2.M, s2.N)
+            if not jnp.allclose(s2.R_lmn, s1.R_lmn):
+                deltas["Rb_lmn"] = s2.R_lmn - s1.R_lmn
+            if not jnp.allclose(s2.Z_lmn, s1.Z_lmn):
+                deltas["Zb_lmn"] = s2.Z_lmn - s1.Z_lmn
+            if not jnp.allclose(s2.L_lmn, s1.L_lmn):
+                deltas["Lb_lmn"] = s2.L_lmn - s1.L_lmn
 
     for key, val in profile_names.items():
         if key in things1:
@@ -217,6 +232,12 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Zb_lmn"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
+    if "Lb_lmn" in deltas.keys():
+        con = get_instance(constraints, BoundaryLambdaSelfConsistency)
+        A = con.jac_unscaled(xz)[0]["L_lmn"]
+        Ainv = jnp.linalg.pinv(A)
+        dc = deltas["Lb_lmn"]
+        tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["L_lmn"]] @ Ainv @ dc
     if "Ra_n" in deltas.keys():
         con = get_instance(constraints, AxisRSelfConsistency)
         A = con.jac_unscaled(xz)[0]["R_lmn"]

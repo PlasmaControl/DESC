@@ -697,12 +697,15 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"Toroidal angle must be between 0 and 2*pi, got {zeta}",
         )
-        surf = self.get_surface_at(zeta=zeta)
-        Lb_lmn, Lb_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
-        surface = PoincareSurface(
-            surface=surf, L_lmn=Lb_lmn, modes_L=Lb_basis.modes, zeta=zeta
-        )
-        return surface
+        if isinstance(self.surface, PoincareSurface) and self.surface.zeta == zeta:
+            return self.surface
+        else:
+            surf = self.get_surface_at(zeta=zeta)
+            Lb_lmn, Lb_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
+            surface = PoincareSurface(
+                surface=surf, L_lmn=Lb_lmn, modes_L=Lb_basis.modes, zeta=zeta
+            )
+            return surface
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):
         """Return a SplineProfile of the desired quantity.

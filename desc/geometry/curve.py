@@ -895,7 +895,7 @@ class FourierRZWindingSurfaceCurve(Curve):
 
     _io_attrs_ = Curve._io_attrs_ + [
         "_theta_n",
-        "_theta_n",
+        "_zeta_n",
         "_secular_theta",
         "_secular_zeta",
         "_theta_basis",

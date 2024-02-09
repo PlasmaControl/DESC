@@ -78,7 +78,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
     -------
     surface : Surface
         Parsed surface object, either FourierRZToroidalSurface or
-        ZernikeRZToroidalSection.
+        PoincareSurface.
     """
     if isinstance(surface, Surface):
         surface = surface

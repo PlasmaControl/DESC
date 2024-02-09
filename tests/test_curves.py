@@ -12,7 +12,7 @@ from desc.geometry import (
     SplineXYZCurve,
 )
 from desc.grid import Grid, LinearGrid
-from desc.io import InputReader
+from desc.io import InputReader, load
 
 
 class TestRZCurve:
@@ -376,6 +376,22 @@ class TestRZWindingSurfaceCurve:
             _ = FourierRZWindingSurfaceCurve(theta_n=[1], modes_theta=[1, 2])
         with pytest.raises(AssertionError):
             _ = FourierRZWindingSurfaceCurve(zeta_n=[1], modes_zeta=[1, 2])
+
+    @pytest.mark.unit
+    def test_io(self, tmpdir_factory):
+        """Test io for FourierRZWindingSurfaceCurve class."""
+        c = FourierRZWindingSurfaceCurve(secular_theta=0.0, secular_zeta=1.0)
+        tmpdir = tmpdir_factory.mktemp("curve_io_test")
+        tmp_path = tmpdir.join("windingsurfacecurve.h5")
+        c.save(tmp_path)
+        c2 = load(tmp_path)
+        assert c.eq(c2)
+        # the curve is a toroidally closed curve at constant theta
+        # check it correctly computes coords after load
+        x, y, z = c.compute("x", grid=0, basis="xyz")["x"].T
+        np.testing.assert_allclose(x, 11)
+        np.testing.assert_allclose(y, 0)
+        np.testing.assert_allclose(z, 0)
 
 
 class TestFourierXYZCurve:

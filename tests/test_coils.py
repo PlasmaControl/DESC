@@ -298,14 +298,12 @@ class TestCoilSet:
         eq = get("precise_QH")
         minor_radius = eq.compute("a")["a"]
 
-        sym = False  # FIXME: make work with stellarator symmetry and change to eq.sym
-
         # initialize CoilSet with symmetry
         num_coils = 3  # number of unique coils per half field period
-        grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (sym + 1))
-        # with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
-        data_center = eq.axis.compute("x", grid=grid, basis="xyz")
-        data_normal = eq.compute("e^zeta", grid=grid)
+        grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+        with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
+            data_center = eq.axis.compute("x", grid=grid, basis="xyz")
+            data_normal = eq.compute("e^zeta", grid=grid)
         centers = data_center["x"]
         normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid.nodes[:, 2])
         coils = []
@@ -317,10 +315,10 @@ class TestCoilSet:
                 r_n=[0, minor_radius + 0.5, 0],
             )
             coils.append(coil)
-        sym_coilset = CoilSet(coils, NFP=eq.NFP, sym=sym)
+        sym_coilset = CoilSet(coils, NFP=eq.NFP, sym=eq.sym)
 
         # equivalent CoilSet without symmetry
-        asym_coilset = CoilSet.from_symmetry(sym_coilset, NFP=eq.NFP, sym=sym)
+        asym_coilset = CoilSet.from_symmetry(sym_coilset, NFP=eq.NFP, sym=eq.sym)
 
         # test that both coil sets compute the same field on the plasma surface
         grid = LinearGrid(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=1, sym=False)

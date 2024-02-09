@@ -8,6 +8,7 @@ import numpy as np
 
 from desc.backend import jit, jnp, scan, tree_stack, tree_unstack, vmap
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.compute.geom_utils import reflection_matrix
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -877,32 +878,49 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         if hasattr(grid, "nodes"):
             grid = grid.nodes
         grid = jnp.atleast_2d(grid)
-        if basis.lower() == "xyz":
-            grid = xyz2rpz(grid)
         if params is None:
             params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
-        assert basis.lower() in ["rpz", "xyz"]
 
-        # sum B contributions from each field period
-        B = jnp.zeros_like(grid)
+        # stellarator symmetry is easiest in [X,Y,Z] coordinates
+        if basis.lower() == "rpz":
+            grid_xyz = rpz2xyz(grid)
+        else:
+            grid_xyz = grid
+
+        # if stellarator symmetric, add reflected nodes from the other half field period
+        if self.sym:
+            normal = jnp.array(
+                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
+            )
+            grid_sym = (
+                grid_xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
+            )
+            grid_xyz = jnp.vstack((grid_xyz, grid_sym))
+
+        # field period rotation is easiest in [R,phi,Z] coordinates
+        grid_rpz = xyz2rpz(grid_xyz)
+
+        # sum the magnetic fields from each field period
+        B = jnp.zeros_like(grid_rpz)
         for k in range(self.NFP):
-            # rotate nodes to the next field period
-            nodes = jnp.array(
-                [grid[:, 0], grid[:, 1] + 2 * jnp.pi * k / self.NFP, grid[:, 2]]
-            ).T
+            grid_nfp = grid_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
 
             def body(B, x):
                 B += self[0].compute_magnetic_field(
-                    nodes, params=x, basis="rpz", source_grid=source_grid
+                    grid_nfp, params=x, basis="rpz", source_grid=source_grid
                 )
                 return B, None
 
-            B += scan(body, jnp.zeros(nodes.shape), tree_stack(params))[0]
+            B += scan(body, jnp.zeros(grid_nfp.shape), tree_stack(params))[0]
+
+        # sum the magnetic fields from both halves of the symmetric field period
+        if self.sym:
+            B = B[: grid.shape[0], :] + B[grid.shape[0] :, :] * jnp.array([-1, 1, 1])
 
         if basis.lower() == "xyz":
-            B = rpz2xyz_vec(B, phi=grid[:, 1])
+            B = rpz2xyz_vec(B, x=grid[:, 0], y=grid[:, 1])
         return B
 
     @classmethod

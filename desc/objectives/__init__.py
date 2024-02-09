@@ -48,6 +48,8 @@ from .linear_objectives import (
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixCurveRotation,
+    FixCurveShift,
     FixElectronDensity,
     FixElectronTemperature,
     FixIonTemperature,

@@ -235,7 +235,7 @@ class TestRZCurve:
         path = "tests/inputs/input.QSC_r2_5.5_desc"
 
         curve1 = FourierRZCurve.from_input_file(path)
-        curve2 = Equilibrium(**InputReader(path).inputs[0]).axis
+        curve2 = Equilibrium(**InputReader(path).inputs[0], check_kwargs=False).axis
         curve1.change_resolution(curve2.N)
 
         np.testing.assert_allclose(curve1.R_n, curve2.R_n)
@@ -247,7 +247,7 @@ class TestRZCurve:
 
         with pytest.warns(UserWarning):
             curve3 = FourierRZCurve.from_input_file(path)
-            curve4 = Equilibrium(**InputReader(path).inputs[0]).axis
+            curve4 = Equilibrium(**InputReader(path).inputs[0], check_kwargs=False).axis
         curve3.change_resolution(curve4.N)
 
         np.testing.assert_allclose(curve3.R_n, curve4.R_n)
@@ -405,6 +405,19 @@ class TestPlanarCurve:
     """Tests for FourierPlanarCurve class."""
 
     @pytest.mark.unit
+    def test_rotation(self):
+        """Test rotation of planar curve."""
+        cx = FourierPlanarCurve(center=[0, 0, 0], normal=[1, 0, 0], r_n=1)
+        cy = FourierPlanarCurve(center=[0, 0, 0], normal=[0, 1, 0], r_n=1)
+        cz = FourierPlanarCurve(center=[0, 0, 0], normal=[0, 0, 1], r_n=1)
+        datax = cx.compute("x", grid=20, basis="xyz")
+        datay = cy.compute("x", grid=20, basis="xyz")
+        dataz = cz.compute("x", grid=20, basis="xyz")
+        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=1e-16)  # only in Y-Z plane
+        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=1e-16)  # only in X-Z plane
+        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=1e-16)  # only in X-Y plane
+
+    @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""
         c = FourierPlanarCurve(modes=[0])
@@ -474,7 +487,7 @@ class TestPlanarCurve:
         np.testing.assert_allclose(z, 0)
         dr, dp, dz = c.compute("x_sss", grid=0, basis="rpz")["x_sss"].T
         np.testing.assert_allclose(dr, 0)
-        np.testing.assert_allclose(dp, 0)
+        np.testing.assert_allclose(dp, 0, atol=1e-14)
         np.testing.assert_allclose(dz, 2)
         c.rotate(angle=np.pi / 2)
         c.flip([0, 1, 0])

@@ -1697,3 +1697,12 @@ def test_quadratic_flux_finite_beta_warning():
     obj = QuadraticFlux(eq=eq, field=field)
     with pytest.warns(UserWarning):
         obj.build()
+
+
+def test_force_balance_axis_error():
+    """Test that ForceBalance objective is not NaN if the grid contains axis."""
+    eq = get("SOLOVEV")
+    grid = LinearGrid(L=2, M=2, N=2, axis=True)
+    obj = ForceBalance(eq, grid=grid)
+    obj.build()
+    assert not np.any(np.isnan(obj.compute_unscaled(*obj.xs(eq))))

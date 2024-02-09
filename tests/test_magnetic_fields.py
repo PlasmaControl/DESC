@@ -752,11 +752,11 @@ class TestMagneticFields:
         M_well_new = 6
         NFP = 4
         field = OmnigenousField(
-            L_well=L_well_old,
-            M_well=M_well_old,
-            L_shift=0,
-            M_shift=0,
-            N_shift=0,
+            L_B=L_well_old,
+            M_B=M_well_old,
+            L_x=0,
+            M_x=0,
+            N_x=0,
             NFP=NFP,
             helicity=(0, NFP),
             B_lm=np.array([0.9, 1.0, 1.1, 0.2, 0.05, -0.2]),
@@ -768,7 +768,7 @@ class TestMagneticFields:
         B_axis_lowres = field.compute_well(rho_axis, eta)
         B_half_lowres = field.compute_well(rho_half, eta)
         B_lcfs_lowres = field.compute_well(rho_lcfs, eta)
-        field.change_resolution(L_well=L_well_new, M_well=M_well_new)
+        field.change_resolution(L_B=L_well_new, M_B=M_well_new)
         B_axis_highres = field.compute_well(rho_axis, eta)
         B_half_highres = field.compute_well(rho_half, eta)
         B_lcfs_highres = field.compute_well(rho_lcfs, eta)

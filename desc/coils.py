@@ -7,8 +7,7 @@ from collections.abc import MutableSequence
 import numpy as np
 
 from desc.backend import jit, jnp, scan, tree_stack, tree_unstack, vmap
-from desc.compute import get_params, rpz2xyz, xyz2rpz_vec
-from desc.compute.geom_utils import rotation_matrix
+from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -182,7 +181,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         if hasattr(grid, "nodes"):
             grid = grid.nodes
         grid = jnp.atleast_2d(grid)
-        if basis == "rpz":
+        if basis.lower() == "rpz":
+            phi = grid[:, 1]
             grid = rpz2xyz(grid)
         if params is None:
             current = self.current
@@ -196,8 +196,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid, data["x"], data["x_s"] * data["ds"][:, None], current
         )
 
-        if basis == "rpz":
-            B = xyz2rpz_vec(B, x=grid[:, 0], y=grid[:, 1])
+        if basis.lower() == "rpz":
+            B = xyz2rpz_vec(B, phi=phi)
         return B
 
     def __repr__(self):
@@ -873,9 +873,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Magnetic field at specified nodes, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
+        assert basis.lower() in ["rpz", "xyz"]
         if hasattr(grid, "nodes"):
             grid = grid.nodes
         grid = jnp.atleast_2d(grid)
+        if basis.lower() == "xyz":
+            grid = xyz2rpz(grid)
         if params is None:
             params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
             for par, coil in zip(params, self):
@@ -885,28 +888,21 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # sum B contributions from each field period
         B = jnp.zeros_like(grid)
         for k in range(self.NFP):
-            if basis == "rpz":
-                nodes_nfp = jnp.array(
-                    [
-                        grid[:, 0],
-                        grid[:, 1] + 2 * jnp.pi * k / self.NFP,
-                        grid[:, 2],
-                    ]
-                ).T
-                print(nodes_nfp[:, 1])
-            else:
-                R = rotation_matrix(axis=[0, 0, 1], angle=2 * jnp.pi * k / self.NFP)
-                nodes_nfp = (R @ grid.T).T
-                print(jnp.arctan2(nodes_nfp[:, 1], nodes_nfp[:, 0]))
+            # rotate nodes to the next field period
+            nodes = jnp.array(
+                [grid[:, 0], grid[:, 1] + 2 * jnp.pi * k / self.NFP, grid[:, 2]]
+            ).T
 
             def body(B, x):
                 B += self[0].compute_magnetic_field(
-                    nodes_nfp, params=x, basis=basis, source_grid=source_grid
+                    nodes, params=x, basis="rpz", source_grid=source_grid
                 )
                 return B, None
 
-            B += scan(body, jnp.zeros(nodes_nfp.shape), tree_stack(params))[0]
+            B += scan(body, jnp.zeros(nodes.shape), tree_stack(params))[0]
 
+        if basis.lower() == "xyz":
+            B = rpz2xyz_vec(B, phi=grid[:, 1])
         return B
 
     @classmethod
@@ -1021,9 +1017,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         coilset = []
         if sym:
             # first reflect/flip original coilset
-            # ie, given coils [1, 2, 3] at angles [0, pi/6, 2pi/6]
+            # ie, given coils [1, 2, 3] at angles [pi/6, pi/2, 5pi/6]
             # we want a new set like [1, 2, 3, flip(3), flip(2), flip(1)]
-            # at [0, pi/6, 2pi/6, 3pi/6, 4pi/6, 5pi/6]
+            # at [pi/6, pi/2, 5pi/6, 7pi/6, 3pi/2, 11pi/6]
             flipped_coils = []
             normal = jnp.array([-jnp.sin(jnp.pi / NFP), jnp.cos(jnp.pi / NFP), 0])
             for coil in coils[::-1]:

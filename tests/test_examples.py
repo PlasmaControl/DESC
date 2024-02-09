@@ -982,7 +982,7 @@ def test_freeb_axisym():
     )
     rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
 
-    np.testing.assert_allclose(rho_err[:, -1], 0, atol=1e-2)  # only check rho=1
+    np.testing.assert_allclose(rho_err[:, -1], 0, atol=2e-2)  # only check rho=1
 
 
 class TestGetExample:

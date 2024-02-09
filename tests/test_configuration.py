@@ -8,12 +8,7 @@ import pytest
 from desc.backend import put
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.initial_guess import _initial_guess_surface
-from desc.geometry import (
-    FourierRZCurve,
-    FourierRZToroidalSurface,
-    PoincareSurface,
-    ZernikeRZToroidalSection,
-)
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, PoincareSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
 
@@ -64,7 +59,7 @@ class TestConstructor:
         np.testing.assert_allclose(axis.R_n, eq.Ra_n)
         np.testing.assert_allclose(axis.Z_n, eq.Za_n)
 
-        surface2 = ZernikeRZToroidalSection(spectral_indexing="ansi")
+        surface2 = PoincareSurface(spectral_indexing="ansi")
         eq2 = Equilibrium(surface=surface2)
         assert eq2.surface.eq(surface2)
 

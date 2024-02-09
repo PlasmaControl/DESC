@@ -12,7 +12,7 @@ from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
 from desc.backend import jnp
-from desc.coils import FourierPlanarCoil
+from desc.coils import CoilSet, FourierPlanarCoil
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -498,11 +498,17 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_coil_length(self):
         """Tests coil length."""
+
+        def test(coil):
+            obj = CoilLength(coil)
+            obj.build()
+            f = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f, 2 * np.pi, rtol=1e-8)
+
         coil = FourierPlanarCoil(r_n=1)
-        obj = CoilLength(coil)
-        obj.build()
-        f = obj.compute(params=coil.params_dict)
-        np.testing.assert_allclose(f, 2 * np.pi, rtol=1e-8)
+        coils = CoilSet.linspaced_linear(coil, n=4)
+        test(coil)
+        test(coils)
 
 
 @pytest.mark.unit

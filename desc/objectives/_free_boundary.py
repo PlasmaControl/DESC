@@ -926,6 +926,7 @@ class QuadraticFlux(_Objective):
             "Z",
             "n_rho",
             "K_vc",
+            "phi",
         ]
         self._args = get_params(
             self._data_keys,
@@ -984,9 +985,7 @@ class QuadraticFlux(_Objective):
             # don't need extra B/2 since we only care about normal component
             Bplasma = -singular_integral(
                 eval_data,
-                eval_grid,
                 src_data,
-                src_grid,
                 "biot_savart",
                 interpolator,
             )
@@ -1064,9 +1063,7 @@ class QuadraticFlux(_Objective):
             # don't need extra B/2 since we only care about normal component
             Bplasma = -singular_integral(
                 eval_data,
-                self._eval_grid,
                 src_data,
-                self._src_grid,
                 "biot_savart",
                 constants["interpolator"],
             )

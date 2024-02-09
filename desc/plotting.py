@@ -3853,7 +3853,7 @@ def _field_line_Rbf(rho, theta0, phi_end, grid, Rs, Zs, B_interp, phi0=0):
 
 
 def plot_regcoil_outputs(
-    field, data, eval_grid=None, source_grid=None, return_data=False, **kwargs
+    field, data, eq, eval_grid=None, source_grid=None, return_data=False, **kwargs
 ):
     """Plot the output of REGCOIL.
 
@@ -3865,6 +3865,8 @@ def plot_regcoil_outputs(
     data : dict
         dictionary containing the output of a call to ``run_regcoil`` method
         of ``FourierCurrentPotentiaField``
+    eq : Equilibrium
+        the equilibrium that the Bn error was evaluated on.
     eval_grid : Grid, optional
         grid to evaluate the magnetic field on, if not None, will plot the magnetic
         field on a default LinearGrid
@@ -3892,9 +3894,19 @@ def plot_regcoil_outputs(
     chi2Ks = data["chi^2_K"]
     phi_mns = data["Phi_mn"]
     if eval_grid is None:
-        eval_grid = LinearGrid(M=30, N=30, NFP=field.NFP)
+        eval_grid = data["eval_grid"]
+        eval_grid = (
+            eval_grid
+            if not eval_grid.sym
+            else LinearGrid(M=eval_grid.M, N=eval_grid.N, sym=False, NFP=eval_grid.NFP)
+        )
     if source_grid is None:
-        source_grid = LinearGrid(M=60, N=60, NFP=field.NFP)
+        source_grid = data["source_grid"]
+    # check if we can use existing quantities in data
+    # or re-evaluate
+    recalc_eval_grid_quantites = not eval_grid.eq(data["eval_grid"])
+
+    # TODO: if recalculating do we replace the data in the dict?
 
     ncontours = kwargs.pop("ncontours", 20)
     figdata = {}
@@ -3906,6 +3918,11 @@ def plot_regcoil_outputs(
         # TODO: replace with plot_2d call
         phi_tot = field.compute("Phi", grid=source_grid)["Phi"]
         # Bnormal plot
+        Bn_tot = (
+            Bn_tot
+            if not recalc_eval_grid_quantites
+            else field.compute_Bnormal(eq, eval_grid, source_grid)[0]
+        )
         plt.rcParams.update({"font.size": 26})
         plt.figure(figsize=(8, 8))
         plt.contourf(
@@ -3990,6 +4007,8 @@ def plot_regcoil_outputs(
             # TODO replace these with plot 2d calls with the ax of each
             # subplot passed in
             field.Phi_mn = phi_mn_opt
+            field.I = data["I"]
+            field.G = data["G"]
             phi_tot = field.compute("Phi", grid=source_grid)["Phi"]
 
             plt.rcParams.update({"font.size": 18})
@@ -4025,7 +4044,12 @@ def plot_regcoil_outputs(
         plt.figure(figsize=(16, 12))
         for whichPlot in range(numPlots):
             plt.subplot(numRows, numCols, whichPlot + 1)
-            Bn = Bn_tot[ialpha_to_plot[whichPlot] - 1]
+            field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            Bn = (
+                Bn_tot[ialpha_to_plot[whichPlot] - 1]
+                if not recalc_eval_grid_quantites
+                else field.compute_Bnormal(eq, eval_grid, source_grid)[0]
+            )
 
             plt.rcParams.update({"font.size": 18})
 

@@ -2003,6 +2003,9 @@ class FourierCurrentPotentialField(
                     `scan=False`, or list of arrays, with list length
                     `scan_alphas.size`, if `scan=True`, corresponding to the list of
                     `alpha`.
+                eval_grid: Grid object that Bn was evaluated at.
+                source_grid: Grid object that Phi and K were evaluated at.
+
 
 
         """
@@ -2170,6 +2173,8 @@ class FourierCurrentPotentialField(
         alphas = [alpha] if not scan else scan_alphas
 
         data = {}
+        data["eval_grid"] = eval_grid
+        data["source_grid"] = source_grid
         chi2Bs = []
         chi2Ks = []
         K_mags = []
@@ -2231,7 +2236,7 @@ class FourierCurrentPotentialField(
         data["chi^2_B"] = chi2Bs[0] if not scan else chi2Bs
         data["chi^2_K"] = chi2Ks[0] if not scan else chi2Ks
         data["|K|"] = K_mags[0] if not scan else K_mags
-        data["Bn_total"] = Bn_tot[0] if not scan else K_mags
+        data["Bn_total"] = Bn_arrs[0] if not scan else Bn_arrs
 
         self.Phi_mn = phi_mns[0]
 

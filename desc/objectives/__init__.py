@@ -13,6 +13,7 @@ from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUs
 from ._geometry import (
     AspectRatio,
     BScaleLength,
+    CoilCurvature,
     Elongation,
     GoodCoordinates,
     MeanCurvature,

@@ -678,6 +678,32 @@ class Equilibrium(IOAble, Optimizable):
             surface.Z_lmn = Zb
             return surface
 
+    def get_poincare_surface_at(self, zeta):
+        """Return a representation for a Poincare section at a given toroidal angle.
+
+        Parameters
+        ----------
+        zeta : float
+            Toroidal angle for the Poincare section.
+
+        Returns
+        -------
+        surface : PoincareSurface
+            object representing the given Poincare section.
+
+        """
+        errorif(
+            not (0 <= zeta <= 2 * np.pi),
+            ValueError,
+            f"Toroidal angle must be between 0 and 2*pi, got {zeta}",
+        )
+        surf = self.get_surface_at(zeta=zeta)
+        Lb_lmn, Lb_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
+        surface = PoincareSurface(
+            surface=surf, L_lmn=Lb_lmn, modes_L=Lb_basis.modes, zeta=zeta
+        )
+        return surface
+
     def get_profile(self, name, grid=None, kind="spline", **kwargs):
         """Return a SplineProfile of the desired quantity.
 
@@ -761,11 +787,7 @@ class Equilibrium(IOAble, Optimizable):
         eq_poincare : Equilibrium
             Separate Equilibrium object to be used for Poincare BC problem
         """
-        surf = self.get_surface_at(zeta=zeta / self.NFP)
-        Lb_lmn, Lb_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
-        surface = PoincareSurface(
-            surface=surf, L_lmn=Lb_lmn, modes_L=Lb_basis.modes, zeta=zeta
-        )
+        surface = self.get_poincare_surface_at(zeta)
 
         eq_poincare = Equilibrium(
             surface=surface,

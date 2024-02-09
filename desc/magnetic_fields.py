@@ -1874,7 +1874,6 @@ class FourierCurrentPotentialField(
         external_field=None,
         scan=False,
         scan_alphas=None,
-        show_plots=False,
         sym_Phi=None,
         verbose=1,
         normalize=True,

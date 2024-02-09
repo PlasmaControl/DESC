@@ -3885,10 +3885,11 @@ def plot_regcoil_outputs(
         This is the same as data_regcoil
     """
     scan = isinstance(data["Phi_mn"], list)
+    # TODO: add flags for each subplot, also add |K| plot
     Bn_tot = data["Bn_total"]
-    alphas = data["alphas"]
-    chi2Bs = data["chi2_B"]
-    chi2Ks = data["chi2_K"]
+    alphas = data["alpha"]
+    chi2Bs = data["chi^2_B"]
+    chi2Ks = data["chi^2_K"]
     phi_mns = data["Phi_mn"]
     if eval_grid is None:
         eval_grid = LinearGrid(M=30, N=30, NFP=field.NFP)

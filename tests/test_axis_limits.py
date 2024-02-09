@@ -92,6 +92,8 @@ not_implemented_limits = {
     "e_theta_zz",
     "e_zeta_z",
     "e_zeta_zz",
+    "n_rho_z",
+    "|e_theta x e_zeta|_z",
     "e^rho_rr",
     "e^theta_rr",
     "e^zeta_rr",

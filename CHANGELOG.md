@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Adds functionality to optimize for omnigenity. This includes the ``OmnigenousField`` magnetic field class, the ``Omnigenity`` objective function, and an accompanying tutorial.
+
 v0.10.4
 -------
 
@@ -34,8 +36,6 @@ for augmented lagrangian optimizers.
 - Fix a bug caused when optimizing multiple objects at the same time and the order of
 the objects gets mixed up.
 
-
-
 v0.10.3
 -------
 
@@ -63,7 +63,6 @@ to objective function values (for targeting the average value of a profile, etc)
 - Utility functions like `desc.objectives.get_fixed_boundary_constraints` now no longer
 require the user to specify which profiles the equilibrium has, they will instead be
 inferred from the equilibrium argument.
-
 
 v0.10.2
 -------
@@ -134,12 +133,10 @@ Bug Fixes
 - Fix bug where running DESC through the command line interface with the `-g` flag
 failed to properly utilize the GPU
 
-
 v0.10.0
 -------
 
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.9.2...v0.10.0)
-
 
 Major Changes
 - Removes the various ``compute_*`` methods from ``Surface`` and ``Curve`` classes in
@@ -187,7 +184,6 @@ dividing by zero where profiles may be zero.
 as an inequality constraint.
 - Fixes a bug where calculating elongation would return NaN for near-circular cross sections.
 
-
 v0.9.2
 ------
 
@@ -215,12 +211,10 @@ New Contributors
 
 - \@rahulgaur104 made their first contribution in https://github.com/PlasmaControl/DESC/pull/576
 
-
 v0.9.1
 ------
 
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.9.0...v0.9.1)
-
 
 Deprecations
 - Creating an ``Objective`` without specifying the ``Equilibrium`` or other object to be
@@ -262,12 +256,10 @@ to avoid aliasing.
 - Removes duplicated entries in the ``data_index``
 - Fixes a bug in the normalization of the radial unit vector.
 
-
 v0.9.0
 ------
 
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.8.2...v0.9.0)
-
 
 New Features
 - Implements a new limit API to correctly evaluate a number of quantities at the
@@ -347,12 +339,10 @@ New Contributors
 
 - \@pkim1818 made their first contribution in https://github.com/PlasmaControl/DESC/pull/503
 
-
 v0.8.2
 ------
 
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.8.1...v0.8.2)
-
 
 New Features
 - New compute functions for derivatives of contravariant metric tensor elements, eg, for Laplace's equation.
@@ -369,7 +359,6 @@ Bug Fixes
 - Fixed bug causing `NFP` of curves to not be updated correctly when the equilibrium changed
 - Fixed issue when converting `pyQIC` solutions to `DESC` equilibria related to offset toroidal grid
 
-
 v0.8.1
 ------
 
@@ -383,7 +372,6 @@ Bug Fixes
 * Add missing classes to API docs
 * fix error in fix axis util function
 * Add missing attributes to new classes added in `v0.8.0`
-
 
 v0.8.0
 ------
@@ -407,7 +395,6 @@ Minor Changes
 Bug Fixes
 - Fix issue with composite profiles parsing parameters incorrectly
 - Loading an equilibrium from VMEC now uses spline profiles to ensure consistency, as VMEC does not always save the input profile
-
 
 v0.7.2
 ------
@@ -437,7 +424,6 @@ What's Changed
 - Fix bug in `plot_qs_error` causing the same value to be plotted for each value of rho.
 - Fix bug sometimes causing the wrong equilibrium to be returned after optimization.
 - Improve numerical stability of perturbations and optimization.
-
 
 v0.7.0
 ------
@@ -469,7 +455,6 @@ Bug Fixes
 - Ensure transforms always have 0,0,0 derivative.
 - Change normalization for poloidal field to avoid having a 0 normalization factor.
 
-
 v0.6.4
 ------
 
@@ -492,7 +477,6 @@ Bug fixes
 - Fix a bug occasionally preventing the optimizer from restarting correctly after
 trying a bad step
 
-
 v0.6.3
 ------
 
@@ -513,7 +497,6 @@ Bug Fixes
 - Fix bug when converting profiles to ``FourierZernikeProfile``.
 - Fix bug where a ``FixBoundary`` constraint with only 1 mode constrained would throw an error during ``objective.build``
 
-
 v0.6.2
 ------
 
@@ -532,12 +515,10 @@ Bug fixes:
 - Fix plotting iota of a current-constrained with ``plot_1d`` function
 - Fix bug where having iota specified in an input file along with vacuum objective lead to error. Now specifying vacuum objective will ignore all profile inputs
 
-
 v0.6.1
 ------
 
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.6.0...v0.6.1)
-
 
 New Features
 - `plot_boundary` function to plot boundary surfaces and multiple toroidal angles together in a single plot. This is a popular plot format in stellarator optimization papers when comparing boundary shapes.
@@ -551,8 +532,6 @@ Bug Fixes
   - Fixes a bug where the `use_jit` arg passed to `objective.build` would override any previously set value for `use_jit` (such as in the class constructor)
 - Grid spacing bugs fixed
   - fixed a bug where setting nodes with a linear spaced array versus asking for `N` linearly spaced nodes would result in different weights despite being the same nodes
-
-
 
 v0.6.0
 ------

@@ -998,11 +998,11 @@ def test_plot_3d_surface():
 def test_plot_omnigenous_field():
     """Test plot omnigenous magnetic field."""
     field = OmnigenousField(
-        L_well=0,
-        M_well=4,
-        L_shift=0,
-        M_shift=1,
-        N_shift=1,
+        L_B=0,
+        M_B=4,
+        L_x=0,
+        M_x=1,
+        N_x=1,
         NFP=4,
         helicity=(1, 4),
         B_lm=np.array([0.8, 0.9, 1.1, 1.2]),

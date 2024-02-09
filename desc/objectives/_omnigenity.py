@@ -548,7 +548,7 @@ class Omnigenity(_Objective):
     and are computed on a collocation grid in (ρ,η,α) coordinates.
 
     This objective assumes that the collocation point (θ=0,ζ=0) lies on the contour of
-    maximum field strength |B|=B_max.
+    maximum field strength ||B||=B_max.
 
     Parameters
     ----------
@@ -590,9 +590,11 @@ class Omnigenity(_Objective):
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
-    well_weight : float, optional
-        Weight applied to the bottom of the magnetic well (B_min) relative to the top
-        of the magnetic well (B_max). Default = 1, which weights all points equally.
+    eta_weight : float, optional
+        Magnitude of relative weight as a function of η. Used to weight the minimum of
+        the magnetic well (B_min at η=0) relative to the maximum (B_max at η=±π/2).
+        For example, `eta_weight = 2` will weight the nodes at B_min twice as much as
+        the nodes at B_max. Default value of 1 weights all nodes equally.
     eq_fixed: bool, optional
         Whether the Equilibrium `eq` is fixed or not.
         If True, the equilibrium is fixed and its values are precomputed, which saves on
@@ -627,7 +629,7 @@ class Omnigenity(_Objective):
         field_grid=None,
         M_booz=None,
         N_booz=None,
-        well_weight=1,
+        eta_weight=1,
         eq_fixed=False,
         field_fixed=False,
         name="omnigenity",
@@ -641,7 +643,7 @@ class Omnigenity(_Objective):
         self.helicity = field.helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
-        self.well_weight = well_weight
+        self.eta_weight = eta_weight
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
         if not eq_fixed or field_fixed:
@@ -695,7 +697,7 @@ class Omnigenity(_Objective):
 
         if self._field_grid is None:
             field_grid = LinearGrid(
-                theta=2 * field.M_well, N=2 * field.N_shift, NFP=field.NFP, sym=False
+                theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
             )
         else:
             field_grid = self._field_grid
@@ -712,6 +714,12 @@ class Omnigenity(_Objective):
         errorif(field_grid.sym, msg="field_grid must not be symmetric")
         errorif(eq_grid.num_rho != 1, msg="eq_grid must be a single surface")
         errorif(field_grid.num_rho != 1, msg="field_grid must be a single surface")
+        print()
+        errorif(
+            eq_grid.nodes[eq_grid.unique_rho_idx, 0]
+            != field_grid.nodes[field_grid.unique_rho_idx, 0],
+            msg="eq_grid and field_grid must be the same surface",
+        )
 
         timer = Timer()
         if verbose > 0:
@@ -732,9 +740,8 @@ class Omnigenity(_Objective):
             grid=field_grid,
         )
 
-        # compute returns points on the grid of the field
-        # (dim_f = field_grid.num_nodes)
-        # so set quad_weights to the surface grid
+        # compute returns points on the grid of the field (dim_f = field_grid.num_nodes)
+        # so set quad_weights to the field grid
         # to avoid it being incorrectly set in the super build
         w = field_grid.weights
         w *= jnp.sqrt(field_grid.num_nodes)
@@ -775,7 +782,11 @@ class Omnigenity(_Objective):
 
         if self._normalize:
             # average |B| on axis
-            self._normalization = jnp.mean(field.B_lm[: field.M_well])
+            self._normalization = jnp.mean(field.B_lm[: field.M_B])
+            errorif(
+                self._normalization <= 0,
+                "|B| on axis is not positive! Check B_lm input.",
+            )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -784,17 +795,20 @@ class Omnigenity(_Objective):
 
         Parameters
         ----------
-        eq_params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        field_params : dict
-            Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
+        params_1 : dict
+            If eq_fixed=True, dictionary of field degrees of freedom,
+            eg OmnigenousField.params_dict. Otherwise, dictionary of equilibrium degrees
+            of freedom, eg Equilibrium.params_dict.
+        params_2 : dict
+            If eq_fixed=False and field_fixed=False, dictionary of field degrees of
+            freedom, eg OmnigenousField.params_dict. Otherwise None.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
 
         Returns
         -------
-        f : ndarray
+        omnigenity_error : ndarray
             Omnigenity error at each node (T).
 
         """
@@ -823,7 +837,7 @@ class Omnigenity(_Objective):
                 profiles=constants["eq_profiles"],
             )
         if self._field_fixed:
-            # FIXME: update this data with new iota from the equilibrium
+            # FIXME: update this data with new iota from the equilibriumht
             field_data = constants["field_data"]
         else:
             field_data = compute_fun(
@@ -836,7 +850,7 @@ class Omnigenity(_Objective):
                 iota=eq_data["iota"][0],
             )
 
-        # additional computation
+        # additional computations that cannot be part of the regular compute API
         nodes = jnp.vstack(
             (
                 jnp.zeros_like(field_data["theta_B"]),
@@ -847,11 +861,11 @@ class Omnigenity(_Objective):
         B_eta_alpha = jnp.matmul(
             constants["eq_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
         )
-        omnigenity = B_eta_alpha - field_data["|B|_omni"]
-        weights = (self.well_weight + 1) / 2 + (self.well_weight - 1) / 2 * jnp.cos(
+        omnigenity_error = B_eta_alpha - field_data["|B|_omni"]
+        weights = (self.eta_weight + 1) / 2 + (self.eta_weight - 1) / 2 * jnp.cos(
             field_data["eta"]
         )
-        return omnigenity * weights
+        return omnigenity_error * weights
 
 
 class Isodynamicity(_Objective):

@@ -515,7 +515,7 @@ class CoilLength(_Objective):
             target = 2 * np.pi
         self._grid = grid
         super().__init__(
-            things=coil,
+            things=[coil],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -537,22 +537,36 @@ class CoilLength(_Objective):
             Level of output.
 
         """
-        coil = self.things[0]
+        # local import to avoid circular import
+        from desc.coils import CoilSet, MixedCoilSet
+
+        is_multiple_coils = False
+        if isinstance(self.things[0], CoilSet):
+            if isinstance(self.things[0], MixedCoilSet):
+                is_multiple_coils = True
+                coil = self.things[0]
+            else:
+                coil = self.things[0].coils[0]
+        else:
+            coil = self.things[0]
+
         self._dim_f = 1
         self._data_keys = ["length"]
         if self._grid is None:
-            grid = LinearGrid(N=32)
+            # TODO: have list of grid if mixed coil set
+            self._grid = LinearGrid(N=32)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, obj=coil, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=coil, grid=grid)
+        # TODO: make list of transforms for MixedCoilSet
+        transforms = get_transforms(self._data_keys, obj=coil, grid=self._grid)
+
         self._constants = {
             "transforms": transforms,
-            "profiles": profiles,
+            "is_coil_set": is_multiple_coils,
         }
 
         timer.stop("Precomputing transforms")
@@ -580,16 +594,19 @@ class CoilLength(_Objective):
         if constants is None:
             constants = self._constants
 
-        data = compute_fun(
-            self.things[0],
+        coils = self.things[0]
+
+        data = coils.compute(
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
-            profiles=constants["profiles"],
+            grid=self._grid,
         )
 
-        f = data["length"]
-        return f
+        if isinstance(data, list):
+            return [data[i]["length"] for i, dat in enumerate(data)]
+        else:
+            return data["length"]
 
 
 class PlasmaVesselDistance(_Objective):

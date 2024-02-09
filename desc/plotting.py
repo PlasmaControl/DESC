@@ -40,6 +40,7 @@ __all__ = [
     "plot_grid",
     "plot_logo",
     "plot_qs_error",
+    "plot_regcoil_outputs",
     "plot_section",
     "plot_surfaces",
 ]
@@ -3883,7 +3884,7 @@ def plot_regcoil_outputs(
         dictionary of the data plotted, only returned if ``return_data=True``
         This is the same as data_regcoil
     """
-    scan = isinstance(data["Phi"], list)
+    scan = isinstance(data["Phi_mn"], list)
     Bn_tot = data["Bn_total"]
     alphas = data["alphas"]
     chi2Bs = data["chi2_B"]

@@ -3893,6 +3893,9 @@ def plot_regcoil_outputs(
     phi_mns = data["Phi_mn"]
     if eval_grid is None:
         eval_grid = LinearGrid(M=30, N=30, NFP=field.NFP)
+    if source_grid is None:
+        source_grid = LinearGrid(M=60, N=60, NFP=field.NFP)
+
     ncontours = kwargs.pop("ncontours", 20)
     figdata = {}
     axdata = {}

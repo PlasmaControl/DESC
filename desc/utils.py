@@ -598,7 +598,10 @@ def print_modes_coefs(thing, coord):
     table = np.empty([basis.num_modes, basis.num_modes + 1])
     table[:, :3] = basis.modes
     table[:, 3] = coeff
-    print(f"Printing {basis.num_modes} results for {coord} coordinate of {thing}")
+    print(
+        f"Printing {basis.num_modes} results for {coord} coordinate of "
+        + f"{thing.__class__.__name__}"
+    )
     print("-------------------------------------")
     for row in table:
         print(

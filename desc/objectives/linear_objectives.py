@@ -493,15 +493,19 @@ class BoundaryLambdaSelfConsistency(_Objective):
 
     def __init__(
         self,
-        eq=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        name="self_consistency lambda",
+        eq,
+        surface_label=None,
+        name="self_consistency Z",
     ):
-        self._args = ["L_lmn"]
+        self._surface_label = surface_label
         super().__init__(
-            things=eq, target=target, bounds=bounds, weight=weight, name=name
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
         )
 
     def build(self, eq=None, use_jit=False, verbose=1):
@@ -520,10 +524,8 @@ class BoundaryLambdaSelfConsistency(_Objective):
         L_modes = eq.L_basis.modes
         dim_L = eq.L_basis.num_modes
 
-        if self.target is None:
-            Lb_modes = eq.Lb_basis.modes
-            self._dim_f = eq.Lb_basis.num_modes
-            self.target = eq.Lb_lmn
+        Lb_modes = eq.Lb_basis.modes
+        self._dim_f = eq.Lb_basis.num_modes
         self._A = np.zeros((self._dim_f, dim_L))
 
         if eq.surface.zeta == 0:
@@ -570,7 +572,7 @@ class BoundaryLambdaSelfConsistency(_Objective):
 
     def compute(self, params, constants=None):
         """Compute deviation from desired boundary."""
-        return jnp.dot(self._A, params["L_lmn"])
+        return jnp.dot(self._A, params["L_lmn"]) - params["Lb_lmn"]
 
 
 class SecondBoundaryRSelfConsistency(_Objective):

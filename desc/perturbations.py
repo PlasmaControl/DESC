@@ -254,7 +254,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     other_args = [
         arg
         for arg in eq.optimizable_params
-        if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]
+        if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn", "Lb_lmn"]
     ]
     if len([arg for arg in other_args if arg in deltas.keys()]):
         dc = jnp.concatenate(

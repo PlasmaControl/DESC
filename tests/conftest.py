@@ -257,6 +257,31 @@ def HELIOTRON_vac2(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
+def ESTELL_older(tmpdir_factory):
+    """Run ESTELL_older example."""
+    input_path = ".//tests//inputs//ESTELL_older"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("ESTELL_older.h5")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running ESTELL_older test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    main(args)
+
+    ESTELL_older = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+    }
+    return ESTELL_older
+
+
+@pytest.fixture(scope="session")
 def DummyStellarator(tmpdir_factory):
     """Create and save a dummy stellarator configuration for testing."""
     output_dir = tmpdir_factory.mktemp("result")

@@ -544,21 +544,23 @@ class CoilLength(_Objective):
         if isinstance(self.things[0], CoilSet):
             if isinstance(self.things[0], MixedCoilSet):
                 is_mixed_coils = True
-                coil = self.things[0]
+                coil = self.things[0].coils
+                self._dim_f = len(coil)
             else:
                 coil = self.things[0].coils[0]
+                self._dim_f = 1
         else:
             coil = self.things[0]
+            self._dim_f = 1
 
-        self._dim_f = 1
         self._data_keys = ["length"]
         if self._grid is None:
             # TODO: raise error if grid, transforms are not the same size as mixed coils
             self._grid = (
-                LinearGrid(N=32) if not is_mixed_coils else [LinearGrid(N=32)] * 4
+                LinearGrid(N=32)
+                if not is_mixed_coils
+                else [LinearGrid(N=32)] * self._dim_f
             )
-
-        assert self._grid
 
         timer = Timer()
         if verbose > 0:
@@ -568,7 +570,7 @@ class CoilLength(_Objective):
         if is_mixed_coils:
             transforms = [
                 get_transforms(self._data_keys, obj=coil[i], grid=self._grid[i])
-                for i, c in enumerate(coil)
+                for i in range(self._dim_f)
             ]
         else:
             transforms = get_transforms(self._data_keys, obj=coil, grid=self._grid)
@@ -603,8 +605,6 @@ class CoilLength(_Objective):
         if constants is None:
             constants = self._constants
 
-        # TODO: could simplify this by making coils always a list,
-        # but then it would always be returning a list
         if constants["is_mixed_coils"]:
             coils = self.things[0].coils
             data = [

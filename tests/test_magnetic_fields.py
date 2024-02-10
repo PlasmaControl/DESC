@@ -743,56 +743,6 @@ class TestMagneticFields:
             Bnorm_from_file = read_BNORM_file(path, asym_surf, grid)
 
     @pytest.mark.unit
-    def test_omnigenous_field_change_well_resolution(self):
-        """Test OmnigenousField.change_resolution() for the magnetic well."""
-        # magnetic well
-        L_well_old = 1
-        L_well_new = 2
-        M_well_old = 3
-        M_well_new = 6
-        NFP = 4
-        field = OmnigenousField(
-            L_B=L_well_old,
-            M_B=M_well_old,
-            L_x=0,
-            M_x=0,
-            N_x=0,
-            NFP=NFP,
-            helicity=(0, NFP),
-            B_lm=np.array([0.9, 1.0, 1.1, 0.2, 0.05, -0.2]),
-        )
-        eta = np.linspace(-np.pi / 2, np.pi / 2, 101)
-        rho_axis = np.zeros_like(eta)
-        rho_half = np.ones_like(eta) * 0.5
-        rho_lcfs = np.ones_like(eta)
-        B_axis_lowres = field.compute_well(rho_axis, eta)
-        B_half_lowres = field.compute_well(rho_half, eta)
-        B_lcfs_lowres = field.compute_well(rho_lcfs, eta)
-        field.change_resolution(L_B=L_well_new, M_B=M_well_new)
-        B_axis_highres = field.compute_well(rho_axis, eta)
-        B_half_highres = field.compute_well(rho_half, eta)
-        B_lcfs_highres = field.compute_well(rho_lcfs, eta)
-        np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
-        np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
-        np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=3e-3)
-
-    def test_spline_field_jit(self):
-        """Test that the spline field can be passed to a jitted function."""
-        extcur = [4700.0, 1000.0]
-        mgrid = "tests/inputs/mgrid_test.nc"
-        field = SplineMagneticField.from_mgrid(mgrid, extcur)
-
-        x = jnp.array([0.70, 0, 0])
-
-        @jit
-        def foo(field, x):
-            return field.compute_magnetic_field(x)
-
-        np.testing.assert_allclose(
-            foo(field, x), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
-        )
-
-    @pytest.mark.unit
     def test_omnigenous_field_change_resolution_B(self):
         """Test OmnigenousField.change_resolution() of the B_lm parameters."""
         L_B_old = 1
@@ -823,3 +773,19 @@ class TestMagneticFields:
         np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
         np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
+
+    def test_spline_field_jit(self):
+        """Test that the spline field can be passed to a jitted function."""
+        extcur = [4700.0, 1000.0]
+        mgrid = "tests/inputs/mgrid_test.nc"
+        field = SplineMagneticField.from_mgrid(mgrid, extcur)
+
+        x = jnp.array([0.70, 0, 0])
+
+        @jit
+        def foo(field, x):
+            return field.compute_magnetic_field(x)
+
+        np.testing.assert_allclose(
+            foo(field, x), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
+        )

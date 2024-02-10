@@ -12,7 +12,7 @@ from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
 from desc.backend import jnp
-from desc.coils import CoilSet, FourierPlanarCoil
+from desc.coils import CoilSet, FourierPlanarCoil, MixedCoilSet
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -507,8 +507,11 @@ class TestObjectiveFunction:
 
         coil = FourierPlanarCoil(r_n=1)
         coils = CoilSet.linspaced_linear(coil, n=4)
+        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
+
         test(coil)
         test(coils)
+        test(mixed_coils)
 
 
 @pytest.mark.unit

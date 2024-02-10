@@ -540,10 +540,10 @@ class CoilLength(_Objective):
         # local import to avoid circular import
         from desc.coils import CoilSet, MixedCoilSet
 
-        is_multiple_coils = False
+        is_mixed_coils = False
         if isinstance(self.things[0], CoilSet):
             if isinstance(self.things[0], MixedCoilSet):
-                is_multiple_coils = True
+                is_mixed_coils = True
                 coil = self.things[0]
             else:
                 coil = self.things[0].coils[0]
@@ -553,20 +553,29 @@ class CoilLength(_Objective):
         self._dim_f = 1
         self._data_keys = ["length"]
         if self._grid is None:
-            # TODO: have list of grid if mixed coil set
-            self._grid = LinearGrid(N=32)
+            # TODO: raise error if grid, transforms are not the same size as mixed coils
+            self._grid = (
+                LinearGrid(N=32) if not is_mixed_coils else [LinearGrid(N=32)] * 4
+            )
+
+        assert self._grid
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        # TODO: make list of transforms for MixedCoilSet
-        transforms = get_transforms(self._data_keys, obj=coil, grid=self._grid)
+        if is_mixed_coils:
+            transforms = [
+                get_transforms(self._data_keys, obj=coil[i], grid=self._grid[i])
+                for i, c in enumerate(coil)
+            ]
+        else:
+            transforms = get_transforms(self._data_keys, obj=coil, grid=self._grid)
 
         self._constants = {
             "transforms": transforms,
-            "is_coil_set": is_multiple_coils,
+            "is_mixed_coils": is_mixed_coils,
         }
 
         timer.stop("Precomputing transforms")
@@ -588,20 +597,33 @@ class CoilLength(_Objective):
 
         Returns
         -------
-        f : float
+        f : float or array of floats
             Coil length.
         """
         if constants is None:
             constants = self._constants
 
-        coils = self.things[0]
-
-        data = coils.compute(
-            self._data_keys,
-            params=params,
-            transforms=constants["transforms"],
-            grid=self._grid,
-        )
+        # TODO: could simplify this by making coils always a list,
+        # but then it would always be returning a list
+        if constants["is_mixed_coils"]:
+            coils = self.things[0].coils
+            data = [
+                coils[i].compute(
+                    self._data_keys,
+                    params=params[i],
+                    transforms=constants["transforms"][i],
+                    grid=self._grid[i],
+                )
+                for i, coil in enumerate(coils)
+            ]
+        else:
+            coils = self.things[0]
+            data = coils.compute(
+                self._data_keys,
+                params=params,
+                transforms=constants["transforms"],
+                grid=self._grid,
+            )
 
         if isinstance(data, list):
             return [data[i]["length"] for i, dat in enumerate(data)]

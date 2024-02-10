@@ -883,21 +883,22 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         axis : array-like, shape(3,)
             axis to rotate about
         angle : float
-            total rotational extend of coil set.
+            total rotational extent of coil set
         n : int
             number of copies of original coil
         endpoint : bool
             whether to include a coil at final angle
+
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
+        phi = jnp.linspace(0, angle, n, endpoint=endpoint)
         coils = []
-        phis = jnp.linspace(0, angle, n, endpoint=endpoint)
         for i in range(n):
             coili = coil.copy()
-            coili.rotate(axis, angle=phis[i])
+            coili.rotate(axis=axis, angle=phi[i])
             coili.current = currents[i]
             coils.append(coili)
         return cls(*coils)
@@ -920,14 +921,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             number of copies of original coil
         endpoint : bool
             whether to include a coil at final point
+
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
         if current is None:
             current = coil.current
         currents = jnp.broadcast_to(current, (n,))
         displacement = jnp.asarray(displacement)
-        coils = []
         a = jnp.linspace(0, 1, n, endpoint=endpoint)
+        coils = []
         for i in range(n):
             coili = coil.copy()
             coili.translate(a[i] * displacement)
@@ -953,6 +955,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             number of field periods
         sym : bool
             whether coils should be stellarator symmetric
+
         """
         if not isinstance(coils, CoilSet):
             coils = CoilSet(coils)

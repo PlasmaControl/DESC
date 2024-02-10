@@ -506,7 +506,7 @@ class BoundaryError(_Objective):
 
         edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))
         warnif(
-            (edge_pres > 1e-6) and not self._sheet_current,
+            (edge_pres * mu_0 > 1e-6) and not self._sheet_current,
             UserWarning,
             f"Boundary pressure is nonzero (max {edge_pres} Pa), "
             + "a sheet current should be included.",
@@ -903,7 +903,7 @@ class BoundaryErrorNESTOR(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+            self._normalization = scales["B"] ** 2 * scales["R0"] * scales["a"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 

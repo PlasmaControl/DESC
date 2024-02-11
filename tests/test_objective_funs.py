@@ -22,6 +22,7 @@ from desc.objectives import (
     AspectRatio,
     BootstrapRedlConsistency,
     BScaleLength,
+    CoilCurvature,
     CoilLength,
     CurrentDensity,
     Elongation,
@@ -506,6 +507,24 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(f, 2 * np.pi, rtol=1e-8)
 
         coil = FourierPlanarCoil(r_n=1)
+        coils = CoilSet.linspaced_linear(coil, n=4)
+        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
+
+        test(coil)
+        test(coils)
+        test(mixed_coils)
+
+    @pytest.mark.unit
+    def test_coil_curvature(self):
+        """Tests coil curvature."""
+
+        def test(coil):
+            obj = CoilCurvature(coil)
+            obj.build()
+            f = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f, 1 / 2, rtol=1e-8)
+
+        coil = FourierPlanarCoil()
         coils = CoilSet.linspaced_linear(coil, n=4)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
 

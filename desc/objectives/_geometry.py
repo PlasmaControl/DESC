@@ -459,13 +459,15 @@ class Volume(_Objective):
         return data["V"]
 
 
-class CoilLength(_Objective):
-    """Plasma volume.
+class _CoilObjective(_Objective):
+    """Base class for calculating coil objectives.
 
     Parameters
     ----------
-    coil : FourierPlanarCoil or FourierXYZCoil
-        Coil for which the length will be found.
+    coil : CoilSet or Coil
+        Coil for which the data keys will be optimized.
+    data_keys : list of str
+        data keys that will be optimized when this class is inherited.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
@@ -501,6 +503,7 @@ class CoilLength(_Objective):
     def __init__(
         self,
         coil,
+        data_keys,
         target=None,
         bounds=None,
         weight=1,
@@ -509,11 +512,10 @@ class CoilLength(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="coil-length",
+        name=None,
     ):
-        if target is None and bounds is None:
-            target = 2 * np.pi
         self._grid = grid
+        self._data_keys = data_keys
         super().__init__(
             things=[coil],
             target=target,
@@ -553,7 +555,6 @@ class CoilLength(_Objective):
             coil = self.things[0]
             self._dim_f = 1
 
-        self._data_keys = ["length"]
         if self._grid is None:
             # TODO: raise error if grid, transforms are not the same size as mixed coils
             self._grid = (
@@ -587,7 +588,7 @@ class CoilLength(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute length of coil.
+        """Compute data of coil for given data key.
 
         Parameters
         ----------
@@ -625,10 +626,121 @@ class CoilLength(_Objective):
                 grid=self._grid,
             )
 
+        return data
+
+
+class CoilLength(_CoilObjective):
+    """Coil length.
+
+    Parameters
+    ----------
+    coil : CoilSet or Coil
+        Coil(s) that are to be optimized
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    """
+
+    def __init__(self, coil, target=None, bounds=None):
+        if target is None and bounds is None:
+            target = 2 * np.pi
+
+        super().__init__(coil, ["length"], target=target, bounds=bounds)
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute coil length.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self._constants.
+
+        Returns
+        -------
+        f : float or array of floats
+            Coil length.
+        """
+        data = super().compute(params, constants=constants)
         if isinstance(data, list):
             return [data[i]["length"] for i, dat in enumerate(data)]
         else:
             return data["length"]
+
+
+class CoilCurvature(_CoilObjective):
+    """Coil curvature.
+
+    Parameters
+    ----------
+    coil : CoilSet or Coil
+        Coil(s) that are to be optimized
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    """
+
+    def __init__(self, coil, target=None, bounds=None):
+        if target is None and bounds is None:
+            target = 1 / 2
+
+        super().__init__(coil, ["curvature"], target=target, bounds=bounds)
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute coil curvature.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self._constants.
+
+        Returns
+        -------
+        f : float or array of floats
+            Coil curvature.
+        """
+        data = super().compute(params, constants=constants)
+        if isinstance(data, list):
+            return [data[i]["curvature"] for i, dat in enumerate(data)]
+        else:
+            return data["curvature"]
 
 
 class PlasmaVesselDistance(_Objective):

@@ -644,11 +644,11 @@ class CoilLength(_CoilObjective):
         Both bounds must be broadcastable to to Objective.dim_f
     """
 
-    def __init__(self, coil, target=None, bounds=None):
+    def __init__(self, coil, target=None, bounds=None, **kwargs):
         if target is None and bounds is None:
             target = 2 * np.pi
 
-        super().__init__(coil, ["length"], target=target, bounds=bounds)
+        super().__init__(coil, ["length"], target=target, bounds=bounds, **kwargs)
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -701,11 +701,11 @@ class CoilCurvature(_CoilObjective):
         Both bounds must be broadcastable to to Objective.dim_f
     """
 
-    def __init__(self, coil, target=None, bounds=None):
+    def __init__(self, coil, target=None, bounds=None, **kwargs):
         if target is None and bounds is None:
             target = 1 / 2
 
-        super().__init__(coil, ["curvature"], target=target, bounds=bounds)
+        super().__init__(coil, ["curvature"], target=target, bounds=bounds, **kwargs)
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.

@@ -501,7 +501,7 @@ class TestObjectiveFunction:
         """Tests coil length."""
 
         def test(coil):
-            obj = CoilLength(coil)
+            obj = CoilLength(coil, weight=1)
             obj.build()
             f = obj.compute(params=coil.params_dict)
             np.testing.assert_allclose(f, 2 * np.pi, rtol=1e-8)
@@ -519,7 +519,7 @@ class TestObjectiveFunction:
         """Tests coil curvature."""
 
         def test(coil):
-            obj = CoilCurvature(coil)
+            obj = CoilCurvature(coil, weight=1)
             obj.build()
             f = obj.compute(params=coil.params_dict)
             np.testing.assert_allclose(f, 1 / 2, rtol=1e-8)

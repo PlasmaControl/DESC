@@ -101,7 +101,12 @@ def factorize_linear_constraints(constraints, objective):  # noqa: C901
                 A_per_subthing = []
                 # it is an optimizable collection, loop through its sub-objects
                 for subthing in thing:
-                    if subthing in con._subthings:
+                    if not hasattr(con, "_subthings"):
+                        A_ = {
+                            arg: jnp.zeros((con.dim_f, dimx))
+                            for arg, dimx in subthing.dimensions.items()
+                        }
+                    elif subthing in con._subthings:
                         # this returns a tuple of length 1 for some reason?
                         A_ = con.jac_scaled(*xz)[0][con._subthings.index(subthing)]
                     else:

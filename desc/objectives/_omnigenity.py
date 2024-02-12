@@ -714,7 +714,6 @@ class Omnigenity(_Objective):
         errorif(field_grid.sym, msg="field_grid must not be symmetric")
         errorif(eq_grid.num_rho != 1, msg="eq_grid must be a single surface")
         errorif(field_grid.num_rho != 1, msg="field_grid must be a single surface")
-        print()
         errorif(
             eq_grid.nodes[eq_grid.unique_rho_idx, 0]
             != field_grid.nodes[field_grid.unique_rho_idx, 0],
@@ -837,8 +836,24 @@ class Omnigenity(_Objective):
                 profiles=constants["eq_profiles"],
             )
         if self._field_fixed:
-            # FIXME: update this data with new iota from the equilibriumht
             field_data = constants["field_data"]
+            # update theta_B and zeta_B with new iota from the equilibrium
+            M, N = constants["helicity"]
+            iota = eq_data["iota"][0]
+            matrix = jnp.where(
+                M == 0,
+                jnp.array([N, iota / N, 0, 1 / N]),  # OP
+                jnp.where(
+                    N == 0,
+                    jnp.array([0, -1, M, -1 / iota]),  # OT
+                    jnp.array(
+                        [N, M * iota / (N - M * iota), M, M / (N - M * iota)]  # OH
+                    ),
+                ),
+            ).reshape((2, 2))
+            booz = matrix @ jnp.vstack((field_data["alpha"], field_data["h"]))
+            field_data["theta_B"] = booz[0, :]
+            field_data["zeta_B"] = booz[1, :]
         else:
             field_data = compute_fun(
                 "desc.magnetic_fields.OmnigenousField",

@@ -2146,6 +2146,7 @@ class OmnigenousField(Optimizable, IOAble):
 
     @B_lm.setter
     def B_lm(self, B_lm):
+        assert len(B_lm) == (self.L_B + 1) * self.M_B
         self._B_lm = B_lm
 
     @optimizable_parameter
@@ -2156,6 +2157,7 @@ class OmnigenousField(Optimizable, IOAble):
 
     @x_lmn.setter
     def x_lmn(self, x_lmn):
+        assert len(x_lmn) == self.x_basis.num_modes
         self._x_lmn = x_lmn
 
     @property

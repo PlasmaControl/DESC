@@ -1008,7 +1008,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         Given coils over one field period, repeat coils NFP times between
         0 and 2pi to form full coil set.
 
-        Or, give coils over 1/2 of a field period, repeat coils 2*NFP times
+        Or, given coils over 1/2 of a field period, repeat coils 2*NFP times
         between 0 and 2pi to form full stellarator symmetric coil set.
 
         Parameters
@@ -1016,9 +1016,19 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         coils : Coil, CoilGroup, Coilset
             Coil or collection of coils in one field period or half field period.
         NFP : int (optional)
-            Number of field periods for enforcing field period symmetry. Default = 1.
+            Number of field periods for enforcing field period symmetry.
+            The coils will be duplicated NFP times. Default = 1.
         sym : bool (optional)
-            Whether to enforce stellarator symmetry. Default = False.
+            Whether to enforce stellarator symmetry.
+            If True, the coils will be duplicated 2*NFP times. Default = False.
+
+        Returns
+        -------
+        coilset : CoilSet
+            A new coil set with NFP=1 and sym=False that is equivalent to the unique
+            coils with field period symmetry and stellarator symmetry.
+            The total number of coils in the new coil set is:
+            len(coilset) = len(coils) * NFP * (int(sym) + 1)
 
         """
         if not isinstance(coils, CoilSet):

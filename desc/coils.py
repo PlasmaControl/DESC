@@ -727,12 +727,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     ----------
     coils : Coil or array-like of Coils
         Collection of coils. Must all be the same type and resolution.
-    currents : float or array-like of float (optional)
-        Currents in each coil, or a single current shared by all coils in the set.
     NFP : int (optional)
-        Number of field periods for enforcing field period symmetry. Default = 1.
+        Number of field periods for enforcing field period symmetry.
+        If NFP > 1, only include the unique coils in the first field period,
+        and the magnetic field will be computed assuming 'virtual' coils from the other
+        field periods. Default = 1.
     sym : bool (optional)
-        Whether to enforce stellarator symmetry. Default = False.
+        Whether to enforce stellarator symmetry. If sym = True, only include the
+        unique coils in a half field period, and the magnetic field will be computed
+        assuming 'virtual' coils from the other half field period. Default = False.
     name : str
         Name of this CoilSet.
 
@@ -740,13 +743,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
 
-    def __init__(self, *coils, currents=None, NFP=1, sym=False, name=""):
+    def __init__(self, *coils, NFP=1, sym=False, name=""):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
         self._coils = list(coils)
-        if currents is not None:
-            self.current = currents
         self._NFP = NFP
         self._sym = sym
         self._name = str(name)
@@ -1377,8 +1378,15 @@ class MixedCoilSet(CoilSet):
     ----------
     coils : Coil or array-like of Coils
         collection of coils
-    currents : float or array-like of float
-        currents in each coil, or a single current shared by all coils in the set
+    NFP : int (optional)
+        Number of field periods for enforcing field period symmetry.
+        If NFP > 1, only include the unique coils in the first field period,
+        and the magnetic field will be computed assuming 'virtual' coils from the other
+        field periods. Default = 1.
+    sym : bool (optional)
+        Whether to enforce stellarator symmetry. If sym = True, only include the
+        unique coils in a half field period, and the magnetic field will be computed
+        assuming 'virtual' coils from the other half field period. Default = False.
     name : str
         name of this CoilSet
 
@@ -1461,6 +1469,7 @@ class MixedCoilSet(CoilSet):
         -------
         field : ndarray, shape(n,3)
             magnetic field at specified points, in either rpz or xyz coordinates
+
         """
         params = self._make_arraylike(params)
         source_grid = self._make_arraylike(source_grid)

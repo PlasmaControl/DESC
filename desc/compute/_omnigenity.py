@@ -12,7 +12,7 @@ expensive computations.
 import numpy as np
 from interpax import interp1d
 
-from desc.backend import jnp, put, sign
+from desc.backend import jnp, put, sign, vmap
 
 from .data_index import register_compute_fun
 from .utils import cross, dot
@@ -469,7 +469,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_B, M_B)
     B_lm = params["B_lm"].reshape((transforms["B"].basis.L + 1, -1))
     # assuming single flux surface, so only take first row (single node)
-    B_input = (transforms["B"].matrices["direct1"][0][0][0] @ B_lm)[0, :]
+    B_input = vmap(lambda x: transforms["B"].transform(x))(B_lm.T)[:, 0]
     B_input = jnp.sort(B_input)  # sort to ensure monotonicity
     eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
 

@@ -147,7 +147,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(new)
 
-    def compute_magnetic_field(self, grid, params=None, basis="rpz", source_grid=None):
+    def compute_magnetic_field(
+        self, eval_grid, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         The coil current may be overridden by including `current`
@@ -155,7 +157,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         Parameters
         ----------
-        grid : array-like shape(n,3) or Grid
+        eval_grid : array-like shape(n,3) or Grid
             Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
         params : dict or array-like of dict, optional
             Parameters to pass to Curve.
@@ -179,12 +181,12 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if hasattr(grid, "nodes"):
-            grid = grid.nodes
-        grid = jnp.atleast_2d(grid)
+        if hasattr(eval_grid, "nodes"):
+            eval_grid = eval_grid.nodes
+        eval_grid = jnp.atleast_2d(eval_grid)
         if basis.lower() == "rpz":
-            phi = grid[:, 1]
-            grid = rpz2xyz(grid)
+            phi = eval_grid[:, 1]
+            eval_grid = rpz2xyz(eval_grid)
         if params is None:
             current = self.current
         else:
@@ -194,7 +196,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             ["x", "x_s", "ds"], grid=source_grid, params=params, basis="xyz"
         )
         B = biot_savart_quad(
-            grid, data["x"], data["x_s"] * data["ds"][:, None], current
+            eval_grid, data["x"], data["x_s"] * data["ds"][:, None], current
         )
 
         if basis.lower() == "rpz":
@@ -568,7 +570,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
     ):
         super().__init__(current, X, Y, Z, knots, method, name)
 
-    def compute_magnetic_field(self, grid, params=None, basis="rpz", source_grid=None):
+    def compute_magnetic_field(
+        self, eval_grid, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         The coil current may be overridden by including `current`
@@ -576,7 +580,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
         Parameters
         ----------
-        grid : array-like shape(n,3) or Grid
+        eval_grid : array-like shape(n,3) or Grid
             Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
         params : dict or array-like of dict, optional
             Parameters to pass to Curve.
@@ -599,11 +603,11 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if hasattr(grid, "nodes"):
-            grid = grid.nodes
-        grid = jnp.atleast_2d(grid)
+        if hasattr(eval_grid, "nodes"):
+            eval_grid = eval_grid.nodes
+        eval_grid = jnp.atleast_2d(eval_grid)
         if basis == "rpz":
-            grid = rpz2xyz(grid)
+            eval_grid = rpz2xyz(eval_grid)
         if params is None:
             current = self.current
         else:
@@ -620,10 +624,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         # coils curvature which is a 2nd derivative of the position, and doing that
         # with only possibly c1 cubic splines is inaccurate, so we don't do it
         # (for now, maybe in the future?)
-        B = biot_savart_hh(grid, coil_pts_start, coil_pts_end, current)
+        B = biot_savart_hh(eval_grid, coil_pts_start, coil_pts_end, current)
 
         if basis == "rpz":
-            B = xyz2rpz_vec(B, x=grid[:, 0], y=grid[:, 1])
+            B = xyz2rpz_vec(B, x=eval_grid[:, 0], y=eval_grid[:, 1])
         return B
 
     @classmethod
@@ -853,12 +857,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
-    def compute_magnetic_field(self, grid, params=None, basis="rpz", source_grid=None):
+    def compute_magnetic_field(
+        self, eval_grid, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        grid : array-like shape(n,3) or Grid
+        eval_grid : array-like shape(n,3) or Grid
             Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for each.
@@ -875,9 +881,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if hasattr(grid, "nodes"):
-            grid = grid.nodes
-        grid = jnp.atleast_2d(grid)
+        if hasattr(eval_grid, "nodes"):
+            eval_grid = eval_grid.nodes
+        eval_grid = jnp.atleast_2d(eval_grid)
         if params is None:
             params = [get_params(["x_s", "x", "s", "ds"], coil) for coil in self]
             for par, coil in zip(params, self):
@@ -885,9 +891,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         # stellarator symmetry is easiest in [X,Y,Z] coordinates
         if basis.lower() == "rpz":
-            grid_xyz = rpz2xyz(grid)
+            grid_xyz = rpz2xyz(eval_grid)
         else:
-            grid_xyz = grid
+            grid_xyz = eval_grid
 
         # if stellarator symmetric, add reflected nodes from the other half field period
         if self.sym:
@@ -917,10 +923,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         # sum the magnetic fields from both halves of the symmetric field period
         if self.sym:
-            B = B[: grid.shape[0], :] + B[grid.shape[0] :, :] * jnp.array([-1, 1, 1])
+            B = B[: eval_grid.shape[0], :] + B[eval_grid.shape[0] :, :] * jnp.array(
+                [-1, 1, 1]
+            )
 
         if basis.lower() == "xyz":
-            B = rpz2xyz_vec(B, x=grid[:, 0], y=grid[:, 1])
+            B = rpz2xyz_vec(B, x=eval_grid[:, 0], y=eval_grid[:, 1])
         return B
 
     @classmethod
@@ -1432,12 +1440,14 @@ class MixedCoilSet(CoilSet):
             )
         ]
 
-    def compute_magnetic_field(self, grid, params=None, basis="rpz", source_grid=None):
+    def compute_magnetic_field(
+        self, eval_grid, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        grid : array-like shape(n,3) or Grid
+        eval_grid : array-like shape(n,3) or Grid
             Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for each.
@@ -1457,7 +1467,7 @@ class MixedCoilSet(CoilSet):
 
         B = 0
         for coil, par, grd in zip(self.coils, params, source_grid):
-            B += coil.compute_magnetic_field(grid, par, basis, grd)
+            B += coil.compute_magnetic_field(eval_grid, par, basis, grd)
 
         return B
 

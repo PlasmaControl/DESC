@@ -340,6 +340,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         title_fontsize: integer, font size of the title
         xlabel_fontsize: integer, font size of the x axis label
+        color: str or tuple, color to use for scatter plot
+        marker: str, marker to use for scatter plot
+
 
     Returns
     -------
@@ -377,19 +380,33 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     fig, ax = _format_ax(ax, rows=1, cols=3, figsize=kwargs.pop("figsize", None))
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    marker = kwargs.pop("marker", "o")
+    color = kwargs.pop("color", "b")
 
     assert (
         len(kwargs) == 0
     ), f"plot_coefficients got unexpected keyword argument: {kwargs.keys()}"
 
     ax[0, 0].semilogy(
-        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1), np.abs(eq.R_lmn), "bo"
+        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.R_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
     ax[0, 1].semilogy(
-        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1), np.abs(eq.Z_lmn), "bo"
+        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.Z_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
     ax[0, 2].semilogy(
-        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1), np.abs(eq.L_lmn), "bo"
+        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.L_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
 
     ax[0, 0].set_xlabel(xlabel, fontsize=xlabel_fontsize)

@@ -624,7 +624,7 @@ def test_plot_normF_section(DSHAPE_current):
 def test_plot_coefficients(DSHAPE_current):
     """Test scatter plot of spectral coefficients."""
     eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_coefficients(eq)
+    fig, ax = plot_coefficients(eq, color="b", marker="o")
     ax[0, 0].set_ylim([1e-8, 1e1])
     return fig
 

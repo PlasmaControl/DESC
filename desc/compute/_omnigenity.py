@@ -452,8 +452,8 @@ def _omni_map(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="|B|_omni",
-    label="|\\mathbf{B}_{omni}|",
+    name="|B|",
+    label="|\\mathbf{B}|",
     units="T",
     units_long="Tesla",
     description="Magnitude of omnigenous magnetic field",
@@ -474,7 +474,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
 
     # |B|_omnigeneous is an even function so B(-eta) = B(+eta) = B(|eta|)
-    data["|B|_omni"] = interp1d(
+    data["|B|"] = interp1d(
         jnp.abs(data["eta"]), eta_input, B_input, method="monotonic-0"
     )
     return data

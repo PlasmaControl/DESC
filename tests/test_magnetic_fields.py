@@ -780,13 +780,13 @@ class TestMagneticFields:
         grid_axis = LinearGrid(rho=[0.0], M=50)
         grid_half = LinearGrid(rho=[0.5], M=50)
         grid_lcfs = LinearGrid(rho=[1.0], M=50)
-        B_axis_lowres = field.compute("|B|_omni", grid=grid_axis)["|B|_omni"]
-        B_half_lowres = field.compute("|B|_omni", grid=grid_half)["|B|_omni"]
-        B_lcfs_lowres = field.compute("|B|_omni", grid=grid_lcfs)["|B|_omni"]
+        B_axis_lowres = field.compute("|B|", grid=grid_axis)["|B|"]
+        B_half_lowres = field.compute("|B|", grid=grid_half)["|B|"]
+        B_lcfs_lowres = field.compute("|B|", grid=grid_lcfs)["|B|"]
         field.change_resolution(L_B=L_B_new, M_B=M_B_new)
-        B_axis_highres = field.compute("|B|_omni", grid=grid_axis)["|B|_omni"]
-        B_half_highres = field.compute("|B|_omni", grid=grid_half)["|B|_omni"]
-        B_lcfs_highres = field.compute("|B|_omni", grid=grid_lcfs)["|B|_omni"]
+        B_axis_highres = field.compute("|B|", grid=grid_axis)["|B|"]
+        B_half_highres = field.compute("|B|", grid=grid_half)["|B|"]
+        B_lcfs_highres = field.compute("|B|", grid=grid_lcfs)["|B|"]
         np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
         np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)

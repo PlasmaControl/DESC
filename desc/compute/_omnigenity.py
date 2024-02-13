@@ -68,7 +68,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_theta_mn", "B_zeta_mn", "NFP"],
+    data=["B_theta_mn", "B_zeta_mn"],
 )
 def _w_mn(params, transforms, profiles, data, **kwargs):
     w_mn = jnp.zeros((transforms["w"].basis.num_modes,))
@@ -76,6 +76,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     Bn = transforms["B"].basis.modes[:, 2]
     wm = transforms["w"].basis.modes[:, 1]
     wn = transforms["w"].basis.modes[:, 2]
+    NFP = transforms["w"].basis.NFP
     # indices of matching modes in w and B bases
     # need to use np instead of jnp here as jnp.where doesn't work under jit
     # even if the args are static
@@ -84,9 +85,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
         (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
     )
     w_mn = put(w_mn, iw, sign(wn[iw]) * data["B_theta_mn"][ib] / jnp.abs(wm[iw]))
-    w_mn = put(
-        w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(data["NFP"] * wn[jw])
-    )
+    w_mn = put(w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(NFP * wn[jw]))
     data["w_Boozer_mn"] = w_mn
     return data
 
@@ -356,15 +355,14 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     description="Intermediate omnigenity coordinate along field lines",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={"h": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=[],
     parameterization="desc.magnetic_fields.OmnigenousField",
 )
 def _eta(params, transforms, profiles, data, **kwargs):
-    # theta is used as a placeholder for eta (angle along field lines)
-    data["eta"] = (transforms["grid"].nodes[:, 1] - jnp.pi) / 2
+    data["eta"] = transforms["h"].grid.nodes[:, 1]
     return data
 
 
@@ -376,15 +374,14 @@ def _eta(params, transforms, profiles, data, **kwargs):
     description="Field line label, defined on [0, 2pi)",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={"h": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["NFP"],
+    data=[],
     parameterization="desc.magnetic_fields.OmnigenousField",
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
-    # zeta is used as a placeholder for alpha (field line label)
-    data["alpha"] = transforms["grid"].nodes[:, 2] * data["NFP"]
+    data["alpha"] = transforms["h"].grid.nodes[:, 2]
     return data
 
 
@@ -396,19 +393,14 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     description="Omnigenity symmetry angle",
     dim=1,
     params=["x_lmn"],
-    transforms={"x": [[0, 0, 0]]},
+    transforms={"h": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["rho", "alpha", "eta"],
+    data=["eta"],
     parameterization="desc.magnetic_fields.OmnigenousField",
 )
 def _omni_angle(params, transforms, profiles, data, **kwargs):
-    nodes = jnp.array([data["rho"], data["eta"], data["alpha"]]).T
-    data["h"] = (
-        transforms["x"].basis.evaluate(nodes) @ params["x_lmn"]
-        + 2 * data["eta"]
-        + jnp.pi
-    )
+    data["h"] = transforms["h"].transform(params["x_lmn"]) + 2 * data["eta"] + jnp.pi
     return data
 
 

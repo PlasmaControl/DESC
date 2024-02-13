@@ -1483,7 +1483,7 @@ def test_regcoil_ellipse_modular_coils_check_B(
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        grid=LinearGrid(M=200, N=200, NFP=surface_current_field.NFP),
+        grid=LinearGrid(M=40, N=40, NFP=surface_current_field.NFP),
         basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=1e-3)

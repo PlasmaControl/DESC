@@ -1027,18 +1027,38 @@ class PoincareSurface(ZernikeRZToroidalSection):
                 check_orientation=check_orientation,
             )
 
+            LR = np.max(abs(modes_R[:, 0]))
+            MR = np.max(abs(modes_R[:, 1]))
+            LZ = np.max(abs(modes_Z[:, 0]))
+            MZ = np.max(abs(modes_Z[:, 1]))
             LL = np.max(abs(modes_L[:, 0]))
             ML = np.max(abs(modes_L[:, 1]))
+
             self._L = max(self.L, LL)
             self._M = max(self.M, ML)
+            self._N = 0
 
+            self._R_basis = ZernikePolynomial(
+                L=max(LR, MR),
+                M=MR,
+                spectral_indexing=spectral_indexing,
+                sym="cos" if sym else False,
+            )
+            self._Z_basis = ZernikePolynomial(
+                L=max(LZ, MZ),
+                M=MZ,
+                spectral_indexing=spectral_indexing,
+                sym="sin" if sym else False,
+            )
             self._L_basis = ZernikePolynomial(
                 L=max(LL, ML),
-                M=max(LL, ML),
+                M=ML,
                 spectral_indexing=spectral_indexing,
                 sym="sin" if sym else False,
             )
 
+            self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, :2])
+            self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
             self._L_lmn = copy_coeffs(L_lmn, modes_L, self.L_basis.modes[:, :2])
             self.name = name
 

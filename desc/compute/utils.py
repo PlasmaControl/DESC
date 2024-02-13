@@ -8,7 +8,7 @@ import numpy as np
 from numpy.polynomial.chebyshev import chebgauss
 from termcolor import colored
 
-from desc.backend import cond, fori_loop, jnp, put
+from desc.backend import cond, fori_loop, jnp, put, root_scalar
 from desc.grid import ConcentricGrid, Grid, LinearGrid, _meshgrid_expand
 
 from .data_index import data_index
@@ -1370,46 +1370,16 @@ def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
     if rho is None:
         rho = jnp.linspace(0, 1, 10)
     if alpha is None:
-        alpha = jnp.linspace(0, 2 * jnp.pi, 20)
+        alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 20)
 
     # Use Gauss-Chebyshev quadrature as the integrand blows up at integration boundary.
     x, w = chebgauss(deg=resolution)
-    # TODO: Write code to compute bounce points given lambda.
-    #  Then vectorize coordinate mapping logic
-    #  for multiple lambdas. For now, let's pretend bounce points do not depend on
+    # TODO: For now, let's pretend bounce points do not depend on
     #  lambda so that bounce_point() returns either one or two numbers for
     #  endpoints of all the integrals.
-    bp = bounce_point(eq, lambdas)
-    if bp.size == 1:
-        zeta = -2 * bp * jnp.arcsin(x) / jnp.pi
-    else:
-        zeta = (2 * jnp.arcsin(x) / jnp.pi - 1) / 2 * (bp[1] - bp[0]) + bp[1]
-
-    r, a, z = jnp.meshgrid(rho, alpha, zeta, copy=False, indexing="ij")
-    r, a, z = r.ravel(), a.ravel(), z.ravel()
-    # Now we map these Clebsch-Type field-line coordinates to DESC coordinates.
-    # Note that the rotational transform can be computed apriori because it is a single
-    # variable function of rho, and the coordinate mapping does not change rho. Once
-    # this is known, it is simple to compute theta_PEST from alpha. Then we transform
-    # from straight field-line coordinates to DESC coordinates with the method
-    # compute_theta_coords. This is preferred over transforming from Clebsch-Type
-    # coordinates to DESC coordinates directly with the more general method
-    # map_coordinates. That method requires an initial guess to be compatible with JIT,
-    # and generating a reasonable initial guess requires computing the rotational
-    # transform to approximate theta_PEST and the poloidal stream function anyway.
-    # TODO: In general, Linear Grid construction is not jit compatible.
-    #  This issue can be worked around with a specific routine for this.
-    lg = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-    lg_data = eq.compute("iota", grid=lg)
-    data = {
-        d: _meshgrid_expand(lg.compress(lg_data[d]), rho.size, alpha.size, zeta.size)
-        for d in lg_data
-        if data_index["desc.equilibrium.equilibrium.Equilibrium"][d]["coordinates"]
-        == "r"
-    }
-    sfl_coords = jnp.column_stack([r, (a + data["iota"] * z) % (2 * jnp.pi), z])
-    desc_coords = eq.compute_theta_coords(sfl_coords)
-    grid = Grid(desc_coords, jitable=True)
+    bp = bounce_point(eq, lambdas, rho, alpha)
+    zeta = (2 * jnp.arcsin(x) / jnp.pi - 1) / 2 * (bp[1] - bp[0]) + bp[1]
+    grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
     data = eq.compute(
         names=["B^zeta", "|B|"], grid=grid, data=data, override_grid=False
     )
@@ -1430,13 +1400,14 @@ def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
         """
         f = eq.compute(name, grid=grid, override_grid=False, data=data)[name]
         # If lambdas.size is large, we should loop to save memory.
-        F = f / (data["B^zeta"] * jnp.sqrt(1 - lambdas[:, jnp.newaxis] * data["|B|"]))
+        F = (
+            f
+            / (data["B^zeta"] * jnp.sqrt(1 - lambdas[:, jnp.newaxis] * data["|B|"]))
+            * jnp.pi
+            / (bp[1] - bp[0])
+        )
         F = jnp.sum(F.reshape(lambdas.size, -1, zeta.size) * w, axis=-1)
         F = F.reshape(lambdas.size, alpha.size, rho.size)
-        if bp.size == 1:
-            F *= -jnp.pi / (2 * bp[0])
-        else:
-            F *= jnp.pi / (bp[1] - bp[0])
         return F
 
     return _bounce_integral
@@ -1505,12 +1476,81 @@ def bounce_average(eq, lambdas, rho=None, alpha=None, resolution=20):
     return _bounce_average
 
 
-def bounce_point(eq, lambdas):
-    """Todo."""
-    # coordinate mapping with dense field line grid to get b on field lines
-    # bounce point idx  np.nonzero(jnp.diff(jnp.sign(lambdas[:, jnp.newaxis] - B))
-    # downsample to course grid and return
-    return np.array([])
+def bounce_point(eq, lambdas, rho, alpha, num_roots=50, max_field_line=10 * jnp.pi):
+    """Find bounce points."""
+    # TODO: Main algorithm here.
+    #     1. fix some broadcasting and vectorization.
+    #     (trying to solve rho.size * alpha.size * lambda.size * num_roots
+    #     root finding problems at once)... better to scan over lambdas for memory
+    #     saving.
+    #     2. add boundary to root finding logic to keep root searches separate
+    #        will probably just make another version of desc.backend.root_scalar
+    #        to avoid separate root finding routines in residual and jac.
+    #     3. write docstrings and use transforms in api instead of eq
+    def residual(zeta):
+        grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
+        data = eq.compute(["|B|"], grid=grid, data=data)
+        # change this to 1 lambda at a time to save memory
+        return data["|B|"] - lambdas
+
+    def jac(zeta):
+        grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
+        data = eq.compute(["|B|_z constant rho alpha"], grid=grid, data=data)
+        return data["|B|_z constant rho alpha"]
+
+    # residual = R = |B| - lambda
+    # Suppose we only cared about finding one roots of R on each field line.
+    # Then we would solve (rho.size * alpha.size * lambdas.size) independent
+    # (scalar) root finding problems
+    # Instead we want to find all the roots R on each field line.
+    # First, on a dense grid, compute R, and for every field line, find the zeta
+    # that are roots of this linear spline of R. These are estimates for the true roots
+    # of R, and will serve as an initial guess for the newton iteration.
+    # Also, we compute the midpoints between these root estimates; these will serve
+    # as boundaries of the domain for the resulting root finding problems.
+    zeta = np.linspace(0, max_field_line, num_roots)
+    grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
+    data = eq.compute(["|B|"], grid=grid, data=data)
+    guess_idx = np.nonzero(jnp.diff(jnp.sign(data["|B|"] - lambdas[:, jnp.newaxis])))
+    guess = grid.nodes[guess_idx, 2]
+    boundary = (guess[:-1] + guess[1:]) / 2
+    boundary = jnp.insert(boundary, [0, -1], [zeta[0], zeta[-1]])
+    # could enforce this with fixup method
+    # could vmap over this, ... but probably easier to instead implement
+    # a modified version of what's in desc.backend. Then we won't need to do
+    # separate root finding routines in residual and jac.
+    bounce_points = root_scalar(residual, guess, jac=jac)
+    return bounce_points
+
+
+def field_line_to_desc_coords(rho, alpha, zeta, eq):
+    """Get desc grid from unique field line coords."""
+    r, a, z = jnp.meshgrid(rho, alpha, zeta, copy=False, indexing="ij")
+    r, a, z = r.ravel(), a.ravel(), z.ravel()
+    # Now we map these Clebsch-Type field-line coordinates to DESC coordinates.
+    # Note that the rotational transform can be computed apriori because it is a single
+    # variable function of rho, and the coordinate mapping does not change rho. Once
+    # this is known, it is simple to compute theta_PEST from alpha. Then we transform
+    # from straight field-line coordinates to DESC coordinates with the method
+    # compute_theta_coords. This is preferred over transforming from Clebsch-Type
+    # coordinates to DESC coordinates directly with the more general method
+    # map_coordinates. That method requires an initial guess to be compatible with JIT,
+    # and generating a reasonable initial guess requires computing the rotational
+    # transform to approximate theta_PEST and the poloidal stream function anyway.
+    # TODO: In general, Linear Grid construction is not jit compatible.
+    #  This issue can be worked around with a specific routine for this.
+    lg = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    lg_data = eq.compute("iota", grid=lg)
+    data = {
+        d: _meshgrid_expand(lg.compress(lg_data[d]), rho.size, alpha.size, zeta.size)
+        for d in lg_data
+        if data_index["desc.equilibrium.equilibrium.Equilibrium"][d]["coordinates"]
+        == "r"
+    }
+    sfl_coords = jnp.column_stack([r, a + data["iota"] * z, z])
+    desc_coords = eq.compute_theta_coords(sfl_coords)
+    grid = Grid(desc_coords, jitable=True)
+    return grid, data
 
 
 # defines the order in which objective arguments get concatenated into the state vector

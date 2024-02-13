@@ -2397,7 +2397,7 @@ def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
     data=["e_theta", "theta_PEST_t"],
 )
 def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
-    # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
+    # dX/dv at const r,z = dX/dt * dt/dv = dX/dt / dv/dt
     data["e_theta_PEST"] = (data["e_theta"].T / data["theta_PEST_t"]).T
     return data
 

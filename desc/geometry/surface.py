@@ -967,7 +967,15 @@ class PoincareSurface(ZernikeRZToroidalSection):
             self._L_basis = L_basis
             self._R_lmn = surface.R_lmn
             self._Z_lmn = surface.Z_lmn
-            self._L_lmn = L_lmn
+            if modes_L.shape[0] == L_lmn.size:
+                self._L_lmn = copy_coeffs(
+                    L_lmn, modes_L[:, :2], self.L_basis.modes[:, :2]
+                )
+            else:
+                raise ValueError(
+                    f"L_lmn should have the same size as the basis, got {len(L_lmn)} "
+                    + f"for basis with {modes_L.shape[0]} modes."
+                )
             self._L = max(surface.L, LL)
             self._M = max(surface.M, ML)
             self._N = surface.N
@@ -975,6 +983,12 @@ class PoincareSurface(ZernikeRZToroidalSection):
             self._zeta = surface.zeta
             self._sym = surface._sym
             self.name = name
+
+            if self.L_basis.num_modes != self.L_lmn.size:
+                raise ValueError(
+                    f"L_lmn should have the same size as the basis, got {len(L_lmn)} "
+                    + f"for basis with {self.L_basis.num_modes} modes."
+                )
         else:
             # UPDATE THIS PART FOR GENERAL USE
             if R_lmn is None:
@@ -991,7 +1005,9 @@ class PoincareSurface(ZernikeRZToroidalSection):
             if modes_Z is None:
                 modes_Z = modes_R
 
-            L_lmn, modes_L = map(np.asarray, (L_lmn, modes_L))
+            L_lmn, modes_R, modes_Z, modes_L = map(
+                np.asarray, (L_lmn, modes_R[:, :2], modes_Z[:, :2], modes_L[:, :2])
+            )
 
             assert (
                 L_lmn.size == modes_L.shape[0]

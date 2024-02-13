@@ -52,12 +52,12 @@ def get_lm_mode(basis, coeff, zeta, L, M, func_zeta=chebyshev_z):
             lm += func_zeta(zeta, n)*coeff[i]
     return lm
 
-
+#0.05,0.15
 surf = FourierRZToroidalSurface(
-    R_lmn=[10, 0.5, -0.2, 0.06, 0.05, 0.15],
-    modes_R=[[0, 0], [1, 0], [1, 2], [1,4], [2, 1],[0,2]],
-    Z_lmn=[0, -0.5, 0.2, -0.06, -0.0],
-    modes_Z=[[0, 0], [-1, 0], [-1, 2], [-1,4], [0, 2]],
+    R_lmn=[10, 0.35, -0.114 * 1.5, 0.002* 1.5, 0.02* 1.5, -0.0024* 1.5, 0.005* 1.5, 0.0012* 1.5, 0.011* 1.5, 0.03, 0.0],
+    modes_R=[[0, 0], [1, 0], [1, 2], [1,4], [1,6], [1,8], [1,10], [1,12], [1,14], [2, 1],[0,2]],
+    Z_lmn=[0, -0.35, 0.114* 1.5, -0.002* 1.5, -0.02* 1.5, 0.0024* 1.5, -0.005* 1.5, -0.0012* 1.5, -0.011* 1.5,  -0.0],
+    modes_Z=[[0, 0], [-1, 0], [-1, 2], [-1,4], [-1,6], [-1,8], [-1,10], [-1,12], [-1,14],[0, 2]],
     NFP=1,
     sym=False,
     mirror=True,
@@ -69,7 +69,7 @@ eq = Equilibrium(
     surface=surf,
     L=5,
     M=2,
-    N=6,
+    N=8,
     mirror=True,
     pressure=p,
     iota=iota,
@@ -107,3 +107,8 @@ eq.solve(
 )
 
 eq.save("mirror_test.h5")
+
+from desc.plotting import plot_section
+
+fig, _ = plot_section(eq, "|F|", norm_F=True, log=True)
+fig.savefig("error.png")

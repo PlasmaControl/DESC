@@ -604,25 +604,31 @@ class VMECIO:
 
         # Mercier stability
         DShear = file.createVariable("DShear", np.float64, ("radius",))
-        DShear.long_name = "Mercier stability criterion magnetic shear term"
+        DShear.long_name = (
+            "Mercier stability criterion magnetic shear term, on full mesh"
+        )
         DShear.units = "1/Wb^2"
         DShear[:] = grid_full.compress(data_full["D_shear"])
         DShear[0] = 0
 
         DCurr = file.createVariable("DCurr", np.float64, ("radius",))
-        DCurr.long_name = "Mercier stability criterion toroidal current term"
+        DCurr.long_name = (
+            "Mercier stability criterion toroidal current term, on full mesh"
+        )
         DCurr.units = "1/Wb^2"
         DCurr[:] = grid_full.compress(data_full["D_current"])
         DCurr[0] = 0
 
         DWell = file.createVariable("DWell", np.float64, ("radius",))
-        DWell.long_name = "Mercier stability criterion magnetic well term"
+        DWell.long_name = "Mercier stability criterion magnetic well term, on full mesh"
         DWell.units = "1/Wb^2"
         DWell[:] = grid_full.compress(data_full["D_well"])
         DWell[0] = 0
 
         DGeod = file.createVariable("DGeod", np.float64, ("radius",))
-        DGeod.long_name = "Mercier stability criterion geodesic curvature term"
+        DGeod.long_name = (
+            "Mercier stability criterion geodesic curvature term, on full mesh"
+        )
         DGeod.units = "1/Wb^2"
         DGeod[:] = grid_full.compress(data_full["D_geodesic"])
         DGeod[0] = 0

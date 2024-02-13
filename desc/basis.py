@@ -1825,7 +1825,7 @@ def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
     if new_Lmax > Lmax or new_Mmax > Mmax:
         raise ValueError(
             "Something went wrong with the basis creation!"
-            + "{new_Lmax=} {Lmax=}, {new_Mmax=} {Mmax=}"
+            + f"{new_Lmax=} {Lmax=}, {new_Mmax=} {Mmax=}"
         )
     X_lmn_2D = copy_coeffs(X_lmn_2D, modes_2D, basis_2D.modes)
     return X_lmn_2D, basis_2D

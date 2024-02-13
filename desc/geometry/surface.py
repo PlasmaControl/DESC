@@ -957,7 +957,7 @@ class PoincareSurface(ZernikeRZToroidalSection):
             ML = np.max(abs(modes_L[:, 1]))
             L_basis = ZernikePolynomial(
                 L=max(LL, ML),
-                M=max(LL, ML),
+                M=ML,
                 spectral_indexing=surface.spectral_indexing,
                 sym="sin" if surface.sym else False,
             )

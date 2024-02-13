@@ -3926,6 +3926,7 @@ def plot_regcoil_outputs(
     # TODO: if recalculating do we replace the data in the dict?
 
     ncontours = kwargs.pop("ncontours", 20)
+    markersize = kwargs.pop("markersize", 12)
     figdata = {}
     axdata = {}
     if not scan:
@@ -3981,7 +3982,7 @@ def plot_regcoil_outputs(
         # github.com/landreman/regcoil/blob/master/
         plt.figure(figsize=(16, 12))
         plt.rcParams.update({"font.size": 20})
-        plt.scatter(alphas, chi2Bs)
+        plt.scatter(alphas, chi2Bs, s=markersize)
         plt.xlabel(r"$\alpha$ (regularization parameter)")
         plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
         plt.yscale("log")
@@ -3989,7 +3990,7 @@ def plot_regcoil_outputs(
         figdata["fig_chi^2_B_vs_alpha"] = plt.gcf()
         axdata["ax_chi^2_B_vs_alpha"] = plt.gca()
         plt.figure(figsize=(16, 12))
-        plt.scatter(alphas, chi2Ks)
+        plt.scatter(alphas, chi2Ks, s=markersize)
         plt.ylabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
         plt.xlabel(r"$\alpha$ (regularization parameter)")
         plt.yscale("log")
@@ -3997,7 +3998,7 @@ def plot_regcoil_outputs(
         figdata["fig_chi^2_K_vs_alpha"] = plt.gcf()
         axdata["ax_chi^2_K_vs_alpha"] = plt.gca()
         plt.figure(figsize=(16, 12))
-        plt.scatter(chi2Ks, chi2Bs)
+        plt.scatter(chi2Ks, chi2Bs, s=markersize)
         plt.xlabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
         plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
         plt.yscale("log")

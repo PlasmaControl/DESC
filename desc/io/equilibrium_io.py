@@ -59,7 +59,6 @@ def load(load_from, file_format=None):
                 cls_name = f["__class__"][()].decode("utf-8")
                 cls = pydoc.locate(cls_name)
                 obj = cls.__new__(cls)
-                f.close()
                 reader = reader_factory(load_from, file_format)
                 reader.read_obj(obj)
                 reader.close()

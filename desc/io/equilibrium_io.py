@@ -54,18 +54,21 @@ def load(load_from, file_format=None):
         with open(load_from, "rb") as f:
             obj = pickle.load(f)
     elif file_format == "hdf5":
-        f = h5py.File(load_from, "r")
-        if "__class__" in f.keys():
-            cls_name = f["__class__"][()].decode("utf-8")
-            cls = pydoc.locate(cls_name)
-            obj = cls.__new__(cls)
-            f.close()
-            reader = reader_factory(load_from, file_format)
-            reader.read_obj(obj)
-        else:
-            raise ValueError(
-                "Could not load from {}, no __class__ attribute found".format(load_from)
-            )
+        with h5py.File(load_from, "r") as f:
+            if "__class__" in f.keys():
+                cls_name = f["__class__"][()].decode("utf-8")
+                cls = pydoc.locate(cls_name)
+                obj = cls.__new__(cls)
+                f.close()
+                reader = reader_factory(load_from, file_format)
+                reader.read_obj(obj)
+                reader.close()
+            else:
+                raise ValueError(
+                    "Could not load from {}, no __class__ attribute found".format(
+                        load_from
+                    )
+                )
     else:
         raise ValueError("Unknown file format: {}".format(file_format))
     # to set other secondary stuff that wasn't saved possibly:

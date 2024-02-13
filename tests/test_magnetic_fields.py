@@ -719,7 +719,7 @@ class TestMagneticFields:
     @pytest.mark.unit
     def test_Bnormal_save_and_load_HELIOTRON(self, tmpdir_factory):
         """Tests Bnormal save/load for simple toroidal field with HELIOTRON."""
-        ### test on simple field with stellarator
+        # test on simple field with stellarator
         tmpdir = tmpdir_factory.mktemp("BNORM_files")
         path = tmpdir.join("BNORM_desc_heliotron.txt")
         tfield = ToroidalMagneticField(2, 1)
@@ -757,3 +757,36 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             foo(field, x), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
         )
+
+    @pytest.mark.unit
+    def test_mgrid_io(self, tmpdir_factory):
+        """Test saving to and loading from an mgrid file."""
+        tmpdir = tmpdir_factory.mktemp("mgrid_dir")
+        path = tmpdir.join("mgrid.nc")
+
+        # field to test on
+        toroidal_field = ToroidalMagneticField(B0=1, R0=5)
+        poloidal_field = PoloidalMagneticField(B0=1, R0=5, iota=2 / np.pi)
+        vertical_field = VerticalMagneticField(B0=0.2)
+        save_field = toroidal_field + poloidal_field + vertical_field
+
+        # save and load mgrid file
+        Rmin = 3
+        Rmax = 7
+        Zmin = -2
+        Zmax = 2
+        save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax)
+        load_field = SplineMagneticField.from_mgrid(path)
+
+        # check that the fields are the same
+        num_nodes = 50
+        grid = np.array(
+            [
+                np.linspace(Rmin, Rmax, num_nodes),
+                np.linspace(0, 2 * np.pi, num_nodes, endpoint=False),
+                np.linspace(Zmin, Zmax, num_nodes),
+            ]
+        ).T
+        B_saved = save_field.compute_magnetic_field(grid)
+        B_loaded = load_field.compute_magnetic_field(grid)
+        np.testing.assert_allclose(B_loaded, B_saved, rtol=1e-6)

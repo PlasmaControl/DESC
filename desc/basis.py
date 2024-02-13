@@ -1816,10 +1816,17 @@ def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
     LM_max = max(Lmax, Mmax)
     basis_2D = ZernikePolynomial(
         L=LM_max,
-        M=LM_max,
+        M=Mmax,
         spectral_indexing=basis_3D._spectral_indexing,
         sym=basis_3D.sym,
     )
+    new_Lmax = np.max(basis_2D.modes[:, 0])
+    new_Mmax = np.max(max(basis_2D.modes[:, 1]))
+    if new_Lmax > Lmax or new_Mmax > Mmax:
+        raise ValueError(
+            "Something went wrong with the basis creation!"
+            + "{new_Lmax=} {Lmax=}, {new_Mmax=} {Mmax=}"
+        )
     X_lmn_2D = copy_coeffs(X_lmn_2D, modes_2D, basis_2D.modes)
     return X_lmn_2D, basis_2D
 

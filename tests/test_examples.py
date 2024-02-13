@@ -988,7 +988,6 @@ def test_regcoil_axisymmetric():
         M_Phi=1,
         N_Phi=1,
         alpha=0,
-        show_plots=True,
         normalize=False,
     )
     chi_B = data["chi^2_B"]
@@ -1087,7 +1086,6 @@ def test_regcoil_axisym_and_ellipse_surface():
         eval_grid=LinearGrid(M=50, N=50, NFP=eq.NFP, sym=eq.sym),
         source_grid=LinearGrid(M=50, N=50, NFP=eq.NFP),
         alpha=0,
-        show_plots=False,
     )
     phi_mn_opt = surface_current_field.Phi_mn
     G = surface_current_field.G

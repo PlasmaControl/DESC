@@ -21,6 +21,7 @@ import numpy as np
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile
 from desc.geometry import FourierRZToroidalSurface
+from scipy.constants import mu_0
 
 
 def chebygrid(N_grid):
@@ -45,7 +46,7 @@ def grid_gen(L_grid, M_grid, N_grid, node_pattern="jacobi"):
 
 def get_lm_mode(basis, coeff, zeta, L, M, func_zeta=chebyshev_z):
     modes = basis.modes
-    lm =0
+    lm = 0
     for i, (l, m, n) in enumerate(modes):
         if l == L and m == M:
             lm += func_zeta(zeta, n)*coeff[i]
@@ -53,10 +54,10 @@ def get_lm_mode(basis, coeff, zeta, L, M, func_zeta=chebyshev_z):
 
 
 surf = FourierRZToroidalSurface(
-    R_lmn=[10, 1, -0.5, -0.2, -0.3],
-    modes_R=[[0, 0], [1, 0], [1, 2], [1, 1], [0, 1]],
-    Z_lmn=[0, -1, 0.5, -0.3],
-    modes_Z=[[0, 0], [-1, 0], [-1, 2], [0, 2]],
+    R_lmn=[10, 0.5, -0.2, 0.06, 0.05, 0.15],
+    modes_R=[[0, 0], [1, 0], [1, 2], [1,4], [2, 1],[0,2]],
+    Z_lmn=[0, -0.5, 0.2, -0.06, -0.0],
+    modes_Z=[[0, 0], [-1, 0], [-1, 2], [-1,4], [0, 2]],
     NFP=1,
     sym=False,
     mirror=True,

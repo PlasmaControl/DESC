@@ -26,12 +26,13 @@ grid = Grid(
     ).T,
     sort=False,
 )
-data = eq.compute(["R", "Z", "zeta"], grid=grid)
+data = eq.compute(["R", "Z", "zeta", "|B|"], grid=grid)
 
 mesh_LCFS = [
     data["R"].reshape(shape),
     data["zeta"].reshape(shape),
     data["Z"].reshape(shape),
+    data["|B|"].reshape(shape),
 ]
 
 np.save("mesh_LCFS", mesh_LCFS)
@@ -53,12 +54,13 @@ grid = Grid(
     ).T,
     sort=False,
 )
-data = eq.compute(["R", "Z", "zeta"], grid=grid)
+data = eq.compute(["R", "Z", "zeta", "p"], grid=grid)
 
 mesh_end0 = [
     data["R"].reshape(shape),
     data["zeta"].reshape(shape),
     data["Z"].reshape(shape),
+    data["p"].reshape(shape),
 ]
 
 np.save("mesh_end0", mesh_end0)
@@ -80,12 +82,13 @@ grid = Grid(
     ).T,
     sort=False,
 )
-data = eq.compute(["R", "Z", "zeta"], grid=grid)
+data = eq.compute(["R", "Z", "zeta", "p"], grid=grid)
 
 mesh_end1 = [
     data["R"].reshape(shape),
     data["zeta"].reshape(shape),
     data["Z"].reshape(shape),
+    data["p"].reshape(shape),
 ]
 
 np.save("mesh_end1", mesh_end1)

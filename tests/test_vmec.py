@@ -522,12 +522,12 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(
         np.abs(vmec.variables["buco"][20:100]),
         np.abs(desc.variables["buco"][20:100]),
-        rtol=3e-2,
+        rtol=1e-5,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["bvco"][20:100]),
         np.abs(desc.variables["bvco"][20:100]),
-        rtol=3e-2,
+        rtol=1e-5,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["jdotb"][20:100]),

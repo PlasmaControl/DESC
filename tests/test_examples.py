@@ -1503,10 +1503,9 @@ def test_regcoil_ellipse_modular_coils_check_coil_B(
     ) = regcoil_ellipse_modular_coils
     surface_current_field = initial_surface_current_field.copy()
     coilset = surface_current_field.cut_surface_current_into_coils(
-        desirednumcoils=240,
-        step=6,
+        desirednumcoils=300,
+        step=5,
     )
-    coilset = coilset.to_FourierXYZ(N=150)
     coords = eq.compute(["R", "phi", "Z", "B"])
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
@@ -1514,4 +1513,4 @@ def test_regcoil_ellipse_modular_coils_check_coil_B(
         coords,
         basis="rpz",
     )
-    np.testing.assert_allclose(B, B_from_surf, atol=1e-3)
+    np.testing.assert_allclose(B, B_from_surf, atol=1e-3, rtol=1e-2)

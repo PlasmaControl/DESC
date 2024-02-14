@@ -21,6 +21,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
 )
 from desc.profiles import PowerSeriesProfile
+
 from .utils import area_difference, compute_coords
 
 
@@ -350,10 +351,24 @@ def test_equilibrium_from_near_axis():
 
 @pytest.mark.unit
 @pytest.mark.slow
-def test_poincare_bc(SOLOVEV, SOLOVEV_Poincare):
+def test_poincare_bc(SOLOVEV):
     """Test fixed poincare solve from input file."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    eq_poin = EquilibriaFamily.load(load_from=str(SOLOVEV_Poincare["desc_h5_path"]))[-1]
+
+    print("Solving Poincare Equilibrium ...")
+    eq_poin = eq.set_poincare_equilibrium()
+    constraints = get_fixed_boundary_constraints(eq=eq_poin)
+    objective = ObjectiveFunction(ForceBalance(eq_poin))
+    eq_poin.solve(
+        verbose=3,
+        objective=objective,
+        constraints=constraints,
+        maxiter=100,
+        ftol=0,
+        xtol=0,
+        gtol=0,
+    )
+
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq, Nz=6)
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq_poin, Nz=6)
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)

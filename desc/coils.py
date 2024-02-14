@@ -6,7 +6,7 @@ from collections.abc import MutableSequence
 
 import numpy as np
 
-from desc.backend import jit, jnp, scan, tree_stack, tree_unstack, vmap
+from desc.backend import fori_loop, jit, jnp, scan, tree_stack, tree_unstack, vmap
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
 from desc.geometry import (
@@ -886,35 +886,39 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         # stellarator symmetry is easiest in [X,Y,Z] coordinates
         if basis.lower() == "rpz":
-            grid_xyz = rpz2xyz(coords)
+            coords_xyz = rpz2xyz(coords)
         else:
-            grid_xyz = coords
+            coords_xyz = coords
 
         # if stellarator symmetric, add reflected nodes from the other half field period
         if self.sym:
             normal = jnp.array(
                 [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
             )
-            grid_sym = (
-                grid_xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
+            coords_sym = (
+                coords_xyz
+                @ reflection_matrix(normal).T
+                @ reflection_matrix([0, 0, 1]).T
             )
-            grid_xyz = jnp.vstack((grid_xyz, grid_sym))
+            coords_xyz = jnp.vstack((coords_xyz, coords_sym))
 
         # field period rotation is easiest in [R,phi,Z] coordinates
-        grid_rpz = xyz2rpz(grid_xyz)
+        coords_rpz = xyz2rpz(coords_xyz)
 
         # sum the magnetic fields from each field period
-        B = jnp.zeros_like(grid_rpz)
-        for k in range(self.NFP):
-            grid_nfp = grid_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
+        def nfp_loop(k, B):
+            coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
 
             def body(B, x):
                 B += self[0].compute_magnetic_field(
-                    grid_nfp, params=x, basis="rpz", source_grid=source_grid
+                    coords_nfp, params=x, basis="rpz", source_grid=source_grid
                 )
                 return B, None
 
-            B += scan(body, jnp.zeros(grid_nfp.shape), tree_stack(params))[0]
+            B += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
+            return B
+
+        B = fori_loop(0, self.NFP, nfp_loop, jnp.zeros_like(coords_rpz))
 
         # sum the magnetic fields from both halves of the symmetric field period
         if self.sym:

@@ -1374,9 +1374,7 @@ def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
 
     # Use Gauss-Chebyshev quadrature as the integrand blows up at integration boundary.
     x, w = chebgauss(deg=resolution)
-    # TODO: For now, let's pretend bounce points do not depend on
-    #  lambda so that bounce_point() returns either one or two numbers for
-    #  endpoints of all the integrals.
+    # TODO: Generalize logic now that bounce_points return a tensor
     bp = bounce_point(eq, lambdas, rho, alpha)
     zeta = (2 * jnp.arcsin(x) / jnp.pi - 1) / 2 * (bp[1] - bp[0]) + bp[1]
     grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
@@ -1399,7 +1397,6 @@ def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
 
         """
         f = eq.compute(name, grid=grid, override_grid=False, data=data)[name]
-        # If lambdas.size is large, we should loop to save memory.
         F = (
             f
             / (data["B^zeta"] * jnp.sqrt(1 - lambdas[:, jnp.newaxis] * data["|B|"]))
@@ -1476,50 +1473,73 @@ def bounce_average(eq, lambdas, rho=None, alpha=None, resolution=20):
     return _bounce_average
 
 
-def bounce_point(eq, lambdas, rho, alpha, num_roots=50, max_field_line=10 * jnp.pi):
+def bounce_point(
+    eq, lambdas, rho, alpha, max_bounce_points=20, max_field_line=10 * jnp.pi
+):
     """Find bounce points."""
-    # TODO: Main algorithm here.
-    #     1. fix some broadcasting and vectorization.
-    #     (trying to solve rho.size * alpha.size * lambda.size * num_roots
-    #     root finding problems at once)... better to scan over lambdas for memory
-    #     saving.
-    #     2. add boundary to root finding logic to keep root searches separate
-    #        will probably just make another version of desc.backend.root_scalar
-    #        to avoid separate root finding routines in residual and jac.
-    #     3. write docstrings and use transforms in api instead of eq
-    def residual(zeta):
+    # TODO:
+    #     1. make another version of desc.backend.root_scalar
+    #        to avoid separate root finding routines in residual and jac
+    #        and use previous desc coords as initial guess for next iteration
+    #     2. write docstrings and use transforms in api instead of eq
+    def residual(zeta, i):
         grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
         data = eq.compute(["|B|"], grid=grid, data=data)
-        # change this to 1 lambda at a time to save memory
-        return data["|B|"] - lambdas
+        return data["|B|"] - lambdas[i]
 
     def jac(zeta):
         grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
         data = eq.compute(["|B|_z constant rho alpha"], grid=grid, data=data)
         return data["|B|_z constant rho alpha"]
 
-    # residual = R = |B| - lambda
-    # Suppose we only cared about finding one roots of R on each field line.
-    # Then we would solve (rho.size * alpha.size * lambdas.size) independent
-    # (scalar) root finding problems
-    # Instead we want to find all the roots R on each field line.
-    # First, on a dense grid, compute R, and for every field line, find the zeta
-    # that are roots of this linear spline of R. These are estimates for the true roots
-    # of R, and will serve as an initial guess for the newton iteration.
-    # Also, we compute the midpoints between these root estimates; these will serve
-    # as boundaries of the domain for the resulting root finding problems.
-    zeta = np.linspace(0, max_field_line, num_roots)
+    # Compute |B| - lambda on a dense grid.
+    # For every field line, find the roots of this linear spline.
+    # These estimates for the true roots will serve as an initial guess, and
+    # let us form a boundary mesh around root estimates to limit search domain
+    # of the root finding algorithms.
+    zeta = np.linspace(0, max_field_line, 3 * max_bounce_points)
     grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
     data = eq.compute(["|B|"], grid=grid, data=data)
-    guess_idx = np.nonzero(jnp.diff(jnp.sign(data["|B|"] - lambdas[:, jnp.newaxis])))
-    guess = grid.nodes[guess_idx, 2]
-    boundary = (guess[:-1] + guess[1:]) / 2
-    boundary = jnp.insert(boundary, [0, -1], [zeta[0], zeta[-1]])
-    # could enforce this with fixup method
-    # could vmap over this, ... but probably easier to instead implement
-    # a modified version of what's in desc.backend. Then we won't need to do
-    # separate root finding routines in residual and jac.
-    bounce_points = root_scalar(residual, guess, jac=jac)
+    B_norm = data["|B|"].reshape(alpha.size, rho.size)  # constant field line chunks
+
+    boundary_lt = jnp.zeros((lambdas.size, max_bounce_points, alpha.size, rho.size))
+    boundary_rt = jnp.zeros((lambdas.size, max_bounce_points, alpha.size, rho.size))
+    guess = jnp.zeros((lambdas.size, max_bounce_points, alpha.size, rho.size))
+    # todo: scan over this
+    for i in range(lambdas.size):
+        for j in range(alpha.size):
+            for k in range(rho.size):
+                # indices of zeta values observed prior to sign change
+                idx = jnp.nonzero(jnp.diff(jnp.sign(B_norm[j, k] - lambdas[i])))[0]
+                guess[i, :, j, k] = grid.nodes[idx, 2]
+                boundary_lt[i, :, j, k] = jnp.append(zeta[0], guess[:-1])
+                boundary_rt[i, :, j, k] = jnp.append(guess[1:], zeta[-1])
+    guess = guess.reshape(lambdas.size, max_bounce_points, alpha.size * rho.size)
+    boundary_lt = boundary_lt.reshape(
+        lambdas.size, max_bounce_points, alpha.size * rho.size
+    )
+    boundary_rt = boundary_rt.reshape(
+        lambdas.size, max_bounce_points, alpha.size * rho.size
+    )
+
+    def body_lambdas(i, out):
+        def body_roots(j, out_i):
+            def fixup(z):
+                return jnp.clip(z, boundary_lt[i, j], boundary_rt[i, j])
+
+            # todo: call vmap to vectorize or guess[i, j] so that we solve
+            #  guess[i, j].size independent root finding problems
+            root = root_scalar(residual, guess[i, j], jac=jac, args=i, fixup=fixup)
+            out_i = put(out_i, j, root)
+            return out_i
+
+        out = put(out, i, fori_loop(0, max_bounce_points, body_roots, out[i]))
+        return out
+
+    bounce_points = jnp.zeros(
+        shape=(lambdas.size, alpha.size, rho.size, max_bounce_points)
+    )
+    bounce_points = fori_loop(0, lambdas.size, body_lambdas, bounce_points)
     return bounce_points
 
 

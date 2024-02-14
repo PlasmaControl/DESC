@@ -16,7 +16,7 @@ from desc.coils import (
 from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 
 
@@ -36,12 +36,10 @@ class TestCoil:
         Bz_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
 
         B_true_xyz = np.atleast_2d([0, By_true, 0])
-        grid_xyz = Grid([10, y, 0])
-        grid_rpz = Grid(xyz2rpz(grid_xyz.nodes))
-        B_true_rpz_xy = xyz2rpz_vec(
-            B_true_xyz, x=grid_xyz.nodes[:, 0], y=grid_xyz.nodes[:, 1]
-        )
-        B_true_rpz_phi = xyz2rpz_vec(B_true_xyz, phi=grid_rpz.nodes[:, 1])
+        grid_xyz = np.atleast_2d([10, y, 0])
+        grid_rpz = xyz2rpz(grid_xyz)
+        B_true_rpz_xy = xyz2rpz_vec(B_true_xyz, x=grid_xyz[:, 0], y=grid_xyz[:, 1])
+        B_true_rpz_phi = xyz2rpz_vec(B_true_xyz, phi=grid_rpz[:, 1])
 
         # FourierXYZCoil
         coil = FourierXYZCoil(I)
@@ -107,12 +105,10 @@ class TestCoil:
         )
 
         B_true_xyz = np.atleast_2d([0, 0, Bz_true])
-        grid_xyz = Grid([0, 0, y])
-        grid_rpz = Grid(xyz2rpz(grid_xyz.nodes))
-        B_true_rpz_xy = xyz2rpz_vec(
-            B_true_xyz, x=grid_xyz.nodes[:, 0], y=grid_xyz.nodes[:, 1]
-        )
-        B_true_rpz_phi = xyz2rpz_vec(B_true_xyz, phi=grid_rpz.nodes[:, 1])
+        grid_xyz = np.atleast_2d([0, 0, y])
+        grid_rpz = xyz2rpz(grid_xyz)
+        B_true_rpz_xy = xyz2rpz_vec(B_true_xyz, x=grid_xyz[:, 0], y=grid_xyz[:, 1])
+        B_true_rpz_phi = xyz2rpz_vec(B_true_xyz, phi=grid_rpz[:, 1])
 
         # FourierRZCoil
         coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]))
@@ -155,7 +151,7 @@ class TestCoil:
 
         field = SumMagneticField(coil, VerticalMagneticField(B_Z))
         B_approx = field.compute_magnetic_field(
-            Grid([[10, y, 0], [10, -y, 0]]), basis="xyz", source_grid=100
+            np.array([[10, y, 0], [10, -y, 0]]), basis="xyz", source_grid=100
         )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
@@ -182,7 +178,7 @@ class TestCoil:
 
         for i, field in enumerate([field1, field2, field3, field4, field5, field6]):
             B_approx = field.compute_magnetic_field(
-                Grid([[10, y, 0], [10, -y, 0]]), basis="xyz", source_grid=100
+                np.array([[10, y, 0], [10, -y, 0]]), basis="xyz", source_grid=100
             )[0]
             np.testing.assert_allclose(
                 B_true, B_approx, rtol=1e-3, atol=1e-10, err_msg=f"field {i}"

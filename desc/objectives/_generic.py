@@ -112,7 +112,13 @@ class GenericObjective(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+            grid = QuadratureGrid(
+                eq.L_grid,
+                eq.M_grid,
+                eq.N_grid,
+                eq.NFP,
+                NFP_umbilic_factor=eq.NFP_umbilic_factor,
+            )
         else:
             grid = self._grid
 
@@ -397,7 +403,13 @@ class ObjectiveFromUser(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+            grid = QuadratureGrid(
+                eq.L_grid,
+                eq.M_grid,
+                eq.N_grid,
+                eq.NFP,
+                NFP_umbilic_factor=eq.NFP_umbilic_factor,
+            )
         else:
             grid = self._grid
 

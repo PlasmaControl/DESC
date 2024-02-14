@@ -347,7 +347,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),
                     NFP=obj.NFP,
-                    NFP_umbilic_factpr=obj.NFP_umbilic_factor,
+                    NFP_umbilic_factor=obj.NFP_umbilic_factor,
                     sym=obj.R_basis.sym,
                 ),
                 derivs=derivs["B"],
@@ -362,7 +362,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),
                     NFP=obj.NFP,
-                    NFP_umbilic_factpr=obj.NFP_umbilic_factor,
+                    NFP_umbilic_factor=obj.NFP_umbilic_factor,
                     sym=obj.Z_basis.sym,
                 ),
                 derivs=derivs["w"],
@@ -656,9 +656,8 @@ def _get_grid_surface(grid, surface_label):
 
     try:
         has_endpoint_dupe = has_endpoint_dupe[0]
-    except:
-        pass
-
+    except ValueError:
+        has_endpoint_dupe = has_endpoint_dupe
 
     return unique_size, inverse_idx, spacing, has_endpoint_dupe
 

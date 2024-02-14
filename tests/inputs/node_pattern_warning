@@ -1,4 +1,5 @@
-# This is the DESC input file for a Solov'ev equilibrium
+# This is the DESC input file for a Solov'ev equilibrium with node_pattern error
+# This file should produce a warning
 
 # global parameters
 sym = 1
@@ -22,6 +23,7 @@ pert_order=0
 optimizer         = lsq-exact
 objective         = force
 spectral_indexing = fringe
+node_pattern = jacobi
 
 
 # pressure and rotational transform profiles

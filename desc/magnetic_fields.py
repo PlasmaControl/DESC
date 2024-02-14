@@ -385,7 +385,7 @@ class _MagneticField(IOAble, ABC):
         nZ=101,
         nphi=90,
     ):
-        """Save the magnetic field to an mgrid NetCDF file.
+        """Save the magnetic field to an mgrid NetCDF file in "raw" format.
 
         Parameters
         ----------
@@ -493,7 +493,7 @@ class _MagneticField(IOAble, ABC):
             "raw_coil_cur", np.float64, ("external_coils",)
         )
         raw_coil_cur.long_name = "Raw coil currents (A)."
-        raw_coil_cur[:] = np.array([1])
+        raw_coil_cur[:] = np.array([1])  # this is 1 because mgrid_mode = "raw"
 
         br_001 = file.createVariable("br_001", np.float64, ("phi", "zee", "rad"))
         br_001.long_name = "B_R = radial component of magnetic field in lab frame (T)."
@@ -1205,8 +1205,8 @@ class SplineMagneticField(_MagneticField, Optimizable):
         mgrid_file : str or path-like
             File path to mgrid netCDF file to load from.
         extcur : array-like, optional
-            Currents for each coil group.
-            By default, it will use the coil currents from the mgrid file.
+            Currents for each coil group. They default to the coil currents from the
+            mgrid file for "scaled" mode, or to 1 for "raw" mode.
         method : str
             Interpolation method.
         extrap : bool
@@ -1215,14 +1215,12 @@ class SplineMagneticField(_MagneticField, Optimizable):
 
         """
         mgrid = Dataset(mgrid_file, "r")
-        mode = chartostring(mgrid["mgrid_mode"][()])  # either "raw" (R) or "scaled" (S)
-        warnif(  # warn if mgrid mode is "scaled" and user doesn't supply coil currents
-            mode != "R" and extcur is None,
-            UserWarning,
-            "External coil currents are expected but were not given.",
-        )
+        mode = chartostring(mgrid["mgrid_mode"][()])
         if extcur is None:
-            extcur = np.array(mgrid["raw_coil_cur"])  # raw coil currents (A)
+            if mode == "S":  # "scaled"
+                extcur = np.array(mgrid["raw_coil_cur"])  # raw coil currents (A)
+            else:  # "raw"
+                extcur = 1  # coil current scaling factor
         nextcur = int(mgrid["nextcur"][()])  # number of coils
         extcur = np.broadcast_to(extcur, nextcur)
 

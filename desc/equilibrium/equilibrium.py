@@ -1000,6 +1000,8 @@ class Equilibrium(IOAble, Optimizable):
                 M=self.M_grid,
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
                 sym=self.sym,
+                endpoint=grid.endpoint,
+                NFP_umbilic_factor=grid.NFP_umbilic_factor,
             )
             # TODO: Pass in data0d as a seed once there are 1d quantities that
             # depend on 0d quantities in data_index.

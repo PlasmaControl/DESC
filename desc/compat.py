@@ -168,7 +168,13 @@ def rescale(
         eq = eq.copy()
 
     # size scaling
-    grid_L = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid_L = QuadratureGrid(
+        L=eq.L_grid,
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+        NFP_umbilic_factor=eq.NFP_umbilic_factor,
+    )
     data_L = eq.compute(L_keys, grid=grid_L)
     L_old = data_L[L_key]
     L_new = L_new or L_old
@@ -177,7 +183,9 @@ def rescale(
 
     # field scaling
     if B_key == "B0":
-        grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
+        grid_B = LinearGrid(
+            N=eq.N_grid, NFP=eq.NFP, NFP_umbilic_factor=eq.NFP_umbilic_factor, rho=0
+        )
         data_B = eq.compute("|B|", grid=grid_B)
         B_old = np.mean(data_B["|B|"])
     elif B_key == "<B>":
@@ -185,7 +193,13 @@ def rescale(
         data_B = eq.compute("<|B|>_vol", grid=grid_B)
         B_old = data_B["<|B|>_vol"]
     elif B_key == "B_max":
-        grid_B = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
+        grid_B = LinearGrid(
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            NFP_umbilic_factor=eq.NFP_umbilic_factor,
+            rho=1,
+        )
         data_B = eq.compute("|B|", grid=grid_B)
         B_old = np.max(data_B["|B|"])
     B_new = B_new or B_old

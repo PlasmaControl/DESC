@@ -1,6 +1,7 @@
 """Functions for plotting and visualizing equilibria."""
 
 import numbers
+import pdb
 import tkinter
 import warnings
 
@@ -1702,27 +1703,38 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     phi = (1 if eq.N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi + 1)  # +1 to include pi and 2pi
+        phi = np.linspace(
+            0, 2 * np.pi * eq.NFP_umbilic_factor / eq.NFP, phi + 1
+        )  # +1 to include pi and 2pi
     phi = np.atleast_1d(phi)
     nphi = len(phi)
     # don't plot axis for FourierRZToroidalSurface, since it's not defined.
     plot_axis = plot_axis and eq.L > 0
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
-    grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": phi}
+    grid_kwargs = {
+        "NFP": eq.NFP,
+        "NFP_umbilic_factor": eq.NFP_umbilic_factor,
+        "rho": rho,
+        "theta": 100,
+        "zeta": phi,
+    }
     grid = _get_grid(**grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
+    coords = map_coordinates(
+        eq,
+        grid.nodes,
+        ["rho", "theta", "phi"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 2 * np.pi * eq.NFP_umbilic_factor),
+        guess=grid.nodes,
+    )
+
     grid = Grid(
-        map_coordinates(
-            eq,
-            grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=grid.nodes,
-        ),
+        coords,
         sort=False,
     )
+    pdb.set_trace()
 
     if colors is None:
         colors = _get_cmap(cmap, nz)(np.linspace(0, 1, nz))
@@ -2475,6 +2487,7 @@ def plot_boozer_surface(
             "M": 4 * eq.M,
             "N": 4 * eq.N,
             "NFP": eq.NFP,
+            "NFP_umbilic_factor": eq.NFP_umbilic_factor,
             "endpoint": False,
         }
         grid_compute = _get_grid(**grid_kwargs)
@@ -2484,6 +2497,7 @@ def plot_boozer_surface(
             "theta": 91,
             "zeta": 91,
             "NFP": eq.NFP,
+            "NFP_umbilic_factor": eq.NFP_umbilic_factor,
             "endpoint": True,
         }
         grid_plot = _get_grid(**grid_kwargs)
@@ -2546,7 +2560,9 @@ def plot_boozer_surface(
 
     if fieldlines:
         theta0 = np.linspace(0, 2 * np.pi, fieldlines, endpoint=False)
-        zeta = np.linspace(0, 2 * np.pi / grid_plot.NFP, 100)
+        zeta = np.linspace(
+            0, 2 * np.pi / grid_plot.NFP * grid_plot.NFP_umbilic_factor, 100
+        )
         alpha = np.atleast_2d(theta0) + iota * np.atleast_2d(zeta).T
         alpha1 = np.where(np.logical_and(alpha >= 0, alpha <= 2 * np.pi), alpha, np.nan)
         alpha2 = np.where(

@@ -351,9 +351,9 @@ def test_equilibrium_from_near_axis():
 
 @pytest.mark.unit
 @pytest.mark.slow
-def test_poincare_bc(SOLOVEV):
+def test_poincare_bc(HELIOTRON):
     """Test fixed poincare solve from input file."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
 
     print("Solving Poincare Equilibrium ...")
     eq_poin = eq.set_poincare_equilibrium()

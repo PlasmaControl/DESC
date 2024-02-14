@@ -5,7 +5,7 @@ from collections.abc import MutableSequence
 
 import numpy as np
 from interpax import approx_df, interp2d, interp3d
-from netCDF4 import Dataset, stringtochar
+from netCDF4 import Dataset, chartostring, stringtochar
 
 from desc.backend import fori_loop, jit, jnp, odeint, sign
 from desc.basis import DoubleFourierSeries
@@ -466,7 +466,7 @@ class _MagneticField(IOAble, ABC):
         kp[:] = nphi
 
         nfp = file.createVariable("nfp", np.int32)
-        nfp.long_name = "Number of toroidal field periods."
+        nfp.long_name = "Number of field periods."
         nfp[:] = NFP
 
         nextcur = file.createVariable("nextcur", np.int32)
@@ -474,37 +474,41 @@ class _MagneticField(IOAble, ABC):
         nextcur[:] = 1
 
         rmin = file.createVariable("rmin", np.float64)
-        rmin.long_name = "Minimum R coordinate (meters)."
+        rmin.long_name = "Minimum R coordinate (m)."
         rmin[:] = Rmin
 
         rmax = file.createVariable("rmax", np.float64)
-        rmax.long_name = "Maximum R coordinate (meters)."
+        rmax.long_name = "Maximum R coordinate (m)."
         rmax[:] = Rmax
 
         zmin = file.createVariable("zmin", np.float64)
-        zmin.long_name = "Minimum Z coordinate (meters)."
+        zmin.long_name = "Minimum Z coordinate (m)."
         zmin[:] = Zmin
 
         zmax = file.createVariable("zmax", np.float64)
-        zmax.long_name = "Maximum Z coordinate (meters)."
+        zmax.long_name = "Maximum Z coordinate (m)."
         zmax[:] = Zmax
 
         raw_coil_cur = file.createVariable(
             "raw_coil_cur", np.float64, ("external_coils",)
         )
-        raw_coil_cur.long_name = "Raw coil currents."
+        raw_coil_cur.long_name = "Raw coil currents (A)."
         raw_coil_cur[:] = np.array([1])
 
         br_001 = file.createVariable("br_001", np.float64, ("phi", "zee", "rad"))
-        br_001.long_name = "B_R = radial component of magnetic field in lab frame."
+        br_001.long_name = "B_R = radial component of magnetic field in lab frame (T)."
         br_001[:] = B_R
 
         bp_001 = file.createVariable("bp_001", np.float64, ("phi", "zee", "rad"))
-        bp_001.long_name = "B_phi = toroidal component of magnetic field in lab frame."
+        bp_001.long_name = (
+            "B_phi = toroidal component of magnetic field in lab frame (T)."
+        )
         bp_001[:] = B_phi
 
         bz_001 = file.createVariable("bz_001", np.float64, ("phi", "zee", "rad"))
-        bz_001.long_name = "B_Z = vertical component of magnetic field in lab frame."
+        bz_001.long_name = (
+            "B_Z = vertical component of magnetic field in lab frame (T)."
+        )
         bz_001[:] = B_Z
 
         file.close()
@@ -1193,53 +1197,64 @@ class SplineMagneticField(_MagneticField, Optimizable):
         return B
 
     @classmethod
-    def from_mgrid(cls, mgrid_file, extcur=1, method="cubic", extrap=False):
+    def from_mgrid(cls, mgrid_file, extcur=None, method="cubic", extrap=False):
         """Create a SplineMagneticField from an "mgrid" file from MAKEGRID.
 
         Parameters
         ----------
         mgrid_file : str or path-like
-            path to mgrid file in netCDF format
-        extcur : array-like
-            currents for each subset of the field
+            File path to mgrid netCDF file to load from.
+        extcur : array-like, optional
+            Currents for each coil group.
+            By default, it will use the coil currents from the mgrid file.
         method : str
-            interpolation method
+            Interpolation method.
         extrap : bool
-            whether to extrapolate beyond the domain of known field values or return nan
+            Whether to extrapolate beyond the domain of known field values (True)
+            or return NaN (False).
 
         """
         mgrid = Dataset(mgrid_file, "r")
-        ir = int(mgrid["ir"][()])
-        jz = int(mgrid["jz"][()])
-        kp = int(mgrid["kp"][()])
-        nfp = mgrid["nfp"][()].data
-        nextcur = int(mgrid["nextcur"][()])
-        rMin = mgrid["rmin"][()]
-        rMax = mgrid["rmax"][()]
-        zMin = mgrid["zmin"][()]
-        zMax = mgrid["zmax"][()]
+        mode = chartostring(mgrid["mgrid_mode"][()])  # either "raw" (R) or "scaled" (S)
+        warnif(  # warn if mgrid mode is "scaled" and user doesn't supply coil currents
+            mode != "R" and extcur is None,
+            UserWarning,
+            "External coil currents are expected but were not given.",
+        )
+        if extcur is None:
+            extcur = np.array(mgrid["raw_coil_cur"])  # raw coil currents (A)
+        nextcur = int(mgrid["nextcur"][()])  # number of coils
         extcur = np.broadcast_to(extcur, nextcur)
 
+        # compute grid knots in cylindrical coordinates
+        ir = int(mgrid["ir"][()])  # number of grid points in the R coordinate
+        jz = int(mgrid["jz"][()])  # number of grid points in the Z coordinate
+        kp = int(mgrid["kp"][()])  # number of grid points in the phi coordinate
+        Rmin = mgrid["rmin"][()]  # Minimum R coordinate (m)
+        Rmax = mgrid["rmax"][()]  # Maximum R coordinate (m)
+        Zmin = mgrid["zmin"][()]  # Minimum Z coordinate (m)
+        Zmax = mgrid["zmax"][()]  # Maximum Z coordinate (m)
+        nfp = int(mgrid["nfp"][()])  # Number of field periods
+        Rgrid = np.linspace(Rmin, Rmax, ir)
+        Zgrid = np.linspace(Zmin, Zmax, jz)
+        pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
+
+        # sum magnetic fields from each coil
         br = np.zeros([kp, jz, ir, nextcur])
         bp = np.zeros([kp, jz, ir, nextcur])
         bz = np.zeros([kp, jz, ir, nextcur])
         for i in range(nextcur):
             coil_id = "%03d" % (i + 1,)
-            br[:, :, :, i] += mgrid["br_" + coil_id][()]
-            bp[:, :, :, i] += mgrid["bp_" + coil_id][()]
-            bz[:, :, :, i] += mgrid["bz_" + coil_id][()]
-        mgrid.close()
+            br[:, :, :, i] += mgrid["br_" + coil_id][()]  # B_R radial magnetic field
+            bp[:, :, :, i] += mgrid["bp_" + coil_id][()]  # B_phi toroidal field (T)
+            bz[:, :, :, i] += mgrid["bz_" + coil_id][()]  # B_Z vertical magnetic field
 
         # shift axes to correct order
         br = np.moveaxis(br, (0, 1, 2), (1, 2, 0))
         bp = np.moveaxis(bp, (0, 1, 2), (1, 2, 0))
         bz = np.moveaxis(bz, (0, 1, 2), (1, 2, 0))
 
-        # re-compute grid knots in radial and vertical direction
-        Rgrid = np.linspace(rMin, rMax, ir)
-        Zgrid = np.linspace(zMin, zMax, jz)
-        pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
-
+        mgrid.close()
         return cls(Rgrid, pgrid, Zgrid, br, bp, bz, extcur, nfp, method, extrap)
 
     @classmethod

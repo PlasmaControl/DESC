@@ -347,7 +347,7 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
 
     Generally follows sec 3.2.1 of [2].
     """
-    assert isinstance(src_grid.NFP, int)
+    assert src_grid.NFP == int(src_grid.NFP)
     src_theta = src_grid.nodes[:, 1]
     src_zeta = src_grid.nodes[:, 2]
     src_dtheta = src_grid.spacing[:, 1]
@@ -410,7 +410,7 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
         return f, src_data
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
-    f, _ = fori_loop(0, src_grid.NFP, nfp_loop, (f, src_data))
+    f, _ = fori_loop(0, int(src_grid.NFP), nfp_loop, (f, src_data))
 
     # undo rotation of src_zeta
     src_data["zeta"] = src_zeta
@@ -540,9 +540,9 @@ def singular_integral(
     kernel : str or callable
         Kernel function to evaluate. If str, one of the following:
             '1_over_r' : 1 / |𝐫 − 𝐫'|
-            'nr_over_r3' : 𝐧⋅(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
-            'biot_savart' : μ₀/4π 𝐊×(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
-            'biot_savart_A' : μ₀/4π 𝐊 / |𝐫 − 𝐫'|
+            'nr_over_r3' : 𝐧'⋅(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
+            'biot_savart' : μ₀/4π 𝐊'×(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
+            'biot_savart_A' : μ₀/4π 𝐊' / |𝐫 − 𝐫'|
         If callable, should take 3 arguments:
             eval_data : dict of data at evaluation points (primed)
             src_data : dict of data at source points (unprimed)

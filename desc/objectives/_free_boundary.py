@@ -368,10 +368,10 @@ class BoundaryError(_Objective):
         Hyperparameters for singular integration scheme, s is roughly equal to the size
         of the local singular grid with respect to the global grid, q is the order of
         integration on the local grid
-    src_grid, eval_grid : Grid, optional
+    source_grid, eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for source terms for Biot-
-        Savart integral and where to evaluate errors. src_grid should not be stellarator
-        symmetric, and both should be at rho=1.
+        Savart integral and where to evaluate errors. source_grid should not be
+        stellarator symmetric, and both should be at rho=1.
     field_grid : Grid, optional
         Grid used to discretize ext_field.
     loop : bool
@@ -402,7 +402,7 @@ class BoundaryError(_Objective):
         deriv_mode="auto",
         s=None,
         q=None,
-        src_grid=None,
+        source_grid=None,
         eval_grid=None,
         field_grid=None,
         loop=True,
@@ -410,7 +410,7 @@ class BoundaryError(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        self._src_grid = src_grid
+        self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._s = s
         self._q = q
@@ -448,11 +448,11 @@ class BoundaryError(_Objective):
         """
         eq = self.things[0]
 
-        if self._src_grid is None:
+        if self._source_grid is None:
             # for axisymmetry we still need to know about toroidal effects, so its
             # cheapest to pretend there are extra field periods
             src_NFP = eq.NFP if eq.N > 0 else 64
-            src_grid = LinearGrid(
+            source_grid = LinearGrid(
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -460,7 +460,7 @@ class BoundaryError(_Objective):
                 sym=False,
             )
         else:
-            src_grid = self._src_grid
+            source_grid = self._source_grid
 
         if self._eval_grid is None:
             eval_grid = LinearGrid(
@@ -474,9 +474,9 @@ class BoundaryError(_Objective):
             eval_grid = self._eval_grid
 
         errorif(
-            not np.all(src_grid.nodes[:, 0] == 1.0),
+            not np.all(source_grid.nodes[:, 0] == 1.0),
             ValueError,
-            "src_grid contains nodes not on rho=1",
+            "source_grid contains nodes not on rho=1",
         )
         errorif(
             not np.all(eval_grid.nodes[:, 0] == 1.0),
@@ -484,25 +484,25 @@ class BoundaryError(_Objective):
             "eval_grid contains nodes not on rho=1",
         )
         errorif(
-            src_grid.sym,
+            source_grid.sym,
             ValueError,
             "Source grids for singular integrals must be non-symmetric",
         )
         if self._s is None:
-            k = min(src_grid.num_theta, src_grid.num_zeta * src_grid.NFP)
+            k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
             self._s = k - 1
         if self._q is None:
-            k = min(src_grid.num_theta, src_grid.num_zeta * src_grid.NFP)
+            k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
             self._q = k // 2 + int(np.sqrt(k))
 
         try:
-            interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = FFTInterpolator(eval_grid, source_grid, self._s, self._q)
         except AssertionError as e:
             warnings.warn(
                 "Could not built fft interpolator, switching to dft method which is"
                 " much slower. Reason: " + str(e)
             )
-            interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = DFTInterpolator(eval_grid, source_grid, self._s, self._q)
 
         edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))
         warnif(
@@ -530,8 +530,8 @@ class BoundaryError(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        src_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=src_grid)
-        src_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=src_grid)
+        src_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=source_grid)
+        src_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=source_grid)
         eval_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eval_grid)
         eval_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=eval_grid)
 
@@ -560,7 +560,7 @@ class BoundaryError(_Objective):
                 self._sheet_data_keys, obj=sheet_current, grid=eval_grid
             )
             sheet_src_transforms = get_transforms(
-                self._sheet_data_keys, obj=sheet_current, grid=src_grid
+                self._sheet_data_keys, obj=sheet_current, grid=source_grid
             )
             self._constants["sheet_eval_transforms"] = sheet_eval_transforms
             self._constants["sheet_src_transforms"] = sheet_src_transforms

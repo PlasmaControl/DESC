@@ -59,16 +59,16 @@ def test_singular_integral_greens_id():
     eval_grid = LinearGrid(M=5, N=6, NFP=eq.NFP)
 
     for i, (m, n) in enumerate(zip(Nu, Nv)):
-        src_grid = LinearGrid(M=m // 2, N=n // 2, NFP=eq.NFP)
+        source_grid = LinearGrid(M=m // 2, N=n // 2, NFP=eq.NFP)
         src_data = eq.compute(
-            ["R", "Z", "phi", "e^rho", "|e_theta x e_zeta|"], grid=src_grid
+            ["R", "Z", "phi", "e^rho", "|e_theta x e_zeta|"], grid=source_grid
         )
         eval_data = eq.compute(
             ["R", "Z", "phi", "e^rho", "|e_theta x e_zeta|"], grid=eval_grid
         )
         s = ss[i]
         q = qs[i]
-        interpolator = FFTInterpolator(eval_grid, src_grid, s, q)
+        interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
 
         err = singular_integral(
             eval_data,
@@ -86,7 +86,7 @@ def test_singular_integral_vac_estell():
     eq = desc.examples.get("ESTELL")
     eval_grid = LinearGrid(M=8, N=8, NFP=int(eq.NFP))
 
-    src_grid = LinearGrid(M=18, N=18, NFP=int(eq.NFP))
+    source_grid = LinearGrid(M=18, N=18, NFP=int(eq.NFP))
 
     keys = [
         "K_vc",
@@ -100,14 +100,14 @@ def test_singular_integral_vac_estell():
         "|e_theta x e_zeta|",
     ]
 
-    src_data = eq.compute(keys, grid=src_grid)
+    src_data = eq.compute(keys, grid=source_grid)
     eval_data = eq.compute(keys, grid=eval_grid)
 
-    k = min(src_grid.num_theta, src_grid.num_zeta)
+    k = min(source_grid.num_theta, source_grid.num_zeta)
     s = k // 2 + int(np.sqrt(k))
     q = k // 2 + int(np.sqrt(k))
 
-    interpolator = FFTInterpolator(eval_grid, src_grid, s, q)
+    interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
     Bplasma = virtual_casing_biot_savart(
         eval_data,
         src_data,

@@ -227,7 +227,7 @@ class VacuumBoundaryError(_Objective):
         )
         x = jnp.array([data["R"], data["phi"], data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(
-            x, grid=self._field_grid, basis="rpz"
+            x, source_grid=self._field_grid, basis="rpz"
         )
         Bex_total = Bext
         Bin_total = data["B"]
@@ -656,7 +656,7 @@ class BoundaryError(_Objective):
         Bplasma = Bplasma + eval_data["B"] / 2
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(
-            x, grid=self._field_grid, basis="rpz"
+            x, source_grid=self._field_grid, basis="rpz"
         )
         Bex_total = Bext + Bplasma
         Bin_total = eval_data["B"]

@@ -65,6 +65,7 @@ def xyz2rpz(pts):
     -------
     pts : ndarray, shape(...,3)
         points in polar (R,phi,Z) coordinates
+
     """
     x, y, z = pts.T
     r = jnp.sqrt(x**2 + y**2)
@@ -84,6 +85,7 @@ def rpz2xyz(pts):
     -------
     pts : ndarray, shape(...,3)
         points in cartesian (X,Y,Z) coordinates
+
     """
     r, p, z = pts.T
     x = r * jnp.cos(p)
@@ -105,6 +107,7 @@ def xyz2rpz_vec(vec, x=None, y=None, phi=None):
     -------
     vec : ndarray, shape(...,3)
         vectors, in polar (R,phi,Z) form
+
     """
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)
@@ -139,6 +142,7 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
     -------
     vec : ndarray, shape(n,3)
         vectors, in cartesian (X,Y,Z) form
+
     """
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)

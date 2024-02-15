@@ -255,7 +255,8 @@ class TestMagneticFields:
 
         np.testing.assert_allclose(
             sumfield.compute_magnetic_field(
-                [10.0, 0, 0], grid=[None, LinearGrid(M=30, N=30, NFP=surface.NFP)]
+                [10.0, 0, 0],
+                source_grid=[None, LinearGrid(M=30, N=30, NFP=surface.NFP)],
             ),
             correct_field(10.0, 0, 0) + B_TF([10.0, 0, 0]),
             atol=1e-16,
@@ -313,13 +314,15 @@ class TestMagneticFields:
         field.change_Phi_resolution(2, 2)
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
+            field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
             correct_field(10.0, 0, 0),
             atol=1e-16,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=surface_grid),
+            field.compute_magnetic_field(
+                [10.0, np.pi / 4, 0], source_grid=surface_grid
+            ),
             correct_field(10.0, np.pi / 4, 0),
             atol=1e-16,
             rtol=1e-8,
@@ -329,14 +332,14 @@ class TestMagneticFields:
         field.I = 0
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
+            field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
             correct_field(10.0, 0, 0) * 2,
             atol=1e-16,
             rtol=1e-8,
         )
         # use default grid
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=None),
+            field.compute_magnetic_field([10.0, np.pi / 4, 0], source_grid=None),
             correct_field(10.0, np.pi / 4, 0) * 2,
             atol=1e-12,
             rtol=1e-8,
@@ -351,13 +354,15 @@ class TestMagneticFields:
         )
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
+            field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
             correct_field(10.0, 0, 0),
             atol=1e-16,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=surface_grid),
+            field.compute_magnetic_field(
+                [10.0, np.pi / 4, 0], source_grid=surface_grid
+            ),
             correct_field(10.0, np.pi / 4, 0),
             atol=1e-16,
             rtol=1e-8,
@@ -719,7 +724,7 @@ class TestMagneticFields:
     @pytest.mark.unit
     def test_Bnormal_save_and_load_HELIOTRON(self, tmpdir_factory):
         """Tests Bnormal save/load for simple toroidal field with HELIOTRON."""
-        ### test on simple field with stellarator
+        # test on simple field with stellarator
         tmpdir = tmpdir_factory.mktemp("BNORM_files")
         path = tmpdir.join("BNORM_desc_heliotron.txt")
         tfield = ToroidalMagneticField(2, 1)

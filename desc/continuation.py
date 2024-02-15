@@ -350,6 +350,8 @@ def _add_shaping(
             deltas["Rb_lmn"] *= bdry_step
         if "Zb_lmn" in deltas:
             deltas["Zb_lmn"] *= bdry_step
+        if "Lb_lmn" in deltas:
+            deltas["Lb_lmn"] *= bdry_step
         bdry_ratio += bdry_step
 
         constraints_i = get_fixed_boundary_constraints(eq=eqi)

@@ -3,6 +3,7 @@
 import numpy as np
 
 from desc.backend import jnp
+from desc.geometry import PoincareSurface
 from desc.objectives import (
     BoundaryLambdaSelfConsistency,
     BoundaryRSelfConsistency,
@@ -452,7 +453,7 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
-            if arg == "Lb_lmn":
+            if arg == "Lb_lmn" and isinstance(self._eq.surface, PoincareSurface):
                 c = get_instance(
                     self._linear_constraints, BoundaryLambdaSelfConsistency
                 )

@@ -6,6 +6,7 @@ import pytest
 import desc.examples
 from desc.compute import rpz2xyz
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
 
@@ -72,6 +73,16 @@ class TestFourierRZToroidalSurface:
         assert c.NFP == 3
         assert c.R_basis.NFP == 3
         assert c.Z_basis.NFP == 3
+
+        # test assert statement for array sizes matching
+        with pytest.raises(AssertionError):
+            c = FourierRZToroidalSurface(
+                R_lmn=np.array([1, 2, 3]), modes_R=np.array([[0, 0], [1, 0]])
+            )
+        with pytest.raises(AssertionError):
+            c = FourierRZToroidalSurface(
+                Z_lmn=np.array([1, 2, 3]), modes_Z=np.array([[0, 0], [1, 0]])
+            )
 
     @pytest.mark.unit
     def test_from_input_file(self):
@@ -142,8 +153,8 @@ class TestFourierRZToroidalSurface:
         s = FourierRZToroidalSurface()
         grid = LinearGrid(M=3, N=2)
         offset = 1
-        (s_offset, data, _) = FourierRZToroidalSurface.constant_offset_surface(
-            s, offset, grid, M=1, N=1, full_output=True
+        (s_offset, data, _) = s.constant_offset_surface(
+            offset, grid, M=1, N=1, full_output=True
         )
         r_offset_surf = data["x_offset_surface"]
         r_surf = data["x"]
@@ -212,10 +223,10 @@ class TestFourierRZToroidalSurface:
         """Test constant offset algorithm for a rotating ellipse."""
         eq = desc.examples.get("HELIOTRON")
         s = eq.surface
-        grid = LinearGrid(M=4, N=4, NFP=eq.NFP)
+        s.change_resolution(M=2, N=2)
         offset = 0.1
-        (s_offset, data, _) = FourierRZToroidalSurface.constant_offset_surface(
-            s, offset, grid, M=2, N=2, full_output=True
+        (s_offset, data, _) = s.constant_offset_surface(
+            offset, grid=None, M=2, N=2, full_output=True
         )
         r_offset_surf = data["x_offset_surface"]
         r_surf = data["x"]
@@ -248,7 +259,7 @@ class TestFourierRZToroidalSurface:
 
         np.testing.assert_allclose(
             R00_offset,
-            eq.surface.R_lmn[eq.surface.R_basis.get_idx(M=0, N=0)],
+            s.R_lmn[s.R_basis.get_idx(M=0, N=0)],
             atol=1e-3,
         )
         np.testing.assert_allclose(R10_offset, -a - offset, atol=1e-2)
@@ -261,7 +272,7 @@ class TestFourierRZToroidalSurface:
 
         np.testing.assert_allclose(
             R00_offset,
-            eq.surface.R_lmn[eq.surface.R_basis.get_idx(M=0, N=0)],
+            s.R_lmn[s.R_basis.get_idx(M=0, N=0)],
             atol=1e-3,
         )
         # cannot do the same sort of distance test as the axisymmetric test
@@ -270,6 +281,16 @@ class TestFourierRZToroidalSurface:
         # so, we cannot know which points on the surface to compare to see if
         # the distance is = offset without doing rootfinding (like is done to
         # find the surface in the first place)
+
+        # we can check that that avg XS area is what we expect
+        semi_major = a + b
+        semi_minor = a - b
+        correct_offset_XS_area = np.pi * (offset + semi_major) * (offset + semi_minor)
+        np.testing.assert_allclose(
+            Equilibrium(surface=s_offset).compute("A")["A"],
+            correct_offset_XS_area,
+            rtol=2e-2,
+        )
 
     def test_position(self):
         """Tests for position on surface."""
@@ -282,6 +303,60 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(data["x"][0, 1], 0, atol=1e-14)  # this is y
         np.testing.assert_allclose(data["Z"], 0)
         np.testing.assert_allclose(data["x"][0, 2], 0)
+
+    @pytest.mark.unit
+    def test_surface_from_values(self):
+        """Test for constructing elliptical surface from values."""
+        surface = get("HELIOTRON", "boundary")
+        grid = LinearGrid(M=20, N=20, sym=False, NFP=surface.NFP, endpoint=False)
+        data = surface.compute(["R", "phi", "Z"], grid=grid)
+
+        theta = grid.nodes[:, 1]
+
+        coords = np.vstack([data["R"], data["phi"], data["Z"]]).T
+        surface2 = FourierRZToroidalSurface.from_values(
+            coords,
+            theta,
+            M=surface.M,
+            N=surface.N,
+            NFP=surface.NFP,
+            sym=True,
+            w=np.ones_like(theta),
+        )
+        grid = LinearGrid(M=25, N=25, sym=False, NFP=surface.NFP)
+        np.testing.assert_allclose(
+            surface.compute("x", grid=grid)["x"], surface2.compute("x", grid=grid)["x"]
+        )
+
+        # with a different poloidal angle
+        theta = -np.arctan2(data["Z"] - 0, data["R"] - 10)
+        surface2 = FourierRZToroidalSurface.from_values(
+            coords,
+            theta,
+            M=surface.M,
+            N=surface.N,
+            NFP=surface.NFP,
+            sym=True,
+        )
+        # cannot compare x directly because thetas are different
+        np.testing.assert_allclose(
+            surface.compute("V")["V"], surface2.compute("V")["V"], rtol=1e-4
+        )
+        np.testing.assert_allclose(
+            surface.compute("S")["S"], surface2.compute("S")["S"], rtol=1e-3
+        )
+
+        # test assert statements
+        with pytest.raises(NotImplementedError):
+            FourierRZToroidalSurface.from_values(
+                coords,
+                theta,
+                zeta=theta,
+                M=surface.M,
+                N=surface.N,
+                NFP=surface.NFP,
+                sym=True,
+            )
 
 
 class TestZernikeRZToroidalSection:

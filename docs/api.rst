@@ -32,6 +32,17 @@ Coils
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
 
+Compatibility
+*************
+
+.. autosummary::
+    :toctree: _api/compat
+    :recursive:
+
+    desc.compat.ensure_positive_jacobian
+    desc.compat.flip_helicity
+    desc.compat.rescale
+
 Continuation
 ************
 .. autosummary::
@@ -40,7 +51,6 @@ Continuation
 
     desc.continuation.solve_continuation
     desc.continuation.solve_continuation_automatic
-
 
 Derivatives
 ***********
@@ -54,7 +64,6 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
     desc.derivatives.AutoDiffDerivative
     desc.derivatives.FiniteDiffDerivative
 
-
 Equilibrium
 ***********
 
@@ -66,7 +75,6 @@ Equilibrium
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
 
-
 Examples
 ********
 
@@ -76,7 +84,6 @@ Examples
 
     desc.examples.get
     desc.examples.listall
-
 
 Geometry
 ********
@@ -119,7 +126,6 @@ IO
     desc.io.InputReader
     desc.io.load
 
-
 Magnetic Fields
 ***************
 
@@ -135,6 +141,8 @@ Magnetic Fields
     desc.magnetic_fields.PoloidalMagneticField
     desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.ScalarPotentialField
+    desc.magnetic_fields.CurrentPotentialField
+    desc.magnetic_fields.FourierCurrentPotentialField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
 
@@ -197,8 +205,6 @@ Objective Functions
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 
-
-
 Optimize
 ********
 
@@ -214,7 +220,6 @@ Optimize
    desc.optimize.lsqtr
    desc.optimize.register_optimizer
    desc.optimize.sgd
-
 
 Perturbations
 *************

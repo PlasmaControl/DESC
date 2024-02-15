@@ -40,6 +40,7 @@ __all__ = [
     "plot_grid",
     "plot_logo",
     "plot_qs_error",
+    "plot_regcoil_outputs",
     "plot_section",
     "plot_surfaces",
 ]
@@ -340,6 +341,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         title_fontsize: integer, font size of the title
         xlabel_fontsize: integer, font size of the x axis label
+        color: str or tuple, color to use for scatter plot
+        marker: str, marker to use for scatter plot
+
 
     Returns
     -------
@@ -377,19 +381,33 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     fig, ax = _format_ax(ax, rows=1, cols=3, figsize=kwargs.pop("figsize", None))
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    marker = kwargs.pop("marker", "o")
+    color = kwargs.pop("color", "b")
 
     assert (
         len(kwargs) == 0
     ), f"plot_coefficients got unexpected keyword argument: {kwargs.keys()}"
 
     ax[0, 0].semilogy(
-        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1), np.abs(eq.R_lmn), "bo"
+        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.R_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
     ax[0, 1].semilogy(
-        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1), np.abs(eq.Z_lmn), "bo"
+        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.Z_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
     ax[0, 2].semilogy(
-        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1), np.abs(eq.L_lmn), "bo"
+        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.L_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
 
     ax[0, 0].set_xlabel(xlabel, fontsize=xlabel_fontsize)
@@ -3849,3 +3867,242 @@ def _field_line_Rbf(rho, theta0, phi_end, grid, Rs, Zs, B_interp, phi0=0):
     fZ = sol.y[1, :]
     fPhi = sol.t
     return fR, fPhi, fZ, sol
+
+
+def plot_regcoil_outputs(
+    field, data, eq, eval_grid=None, source_grid=None, return_data=False, **kwargs
+):
+    """Plot the output of REGCOIL.
+
+    Parameters
+    ----------
+    field : FourierCurrentPotentialField
+        object with which to plot the data from the REGCOIL output.
+        should have the correct resolutions and NFP to match the REGCOIL output
+    data : dict
+        dictionary containing the output of a call to ``run_regcoil`` method
+        of ``FourierCurrentPotentiaField``
+    eq : Equilibrium
+        the equilibrium that the Bn error was evaluated on.
+    eval_grid : Grid, optional
+        grid to evaluate the magnetic field on, if not None, will plot the magnetic
+        field on a default LinearGrid
+    source_grid : Grid, optional
+        grid to evaluate the current potential on, if not None, will plot the current
+        potential on a default LinearGrid
+    return_data : bool, optional
+        if True, return the data plotted as well as fig,ax
+
+    Outputs
+    -------
+    fig : list of matplotlib.figure.Figure
+        list of figure being plotted to
+    ax : list of matplotlib.axes.Axes or list of ndarray of Axes
+        list of axes being plotted to
+    plot_data : dict
+        dictionary of the data plotted, only returned if ``return_data=True``
+        This is the same as data_regcoil
+    """
+    scan = isinstance(data["Phi_mn"], list)
+    # TODO: add flags for each subplot, also add |K| plot
+    Bn_tot = data["Bn_total"]
+    alphas = data["alpha"]
+    chi2Bs = data["chi^2_B"]
+    chi2Ks = data["chi^2_K"]
+    phi_mns = data["Phi_mn"]
+    if eval_grid is None:
+        eval_grid = data["eval_grid"]
+        eval_grid = (
+            eval_grid
+            if not eval_grid.sym
+            else LinearGrid(M=eval_grid.M, N=eval_grid.N, sym=False, NFP=eval_grid.NFP)
+        )
+    if source_grid is None:
+        source_grid = data["source_grid"]
+    # check if we can use existing quantities in data
+    # or re-evaluate
+    recalc_eval_grid_quantites = not eval_grid.eq(data["eval_grid"])
+
+    # TODO: if recalculating do we replace the data in the dict?
+
+    ncontours = kwargs.pop("ncontours", 20)
+    markersize = kwargs.pop("markersize", 12)
+    figdata = {}
+    axdata = {}
+    if not scan:
+        field.Phi_mn = data["Phi_mn"]
+        field.I = data["I"]
+        field.G = data["G"]
+        # TODO: replace with plot_2d call
+        phi_tot = field.compute("Phi", grid=source_grid)["Phi"]
+        # Bnormal plot
+        Bn_tot = (
+            Bn_tot
+            if not recalc_eval_grid_quantites
+            else field.compute_Bnormal(eq, eval_grid, source_grid)[0]
+        )
+        plt.rcParams.update({"font.size": 26})
+        plt.figure(figsize=(8, 8))
+        plt.contourf(
+            eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
+            eval_grid.nodes[eval_grid.unique_theta_idx, 1],
+            (Bn_tot).reshape(eval_grid.num_theta, eval_grid.num_zeta, order="F"),
+        )
+        plt.ylabel("theta")
+        plt.xlabel("zeta")
+        plt.title("Bnormal on plasma surface")
+        plt.colorbar()
+        plt.xlim([0, 2 * np.pi / field.NFP])
+        figdata["fig_Bn"] = plt.gcf()
+        axdata["ax_Bn"] = plt.gca()
+
+        # TODO: replace with plot_2d call
+        # current potential contour plot
+        plt.figure(figsize=(10, 10))
+        plt.rcParams.update({"font.size": 18})
+        plt.contour(
+            source_grid.nodes[source_grid.unique_zeta_idx, 2],
+            source_grid.nodes[source_grid.unique_theta_idx, 1],
+            (phi_tot).reshape(source_grid.num_theta, source_grid.num_zeta, order="F"),
+            levels=ncontours,
+        )
+        plt.colorbar()
+        plt.ylabel("theta")
+        plt.xlabel("zeta")
+        plt.title("Total Current Potential on winding surface")
+
+        plt.xlim([0, 2 * np.pi / field.NFP])
+        figdata["fig_Phi"] = plt.gcf()
+        axdata["ax_Phi"] = plt.gca()
+        if return_data:
+            return figdata, axdata, data
+        return figdata, axdata
+    else:  # show composite scan over alpha plots
+        # strongly based off of Landreman's REGCOIL plotting routine:
+        # github.com/landreman/regcoil/blob/master/
+        plt.figure(figsize=(16, 12))
+        plt.rcParams.update({"font.size": 20})
+        plt.scatter(alphas, chi2Bs, s=markersize)
+        plt.xlabel(r"$\alpha$ (regularization parameter)")
+        plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
+        plt.yscale("log")
+        plt.xscale("log")
+        figdata["fig_chi^2_B_vs_alpha"] = plt.gcf()
+        axdata["ax_chi^2_B_vs_alpha"] = plt.gca()
+        plt.figure(figsize=(16, 12))
+        plt.scatter(alphas, chi2Ks, s=markersize)
+        plt.ylabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
+        plt.xlabel(r"$\alpha$ (regularization parameter)")
+        plt.yscale("log")
+        plt.xscale("log")
+        figdata["fig_chi^2_K_vs_alpha"] = plt.gcf()
+        axdata["ax_chi^2_K_vs_alpha"] = plt.gca()
+        plt.figure(figsize=(16, 12))
+        plt.scatter(chi2Ks, chi2Bs, s=markersize)
+        plt.xlabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
+        plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
+        plt.yscale("log")
+        plt.xscale("log")
+        figdata["fig_chi^2_B_vs_chi^2_K"] = plt.gcf()
+        axdata["ax_chi^2_B_vs_chi^2_K"] = plt.gca()
+
+        nalpha = len(chi2Bs)
+        max_nalpha_for_contour_plots = 16
+        numPlots = min(nalpha, max_nalpha_for_contour_plots)
+        ialpha_to_plot = np.sort(list(set(map(int, np.linspace(1, nalpha, numPlots)))))
+        numPlots = len(ialpha_to_plot)
+
+        numCols = int(np.ceil(np.sqrt(numPlots)))
+        numRows = int(np.ceil(numPlots * 1.0 / numCols))
+
+        ########################################################
+        # Plot total current potentials
+        ########################################################
+        plt.figure(figsize=(16, 12))
+        for whichPlot in range(numPlots):
+            plt.subplot(numRows, numCols, whichPlot + 1)
+            phi_mn_opt = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            # TODO replace these with plot 2d calls with the ax of each
+            # subplot passed in
+            field.Phi_mn = phi_mn_opt
+            field.I = data["I"]
+            field.G = data["G"]
+            phi_tot = field.compute("Phi", grid=source_grid)["Phi"]
+
+            plt.rcParams.update({"font.size": 18})
+
+            plt.contour(
+                source_grid.nodes[source_grid.unique_zeta_idx, 2],
+                source_grid.nodes[source_grid.unique_theta_idx, 1],
+                (phi_tot).reshape(
+                    source_grid.num_theta, source_grid.num_zeta, order="F"
+                ),
+                levels=ncontours,
+            )
+            plt.ylabel("theta")
+            plt.xlabel("zeta")
+            plt.title(
+                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                fontsize="x-small",
+            )
+            plt.colorbar()
+            plt.xlim([0, 2 * np.pi / field.NFP])
+        plt.tight_layout()
+        plt.figtext(
+            0.5,
+            0.995,
+            "Total Current Potential",
+            horizontalalignment="center",
+            verticalalignment="top",
+            fontsize="small",
+        )
+        figdata["fig_scan_Phi"] = plt.gcf()
+        axdata["ax_scan_Phi"] = plt.gca()
+        plt.figure(figsize=(16, 12))
+        for whichPlot in range(numPlots):
+            plt.subplot(numRows, numCols, whichPlot + 1)
+            field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            Bn = (
+                Bn_tot[ialpha_to_plot[whichPlot] - 1]
+                if not recalc_eval_grid_quantites
+                else field.compute_Bnormal(eq, eval_grid, source_grid)[0]
+            )
+
+            plt.rcParams.update({"font.size": 18})
+
+            plt.contourf(
+                eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
+                eval_grid.nodes[eval_grid.unique_theta_idx, 1],
+                (Bn).reshape(eval_grid.num_theta, eval_grid.num_zeta, order="F"),
+                levels=ncontours,
+            )
+            plt.ylabel("theta")
+            plt.xlabel("zeta")
+            plt.title(
+                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                fontsize="x-small",
+            )
+            plt.colorbar()
+            plt.xlim([0, 2 * np.pi / field.NFP])
+        plt.tight_layout()
+        units = " (T)"
+        plt.figtext(
+            0.5,
+            0.995,
+            "Bnormal" + units,
+            horizontalalignment="center",
+            verticalalignment="top",
+            fontsize="small",
+        )
+        figdata["fig_scan_Bn"] = plt.gcf()
+        axdata["ax_scan_Bn"] = plt.gca()
+        if return_data:
+            return (
+                figdata,
+                axdata,
+                data,
+            )
+        else:
+            return figdata, axdata

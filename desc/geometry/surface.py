@@ -4,11 +4,11 @@ import numbers
 import warnings
 
 import numpy as np
+import scipy
 
 from desc.backend import jit, jnp, put, root_scalar, sign, vmap
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
-from desc.compute.utils import cross, safediv
+from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -52,8 +52,8 @@ class FourierRZToroidalSurface(Surface):
         "_Z_lmn",
         "_R_basis",
         "_Z_basis",
-        "rho",
         "_NFP",
+        "_rho",
     ]
 
     def __init__(
@@ -79,6 +79,13 @@ class FourierRZToroidalSurface(Surface):
         R_lmn, Z_lmn, modes_R, modes_Z = map(
             np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
         )
+
+        assert (
+            R_lmn.size == modes_R.shape[0]
+        ), "R_lmn size and modes_R.shape[0] must be the same size!"
+        assert (
+            Z_lmn.size == modes_Z.shape[0]
+        ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
@@ -112,7 +119,7 @@ class FourierRZToroidalSurface(Surface):
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
         self._NFP = NFP
         self._sym = sym
-        self.rho = rho
+        self._rho = rho
 
         if check_orientation and self._compute_orientation() == -1:
             warnings.warn(
@@ -147,6 +154,15 @@ class FourierRZToroidalSurface(Surface):
     def Z_basis(self):
         """DoubleFourierSeries: Spectral basis for Z."""
         return self._Z_basis
+
+    @property
+    def rho(self):
+        """float: Flux surface label."""
+        return self._rho
+
+    @rho.setter
+    def rho(self, rho):
+        self._rho = rho
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
@@ -280,16 +296,7 @@ class FourierRZToroidalSurface(Surface):
             Surface with given Fourier coefficients.
 
         """
-        f = open(path)
-        isVMEC = False
-        for line in f.readlines():
-            if "&INDATA" in line.upper():
-                isVMEC = True
-                break
-        if isVMEC:  # vmec input, convert to desc
-            inputs = InputReader.parse_vmec_inputs(f)[-1]
-        else:
-            inputs = InputReader().parse_inputs(f)[-1]
+        inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
                 "boundary_ratio = {} != 1, surface may not be as expected".format(
@@ -362,28 +369,57 @@ class FourierRZToroidalSurface(Surface):
         return surf
 
     @classmethod
-    def from_values(cls, coords, nodes, M, N, NFP, sym=True):
+    def from_values(
+        cls,
+        coords,
+        theta,
+        zeta=None,
+        M=6,
+        N=6,
+        NFP=1,
+        sym=True,
+        check_orientation=True,
+        rcond=None,
+        w=None,
+    ):
         """Create a surface from given R,Z coordinates in real space.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical coordinates to fit as a FourierRZToroidalSurface
-        nodes : Grid or ndarray, shape(k,3)
-            Locations in (theta,zeta) where real space coordinates are given.
-            Expects same number of nodes as coords (N),
-            containing the theta and zeta angles corresponding to the
-            given coordinates (the rho coordinate is ignored).
-            This determines the poloidal and toroidal angle for the
-            resulting surface
+        coords : array-like shape(num_points,3) or Grid
+            cylindrical coordinates (R,phi,Z) to fit as a FourierRZToroidalSurface
+        theta : ndarray, shape(num_points,)
+            Locations in poloidal angle theta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the poloidal angle for the resulting surface.
+        zeta : ndarray, shape(num_points,)
+            Locations in toroidal angle zeta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the toroidal angle for the resulting surface.
+            if None, defaults to assuming the toroidal angle is the cylindrical phi
+            and so sets zeta = phi = coords[:,1]
         M : int
-            poloidal resolution of basis used to fit surface with
+            poloidal resolution of basis used to fit surface with.
+            It is recommended to fit with M < num_theta points per toroidal plane,
+            i.e. if num_points = num_theta*num_zeta , then want to ensure M < num_theta
         N : int
             toroidal resolution of basis used to fit surface with
+            It is recommended to fit with N < num_zeta points per poloidal plane.
+            i.e. if num_points = num_theta*num_zeta , then want to ensure N < num_zeta
         NFP : int
             number of toroidal field periods for surface
         sym : bool
             True if surface is stellarator-symmetric
+        check_orientation : bool
+            whether to check left-handedness of coordinates and flip if necessary.
+        rcond : float
+            Relative condition number of the fit. Singular values smaller than this
+            relative to the largest singular value will be ignored. The default value
+            is len(x)*eps, where eps is the relative precision of the float type, about
+            2e-16 in most cases.
+        w : array-like, shape(num_points,)
+            Weights to apply to the sample coordinates. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
 
         Returns
         -------
@@ -391,19 +427,58 @@ class FourierRZToroidalSurface(Surface):
             Surface with Fourier coefficients fitted from input coords.
 
         """
-        if not isinstance(nodes, Grid):
-            nodes = Grid(nodes, sort=False)
+        theta = np.asarray(theta)
+        assert (
+            coords.shape[0] == theta.size
+        ), "coords first dimenson and theta must have same size"
+        if zeta is None:
+            zeta = coords[:, 1]
+        else:
+            raise NotImplementedError("zeta != phi not yet implemented")
+        nodes = Grid(
+            np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
+            sort=False,
+            jitable=True,
+        )
 
         R = coords[:, 0]
         Z = coords[:, 2]
         R_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
         Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        if w is None:  # unweighted fit
+            transform = Transform(
+                nodes, R_basis, build=False, build_pinv=True, rcond=rcond
+            )
+            Rb_lmn = transform.fit(R)
 
-        transform = Transform(nodes, R_basis, build=False, build_pinv=True)
-        Rb_lmn = transform.fit(R)
+            transform = Transform(
+                nodes, Z_basis, build=False, build_pinv=True, rcond=rcond
+            )
+            Zb_lmn = transform.fit(Z)
+        else:  # perform weighted fit
+            # solves system W A x = W b
+            # where A is the transform matrix, W is the diagonal weight matrix
+            # of weights w, and b is the vector of data points
+            w = np.asarray(w)
+            W = np.diag(w)
+            assert w.size == R.size, "w must same length as number of points being fit"
 
-        transform = Transform(nodes, Z_basis, build=False, build_pinv=True)
-        Zb_lmn = transform.fit(Z)
+            transform = Transform(
+                nodes, R_basis, build=True, build_pinv=False, method="direct1"
+            )
+            AR = transform.matrices[transform.method][0][0][0]
+
+            transform = Transform(
+                nodes, Z_basis, build=True, build_pinv=False, method="direct1"
+            )
+            AZ = transform.matrices[transform.method][0][0][0]
+
+            A = scipy.linalg.block_diag(W @ AR, W @ AZ)
+            b = np.concatenate([w * R, w * Z])
+            x_lmn = np.linalg.lstsq(A, b, rcond=rcond)[0]
+
+            Rb_lmn = x_lmn[0 : R_basis.num_modes]
+            Zb_lmn = x_lmn[R_basis.num_modes :]
 
         surf = cls(
             Rb_lmn,
@@ -412,14 +487,14 @@ class FourierRZToroidalSurface(Surface):
             Z_basis.modes[:, 1:],
             NFP,
             sym,
+            check_orientation=check_orientation,
         )
         return surf
 
-    @classmethod
     def constant_offset_surface(
-        cls, base_surface, offset, grid=None, M=None, N=None, full_output=False
+        self, offset, grid=None, M=None, N=None, full_output=False
     ):
-        """Create a FourierRZSurface with constant offset from the given surface.
+        """Create a FourierRZSurface with constant offset from the base surface (self).
 
         Implementation of algorithm described in Appendix B of
         "An improved current potential method for fast computation of
@@ -475,12 +550,13 @@ class FourierRZToroidalSurface(Surface):
             for each point. Only returned if ``full_output`` is True
 
         """
+        base_surface = self
         if grid is None:
             grid = LinearGrid(
-                M=base_surface.M,
-                N=base_surface.N,
+                M=base_surface.M * 2,
+                N=base_surface.N * 2,
                 NFP=base_surface.NFP,
-                sym=base_surface.sym,
+                sym=False,
             )
         assert isinstance(
             base_surface, FourierRZToroidalSurface
@@ -488,28 +564,16 @@ class FourierRZToroidalSurface(Surface):
         M = base_surface.M if M is None else int(M)
         N = base_surface.N if N is None else int(N)
 
-        Rbasis = base_surface.R_basis
-        Zbasis = base_surface.Z_basis
-
         def n_and_r_jax(nodes):
-            R = Rbasis.evaluate(nodes) @ base_surface.R_lmn
-            Z = Zbasis.evaluate(nodes) @ base_surface.Z_lmn
-            R_t = Rbasis.evaluate(nodes, np.array([0, 1, 0])) @ base_surface.R_lmn
-            Z_t = Zbasis.evaluate(nodes, np.array([0, 1, 0])) @ base_surface.Z_lmn
-            R_z = Rbasis.evaluate(nodes, np.array([0, 0, 1])) @ base_surface.R_lmn
-            Z_z = Zbasis.evaluate(nodes, np.array([0, 0, 1])) @ base_surface.Z_lmn
+            data = base_surface.compute(
+                ["X", "Y", "Z", "n_rho"],
+                grid=Grid(nodes, jitable=True, sort=False),
+                method="jitable",
+            )
 
             phi = nodes[:, 2]
-            coords = jnp.stack([R, phi, Z], axis=1)
-            re = rpz2xyz(coords)
-            # NOTE: when generalized toroidal angle is implemented
-            # this must include omega
-            e_theta = jnp.array([R_t, jnp.zeros_like(R_t), Z_t]).T
-            e_zeta = jnp.array([R_z, R, Z_z]).T
-            e_theta_cross_e_zeta = cross(e_theta, e_zeta)
-            n = safediv(
-                e_theta_cross_e_zeta.T, jnp.linalg.norm(e_theta_cross_e_zeta, axis=1)
-            ).T
+            re = jnp.vstack([data["X"], data["Y"], data["Z"]]).T
+            n = data["n_rho"]
             n = rpz2xyz_vec(n, phi=phi)
             r_offset = re + offset * n
             return n, re, r_offset
@@ -519,16 +583,7 @@ class FourierRZToroidalSurface(Surface):
             n, r, r_offset = n_and_r_jax(nodes)
             return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
 
-        vecroot = jit(
-            vmap(
-                lambda x0, *p: root_scalar(
-                    fun_jax,
-                    x0,
-                    jac=None,
-                    args=p,
-                )
-            )
-        )
+        vecroot = jit(vmap(lambda x0, *p: root_scalar(fun_jax, x0, jac=None, args=p)))
         zetas, (res, niter) = vecroot(
             grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
         )
@@ -542,9 +597,9 @@ class FourierRZToroidalSurface(Surface):
         data["x"] = xyz2rpz(x)
         data["x_offset_surface"] = xyz2rpz(x_offsets)
 
-        offset_surface = cls.from_values(
+        offset_surface = FourierRZToroidalSurface.from_values(
             data["x_offset_surface"],
-            nodes,
+            theta=nodes[:, 1],
             M=M,
             N=N,
             NFP=base_surface.NFP,
@@ -603,8 +658,8 @@ class ZernikeRZToroidalSection(Surface):
         "_Z_lmn",
         "_R_basis",
         "_Z_basis",
-        "zeta",
         "_spectral_indexing",
+        "_zeta",
     ]
 
     def __init__(
@@ -630,6 +685,13 @@ class ZernikeRZToroidalSection(Surface):
         R_lmn, Z_lmn, modes_R, modes_Z = map(
             np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
         )
+
+        assert (
+            R_lmn.size == modes_R.shape[0]
+        ), "R_lmn size and modes_R.shape[0] must be the same size!"
+        assert (
+            Z_lmn.size == modes_Z.shape[0]
+        ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
@@ -670,7 +732,7 @@ class ZernikeRZToroidalSection(Surface):
         self._sym = sym
         self._spectral_indexing = spectral_indexing
 
-        self.zeta = zeta
+        self._zeta = zeta
 
         if check_orientation and self._compute_orientation() == -1:
             warnings.warn(
@@ -697,6 +759,15 @@ class ZernikeRZToroidalSection(Surface):
     def Z_basis(self):
         """ZernikePolynomial: Spectral basis for Z."""
         return self._Z_basis
+
+    @property
+    def zeta(self):
+        """float: Toroidal angle."""
+        return self._zeta
+
+    @zeta.setter
+    def zeta(self, zeta):
+        self._zeta = zeta
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""

@@ -159,11 +159,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
         ----------
         coords : array-like shape(n,3)
             Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
-        params : dict or array-like of dict, optional
+        params : dict, optional
             Parameters to pass to Curve.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
 
@@ -580,11 +580,11 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         ----------
         coords : array-like shape(n,3)
             Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
-        params : dict or array-like of dict, optional
+        params : dict, optional
             Parameters to pass to Curve.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : Grid, int or None, optional
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
 
@@ -809,7 +809,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : Grid or int or array-like, optional
+        grid : Grid or int, optional
             Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         params : dict of ndarray or array-like
@@ -867,7 +867,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Parameters to pass to coils, either the same for all coils or one for each.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : Grid, int or None, optional
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
 
@@ -1414,7 +1414,7 @@ class MixedCoilSet(CoilSet):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : Grid or int or array-like, optional
+        grid : Grid or int, optional
             Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
             If array-like, should be 1 value per coil.
@@ -1462,7 +1462,7 @@ class MixedCoilSet(CoilSet):
             Parameters to pass to coils, either the same for all coils or one for each.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
+        source_grid : Grid, int or None, optional
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
 

@@ -495,7 +495,7 @@ class BoundaryLambdaSelfConsistency(_Objective):
         self,
         eq,
         surface_label=None,
-        name="self_consistency Z",
+        name="self_consistency Lambda",
     ):
         self._surface_label = surface_label
         super().__init__(

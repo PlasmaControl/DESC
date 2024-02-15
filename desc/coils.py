@@ -1414,7 +1414,7 @@ class MixedCoilSet(CoilSet):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : Grid or int, optional
+        grid : Grid or int or array-like, optional
             Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
             If array-like, should be 1 value per coil.
@@ -1460,11 +1460,13 @@ class MixedCoilSet(CoilSet):
             Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for each.
+            If array-like, should be 1 value per coil.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None, optional
+        source_grid : Grid, int or None or array-like, optional
             Grid used to discretize coils. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
+            If array-like, should be 1 value per coil.
 
         Returns
         -------

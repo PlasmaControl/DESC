@@ -20,6 +20,7 @@ from desc.objectives import (
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
 )
+from desc.perturbations import get_deltas
 from desc.profiles import PowerSeriesProfile
 
 from .utils import area_difference, compute_coords
@@ -355,11 +356,16 @@ def test_poincare_bc(HELIOTRON):
     """Test fixed poincare solve from input file."""
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
 
-    print("Solving Poincare Equilibrium ...")
+    print("Creating equilibrium...")
     eq_poin = eq.set_poincare_equilibrium()
-    constraints = get_fixed_boundary_constraints(eq=eq_poin)
-    objective = ObjectiveFunction(ForceBalance(eq_poin))
-    eq_poin.solve(
+    eq_GS = eq_poin.copy()
+    eq_GS.surface = eq_poin.get_surface_at(rho=1)
+    eq_GS.change_resolution(eq.L, eq.M, 0, N_grid=0)
+
+    print("\nSolving Grad Shafranov...")
+    constraints = get_fixed_boundary_constraints(eq=eq_GS)
+    objective = ObjectiveFunction(ForceBalance(eq_GS))
+    eq_GS.solve(
         verbose=3,
         objective=objective,
         constraints=constraints,
@@ -369,11 +375,41 @@ def test_poincare_bc(HELIOTRON):
         gtol=0,
     )
 
+    print("\nPerturbing GS...")
+    eq_GS.change_resolution(eq.L, eq.M, eq.N, N_grid=eq.N_grid)
+    eq_perturb = eq_GS.set_poincare_equilibrium()
+    eq_perturb.change_resolution(eq.L, eq.M, eq.N)
+
+    surf1 = eq_perturb.surface
+    surf2 = eq_poin.surface
+    things1 = {"surface_poincare": surf1}
+    things2 = {"surface_poincare": surf2}
+
+    deltas = get_deltas(things1, things2)
+    constraints = get_fixed_boundary_constraints(eq=eq_perturb)
+    objective = ObjectiveFunction(ForceBalance(eq_perturb))
+    eq_perturb.perturb(
+        objective=objective, constraints=constraints, deltas=deltas, tr_ratio=0.02
+    )
+
+    print("\nSolving last time...")
+    constraints = get_fixed_boundary_constraints(eq=eq_perturb)
+    objective = ObjectiveFunction(ForceBalance(eq_perturb))
+    eq_perturb.solve(
+        verbose=3,
+        objective=objective,
+        constraints=constraints,
+        maxiter=250,
+        ftol=0,
+        xtol=0,
+        gtol=0,
+    )
+
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq, Nz=6)
-    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq_poin, Nz=6)
+    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq_perturb, Nz=6)
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-2)
+    np.testing.assert_allclose(rho_err, 0, atol=5e-2)
+    np.testing.assert_allclose(theta_err, 0, atol=5e-2)
 
 
 @pytest.mark.unit

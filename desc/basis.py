@@ -6,7 +6,7 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign
+from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign, switch
 from desc.io import IOAble
 from desc.utils import flatten_list
 
@@ -1449,37 +1449,14 @@ def zernike_radial(r, l, m, dr=0):
     """
     dr = jnp.asarray(dr).astype(int)
 
-    def ZeroOne(args):
-        def Zero(args):
-            (r, l, m, dr) = args
-            return _zernike_radial_vectorized(r, l, m, dr)
-
-        def One(args):
-            (r, l, m, dr) = args
-            return _zernike_radial_vectorized_d1(r, l, m, dr)
-
-        return cond(dr == 0, Zero, One, (r, l, m, dr))
-
-    def Rest(args):
-        def Two(args):
-            (r, l, m, dr) = args
-            return _zernike_radial_vectorized_d2(r, l, m, dr)
-
-        def ThreeFour(args):
-            def Three(args):
-                (r, l, m, dr) = args
-                return _zernike_radial_vectorized_d3(r, l, m, dr)
-
-            def Four(args):
-                (r, l, m, dr) = args
-                return _zernike_radial_vectorized_d4(r, l, m, dr)
-
-            return cond(dr == 3, Three, Four, (r, l, m, dr))
-
-        return cond(dr == 2, Two, ThreeFour, (r, l, m, dr))
-
-    # Switch doesn't work. Under JIT, only viable option seems this conditional
-    return cond(dr < 2, ZeroOne, Rest, (r, l, m, dr))
+    branches = [
+        _zernike_radial_vectorized,
+        _zernike_radial_vectorized_d1,
+        _zernike_radial_vectorized_d2,
+        _zernike_radial_vectorized_d3,
+        _zernike_radial_vectorized_d4,
+    ]
+    return switch(dr, branches, r, l, m, dr)
 
 
 @functools.partial(jnp.vectorize, excluded=(1, 2, 3), signature="()->(k)")

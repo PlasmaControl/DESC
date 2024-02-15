@@ -812,6 +812,48 @@ class Equilibrium(IOAble, Optimizable):
         eq_poincare.axis = eq_poincare.get_axis()
         return eq_poincare
 
+    def print_summary(self):
+        """Print a summary of the equilibrium."""
+        print(self)
+        print("\nDimensions")
+        print("===============")
+        print("NFP: ", self.NFP)
+        print(f"L, L_grid: {self.L}   {self.L_grid}")
+        print(f"M, M_grid: {self.M}   {self.M_grid}")
+        print(f"N, N_grid: {self.N}   {self.N_grid}")
+        print(
+            f"R_lmn_dim: {self.R_lmn.size}   "
+            + f"\nZ_lmn_dim: {self.Z_lmn.size}   "
+            + f"\nL_lmn_dim: {self.L_lmn.size}   "
+        )
+        print("\nsurface: ", self.surface.__class__.__name__)
+        print(f"\tL: {self.surface.L}  M: {self.surface.M}  N: {self.surface.N}")
+        if isinstance(self.surface, PoincareSurface):
+            print(
+                f"\tR_lmn_dim: {self.surface.R_lmn.size}   "
+                + f"\n\tZ_lmn_dim: {self.surface.Z_lmn.size}   "
+                + f"\n\tL_lmn_dim: {self.surface.L_lmn.size}   "
+            )
+        else:
+            print(
+                f"\tR_lmn_dim: {self.surface.R_lmn.size}   "
+                + f"\n\tZ_lmn_dim: {self.surface.Z_lmn.size}   "
+            )
+        print("\naxis: ", self.axis.__class__.__name__)
+        print("sym: ", self.sym)
+        print("spectral_indexing: ", self.spectral_indexing)
+        print("\nProfiles")
+        print("===============")
+        print("Psi: ", self.Psi)
+        print("pressure: ", self.pressure)
+        print("iota: ", self.iota)
+        print("current: ", self.current)
+        print("electron_temperature: ", self.electron_temperature)
+        print("electron_density: ", self.electron_density)
+        print("ion_temperature: ", self.ion_temperature)
+        print("atomic_number: ", self.atomic_number)
+        print("anisotropy: ", self.anisotropy)
+
     def compute(
         self,
         names,

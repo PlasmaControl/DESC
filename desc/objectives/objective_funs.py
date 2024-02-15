@@ -387,7 +387,7 @@ class ObjectiveFunction(IOAble):
         """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
         things = things or self.things
-        assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
+        assert all([type(t1) == type(t2) for t1, t2 in zip(things, self.things)])
         xs = [t.pack_params(t.params_dict) for t in things]
         return jnp.concatenate(xs)
 
@@ -767,7 +767,6 @@ class _Objective(IOAble, ABC):
         device=None,
         name=None,
     ):
-
         if self._scalar:
             assert self._coordinates == ""
         assert np.all(np.asarray(weight) > 0)
@@ -864,9 +863,7 @@ class _Objective(IOAble, ABC):
 
         # set quadrature weights if they haven't been
         if hasattr(self, "_constants") and ("quad_weights" not in self._constants):
-            if self._coordinates == "":
-                w = jnp.ones((self.dim_f,))
-            elif self._coordinates == "rtz":
+            if self._coordinates == "rtz":
                 w = self._constants["transforms"]["grid"].weights
                 w *= jnp.sqrt(self._constants["transforms"]["grid"].num_nodes)
             elif self._coordinates == "r":
@@ -875,6 +872,8 @@ class _Objective(IOAble, ABC):
                     surface_label="rho",
                 )
                 w = jnp.sqrt(w)
+            else:
+                w = jnp.ones((self.dim_f,))
             if w.size:
                 w = jnp.tile(w, self.dim_f // w.size)
             self._constants["quad_weights"] = w

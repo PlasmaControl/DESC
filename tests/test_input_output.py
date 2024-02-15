@@ -496,7 +496,7 @@ def test_ascii_io(DSHAPE_current, tmpdir_factory):
         sym=True
     )
     write_ascii(tmp_path, eq1)
-    with pytest.warns(UserWarning):
+    with pytest.warns(UserWarning, match="not an even power series"):
         eq2 = read_ascii(tmp_path)
     assert np.allclose(eq1.R_lmn, eq2.R_lmn)
     assert np.allclose(eq1.Z_lmn, eq2.Z_lmn)
@@ -560,9 +560,7 @@ def test_io_SplineMagneticField(tmpdir_factory):
     Z = np.linspace(1, 2, 2)
     phi = np.linspace(1, 2, 2)
 
-    field = SplineMagneticField.from_field(
-        ToroidalMagneticField(R0=1, B0=1), R, phi, Z, period=2 * np.pi
-    )
+    field = SplineMagneticField.from_field(ToroidalMagneticField(R0=1, B0=1), R, phi, Z)
 
     field.save(tmp_path)
     field2 = load(tmp_path)
@@ -582,3 +580,17 @@ def test_io_SplineMagneticField(tmpdir_factory):
     for key in derivs1.keys():
         for key2 in derivs1[key].keys():
             np.testing.assert_allclose(derivs1[key][key2], derivs2[key][key2])
+
+
+@pytest.mark.unit
+def test_save_after_load(tmpdir_factory):
+    """Test saving a DESC .h5 file after loading it (see gh #871)."""
+    tmpdir = tmpdir_factory.mktemp("save_after_load_test")
+    tmp_path = tmpdir.join("save_after_load_test.h5")
+    eq = Equilibrium()
+    eq.save(tmp_path)
+    eq2 = load(tmp_path)
+    # ensure can save again without an error being thrown due
+    # to the .h5 file not being closed
+    eq2.save(tmp_path)
+    assert eq2.eq(eq)

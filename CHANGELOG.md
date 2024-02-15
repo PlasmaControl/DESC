@@ -1,6 +1,45 @@
 Changelog
 =========
 
+v0.10.4
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.10.3...v0.10.4)
+
+- `Equilibrium.map_coordinates` is now differentiable.
+- Removes method `Equilibrium.compute_flux_coordinates` as it is now redundant with the
+more general `Equilibrium.map_coordinates`.
+- Allows certain objectives to target ``FourierRZToroidalSurface`` objects as well as
+``Equilibrium`` objects, such as ``MeanCurvature``, ``PrincipalCurvature``, and ``Volume``.
+- Allow optimizations where the only object being optimized is not an ``Equilibrium``
+object e.g. optimizing only a ``FourierRZToroidalSurface`` object to have a certain
+``Volume``.
+- Many functions from ``desc.plotting`` now also work for plotting quantities from
+``Curve`` and ``Surface`` classes.
+- Adds method ``FourierRZToroidalSurface.constant_offset_surface`` which creates
+a  surface with a specified constant offset from the base surface.
+- Adds method ``FourierRZToroidalSurface.from_values``  to create a surface by fitting
+(R,phi,Z) points, along with a user-defined poloidal angle theta which sets the poloidal
+angle for the created surface
+- Adds new objective ``LinearObjectiveFromUser`` for custom linear constraints.
+- `elongation` is now computed as a function of zeta rather than a single global scalar.
+- Adds `beta_vol` and `betaxis` to VMEC output.
+- Reorder steps in `solve_continuation_automatic` to avoid finite pressure tokamak with
+zero current.
+- Fix error in lambda o(rho) constraint for near axis behavior.
+- Fix bug when optimizing with only a single constraint.
+- Fix some bugs causing NaN in reverse mode AD for some objectives.
+- Fix incompatible array shapes when user supplies initial guess for lagrange multipliers
+for augmented lagrangian optimizers.
+- Fix a bug caused when optimizing multiple objects at the same time and the order of
+the objects gets mixed up.
+
+
+v0.10.3
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.10.2...v0.10.3)
+
 - Adds ``deriv_mode`` keyword argument to all ``Objective``s for specifying whether to
 use forward or reverse mode automatic differentiation.
 - Adds ``desc.compat.rescale`` for rescaling equilibria to a specified size and field
@@ -16,7 +55,14 @@ the boundary surface produces self-intersecting surfaces. This can be disabled b
 passing `ensure_nested=False` when constructing the `Equilibrum`.
 - Adds `loss_function` argument to all `Objective`s for applying one of min/max/mean
 to objective function values (for targeting the average value of a profile, etc).
+- `Equilibrium.get_profile` now allows user to choose a profile type (power series, spline, etc)
 - Fixes a bug preventing linear objectives like `FixPressure` from being used as bounds.
+- Updates to tutorials and example scripts
+- `desc.interpolate` module has been deprecated in favor of the `interpax` package.
+- Utility functions like `desc.objectives.get_fixed_boundary_constraints` now no longer
+require the user to specify which profiles the equilibrium has, they will instead be
+inferred from the equilibrium argument.
+
 
 v0.10.2
 -------

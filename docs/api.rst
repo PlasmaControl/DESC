@@ -43,6 +43,17 @@ Coils
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
 
+Compatibility
+*************
+
+.. autosummary::
+    :toctree: _api/compat
+    :recursive:
+
+    desc.compat.ensure_positive_jacobian
+    desc.compat.flip_helicity
+    desc.compat.rescale
+
 Continuation
 ************
 .. autosummary::
@@ -51,7 +62,6 @@ Continuation
 
     desc.continuation.solve_continuation
     desc.continuation.solve_continuation_automatic
-
 
 Derivatives
 ***********
@@ -65,7 +75,6 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
     desc.derivatives.AutoDiffDerivative
     desc.derivatives.FiniteDiffDerivative
 
-
 Equilibrium
 ***********
 
@@ -77,7 +86,6 @@ Equilibrium
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
 
-
 Examples
 ********
 
@@ -87,7 +95,6 @@ Examples
 
     desc.examples.get
     desc.examples.listall
-
 
 Geometry
 ********
@@ -129,7 +136,6 @@ IO
 
     desc.io.InputReader
     desc.io.load
-
 
 Magnetic Fields
 ***************
@@ -208,8 +214,6 @@ Objective Functions
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 
-
-
 Optimize
 ********
 
@@ -225,7 +229,6 @@ Optimize
    desc.optimize.lsqtr
    desc.optimize.register_optimizer
    desc.optimize.sgd
-
 
 Perturbations
 *************

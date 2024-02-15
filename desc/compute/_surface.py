@@ -1,7 +1,7 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz
+from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 
 @register_compute_fun(
@@ -35,6 +35,54 @@ def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="X",
+    label="X",
+    units="m",
+    units_long="meters",
+    description="Cartesian X coordinate.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["x"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _X_Surface(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        # if basis is rpz, then "x" is rpz and we must convert to xyz
+        coords = rpz2xyz(coords)
+    data["X"] = coords[:, 0]
+    return data
+
+
+@register_compute_fun(
+    name="Y",
+    label="Y",
+    units="m",
+    units_long="meters",
+    description="Cartesian Y coordinate.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["x"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _Y_Surface(params, transforms, profiles, data, **kwargs):
+    coords = data["x"]
+    if kwargs.get("basis", "rpz").lower() == "rpz":
+        # if basis is rpz, then "x" is rpz and we must convert to xyz
+        coords = rpz2xyz(coords)
+    data["Y"] = coords[:, 1]
+    return data
+
+
+@register_compute_fun(
     name="R",
     label="R",
     units="m",
@@ -44,12 +92,12 @@ def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    coordinates="tz",
+    coordinates="rtz",
     data=["x"],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    parameterization="desc.geometry.core.Surface",
     basis="basis",
 )
-def _R_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+def _R_Surface(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
     if kwargs.get("basis", "rpz").lower() == "xyz":
         # if basis is xyz, then "x" is xyz and we must convert to rpz
@@ -68,17 +116,89 @@ def _R_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    coordinates="tz",
+    coordinates="rtz",
     data=["x"],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    parameterization="desc.geometry.core.Surface",
     basis="basis",
 )
-def _phi_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+def _phi_Surface(params, transforms, profiles, data, **kwargs):
     coords = data["x"]
     if kwargs.get("basis", "rpz").lower() == "xyz":
         # if basis is xyz, then "x" is xyz and we must convert to rpz
         coords = xyz2rpz(coords)
     data["phi"] = coords[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="phi_r",
+    label="\\partial_{\\rho} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, derivative wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_r_Surface(params, transforms, profiles, data, **kwargs):
+    coords_r = data["e_rho"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords_r = xyz2rpz_vec(coords_r, phi=data["phi"])
+    data["phi_r"] = coords_r[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="phi_t",
+    label="\\partial_{\\theta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, derivative wrt poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_t_Surface(params, transforms, profiles, data, **kwargs):
+    coords_t = data["e_theta"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords_t = xyz2rpz_vec(coords_t, phi=data["phi"])
+    data["phi_t"] = coords_t[:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="phi_z",
+    label="\\partial_{\\zeta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, derivative wrt toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta", "phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_z_Surface(params, transforms, profiles, data, **kwargs):
+    coords_z = data["e_zeta"]
+    if kwargs.get("basis", "rpz").lower() == "xyz":
+        # if basis is xyz, then "x" is xyz and we must convert to rpz
+        coords_z = xyz2rpz_vec(coords_z, phi=data["phi"])
+    data["phi_z"] = coords_z[:, 1]
     return data
 
 
@@ -92,11 +212,11 @@ def _phi_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    coordinates="tz",
+    coordinates="rtz",
     data=["x"],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    parameterization="desc.geometry.core.Surface",
 )
-def _Z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+def _Z_Surface(params, transforms, profiles, data, **kwargs):
     data["Z"] = data["x"][:, 2]
     return data
 

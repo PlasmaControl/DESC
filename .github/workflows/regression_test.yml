@@ -8,9 +8,6 @@ on:
   pull_request:
     branches:
       - master
-    paths-ignore:
-      - 'docs/**'
-      - 'devtools/**'
   workflow_dispatch:
 
 concurrency:
@@ -27,9 +24,9 @@ jobs:
         group: [1, 2, 3, 4, 5, 6]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
@@ -48,7 +45,7 @@ jobs:
           python -m pytest -v -m regression --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl --mpl-results-path=mpl_results.html --mpl-generate-summary=html --splits 6 --group ${{ matrix.group }} --splitting-algorithm least_duration --db ./prof.db
       - name: save coverage file and plot comparison results
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: regression_test_artifact-${{ matrix.python-version }}-${{ matrix.group }}
           path: |
@@ -57,7 +54,7 @@ jobs:
             ./prof.db
       - name: Upload coverage
         id : codecov
-        uses: Wandalen/wretry.action@v1.0.36
+        uses: Wandalen/wretry.action@v1.3.0
         with:
           action: codecov/codecov-action@v3
           with: |

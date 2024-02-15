@@ -38,13 +38,7 @@ from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import Timer, copy_coeffs, errorif, isposint, only1, setdefault
 
-from .coords import (
-    compute_flux_coords,
-    compute_theta_coords,
-    is_nested,
-    map_coordinates,
-    to_sfl,
-)
+from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
 from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
 
@@ -384,6 +378,12 @@ class Equilibrium(IOAble, Optimizable):
             self.set_initial_guess(ensure_nested=ensure_nested)
         if check_orientation:
             ensure_positive_jacobian(self)
+        if kwargs.get("check_kwargs", True):
+            errorif(
+                len(kwargs),
+                TypeError,
+                f"Equilibrium got unexpected kwargs: {kwargs.keys()}",
+            )
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -644,9 +644,6 @@ class Equilibrium(IOAble, Optimizable):
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
-            surface.grid = LinearGrid(
-                rho=rho, M=2 * surface.M, N=2 * surface.N, endpoint=True, NFP=self.NFP
-            )
             return surface
 
         if zeta is not None:
@@ -678,15 +675,9 @@ class Equilibrium(IOAble, Optimizable):
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
-            surface.grid = LinearGrid(
-                L=2 * surface.L,
-                M=2 * surface.M,
-                zeta=zeta,
-                endpoint=True,
-            )
             return surface
 
-    def get_profile(self, name, grid=None, **kwargs):
+    def get_profile(self, name, grid=None, kind="spline", **kwargs):
         """Return a SplineProfile of the desired quantity.
 
         Parameters
@@ -696,6 +687,8 @@ class Equilibrium(IOAble, Optimizable):
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
             Note profile will only be a function of the radial coordinate.
+        kind : {"power_series", "spline", "fourier_zernike"}
+            Type of returned profile.
 
         Returns
         -------
@@ -703,12 +696,19 @@ class Equilibrium(IOAble, Optimizable):
             Radial profile of the desired quantity.
 
         """
+        assert kind in {"power_series", "spline", "fourier_zernike"}
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
-        x = data[name]
-        x = grid.compress(x, surface_label="rho")
-        return SplineProfile(x, grid.nodes[grid.unique_rho_idx, 0], name=name)
+        f = data[name]
+        f = grid.compress(f, surface_label="rho")
+        x = grid.nodes[grid.unique_rho_idx, 0]
+        p = SplineProfile(f, x, name=name)
+        if kind == "power_series":
+            p = p.to_powerseries(order=min(self.L, len(x)), xs=x, sym=True)
+        if kind == "fourier_zernike":
+            p = p.to_fourierzernike(L=min(self.L, len(x)), xs=x)
+        return p
 
     def get_axis(self):
         """Return a representation for the magnetic axis.
@@ -809,29 +809,36 @@ class Equilibrium(IOAble, Optimizable):
         # and compute those first on a full grid
         p = "desc.equilibrium.equilibrium.Equilibrium"
         deps = list(set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names))
+        # TODO: replace this logic with `grid_type` from data_index
         dep0d = [
             dep
             for dep in deps
             if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
         ]
-        dep1d = [
+        dep1dr = [
             dep
             for dep in deps
             if (data_index[p][dep]["coordinates"] == "r") and (dep not in data)
         ]
+        dep1dz = [
+            dep
+            for dep in deps
+            if (data_index[p][dep]["coordinates"] == "z") and (dep not in data)
+        ]
 
         # whether we need to calculate 0d or 1d quantities on a special grid
         calc0d = bool(len(dep0d))
-        calc1d = bool(len(dep1d))
+        calc1dr = bool(len(dep1dr))
+        calc1dz = bool(len(dep1dz))
         if (  # see if the grid we're already using will work for desired qtys
             (grid.L >= self.L_grid)
             and (grid.M >= self.M_grid)
             and (grid.N >= self.N_grid)
         ):
             if isinstance(grid, QuadratureGrid):
-                calc0d = calc1d = False
+                calc0d = calc1dr = calc1dz = False
             if isinstance(grid, LinearGrid):
-                calc1d = False
+                calc1dr = calc1dz = False
 
         if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
@@ -848,32 +855,63 @@ class Equilibrium(IOAble, Optimizable):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        if calc1d and override_grid:
-            grid1d = LinearGrid(
+        if calc1dr and override_grid:
+            grid1dr = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
                 sym=self.sym,
             )
-            # Todo: Pass in data0d as a seed once there are 1d quantities that
-            #  depend on 0d quantities in data_index.
-            data1d = compute_fun(
+            # TODO: Pass in data0d as a seed once there are 1d quantities that
+            # depend on 0d quantities in data_index.
+            data1dr = compute_fun(
                 self,
-                dep1d,
+                dep1dr,
                 params=params,
-                transforms=get_transforms(dep1d, obj=self, grid=grid1d, **kwargs),
-                profiles=get_profiles(dep1d, obj=self, grid=grid1d),
+                transforms=get_transforms(dep1dr, obj=self, grid=grid1dr, **kwargs),
+                profiles=get_profiles(dep1dr, obj=self, grid=grid1dr),
                 data=None,
                 **kwargs,
             )
             # need to make this data broadcast with the data on the original grid
-            data1d = {
-                key: grid.expand(grid1d.compress(val))
-                for key, val in data1d.items()
-                if key in dep1d
+            data1dr = {
+                key: grid.expand(
+                    grid1dr.compress(val, surface_label="rho"), surface_label="rho"
+                )
+                for key, val in data1dr.items()
+                if key in dep1dr
             }
-            data.update(data1d)
+            data.update(data1dr)
+
+        if calc1dz and override_grid:
+            grid1dz = LinearGrid(
+                zeta=grid.nodes[grid.unique_zeta_idx, 2],
+                L=self.L_grid,
+                M=self.M_grid,
+                NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
+                sym=self.sym,
+            )
+            # TODO: Pass in data0d as a seed once there are 1d quantities that
+            # depend on 0d quantities in data_index.
+            data1dz = compute_fun(
+                self,
+                dep1dz,
+                params=params,
+                transforms=get_transforms(dep1dz, obj=self, grid=grid1dz, **kwargs),
+                profiles=get_profiles(dep1dz, obj=self, grid=grid1dz),
+                data=None,
+                **kwargs,
+            )
+            # need to make this data broadcast with the data on the original grid
+            data1dz = {
+                key: grid.expand(
+                    grid1dz.compress(val, surface_label="zeta"), surface_label="zeta"
+                )
+                for key, val in data1dz.items()
+                if key in dep1dz
+            }
+            data.update(data1dz)
 
         # TODO: we can probably reduce the number of deps computed here if some are only
         #   needed as inputs for 0d and 1d qtys, unless the user asks for them
@@ -895,17 +933,17 @@ class Equilibrium(IOAble, Optimizable):
         inbasis,
         outbasis=("rho", "theta", "zeta"),
         guess=None,
+        params=None,
         period=(np.inf, np.inf, np.inf),
         tol=1e-6,
         maxiter=30,
+        full_output=False,
         **kwargs,
     ):
         """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
 
         First solves for the computational coordinates that correspond to inbasis, then
         evaluates outbasis at those locations.
-
-        NOTE: this function cannot be JIT compiled or differentiated with AD.
 
         Parameters
         ----------
@@ -920,6 +958,8 @@ class Equilibrium(IOAble, Optimizable):
             Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
             corresponding to coords in inbasis. If None, heuristics are used based on
             in basis and a nearest neighbor search on a coarse grid.
+        params : dict
+            Values of equilibrium parameters to use, eg eq.params_dict
         period : tuple of float
             Assumed periodicity for each quantity in inbasis.
             Use np.inf to denote no periodicity.
@@ -927,24 +967,49 @@ class Equilibrium(IOAble, Optimizable):
             Stopping tolerance.
         maxiter : int > 0
             Maximum number of Newton iterations
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
+            ``alpha``.
 
         Returns
         -------
         coords : ndarray, shape(k,3)
-            Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
-            for coordinates where root finding did not succeed, possibly because the
-            coordinate is not in the plasma volume.
+            Coordinates mapped from inbasis to outbasis.
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True
+
+        Notes
+        -----
+        ``guess`` must be given for this function to be compatible with ``jit``.
 
         """
         return map_coordinates(
-            self, coords, inbasis, outbasis, guess, period, tol, maxiter, **kwargs
+            self,
+            coords,
+            inbasis,
+            outbasis,
+            guess,
+            params,
+            period,
+            tol,
+            maxiter,
+            full_output,
+            **kwargs,
         )
 
-    def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
-        """Find geometric theta for given straight field line theta.
+    def compute_theta_coords(
+        self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
+    ):
+        """Find theta_DESC for given straight field line theta_PEST.
 
         Parameters
         ----------
+        eq : Equilibrium
+            Equilibrium to use
         flux_coords : ndarray, shape(k,3)
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
             point in space.
@@ -954,45 +1019,29 @@ class Equilibrium(IOAble, Optimizable):
             Stopping tolerance.
         maxiter : int > 0
             maximum number of Newton iterations
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to ``root_scalar`` such as
+            ``maxiter_ls``, ``alpha``.
 
         Returns
         -------
         coords : ndarray, shape(k,3)
-            coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-            a given coordinate nan will be returned for those values
-
+            coordinates [rho,theta,zeta].
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True
         """
-        return compute_theta_coords(self, flux_coords, L_lmn, tol, maxiter)
-
-    def compute_flux_coords(
-        self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
-    ):
-        """Find the (rho, theta, zeta) that correspond to given (R, phi, Z).
-
-        Parameters
-        ----------
-        real_coords : ndarray, shape(k,3)
-            2D array of real space coordinates [R,phi,Z]. Each row is a different
-            point in space.
-        R_lmn, Z_lmn : ndarray
-            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
-        tol : float
-            Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
-        maxiter : int > 0
-            maximum number of Newton iterations
-        rhomin : float
-            minimum allowable value of rho (to avoid singularity at rho=0)
-
-        Returns
-        -------
-        flux_coords : ndarray, shape(k,3)
-            flux coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-            a given coordinate (often because it is outside the plasma boundary),
-            nan will be returned for those values
-
-        """
-        return compute_flux_coords(
-            self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
+        return compute_theta_coords(
+            self,
+            flux_coords,
+            L_lmn=L_lmn,
+            maxiter=maxiter,
+            tol=tol,
+            full_output=full_output,
+            **kwargs,
         )
 
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
@@ -1587,7 +1636,7 @@ class Equilibrium(IOAble, Optimizable):
                 "M": M,
                 "N": N,
                 "sym": not na_eq.lasym,
-                "spectral_indexing ": spectral_indexing,
+                "spectral_indexing": spectral_indexing,
                 "pressure": np.array([[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]),
                 "iota": None,
                 "current": np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]]),
@@ -1753,6 +1802,7 @@ class Equilibrium(IOAble, Optimizable):
             verbose=verbose,
             maxiter=maxiter,
             options=options,
+            copy=copy,
         )
 
         return things[0], result
@@ -1925,7 +1975,7 @@ class Equilibrium(IOAble, Optimizable):
                 print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
             # perturb + solve
-            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit,) = optimal_perturb(
+            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit) = optimal_perturb(
                 self,
                 constraint,
                 objective,
@@ -2093,20 +2143,32 @@ class EquilibriaFamily(IOAble, MutableSequence):
     _io_attrs_ = ["_equilibria"]
 
     def __init__(self, *args):
-        # we use ensure_nested=False here because it is assumed the family
+        # we use ensure_nested=False here for all but the first iteration
+        # because it is assumed the family
         # will be solved with a continuation method, so there's no need for the
         # fancy coordinate mapping stuff since it will just be overwritten during
         # solve_continuation
         self.equilibria = []
         if len(args) == 1 and isinstance(args[0], list):
-            for inp in args[0]:
-                self.equilibria.append(Equilibrium(**inp, ensure_nested=False))
+            for i, inp in enumerate(args[0]):
+                # ensure that first step is nested
+                ensure_nested_bool = True if i == 0 else False
+                self.equilibria.append(
+                    Equilibrium(
+                        **inp, ensure_nested=ensure_nested_bool, check_kwargs=False
+                    )
+                )
         else:
-            for arg in args:
+            for i, arg in enumerate(args):
                 if isinstance(arg, Equilibrium):
                     self.equilibria.append(arg)
                 elif isinstance(arg, dict):
-                    self.equilibria.append(Equilibrium(**arg, ensure_nested=False))
+                    ensure_nested_bool = True if i == 0 else False
+                    self.equilibria.append(
+                        Equilibrium(
+                            **arg, ensure_nested=ensure_nested_bool, check_kwargs=False
+                        )
+                    )
                 else:
                     raise TypeError(
                         "Args to create EquilibriaFamily should either be "

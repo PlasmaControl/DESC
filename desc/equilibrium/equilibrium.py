@@ -623,6 +623,11 @@ class Equilibrium(IOAble, Optimizable):
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
 
+            modes_R = []
+            jRs = []
+            modes_Z = []
+            jZs = []
+
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -630,7 +635,11 @@ class Equilibrium(IOAble, Optimizable):
                         surface.R_basis.modes[:, 2] == n,
                     )
                 )
-                AR[j, i] = zernike_radial(rho, l, m)
+                modes_R.append([i, l, m])
+                jRs.append([j])
+            modes_R = np.array(modes_R)
+            jRs = np.array(jRs)
+            AR[jRs, modes_R[:, 0]] = zernike_radial(rho, modes_R[:, 1], modes_R[:, 2])
 
             for i, (l, m, n) in enumerate(self.Z_basis.modes):
                 j = np.argwhere(
@@ -639,7 +648,12 @@ class Equilibrium(IOAble, Optimizable):
                         surface.Z_basis.modes[:, 2] == n,
                     )
                 )
-                AZ[j, i] = zernike_radial(rho, l, m)
+                modes_Z.append([i, l, m])
+                jZs.append([j])
+            modes_Z = np.array(modes_Z)
+            jZs = np.array(jZs)
+            AZ[jZs, modes_Z[:, 0]] = zernike_radial(rho, modes_Z[:, 1], modes_Z[:, 2])
+
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb

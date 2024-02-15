@@ -2243,7 +2243,7 @@ class FourierCurrentPotentialField(
                         (curve_data["R"], curve_data["phi"], curve_data["Z"])
                     ).T
                     ext_field_along_curve = external_field.compute_magnetic_field(
-                        curve_coords, basis="rpz", grid=source_grid
+                        curve_coords, basis="rpz", source_grid=source_grid
                     )
                 # calculate covariant B_zeta = B dot e_zeta from external field
                 ext_field_B_zeta = jnp.sum(

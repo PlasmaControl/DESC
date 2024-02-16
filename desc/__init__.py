@@ -145,10 +145,14 @@ def set_device(kind="cpu"):
 
     cpu_mem = psutil.virtual_memory().available / 1024**2  # RAM in MB
     # see if we're in a slurm job, in which case report allocated memory
-    ntask = os.environ.get("SLURM_NTASKS", 1)
-    cpupertask = os.environ.get("SLURM_CPU_PER_TASK", 1)
-    mempercpu = os.environ.get("SLURM_MEM_PER_CPU", cpu_mem)  # in MB
-    cpu_avail_mem = ntask * cpupertask * mempercpu / 1024  # put into GB
+    ntask = int(os.environ.get("SLURM_NTASKS", 1))
+    cpupertask = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
+    mempercpu = float(os.environ.get("SLURM_MEM_PER_CPU", 0))  # in MB
+    cpu_avail_mem = ntask * cpupertask * mempercpu
+    # sometimes slurm doesn't set all flags?
+    cpu_avail_mem = max(cpu_avail_mem, float(os.environ.get("SLURM_MEM_PER_NODE", 0)))
+    cpu_avail_mem /= 1024  # put into GB
+
     try:
         import jax
 

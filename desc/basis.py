@@ -1820,12 +1820,12 @@ def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
         spectral_indexing=basis_3D._spectral_indexing,
         sym=basis_3D.sym,
     )
-    new_Lmax = np.max(basis_2D.modes[:, 0])
-    new_Mmax = np.max(max(basis_2D.modes[:, 1]))
+    new_Lmax = np.max(abs(basis_2D.modes[:, 0]))
+    new_Mmax = np.max(abs(basis_2D.modes[:, 1]))
     if new_Lmax > Lmax or new_Mmax > Mmax:
         raise ValueError(
             "Something went wrong with the basis creation!"
-            + f"{new_Lmax=} {Lmax=}, {new_Mmax=} {Mmax=}"
+            + f"{new_Lmax = } {Lmax = }, {new_Mmax = } {Mmax = }"
         )
     X_lmn_2D = copy_coeffs(X_lmn_2D, modes_2D, basis_2D.modes)
     return X_lmn_2D, basis_2D

@@ -788,8 +788,8 @@ class ProximalProjection(ObjectiveFunction):
         """
         raise NotImplementedError("Unscaled jacobian of proximal projection is hard.")
 
-    def _jvp_f(self, xf, dc, constants=None):
-        Fx = self._constraint.jac_scaled(xf, constants)
+    def _jvp_f(self, xf, dc, constants, op):
+        Fx = getattr(self._constraint, "jac_" + op)(xf, constants)
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Fc = Fx @ (self._dxdc @ dc)
         Fxh = Fx_reduced
@@ -800,28 +800,7 @@ class ProximalProjection(ObjectiveFunction):
         Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
         return Fxh_inv @ Fc
 
-    def jvp_scaled(self, v, x, constants=None):
-        """Compute Jacobian-vector product of the objective function.
-
-        Uses the scaled form of the objective.
-
-        Parameters
-        ----------
-        v : tuple of ndarray
-            Vectors to right-multiply the Jacobian by.
-            This method only works for first order jvps.
-        x : ndarray
-            Optimization variables.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
-        """
-        if isinstance(v, tuple):
-            v = v[0]
-        if constants is None:
-            constants = self.constants
-        xg, xf = self._update_equilibrium(x, store=True)
-
+    def _jvp(self, v, xf, xg, constants, op):
         # we're replacing stuff like this with jvps
         # Fx_reduced = Fx[:, unfixed_idx] @ Z               # noqa: E800
         # Gx_reduced = Gx[:, unfixed_idx] @ Z               # noqa: E800
@@ -833,7 +812,7 @@ class ProximalProjection(ObjectiveFunction):
         # want jvp_f to only get parts from equilibrium, not other things
         vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
         # this is Fx_reduced_inv @ Fc
-        dfdc = self._jvp_f(xf, vs[self._eq_idx], constants[1])
+        dfdc = self._jvp_f(xf, vs[self._eq_idx], constants[1], op)
         # broadcasting against multiple things
         dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
         dfdcs[self._eq_idx] = dfdc
@@ -842,9 +821,9 @@ class ProximalProjection(ObjectiveFunction):
         # LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc    # noqa: E800
         # = Gx @ (unfixed_idx @ Z @ dfdc - dxdc @ v)
         # unfixed_idx_mat includes Z already
-        tangent = self._unfixed_idx_mat @ dfdc - jnp.atleast_2d(self._dxdc @ v)
+        tangent = self._unfixed_idx_mat @ dfdc - self._dxdc @ v
         if self._objective._deriv_mode in ["batched", "looped"]:
-            out = self._objective.jvp_scaled(tangent.T, xg, constants[0])
+            out = getattr(self._objective, "jvp_" + op)(tangent, xg, constants[0])
         else:  # deriv_mode == "blocked"
             vgs = jnp.split(tangent, np.cumsum(self._dimx_per_thing))
             xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
@@ -858,16 +837,42 @@ class ProximalProjection(ObjectiveFunction):
                     # obj might now allow fwd mode, so compute full rev mode jacobian
                     # and do matmul manually. This is slightly inefficient, but usually
                     # when rev mode is used, dim_f <<< dim_x, so its not too bad.
-                    Ji = obj.jac_scaled(*xi, const)
-                    outi = jnp.array([Jii @ vii for Jii, vii in zip(Ji, vi)]).sum(
+                    Ji = getattr(obj, "jac_" + op)(*xi, const)
+                    outi = jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(
                         axis=0
                     )
                     out.append(outi)
                 else:
-                    outi = obj.jvp_scaled([_vi.T for _vi in vi], xi, constants=const).T
+                    outi = getattr(obj, "jvp_" + op)(
+                        [_vi for _vi in vi], xi, constants=const
+                    ).T
                     out.append(outi)
             out = jnp.concatenate(out)
-        return out
+        return -out
+
+    def jvp_scaled(self, v, x, constants=None):
+        """Compute Jacobian-vector product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray or tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+            This method only works for first order jvps.
+        x : ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        if isinstance(v, (tuple, list)):
+            v = v[0]
+        if constants is None:
+            constants = self.constants
+        xg, xf = self._update_equilibrium(x, store=True)
+        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
+        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
 
     def jac_scaled(self, x, constants=None):
         """Compute Jacobian of the vector objective function with weights / bounds.

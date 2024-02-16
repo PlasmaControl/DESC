@@ -259,7 +259,10 @@ class QuadraticFlux(_Objective):
             plasma_coords = constants["plasma_coords"]
 
         B = self._field.compute_magnetic_field(
-            plasma_coords, basis="xyz", grid=self._source_grid, params=field_params
+            plasma_coords,
+            basis="xyz",
+            source_grid=self._source_grid,
+            params=field_params,
         )
 
         Bn = jnp.sum(B * data["n_rho"], axis=-1)
@@ -267,7 +270,7 @@ class QuadraticFlux(_Objective):
         if self._external_field is not None:
             B_ext = self._external_field.compute_magnetic_field(
                 plasma_coords,
-                grid=self._external_field_source_grid,
+                source_grid=self._external_field_source_grid,
                 basis="xyz",
             )
             Bn += jnp.sum(B_ext * data["n_rho"], axis=-1)

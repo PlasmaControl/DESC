@@ -1935,9 +1935,6 @@ class FourierCurrentPotentialField(
             magnetic field at specified points
 
         """
-        source_grid = source_grid or LinearGrid(
-            M=self._M_Phi * 4 + 1, N=self._N_Phi * 4 + 1, NFP=self.NFP
-        )
         return _compute_magnetic_field_from_CurrentPotentialField(
             field=self,
             coords=coords,
@@ -2028,6 +2025,7 @@ class FourierCurrentPotentialField(
         eval_grid=None,
         current_helicity=0,
         external_field=None,
+        external_field_grid=None,
         scan=False,
         scan_alphas=None,
         sym_Phi=None,
@@ -2099,6 +2097,12 @@ class FourierCurrentPotentialField(
             e.g. can provide a TF coilset to calculate the surface current
             which is needed to minimize Bn given this external coilset providing
             the bulk of the required net toroidal magnetic flux, by default None
+        external_field_grid : Grid, optional
+            Source grid with which to evaluate the external field when calculating
+            its contribution to the normal field on the plasma surface (if it is a type
+            that requires a source, like a CoilSet or a CurrentPotentialField).
+            By default None, which will use the default grid for the given
+            external field type.
         current_helicity : int, optional
             Ratio of used to determine if coils are modular (0) or helical (!=0)
             defined as (G - G_ext) / (I * NFP)  = current_helicity
@@ -2187,13 +2191,16 @@ class FourierCurrentPotentialField(
             f"Current is non-zero (max {curr} A), "
             + "finite plasma currents not supported yet.",
         )
-
+        data = {}
         if external_field:  # ensure given field is an instance of _MagneticField
             assert hasattr(external_field, "compute_magnetic_field"), (
                 "Expected"
                 + "MagneticField for argument external_field,"
                 + f" got type {type(external_field)} "
             )
+            data["external_field"] = external_field
+            data["external_field_grid"] = external_field
+
         if source_grid is None:
             source_grid = LinearGrid(M=30, N=30, NFP=int(eq.NFP))
         if eval_grid is None:
@@ -2204,6 +2211,9 @@ class FourierCurrentPotentialField(
             normalization_B = jnp.mean(B_eq_surf)
         else:
             normalization_B = 1
+
+        data["eval_grid"] = eval_grid
+        data["source_grid"] = source_grid
 
         # plasma surface normal vector magnitude on eval grid
         ne_mag = eq.compute(["|e_theta x e_zeta|"], eval_grid)["|e_theta x e_zeta|"]
@@ -2243,7 +2253,7 @@ class FourierCurrentPotentialField(
                         (curve_data["R"], curve_data["phi"], curve_data["Z"])
                     ).T
                     ext_field_along_curve = external_field.compute_magnetic_field(
-                        curve_coords, basis="rpz", source_grid=source_grid
+                        curve_coords, basis="rpz", source_grid=external_field_grid
                     )
                 # calculate covariant B_zeta = B dot e_zeta from external field
                 ext_field_B_zeta = jnp.sum(
@@ -2310,10 +2320,8 @@ class FourierCurrentPotentialField(
         )  # from plasma current, currently assume is 0
         # find external field's Bnormal contribution
         if external_field:
-            # FIXME: the source grid might not be correct for the external field
-            # given, perhaps change to "external_source_grid" or None
             Bn_ext, _ = external_field.compute_Bnormal(
-                eq.surface, eval_grid=eval_grid, source_grid=None
+                eq.surface, eval_grid=eval_grid, source_grid=external_field_grid
             )
         else:
             Bn_ext = jnp.zeros_like(B_GI_normal)
@@ -2328,9 +2336,6 @@ class FourierCurrentPotentialField(
             )
         alphas = [alpha] if not scan else scan_alphas
 
-        data = {}
-        data["eval_grid"] = eval_grid
-        data["source_grid"] = source_grid
         chi2Bs = []
         chi2Ks = []
         K_mags = []
@@ -2730,7 +2735,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     coords = jnp.atleast_2d(coords)
     if basis == "rpz":
         coords = rpz2xyz(coords)
-    surface_grid = source_grid or LinearGrid(M=60, N=60, NFP=field.NFP)
+    surface_grid = source_grid or LinearGrid(M=80, N=80, NFP=field.NFP)
 
     # compute surface current, and store grid quantities
     # needed for integration in class

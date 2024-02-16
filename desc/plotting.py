@@ -3919,6 +3919,13 @@ def plot_regcoil_outputs(
         )
     if source_grid is None:
         source_grid = data["source_grid"]
+    if "external_field" in data.keys():
+        external_field = data["external_field"]
+        external_field_grid = data["external_field_grid"]
+        B_ext = external_field.compute_Bnormal(eq, eval_grid, external_field_grid)[0]
+
+    else:
+        external_field = None
     # check if we can use existing quantities in data
     # or re-evaluate
     recalc_eval_grid_quantites = not eval_grid.eq(data["eval_grid"])
@@ -3941,6 +3948,8 @@ def plot_regcoil_outputs(
             if not recalc_eval_grid_quantites
             else field.compute_Bnormal(eq, eval_grid, source_grid)[0]
         )
+        if external_field:
+            Bn_tot += B_ext
         plt.rcParams.update({"font.size": 26})
         plt.figure(figsize=(8, 8))
         plt.contourf(
@@ -4068,6 +4077,8 @@ def plot_regcoil_outputs(
                 if not recalc_eval_grid_quantites
                 else field.compute_Bnormal(eq, eval_grid, source_grid)[0]
             )
+            if external_field:
+                Bn_tot += B_ext
 
             plt.rcParams.update({"font.size": 18})
 

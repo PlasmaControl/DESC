@@ -1124,6 +1124,7 @@ def test_regcoil_axisym_and_ellipse_surface():
         source_grid=LinearGrid(M=60, N=60, NFP=eq.NFP),
         alpha=0,
         external_field=external_field,
+        external_field_grid=LinearGrid(M=60, N=60, NFP=eq.NFP),
         verbose=2,
     )
     phi_mn_opt = surface_current_field.Phi_mn

@@ -34,6 +34,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     PlasmaVesselDistance,
+    QuasisymmetryTripleProduct,
     Volume,
     get_fixed_boundary_constraints,
 )
@@ -1127,3 +1128,82 @@ def test_optimize_with_single_constraint():
 
     # test depends on verbose > 0
     optimizer.optimize(eq, objective=objectective, constraints=constraints, verbose=2)
+
+
+@pytest.mark.unit
+def test_proximal_jacobian():
+    """Test that JVPs and manual concatenation give the same result as full jac."""
+    eq = desc.examples.get("HELIOTRON")
+    eq.change_resolution(3, 2, 1, 6, 4, 2)
+    eq1 = eq.copy()
+    eq2 = eq.copy()
+    eq3 = eq.copy()
+    con1 = ObjectiveFunction(ForceBalance(eq1))
+    con2 = ObjectiveFunction(ForceBalance(eq2))
+    con3 = ObjectiveFunction(ForceBalance(eq3))
+    obj1 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq1, deriv_mode="fwd"),
+            AspectRatio(eq1, deriv_mode="rev"),
+            Volume(eq1, deriv_mode="rev"),
+        ),
+        deriv_mode="batched",
+    )
+    obj2 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
+            AspectRatio(eq2, deriv_mode="rev"),
+            Volume(eq2, deriv_mode="rev"),
+        ),
+        deriv_mode="looped",
+    )
+    obj3 = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq3, deriv_mode="fwd"),
+            AspectRatio(eq3, deriv_mode="rev"),
+            Volume(eq3, deriv_mode="rev"),
+        ),
+        deriv_mode="blocked",
+    )
+    prox1 = ProximalProjection(obj1, con1, eq1)
+    prox2 = ProximalProjection(obj2, con2, eq2)
+    prox3 = ProximalProjection(obj3, con3, eq3)
+    prox1.build()
+    prox2.build()
+    prox3.build()
+
+    x = prox1.x(eq)
+    v = np.random.default_rng(1138).random(x.shape)
+
+    # this is basically the old method we're benchmarking against
+    xf = con1.x(eq1)
+    xg = obj1.x(eq1)
+    Fx = con1.jac_scaled(xf)
+    Gx = obj1.jac_scaled(xg)
+    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
+    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fc = Fx @ prox1._dxdc
+    Gc = Gx @ prox1._dxdc
+    cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf += sf[-1]  # add a tiny bit of regularization
+    sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+    Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
+    Jac0 = -Gxh @ (Fxh_inv @ Fc) + Gc
+
+    jvp0 = Jac0 @ v
+    jvp1 = prox1.jvp_scaled(v, x)
+    jvp2 = prox2.jvp_scaled(v, x)
+    jvp3 = prox3.jvp_scaled(v, x)
+
+    np.testing.assert_allclose(jvp0, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp3, rtol=1e-12, atol=1e-12)
+
+    jac1 = prox1.jac_scaled(x)
+    jac2 = prox2.jac_scaled(x)
+    jac3 = prox3.jac_scaled(x)
+
+    np.testing.assert_allclose(Jac0, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(Jac0, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(Jac0, jac3, rtol=1e-12, atol=1e-12)

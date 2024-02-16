@@ -412,6 +412,10 @@ class Equilibrium(IOAble, Optimizable):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
+        if self.xsection is None:
+            # eq.xsection property was added with Poincare BC support
+            self.xsection = self.get_poincare_xsection_at()
+            self.xsection.isgiven = False
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.

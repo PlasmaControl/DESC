@@ -14,7 +14,6 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import zernike_radial, zernike_radial_coeffs
-from desc.geometry import FourierRZToroidalSurface, PoincareSurface
 from desc.utils import errorif, setdefault
 
 from .normalization import compute_scaling_factors
@@ -266,51 +265,12 @@ class BoundaryRSelfConsistency(_Objective):
         self._dim_f = eq.surface.R_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
 
-        if isinstance(eq.surface, FourierRZToroidalSurface):
-            for i, (l, m, n) in enumerate(eq.R_basis.modes):
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
-        elif isinstance(eq.surface, PoincareSurface):
-            if eq.surface.zeta == 0:
-                for i, (l, m, n) in enumerate(modes):
-                    j = np.argwhere(
-                        np.logical_and(
-                            (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                            eq.R_basis.modes[:, 2] >= 0,
-                        )
-                    )
-                    self._A[i, j] = 1
-            elif eq.surface.zeta == np.pi:
-                for i, (l, m, n) in enumerate(modes):
-                    j1 = np.argwhere(
-                        np.logical_and(
-                            np.logical_and(
-                                (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                                eq.R_basis.modes[:, 2] % 2 == 1,
-                            ),
-                            eq.R_basis.modes[:, 2] >= 0,
-                        )
-                    )
-                    j2 = np.argwhere(
-                        np.logical_and(
-                            np.logical_and(
-                                (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                                eq.R_basis.modes[:, 2] % 2 == 0,
-                            ),
-                            eq.R_basis.modes[:, 2] >= 0,
-                        )
-                    )
-                    self._A[i, j1] = -1
-                    self._A[i, j2] = 1
-            else:
-                raise ValueError(
-                    f"Zeta value must be 0 or pi. The given value is {eq.surface.zeta}"
-                )
+        for i, (l, m, n) in enumerate(eq.R_basis.modes):
+            j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+            surf = (
+                eq.surface.rho if self._surface_label is None else self._surface_label
+            )
+            self._A[j, i] = zernike_radial(surf, l, m)
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -395,51 +355,12 @@ class BoundaryZSelfConsistency(_Objective):
         self._dim_f = eq.surface.Z_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
 
-        if isinstance(eq.surface, FourierRZToroidalSurface):
-            for i, (l, m, n) in enumerate(eq.Z_basis.modes):
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
-        elif isinstance(eq.surface, PoincareSurface):
-            if eq.surface.zeta == 0:
-                for i, (l, m, n) in enumerate(modes):
-                    j = np.argwhere(
-                        np.logical_and(
-                            (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                            eq.Z_basis.modes[:, 2] >= 0,
-                        )
-                    )
-                    self._A[i, j] = 1
-            elif eq.surface.zeta == np.pi:
-                for i, (l, m, n) in enumerate(modes):
-                    j1 = np.argwhere(
-                        np.logical_and(
-                            np.logical_and(
-                                (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                                eq.Z_basis.modes[:, 2] % 2 == 1,
-                            ),
-                            eq.Z_basis.modes[:, 2] >= 0,
-                        )
-                    )
-                    j2 = np.argwhere(
-                        np.logical_and(
-                            np.logical_and(
-                                (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                                eq.Z_basis.modes[:, 2] % 2 == 0,
-                            ),
-                            eq.Z_basis.modes[:, 2] >= 0,
-                        )
-                    )
-                    self._A[i, j1] = -1
-                    self._A[i, j2] = 1
-            else:
-                raise ValueError(
-                    f"Zeta value must be 0 or pi. The given value is {eq.surface.zeta}"
-                )
+        for i, (l, m, n) in enumerate(eq.Z_basis.modes):
+            j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+            surf = (
+                eq.surface.rho if self._surface_label is None else self._surface_label
+            )
+            self._A[j, i] = zernike_radial(surf, l, m)
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -466,8 +387,222 @@ class BoundaryZSelfConsistency(_Objective):
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 
 
-class BoundaryLambdaSelfConsistency(_Objective):
-    """Enforces lambda values at zeta=0 XS (i.e. prescribes the SFL angle vartheta).
+class SectionRSelfConsistency(_Objective):
+    """Ensure that the boundary and interior surfaces are self-consistent.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    surface_label : float, optional
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "R cross-section self consistency error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        name="self_consistency section R",
+    ):
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        modes = eq.xsection.R_basis.modes
+        self._dim_f = eq.xsection.R_basis.num_modes
+        self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+
+        if eq.xsection.zeta == 0:
+            for i, (l, m, n) in enumerate(modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                        eq.R_basis.modes[:, 2] >= 0,
+                    )
+                )
+                self._A[i, j] = 1
+        elif eq.xsection.zeta == np.pi:
+            for i, (l, m, n) in enumerate(modes):
+                j1 = np.argwhere(
+                    np.logical_and(
+                        np.logical_and(
+                            (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                            eq.R_basis.modes[:, 2] % 2 == 1,
+                        ),
+                        eq.R_basis.modes[:, 2] >= 0,
+                    )
+                )
+                j2 = np.argwhere(
+                    np.logical_and(
+                        np.logical_and(
+                            (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                            eq.R_basis.modes[:, 2] % 2 == 0,
+                        ),
+                        eq.R_basis.modes[:, 2] >= 0,
+                    )
+                )
+                self._A[i, j1] = -1
+                self._A[i, j2] = 1
+        else:
+            raise ValueError(
+                f"Zeta value must be 0 or pi. The given value is {eq.xsection.zeta}"
+            )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute boundary R self-consistency errors.
+
+        IE, the mismatch between the Fourier-Zernike basis evaluated at rho=1 and the
+        double Fourier series defining the equilibrium LCFS
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            boundary R self-consistency errors.
+
+        """
+        return jnp.dot(self._A, params["R_lmn"]) - params["Rp_lmn"]
+
+
+class SectionZSelfConsistency(_Objective):
+    """Keeps the coefficients same as the given cross-section values at cross-section.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    surface_label : float, optional
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Z cross-section self consistency error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        name="self_consistency section Z",
+    ):
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        modes = eq.xsection.Z_basis.modes
+        self._dim_f = eq.xsection.Z_basis.num_modes
+        self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+
+        if eq.xsection.zeta == 0:
+            for i, (l, m, n) in enumerate(modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                        eq.Z_basis.modes[:, 2] >= 0,
+                    )
+                )
+                self._A[i, j] = 1
+        elif eq.xsection.zeta == np.pi:
+            for i, (l, m, n) in enumerate(modes):
+                j1 = np.argwhere(
+                    np.logical_and(
+                        np.logical_and(
+                            (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                            eq.Z_basis.modes[:, 2] % 2 == 1,
+                        ),
+                        eq.Z_basis.modes[:, 2] >= 0,
+                    )
+                )
+                j2 = np.argwhere(
+                    np.logical_and(
+                        np.logical_and(
+                            (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                            eq.Z_basis.modes[:, 2] % 2 == 0,
+                        ),
+                        eq.Z_basis.modes[:, 2] >= 0,
+                    )
+                )
+                self._A[i, j1] = -1
+                self._A[i, j2] = 1
+        else:
+            raise ValueError(
+                f"Zeta value must be 0 or pi. The given value is {eq.xsection.zeta}"
+            )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute deviation from desired boundary."""
+        return jnp.dot(self._A, params["Z_lmn"]) - params["Zp_lmn"]
+
+
+class SectionLambdaSelfConsistency(_Objective):
+    """Enforces lambda values at cross-section.
 
     Parameters
     ----------
@@ -489,13 +624,13 @@ class BoundaryLambdaSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(dimensionless)"
-    _print_value_fmt = "Lambda boundary self consistency error: {:10.3e}"
+    _print_value_fmt = "Lambda section self consistency error: {:10.3e}"
 
     def __init__(
         self,
         eq,
         surface_label=None,
-        name="self_consistency Lambda",
+        name="self_consistency section Lambda",
     ):
         self._surface_label = surface_label
         super().__init__(
@@ -524,12 +659,12 @@ class BoundaryLambdaSelfConsistency(_Objective):
         L_modes = eq.L_basis.modes
         dim_L = eq.L_basis.num_modes
 
-        Lb_modes = eq.Lb_basis.modes
-        self._dim_f = eq.Lb_basis.num_modes
+        Lp_modes = eq.Lp_basis.modes
+        self._dim_f = eq.Lp_basis.num_modes
         self._A = np.zeros((self._dim_f, dim_L))
 
-        if eq.surface.zeta == 0:
-            for i, (l, m, n) in enumerate(Lb_modes):
+        if eq.xsection.zeta == 0:
+            for i, (l, m, n) in enumerate(Lp_modes):
                 j = np.argwhere(
                     np.logical_and(
                         (L_modes[:, :-1] == [l, m]).all(axis=1),
@@ -537,8 +672,8 @@ class BoundaryLambdaSelfConsistency(_Objective):
                     )
                 )
                 self._A[i, j] = 1
-        elif eq.surface.zeta == np.pi:
-            for i, (l, m, n) in enumerate(Lb_modes):
+        elif eq.xsection.zeta == np.pi:
+            for i, (l, m, n) in enumerate(Lp_modes):
                 j1 = np.argwhere(
                     np.logical_and(
                         np.logical_and(
@@ -562,7 +697,7 @@ class BoundaryLambdaSelfConsistency(_Objective):
         else:
             raise ValueError(
                 "Unvalid zeta value! Only 0 or pi is supported! zeta ="
-                + f"{eq.surface.zeta} is given!"
+                + f"{eq.xsection.zeta} is given!"
             )
 
         if self.target is not None:
@@ -572,7 +707,7 @@ class BoundaryLambdaSelfConsistency(_Objective):
 
     def compute(self, params, constants=None):
         """Compute deviation from desired boundary."""
-        return jnp.dot(self._A, params["L_lmn"]) - params["Lb_lmn"]
+        return jnp.dot(self._A, params["L_lmn"]) - params["Lp_lmn"]
 
 
 class AxisRSelfConsistency(_Objective):
@@ -1041,8 +1176,11 @@ class FixBoundaryZ(_FixedObjective):
         return jnp.dot(self._A, params["Zb_lmn"])
 
 
-class FixBoundaryLambda(_FixedObjective):
-    """Boundary condition on the Lambda boundary parameters.
+class FixSectionR(_FixedObjective):
+    """Boundary condition on the R boundary parameters at cross-section.
+
+    Notice this objective is not for consistency. Rather it is used to fix parameter
+    Rp_lmn (which optiizable bydefault) to a given value.
 
     Parameters
     ----------
@@ -1080,9 +1218,9 @@ class FixBoundaryLambda(_FixedObjective):
     `basis.modes` which may be different from the order that was passed in.
     """
 
-    _target_arg = "Lb_lmn"
-    _units = " "
-    _print_value_fmt = "Lambda boundary error: {:10.3e} "
+    _target_arg = "Rp_lmn"
+    _units = "(m)"
+    _print_value_fmt = "R cross-section error: {:10.3e} "
 
     def __init__(
         self,
@@ -1094,7 +1232,7 @@ class FixBoundaryLambda(_FixedObjective):
         normalize_target=True,
         modes=True,
         surface_label=None,
-        name="Poincare Surface Lambda",
+        name="poincare R",
     ):
         self._modes = modes
         self._target_from_user = setdefault(bounds, target)
@@ -1126,8 +1264,8 @@ class FixBoundaryLambda(_FixedObjective):
             idx = np.array([], dtype=int)
             modes_idx = idx
         elif self._modes is True:  # all modes
-            modes = eq.surface.L_basis.modes
-            idx = np.arange(eq.surface.L_basis.num_modes)
+            modes = eq.xsection.R_basis.modes
+            idx = np.arange(eq.xsection.R_basis.num_modes)
             modes_idx = idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
@@ -1136,14 +1274,14 @@ class FixBoundaryLambda(_FixedObjective):
                 "formats": 3 * [modes.dtype],
             }
             _, idx, modes_idx = np.intersect1d(
-                eq.surface.L_basis.modes.astype(modes.dtype).view(dtype),
+                eq.xsection.R_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
-            # rearrange modes to match order of eq.surface.L_basis.modes
-            # and eq.surface.L_lmn,
+            # rearrange modes to match order of eq.xsection.R_basis.modes
+            # and eq.xsection.R_lmn,
             # necessary so that the A matrix rows match up with the target b
-            modes = np.atleast_2d(eq.surface.L_basis.modes[idx, :])
+            modes = np.atleast_2d(eq.xsection.R_basis.modes[idx, :])
 
             if idx.size < modes.shape[0]:
                 warnings.warn(
@@ -1155,11 +1293,305 @@ class FixBoundaryLambda(_FixedObjective):
                 )
 
         self._dim_f = idx.size
-        # Lb_lmn -> Lb optimization space
-        self._A = np.eye(eq.surface.L_basis.num_modes)[idx, :]
+        # Rp_lmn -> Rp optimization space
+        self._A = np.eye(eq.xsection.R_basis.num_modes)[idx, :]
 
         self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.surface.L_lmn[idx], None, modes_idx
+            self._target_from_user, eq.xsection.R_lmn[idx], None, modes_idx
+        )
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute boundary R errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            boundary R errors.
+
+        """
+        return jnp.dot(self._A, params["Rp_lmn"])
+
+
+class FixSectionZ(_FixedObjective):
+    """Boundary condition on the Z boundary parameters at cross-section.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the surface modes.
+    surface_label : float, optional
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str, optional
+        Name of the objective function.
+
+
+    Notes
+    -----
+    If specifying particular modes to fix, the rows of the resulting constraint `A`
+    matrix and `target` vector will be re-sorted according to the ordering of
+    `basis.modes` which may be different from the order that was passed in.
+    """
+
+    _target_arg = "Zp_lmn"
+    _units = "(m)"
+    _print_value_fmt = "Z cross-section error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        surface_label=None,
+        name="poincare Z",
+    ):
+        self._modes = modes
+        self._target_from_user = setdefault(bounds, target)
+        self._surface_label = surface_label
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+            modes_idx = idx
+        elif self._modes is True:  # all modes
+            modes = eq.xsection.Z_basis.modes
+            idx = np.arange(eq.xsection.Z_basis.num_modes)
+            modes_idx = idx
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.xsection.Z_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            # rearrange modes to match order of eq.xsection.Z_basis.modes
+            # and eq.xsection.Z_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.xsection.Z_basis.modes[idx, :])
+
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the surface, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = idx.size
+        # Zp_lmn -> Zp optimization space
+        self._A = np.eye(eq.xsection.Z_basis.num_modes)[idx, :]
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.xsection.Z_lmn[idx], None, modes_idx
+        )
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute boundary Z errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            boundary Z errors.
+
+        """
+        return jnp.dot(self._A, params["Zp_lmn"])
+
+
+class FixSectionLambda(_FixedObjective):
+    """Boundary condition on the Lambda boundary parameters at cross-section.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the profile modes.
+    surface_label : float, optional
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str, optional
+        Name of the objective function.
+
+
+    Notes
+    -----
+    If specifying particular modes to fix, the rows of the resulting constraint `A`
+    matrix and `target` vector will be re-sorted according to the ordering of
+    `basis.modes` which may be different from the order that was passed in.
+    """
+
+    _target_arg = "Lp_lmn"
+    _units = " "
+    _print_value_fmt = "Lambda cross-section error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        surface_label=None,
+        name="poincare Lambda",
+    ):
+        self._modes = modes
+        self._target_from_user = setdefault(bounds, target)
+        self._surface_label = surface_label
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+            modes_idx = idx
+        elif self._modes is True:  # all modes
+            modes = eq.xsection.L_basis.modes
+            idx = np.arange(eq.xsection.L_basis.num_modes)
+            modes_idx = idx
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.xsection.L_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            # rearrange modes to match order of eq.xsection.L_basis.modes
+            # and eq.xsection.L_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.xsection.L_basis.modes[idx, :])
+
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the surface, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = idx.size
+        # Lp_lmn -> Lp optimization space
+        self._A = np.eye(eq.xsection.L_basis.num_modes)[idx, :]
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.xsection.L_lmn[idx], None, modes_idx
         )
 
         if self._normalize:
@@ -1185,7 +1617,7 @@ class FixBoundaryLambda(_FixedObjective):
             boundary Lambda errors.
 
         """
-        return jnp.dot(self._A, params["Lb_lmn"])
+        return jnp.dot(self._A, params["Lp_lmn"])
 
 
 class FixLambdaGauge(_Objective):

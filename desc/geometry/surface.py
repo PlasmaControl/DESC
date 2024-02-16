@@ -983,6 +983,7 @@ class PoincareSurface(ZernikeRZToroidalSection):
             self._zeta = surface.zeta
             self._sym = surface._sym
             self.name = name
+            self._isgiven = True
 
             if self.L_basis.num_modes != self.L_lmn.size:
                 raise ValueError(
@@ -991,6 +992,10 @@ class PoincareSurface(ZernikeRZToroidalSection):
                 )
         else:
             # UPDATE THIS PART FOR GENERAL USE
+            if R_lmn is not None and Z_lmn is not None and L_lmn is not None:
+                self._isgiven = True
+            else:
+                self._isgiven = False
             if R_lmn is None:
                 R_lmn = np.array([10, 1])
                 modes_R = np.array([[0, 0], [1, 1]])
@@ -1081,6 +1086,17 @@ class PoincareSurface(ZernikeRZToroidalSection):
     def L_lmn(self, L_lmn):
         self._L_lmn = L_lmn
 
+    @property
+    def isgiven(self):
+        """bool: Cross-section is given as input or not."""
+        # True: Cross-section is given as input
+        # False: Cross-section is not given as input
+        return self._isgiven
+
+    @isgiven.setter
+    def isgiven(self, isgiven):
+        self._isgiven = isgiven
+
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""
         assert (
@@ -1088,7 +1104,7 @@ class PoincareSurface(ZernikeRZToroidalSection):
             or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
             or (len(args) == 0)
         ), (
-            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+            "change_resolution should be called with 2 (L,M) or 3 (L,M,N) "
             + "positional arguments or only keyword arguments."
         )
         L = kwargs.pop("L", None)

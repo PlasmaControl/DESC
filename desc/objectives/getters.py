@@ -1,7 +1,5 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
-from desc.geometry import PoincareSurface
-
 from ._equilibrium import (
     CurrentDensity,
     Energy,
@@ -12,14 +10,12 @@ from ._equilibrium import (
 from .linear_objectives import (
     AxisRSelfConsistency,
     AxisZSelfConsistency,
-    BoundaryLambdaSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixAnisotropy,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
-    FixBoundaryLambda,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
@@ -32,6 +28,12 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixPsi,
+    FixSectionLambda,
+    FixSectionR,
+    FixSectionZ,
+    SectionLambdaSelfConsistency,
+    SectionRSelfConsistency,
+    SectionZSelfConsistency,
 )
 from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
@@ -135,9 +137,6 @@ def get_fixed_boundary_constraints(
         If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
-    poincare_lambda : bool
-        Whether to fix the poloidal stream function lambda's value at
-        the zeta=0 Poincare XS
 
     Returns
     -------
@@ -150,10 +149,44 @@ def get_fixed_boundary_constraints(
         FixBoundaryZ(eq=eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
-    if isinstance(eq.surface, PoincareSurface):
-        constraints += (
-            FixBoundaryLambda(eq=eq, normalize=normalize, normalize_target=normalize),
-        )
+    if profiles:
+        for name, con in _PROFILE_CONSTRAINTS.items():
+            if getattr(eq, name) is not None:
+                constraints += (
+                    con(eq=eq, normalize=normalize, normalize_target=normalize),
+                )
+
+    return constraints
+
+
+def get_fixed_xsection_constraints(
+    eq,
+    profiles=True,
+    normalize=True,
+):
+    """Get the constraints necessary for a fixed cross-section equilibrium problem.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to constrain.
+    profiles : bool
+        If True, also include constraints to fix all profiles assigned to equilibrium.
+    normalize : bool
+        Whether to apply constraints in normalized units.
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed-boundary problems.
+
+    """
+    constraints = (
+        FixSectionR(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixSectionZ(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixSectionLambda(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
+    )
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
@@ -243,16 +276,23 @@ def maybe_add_self_consistency(thing, constraints):
         and hasattr(thing, "Za_n")
         and hasattr(thing, "Rb_lmn")
         and hasattr(thing, "Zb_lmn")
+        and hasattr(thing, "Rp_lmn")
+        and hasattr(thing, "Zp_lmn")
+        and hasattr(thing, "Lp_lmn")
         and hasattr(thing, "L_lmn")
     ):
-        if not _is_any_instance(constraints, BoundaryRSelfConsistency):
-            constraints += (BoundaryRSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, BoundaryZSelfConsistency):
-            constraints += (BoundaryZSelfConsistency(eq=thing),)
-        if not _is_any_instance(
-            constraints, BoundaryLambdaSelfConsistency
-        ) and isinstance(thing.surface, PoincareSurface):
-            constraints += (BoundaryLambdaSelfConsistency(eq=thing),)
+        if thing.xsection.isgiven:
+            if not _is_any_instance(constraints, SectionRSelfConsistency):
+                constraints += (SectionRSelfConsistency(eq=thing),)
+            if not _is_any_instance(constraints, SectionZSelfConsistency):
+                constraints += (SectionZSelfConsistency(eq=thing),)
+            if not _is_any_instance(constraints, SectionLambdaSelfConsistency):
+                constraints += (SectionLambdaSelfConsistency(eq=thing),)
+        else:
+            if not _is_any_instance(constraints, BoundaryRSelfConsistency):
+                constraints += (BoundaryRSelfConsistency(eq=thing),)
+            if not _is_any_instance(constraints, BoundaryZSelfConsistency):
+                constraints += (BoundaryZSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, FixLambdaGauge):
             constraints += (FixLambdaGauge(eq=thing),)
         if not _is_any_instance(constraints, AxisRSelfConsistency):

@@ -8,7 +8,7 @@ def compute_scaling_factors(thing):
     """Compute dimensional quantities for normalizations."""
     # local import to avoid circular import
     from desc.equilibrium import Equilibrium
-    from desc.geometry import FourierRZToroidalSurface, PoincareSurface
+    from desc.geometry import FourierRZToroidalSurface
 
     scales = {}
 
@@ -35,16 +35,20 @@ def compute_scaling_factors(thing):
         raise ValueError("No modes found, geometry is unphysical.")
 
     if isinstance(thing, Equilibrium):
-        R00 = thing.Rb_lmn[thing.surface.R_basis.get_idx(M=0, N=0)]
+        R00 = (
+            thing.Rb_lmn[thing.surface.R_basis.get_idx(M=0, N=0)]
+            if not thing.xsection.isgiven
+            else thing.Rp_lmn[thing.xsection.R_basis.get_idx(M=0, N=0)]
+        )
         R10 = (
             get_lowest_mode(thing.surface.R_basis, thing.Rb_lmn)
-            if not isinstance(thing.surface, PoincareSurface)
-            else thing.Rb_lmn[thing.surface.R_basis.get_idx(L=1, M=1)]
+            if not thing.xsection.isgiven
+            else thing.Rp_lmn[thing.xsection.R_basis.get_idx(L=1, M=1)]
         )
         Z10 = (
             get_lowest_mode(thing.surface.Z_basis, thing.Zb_lmn)
-            if not isinstance(thing.surface, PoincareSurface)
-            else thing.Zb_lmn[thing.surface.Z_basis.get_idx(L=1, M=-1)]
+            if not thing.xsection.isgiven
+            else thing.Zp_lmn[thing.xsection.Z_basis.get_idx(L=1, M=-1)]
         )
 
         scales["R0"] = R00

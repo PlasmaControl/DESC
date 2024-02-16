@@ -1367,7 +1367,9 @@ arg_order = (
     "Za_n",
     "Rb_lmn",
     "Zb_lmn",
-    "Lb_lmn",
+    "Rp_lmn",
+    "Zp_lmn",
+    "Lp_lmn",
 )
 # map from profile name to equilibrium parameter name
 profile_names = {

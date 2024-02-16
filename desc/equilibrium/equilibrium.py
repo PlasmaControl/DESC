@@ -41,7 +41,13 @@ from desc.utils import Timer, copy_coeffs, errorif, isposint, only1, setdefault
 
 from .coords import compute_theta_coords, is_nested, map_coordinates, to_sfl
 from .initial_guess import set_initial_guess
-from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
+from .utils import (
+    _assert_nonnegint,
+    parse_axis,
+    parse_profile,
+    parse_section,
+    parse_surface,
+)
 
 
 class Equilibrium(IOAble, Optimizable):
@@ -135,6 +141,7 @@ class Equilibrium(IOAble, Optimizable):
         "_L_basis",
         "_surface",
         "_axis",
+        "_xsection",
         "_pressure",
         "_iota",
         "_current",
@@ -169,6 +176,7 @@ class Equilibrium(IOAble, Optimizable):
         anisotropy=None,
         surface=None,
         axis=None,
+        xsection=None,
         sym=None,
         spectral_indexing=None,
         check_orientation=True,
@@ -227,7 +235,10 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         # magnetic axis
-        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
+        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface, xsection)
+
+        # cross section
+        self._xsection = parse_section(xsection)
 
         # resolution
         _assert_nonnegint(L, "L")
@@ -238,12 +249,13 @@ class Equilibrium(IOAble, Optimizable):
         _assert_nonnegint(N_grid, "N_grid")
 
         self._N = int(setdefault(N, self.surface.N))
-        self._M = int(setdefault(M, self.surface.M))
+        self._M = int(setdefault(M, setdefault(self.surface.M, self.xsection.M)))
         self._L = int(
             setdefault(
                 L,
                 max(
                     self.surface.L,
+                    self.xsection.L,
                     self.M if (self.spectral_indexing == "ansi") else 2 * self.M,
                 ),
             )
@@ -254,6 +266,7 @@ class Equilibrium(IOAble, Optimizable):
 
         self._surface.change_resolution(self.L, self.M, self.N)
         self._axis.change_resolution(self.N)
+        self._xsection.change_resolution(self.L, self.M)
 
         # bases
         self._R_basis = FourierZernikeBasis(
@@ -423,7 +436,9 @@ class Equilibrium(IOAble, Optimizable):
             "Za_n",
             "Rb_lmn",
             "Zb_lmn",
-            "Lb_lmn",
+            "Rp_lmn",
+            "Zp_lmn",
+            "Lp_lmn",
         )
         assert sorted(args) == sorted(arg_order)
         return [arg for arg in arg_order if arg in args]
@@ -678,7 +693,7 @@ class Equilibrium(IOAble, Optimizable):
             surface.Z_lmn = Zb
             return surface
 
-    def get_poincare_surface_at(self, zeta):
+    def get_poincare_xsection_at(self, zeta=0):
         """Return a representation for a Poincare section at a given toroidal angle.
 
         Parameters
@@ -697,15 +712,11 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"Toroidal angle must be between 0 and 2*pi, got {zeta}",
         )
-        if isinstance(self.surface, PoincareSurface) and self.surface.zeta == zeta:
-            return self.surface
-        else:
-            surf = self.get_surface_at(zeta=zeta)
-            Lb_lmn, Lb_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
-            surface = PoincareSurface(
-                surface=surf, L_lmn=Lb_lmn, modes_L=Lb_basis.modes, zeta=zeta
-            )
-            return surface
+        surf = self.get_surface_at(zeta=zeta)
+        Lp_lmn, Lp_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
+        return PoincareSurface(
+            surface=surf, L_lmn=Lp_lmn, modes_L=Lp_basis.modes, zeta=zeta
+        )
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):
         """Return a SplineProfile of the desired quantity.
@@ -790,10 +801,10 @@ class Equilibrium(IOAble, Optimizable):
         eq_poincare : Equilibrium
             Separate Equilibrium object to be used for Poincare BC problem
         """
-        surface = self.get_poincare_surface_at(zeta)
+        xsection = self.get_poincare_xsection_at(zeta)
 
         eq_poincare = Equilibrium(
-            surface=surface,
+            xsection=xsection,
             pressure=self.pressure,
             iota=self.iota,
             Psi=self.Psi,  # flux (in Webers) within the last closed flux surface
@@ -828,17 +839,17 @@ class Equilibrium(IOAble, Optimizable):
         )
         print("\nsurface: ", self.surface.__class__.__name__)
         print(f"\tL: {self.surface.L}  M: {self.surface.M}  N: {self.surface.N}")
-        if isinstance(self.surface, PoincareSurface):
-            print(
-                f"\tR_lmn_dim: {self.surface.R_lmn.size}   "
-                + f"\n\tZ_lmn_dim: {self.surface.Z_lmn.size}   "
-                + f"\n\tL_lmn_dim: {self.surface.L_lmn.size}   "
-            )
-        else:
-            print(
-                f"\tR_lmn_dim: {self.surface.R_lmn.size}   "
-                + f"\n\tZ_lmn_dim: {self.surface.Z_lmn.size}   "
-            )
+        print(
+            f"\tR_lmn_dim: {self.surface.R_lmn.size}   "
+            + f"\n\tZ_lmn_dim: {self.surface.Z_lmn.size}   "
+        )
+        print("\ncross-section: ", self.xsection.__class__.__name__)
+        print(f"\tL: {self.xsection.L}  M: {self.xsection.M}  N: {self.xsection.N}")
+        print(
+            f"\tR_lmn_dim: {self.xsection.R_lmn.size}   "
+            + f"\n\tZ_lmn_dim: {self.xsection.Z_lmn.size}   "
+            + f"\n\tL_lmn_dim: {self.xsection.L_lmn.size}   "
+        )
         print("\naxis: ", self.axis.__class__.__name__)
         print("sym: ", self.sym)
         print("spectral_indexing: ", self.spectral_indexing)
@@ -1265,6 +1276,25 @@ class Equilibrium(IOAble, Optimizable):
         self._axis = new
 
     @property
+    def xsection(self):
+        """Poincare Section: Geometric surface defining toroidal cross-section."""
+        return self._xsection
+
+    @xsection.setter
+    def xsection(self, new):
+        assert isinstance(
+            new, PoincareSurface
+        ), f"surfaces should be of type PoincareSurface, got {new}"
+        assert (
+            self.sym == new.sym
+        ), "Surface and Equilibrium must have the same symmetry"
+        assert self.NFP == getattr(
+            new, "NFP", self.NFP
+        ), "Surface and Equilibrium must have the same NFP"
+        new.change_resolution(self.L, self.M, self.N)
+        self._xsection = new
+
+    @property
     def spectral_indexing(self):
         """str: Type of indexing used for the spectral basis."""
         # TODO: allow this to change?
@@ -1400,28 +1430,42 @@ class Equilibrium(IOAble, Optimizable):
 
     @optimizable_parameter
     @property
-    def Lb_lmn(self):
-        """ndarray: Spectral coefficients of Lambda at the boundary."""
-        if isinstance(self.surface, PoincareSurface):
-            return self.surface.L_lmn
-        else:
-            return np.empty(0)
+    def Rp_lmn(self):
+        """ndarray: Spectral coefficients of R at the cross-section."""
+        return self.xsection.R_lmn
 
-    @Lb_lmn.setter
-    def Lb_lmn(self, Lb_lmn):
-        self.surface.L_lmn = Lb_lmn
+    @Rp_lmn.setter
+    def Rp_lmn(self, Rp_lmn):
+        self.xsection.R_lmn = Rp_lmn
+
+    @optimizable_parameter
+    @property
+    def Zp_lmn(self):
+        """ndarray: Spectral coefficients of Z at the cross-section."""
+        return self.xsection.Z_lmn
+
+    @Zp_lmn.setter
+    def Zp_lmn(self, Zp_lmn):
+        self.xsection.Z_lmn = Zp_lmn
+
+    @optimizable_parameter
+    @property
+    def Lp_lmn(self):
+        """ndarray: Spectral coefficients of Lambda at the cross-section."""
+        return self.xsection.L_lmn
+
+    @Lp_lmn.setter
+    def Lp_lmn(self, Lp_lmn):
+        self.xsection.L_lmn = Lp_lmn
 
     @property
-    def Lb_basis(self):
-        """ndarray: Spectral coefficients of Lambda at the boundary."""
-        if isinstance(self.surface, PoincareSurface):
-            return self.surface.L_basis
-        else:
-            return np.empty(0)
+    def Lp_basis(self):
+        """ndarray: Spectral coefficients of Lambda at the cross-section."""
+        return self.xsection.L_basis
 
-    @Lb_basis.setter
-    def Lb_basis(self, Lb_basis):
-        self.surface.L_basis = Lb_basis
+    @Lp_basis.setter
+    def Lp_basis(self, Lp_basis):
+        self.xsection.L_basis = Lp_basis
 
     @optimizable_parameter
     @property

@@ -19,6 +19,7 @@ from desc.objectives import (
     ObjectiveFunction,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
+    get_fixed_xsection_constraints,
 )
 from desc.perturbations import get_deltas
 from desc.profiles import PowerSeriesProfile
@@ -380,20 +381,20 @@ def test_poincare_bc(HELIOTRON):
     eq_perturb = eq_GS.set_poincare_equilibrium()
     eq_perturb.change_resolution(eq.L, eq.M, eq.N)
 
-    surf1 = eq_perturb.surface
-    surf2 = eq_poin.surface
+    surf1 = eq_perturb.xsection
+    surf2 = eq_poin.xsection
     things1 = {"surface_poincare": surf1}
     things2 = {"surface_poincare": surf2}
 
     deltas = get_deltas(things1, things2)
-    constraints = get_fixed_boundary_constraints(eq=eq_perturb)
+    constraints = get_fixed_xsection_constraints(eq=eq_perturb)
     objective = ObjectiveFunction(ForceBalance(eq_perturb))
     eq_perturb.perturb(
         objective=objective, constraints=constraints, deltas=deltas, tr_ratio=0.02
     )
 
     print("\nSolving last time...")
-    constraints = get_fixed_boundary_constraints(eq=eq_perturb)
+    constraints = get_fixed_xsection_constraints(eq=eq_perturb)
     objective = ObjectiveFunction(ForceBalance(eq_perturb))
     eq_perturb.solve(
         verbose=3,

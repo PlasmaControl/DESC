@@ -7,7 +7,6 @@ import numpy as np
 from termcolor import colored
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.geometry import PoincareSurface
 from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.optimize import Optimizer
 from desc.perturbations import get_deltas
@@ -351,8 +350,8 @@ def _add_shaping(
             deltas["Rb_lmn"] *= bdry_step
         if "Zb_lmn" in deltas:
             deltas["Zb_lmn"] *= bdry_step
-        if "Lb_lmn" in deltas and isinstance(eq.surface, PoincareSurface):
-            deltas["Lb_lmn"] *= bdry_step
+        if "Lp_lmn" in deltas and eq.xsection.isgiven:
+            print("WARNING: Lp_lmn is not yet supported for continuation")
         bdry_ratio += bdry_step
 
         constraints_i = get_fixed_boundary_constraints(eq=eqi)

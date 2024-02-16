@@ -112,7 +112,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
     return surface
 
 
-def parse_axis(axis, NFP=1, sym=True, surface=None):
+def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
     """Parse axis input into Curve object.
 
     Parameters
@@ -154,13 +154,14 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
                 ],
                 NFP=NFP,
             )
-        elif isinstance(surface, PoincareSurface):
+        elif isinstance(xsection, PoincareSurface):
             # FIXME: include m=0 l!=0 modes
             axis = FourierRZCurve(
                 R_n=surface.R_lmn[
                     np.where(
+                        PoincareSurface,
                         (surface.R_basis.modes[:, 0] == 0)
-                        & (surface.R_basis.modes[:, 1] == 0)
+                        & (surface.R_basis.modes[:, 1] == 0),
                     )
                 ].sum(),
                 Z_n=surface.Z_lmn[
@@ -176,6 +177,17 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
     else:
         raise TypeError("Got unknown axis type {}".format(axis))
     return axis
+
+
+def parse_section(xsection):
+    """Parse section input into PoincareSurface object."""
+    if isinstance(xsection, PoincareSurface):
+        xsection = xsection
+        xsection.isgiven = True
+    else:
+        xsection = PoincareSurface()
+        xsection.isgiven = False
+    return xsection
 
 
 def _assert_nonnegint(x, name=""):

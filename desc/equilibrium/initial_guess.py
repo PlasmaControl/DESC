@@ -7,7 +7,7 @@ import numpy as np
 
 from desc.backend import fori_loop, jit, jnp, put
 from desc.basis import zernike_radial
-from desc.geometry import FourierRZCurve, PoincareSurface, Surface
+from desc.geometry import FourierRZCurve, Surface
 from desc.grid import Grid, _Grid
 from desc.io import load
 from desc.objectives import (
@@ -87,7 +87,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
             "set_initial_guess should be called with 4 or fewer arguments."
         )
     if nargs == 0 or nargs == 1 and args[0] is None:
-        if hasattr(eq, "_surface"):
+        if hasattr(eq, "_surface") and not eq.xsection.isgiven:
             # use whatever surface is already assigned
             if hasattr(eq, "_axis"):
                 axisR = np.array([eq._axis.R_basis.modes[:, -1], eq._axis.R_n]).T
@@ -110,16 +110,26 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
                 axisZ,
                 coord,
             )
-            if isinstance(eq.surface, PoincareSurface):
-                eq.L_lmn = _initial_guess_surface(
-                    eq.L_basis,
-                    eq.Lb_lmn,
-                    eq.surface.L_basis,
-                )
+        elif eq.xsection.isgiven:
+            eq.R_lmn = _initial_guess_surface(
+                eq.R_basis,
+                eq.Rp_lmn,
+                eq.xsection.R_basis,
+            )
+            eq.Z_lmn = _initial_guess_surface(
+                eq.Z_basis,
+                eq.Zp_lmn,
+                eq.xsection.Z_basis,
+            )
+            eq.L_lmn = _initial_guess_surface(
+                eq.L_basis,
+                eq.Lp_lmn,
+                eq.xsection.L_basis,
+            )
         else:
             raise ValueError(
                 "set_initial_guess called with no arguments, "
-                + "but no surface is assigned."
+                + "but no surface or cross-section is assigned."
             )
     else:  # nargs > 0
         if isinstance(args[0], Surface):

@@ -3,12 +3,13 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.geometry import PoincareSurface
 from desc.objectives import (
-    BoundaryLambdaSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     ObjectiveFunction,
+    SectionLambdaSelfConsistency,
+    SectionRSelfConsistency,
+    SectionZSelfConsistency,
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
@@ -438,7 +439,7 @@ class ProximalProjection(ObjectiveFunction):
         xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
         for arg in self._args:
-            if arg not in ["Rb_lmn", "Zb_lmn", "Lb_lmn"]:
+            if arg not in ["Rb_lmn", "Zb_lmn", "Rp_lmn", "Zp_lmn", "Lp_lmn"]:
                 x_idx = self._eq.x_idx[arg]
                 dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
             if arg == "Rb_lmn":
@@ -453,14 +454,24 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
-            if arg == "Lb_lmn" and isinstance(self._eq.surface, PoincareSurface):
-                c = get_instance(
-                    self._linear_constraints, BoundaryLambdaSelfConsistency
-                )
+            if arg == "Rp_lmn" and self._eq.xsection.isgiven:
+                c = get_instance(self._linear_constraints, SectionRSelfConsistency)
+                A = c.jac_unscaled(xz)[0]["R_lmn"]
+                Ainv = np.linalg.pinv(A)
+                dxdRp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
+                dxdc.append(dxdRp)
+            if arg == "Zp_lmn" and self._eq.xsection.isgiven:
+                c = get_instance(self._linear_constraints, SectionZSelfConsistency)
+                A = c.jac_unscaled(xz)[0]["Z_lmn"]
+                Ainv = np.linalg.pinv(A)
+                dxdZp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
+                dxdc.append(dxdZp)
+            if arg == "Lp_lmn" and self._eq.xsection.isgiven:
+                c = get_instance(self._linear_constraints, SectionLambdaSelfConsistency)
                 A = c.jac_unscaled(xz)[0]["L_lmn"]
                 Ainv = np.linalg.pinv(A)
-                dxdLb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["L_lmn"]] @ Ainv
-                dxdc.append(dxdLb)
+                dxdLp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["L_lmn"]] @ Ainv
+                dxdc.append(dxdLp)
         self._dxdc = np.hstack(dxdc)
 
     def build(self, use_jit=None, verbose=1):  # noqa: C901

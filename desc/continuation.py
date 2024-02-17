@@ -509,6 +509,11 @@ def solve_continuation_automatic(  # noqa: C901
         NotImplementedError,
         "Continuation method with anisotropic pressure is not currently supported",
     )
+    errorif(
+        eq.xsection.isgiven,
+        NotImplementedError,
+        "Continuation method with Poincare BC is not currently supported",
+    )
     timer = Timer()
     timer.start("Total time")
 
@@ -675,6 +680,11 @@ def solve_continuation(  # noqa: C901
         not all([eq.anisotropy is None for eq in eqfam]),
         NotImplementedError,
         "Continuation method with anisotropic pressure is not currently supported",
+    )
+    errorif(
+        not all([not eq.xsection.isgiven for eq in eqfam]),
+        NotImplementedError,
+        "Continuation method with Poincare BC is not currently supported",
     )
 
     timer = Timer()

@@ -271,7 +271,7 @@ class TestObjectiveFunction:
             """Ensure compilation without any errors from JAX, related to issue #625."""
             obj = ObjectiveFunction(QuasisymmetryBoozer(eq=eq))
             obj.build()
-            obj.compile()
+            obj.compile("all")
             fb = obj.compute_scaled_error(obj.x(eq))
             np.testing.assert_allclose(fb, 0, atol=1e-12)
 

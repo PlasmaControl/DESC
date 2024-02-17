@@ -818,10 +818,17 @@ class ProximalProjection(ObjectiveFunction):
         dfdcs[self._eq_idx] = dfdc
         dfdc = jnp.concatenate(dfdcs)
 
-        # LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc    # noqa: E800
+        # dG/dc = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc
         # = Gx @ (unfixed_idx @ Z @ dfdc - dxdc @ v)
         # unfixed_idx_mat includes Z already
-        tangent = self._unfixed_idx_mat @ dfdc - self._dxdc @ v
+        dxdcv = jnp.concatenate(
+            [
+                *vs[: self._eq_idx],
+                self._dxdc @ vs[self._eq_idx],
+                *vs[self._eq_idx + 1 :],
+            ]
+        )
+        tangent = self._unfixed_idx_mat @ dfdc - dxdcv
         if self._objective._deriv_mode in ["batched", "looped"]:
             out = getattr(self._objective, "jvp_" + op)(tangent, xg, constants[0])
         else:  # deriv_mode == "blocked"

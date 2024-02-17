@@ -541,8 +541,7 @@ class ObjectiveFunction(IOAble):
         elif mode == "auto":
             mode = "lsq"
         self._compile_mode = mode
-        # variable values are irrelevant for compilation
-        x = np.zeros((self.dim_x,))
+        x = self.x()
 
         if verbose > 0:
             print(

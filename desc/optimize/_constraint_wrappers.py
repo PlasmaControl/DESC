@@ -103,21 +103,6 @@ class LinearConstraintProjection(ObjectiveFunction):
         if verbose > 1:
             timer.disp("Linear constraint projection build")
 
-    def compile(self, mode="lsq", verbose=1):
-        """Call the necessary functions to ensure the function is compiled.
-
-        Parameters
-        ----------
-        mode : {"auto", "lsq", "scalar", "all"}
-            Whether to compile for least squares optimization or scalar optimization.
-            "auto" compiles based on the type of objective,
-            "all" compiles all derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        self._objective.compile(mode, verbose)
-
     def project(self, x):
         """Project full vector x into x_reduced that satisfies constraints."""
         return self._project(x)
@@ -609,22 +594,6 @@ class ProximalProjection(ObjectiveFunction):
             else:
                 s += t.dim_x
         return s
-
-    def compile(self, mode="lsq", verbose=1):
-        """Call the necessary functions to ensure the function is compiled.
-
-        Parameters
-        ----------
-        mode : {"auto", "lsq", "scalar", "all"}
-            Whether to compile for least squares optimization or scalar optimization.
-            "auto" compiles based on the type of objective,
-            "all" compiles all derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        self._objective.compile(mode, verbose)
-        self._constraint.compile(mode, verbose)
 
     def _update_equilibrium(self, x, store=False):
         """Update the internal equilibrium with new boundary, profile etc.

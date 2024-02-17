@@ -11,7 +11,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
-from desc.utils import Timer, get_instance
+from desc.utils import Timer, get_instance, setdefault
 
 from .utils import f_where_x
 
@@ -431,7 +431,7 @@ class ProximalProjection(ObjectiveFunction):
             recover,
         ) = factorize_linear_constraints(self._linear_constraints, self._constraint)
 
-        # dx/dc - goes from the full state to optimization variables
+        # dx/dc - goes from the full state to optimization variables for eq
         dxdc = []
         xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
@@ -502,6 +502,7 @@ class ProximalProjection(ObjectiveFunction):
             self._scalar = False
 
         self._set_eq_state_vector()
+
         # map from eq c to full c
         self._dimc_per_thing = [t.dim_x for t in self.things]
         self._dimc_per_thing[self._eq_idx] = np.sum(
@@ -509,6 +510,7 @@ class ProximalProjection(ObjectiveFunction):
         )
         self._dimx_per_thing = [t.dim_x for t in self.things]
 
+        # equivalent matrix for A[unfixed_idx]@Z == A@unfixed_idx_mat
         self._unfixed_idx_mat = jnp.eye(self._objective.dim_x)
         self._unfixed_idx_mat = jnp.split(
             self._unfixed_idx_mat, np.cumsum([t.dim_x for t in self.things]), axis=-1
@@ -705,8 +707,7 @@ class ProximalProjection(ObjectiveFunction):
             Objective function value(s).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = setdefault(constants, self.constants)
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_scaled(xopt, constants[0])
 
@@ -726,8 +727,7 @@ class ProximalProjection(ObjectiveFunction):
             Objective function value(s).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = setdefault(constants, self.constants)
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_scaled_error(xopt, constants[0])
 
@@ -747,8 +747,7 @@ class ProximalProjection(ObjectiveFunction):
             Objective function value(s).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = setdefault(constants, self.constants)
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_unscaled(xopt, constants[0])
 
@@ -786,7 +785,91 @@ class ProximalProjection(ObjectiveFunction):
         J : ndarray
             Jacobian matrix.
         """
-        raise NotImplementedError("Unscaled jacobian of proximal projection is hard.")
+        v = jnp.eye(x.shape[0])
+        return self.jvp_unscaled(v, x, constants).T
+
+    def jac_scaled(self, x, constants=None):
+        """Compute Jacobian of the vector objective function with weights / bounds.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
+        v = jnp.eye(x.shape[0])
+        return self.jvp_scaled(v, x, constants).T
+
+    def hess(self, x, constants=None):
+        """Compute Hessian of the sum of squares of residuals.
+
+        Uses the "small residual approximation" where the Hessian is replaced by
+        the square of the Jacobian: H = J.T @ J
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        H : ndarray
+            Hessian matrix.
+        """
+        J = self.jac_scaled(x, constants)
+        return J.T @ J
+
+    def jvp_scaled(self, v, x, constants=None):
+        """Compute Jacobian-vector product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray or tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+            This method only works for first order jvps.
+        x : ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        v = v[0] if isinstance(v, (tuple, list)) else v
+        constants = setdefault(constants, self.constants)
+        xg, xf = self._update_equilibrium(x, store=True)
+        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
+        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+
+    def jvp_unscaled(self, v, x, constants=None):
+        """Compute Jacobian-vector product of the objective function.
+
+        Uses the unscaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray or tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+            This method only works for first order jvps.
+        x : ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        v = v[0] if isinstance(v, (tuple, list)) else v
+        constants = setdefault(constants, self.constants)
+        xg, xf = self._update_equilibrium(x, store=True)
+        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="unscaled")
+        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
 
     def _jvp_f(self, xf, dc, constants, op):
         Fx = getattr(self._constraint, "jac_" + op)(xf, constants)
@@ -856,99 +939,6 @@ class ProximalProjection(ObjectiveFunction):
                     out.append(outi)
             out = jnp.concatenate(out)
         return -out
-
-    def jvp_scaled(self, v, x, constants=None):
-        """Compute Jacobian-vector product of the objective function.
-
-        Uses the scaled form of the objective.
-
-        Parameters
-        ----------
-        v : ndarray or tuple of ndarray
-            Vectors to right-multiply the Jacobian by.
-            This method only works for first order jvps.
-        x : ndarray
-            Optimization variables.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
-        """
-        if isinstance(v, (tuple, list)):
-            v = v[0]
-        if constants is None:
-            constants = self.constants
-        xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
-
-    def jac_scaled(self, x, constants=None):
-        """Compute Jacobian of the vector objective function with weights / bounds.
-
-        Parameters
-        ----------
-        x : ndarray
-            State vector.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
-        Returns
-        -------
-        J : ndarray
-            Jacobian matrix.
-        """
-        v = jnp.eye(x.shape[0])
-        return self.jvp_scaled(v, x, constants).T
-
-    def hess(self, x, constants=None):
-        """Compute Hessian of the sum of squares of residuals.
-
-        Uses the "small residual approximation" where the Hessian is replaced by
-        the square of the Jacobian: H = J.T @ J
-
-        Parameters
-        ----------
-        x : ndarray
-            State vector.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
-        Returns
-        -------
-        H : ndarray
-            Hessian matrix.
-        """
-        J = self.jac_scaled(x, constants)
-        return J.T @ J
-
-    def vjp_scaled(self, v, x):
-        """Compute vector-Jacobian product of the objective function.
-
-        Uses the scaled form of the objective.
-
-        Parameters
-        ----------
-        v : ndarray
-            Vector to left-multiply the Jacobian by.
-        x : ndarray
-            Optimization variables.
-
-        """
-        raise NotImplementedError
-
-    def vjp_unscaled(self, v, x):
-        """Compute vector-Jacobian product of the objective function.
-
-        Uses the unscaled form of the objective.
-
-        Parameters
-        ----------
-        v : ndarray
-            Vector to left-multiply the Jacobian by.
-        x : ndarray
-            Optimization variables.
-
-        """
-        raise NotImplementedError
 
     @property
     def constants(self):

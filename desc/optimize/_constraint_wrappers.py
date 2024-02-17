@@ -583,7 +583,7 @@ class ProximalProjection(ObjectiveFunction):
         """Return the full state vector from the Optimizable objects things."""
         # TODO: also check resolution etc?
         things = things or self.things
-        assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
+        assert [type(t1) is type(t2) for t1, t2 in zip(things, self.things)]
         xs = []
         for t in self.things:
             if t is self._eq:

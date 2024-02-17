@@ -9,8 +9,15 @@ desc.set_device("cpu")
 import desc.examples
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
-from desc.grid import ConcentricGrid
-from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
+from desc.grid import ConcentricGrid, LinearGrid
+from desc.objectives import (
+    ForceBalance,
+    ObjectiveFunction,
+    QuasisymmetryTwoTerm,
+    get_equilibrium_objective,
+    get_fixed_boundary_constraints,
+)
+from desc.optimize import ProximalProjection
 from desc.perturbations import perturb
 from desc.transform import Transform
 
@@ -269,3 +276,22 @@ def test_perturb_2(benchmark):
         return args, kwargs
 
     benchmark.pedantic(perturb, setup=setup, rounds=10, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_proximal_jac_atf(benchmark):
+    """Benchmark computing jacobian of constrained proximal projection."""
+    eq = desc.examples.get("ATF")
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
+    objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
+    constraint = ObjectiveFunction(ForceBalance(eq))
+    prox = ProximalProjection(objective, constraint, eq)
+    prox.build()
+    prox.compile()
+    x = prox.x(eq)
+
+    def run(x):
+        prox.jac_scaled(x, prox.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x,), rounds=15, iterations=1)

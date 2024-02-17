@@ -1134,7 +1134,7 @@ def test_optimize_with_single_constraint():
 def test_proximal_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")
-    eq.change_resolution(3, 2, 1, 6, 4, 2)
+    eq.change_resolution(1, 1, 1, 2, 2, 2)
     eq1 = eq.copy()
     eq2 = eq.copy()
     eq3 = eq.copy()
@@ -1144,16 +1144,16 @@ def test_proximal_jacobian():
     obj1 = ObjectiveFunction(
         (
             QuasisymmetryTripleProduct(eq1, deriv_mode="fwd"),
-            AspectRatio(eq1, deriv_mode="rev"),
-            Volume(eq1, deriv_mode="rev"),
+            AspectRatio(eq1, deriv_mode="fwd"),
+            Volume(eq1, deriv_mode="fwd"),
         ),
         deriv_mode="batched",
     )
     obj2 = ObjectiveFunction(
         (
             QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
-            AspectRatio(eq2, deriv_mode="rev"),
-            Volume(eq2, deriv_mode="rev"),
+            AspectRatio(eq2, deriv_mode="fwd"),
+            Volume(eq2, deriv_mode="fwd"),
         ),
         deriv_mode="looped",
     )
@@ -1178,6 +1178,7 @@ def test_proximal_jacobian():
     # this is basically the old method we're benchmarking against
     xf = con1.x(eq1)
     xg = obj1.x(eq1)
+    # for scaled jacobian
     Fx = con1.jac_scaled(xf)
     Gx = obj1.jac_scaled(xg)
     Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
@@ -1189,12 +1190,34 @@ def test_proximal_jacobian():
     sf += sf[-1]  # add a tiny bit of regularization
     sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
     Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
-    Jac0 = -Gxh @ (Fxh_inv @ Fc) + Gc
+    jac_scaled = -Gxh @ (Fxh_inv @ Fc) + Gc
+    # for unscaled jacobian
+    Fx = con1.jac_unscaled(xf)
+    Gx = obj1.jac_unscaled(xg)
+    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
+    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fc = Fx @ prox1._dxdc
+    Gc = Gx @ prox1._dxdc
+    cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf += sf[-1]  # add a tiny bit of regularization
+    sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+    Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
+    jac_unscaled = -Gxh @ (Fxh_inv @ Fc) + Gc
 
-    jvp0 = Jac0 @ v
+    jvp0 = jac_scaled @ v
     jvp1 = prox1.jvp_scaled(v, x)
     jvp2 = prox2.jvp_scaled(v, x)
     jvp3 = prox3.jvp_scaled(v, x)
+
+    np.testing.assert_allclose(jvp0, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp0, jvp3, rtol=1e-12, atol=1e-12)
+
+    jvp0 = jac_unscaled @ v
+    jvp1 = prox1.jvp_unscaled(v, x)
+    jvp2 = prox2.jvp_unscaled(v, x)
+    jvp3 = prox3.jvp_unscaled(v, x)
 
     np.testing.assert_allclose(jvp0, jvp1, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(jvp0, jvp2, rtol=1e-12, atol=1e-12)
@@ -1204,6 +1227,14 @@ def test_proximal_jacobian():
     jac2 = prox2.jac_scaled(x)
     jac3 = prox3.jac_scaled(x)
 
-    np.testing.assert_allclose(Jac0, jac1, rtol=1e-12, atol=1e-12)
-    np.testing.assert_allclose(Jac0, jac2, rtol=1e-12, atol=1e-12)
-    np.testing.assert_allclose(Jac0, jac3, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac3, rtol=1e-12, atol=1e-12)
+
+    jac1 = prox1.jac_unscaled(x)
+    jac2 = prox2.jac_unscaled(x)
+    jac3 = prox3.jac_unscaled(x)
+
+    np.testing.assert_allclose(jac_unscaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)

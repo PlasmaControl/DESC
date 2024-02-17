@@ -302,11 +302,7 @@ def run_qh_step(n, eq):
         maxiter=50,
         verbose=3,
         copy=True,
-        options={
-            "initial_trust_ratio": 1.0,  # for backwards consistency
-            "perturb_options": {"verbose": 0},
-            "solve_options": {"verbose": 0},
-        },
+        options={},
     )
 
     return eq1
@@ -325,7 +321,7 @@ def test_qh_optimization():
         modes_Z=[[-1, 0], [0, -1]],
         NFP=4,
     )
-    eq = Equilibrium(M=4, N=4, Psi=0.04, surface=surf)
+    eq = Equilibrium(M=5, N=5, Psi=0.04, surface=surf)
     eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[
         -1
     ]

@@ -183,6 +183,7 @@ class InputReader:
             "current": np.atleast_2d((0, 0.0)),
             "surface": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
+            "xsection": None,
         }
 
         iota_flag = False

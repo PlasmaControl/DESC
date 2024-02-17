@@ -1091,7 +1091,11 @@ class PoincareSurface(ZernikeRZToroidalSection):
         """bool: Cross-section is given as input or not."""
         # True: Cross-section is given as input
         # False: Cross-section is not given as input
-        return self._isgiven
+        try:
+            return self._isgiven
+        except AttributeError:
+            self._isgiven = False
+            return self._isgiven
 
     @isgiven.setter
     def isgiven(self, isgiven):

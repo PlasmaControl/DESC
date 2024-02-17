@@ -239,6 +239,12 @@ class Equilibrium(IOAble, Optimizable):
 
         # cross section
         self._xsection = parse_section(xsection)
+        try:
+            assert self.xsection.isgiven != "dummy"
+        except AttributeError:
+            # Initialisation with load function cause issues
+            # if the xsection is not empty PoincareSurface object
+            self.xsection.isgiven = False
 
         # resolution
         _assert_nonnegint(L, "L")

@@ -95,17 +95,8 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
                 sym,
                 check_orientation=False,
             )
-        elif np.all(surface[:, 2] == 0):
-            surface = PoincareSurface(
-                R_lmn=surface[:, 3],
-                Z_lmn=surface[:, 4],
-                modes_R=surface[:, :2].astype(int),
-                modes_Z=surface[:, :2].astype(int),
-                spectral_indexing=spectral_indexing,
-                sym=sym,
-            )
         else:
-            raise ValueError("boundary should either have l=0 or n=0")
+            raise ValueError("boundary should have l=0")
     else:
         raise TypeError("Got unknown surface type {}".format(surface))
 
@@ -154,7 +145,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
                 ],
                 NFP=NFP,
             )
-        elif isinstance(xsection, PoincareSurface):
+        elif isinstance(xsection, PoincareSurface) and xsection.isgiven:
             # FIXME: include m=0 l!=0 modes
             axis = FourierRZCurve(
                 R_n=surface.R_lmn[

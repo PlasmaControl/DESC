@@ -59,16 +59,16 @@ class TestConstructor:
         np.testing.assert_allclose(axis.R_n, eq.Ra_n)
         np.testing.assert_allclose(axis.Z_n, eq.Za_n)
 
-        surface2 = PoincareSurface(spectral_indexing="ansi")
-        eq2 = Equilibrium(surface=surface2)
-        assert eq2.surface.eq(surface2)
+        xsection = PoincareSurface(spectral_indexing="ansi")
+        eq2 = Equilibrium(xsection=xsection)
+        assert eq2.xsection.eq(xsection)
 
         surface3 = FourierRZToroidalSurface(NFP=3)
         eq3 = Equilibrium(surface=surface3)
         assert eq3.NFP == 3
         assert eq3.axis.NFP == 3
 
-        eq4 = Equilibrium(surface=surface2, axis=None)
+        eq4 = Equilibrium(xsection=xsection, axis=None)
         np.testing.assert_allclose(eq4.axis.R_n, [10])
 
     @pytest.mark.unit

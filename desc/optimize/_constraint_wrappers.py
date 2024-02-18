@@ -98,6 +98,11 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._dim_x = self._objective.dim_x
         self._dim_x_reduced = self._Z.shape[1]
 
+        # equivalent matrix for A[unfixed_idx]@Z == A@unfixed_idx_mat
+        self._unfixed_idx_mat = (
+            jnp.eye(self._objective.dim_x)[:, self._unfixed_idx] @ self._Z
+        )
+
         self._built = True
         timer.stop("Linear constraint projection build")
         if verbose > 1:
@@ -277,8 +282,9 @@ class LinearConstraintProjection(ObjectiveFunction):
             Jacobian matrix.
         """
         x = self.recover(x_reduced)
-        df = self._objective.jac_unscaled(x, constants)
-        return df[:, self._unfixed_idx] @ self._Z
+        v = self._unfixed_idx_mat
+        df = self._objective.jvp_unscaled(v.T, x, constants)
+        return df.T
 
     def jac_scaled(self, x_reduced, constants=None):
         """Compute Jacobian of the vector objective function with weighting / bounds.
@@ -296,10 +302,51 @@ class LinearConstraintProjection(ObjectiveFunction):
             Jacobian matrix.
         """
         x = self.recover(x_reduced)
-        df = self._objective.jac_scaled(x, constants)
-        return df[:, self._unfixed_idx] @ self._Z
+        v = self._unfixed_idx_mat
+        df = self._objective.jvp_scaled(v.T, x, constants)
+        return df.T
 
-    def vjp_scaled(self, v, x_reduced):
+    def jvp_scaled(self, v, x_reduced, constants=None):
+        """Compute Jacobian-vector product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+        x_reduced : ndarray
+            Optimization variables with linear constraints removed.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        x = self.recover(x_reduced)
+        v = self._unfixed_idx_mat @ v
+        df = self._objective.jvp_scaled(v, x, constants)
+        return df
+
+    def jvp_unscaled(self, v, x_reduced, constants=None):
+        """Compute Jacobian-vector product of the objective function.
+
+        Uses the unscaled form of the objective.
+
+        Parameters
+        ----------
+        v : tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+        x_reduced : ndarray
+            Optimization variables with linear constraints removed.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        x = self.recover(x_reduced)
+        v = self._unfixed_idx_mat @ v
+        df = self._objective.jvp_unscaled(v, x, constants)
+        return df
+
+    def vjp_scaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of the objective function.
 
         Uses the scaled form of the objective.
@@ -309,14 +356,16 @@ class LinearConstraintProjection(ObjectiveFunction):
         v : ndarray
             Vector to left-multiply the Jacobian by.
         x_reduced : ndarray
-            Optimization variables.
+            Optimization variables with linear constraints removed.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         """
         x = self.recover(x_reduced)
-        df = self._objective.vjp_scaled(v, x)
+        df = self._objective.vjp_scaled(v, x, constants)
         return df[self._unfixed_idx] @ self._Z
 
-    def vjp_unscaled(self, v, x_reduced):
+    def vjp_unscaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of the objective function.
 
         Uses the unscaled form of the objective.
@@ -326,11 +375,13 @@ class LinearConstraintProjection(ObjectiveFunction):
         v : ndarray
             Vector to left-multiply the Jacobian by.
         x_reduced : ndarray
-            Optimization variables.
+            Optimization variables with linear constraints removed.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         """
         x = self.recover(x_reduced)
-        df = self._objective.vjp_unscaled(v, x)
+        df = self._objective.vjp_unscaled(v, x, constants)
         return df[self._unfixed_idx] @ self._Z
 
     def __getattr__(self, name):

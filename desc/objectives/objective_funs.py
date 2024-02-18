@@ -485,7 +485,7 @@ class ObjectiveFunction(IOAble):
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
 
-    def vjp_scaled(self, v, x):
+    def vjp_scaled(self, v, x, constants=None):
         """Compute vector-Jacobian product of the objective function.
 
         Uses the scaled form of the objective.
@@ -496,11 +496,14 @@ class ObjectiveFunction(IOAble):
             Vector to left-multiply the Jacobian by.
         x : ndarray
             Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         """
-        return Derivative.compute_vjp(self.compute_scaled, 0, v, x)
+        compute_scaled = lambda x: self.compute_scaled(x, constants)
+        return Derivative.compute_vjp(compute_scaled, 0, v, x)
 
-    def vjp_unscaled(self, v, x):
+    def vjp_unscaled(self, v, x, constants=None):
         """Compute vector-Jacobian product of the objective function.
 
         Uses the unscaled form of the objective.
@@ -511,9 +514,12 @@ class ObjectiveFunction(IOAble):
             Vector to left-multiply the Jacobian by.
         x : ndarray
             Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         """
-        return Derivative.compute_vjp(self.compute_unscaled, 0, v, x)
+        compute_unscaled = lambda x: self.compute_unscaled(x, constants)
+        return Derivative.compute_vjp(compute_unscaled, 0, v, x)
 
     def compile(self, mode="auto", verbose=1):
         """Call the necessary functions to ensure the function is compiled.

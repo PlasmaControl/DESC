@@ -641,8 +641,8 @@ class TestComputeUtils:
         x = np.stack([x, x * 2], axis=-1)
         x = np.stack([x, x * 2, x * 3, x * 4], axis=-1)
         assert np.unique(x.shape).size == x.ndim
-        assert poly.shape[1:] == x.shape[:2]
-        assert np.unique((poly.shape[0],) + x.shape[2:]).size == x.ndim - 1
+        assert poly.shape[1:] == x.shape[: poly.ndim - 1]
+        assert np.unique((poly.shape[0],) + x.shape[poly.ndim - 1 :]).size == x.ndim - 1
         out = polyeval(poly, x)
         for j in range(poly.shape[1]):
             for k in range(poly.shape[2]):

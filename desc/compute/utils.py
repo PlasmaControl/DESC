@@ -1351,7 +1351,7 @@ def surface_min(grid, x, surface_label="rho"):
 
 
 # probably best to add these to interpax
-def cubic_poly_roots(coef, shift=0, real=True):
+def cubic_poly_roots(coef, shift=jnp.array([0]), real=True):
     """Roots of cubic polynomial.
 
     Parameters
@@ -1375,7 +1375,7 @@ def cubic_poly_roots(coef, shift=0, real=True):
     # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
     # The common libraries use root-finding which isn't compatible with JAX.
     a, b, c, d = coef
-    d = (d[jnp.newaxis, :].T - shift).T
+    d = jnp.squeeze((d[jnp.newaxis, :].T - shift).T)
     t_0 = b**2 - 3 * a * c
     t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
     C = ((t_1 + complex_sqrt(t_1**2 - 4 * t_0**3)) / 2) ** (1 / 3)
@@ -1462,7 +1462,9 @@ def polyeval(coef, x):
 
     """
     X = (x[jnp.newaxis, :].T ** jnp.arange(coef.shape[0] - 1, -1, -1)).T
-    f = jnp.einsum("ijk...,ijk...->jk...", coef, X)
+    subscripts = "abcdefghijklmnopqrstuvwxyz"
+    sub = subscripts[: coef.ndim]
+    f = jnp.einsum(sub + "," + sub + "...->" + sub[1:] + "...", coef, X)
     return f
 
 
@@ -1526,6 +1528,9 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         extrapolate="periodic",
     ).c
     der = polyder(coef)
+    # There are zeta.size - 1 splines per field line.
+    assert coef.shape == (4, zeta.size - 1, alpha.size, rho.size)
+    assert der.shape == (3, zeta.size - 1, alpha.size, rho.size)
 
     def _bounce_integral(name, lambda_pitch):
         """Compute the bounce integral of the named quantity.
@@ -1539,7 +1544,7 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
 
         Returns
         -------
-        F : ndarray, shape(lambda_pitch.size, alpha.size, rho.size, resolution, 2)
+        F : ndarray, shape(rho.size, alpha.size, resolution, 2, lambda_pitch.size)
             Bounce integrals evaluated at ``lambda_pitch`` for every field line.
 
         """
@@ -1552,25 +1557,29 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         # the spline exactly between the bounce points. This should give
         # comparable results to a composite Simpson Newton-Cotes with quadrature
         # points near bounce points.
+        lambda_pitch = jnp.atleast_1d(lambda_pitch)
         bp = cubic_poly_roots(coef, 1 / lambda_pitch)
-        # Recall there are zeta.size - 1 cubic splines per field line.
-        assert bp.shape == (lambda_pitch.size, zeta.size - 1, alpha.size, rho.size, 3)
+        bp = jnp.moveaxis(bp, 0, -(lambda_pitch.size > 1))
+        assert bp.shape == (zeta.size - 1, alpha.size, rho.size, 3, lambda_pitch.size)
         b_norm_z = polyeval(der, bp)
-        wells = (b_norm_z[:, :, :, :, :-1] <= 0) & (b_norm_z[:, :, :, :, 1:] >= 0)
+        wells = (b_norm_z[:, :, :, :-1] <= 0) & (b_norm_z[:, :, :, 1:] >= 0)
 
-        Y = jnp.reshape(
+        Y = jnp.nan_to_num(
             eq.compute(name, grid=grid, override_grid=False, data=data)[name]
             / (
                 data["B^zeta"]
                 * jnp.sqrt(1 - lambda_pitch[:, jnp.newaxis] * data["|B|"])
-            ),
-            (lambda_pitch.size, alpha.size, rho.size, zeta.size),
-        )
+            )
+        ).reshape(lambda_pitch.size, alpha.size, rho.size, zeta.size)
         Y = polyint(CubicSpline(zeta, Y, axis=-1, extrapolate="periodic").c)
+        Y = jnp.moveaxis(Y, 2, -1)
+        assert Y.shape == (4, zeta.size - 1, alpha.size, rho.size, lambda_pitch.size)
         # TODO: add periodic boundary condition on leftmost and rightmost bounce points
-        integrals = polyeval(Y, bp)
+        integrals = polyeval(Y[:, :, :, :, jnp.newaxis], bp)
         # Mask the integrations outside the potential wells.
-        F = wells * (integrals[:, :, :, :, 1:] - integrals[:, :, :, :, :-1])
+        F = wells * (integrals[:, :, :, 1:] - integrals[:, :, :, :-1])
+        F = jnp.swapaxes(F, 0, 2)
+        assert F.shape == (rho.size, alpha.size, zeta.size - 1, 2, lambda_pitch.size)
         return F
 
     return _bounce_integral
@@ -1630,7 +1639,7 @@ def bounce_average(eq, rho=None, alpha=None, resolution=20):
 
         Returns
         -------
-        G : ndarray, shape(lambda_pitch.size, alpha.size, rho.size)
+        G : ndarray, shape(rho.size, alpha.size, resolution, 2, lambda_pitch.size)
             Bounce average evaluated at ``lambdas`` for every field line.
 
         """

@@ -5,7 +5,7 @@ from collections.abc import MutableSequence
 
 import numpy as np
 from interpax import approx_df, interp2d, interp3d
-from netCDF4 import Dataset
+from netCDF4 import Dataset, chartostring, stringtochar
 
 from desc.backend import fori_loop, jit, jnp, odeint, sign
 from desc.basis import DoubleFourierSeries
@@ -170,21 +170,22 @@ class _MagneticField(IOAble, ABC):
         return self.__add__(-x)
 
     @abstractmethod
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : dict, optional
-            parameters to pass to scalar potential function
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object if calculating B from
+            Biot-Savart. Should NOT include endpoint at 2pi.
 
         Returns
         -------
@@ -193,9 +194,9 @@ class _MagneticField(IOAble, ABC):
 
         """
 
-    def __call__(self, coords, params=None, basis="rpz"):
+    def __call__(self, grid, params=None, basis="rpz"):
         """Compute magnetic field at a set of points."""
-        return self.compute_magnetic_field(coords, params, basis)
+        return self.compute_magnetic_field(grid, params, basis)
 
     def compute_Bnormal(
         self, surface, eval_grid=None, source_grid=None, params=None, basis="rpz"
@@ -213,9 +214,8 @@ class _MagneticField(IOAble, ABC):
             the surface poloidal and toroidal resolutions
             points are in surface angular coordinates i.e theta and zeta
         source_grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
+            Grid used to discretize MagneticField object if calculating B from
+            Biot-Savart. Should NOT include endpoint at 2pi.
         params : list or tuple of dict, optional
             parameters to pass to underlying field's compute_magnetic_field function.
             If None, uses the default parameters for each field.
@@ -244,7 +244,7 @@ class _MagneticField(IOAble, ABC):
         coords = data["x"]
         surf_normal = data["n_rho"]
         B = self.compute_magnetic_field(
-            coords, basis="xyz", grid=source_grid, params=params
+            coords, basis="xyz", source_grid=source_grid, params=params
         )
 
         Bnorm = jnp.sum(B * surf_normal, axis=-1)
@@ -287,9 +287,8 @@ class _MagneticField(IOAble, ABC):
             the surface poloidal and toroidal resolutions
             points are in surface angular coordinates i.e theta and zeta
         source_grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
+            Grid used to discretize MagneticField object if calculating B from
+            Biot-Savart. Should NOT include endpoint at 2pi.
         params : list or tuple of dict, optional
             parameters to pass to underlying field's compute_magnetic_field function.
             If None, uses the default parameters for each field.
@@ -374,6 +373,145 @@ class _MagneticField(IOAble, ABC):
         np.savetxt(f"{fname}", data, fmt="%d %d %1.12e")
         return None
 
+    def save_mgrid(
+        self,
+        path,
+        Rmin,
+        Rmax,
+        Zmin,
+        Zmax,
+        nR=101,
+        nZ=101,
+        nphi=90,
+    ):
+        """Save the magnetic field to an mgrid NetCDF file in "raw" format.
+
+        Parameters
+        ----------
+        path : str
+            File path of mgrid file to write.
+        Rmin : float
+            Minimum R coordinate (meters).
+        Rmax : float
+            Maximum R coordinate (meters).
+        Zmin : float
+            Minimum Z coordinate (meters).
+        Zmax : float
+            Maximum Z coordinate (meters).
+        nR : int, optional
+            Number of grid points in the R coordinate (default = 101).
+        nZ : int, optional
+            Number of grid points in the Z coordinate (default = 101).
+        nphi : int, optional
+            Number of grid points in the toroidal angle (default = 90).
+
+        Returns
+        -------
+        None
+
+        """
+        # cyclindrical coordinates grid
+        NFP = self.NFP if hasattr(self, "_NFP") else 1
+        R = np.linspace(Rmin, Rmax, nR)
+        Z = np.linspace(Zmin, Zmax, nZ)
+        phi = np.linspace(0, 2 * np.pi / NFP, nphi, endpoint=False)
+        [PHI, ZZ, RR] = np.meshgrid(phi, Z, R, indexing="ij")
+        grid = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
+
+        # evaluate magnetic field on grid
+        field = self.compute_magnetic_field(grid, basis="rpz")
+        B_R = field[:, 0].reshape(nphi, nZ, nR)
+        B_phi = field[:, 1].reshape(nphi, nZ, nR)
+        B_Z = field[:, 2].reshape(nphi, nZ, nR)
+
+        # write mgrid file
+        file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
+
+        # dimensions
+        file.createDimension("dim_00001", 1)
+        file.createDimension("stringsize", 30)
+        file.createDimension("external_coil_groups", 1)
+        file.createDimension("external_coils", 1)
+        file.createDimension("rad", nR)
+        file.createDimension("zee", nZ)
+        file.createDimension("phi", nphi)
+
+        # variables
+        mgrid_mode = file.createVariable("mgrid_mode", "S1", ("dim_00001",))
+        mgrid_mode[:] = stringtochar(
+            np.array(["R"], "S" + str(file.dimensions["dim_00001"].size))
+        )
+
+        coil_group = file.createVariable(
+            "coil_group", "S1", ("external_coil_groups", "stringsize")
+        )
+        coil_group[:] = stringtochar(
+            np.array(
+                ["single coil representing field"],
+                "S" + str(file.dimensions["stringsize"].size),
+            )
+        )
+
+        ir = file.createVariable("ir", np.int32)
+        ir.long_name = "Number of grid points in the R coordinate."
+        ir[:] = nR
+
+        jz = file.createVariable("jz", np.int32)
+        jz.long_name = "Number of grid points in the Z coordinate."
+        jz[:] = nZ
+
+        kp = file.createVariable("kp", np.int32)
+        kp.long_name = "Number of grid points in the phi coordinate."
+        kp[:] = nphi
+
+        nfp = file.createVariable("nfp", np.int32)
+        nfp.long_name = "Number of field periods."
+        nfp[:] = NFP
+
+        nextcur = file.createVariable("nextcur", np.int32)
+        nextcur.long_name = "Number of coils."
+        nextcur[:] = 1
+
+        rmin = file.createVariable("rmin", np.float64)
+        rmin.long_name = "Minimum R coordinate (m)."
+        rmin[:] = Rmin
+
+        rmax = file.createVariable("rmax", np.float64)
+        rmax.long_name = "Maximum R coordinate (m)."
+        rmax[:] = Rmax
+
+        zmin = file.createVariable("zmin", np.float64)
+        zmin.long_name = "Minimum Z coordinate (m)."
+        zmin[:] = Zmin
+
+        zmax = file.createVariable("zmax", np.float64)
+        zmax.long_name = "Maximum Z coordinate (m)."
+        zmax[:] = Zmax
+
+        raw_coil_cur = file.createVariable(
+            "raw_coil_cur", np.float64, ("external_coils",)
+        )
+        raw_coil_cur.long_name = "Raw coil currents (A)."
+        raw_coil_cur[:] = np.array([1])  # this is 1 because mgrid_mode = "raw"
+
+        br_001 = file.createVariable("br_001", np.float64, ("phi", "zee", "rad"))
+        br_001.long_name = "B_R = radial component of magnetic field in lab frame (T)."
+        br_001[:] = B_R
+
+        bp_001 = file.createVariable("bp_001", np.float64, ("phi", "zee", "rad"))
+        bp_001.long_name = (
+            "B_phi = toroidal component of magnetic field in lab frame (T)."
+        )
+        bp_001[:] = B_phi
+
+        bz_001 = file.createVariable("bz_001", np.float64, ("phi", "zee", "rad"))
+        bz_001.long_name = (
+            "B_Z = vertical component of magnetic field in lab frame (T)."
+        )
+        bz_001[:] = B_Z
+
+        file.close()
+
 
 class ScaledMagneticField(_MagneticField, Optimizable):
     """Magnetic field scaled by a scalar value.
@@ -433,29 +571,31 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     def __hasattr__(self, attr):
         return hasattr(self, attr) or hasattr(self._field, attr)
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : tuple, optional
-            parameters to pass to underlying field
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object if calculating B from
+            Biot-Savart. Should NOT include endpoint at 2pi.
 
         Returns
         -------
         field : ndarray, shape(N,3)
             scaled magnetic field at specified points
+
         """
         return self._scale * self._field.compute_magnetic_field(
-            coords, params, basis, grid
+            coords, params, basis, source_grid
         )
 
 
@@ -479,47 +619,46 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         )
         self._fields = fields
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : list or tuple of dict, optional
-            parameters to pass to underlying fields. If None,
-            uses the default parameters for each field. If a list or tuple, should have
-            one entry for each component field.
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : list or tuple of Grid, int or None, optional
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object if calculating B from
+            Biot-Savart. Should NOT include endpoint at 2pi.
 
         Returns
         -------
         field : ndarray, shape(N,3)
             scaled magnetic field at specified points
+
         """
         if params is None:
             params = [None] * len(self._fields)
         if isinstance(params, dict):
             params = [params]
-        if grid is None:
-            grid = [None] * len(self._fields)
-        if not isinstance(grid, (list, tuple)):
-            grid = [grid]
-        if len(grid) != len(self._fields):
-            # ensure that if grid is shorter, that
-            # it is simply repeated so that zip
-            # does not terminate early
-            grid = grid * len(self._fields)
+        if source_grid is None:
+            source_grid = [None] * len(self._fields)
+        if not isinstance(source_grid, (list, tuple)):
+            source_grid = [source_grid]
+        if len(source_grid) != len(self._fields):
+            # ensure that if source_grid is shorter, that it is simply repeated so that
+            # zip does not terminate early
+            source_grid = source_grid * len(self._fields)
 
         B = 0
-        for i, (field, g) in enumerate(zip(self._fields, grid)):
+        for i, (field, g) in enumerate(zip(self._fields, source_grid)):
             B += field.compute_magnetic_field(
-                coords, params[i % len(params)], basis, grid=g
+                coords, params[i % len(params)], basis, source_grid=g
             )
 
         return B
@@ -594,22 +733,22 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         assert float(new) == new, "B0 must be a scalar"
         self._B0 = new
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : dict, optional
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
             Dict of values for R0 and B0.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
-            Unused by this MagneticField class
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
+
         Returns
         -------
         field : ndarray, shape(N,3)
@@ -621,8 +760,6 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         R0 = params.get("R0", self.R0)
 
         assert basis.lower() in ["rpz", "xyz"]
-        if hasattr(coords, "nodes"):
-            coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
             coords = xyz2rpz(coords)
@@ -661,22 +798,21 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         assert float(new) == new, "B0 must be a scalar"
         self._B0 = new
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : dict, optional
-            Dict of value for B0.
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for B0.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
-            Unused by this MagneticField class
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
 
         Returns
         -------
@@ -688,8 +824,6 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         B0 = params.get("B0", self.B0)
 
         assert basis.lower() in ["rpz", "xyz"]
-        if hasattr(coords, "nodes"):
-            coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
             coords = xyz2rpz(coords)
@@ -766,22 +900,21 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         assert float(new) == new, "iota must be a scalar"
         self._iota = new
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : dict, optional
-            Dict of values for B0, R0, iota.
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dict of values for R0, B0, and iota.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
-            Unused by this MagneticField class
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Unused by this MagneticField class.
 
         Returns
         -------
@@ -795,8 +928,6 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         iota = params.get("iota", self.iota)
 
         assert basis.lower() in ["rpz", "xyz"]
-        if hasattr(coords, "nodes"):
-            coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
             coords = xyz2rpz(coords)
@@ -937,22 +1068,21 @@ class SplineMagneticField(_MagneticField, Optimizable):
                 tempdict[key] = val[:, 0, :]
         return tempdict
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : dict, optional
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
-            Unused by this MagneticField class
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None
+            Unused by this MagneticField class.
 
         Returns
         -------
@@ -962,8 +1092,6 @@ class SplineMagneticField(_MagneticField, Optimizable):
         """
         assert basis.lower() in ["rpz", "xyz"]
         currents = self.currents if params is None else params["currents"]
-        if hasattr(coords, "nodes"):
-            coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
             coords = xyz2rpz(coords)
@@ -1058,53 +1186,62 @@ class SplineMagneticField(_MagneticField, Optimizable):
         return B
 
     @classmethod
-    def from_mgrid(cls, mgrid_file, extcur=1, method="cubic", extrap=False):
+    def from_mgrid(cls, mgrid_file, extcur=None, method="cubic", extrap=False):
         """Create a SplineMagneticField from an "mgrid" file from MAKEGRID.
 
         Parameters
         ----------
         mgrid_file : str or path-like
-            path to mgrid file in netCDF format
-        extcur : array-like
-            currents for each subset of the field
+            File path to mgrid netCDF file to load from.
+        extcur : array-like, optional
+            Currents for each coil group. They default to the coil currents from the
+            mgrid file for "scaled" mode, or to 1 for "raw" mode.
         method : str
-            interpolation method
+            Interpolation method.
         extrap : bool
-            whether to extrapolate beyond the domain of known field values or return nan
+            Whether to extrapolate beyond the domain of known field values (True)
+            or return NaN (False).
 
         """
         mgrid = Dataset(mgrid_file, "r")
-        ir = int(mgrid["ir"][()])
-        jz = int(mgrid["jz"][()])
-        kp = int(mgrid["kp"][()])
-        nfp = mgrid["nfp"][()].data
-        nextcur = int(mgrid["nextcur"][()])
-        rMin = mgrid["rmin"][()]
-        rMax = mgrid["rmax"][()]
-        zMin = mgrid["zmin"][()]
-        zMax = mgrid["zmax"][()]
+        mode = chartostring(mgrid["mgrid_mode"][()])
+        if extcur is None:
+            if mode == "S":  # "scaled"
+                extcur = np.array(mgrid["raw_coil_cur"])  # raw coil currents (A)
+            else:  # "raw"
+                extcur = 1  # coil current scaling factor
+        nextcur = int(mgrid["nextcur"][()])  # number of coils
         extcur = np.broadcast_to(extcur, nextcur)
 
+        # compute grid knots in cylindrical coordinates
+        ir = int(mgrid["ir"][()])  # number of grid points in the R coordinate
+        jz = int(mgrid["jz"][()])  # number of grid points in the Z coordinate
+        kp = int(mgrid["kp"][()])  # number of grid points in the phi coordinate
+        Rmin = mgrid["rmin"][()]  # Minimum R coordinate (m)
+        Rmax = mgrid["rmax"][()]  # Maximum R coordinate (m)
+        Zmin = mgrid["zmin"][()]  # Minimum Z coordinate (m)
+        Zmax = mgrid["zmax"][()]  # Maximum Z coordinate (m)
+        nfp = int(mgrid["nfp"][()])  # Number of field periods
+        Rgrid = np.linspace(Rmin, Rmax, ir)
+        Zgrid = np.linspace(Zmin, Zmax, jz)
+        pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
+
+        # sum magnetic fields from each coil
         br = np.zeros([kp, jz, ir, nextcur])
         bp = np.zeros([kp, jz, ir, nextcur])
         bz = np.zeros([kp, jz, ir, nextcur])
         for i in range(nextcur):
             coil_id = "%03d" % (i + 1,)
-            br[:, :, :, i] += mgrid["br_" + coil_id][()]
-            bp[:, :, :, i] += mgrid["bp_" + coil_id][()]
-            bz[:, :, :, i] += mgrid["bz_" + coil_id][()]
-        mgrid.close()
+            br[:, :, :, i] += mgrid["br_" + coil_id][()]  # B_R radial magnetic field
+            bp[:, :, :, i] += mgrid["bp_" + coil_id][()]  # B_phi toroidal field (T)
+            bz[:, :, :, i] += mgrid["bz_" + coil_id][()]  # B_Z vertical magnetic field
 
         # shift axes to correct order
         br = np.moveaxis(br, (0, 1, 2), (1, 2, 0))
         bp = np.moveaxis(bp, (0, 1, 2), (1, 2, 0))
         bz = np.moveaxis(bz, (0, 1, 2), (1, 2, 0))
 
-        # re-compute grid knots in radial and vertical direction
-        Rgrid = np.linspace(rMin, rMax, ir)
-        Zgrid = np.linspace(zMin, zMax, jz)
-        pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
-
+        mgrid.close()
         return cls(Rgrid, pgrid, Zgrid, br, bp, bz, extcur, nfp, method, extrap)
 
     @classmethod
@@ -1190,22 +1327,21 @@ class ScalarPotentialField(_MagneticField):
         self._potential = potential
         self._params = params
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : dict, optional
-            parameters to pass to scalar potential function
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid, int or None
-            Grid used to discretize MagneticField object if calculating
-            B from biot savart. If an integer, uses that many equally spaced
-            points.
-            Unused by this MagneticField class
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None
+            Unused by this MagneticField class.
 
         Returns
         -------
@@ -1214,8 +1350,6 @@ class ScalarPotentialField(_MagneticField):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        if hasattr(coords, "nodes"):
-            coords = coords.nodes
         coords = jnp.atleast_2d(coords)
         if basis == "xyz":
             coords = xyz2rpz(coords)
@@ -1237,7 +1371,15 @@ class ScalarPotentialField(_MagneticField):
 
 
 def field_line_integrate(
-    r0, z0, phis, field, params=None, grid=None, rtol=1e-8, atol=1e-8, maxstep=1000
+    r0,
+    z0,
+    phis,
+    field,
+    params=None,
+    source_grid=None,
+    rtol=1e-8,
+    atol=1e-8,
+    maxstep=1000,
 ):
     """Trace field lines by integration.
 
@@ -1253,7 +1395,7 @@ def field_line_integrate(
         source of magnetic field to integrate
     params: dict
         parameters passed to field
-    grid : Grid, optional
+    source_grid : Grid, optional
         Collocation points used to discretize source field.
     rtol, atol : float
         relative and absolute tolerances for ode integration
@@ -1277,7 +1419,9 @@ def field_line_integrate(
     def odefun(rpz, s):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
-        br, bp, bz = field.compute_magnetic_field(rpz, params, basis="rpz", grid=grid).T
+        br, bp, bz = field.compute_magnetic_field(
+            rpz, params, basis="rpz", source_grid=source_grid
+        ).T
         return jnp.array(
             [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
         ).squeeze()
@@ -1446,20 +1590,21 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             " as the potential function cannot be serialized."
         )
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : dict, optional
-            parameters to pass to compute function
-            should include the potential
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid,
-            source grid upon which to evaluate the surface current density K
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
 
         Returns
         -------
@@ -1468,7 +1613,11 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
         """
         return _compute_magnetic_field_from_CurrentPotentialField(
-            field=self, coords=coords, params=params, basis=basis, grid=grid
+            field=self,
+            coords=coords,
+            params=params,
+            basis=basis,
+            source_grid=source_grid,
         )
 
     @classmethod
@@ -1746,20 +1895,21 @@ class FourierCurrentPotentialField(
             NFP=NFP
         )  # make sure surface and Phi basis NFP are the same
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz", grid=None):
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None
+    ):
         """Compute magnetic field at a set of points.
 
         Parameters
         ----------
-        coords : array-like shape(N,3) or Grid
-            cylindrical or cartesian coordinates
-        params : dict, optional
-            parameters to pass to compute function
-            should include the potential
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
-            basis for input coordinates and returned magnetic field
-        grid : Grid,
-            grid upon which to evaluate the surface current density K
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Source grid upon which to evaluate the surface current density K.
 
         Returns
         -------
@@ -1767,11 +1917,15 @@ class FourierCurrentPotentialField(
             magnetic field at specified points
 
         """
-        grid = grid or LinearGrid(
+        coords = coords or LinearGrid(
             M=self._M_Phi * 4 + 1, N=self._N_Phi * 4 + 1, NFP=self.NFP
         )
         return _compute_magnetic_field_from_CurrentPotentialField(
-            field=self, coords=coords, params=params, basis=basis, grid=grid
+            field=self,
+            coords=coords,
+            params=params,
+            basis=basis,
+            source_grid=source_grid,
         )
 
     @classmethod
@@ -1847,7 +2001,7 @@ class FourierCurrentPotentialField(
 
 
 def _compute_magnetic_field_from_CurrentPotentialField(
-    field, coords, params=None, basis="rpz", grid=None
+    field, coords, params=None, basis="rpz", source_grid=None
 ):
     """Compute magnetic field at a set of points.
 
@@ -1855,14 +2009,14 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     ----------
     field : CurrentPotentialField or FourierCurrentPotentialField
         current potential field object from which to compute magnetic field.
-    coords : array-like shape(N,3) or Grid
+    coords : array-like shape(N,3)
         cylindrical or cartesian coordinates
     params : dict, optional
         parameters to pass to compute function
         should include the potential
     basis : {"rpz", "xyz"}
         basis for input coordinates and returned magnetic field
-    grid : Grid,
+    source_grid : Grid,
         source grid upon which to evaluate the surface current density K
 
     Returns
@@ -1872,12 +2026,10 @@ def _compute_magnetic_field_from_CurrentPotentialField(
 
     """
     assert basis.lower() in ["rpz", "xyz"]
-    if hasattr(coords, "nodes"):
-        coords = coords.nodes
     coords = jnp.atleast_2d(coords)
     if basis == "rpz":
         coords = rpz2xyz(coords)
-    surface_grid = grid or LinearGrid(M=30, N=30, NFP=field.NFP)
+    surface_grid = source_grid or LinearGrid(M=30, N=30, NFP=field.NFP)
 
     # compute surface current, and store grid quantities
     # needed for integration in class

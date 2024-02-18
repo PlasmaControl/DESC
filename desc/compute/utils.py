@@ -8,7 +8,7 @@ import numpy as np
 from scipy.interpolate import CubicHermiteSpline, CubicSpline
 from termcolor import colored
 
-from desc.backend import complex_sqrt, cond, fori_loop, jnp, put
+from desc.backend import complex_sqrt, cond, fori_loop, jnp, put, vmap
 from desc.grid import ConcentricGrid, Grid, LinearGrid, _meshgrid_expand
 
 from .data_index import data_index
@@ -1539,7 +1539,7 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
 
         Returns
         -------
-        F : ndarray, shape(lambda_pitch.size, alpha.size, rho.size, 2)
+        F : ndarray, shape(lambda_pitch.size, alpha.size, rho.size, resolution, 2)
             Bounce integrals evaluated at ``lambda_pitch`` for every field line.
 
         """
@@ -1557,26 +1557,24 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
             / data["B^zeta"]
         )
 
-        def body(i, out):
-            bp = cubic_poly_roots(coef, 1 / lambda_pitch[i])
+        def body(lambda_pitch_single):
+            bp = cubic_poly_roots(coef, 1 / lambda_pitch_single)
             # number of splines per field line is zeta.size - 1
             # assert bp.shape == (zeta.size - 1, alpha.size, rho.size, 3) # noqa E800
+            b_norm_z = polyeval(der, bp)
+            wells = (b_norm_z[:, :, :, :-1] <= 0) & (b_norm_z[:, :, :, 1:] >= 0)
             Y = jnp.reshape(
-                y / (jnp.sqrt(1 - lambda_pitch[i] * data["|B|"])),
+                y / (jnp.sqrt(1 - lambda_pitch_single * data["|B|"])),
                 (alpha.size, rho.size, zeta.size),
             )
             Y = polyint(CubicSpline(zeta, Y, axis=-1, extrapolate="periodic").c)
             integrals = polyeval(Y, bp)
-            integrals = integrals[:, :, :, 1:] - integrals[:, :, :, :-1]
-            # Mask the integrals that were outside the potential wells.
-            b_norm_z = polyeval(der, bp)
-            wells = (b_norm_z[:, :, :, :-1] <= 0) & (b_norm_z[:, :, :, 1:] >= 0)
-            out = put(out, i, wells * integrals)
-            return out
+            # Mask the integrations outside the potential wells.
+            integrals = wells * (integrals[:, :, :, 1:] - integrals[:, :, :, :-1])
+            return integrals
 
         # TODO: add periodic boundary condition on leftmost and rightmost bounce points
-        F = jnp.empty((lambda_pitch.size, alpha.size, rho.size, zeta.size, 2))
-        F = fori_loop(0, lambda_pitch.size, body, F)
+        F = vmap(body)(lambda_pitch)
         return F
 
     return _bounce_integral

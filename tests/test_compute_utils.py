@@ -595,17 +595,24 @@ class TestComputeUtils:
         poly = np.arange(-60, 60).reshape(cubic, 6, -1)
         poly[0] = np.where(poly[0] == 0, np.ones_like(poly[0]), poly[0])
         poly = poly * np.e * np.pi
-        out = cubic_poly_roots(poly, real=False)
+        assert np.unique(poly.shape).size == poly.ndim
+        shift = np.arange(10)
+        assert np.unique(poly.shape + shift.shape).size == poly.ndim + shift.ndim
+        out = cubic_poly_roots(poly, shift, real=False)
         for j in range(poly.shape[1]):
             for k in range(poly.shape[2]):
-                root_finds = np.sort_complex(np.roots(poly[:, j, k]))
-                np.testing.assert_allclose(out[j, k], root_finds)
+                for s in range(shift.size):
+                    a, b, c, d = poly[:, j, k]
+                    d = d - shift[s]
+                    root_finds = np.sort_complex(np.roots([a, b, c, d]))
+                    np.testing.assert_allclose(out[s, j, k], root_finds)
 
     @pytest.mark.unit
     def test_polyint(self):
         """Test vectorized computation of polynomial primitive."""
         quintic = 6
         poly = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
+        assert np.unique(poly.shape).size == poly.ndim
         out = polyint(poly)
         for j in range(poly.shape[1]):
             for k in range(poly.shape[2]):
@@ -616,6 +623,7 @@ class TestComputeUtils:
         """Test vectorized computation of polynomial derivative."""
         quintic = 6
         poly = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
+        assert np.unique(poly.shape).size == poly.ndim
         out = polyder(poly)
         for j in range(poly.shape[1]):
             for k in range(poly.shape[2]):
@@ -626,10 +634,15 @@ class TestComputeUtils:
         """Test vectorized computation of polynomial evaluation."""
         quintic = 6
         poly = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
+        assert np.unique(poly.shape).size == poly.ndim
         x = np.linspace(0, 20, poly.shape[1] * poly.shape[2]).reshape(
             poly.shape[1], poly.shape[2]
         )
         x = np.stack([x, x * 2], axis=-1)
+        x = np.stack([x, x * 2, x * 3, x * 4], axis=-1)
+        assert np.unique(x.shape).size == x.ndim
+        assert poly.shape[1:] == x.shape[:2]
+        assert np.unique((poly.shape[0],) + x.shape[2:]).size == x.ndim - 1
         out = polyeval(poly, x)
         for j in range(poly.shape[1]):
             for k in range(poly.shape[2]):

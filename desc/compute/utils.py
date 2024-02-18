@@ -8,7 +8,7 @@ import numpy as np
 from scipy.interpolate import CubicHermiteSpline, CubicSpline
 from termcolor import colored
 
-from desc.backend import complex_sqrt, cond, fori_loop, jnp, put, vmap
+from desc.backend import complex_sqrt, cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid, _meshgrid_expand
 
 from .data_index import data_index
@@ -1360,7 +1360,7 @@ def cubic_poly_roots(coef, shift=0, real=True):
         First axis should store coefficients of a polynomial. For a polynomial
         given by c₁ x³ + c₂ x² + c₃ x + c₄, ``coef[i]`` should store cᵢ.
         It is assumed that c₁ is nonzero.
-    shift : float
+    shift : ndarray, shape(shift.size, )
         Specify to instead find solutions to c₁ x³ + c₂ x² + c₃ x + c₄ = ``shift``.
     real : bool
         Whether to return only real solutions. If true complex solutions are
@@ -1375,7 +1375,7 @@ def cubic_poly_roots(coef, shift=0, real=True):
     # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
     # The common libraries use root-finding which isn't compatible with JAX.
     a, b, c, d = coef
-    d = d - shift
+    d = (d[jnp.newaxis, :].T - shift).T
     t_0 = b**2 - 3 * a * c
     t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
     C = ((t_1 + complex_sqrt(t_1**2 - 4 * t_0**3)) / 2) ** (1 / 3)
@@ -1552,29 +1552,25 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         # the spline exactly between the bounce points. This should give
         # comparable results to a composite Simpson Newton-Cotes with quadrature
         # points near bounce points.
-        y = (
+        bp = cubic_poly_roots(coef, 1 / lambda_pitch)
+        # Recall there are zeta.size - 1 cubic splines per field line.
+        assert bp.shape == (lambda_pitch.size, zeta.size - 1, alpha.size, rho.size, 3)
+        b_norm_z = polyeval(der, bp)
+        wells = (b_norm_z[:, :, :, :, :-1] <= 0) & (b_norm_z[:, :, :, :, 1:] >= 0)
+
+        Y = jnp.reshape(
             eq.compute(name, grid=grid, override_grid=False, data=data)[name]
-            / data["B^zeta"]
+            / (
+                data["B^zeta"]
+                * jnp.sqrt(1 - lambda_pitch[:, jnp.newaxis] * data["|B|"])
+            ),
+            (lambda_pitch.size, alpha.size, rho.size, zeta.size),
         )
-
-        def body(lambda_pitch_single):
-            bp = cubic_poly_roots(coef, 1 / lambda_pitch_single)
-            # number of splines per field line is zeta.size - 1
-            # assert bp.shape == (zeta.size - 1, alpha.size, rho.size, 3) # noqa E800
-            b_norm_z = polyeval(der, bp)
-            wells = (b_norm_z[:, :, :, :-1] <= 0) & (b_norm_z[:, :, :, 1:] >= 0)
-            Y = jnp.reshape(
-                y / (jnp.sqrt(1 - lambda_pitch_single * data["|B|"])),
-                (alpha.size, rho.size, zeta.size),
-            )
-            Y = polyint(CubicSpline(zeta, Y, axis=-1, extrapolate="periodic").c)
-            integrals = polyeval(Y, bp)
-            # Mask the integrations outside the potential wells.
-            integrals = wells * (integrals[:, :, :, 1:] - integrals[:, :, :, :-1])
-            return integrals
-
+        Y = polyint(CubicSpline(zeta, Y, axis=-1, extrapolate="periodic").c)
         # TODO: add periodic boundary condition on leftmost and rightmost bounce points
-        F = vmap(body)(lambda_pitch)
+        integrals = polyeval(Y, bp)
+        # Mask the integrations outside the potential wells.
+        F = wells * (integrals[:, :, :, :, 1:] - integrals[:, :, :, :, :-1])
         return F
 
     return _bounce_integral

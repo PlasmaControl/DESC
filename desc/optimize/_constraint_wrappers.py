@@ -36,11 +36,11 @@ class LinearConstraintProjection(ObjectiveFunction):
     constraints : tuple of Objective
         Linear constraints to enforce. Should be a tuple or list of Objective,
         and must all be linear.
-    verbose : int, optional
-        Level of output.
+    name : str
+        Name of the objective function.
     """
 
-    def __init__(self, objective, constraints, verbose=1):
+    def __init__(self, objective, constraints, name="LinearConstraintProjection"):
         assert isinstance(objective, ObjectiveFunction), (
             "objective should be instance of ObjectiveFunction." ""
         )
@@ -56,6 +56,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         # don't want to compile this, just use the compiled objective
         self._use_jit = False
         self._compiled = False
+        self._name = name
 
     def build(self, use_jit=None, verbose=1):
         """Build the objective.
@@ -418,11 +419,11 @@ class ProximalProjection(ObjectiveFunction):
         RadialForceBalance, HelicalForceBalance}
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the objectives.
-    verbose : int, optional
-        Level of output.
     perturb_options, solve_options : dict
         dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
         during the projection step.
+    name : str
+        Name of the objective function.
     """
 
     def __init__(
@@ -430,9 +431,9 @@ class ProximalProjection(ObjectiveFunction):
         objective,
         constraint,
         eq,
-        verbose=1,
         perturb_options=None,
         solve_options=None,
+        name="ProximalProjection",
     ):
         assert isinstance(objective, ObjectiveFunction), (
             "objective should be instance of ObjectiveFunction." ""
@@ -460,6 +461,7 @@ class ProximalProjection(ObjectiveFunction):
         self._use_jit = False
         self._compiled = False
         self._eq = eq
+        self._name = name
 
     def _set_eq_state_vector(self):
         full_args = self._eq.optimizable_params.copy()

@@ -16,8 +16,6 @@ from .objective_funs import _Objective
 from .utils import softmin
 
 
-# TODO: add Surface parametrization to compute R0/a
-# so can use this objective with FourierRZToroidalSurface
 class AspectRatio(_Objective):
     """Aspect ratio = major radius / minor radius.
 
@@ -149,8 +147,9 @@ class AspectRatio(_Objective):
 
         Parameters
         ----------
-            Dictionary of equilibrium or surface degrees of freedom,
-            eg Equilibrium.params_dict
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom, eg
+            Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants

@@ -1238,3 +1238,88 @@ def test_proximal_jacobian():
     np.testing.assert_allclose(jac_unscaled, jac1, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(jac_unscaled, jac2, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_LinearConstraint_jacobian():
+    """Test that JVPs and manual concatenation give the same result as full jac."""
+    eq = desc.examples.get("HELIOTRON")
+    eq.change_resolution(1, 1, 1, 2, 2, 2)
+    eq1 = eq.copy()
+    eq2 = eq.copy()
+    eq3 = eq.copy()
+    obj1 = ObjectiveFunction(ForceBalance(eq1, deriv_mode="auto"), deriv_mode="batched")
+    obj2 = ObjectiveFunction(ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped")
+    obj3 = ObjectiveFunction(ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked")
+
+    con1 = get_fixed_boundary_constraints(eq1)
+    con2 = get_fixed_boundary_constraints(eq2)
+    con3 = get_fixed_boundary_constraints(eq3)
+
+    lc1 = LinearConstraintProjection(obj1, con1)
+    lc2 = LinearConstraintProjection(obj2, con2)
+    lc3 = LinearConstraintProjection(obj3, con3)
+
+    lc1.build()
+    lc2.build()
+    lc3.build()
+
+    vl = np.random.default_rng(1729).random(lc1._dim_x_reduced)
+    vr = np.random.default_rng(1729).random(lc1.dim_f)
+
+    x = obj1.x()
+    x_reduced = lc1.x()
+    jac_scaled = obj1.jac_scaled(x)[:, lc1._unfixed_idx] @ lc1._Z
+    jac_unscaled = obj1.jac_unscaled(x)[:, lc1._unfixed_idx] @ lc1._Z
+    jvp_scaled = jac_scaled @ vl
+    jvp_unscaled = jac_unscaled @ vl
+    vjp_scaled = jac_scaled.T @ vr
+    vjp_unscaled = jac_unscaled.T @ vr
+
+    jac1 = lc1.jac_scaled(x_reduced)
+    jac2 = lc2.jac_scaled(x_reduced)
+    jac3 = lc3.jac_scaled(x_reduced)
+
+    np.testing.assert_allclose(jac_scaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_scaled, jac3, rtol=1e-12, atol=1e-12)
+
+    jac1 = lc1.jac_unscaled(x_reduced)
+    jac2 = lc2.jac_unscaled(x_reduced)
+    jac3 = lc3.jac_unscaled(x_reduced)
+
+    np.testing.assert_allclose(jac_unscaled, jac1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)
+
+    jvp1 = lc1.jvp_scaled(vl, x_reduced)
+    jvp2 = lc2.jvp_scaled(vl, x_reduced)
+    jvp3 = lc3.jvp_scaled(vl, x_reduced)
+
+    np.testing.assert_allclose(jvp_scaled, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_scaled, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_scaled, jvp3, rtol=1e-12, atol=1e-12)
+
+    jvp1 = lc1.jvp_unscaled(vl, x_reduced)
+    jvp2 = lc2.jvp_unscaled(vl, x_reduced)
+    jvp3 = lc3.jvp_unscaled(vl, x_reduced)
+
+    np.testing.assert_allclose(jvp_unscaled, jvp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_unscaled, jvp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(jvp_unscaled, jvp3, rtol=1e-12, atol=1e-12)
+
+    vjp1 = lc1.vjp_scaled(vr, x_reduced)
+    vjp2 = lc2.vjp_scaled(vr, x_reduced)
+    vjp3 = lc3.vjp_scaled(vr, x_reduced)
+
+    np.testing.assert_allclose(vjp_scaled, vjp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_scaled, vjp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_scaled, vjp3, rtol=1e-12, atol=1e-12)
+
+    vjp1 = lc1.vjp_unscaled(vr, x_reduced)
+    vjp2 = lc2.vjp_unscaled(vr, x_reduced)
+    vjp3 = lc3.vjp_unscaled(vr, x_reduced)
+
+    np.testing.assert_allclose(vjp_unscaled, vjp1, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_unscaled, vjp2, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(vjp_unscaled, vjp3, rtol=1e-12, atol=1e-12)

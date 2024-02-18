@@ -266,7 +266,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = self._objective.hess(x, constants)
         return self._Z.T @ df[self._unfixed_idx, :][:, self._unfixed_idx] @ self._Z
 
-    def jac_unscaled(self, x_reduced, constants):
+    def jac_unscaled(self, x_reduced, constants=None):
         """Compute Jacobian of the vector objective function without weighting / bounds.
 
         Parameters
@@ -282,6 +282,11 @@ class LinearConstraintProjection(ObjectiveFunction):
             Jacobian matrix.
         """
         x = self.recover(x_reduced)
+        if self._objective._deriv_mode == "blocked":
+            return (
+                self._objective.jac_unscaled(x, constants)[:, self._unfixed_idx]
+                @ self._Z
+            )
         v = self._unfixed_idx_mat
         df = self._objective.jvp_unscaled(v.T, x, constants)
         return df.T
@@ -302,6 +307,10 @@ class LinearConstraintProjection(ObjectiveFunction):
             Jacobian matrix.
         """
         x = self.recover(x_reduced)
+        if self._objective._deriv_mode == "blocked":
+            return (
+                self._objective.jac_scaled(x, constants)[:, self._unfixed_idx] @ self._Z
+            )
         v = self._unfixed_idx_mat
         df = self._objective.jvp_scaled(v.T, x, constants)
         return df.T

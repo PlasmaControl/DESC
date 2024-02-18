@@ -598,7 +598,7 @@ class TestComputeUtils:
         assert np.unique(poly.shape).size == poly.ndim
         shift = np.arange(10)
         assert np.unique(poly.shape + shift.shape).size == poly.ndim + shift.ndim
-        out = cubic_poly_roots(poly, shift, real=False)
+        out = cubic_poly_roots(poly, shift)
         for j in range(poly.shape[1]):
             for k in range(poly.shape[2]):
                 for s in range(shift.size):

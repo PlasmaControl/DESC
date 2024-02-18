@@ -1482,7 +1482,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         _MagneticField._io_attrs_
         + FourierRZToroidalSurface._io_attrs_
         + [
-            "_surface_grid",
             "_params",
         ]
     )
@@ -2026,24 +2025,24 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     coords = jnp.atleast_2d(coords)
     if basis == "rpz":
         coords = rpz2xyz(coords)
-    surface_grid = source_grid or LinearGrid(M=60, N=60, NFP=field.NFP)
+    source_grid = source_grid or LinearGrid(M=60, N=60, NFP=field.NFP)
 
     # compute surface current, and store grid quantities
     # needed for integration in class
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = field.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
+    data = field.compute(["K", "x"], grid=source_grid, basis="xyz", params=params)
 
     _rs = xyz2rpz(data["x"])
-    _K = xyz2rpz_vec(data["K"], phi=surface_grid.nodes[:, 2])
+    _K = xyz2rpz_vec(data["K"], phi=source_grid.nodes[:, 2])
 
     # surface element, must divide by NFP to remove the NFP multiple on the
     # surface grid weights, as we account for that when doing the for loop
     # over NFP
-    _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
+    _dV = source_grid.weights * data["|e_theta x e_zeta|"] / source_grid.NFP
 
     def nfp_loop(j, f):
         # calculate (by rotating) rs, rs_t, rz_t
-        phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
+        phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
             2 * jnp.pi
         )
         # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
@@ -2059,7 +2058,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
         f += fj
         return f
 
-    B = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+    B = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
     if basis == "rpz":
         B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
     return B

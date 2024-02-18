@@ -38,14 +38,16 @@ class ObjectiveFunction(IOAble):
         Jacobian column by column. Generally the slowest, but most memory efficient.
         "auto" defaults to "batched" if all sub-objectives are set to "fwd",
         otherwise "blocked".
-    verbose : int, optional
-        Level of output.
+    name : str
+        Name of the objective function.
 
     """
 
     _io_attrs_ = ["_objectives"]
 
-    def __init__(self, objectives, use_jit=True, deriv_mode="auto", verbose=1):
+    def __init__(
+        self, objectives, use_jit=True, deriv_mode="auto", name="ObjectiveFunction"
+    ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
         assert all(
@@ -59,6 +61,7 @@ class ObjectiveFunction(IOAble):
         self._deriv_mode = deriv_mode
         self._built = False
         self._compiled = False
+        self._name = name
 
     def _set_derivatives(self):
         """Set up derivatives of the objective functions."""
@@ -635,6 +638,11 @@ class ObjectiveFunction(IOAble):
         return self._dim_f
 
     @property
+    def name(self):
+        """Name of objective function (str)."""
+        return self._name
+
+    @property
     def target_scaled(self):
         """ndarray: target vector."""
         target = []
@@ -753,7 +761,7 @@ class _Objective(IOAble, ABC):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     name : str, optional
-        Name of the objective function.
+        Name of the objective.
 
     """
 
@@ -1206,7 +1214,7 @@ class _Objective(IOAble, ABC):
 
     @property
     def name(self):
-        """Name of objective function (str)."""
+        """Name of objective (str)."""
         return self._name
 
     @property

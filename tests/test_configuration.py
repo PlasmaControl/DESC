@@ -90,6 +90,7 @@ class TestConstructor:
                 ]
             ),
             "axis": np.array([[0, 10, 0]]),
+            "xsection": None,
             "pressure": np.array([[0, 10], [2, 5]]),
             "iota": np.array([[0, 1], [2, 3]]),
         }
@@ -164,7 +165,7 @@ class TestConstructor:
             ],
         )
 
-        inputs["surface"] = np.array(
+        inputs["xsection"] = np.array(
             [
                 [0, 0, 0, 10, 0],
                 [1, 1, 0, 1, 0.1],
@@ -172,14 +173,8 @@ class TestConstructor:
             ]
         )
 
-        eq = Equilibrium(**inputs)
-        assert isinstance(eq.surface, PoincareSurface)
-        np.testing.assert_allclose(
-            eq.Rb_lmn, [10.0, 0.2, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        )
-        np.testing.assert_allclose(
-            eq.Zb_lmn, [0.0, -1.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        )
+        with pytest.raises(NotImplementedError):
+            eq = Equilibrium(**inputs)
 
     @pytest.mark.unit
     def test_asserts(self):

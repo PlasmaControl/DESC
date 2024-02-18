@@ -175,6 +175,10 @@ def parse_section(xsection):
     if isinstance(xsection, PoincareSurface):
         xsection = xsection
         xsection.isgiven = True
+    elif isinstance(xsection, (np.ndarray, jnp.ndarray)):
+        # This is temporary, until we have a proper PoincareSurface constructor
+        # from input file
+        raise NotImplementedError("PoincareSurface from input file not implemented")
     else:
         xsection = PoincareSurface()
         xsection.isgiven = False

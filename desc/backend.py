@@ -357,6 +357,26 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         )
         return x, (jnp.linalg.norm(res), niter)
 
+    def complex_sqrt(x):
+        """Compute the square root of x.
+
+        For negative input elements, a complex value is returned
+        (unlike numpy.sqrt which returns NaN).
+
+        Parameters
+        ----------
+        x : array_like
+            The input value(s).
+
+        Returns
+        -------
+        out : ndarray
+            The square root of x.
+
+        """
+        out = jnp.sqrt(x.astype("complex128"))
+        return out
+
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
@@ -750,3 +770,24 @@ else:  # pragma: no cover
         """
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
         return out.x, out
+
+    def complex_sqrt(x):
+        """Compute the square root of x.
+
+        For negative input elements, a complex value is returned
+        (unlike numpy.sqrt which returns NaN).
+
+        Parameters
+        ----------
+        x : array_like
+            The input value(s).
+
+        Returns
+        -------
+        out : ndarray or scalar
+            The square root of x. If x was a scalar, so is out,
+            otherwise an array is returned.
+
+        """
+        out = np.emath.sqrt(x)
+        return out

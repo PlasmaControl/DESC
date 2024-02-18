@@ -5,10 +5,10 @@ import inspect
 import warnings
 
 import numpy as np
-from numpy.polynomial.chebyshev import chebgauss
+from scipy.interpolate import CubicHermiteSpline, CubicSpline
 from termcolor import colored
 
-from desc.backend import cond, fori_loop, jnp, put, root_scalar
+from desc.backend import complex_sqrt, cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, Grid, LinearGrid, _meshgrid_expand
 
 from .data_index import data_index
@@ -1350,7 +1350,123 @@ def surface_min(grid, x, surface_label="rho"):
     return grid.expand(mins, surface_label)
 
 
-def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
+# probably best to add these to interpax
+def cubic_poly_roots(coef, shift=0, real=True):
+    """Roots of cubic polynomial.
+
+    Parameters
+    ----------
+    coef : ndarray
+        First axis should store coefficients of a polynomial. For a polynomial
+        given by c₁ x³ + c₂ x² + c₃ x + c₄, ``coef[i]`` should store cᵢ.
+        It is assumed that c₁ is nonzero.
+    shift : float
+        Specify to instead find solutions to c₁ x³ + c₂ x² + c₃ x + c₄ = ``shift``.
+    real : bool
+        Whether to return only real solutions. If true complex solutions are
+        returned as nan values.
+
+    Returns
+    -------
+    xi : ndarray
+        The three roots of the cubic polynomial, sorted by real part then imaginary.
+
+    """
+    # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
+    # The common libraries use root-finding which isn't compatible with JAX.
+    a, b, c, d = coef
+    d = d - shift
+    t_0 = b**2 - 3 * a * c
+    t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
+    C = ((t_1 + complex_sqrt(t_1**2 - 4 * t_0**3)) / 2) ** (1 / 3)
+    C_is_zero = jnp.isclose(C, 0)
+
+    def roots(xi_k):
+        t_3 = jnp.where(C_is_zero, 0, t_0 / (xi_k * C))
+        r = -(b + xi_k * C + t_3) / (3 * a)
+        if real:
+            # TODO: Do we need a sentinel besides nan to avoid it in gradient?
+            #  can't jax condition on different types
+            r = jnp.where(jnp.isreal(r), jnp.real(r), jnp.nan)
+        return r
+
+    xi_1 = (-1 + (-3) ** 0.5) / 2
+    xi_2 = xi_1**2
+    xi_3 = 1
+    xi = jnp.sort(jnp.stack([roots(xi_1), roots(xi_2), roots(xi_3)], axis=-1), axis=-1)
+    return xi
+
+
+def polyint(coef):
+    """Coefficients for the primitives of the given set of polynomials.
+
+    Parameters
+    ----------
+    coef : ndarray
+        First axis should store coefficients of a polynomial.
+        For a polynomial given by ∑ᵢⁿ cᵢ xⁱ, where n is ``coef.shape[0] - 1``,
+        coefficient cᵢ should be stored at ``coef[n - i]``.
+
+    Returns
+    -------
+    poly : ndarray
+        Coefficients of polynomial primitive, ignoring the arbitrary constant.
+        That is, ``poly[i]`` stores the coefficient of the monomial xⁿ⁻ⁱ⁺¹,
+        where n is ``coef.shape[0] - 1``.
+
+    """
+    poly = (coef.T / jnp.arange(coef.shape[0], 0, -1)).T
+    return poly
+
+
+def polyder(coef):
+    """Coefficients for the derivatives of the given set of polynomials.
+
+    Parameters
+    ----------
+    coef : ndarray
+        First axis should store coefficients of a polynomial.
+        For a polynomial given by ∑ᵢⁿ cᵢ xⁱ, where n is ``coef.shape[0] - 1``,
+        coefficient cᵢ should be stored at ``coef[n - i]``.
+
+    Returns
+    -------
+    poly : ndarray
+        Coefficients of polynomial derivative, ignoring the arbitrary constant.
+        That is, ``poly[i]`` stores the coefficient of the monomial xⁿ⁻ⁱ⁻¹,
+        where n is ``coef.shape[0] - 1``.
+
+    """
+    poly = (coef[:-1].T * jnp.arange(coef.shape[0] - 1, 0, -1)).T
+    return poly
+
+
+def polyeval(coef, x):
+    """Evaluate the set of polynomials at the points x.
+
+    Parameters
+    ----------
+    coef : ndarray
+        First axis should store coefficients of a polynomial.
+        For a polynomial given by ∑ᵢⁿ cᵢ xⁱ, where n is ``coef.shape[0] - 1``,
+        coefficient cᵢ should be stored at ``coef[n - i]``.
+    x : ndarray
+        Coordinates at which to evaluate the set of polynomials.
+        The first ``coef.ndim`` axes should have shape ``coef.shape[1:]``.
+
+    Returns
+    -------
+    f : ndarray
+        ``f[j, k, ...]`` is the polynomial with coefficients ``coef[:, j, k, ...]``
+        evaluated at the point ``x[j, k, ...]``.
+
+    """
+    X = (x[jnp.newaxis, :].T ** jnp.arange(coef.shape[0] - 1, -1, -1)).T
+    f = jnp.einsum("ijk...,ijk...->jk...", coef, X)
+    return f
+
+
+def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=20):
     """Returns a method to compute the bounce integral of any quantity.
 
     The bounce integral is defined as F_ℓ(λ) = ∫ f(ℓ) / √(1 − λ |B|) dℓ, where
@@ -1367,12 +1483,12 @@ def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
     ----------
     eq : Equilibrium
         Equilibrium on which the bounce integral is defined.
-    lambdas : ndarray
-        λ values to evaluate the bounce integral at.
     rho : ndarray
         Unique flux surface label coordinates.
     alpha : ndarray
         Unique field line label coordinates over a constant rho surface.
+    zeta_max : float
+        Max value for field line following coordinate.
     resolution : int
         Number of quadrature points used to compute the bounce integral.
 
@@ -1381,14 +1497,14 @@ def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
     bi : callable
         This callable method computes the bounce integral F_ℓ(λ) for every
         specified field line ℓ (constant rho and alpha), for every λ value in
-        ``lambdas``.
+        ``lambda_pitch``.
 
     Examples
     --------
     .. code-block:: python
 
-        bi = bounce_integral(eq, lambdas)
-        F = bi(name)
+        bi = bounce_integral(eq)
+        F = bi(name, lambda_pitch)
 
     """
     if rho is None:
@@ -1396,45 +1512,77 @@ def bounce_integral(eq, lambdas, rho=None, alpha=None, resolution=20):
     if alpha is None:
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 20)
 
-    # Use Gauss-Chebyshev quadrature as the integrand blows up at integration boundary.
-    x, w = chebgauss(deg=resolution)
-    # TODO: Generalize logic now that bounce_points return a tensor
-    bp = bounce_point(eq, lambdas, rho, alpha)
-    zeta = (2 * jnp.arcsin(x) / jnp.pi - 1) / 2 * (bp[1] - bp[0]) + bp[1]
+    zeta = np.linspace(0, zeta_max, resolution)
     grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
     data = eq.compute(
-        names=["B^zeta", "|B|"], grid=grid, data=data, override_grid=False
+        ["B^zeta", "|B|", "|B|_z constant rho alpha"], grid=grid, data=data
     )
+    # TODO: https://github.com/f0uriest/interpax/issues/19
+    coef = CubicHermiteSpline(
+        zeta,
+        data["|B|"].reshape(alpha.size, rho.size, zeta.size),
+        data["|B|_z constant rho alpha"].reshape(alpha.size, rho.size, zeta.size),
+        axis=-1,
+        extrapolate="periodic",
+    ).c
+    der = polyder(coef)
 
-    def _bounce_integral(name):
+    def _bounce_integral(name, lambda_pitch):
         """Compute the bounce integral of the named quantity.
 
         Parameters
         ----------
         name : ndarray
             Name of quantity in ``data_index`` to compute the bounce integral of.
+        lambda_pitch : ndarray
+            λ values to evaluate the bounce integral at.
 
         Returns
         -------
-        F : ndarray, shape(lambdas.size, alpha.size, rho.size)
-            Bounce integral evaluated at ``lambdas`` for every field line.
+        F : ndarray, shape(lambda_pitch.size, alpha.size, rho.size, 2)
+            Bounce integrals evaluated at ``lambda_pitch`` for every field line.
 
         """
-        f = eq.compute(name, grid=grid, override_grid=False, data=data)[name]
-        F = (
-            f
-            / (data["B^zeta"] * jnp.sqrt(1 - lambdas[:, jnp.newaxis] * data["|B|"]))
-            * jnp.pi
-            / (bp[1] - bp[0])
+        # Gauss-Quadrature is expensive to perform because evaluating the integrand
+        # at the optimal quadrature points along the field line would require
+        # root finding to map field line coordinates to desc coordinates.
+        # Newton-Cotes quadrature is inaccurate as the bounce points are not
+        # guaranteed to be near the fixed quadrature points. Instead, we
+        # construct interpolating cubic splines of the integrand and integrate
+        # the spline exactly between the bounce points. This should give
+        # comparable results to a composite Simpson Newton-Cotes with quadrature
+        # points near bounce points.
+        y = (
+            eq.compute(name, grid=grid, override_grid=False, data=data)[name]
+            / data["B^zeta"]
         )
-        F = jnp.sum(F.reshape(lambdas.size, -1, zeta.size) * w, axis=-1)
-        F = F.reshape(lambdas.size, alpha.size, rho.size)
+
+        def body(i, out):
+            bp = cubic_poly_roots(coef, 1 / lambda_pitch[i])
+            # number of splines per field line is zeta.size - 1
+            # assert bp.shape == (zeta.size - 1, alpha.size, rho.size, 3) # noqa E800
+            Y = jnp.reshape(
+                y / (jnp.sqrt(1 - lambda_pitch[i] * data["|B|"])),
+                (alpha.size, rho.size, zeta.size),
+            )
+            Y = polyint(CubicSpline(zeta, Y, axis=-1, extrapolate="periodic").c)
+            integrals = polyeval(Y, bp)
+            integrals = integrals[:, :, :, 1:] - integrals[:, :, :, :-1]
+            # Mask the integrals that were outside the potential wells.
+            b_norm_z = polyeval(der, bp)
+            wells = (b_norm_z[:, :, :, :-1] <= 0) & (b_norm_z[:, :, :, 1:] >= 0)
+            out = put(out, i, wells * integrals)
+            return out
+
+        # TODO: add periodic boundary condition on leftmost and rightmost bounce points
+        F = jnp.empty((lambda_pitch.size, alpha.size, rho.size, zeta.size, 2))
+        F = fori_loop(0, lambda_pitch.size, body, F)
         return F
 
     return _bounce_integral
 
 
-def bounce_average(eq, lambdas, rho=None, alpha=None, resolution=20):
+def bounce_average(eq, rho=None, alpha=None, resolution=20):
     """Returns a method to compute the bounce average of any quantity.
 
     The bounce average is defined as
@@ -1452,8 +1600,6 @@ def bounce_average(eq, lambdas, rho=None, alpha=None, resolution=20):
     ----------
     eq : Equilibrium
         Equilibrium on which the bounce integral is defined.
-    lambdas : ndarray
-        λ values to evaluate the bounce integral at.
     rho : ndarray
         Unique flux surface label coordinates.
     alpha : ndarray
@@ -1472,104 +1618,36 @@ def bounce_average(eq, lambdas, rho=None, alpha=None, resolution=20):
     --------
     .. code-block:: python
 
-        ba = bounce_average(eq, lambdas)
-        G = ba(name)
+        ba = bounce_average(eq)
+        G = ba(name, lambda_pitch)
 
     """
-    bi = bounce_integral(eq, lambdas, rho, alpha, resolution)
+    bi = bounce_integral(eq, rho, alpha, resolution)
 
-    def _bounce_average(name):
+    def _bounce_average(name, lambda_pitch):
         """Compute the bounce average of the named quantity.
 
         Parameters
         ----------
         name : ndarray
             Name of quantity in ``data_index`` to compute the bounce average of.
+        lambda_pitch : ndarray
+            λ values to evaluate the bounce integral at.
 
         Returns
         -------
-        G : ndarray, shape(lambdas.size, alpha.size, rho.size)
+        G : ndarray, shape(lambda_pitch.size, alpha.size, rho.size)
             Bounce average evaluated at ``lambdas`` for every field line.
 
         """
-        return bi(name) / bi("1")
+        return bi(name, lambda_pitch) / bi("1", lambda_pitch)
 
     return _bounce_average
 
 
-def bounce_point(
-    eq, lambdas, rho, alpha, max_bounce_points=20, max_field_line=10 * jnp.pi
-):
-    """Find bounce points."""
-    # TODO:
-    #     1. make another version of desc.backend.root_scalar
-    #        to avoid separate root finding routines in residual and jac
-    #        and use previous desc coords as initial guess for next iteration
-    #     2. write docstrings and use transforms in api instead of eq
-    def residual(zeta, i):
-        grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
-        data = eq.compute(["|B|"], grid=grid, data=data)
-        return data["|B|"] - lambdas[i]
-
-    def jac(zeta):
-        grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
-        data = eq.compute(["|B|_z constant rho alpha"], grid=grid, data=data)
-        return data["|B|_z constant rho alpha"]
-
-    # Compute |B| - lambda on a dense grid.
-    # For every field line, find the roots of this linear spline.
-    # These estimates for the true roots will serve as an initial guess, and
-    # let us form a boundary mesh around root estimates to limit search domain
-    # of the root finding algorithms.
-    zeta = np.linspace(0, max_field_line, 3 * max_bounce_points)
-    grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
-    data = eq.compute(["|B|"], grid=grid, data=data)
-    B_norm = data["|B|"].reshape(alpha.size, rho.size)  # constant field line chunks
-
-    boundary_lt = jnp.zeros((lambdas.size, max_bounce_points, alpha.size, rho.size))
-    boundary_rt = jnp.zeros((lambdas.size, max_bounce_points, alpha.size, rho.size))
-    guess = jnp.zeros((lambdas.size, max_bounce_points, alpha.size, rho.size))
-    # todo: scan over this
-    for i in range(lambdas.size):
-        for j in range(alpha.size):
-            for k in range(rho.size):
-                # indices of zeta values observed prior to sign change
-                idx = jnp.nonzero(jnp.diff(jnp.sign(B_norm[j, k] - lambdas[i])))[0]
-                guess[i, :, j, k] = grid.nodes[idx, 2]
-                boundary_lt[i, :, j, k] = jnp.append(zeta[0], guess[:-1])
-                boundary_rt[i, :, j, k] = jnp.append(guess[1:], zeta[-1])
-    guess = guess.reshape(lambdas.size, max_bounce_points, alpha.size * rho.size)
-    boundary_lt = boundary_lt.reshape(
-        lambdas.size, max_bounce_points, alpha.size * rho.size
-    )
-    boundary_rt = boundary_rt.reshape(
-        lambdas.size, max_bounce_points, alpha.size * rho.size
-    )
-
-    def body_lambdas(i, out):
-        def body_roots(j, out_i):
-            def fixup(z):
-                return jnp.clip(z, boundary_lt[i, j], boundary_rt[i, j])
-
-            # todo: call vmap to vectorize or guess[i, j] so that we solve
-            #  guess[i, j].size independent root finding problems
-            root = root_scalar(residual, guess[i, j], jac=jac, args=i, fixup=fixup)
-            out_i = put(out_i, j, root)
-            return out_i
-
-        out = put(out, i, fori_loop(0, max_bounce_points, body_roots, out[i]))
-        return out
-
-    bounce_points = jnp.zeros(
-        shape=(lambdas.size, alpha.size, rho.size, max_bounce_points)
-    )
-    bounce_points = fori_loop(0, lambdas.size, body_lambdas, bounce_points)
-    return bounce_points
-
-
 def field_line_to_desc_coords(rho, alpha, zeta, eq):
     """Get desc grid from unique field line coords."""
-    r, a, z = jnp.meshgrid(rho, alpha, zeta, copy=False, indexing="ij")
+    r, a, z = jnp.meshgrid(rho, alpha, zeta, indexing="ij")
     r, a, z = r.ravel(), a.ravel(), z.ravel()
     # Now we map these Clebsch-Type field-line coordinates to DESC coordinates.
     # Note that the rotational transform can be computed apriori because it is a single

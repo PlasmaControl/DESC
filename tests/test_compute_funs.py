@@ -1653,3 +1653,20 @@ def test_iota_components(HELIOTRON_vac):
     data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
     np.testing.assert_allclose(data["iota"], data["iota vacuum"])
     np.testing.assert_allclose(data["iota current"], 0)
+
+
+@pytest.mark.unit
+def test_surface_equilibrium_geometry():
+    """Test that computing stuff from surface gives same result as equilibrium."""
+    names = ["DSHAPE", "HELIOTRON", "NCSX"]
+    data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
+    for name in names:
+        eq = get(name)
+        for key in data:
+            x = eq.compute(key)[key].max()  # max needed for elongation broadcasting
+            y = eq.surface.compute(key)[key].max()
+            if key == "a_major/a_minor":
+                rtol, atol = 1e-2, 1e-4  # need looser tol here bc of different grids
+            else:
+                rtol, atol = 1e-8, 1e-8
+            np.testing.assert_allclose(x, y, rtol=rtol, atol=atol, err_msg=name + key)

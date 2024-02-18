@@ -1,7 +1,6 @@
 """Functions for plotting and visualizing equilibria."""
 
 import numbers
-import pdb
 import tkinter
 import warnings
 
@@ -221,6 +220,7 @@ def _get_grid(**kwargs):
         "rho": np.array([1.0]),
         "theta": np.array([0.0]),
         "zeta": np.array([0.0]),
+        "NFP_umbilic_factor": 1.0,
     }
     for key in kwargs.keys():
         if key in grid_args.keys():
@@ -1717,7 +1717,6 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
         coords,
         sort=False,
     )
-    pdb.set_trace()
 
     if colors is None:
         colors = _get_cmap(cmap, nz)(np.linspace(0, 1, nz))

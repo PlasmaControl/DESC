@@ -234,24 +234,25 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Zb_lmn"]
         tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
-    if "Rp_lmn" in deltas.keys() and eq.xsection.isgiven:
-        con = get_instance(constraints, SectionRSelfConsistency)
-        A = con.jac_unscaled(xz)[0]["R_lmn"]
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Rp_lmn"]
-        tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["R_lmn"]] @ Ainv @ dc
-    if "Zp_lmn" in deltas.keys() and eq.xsection.isgiven:
-        con = get_instance(constraints, SectionZSelfConsistency)
-        A = con.jac_unscaled(xz)[0]["Z_lmn"]
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Zp_lmn"]
-        tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
-    if "Lp_lmn" in deltas.keys() and eq.xsection.isgiven:
-        con = get_instance(constraints, SectionLambdaSelfConsistency)
-        A = con.jac_unscaled(xz)[0]["L_lmn"]
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Lp_lmn"]
-        tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["L_lmn"]] @ Ainv @ dc
+    if eq.xsection.isgiven:
+        if "Rp_lmn" in deltas.keys():
+            con = get_instance(constraints, SectionRSelfConsistency)
+            A = con.jac_unscaled(xz)[0]["R_lmn"]
+            Ainv = jnp.linalg.pinv(A)
+            dc = deltas["Rp_lmn"]
+            tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["R_lmn"]] @ Ainv @ dc
+        if "Zp_lmn" in deltas.keys():
+            con = get_instance(constraints, SectionZSelfConsistency)
+            A = con.jac_unscaled(xz)[0]["Z_lmn"]
+            Ainv = jnp.linalg.pinv(A)
+            dc = deltas["Zp_lmn"]
+            tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["Z_lmn"]] @ Ainv @ dc
+        if "Lp_lmn" in deltas.keys():
+            con = get_instance(constraints, SectionLambdaSelfConsistency)
+            A = con.jac_unscaled(xz)[0]["L_lmn"]
+            Ainv = jnp.linalg.pinv(A)
+            dc = deltas["Lp_lmn"]
+            tangents += jnp.eye(eq.dim_x)[:, eq.x_idx["L_lmn"]] @ Ainv @ dc
     if "Ra_n" in deltas.keys():
         con = get_instance(constraints, AxisRSelfConsistency)
         A = con.jac_unscaled(xz)[0]["R_lmn"]

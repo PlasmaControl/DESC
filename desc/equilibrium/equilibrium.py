@@ -389,6 +389,11 @@ class Equilibrium(IOAble, Optimizable):
             self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
         else:
             self.set_initial_guess(ensure_nested=ensure_nested)
+            if not self.xsection.isgiven:
+                # For none Poincare BC problems, we need to set the xsection
+                # from the initial guess.
+                self._xsection = self.get_poincare_xsection_at()
+                self._xsection.isgiven = False
         if check_orientation:
             ensure_positive_jacobian(self)
         if kwargs.get("check_kwargs", True):

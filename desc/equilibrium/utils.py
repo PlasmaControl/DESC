@@ -148,17 +148,17 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
         elif isinstance(xsection, PoincareSurface) and xsection.isgiven:
             # FIXME: include m=0 l!=0 modes
             axis = FourierRZCurve(
-                R_n=surface.R_lmn[
+                R_n=xsection.R_lmn[
                     np.where(
                         PoincareSurface,
-                        (surface.R_basis.modes[:, 0] == 0)
-                        & (surface.R_basis.modes[:, 1] == 0),
+                        (xsection.R_basis.modes[:, 0] == 0)
+                        & (xsection.R_basis.modes[:, 1] == 0),
                     )
                 ].sum(),
-                Z_n=surface.Z_lmn[
+                Z_n=xsection.Z_lmn[
                     np.where(
-                        (surface.Z_basis.modes[:, 0] == 0)
-                        & (surface.Z_basis.modes[:, 1] == 0)
+                        (xsection.Z_basis.modes[:, 0] == 0)
+                        & (xsection.Z_basis.modes[:, 1] == 0)
                     )
                 ].sum(),
                 modes_R=[0],

@@ -609,6 +609,7 @@ class Equilibrium(IOAble, Optimizable):
             self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
         )
         self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
+        self.xsection.change_resolution(L=self.L, M=self.M, NFP=self.NFP, sym=self.sym)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)

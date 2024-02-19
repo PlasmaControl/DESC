@@ -281,24 +281,29 @@ def maybe_add_self_consistency(thing, constraints):
         and hasattr(thing, "Lp_lmn")
         and hasattr(thing, "L_lmn")
     ):
-        if thing.xsection.isgiven:
-            if not _is_any_instance(constraints, SectionRSelfConsistency):
-                constraints += (SectionRSelfConsistency(eq=thing),)
-            if not _is_any_instance(constraints, SectionZSelfConsistency):
-                constraints += (SectionZSelfConsistency(eq=thing),)
-            if not _is_any_instance(constraints, SectionLambdaSelfConsistency):
-                constraints += (SectionLambdaSelfConsistency(eq=thing),)
-        else:
-            if not _is_any_instance(constraints, BoundaryRSelfConsistency):
-                constraints += (BoundaryRSelfConsistency(eq=thing),)
-            if not _is_any_instance(constraints, BoundaryZSelfConsistency):
-                constraints += (BoundaryZSelfConsistency(eq=thing),)
-        if not _is_any_instance(constraints, FixLambdaGauge):
-            constraints += (FixLambdaGauge(eq=thing),)
+        # Section self-consistency constraints
+        if not _is_any_instance(constraints, SectionRSelfConsistency):
+            constraints += (SectionRSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, SectionZSelfConsistency):
+            constraints += (SectionZSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, SectionLambdaSelfConsistency):
+            constraints += (SectionLambdaSelfConsistency(eq=thing),)
+
+        # Boundary self-consistency constraints
+        if not _is_any_instance(constraints, BoundaryRSelfConsistency):
+            constraints += (BoundaryRSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, BoundaryZSelfConsistency):
+            constraints += (BoundaryZSelfConsistency(eq=thing),)
+
+        # Axis self-consistency constraints
         if not _is_any_instance(constraints, AxisRSelfConsistency):
             constraints += (AxisRSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, AxisZSelfConsistency):
             constraints += (AxisZSelfConsistency(eq=thing),)
+
+        # Lambda gauge constraint for theta=0
+        if not _is_any_instance(constraints, FixLambdaGauge):
+            constraints += (FixLambdaGauge(eq=thing),)
 
     # Curve
     elif hasattr(thing, "shift") and hasattr(thing, "rotmat"):

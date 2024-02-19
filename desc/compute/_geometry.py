@@ -145,29 +145,59 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="A",
-    label="A",
+    name="A(z)",
+    label="A(\\zeta)",
     units="m^{2}",
     units_long="square meters",
-    description="Average cross-sectional area",
-    dim=0,
+    description="Cross-sectional area as function of zeta",
+    dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="",
+    coordinates="z",
     data=["|e_rho x e_theta|"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
-def _A(params, transforms, profiles, data, **kwargs):
-    data["A"] = jnp.mean(
-        surface_integrals(
+def _A_of_z(params, transforms, profiles, data, **kwargs):
+    data["A(z)"] = surface_integrals(
+        transforms["grid"],
+        jnp.abs(data["|e_rho x e_theta|"]),
+        surface_label="zeta",
+        expand_out=True,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="A(z)",
+    label="A(\\zeta)",
+    units="m^{2}",
+    units_long="square meters",
+    description="Cross-sectional area as function of zeta",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="z",
+    data=["Z", "n_rho", "g_tt"],
+    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+)
+def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # divergence theorem: integral(dA div [0, 0, Z]) = integral(ds n dot [0, 0, Z])
+    # but we need only the part of n in the R,Z plane
+    n = data["n_rho"]
+    n = n.at[:, 1].set(0)
+    n = n / jnp.linalg.norm(n, axis=-1)[:, None]
+    data["A(z)"] = jnp.abs(
+        line_integrals(
             transforms["grid"],
-            jnp.abs(data["|e_rho x e_theta|"]),
-            surface_label="zeta",
-            expand_out=False,
+            data["Z"] * n[:, 2] * jnp.sqrt(data["g_tt"]),
+            line_label="theta",
+            fix_surface=("rho", 1.0),
+            expand_out=True,
         )
     )
     return data
@@ -184,25 +214,15 @@ def _A(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["Z", "n_rho", "g_tt"],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    data=["A(z)"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
-def _A_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    # divergence theorem: integral(dA div [0, 0, Z]) = integral(ds n dot [0, 0, Z])
-    # but we need only the part of n in the R,Z plane
-    n = data["n_rho"]
-    n = n.at[:, 1].set(0)
-    n = n / jnp.linalg.norm(n, axis=-1)[:, None]
+def _A(params, transforms, profiles, data, **kwargs):
     data["A"] = jnp.mean(
-        jnp.abs(
-            line_integrals(
-                transforms["grid"],
-                data["Z"] * n[:, 2] * jnp.sqrt(data["g_tt"]),
-                line_label="theta",
-                fix_surface=("rho", 1.0),
-                expand_out=False,
-            )
-        )
+        transforms["grid"].compress(data["A(z)"], surface_label="zeta")
     )
     return data
 
@@ -376,7 +396,58 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _ellipse_radii(P, A):
+@register_compute_fun(
+    name="perimeter(z)",
+    label="P(\\zeta)",
+    units="m",
+    units_long="meters",
+    description="Perimeter of cross section as function of zeta",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="z",
+    data=["rho", "g_tt"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
+    max_rho = jnp.max(data["rho"])
+    data["perimeter(z)"] = (  # perimeter at rho ~ 1
+        line_integrals(
+            transforms["grid"],
+            jnp.sqrt(data["g_tt"]),
+            line_label="theta",
+            fix_surface=("rho", max_rho),
+            expand_out=True,
+        )
+        / max_rho  # to account for quadrature grid not having nodes out to rho=1
+    )
+    return data
+
+
+@register_compute_fun(
+    name="a_major/a_minor",
+    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
+    units="~",
+    units_long="None",
+    description="Elongation at a toroidal cross-section",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="z",
+    data=["A(z)", "perimeter(z)"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
+    A = transforms["grid"].compress(data["A(z)"], surface_label="zeta")
+    P = transforms["grid"].compress(data["perimeter(z)"], surface_label="zeta")
     # derived from Ramanujan approximation for the perimeter of an ellipse
     a = (  # semi-major radius
         jnp.sqrt(3)
@@ -393,70 +464,6 @@ def _ellipse_radii(P, A):
         + 3 * P
     ) / (12 * jnp.pi)
     b = A / (jnp.pi * a)  # semi-minor radius
-    return a, b
-
-
-@register_compute_fun(
-    name="a_major/a_minor",
-    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
-    units="~",
-    units_long="None",
-    description="Elongation at a toroidal cross-section",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="z",
-    data=["rho", "sqrt(g)", "g_tt", "R"],
-)
-def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
-    max_rho = jnp.max(data["rho"])
-    P = (  # perimeter at rho=1
-        line_integrals(
-            transforms["grid"],
-            jnp.sqrt(data["g_tt"]),
-            line_label="theta",
-            fix_surface=("rho", max_rho),
-            expand_out=False,
-        )
-        / max_rho
-    )
-    # surface area. Need to recompute this since the grids used for A and P are
-    # usually different
-    A = surface_integrals(
-        transforms["grid"],
-        jnp.abs(data["sqrt(g)"] / data["R"]),
-        surface_label="zeta",
-        expand_out=False,
-    )
-    a, b = _ellipse_radii(P, A)
-    data["a_major/a_minor"] = transforms["grid"].expand(a / b, surface_label="zeta")
-    return data
-
-
-@register_compute_fun(
-    name="a_major/a_minor",
-    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
-    units="~",
-    units_long="None",
-    description="Elongation at a toroidal cross-section",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="z",
-    data=["g_tt", "A"],
-    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
-)
-def _a_major_over_a_minor_ToroidalSurface(params, transforms, profiles, data, **kwargs):
-    P = line_integrals(  # perimeter at rho=1
-        transforms["grid"],
-        jnp.sqrt(data["g_tt"]),
-        line_label="theta",
-        fix_surface=("rho", 1.0),
-        expand_out=False,
-    )
-    a, b = _ellipse_radii(P, data["A"])
     data["a_major/a_minor"] = transforms["grid"].expand(a / b, surface_label="zeta")
     return data
 

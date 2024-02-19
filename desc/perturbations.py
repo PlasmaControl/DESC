@@ -168,9 +168,8 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if not objective.built:
         objective.build(eq, verbose=verbose)
     constraints = maybe_add_self_consistency(eq, constraints)
-    for con in constraints:
-        if not con.built:
-            con.build(eq, verbose=verbose)
+    constraint = ObjectiveFunction(constraints)
+    constraint.build(verbose=verbose)
 
     if objective.scalar:  # FIXME: change to num objectives >= num parameters
         raise AttributeError(
@@ -187,7 +186,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective, ObjectiveFunction(constraints)
+        objective, constraint
     )
     timer.stop("linear constraint factorize")
     if verbose > 1:
@@ -390,8 +389,10 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     for constraint in constraints:
         if hasattr(constraint, "update_target"):
             constraint.update_target(eq_new)
+    constraint = ObjectiveFunction(constraints)
+    constraint.build(verbose=verbose)
     xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective, ObjectiveFunction(constraints)
+        objective, constraint
     )
 
     # update other attributes
@@ -546,12 +547,11 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(eq=eq)
     constraints = maybe_add_self_consistency(eq, constraints)
-    for con in constraints:
-        if not con.built:
-            con.build(eq, verbose=verbose)
+    constraint = ObjectiveFunction(constraints)
+    constraint.build(verbose=verbose)
 
     _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective_f, ObjectiveFunction(constraints)
+        objective_f, constraint
     )
 
     # state vector
@@ -755,8 +755,10 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     for constraint in constraints:
         if hasattr(constraint, "update_target"):
             constraint.update_target(eq_new)
+    constraint = ObjectiveFunction(constraints)
+    constraint.build(verbose=verbose)
     _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        objective_f, ObjectiveFunction(constraints)
+        objective_f, constraint
     )
 
     # update other attributes

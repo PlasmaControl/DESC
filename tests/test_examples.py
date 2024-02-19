@@ -273,7 +273,6 @@ def run_qh_step(n, eq):
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
-        verbose=0,
     )
     R_modes = np.vstack(
         (

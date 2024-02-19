@@ -238,7 +238,7 @@ class Equilibrium(IOAble, Optimizable):
         self._axis = parse_axis(axis, self.NFP, self.sym, self.surface, xsection)
 
         # cross section
-        self._xsection = parse_section(xsection, self.NFP, self.sym)
+        self._xsection = parse_section(xsection, self.sym)
 
         # resolution
         _assert_nonnegint(L, "L")

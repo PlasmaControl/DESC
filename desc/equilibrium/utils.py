@@ -175,7 +175,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
     return axis
 
 
-def parse_section(xsection, NFP=1, sym=True):
+def parse_section(xsection, sym=True):
     """Parse section input into PoincareSurface object.
 
     Parameters
@@ -200,7 +200,7 @@ def parse_section(xsection, NFP=1, sym=True):
         # from input file
         raise NotImplementedError("PoincareSurface from input file not implemented")
     else:
-        xsection = PoincareSurface(sym=sym, NFP=NFP)
+        xsection = PoincareSurface(sym=sym)
         xsection.isgiven = False
     return xsection
 

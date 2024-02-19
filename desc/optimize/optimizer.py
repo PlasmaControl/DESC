@@ -68,7 +68,6 @@ class Optimizer(IOAble):
             )
         self._method = method
 
-    # TODO: add copy argument and return the equilibrium?
     def optimize(  # noqa: C901 - FIXME: simplify this
         self,
         things,
@@ -163,40 +162,46 @@ class Optimizer(IOAble):
         # TODO: document options
         timer = Timer()
         options = {} if options is None else options
-        wrapper, method = _parse_method(self.method)
+        _, method = _parse_method(self.method)
 
-        linear_constraints, nonlinear_constraint = _parse_constraints(constraints)
-        objective, nonlinear_constraint = _maybe_wrap_nonlinear_constraints(
-            eq, objective, nonlinear_constraint, self.method, options
+        # parse and combine constraints into linear & nonlinear objective functions
+        linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
+        objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
+            eq, objective, nonlinear_constraints, self.method, options
         )
+        if not isinstance(objective, ProximalProjection) and eq is not None:
+            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
+        linear_constraint = _combine_constraints(linear_constraints)
+        nonlinear_constraint = _combine_constraints(nonlinear_constraints)
 
         # make sure everything is built
         if objective is not None and not objective.built:
             objective.build(verbose=verbose)
+        if linear_constraint is not None and not linear_constraint.built:
+            linear_constraint.build(verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
             nonlinear_constraint.build(verbose=verbose)
 
+        # combine arguments from all three objective functions
         if nonlinear_constraint is not None:
-            objective, nonlinear_constraint = combine_args(
-                objective, nonlinear_constraint
+            objective, linear_constraint, nonlinear_constraint = combine_args(
+                objective, linear_constraint, nonlinear_constraint
             )
+            assert set(objective.things) == set(linear_constraint.things)
             assert set(objective.things) == set(nonlinear_constraint.things)
         assert set(objective.things) == set(things)
 
-        if not isinstance(objective, ProximalProjection) and eq is not None:
-            # need to include self consistency constraints
-            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
         # wrap to handle linear constraints
-        if len(linear_constraints):
-            objective = LinearConstraintProjection(objective, linear_constraints)
+        if linear_constraint is not None:
+            objective = LinearConstraintProjection(objective, linear_constraint)
             objective.build(verbose=verbose)
             if nonlinear_constraint is not None:
                 nonlinear_constraint = LinearConstraintProjection(
-                    nonlinear_constraint, linear_constraints
+                    nonlinear_constraint, linear_constraint
                 )
                 nonlinear_constraint.build(verbose=verbose)
 
-        if len(linear_constraints) and not isinstance(x_scale, str):
+        if linear_constraint is not None and not isinstance(x_scale, str):
             # need to project x_scale down to correct size
             Z = objective._Z
             x_scale = np.broadcast_to(x_scale, objective._objective.dim_x)
@@ -363,21 +368,43 @@ def _parse_method(method):
     return wrapper, submethod
 
 
-def _parse_constraints(constraints):
-    """Break constraints into linear and nonlinear, and combine nonlinear constraints.
+def _combine_constraints(constraints):
+    """Combine constraints into a single ObjectiveFunction.
 
     Parameters
     ----------
     constraints : tuple of Objective
-        constraints to parse
+        Constraints to combine.
+
+    Returns
+    -------
+    objective : ObjectiveFunction or None
+        If constraints are present, they are combined into a single ObjectiveFunction.
+        Otherwise returns None.
+
+    """
+    if len(constraints):
+        objective = ObjectiveFunction(constraints)
+    else:
+        objective = None
+    return objective
+
+
+def _parse_constraints(constraints):
+    """Break constraints into linear and nonlinear.
+
+    Parameters
+    ----------
+    constraints : tuple of Objective
+        Constraints to parse.
 
     Returns
     -------
     linear_constraints : tuple of Objective
-        Individual linear constraints
-    nonlinear_constraints : ObjectiveFunction or None
-        if any nonlinear constraints are present, they are combined into a single
-        ObjectiveFunction, otherwise returns None
+        Individual linear constraints.
+    nonlinear_constraints : tuple of Objective
+        Individual nonlinear constraints.
+
     """
     if not isinstance(constraints, (tuple, list)):
         constraints = (constraints,)
@@ -399,27 +426,22 @@ def _parse_constraints(constraints):
             "Toroidal current and rotational transform cannot be "
             + "constrained simultaneously."
         )
-    # make sure any nonlinear constraints are combined into a single ObjectiveFunction
-    if len(nonlinear_constraints):
-        nonlinear_constraints = ObjectiveFunction(nonlinear_constraints)
-    else:
-        nonlinear_constraints = None
     return linear_constraints, nonlinear_constraints
 
 
 def _maybe_wrap_nonlinear_constraints(
-    eq, objective, nonlinear_constraint, method, options
+    eq, objective, nonlinear_constraints, method, options
 ):
     """Use ProximalProjection to handle nonlinear constraints."""
     if eq is None:  # not deal with an equilibrium problem -> no ProximalProjection
-        return objective, nonlinear_constraint
+        return objective, nonlinear_constraints
     wrapper, method = _parse_method(method)
-    if nonlinear_constraint is None:
+    if not len(nonlinear_constraints):
         if wrapper is not None:
             warnings.warn(
-                f"No nonlinear constraints detected, ignoring wrapper method {wrapper}"
+                f"No nonlinear constraints detected, ignoring wrapper method {wrapper}."
             )
-        return objective, nonlinear_constraint
+        return objective, nonlinear_constraints
     if wrapper is None and not optimizers[method]["equality_constraints"]:
         warnings.warn(
             FutureWarning(
@@ -438,13 +460,13 @@ def _maybe_wrap_nonlinear_constraints(
         solve_options = options.pop("solve_options", {})
         objective = ProximalProjection(
             objective,
-            constraint=nonlinear_constraint,
+            constraint=_combine_constraints(nonlinear_constraints),
             perturb_options=perturb_options,
             solve_options=solve_options,
             eq=eq,
         )
-        nonlinear_constraint = None
-    return objective, nonlinear_constraint
+        nonlinear_constraints = None
+    return objective, nonlinear_constraints
 
 
 def _get_default_tols(

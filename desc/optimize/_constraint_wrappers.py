@@ -21,7 +21,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     Given a problem of the form
 
-    min_x f(x)  subject to A*x=b
+    min_x f(x) subject to A*x=b
 
     We can write any feasible x=xp + Z*x_reduced where xp is a particular solution to
     Ax=b (taken to be the least norm solution), Z is a representation for the null
@@ -33,25 +33,23 @@ class LinearConstraintProjection(ObjectiveFunction):
     ----------
     objective : ObjectiveFunction
         Objective function to optimize.
-    constraints : tuple of Objective
-        Linear constraints to enforce. Should be a tuple or list of Objective,
-        and must all be linear.
-    verbose : int, optional
-        Level of output.
+    constraint : ObjectiveFunction
+        Objective function of linear constraints to enforce.
+
     """
 
-    def __init__(self, objective, constraints, verbose=1):
+    def __init__(self, objective, constraint):
         assert isinstance(objective, ObjectiveFunction), (
             "objective should be instance of ObjectiveFunction." ""
         )
-        for con in constraints:
+        for con in constraint.objectives:
             if not con.linear:
                 raise ValueError(
                     "LinearConstraintProjection method "
                     + "cannot handle nonlinear constraint {}.".format(con)
                 )
         self._objective = objective
-        self._constraints = constraints
+        self._constraint = constraint
         self._built = False
         # don't want to compile this, just use the compiled objective
         self._use_jit = False
@@ -77,9 +75,8 @@ class LinearConstraintProjection(ObjectiveFunction):
         # do it before this wrapper is created for them.
         if not self._objective.built:
             self._objective.build(verbose=verbose)
-        for con in self._constraints:
-            if not con.built:
-                con.build(verbose=verbose)
+        if not self._constraint.built:
+            self._constraint.build(verbose=verbose)
 
         self._dim_f = self._objective.dim_f
         self._scalar = self._objective.scalar
@@ -92,8 +89,8 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._project,
             self._recover,
         ) = factorize_linear_constraints(
-            self._constraints,
             self._objective,
+            self._constraint,
         )
         self._dim_x = self._objective.dim_x
         self._dim_x_reduced = self._Z.shape[1]

@@ -38,14 +38,12 @@ class ObjectiveFunction(IOAble):
         Jacobian column by column. Generally the slowest, but most memory efficient.
         "auto" defaults to "batched" if all sub-objectives are set to "fwd",
         otherwise "blocked".
-    verbose : int, optional
-        Level of output.
 
     """
 
     _io_attrs_ = ["_objectives"]
 
-    def __init__(self, objectives, use_jit=True, deriv_mode="auto", verbose=1):
+    def __init__(self, objectives, use_jit=True, deriv_mode="auto"):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
         assert all(

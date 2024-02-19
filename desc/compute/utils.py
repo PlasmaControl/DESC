@@ -1350,8 +1350,14 @@ def surface_min(grid, x, surface_label="rho"):
     return grid.expand(mins, surface_label)
 
 
-# probably best to add these to interpax
-def cubic_poly_roots(coef, shift=jnp.array([0])):
+def cubic_poly_roots(
+    coef,
+    constant=jnp.array([0]),
+    a_min=-jnp.inf,
+    a_max=jnp.inf,
+    return_complex=False,
+    fill=False,
+):
     """Roots of cubic polynomial.
 
     Parameters
@@ -1360,20 +1366,35 @@ def cubic_poly_roots(coef, shift=jnp.array([0])):
         First axis should store coefficients of a polynomial. For a polynomial
         given by c₁ x³ + c₂ x² + c₃ x + c₄, ``coef[i]`` should store cᵢ.
         It is assumed that c₁ is nonzero.
-    shift : ndarray, shape(shift.size, )
-        Specify to instead find solutions to c₁ x³ + c₂ x² + c₃ x + c₄ = ``shift``.
+    constant : ndarray, shape(constant.size, )
+        Specify to instead find solutions to c₁ x³ + c₂ x² + c₃ x + c₄ = ``constant``.
+    a_min : ndarray
+        Return nan if real part of root is less than ``a_min``.
+        Should broadcast with arrays of shape ``coef.shape[1:]``.
+    a_max : ndarray
+        Return nan if real part of root is less than ``a_max``.
+        Should broadcast with arrays of shape ``coef.shape[1:]``.
+    return_complex : bool
+        If set to false, will return nan for complex roots.
+    fill : bool
+        If set to True, then the last axis of the output has size 5 instead
+        of 3, where the first element is ``a_min`` and the last is ``a_max``.
+        This option also replaces undesirable roots with by duplicating a
+        desirable root with smaller real part.  If no such root exists,
+        then ``a_min`` is used. The roots will be sorted from from smallest
+        to largest real part.
 
     Returns
     -------
-    xi : ndarray, shape(shift.size, coef.shape, 3)
-        If shift has one element, the first axis will be squeezed out.
-        The three roots of the cubic polynomial, sorted by real part then imaginary.
+    xi : ndarray, shape(constant.size, coef.shape, ?)
+        If constant has one element, the first axis will be squeezed out.
+        The roots of the cubic polynomial.
 
     """
     # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
     # The common libraries use root-finding which isn't compatible with JAX.
     a, b, c, d = coef
-    d = jnp.squeeze((d[jnp.newaxis, :].T - shift).T)
+    d = jnp.squeeze((d[jnp.newaxis].T - constant).T)
     t_0 = b**2 - 3 * a * c
     t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
     C = ((t_1 + complex_sqrt(t_1**2 - 4 * t_0**3)) / 2) ** (1 / 3)
@@ -1382,12 +1403,21 @@ def cubic_poly_roots(coef, shift=jnp.array([0])):
     def roots(xi_k):
         t_3 = jnp.where(C_is_zero, 0, t_0 / (xi_k * C))
         r = -(b + xi_k * C + t_3) / (3 * a)
+        r = jnp.where(
+            (return_complex | jnp.isreal(r)) & (a_min <= r) & (r <= a_max), r, jnp.nan
+        )
         return r
 
     xi_1 = (-1 + (-3) ** 0.5) / 2
     xi_2 = xi_1**2
     xi_3 = 1
-    xi = jnp.sort(jnp.stack([roots(xi_1), roots(xi_2), roots(xi_3)], axis=-1), axis=-1)
+    xi = jnp.stack([roots(xi_1), roots(xi_2), roots(xi_3)], axis=-1)
+    if fill:
+        xi_1, xi_2, xi_3 = jnp.sort(xi, axis=-1).T
+        xi_1 = jnp.where(jnp.isnan(xi_1), a_min, xi_1)
+        xi_2 = jnp.where(jnp.isnan(xi_2), xi_1, xi_2)
+        xi_3 = jnp.where(jnp.isnan(xi_3), xi_2, xi_3)
+        xi = jnp.stack(np.broadcast_arrays(a_min, xi_1, xi_2, xi_3, a_max), axis=-1)
     return xi
 
 
@@ -1455,7 +1485,7 @@ def polyeval(coef, x):
         evaluated at the point ``x[j, k, ...]``.
 
     """
-    X = (x[jnp.newaxis, :].T ** jnp.arange(coef.shape[0] - 1, -1, -1)).T
+    X = (x[jnp.newaxis].T ** jnp.arange(coef.shape[0] - 1, -1, -1)).T
     alphabet = "abcdefghijklmnopqrstuvwxyz"
     sub = alphabet[: coef.ndim]
     f = jnp.einsum(f"{sub},{sub}...->{sub[1:]}...", coef, X)
@@ -1525,14 +1555,12 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         axis=-1,
         extrapolate="periodic",
     ).c
-    # Enforce a periodic boundary condition to compute bounce integrals
-    # of particles trapped outside this snapshot of the field lines.
-    coef = jnp.append(coef, coef[:, 0][:, jnp.newaxis], axis=1)
+    coef = jnp.swapaxes(coef, 1, -1)
     der = polyder(coef)
     # There are zeta.size splines per field line.
     # The last spline is a duplicate of the first.
-    assert coef.shape == (4, zeta.size, alpha.size, rho.size)
-    assert der.shape == (3, zeta.size, alpha.size, rho.size)
+    assert coef.shape == (4, rho.size, alpha.size, zeta.size - 1)
+    assert der.shape == (3, rho.size, alpha.size, zeta.size - 1)
 
     def _bounce_integral(name, lambda_pitch):
         """Compute the bounce integral of the named quantity.
@@ -1546,7 +1574,7 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
 
         Returns
         -------
-        F : ndarray, shape(lambda_pitch.size, resolution, alpha.size, rho.size, 2)
+        F : ndarray, shape(lambda_pitch.size, rho.size, alpha.size, resolution, 2)
             Axes with size one will be squeezed out.
             Bounce integrals evaluated at ``lambda_pitch`` for every field line.
 
@@ -1561,19 +1589,23 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         # comparable results to a composite Simpson Newton-Cotes with quadrature
         # points near bounce points.
         lambda_pitch = jnp.atleast_1d(lambda_pitch)
-        bp = cubic_poly_roots(coef, 1 / lambda_pitch).reshape(
-            lambda_pitch.size, zeta.size, alpha.size, rho.size, 3
+        bp = cubic_poly_roots(
+            coef,
+            constant=1 / lambda_pitch,
+            a_min=zeta[:-1],
+            a_max=zeta[1:],
+            fill=True,
+        ).reshape(lambda_pitch.size, rho.size, alpha.size, zeta.size - 1, 5)
+        # Use the filter bp[..., 1:-1] to compute only on potential bounce points.
+        b_norm_z = polyeval(der[:, jnp.newaxis], bp[..., 1:-1]).reshape(
+            lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 3
         )
-        real_bp = jnp.real(bp)
-        b_norm_z = polyeval(der[:, jnp.newaxis], real_bp)
-        is_well = (b_norm_z[..., :-1] <= 0) & (b_norm_z[..., 1:] >= 0)
-        is_real = jnp.isreal(bp[..., :-1]) & jnp.isreal(bp[..., 1:])
+        # Check sign of gradient to determine whether root is a valid bounce point.
+        # Periodic boundary to compute bounce integrals of particles
+        # trapped outside this snapshot of the field lines.
+        is_well = (b_norm_z <= 0) & (jnp.roll(b_norm_z, -1, axis=-1) >= 0)  # noqa: F841
         # Can precompute everything above if lambda_pitch given to parent function.
 
-        # Goal: Integrate between potential wells with real bounce points.
-        # Strategy: 1. Integrate between real parts of all complex bounce points.
-        #           2. Sum integrals between real bounce points.
-        #           3. Keep only results with two real bounce points in a well.
         y = jnp.nan_to_num(
             eq.compute(name, grid=grid, override_grid=False, data=data)[name]
             / (
@@ -1582,14 +1614,19 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
             )
         ).reshape(lambda_pitch.size, alpha.size, rho.size, zeta.size)
         y = CubicSpline(zeta, y, axis=-1, extrapolate="periodic").c
-        # Enforce a periodic boundary condition to compute bounce integrals
-        # of particles trapped outside this snapshot of the field lines.
-        y = jnp.append(y, y[:, 0][:, jnp.newaxis], axis=1)
-        Y = jnp.swapaxes(polyint(y), 1, 2)
-        Y = polyeval(Y, real_bp)
-        integral = Y[..., 1:] - Y[..., :-1]
-        # TODO: sum across real bounce points
-        F = jnp.squeeze((is_well & is_real) * integral)
+        y = jnp.moveaxis(y, [1, -1], [-1, 2])
+        assert y.shape == (4, lambda_pitch.size, rho.size, alpha.size, zeta.size - 1)
+        Y = polyeval(polyint(y), bp).reshape(
+            lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 5
+        )
+        integrals = jnp.roll(Y, -1, axis=-1) - Y
+        # TODO: For each every two True values along last axis of is_well, indexed
+        #   along the last axis by i, j, we should
+        #   compute jnp.sum(match[..., i:j], axis=-1) where
+        #   the variable match is integrals.reshape(..., (zeta.size - 1), 5))[..., 1:-1]
+        #   then we are done. maybe can do this with a mask
+        #   like F = jnp.squeeze(is_well * integrals)
+        F = integrals
         return F
 
     return _bounce_integral
@@ -1653,7 +1690,7 @@ def bounce_average(eq, rho=None, alpha=None, resolution=20):
 
         Returns
         -------
-        G : ndarray, shape(lambda_pitch.size, resolution - 1, alpha.size, rho.size, 2)
+        G : ndarray, shape(lambda_pitch.size, rho.size, alpha.size, resolution, 2)
             Bounce average evaluated at ``lambdas`` for every field line.
 
         """

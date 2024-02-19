@@ -596,16 +596,18 @@ class TestComputeUtils:
         poly[0] = np.where(poly[0] == 0, np.ones_like(poly[0]), poly[0])
         poly = poly * np.e * np.pi
         assert np.unique(poly.shape).size == poly.ndim
-        shift = np.arange(10)
-        assert np.unique(poly.shape + shift.shape).size == poly.ndim + shift.ndim
-        out = cubic_poly_roots(poly, shift)
+        constant = np.arange(10)
+        assert np.unique(poly.shape + constant.shape).size == poly.ndim + constant.ndim
+        out = cubic_poly_roots(poly, constant, return_complex=True)
         for j in range(poly.shape[1]):
             for k in range(poly.shape[2]):
-                for s in range(shift.size):
+                for s in range(constant.size):
                     a, b, c, d = poly[:, j, k]
-                    d = d - shift[s]
-                    root_finds = np.sort_complex(np.roots([a, b, c, d]))
-                    np.testing.assert_allclose(out[s, j, k], root_finds)
+                    d = d - constant[s]
+                    np.testing.assert_allclose(
+                        np.sort_complex(out[s, j, k]),
+                        np.sort_complex(np.roots([a, b, c, d])),
+                    )
 
     @pytest.mark.unit
     def test_polyint(self):

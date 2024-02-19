@@ -110,7 +110,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
                 axisZ,
                 coord,
             )
-        elif eq.xsection.isgiven:
+        elif hasattr(eq, "_xsection") and eq.xsection.isgiven:
             eq.R_lmn = _initial_guess_surface(
                 eq.R_basis,
                 eq.Rp_lmn,

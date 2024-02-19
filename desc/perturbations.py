@@ -11,6 +11,7 @@ from desc.objectives import (
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    ObjectiveFunction,
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
@@ -186,7 +187,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective
+        objective, ObjectiveFunction(constraints)
     )
     timer.stop("linear constraint factorize")
     if verbose > 1:
@@ -390,7 +391,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if hasattr(constraint, "update_target"):
             constraint.update_target(eq_new)
     xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective
+        objective, ObjectiveFunction(constraints)
     )
 
     # update other attributes
@@ -549,15 +550,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if not con.built:
             con.build(eq, verbose=verbose)
 
-    (
-        xp,
-        _,
-        _,
-        Z,
-        unfixed_idx,
-        project,
-        recover,
-    ) = factorize_linear_constraints(constraints, objective_f)
+    _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        objective_f, ObjectiveFunction(constraints)
+    )
 
     # state vector
     xf = objective_f.x(eq)
@@ -760,8 +755,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     for constraint in constraints:
         if hasattr(constraint, "update_target"):
             constraint.update_target(eq_new)
-    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective_f
+    _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        objective_f, ObjectiveFunction(constraints)
     )
 
     # update other attributes

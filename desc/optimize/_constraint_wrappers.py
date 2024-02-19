@@ -418,15 +418,9 @@ class ProximalProjection(ObjectiveFunction):
         self._args = self._eq.optimizable_params.copy()
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self._args.remove(arg)
-        (
-            xp,
-            A,
-            b,
-            self._Z,
-            self._unfixed_idx,
-            project,
-            recover,
-        ) = factorize_linear_constraints(self._linear_constraints, self._constraint)
+        _, A, _, self._Z, self._unfixed_idx, _, _ = factorize_linear_constraints(
+            self._constraint, ObjectiveFunction(self._linear_constraints)
+        )
 
         # dx/dc - goes from the full state to optimization variables
         dxdc = []
@@ -657,15 +651,14 @@ class ProximalProjection(ObjectiveFunction):
             self._eq.params_dict = xeq_dict
             x_list[self._eq_idx] = xeq_dict
             self.history.append(x_list)
-            for con in self._linear_constraints:
-                if hasattr(con, "update_target"):
-                    con.update_target(self._eq)
         else:
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
-            for con in self._linear_constraints:
-                if hasattr(con, "update_target"):
-                    con.update_target(self._eq)
+
+        for con in self._linear_constraints:
+            if hasattr(con, "update_target"):
+                con.update_target(self._eq)
+
         return xopt, xeq
 
     def compute_scaled(self, x, constants=None):

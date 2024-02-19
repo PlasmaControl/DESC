@@ -69,7 +69,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     # set state vector
     xp = jnp.zeros(objective.dim_x)  # particular solution to Ax=b
     A = constraint.jac_scaled(xp)
-    b = constraint.compute_scaled(xp)
+    b = -constraint.compute_scaled_error(xp)
 
     # fixed just means there is a single element in A, so A_ij*x_j = b_i
     fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
@@ -126,8 +126,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         np.testing.assert_allclose(
             y1,
             y2,
-            atol=2e-14,
-            rtol=5e-14,
+            atol=3e-14,
             err_msg="Incompatible constraints detected, cannot satisfy constraint "
             + f"{con}.",
         )

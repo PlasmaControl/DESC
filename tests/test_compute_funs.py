@@ -1666,7 +1666,7 @@ def test_surface_equilibrium_geometry():
             x = eq.compute(key)[key].max()  # max needed for elongation broadcasting
             y = eq.surface.compute(key)[key].max()
             if key == "a_major/a_minor":
-                rtol, atol = 1e-2, 1e-4  # need looser tol here bc of different grids
+                rtol, atol = 1e-2, 0  # need looser tol here bc of different grids
             else:
-                rtol, atol = 1e-8, 1e-8
+                rtol, atol = 1e-8, 0
             np.testing.assert_allclose(x, y, rtol=rtol, atol=atol, err_msg=name + key)

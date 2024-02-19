@@ -1611,6 +1611,11 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field at specified points
 
         """
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * self.M,
+            N=30 + 2 * self.N,
+            NFP=self.NFP,
+        )
         return _compute_magnetic_field_from_CurrentPotentialField(
             field=self,
             coords=coords,
@@ -1856,6 +1861,16 @@ class FourierCurrentPotentialField(
         """str: Type of symmetry of periodic part of Phi (no symmetry if False)."""
         return self._sym_Phi
 
+    @property
+    def M_Phi(self):
+        """int: Poloidal resolution of periodic part of Phi."""
+        return self._M_Phi
+
+    @property
+    def N_Phi(self):
+        """int: Toroidal resolution of periodic part of Phi."""
+        return self._N_Phi
+
     def change_Phi_resolution(self, M=None, N=None, NFP=None, sym_Phi=None):
         """Change the maximum poloidal and toroidal resolution for Phi.
 
@@ -1916,6 +1931,11 @@ class FourierCurrentPotentialField(
             magnetic field at specified points
 
         """
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * max(self.M, self.M_Phi),
+            N=30 + 2 * max(self.N, self.N_Phi),
+            NFP=self.NFP,
+        )
         return _compute_magnetic_field_from_CurrentPotentialField(
             field=self,
             coords=coords,
@@ -1997,7 +2017,11 @@ class FourierCurrentPotentialField(
 
 
 def _compute_magnetic_field_from_CurrentPotentialField(
-    field, coords, params=None, basis="rpz", source_grid=None
+    field,
+    coords,
+    source_grid,
+    params=None,
+    basis="rpz",
 ):
     """Compute magnetic field at a set of points.
 
@@ -2007,13 +2031,14 @@ def _compute_magnetic_field_from_CurrentPotentialField(
         current potential field object from which to compute magnetic field.
     coords : array-like shape(N,3)
         cylindrical or cartesian coordinates
+    source_grid : Grid,
+        source grid upon which to evaluate the surface current density K
     params : dict, optional
         parameters to pass to compute function
         should include the potential
     basis : {"rpz", "xyz"}
         basis for input coordinates and returned magnetic field
-    source_grid : Grid,
-        source grid upon which to evaluate the surface current density K
+
 
     Returns
     -------
@@ -2025,7 +2050,6 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     coords = jnp.atleast_2d(coords)
     if basis == "rpz":
         coords = rpz2xyz(coords)
-    source_grid = source_grid or LinearGrid(M=60, N=60, NFP=field.NFP)
 
     # compute surface current, and store grid quantities
     # needed for integration in class

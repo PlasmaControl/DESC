@@ -114,6 +114,11 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
         Number of field periods of the Equilibrium.
     sym : bool
         Stellarator symmetry of the Equilibrium.
+    surface: FourierRZToroidalSurface
+        Last closed flux surface to get axis from
+    xsection: PoincareSurface
+        Poincare cross-section at given zeta toroidal angle
+        If supplied, axis will be axisymmetic
 
     Returns
     -------
@@ -170,8 +175,23 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
     return axis
 
 
-def parse_section(xsection):
-    """Parse section input into PoincareSurface object."""
+def parse_section(xsection, NFP=1, sym=True):
+    """Parse section input into PoincareSurface object.
+
+    Parameters
+    ----------
+    xsection : PoincareSurface, None
+        Poincare surface object to parse.
+    NFP : int
+        Number of field periods of the Equilibrium.
+    sym : bool
+        Stellarator symmetry of the Equilibrium.
+
+    Returns
+    -------
+    xsection : PoincareSurface
+        Parsed Poincare surface object.
+    """
     if isinstance(xsection, PoincareSurface):
         xsection = xsection
         xsection.isgiven = True
@@ -180,7 +200,7 @@ def parse_section(xsection):
         # from input file
         raise NotImplementedError("PoincareSurface from input file not implemented")
     else:
-        xsection = PoincareSurface()
+        xsection = PoincareSurface(sym=sym, NFP=NFP)
         xsection.isgiven = False
     return xsection
 

@@ -831,6 +831,7 @@ class Equilibrium(IOAble, Optimizable):
 
         eq_poincare.change_resolution(self.L, self.M, self.N)
         eq_poincare.axis = eq_poincare.get_axis()
+        eq_poincare.surface = eq_poincare.get_surface_at(rho=1)
         return eq_poincare
 
     def print_summary(self):

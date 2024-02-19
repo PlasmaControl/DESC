@@ -431,7 +431,7 @@ def test_poincare_sfl_bc(
     # perturb slightly from the axisymmetric equilibrium
     eq_poin.R_lmn = eq_poin.R_lmn.at[eq_poin.R_basis.get_idx(1, 1, 1)].set(0.1)
     # this constrains lambda at the zeta=0 surface, using eq's current value of lambda
-    constraints = get_fixed_boundary_constraints(eq=eq_poin)
+    constraints = get_fixed_xsection_constraints(eq=eq_poin)
     objective = ObjectiveFunction(ForceBalance(eq=eq_poin))
     eq_poin.solve(
         verbose=1,

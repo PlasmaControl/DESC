@@ -59,7 +59,10 @@ class _Basis(IOAble, ABC):
         self._M = int(self._M)
         self._N = int(self._N)
         self._NFP = int(self._NFP)
-        self._NFP_umbilic_factor = int(self._NFP_umbilic_factor)
+        if hasattr(self, "_NFP_umbilic_factor"):
+            self._NFP_umbilic_factor = int(self._NFP_umbilic_factor)
+        else:
+            self._NFP_umbilic_factor = int(1)
         self._modes = self._modes.astype(int)
 
     def _enforce_symmetry(self):

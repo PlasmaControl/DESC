@@ -439,6 +439,11 @@ class Equilibrium(IOAble, Optimizable):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.
             self.current._transform = self.current._get_transform(self.current.grid)
+        self._NFP_umbilic_factor = (
+            int(self._NFP_umbilic_factor)
+            if self._NFP_umbilic_factor is not None
+            else int(1)
+        )
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.

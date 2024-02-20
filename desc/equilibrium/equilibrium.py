@@ -730,6 +730,7 @@ class Equilibrium(IOAble, Optimizable):
             modes_L=Lp_basis.modes,
             zeta=zeta,
             spectral_indexing=Lp_basis.spectral_indexing,
+            sym=self.sym,
         )
         xsection.isgiven = True if self.xsection.isgiven else False
         return xsection

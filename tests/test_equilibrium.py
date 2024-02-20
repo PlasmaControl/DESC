@@ -424,9 +424,8 @@ def test_poincare_sfl_bc(
     eq_poin = eq.set_poincare_equilibrium()
 
     eq_poin.change_resolution(
-        eq_poin.L, eq_poin.M, 1
+        eq_poin.L, eq_poin.M, 1, N_grid=2
     )  # add toroidal modes to the equilibrium
-    eq_poin.N_grid = 2  # set resolution of toroidal grid
 
     # perturb slightly from the axisymmetric equilibrium
     eq_poin.R_lmn = eq_poin.R_lmn.at[eq_poin.R_basis.get_idx(1, 1, 1)].set(0.1)

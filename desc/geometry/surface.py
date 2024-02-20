@@ -959,7 +959,7 @@ class PoincareSurface(ZernikeRZToroidalSection):
                 L=max(LL, ML),
                 M=ML,
                 spectral_indexing=spectral_indexing,
-                sym="sin" if surface.sym else False,
+                sym="sin" if sym else False,
             )
 
             self._R_basis = surface.R_basis
@@ -981,7 +981,7 @@ class PoincareSurface(ZernikeRZToroidalSection):
             self._N = surface.N
             self._spectral_indexing = spectral_indexing
             self._zeta = surface.zeta
-            self._sym = surface._sym
+            self._sym = sym
             self.name = name
             self._isgiven = True
 

@@ -193,16 +193,16 @@ def parse_section(xsection, sym=True):
         Parsed Poincare surface object.
     """
     if isinstance(xsection, PoincareSurface):
-        xsection = xsection
-        xsection.isgiven = True
+        _xsection = xsection
+        _xsection.isgiven = True
     elif isinstance(xsection, (np.ndarray, jnp.ndarray)):
         # This is temporary, until we have a proper PoincareSurface constructor
         # from input file
         raise NotImplementedError("PoincareSurface from input file not implemented")
     else:
-        xsection = PoincareSurface(sym=sym)
-        xsection.isgiven = False
-    return xsection
+        _xsection = PoincareSurface(sym=sym)
+        _xsection.isgiven = False
+    return _xsection
 
 
 def _assert_nonnegint(x, name=""):

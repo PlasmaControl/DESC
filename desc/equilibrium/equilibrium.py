@@ -724,9 +724,11 @@ class Equilibrium(IOAble, Optimizable):
         )
         surf = self.get_surface_at(zeta=zeta)
         Lp_lmn, Lp_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
-        return PoincareSurface(
+        xsection = PoincareSurface(
             surface=surf, L_lmn=Lp_lmn, modes_L=Lp_basis.modes, zeta=zeta
         )
+        xsection.isgiven = True if self.xsection.isgiven else False
+        return xsection
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):
         """Return a SplineProfile of the desired quantity.

@@ -216,9 +216,9 @@ def rescale(
     if eq.current is not None:
         eq.c_l *= cL * cB
 
-    # boundary & axis
+    # boundary & axis & cross-section
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
-    eq.xsection = eq.get_poincare_xsection_at()
+    eq.xsection = eq.get_poincare_xsection_at(eq.xsection.zeta)
 
     return eq

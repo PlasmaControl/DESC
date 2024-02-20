@@ -19,7 +19,6 @@ from desc.compute.utils import get_data_deps, get_params, get_profiles, get_tran
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
-    Surface,
     ZernikeRZToroidalSection,
 )
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
@@ -423,6 +422,9 @@ class Equilibrium(IOAble, Optimizable):
             "Za_n",
             "Rb_lmn",
             "Zb_lmn",
+            "I",
+            "G",
+            "Phi_mn",
         )
         assert sorted(args) == sorted(arg_order)
         return [arg for arg in arg_order if arg in args]
@@ -1128,14 +1130,12 @@ class Equilibrium(IOAble, Optimizable):
     @surface.setter
     def surface(self, new):
         assert isinstance(
-            new, Surface
-        ), f"surfaces should be of type Surface or a subclass, got {new}"
+            new, FourierRZToroidalSurface
+        ), f"surface should be of type FourierRZToroidalSurface or subclass, got {new}"
         assert (
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"
-        assert self.NFP == getattr(
-            new, "NFP", self.NFP
-        ), "Surface and Equilibrium must have the same NFP"
+        assert self.NFP == new.NFP, "Surface and Equilibrium must have the same NFP"
         new.change_resolution(self.L, self.M, self.N)
         self._surface = new
 
@@ -1292,6 +1292,51 @@ class Equilibrium(IOAble, Optimizable):
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
+
+    @optimizable_parameter
+    @property
+    def I(self):  # noqa: E743
+        """float: Net current linking the plasma surface toroidally."""
+        return self.surface.I if hasattr(self.surface, "I") else np.empty(0)
+
+    @I.setter
+    def I(self, new):  # noqa: E743
+        errorif(
+            not hasattr(self.surface, "I"),
+            ValueError,
+            "Attempt to set I on an equilibrium without sheet current",
+        )
+        self.surface.I = new
+
+    @optimizable_parameter
+    @property
+    def G(self):
+        """float: Net current linking the plasma surface poloidally."""
+        return self.surface.G if hasattr(self.surface, "G") else np.empty(0)
+
+    @G.setter
+    def G(self, new):
+        errorif(
+            not hasattr(self.surface, "G"),
+            ValueError,
+            "Attempt to set G on an equilibrium without sheet current",
+        )
+        self.surface.G = new
+
+    @optimizable_parameter
+    @property
+    def Phi_mn(self):
+        """ndarray: coeffs of single-valued part of surface current potential."""
+        return self.surface.Phi_mn if hasattr(self.surface, "Phi_mn") else np.empty(0)
+
+    @Phi_mn.setter
+    def Phi_mn(self, new):
+        errorif(
+            not hasattr(self.surface, "Phi_mn"),
+            ValueError,
+            "Attempt to set Phi_mn on an equilibrium without sheet current",
+        )
+        self.surface.Phi_mn = new
 
     @optimizable_parameter
     @property

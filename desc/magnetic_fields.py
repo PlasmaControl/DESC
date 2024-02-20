@@ -1707,7 +1707,8 @@ class FourierCurrentPotentialField(
     Phi_mn : ndarray
         Fourier coefficients of the double FourierSeries part of the current potential.
     modes_Phi : array-like, shape(k,2)
-        Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn coefficients
+        Poloidal and Toroidal mode numbers corresponding to passed-in Phi_mn
+        coefficients.
     I : float
         Net current linking the plasma and the surface toroidally
         Denoted I in the algorithm
@@ -1965,7 +1966,7 @@ class FourierCurrentPotentialField(
             Fourier coefficients of the double FourierSeries of the current potential.
             Should correspond to the given DoubleFourierSeries basis object passed in.
         modes_Phi : array-like, shape(k,2)
-            Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn
+            Poloidal and Toroidal mode numbers corresponding to passed-in Phi_mn
             coefficients
         I : float
             Net current linking the plasma and the surface toroidally
@@ -1978,12 +1979,10 @@ class FourierCurrentPotentialField(
             and increasing when going in the clockwise direction, which with the
             convention n x grad(phi) will result in a toroidal field in the negative
             toroidal direction.
-        name : str
-            name for this field
-        check_orientation : bool
-            ensure that this surface has a right handed orientation. Do not set to False
-            unless you are sure the parameterization you have given is right handed
-            (ie, e_theta x e_zeta points outward from the surface).
+        sym_Phi :  {"auto","cos","sin",False}
+            whether to enforce a given symmetry for the DoubleFourierSeries part of the
+            current potential. Default is "auto" which enforces if modes are symmetric.
+            If True, non-symmetric modes will be truncated.
 
         """
         if not isinstance(surface, FourierRZToroidalSurface):

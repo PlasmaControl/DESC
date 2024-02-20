@@ -66,17 +66,20 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
                     + " but not included in objective."
                 )
 
-    # set state vector
-    xp = jnp.zeros(objective.dim_x)  # particular solution to Ax=b
-    A = constraint.jac_scaled(xp)
-    b = -constraint.compute_scaled_error(xp)
+    # particular solution to Ax=b
+    xp = jnp.zeros(objective.dim_x)
+
+    # linear constraints Ax=b
+    x0 = jnp.zeros(constraint.dim_x)
+    A = constraint.jac_scaled(x0)
+    b = -constraint.compute_scaled_error(x0)
 
     # fixed just means there is a single element in A, so A_ij*x_j = b_i
     fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
     # indices of x that are fixed = cols of A where rows have 1 nonzero val.
     _, fixed_idx = np.where(A[fixed_rows])
     unfixed_rows = np.setdiff1d(np.arange(A.shape[0]), fixed_rows)
-    unfixed_idx = np.setdiff1d(np.arange(xp.size), fixed_idx)
+    unfixed_idx = np.setdiff1d(np.arange(objective.dim_x), fixed_idx)
     if len(fixed_rows):
         # something like 0.5 x1 = 2 is the same as x1 = 4
         b = put(b, fixed_rows, b[fixed_rows] / np.sum(A[fixed_rows], axis=1))

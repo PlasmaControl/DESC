@@ -522,7 +522,7 @@ def test_simsopt_QH_comparison():
             ),
         )
     )
-    eq2, result = eq.optimize(
+    eq2, _ = eq.optimize(
         verbose=3,
         objective=objective,
         constraints=constraints,

@@ -370,8 +370,6 @@ class ProximalProjection(ObjectiveFunction):
         RadialForceBalance, HelicalForceBalance}
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the objectives.
-    verbose : int, optional
-        Level of output.
     perturb_options, solve_options : dict
         dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
         during the projection step.
@@ -382,7 +380,6 @@ class ProximalProjection(ObjectiveFunction):
         objective,
         constraint,
         eq,
-        verbose=1,
         perturb_options=None,
         solve_options=None,
     ):
@@ -418,8 +415,10 @@ class ProximalProjection(ObjectiveFunction):
         self._args = self._eq.optimizable_params.copy()
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self._args.remove(arg)
+        linear_constraint = ObjectiveFunction(self._linear_constraints)
+        linear_constraint.build()
         _, A, _, self._Z, self._unfixed_idx, _, _ = factorize_linear_constraints(
-            self._constraint, ObjectiveFunction(self._linear_constraints)
+            self._constraint, linear_constraint
         )
 
         # dx/dc - goes from the full state to optimization variables

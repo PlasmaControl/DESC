@@ -465,7 +465,7 @@ def _maybe_wrap_nonlinear_constraints(
             solve_options=solve_options,
             eq=eq,
         )
-        nonlinear_constraints = None
+        nonlinear_constraints = ()
     return objective, nonlinear_constraints
 
 

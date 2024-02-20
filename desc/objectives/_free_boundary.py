@@ -31,7 +31,7 @@ class VacuumBoundaryError(_Objective):
 
     Where 𝐁ᵢₙ is the total field inside the LCFS (from fixed boundary calculation)
     𝐁ₒᵤₜ is the total field outside the LCFS (from coils), and 𝐧 is the outward surface
-    normal. All residuals are weighted by the local area element |𝐞_θ × 𝐞_ζ| Δθ Δζ
+    normal. All residuals are weighted by the local area element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
 
     (Technically for vacuum equilibria the second condition is redundant with the first,
     but including it makes things more robust).
@@ -319,7 +319,7 @@ class BoundaryError(_Objective):
     𝐁ₒᵤₜ is the total field outside the LCFS (from coils and virtual casing principle),
     𝐧 is the outward surface normal, p is the plasma pressure, and Φ is the surface
     current potential on the LCFS. All residuals are weighted by the local area
-    element |𝐞_θ × 𝐞_ζ| Δθ Δζ
+    element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
 
     The third equation is only included if a sheet current is supplied, otherwise it
     is trivially satisfied. If it is known that the external field accurately reproduces
@@ -762,7 +762,7 @@ class BoundaryErrorNESTOR(_Objective):
 
         1/2mu0*(B_vac + B_coil)^2 - 1/2mu0*B_plasma^2 - p
 
-    Residuals are weighted by the local area element |𝐞_θ × 𝐞_ζ| Δθ Δζ
+    Residuals are weighted by the local area element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
 
     Parameters
     ----------

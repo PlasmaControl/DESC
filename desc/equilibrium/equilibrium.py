@@ -730,9 +730,13 @@ class Equilibrium(IOAble, Optimizable):
             modes_L=Lp_basis.modes,
             zeta=zeta,
             spectral_indexing=Lp_basis.spectral_indexing,
-            sym=self.sym,
+            sym=Lp_basis.sym,
         )
-        xsection.isgiven = True if self.xsection.isgiven else False
+        try:
+            xsection.isgiven = True if self.xsection.isgiven else False
+        except AttributeError:
+            xsection.isgiven = False
+
         return xsection
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):
@@ -832,7 +836,7 @@ class Equilibrium(IOAble, Optimizable):
             L_grid=self.L_grid,  # real space radial resolution, slightly oversampled
             M_grid=self.M_grid,  # real space poloidal resolution, slightly oversampled
             N_grid=self.N_grid,  # real space toroidal resolution
-            sym=True,  # explicitly enforce stellarator symmetry
+            sym=self.sym,  # explicitly enforce stellarator symmetry
             spectral_indexing=self._spectral_indexing,
         )
 

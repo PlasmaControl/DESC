@@ -953,11 +953,9 @@ class PoincareSurface(ZernikeRZToroidalSection):
             and L_lmn is not None
             and modes_L is not None
         ):
-            LL = np.max(abs(modes_L[:, 0]))
-            ML = np.max(abs(modes_L[:, 1]))
             L_basis = ZernikePolynomial(
-                L=max(LL, ML),
-                M=ML,
+                L=surface.L,
+                M=surface.M,
                 spectral_indexing=spectral_indexing,
                 sym="sin" if sym else False,
             )
@@ -976,8 +974,8 @@ class PoincareSurface(ZernikeRZToroidalSection):
                     f"L_lmn should have the same size as the basis, got {len(L_lmn)} "
                     + f"for basis with {modes_L.shape[0]} modes."
                 )
-            self._L = max(surface.L, LL)
-            self._M = max(surface.M, ML)
+            self._L = surface.L
+            self._M = surface.M
             self._N = surface.N
             self._spectral_indexing = spectral_indexing
             self._zeta = surface.zeta

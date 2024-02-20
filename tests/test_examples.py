@@ -883,6 +883,7 @@ def test_only_non_eq_optimization():
 @pytest.mark.slow
 def test_freeb_vacuum():
     """Test for free boundary vacuum stellarator."""
+    # currents from VMEC input this test is meant to reproduce
     extcur = [4700.0, 1000.0]
     ext_field = SplineMagneticField.from_mgrid(
         "tests/inputs/mgrid_test.nc", extcur=extcur
@@ -921,6 +922,7 @@ def test_freeb_vacuum():
 @pytest.mark.slow
 def test_freeb_axisym():
     """Test for free boundary finite beta tokamak."""
+    # currents from VMEC input this test is meant to reproduce
     extcur = [
         3.884526409876309e06,
         -2.935577123737952e05,

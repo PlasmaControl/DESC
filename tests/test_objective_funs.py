@@ -1970,24 +1970,7 @@ def test_objective_no_nangrad():
     g = obj.grad(obj.x(eq))
     assert not np.any(np.isnan(g)), "redl bootstrap"
 
-    extcur = [
-        3.884526409876309e06,
-        -2.935577123737952e05,
-        -1.734851853677043e04,
-        6.002137016973160e04,
-        6.002540940490887e04,
-        -1.734993103183817e04,
-        -2.935531536308510e05,
-        -3.560639108717275e05,
-        -6.588434719283084e04,
-        -1.154387774712987e04,
-        -1.153546510755219e04,
-        -6.588300858364606e04,
-        -3.560589388468855e05,
-    ]
-    ext_field = SplineMagneticField.from_mgrid(
-        r"tests/inputs/mgrid_solovev.nc", extcur=extcur
-    )
+    ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
     pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
     iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])

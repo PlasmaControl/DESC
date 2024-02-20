@@ -272,7 +272,7 @@ class TestInputReader:
         ), "numpy environment variable incorrect with default argument"
         assert ir.args.version is False, "version is not default False"
         assert (
-            len(ir.inputs[0]) == 25
+            len(ir.inputs[0]) == 26
         ), "number of inputs does not match number expected in MIN_INPUT"
         # test equality of arguments
 

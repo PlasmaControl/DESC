@@ -1113,15 +1113,15 @@ def test_boundary_error_print(capsys):
         "Precomputing transforms\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
@@ -1143,15 +1143,15 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
@@ -1188,15 +1188,15 @@ def test_boundary_error_print(capsys):
         "Precomputing transforms\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
@@ -1218,15 +1218,15 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
@@ -1266,15 +1266,15 @@ def test_boundary_error_print(capsys):
         "Precomputing transforms\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
@@ -1296,15 +1296,15 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
@@ -1326,15 +1326,15 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary field jump error: {:10.3e} ".format(np.max(f3))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary field jump error: {:10.3e} ".format(np.min(f3))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary field jump error: {:10.3e} ".format(np.mean(f3))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary field jump error: {:10.3e} ".format(

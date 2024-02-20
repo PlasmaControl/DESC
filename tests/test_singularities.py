@@ -60,7 +60,7 @@ def test_singular_integral_greens_id():
 
     for i, (m, n) in enumerate(zip(Nu, Nv)):
         source_grid = LinearGrid(M=m // 2, N=n // 2, NFP=eq.NFP)
-        src_data = eq.compute(
+        source_data = eq.compute(
             ["R", "Z", "phi", "e^rho", "|e_theta x e_zeta|"], grid=source_grid
         )
         eval_data = eq.compute(
@@ -72,7 +72,7 @@ def test_singular_integral_greens_id():
 
         err = singular_integral(
             eval_data,
-            src_data,
+            source_data,
             "nr_over_r3",
             interpolator,
             loop=True,
@@ -100,7 +100,7 @@ def test_singular_integral_vac_estell():
         "|e_theta x e_zeta|",
     ]
 
-    src_data = eq.compute(keys, grid=source_grid)
+    source_data = eq.compute(keys, grid=source_grid)
     eval_data = eq.compute(keys, grid=eval_grid)
 
     k = min(source_grid.num_theta, source_grid.num_zeta)
@@ -110,7 +110,7 @@ def test_singular_integral_vac_estell():
     interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
     Bplasma = virtual_casing_biot_savart(
         eval_data,
-        src_data,
+        source_data,
         interpolator,
         loop=True,
     )
@@ -137,15 +137,15 @@ def test_biest_interpolators():
 
     f = lambda t, z: np.sin(4 * t) + np.cos(3 * z)
 
-    src_dtheta = sgrid.spacing[:, 1]
-    src_dzeta = sgrid.spacing[:, 2] / sgrid.NFP
-    src_theta = sgrid.nodes[:, 1]
-    src_zeta = sgrid.nodes[:, 2]
+    source_dtheta = sgrid.spacing[:, 1]
+    source_dzeta = sgrid.spacing[:, 2] / sgrid.NFP
+    source_theta = sgrid.nodes[:, 1]
+    source_zeta = sgrid.nodes[:, 2]
     eval_theta = egrid.nodes[:, 1]
     eval_zeta = egrid.nodes[:, 2]
 
-    h_t = np.mean(src_dtheta)
-    h_z = np.mean(src_dzeta)
+    h_t = np.mean(source_dtheta)
+    h_z = np.mean(source_dzeta)
 
     for i in range(len(r)):
         dt = s / 2 * h_t * r[i] * np.sin(w[i])
@@ -154,7 +154,7 @@ def test_biest_interpolators():
         zeta_i = eval_zeta + dz
         ff = f(theta_i, zeta_i)
 
-        g1 = interp1(f(src_theta, src_zeta), i)
-        g2 = interp2(f(src_theta, src_zeta), i)
+        g1 = interp1(f(source_theta, source_zeta), i)
+        g2 = interp2(f(source_theta, source_zeta), i)
         np.testing.assert_allclose(g1, g2)
         np.testing.assert_allclose(g1, ff)

@@ -725,7 +725,11 @@ class Equilibrium(IOAble, Optimizable):
         surf = self.get_surface_at(zeta=zeta)
         Lp_lmn, Lp_basis = get_basis_poincare(self.L_lmn, self.L_basis, zeta)
         xsection = PoincareSurface(
-            surface=surf, L_lmn=Lp_lmn, modes_L=Lp_basis.modes, zeta=zeta
+            surface=surf,
+            L_lmn=Lp_lmn,
+            modes_L=Lp_basis.modes,
+            zeta=zeta,
+            spectral_indexing=Lp_basis.spectral_indexing,
         )
         xsection.isgiven = True if self.xsection.isgiven else False
         return xsection

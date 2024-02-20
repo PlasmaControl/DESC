@@ -1714,7 +1714,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     phi = (1 if eq.N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi + 1)  # +1 to include pi and 2pi
+        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
     phi = np.atleast_1d(phi)
     nphi = len(phi)
     # don't plot axis for FourierRZToroidalSurface, since it's not defined.
@@ -1737,15 +1737,15 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     )
 
     if colors is None:
-        colors = _get_cmap(cmap, nz)(np.linspace(0, 1, nz))
+        colors = _get_cmap(cmap)((phi * eq.NFP / (2 * np.pi)) % 1)
     if lw is None:
         lw = 1
     if isinstance(lw, int):
-        lw = [lw for i in range(nz - 1)]
+        lw = [lw for _ in range(nz)]
     if ls is None:
         ls = "-"
     if isinstance(ls, str):
-        ls = [ls for i in range(nz - 1)]
+        ls = [ls for _ in range(nz)]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -1755,7 +1755,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     fig, ax = _format_ax(ax, figsize=figsize, equal=True)
 
-    for i in range(nphi - 1):
+    for i in range(nphi):
         ax.plot(
             R[:, -1, i],
             Z[:, -1, i],

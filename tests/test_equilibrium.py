@@ -439,6 +439,7 @@ def test_poincare_sfl_bc(
         constraints=constraints,
         maxiter=100,
         xtol=1e-6,
+        gtol=1e-6,
     )
 
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq, Nz=6)

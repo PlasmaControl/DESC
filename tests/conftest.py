@@ -257,28 +257,29 @@ def HELIOTRON_vac2(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def ESTELL_older(tmpdir_factory):
-    """Run ESTELL_older example."""
-    input_path = ".//tests//inputs//ESTELL_older"
+def NCSX_older(tmpdir_factory):
+    """Run NCSX_older example."""
+    input_path = ".//tests//inputs//NCSX_older"
     output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = output_dir.join("ESTELL_older.h5")
+    desc_h5_path = output_dir.join("NCSX_older.h5")
 
     cwd = os.path.dirname(__file__)
     exec_dir = os.path.join(cwd, "..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running ESTELL_older test.")
+    print("Running NCSX_older test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    main(args)
+    with pytest.warns(UserWarning, match="pressure profile is not an even"):
+        main(args)
 
-    ESTELL_older = {
+    NCSX_older = {
         "input_path": input_path,
         "desc_h5_path": desc_h5_path,
     }
-    return ESTELL_older
+    return NCSX_older
 
 
 @pytest.fixture(scope="session")

@@ -14,6 +14,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import zernike_radial, zernike_radial_coeffs
+from desc.optimizable import OptimizableCollection
 from desc.utils import errorif, setdefault
 
 from .normalization import compute_scaling_factors
@@ -112,6 +113,11 @@ class FixParameter(_FixedObjective):
         self._target_from_user = target
         self._params = params
         self._indices = indices
+        if isinstance(thing, OptimizableCollection):
+            self._is_collection = True
+            self._subthings = [subthing for subthing in thing]
+        else:
+            self._is_collection = False
         super().__init__(
             things=thing,
             target=target,
@@ -122,7 +128,7 @@ class FixParameter(_FixedObjective):
             name=name,
         )
 
-    def build(self, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):  # noqa: C901
         """Build constant arrays.
 
         Parameters
@@ -139,52 +145,161 @@ class FixParameter(_FixedObjective):
         if not isinstance(params, (list, tuple)):
             params = [params]
         for par in params:
-            errorif(
-                par not in thing.optimizable_params,
-                ValueError,
-                f"parameter {par} not found in optimizable_parameters: "
-                + f"{thing.optimizable_params}",
-            )
+            if not isinstance(par, (list, tuple)):
+                errorif(
+                    par not in thing.optimizable_params,
+                    ValueError,
+                    f"parameter {par} not found in optimizable_parameters: "
+                    + f"{thing.optimizable_params}",
+                )
+            else:  # given a list of params for each subthing in thing
+                for i, (subpar, subthing) in enumerate(zip(par, thing)):
+                    errorif(
+                        subpar not in subthing.optimizable_params,
+                        ValueError,
+                        f"parameter {subpar} not found in optimizable_parameters: "
+                        + f"{subthing.optimizable_params} at index {i} of {thing}",
+                    )
         self._params = params
 
         # replace indices=True with actual indices
         if isinstance(self._indices, bool) and self._indices:
-            self._indices = [np.arange(thing.dimensions[par]) for par in self._params]
+            if not self._is_collection:
+                self._indices = [
+                    np.arange(thing.dimensions[par]) for par in self._params
+                ]
+            else:  # it is an optimizable collection
+                self._indices = []
+                for subthing, subpar in zip(thing, self._params):
+                    self._indices.append(
+                        [np.arange(subthing.dimensions[par]) for par in subpar]
+                    )
+
         # make sure its iterable if only a scalar was passed in
         if not isinstance(self._indices, (list, tuple)):
             self._indices = [self._indices]
+        # FIXME: unsure of how to replicate above behavior for collection...
+        # do we enforce that everythign is a list of lists? and so assume if I
+        # pass in a list of scalars, that I meant it to be a list of lists?
         # replace idx=True with array of all indices, throwing an error if the length
         # of indices is different from number of params
-        indices = {}
-        errorif(
-            len(self._params) != len(self._indices),
-            ValueError,
-            f"not enough indices ({len(self._indices)}) "
-            + f"for params ({len(self._params)})",
-        )
-        for idx, par in zip(self._indices, self._params):
-            if isinstance(idx, bool) and idx:
-                idx = np.arange(thing.dimensions[par])
-            indices[par] = np.atleast_1d(idx)
-        self._indices = indices
-        self._dim_f = sum(t.size for t in self._indices.values())
 
-        default_target = {
-            par: thing.params_dict[par][self._indices[par]] for par in params
-        }
-        default_bounds = None
-        target, bounds = self._parse_target_from_user(
-            self._target_from_user, default_target, default_bounds, indices
-        )
-        if target:
-            self.target = jnp.concatenate([target[par] for par in params])
-            self.bounds = None
-        else:
-            self.target = None
-            self.bounds = (
-                jnp.concatenate([bounds[0][par] for par in params]),
-                jnp.concatenate([bounds[1][par] for par in params]),
+        if not self._is_collection:
+            indices = {}
+            errorif(
+                len(self._params) != len(self._indices),
+                ValueError,
+                f"not enough indices ({len(self._indices)}) "
+                + f"for params ({len(self._params)})",
             )
+            for idx, par in zip(self._indices, self._params):
+                if isinstance(idx, bool) and idx:
+                    idx = np.arange(thing.dimensions[par])
+                indices[par] = np.atleast_1d(idx)
+            self._indices = indices
+            self._dim_f = sum(t.size for t in self._indices.values())
+
+            default_target = {
+                par: thing.params_dict[par][self._indices[par]] for par in params
+            }
+            default_bounds = None
+            target, bounds = self._parse_target_from_user(
+                self._target_from_user, default_target, default_bounds, indices
+            )
+            if target:
+                self.target = jnp.concatenate([target[par] for par in params])
+                self.bounds = None
+            else:
+                self.target = None
+                self.bounds = (
+                    jnp.concatenate([bounds[0][par] for par in params]),
+                    jnp.concatenate([bounds[1][par] for par in params]),
+                )
+        else:  # it is an optimizable collection
+            indices = []  # will be a list of dicts
+            errorif(
+                len(thing) != len(self._indices),
+                ValueError,
+                f"not enough indices ({len(self._indices)}) "
+                + f"for length of thing ({len(thing)})",
+            )
+            for subthing, subindices, subparams in zip(
+                thing, self._indices, self._params
+            ):
+                subindices_dict = {}
+                for idx, par in zip(subindices, subparams):
+                    if isinstance(idx, bool) and idx:
+                        idx = np.arange(subthing.dimensions[par])
+                    subindices_dict[par] = np.atleast_1d(idx)
+                indices.append(subindices_dict)
+            self._indices = indices
+            dim_fs = []
+            for subindices in self._indices:
+                dim_fs.append(sum(t.size for t in subindices.values()))
+
+            # need to process targets and bounds for each subthing
+            # final attributes will be a target of len dim_f or
+            # bound that is a a tuple of (scalar, scalar) or (len dim_f, len dim_f)
+            target_list = []
+            bounds_list = []
+
+            for subthing, subindices, subparams, dim_f in zip(
+                thing, self._indices, params, dim_fs
+            ):
+                self._dim_f = dim_f  # set this for the parse_target_from_user
+                default_target = {
+                    par: subthing.params_dict[par][subindices[par]] for par in subparams
+                }
+                default_bounds = None
+
+                target, bounds = self._parse_target_from_user(
+                    self._target_from_user, default_target, default_bounds, indices
+                )
+                target_list.append(target)
+                bounds_list.append(bounds)
+            self._dim_f = sum(dim_fs)
+            if np.all([t is not None for t in target_list]):
+                targets = []
+                for subparam, subindices, sub_self_param, subtarget in zip(
+                    params, self._indices, self._params, target_list
+                ):
+                    if (
+                        subindices
+                    ):  # skip if no indices or params provided for a given subthing
+                        targets.append(
+                            jnp.concatenate(
+                                [
+                                    subtarget[par][subindices[par]]
+                                    for par in sub_self_param
+                                ]
+                            )
+                        )
+                self.target = jnp.concatenate(targets)
+                self.bounds = None
+            else:
+                self.target = None
+                bounds_lower_list = []
+                bounds_upper_list = []
+
+                for subparam, subindices, sub_self_param, subbounds in zip(
+                    params, self._indices, self._params, bounds_list
+                ):
+                    if subindices:
+                        bounds_lower_list.append(
+                            jnp.concatenate(
+                                [subbounds[0][par] for par in sub_self_param]
+                            )
+                        )
+                        bounds_upper_list.append(
+                            jnp.concatenate(
+                                [subbounds[1][par] for par in sub_self_param]
+                            )
+                        )
+                self.bounds = (
+                    bounds_lower_list,
+                    bounds_upper_list,
+                )
+
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -204,9 +319,24 @@ class FixParameter(_FixedObjective):
             Fixed degree of freedom errors.
 
         """
-        return jnp.concatenate(
-            [params[par][self._indices[par]] for par in self._params]
-        )
+        if not self._is_collection:
+            return jnp.concatenate(
+                [params[par][self._indices[par]] for par in self._params]
+            )
+        else:  # optimizable collection
+            fs = []
+            for subparam, subindices, sub_self_param in zip(
+                params, self._indices, self._params
+            ):
+                if (
+                    subindices
+                ):  # skip if no indices or params provided for a given subthing
+                    fs.append(
+                        jnp.concatenate(
+                            [subparam[par][subindices[par]] for par in sub_self_param]
+                        )
+                    )
+            return jnp.concatenate(fs)
 
 
 class BoundaryRSelfConsistency(_Objective):

@@ -164,6 +164,7 @@ class FourierRZToroidalSurface(Surface):
 
     @rho.setter
     def rho(self, rho):
+        self._rho = rho
         return self._rho
 
     def change_resolution(self, *args, **kwargs):

@@ -424,10 +424,10 @@ def test_equilibrium_unused_kwargs():
 @pytest.mark.slow
 @pytest.mark.unit
 @pytest.mark.solve
-def test_backward_compatible_load_and_resolve(NCSX_older):
+def test_backward_compatible_load_and_resolve():
     """Test backwards compatibility of load and re-solve."""
     with pytest.warns(RuntimeWarning):
-        eq = EquilibriaFamily.load(load_from=str(NCSX_older["desc_h5_path"]))[-1]
+        eq = EquilibriaFamily.load(load_from=".//tests//inputs//NCSX_older.h5")[-1]
 
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj)

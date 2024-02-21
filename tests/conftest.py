@@ -257,32 +257,6 @@ def HELIOTRON_vac2(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def NCSX_older(tmpdir_factory):
-    """Run NCSX_older example."""
-    input_path = ".//tests//inputs//NCSX_older"
-    output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = output_dir.join("NCSX_older.h5")
-
-    cwd = os.path.dirname(__file__)
-    exec_dir = os.path.join(cwd, "..")
-    input_filename = os.path.join(exec_dir, input_path)
-
-    print("Running NCSX_older test.")
-    print("exec_dir=", exec_dir)
-    print("cwd=", cwd)
-
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    with pytest.warns(UserWarning, match="pressure profile is not an even"):
-        main(args)
-
-    NCSX_older = {
-        "input_path": input_path,
-        "desc_h5_path": desc_h5_path,
-    }
-    return NCSX_older
-
-
-@pytest.fixture(scope="session")
 def DummyStellarator(tmpdir_factory):
     """Create and save a dummy stellarator configuration for testing."""
     output_dir = tmpdir_factory.mktemp("result")

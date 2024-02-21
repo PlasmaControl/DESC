@@ -530,10 +530,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
 
     def __init__(self, scale, field):
-        assert (
-            np.isscalar(scale) or np.asarray(scale).size == 1
-        ), "scale must be a scalar value"
-        scale = float(scale)
+        scale = float(np.squeeze(scale))
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
@@ -553,8 +550,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
 
     @scale.setter
     def scale(self, new):
-        assert float(new) == new, "scale must be a scalar"
-        self._scale = new
+        self._scale = float(np.squeeze(new))
 
     # want this class to pretend like its the underlying field
     def __getattr__(self, attr):
@@ -707,9 +703,8 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0"]
 
     def __init__(self, B0, R0):
-        assert float(R0) == R0, "R0 must be a scalar"
-        self.B0 = float(B0)
-        self.R0 = float(R0)
+        self.B0 = float(np.squeeze(B0))
+        self.R0 = float(np.squeeze(R0))
 
     @optimizable_parameter
     @property
@@ -719,8 +714,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        assert float(new) == new, "R0 must be a scalar"
-        self._R0 = new
+        self._R0 = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -730,8 +724,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        assert float(new) == new, "B0 must be a scalar"
-        self._B0 = new
+        self._B0 = float(np.squeeze(new))
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -795,8 +788,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        assert float(new) == new, "B0 must be a scalar"
-        self._B0 = new
+        self._B0 = float(np.squeeze(new))
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -875,8 +867,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        assert float(new) == new, "R0 must be a scalar"
-        self._R0 = new
+        self._R0 = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -886,8 +877,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        assert float(new) == new, "B0 must be a scalar"
-        self._B0 = new
+        self._B0 = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -897,8 +887,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @iota.setter
     def iota(self, new):
-        assert float(new) == new, "iota must be a scalar"
-        self._iota = new
+        self._iota = float(np.squeeze(new))
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -1795,10 +1784,8 @@ class FourierCurrentPotentialField(
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
         self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
 
-        assert np.isscalar(I) or np.asarray(I).size == 1, "I must be a scalar"
-        assert np.isscalar(G) or np.asarray(G).size == 1, "G must be a scalar"
-        self._I = float(I)
-        self._G = float(G)
+        self._I = float(np.squeeze(I))
+        self._G = float(np.squeeze(G))
 
         super().__init__(
             R_lmn,
@@ -1819,8 +1806,7 @@ class FourierCurrentPotentialField(
 
     @I.setter
     def I(self, new):  # noqa: E743
-        assert np.isscalar(new) or np.asarray(new).size == 1, "I must be a scalar"
-        self._I = float(new)
+        self._I = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -1830,8 +1816,7 @@ class FourierCurrentPotentialField(
 
     @G.setter
     def G(self, new):
-        assert np.isscalar(new) or np.asarray(new).size == 1, "G must be a scalar"
-        self._G = float(new)
+        self._G = float(np.squeeze(new))
 
     @optimizable_parameter
     @property

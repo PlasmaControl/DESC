@@ -118,7 +118,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             1 where x>=0, -1 where x<0
 
         """
-        x = jnp.atleast_1d(jnp.asarray(x))
+        x = jnp.asarray(x)
         y = jnp.where(x == 0, 1, jnp.sign(x))
         return y
 

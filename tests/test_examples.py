@@ -25,6 +25,9 @@ from desc.objectives import (
     FixParameter,
     FixPressure,
     FixPsi,
+    FixSectionLambda,
+    FixSectionR,
+    FixSectionZ,
     FixSumModesLambda,
     ForceBalance,
     ForceBalanceAnisotropic,
@@ -234,6 +237,13 @@ def test_1d_optimization():
         FixPressure(eq=eq),
         FixIota(eq=eq),
         FixPsi(eq=eq),
+    )
+    # New parameters comign from Poincare BC, cause a bad approximation error
+    # either fix them or delete from optimizable parameters
+    constraints += (
+        FixSectionLambda(eq=eq),
+        FixSectionR(eq=eq),
+        FixSectionZ(eq=eq),
     )
     options = {"perturb_options": {"order": 1}}
     with pytest.warns((FutureWarning, UserWarning)):

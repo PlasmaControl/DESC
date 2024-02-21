@@ -396,14 +396,6 @@ class Equilibrium(IOAble, Optimizable):
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
 
-        if (
-            not hasattr(self._surface, "_rho") or self._surface._rho is None
-        ) and self._bdry_mode == "lcfs":
-            setattr(self._surface, "_rho", 1.0)
-            warnings.warn(
-                f"Save attribute _rho set to {self._surface._rho}", RuntimeWarning
-            )
-
         if self.current is not None and hasattr(self.current, "_get_transform"):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.

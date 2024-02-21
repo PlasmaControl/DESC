@@ -158,11 +158,13 @@ class FourierRZToroidalSurface(Surface):
     @property
     def rho(self):
         """float: Flux surface label."""
+        if not (hasattr(self, "_rho")) or self._rho is None:
+            self._rho = 1.0
         return self._rho
 
     @rho.setter
     def rho(self, rho):
-        self._rho = rho
+        return self._rho
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""

@@ -879,7 +879,7 @@ class InputReader:
         if not isinstance(eq.iota, PowerSeriesProfile):
             iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
             iota_profile = PowerSeriesProfile.from_values(
-                rho, iota, order=eq.L, sym=eq.sym
+                rho, iota, order=eq.L, sym=False
             )
         else:
             iota_profile = eq.iota

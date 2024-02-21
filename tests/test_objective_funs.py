@@ -23,7 +23,6 @@ from desc.objectives import (
     AspectRatio,
     BootstrapRedlConsistency,
     BoundaryError,
-    BoundaryErrorNESTOR,
     BScaleLength,
     CurrentDensity,
     Elongation,
@@ -53,6 +52,7 @@ from desc.objectives import (
     VacuumBoundaryError,
     Volume,
 )
+from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective
 from desc.objectives.utils import softmax, softmin

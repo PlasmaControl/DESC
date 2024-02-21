@@ -1469,7 +1469,7 @@ def _zernike_radial_vectorized(r, l, m, dr):
         P_n1 = P_past[1]  # Jacobi at N-1
         P_n = jacobi_poly_single(r_jacobi, N, alpha, 0, P_n1, P_n2)
 
-        # Only calculate the function at dr th index with input r
+        # Calculate Radial part of Zernike for N,alpha
         result = (-1) ** N * r**alpha * P_n
         # Check if the calculated values is in the given modes
         _, _, _, _, _, out = fori_loop(

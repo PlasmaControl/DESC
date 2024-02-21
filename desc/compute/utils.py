@@ -1414,10 +1414,13 @@ def cubic_poly_roots(
     xi = jnp.stack([roots(xi_1), roots(xi_2), roots(xi_3)], axis=-1)
     if fill:
         xi_1, xi_2, xi_3 = jnp.sort(xi, axis=-1).T
-        xi_1 = jnp.where(jnp.isnan(xi_1), a_min, xi_1)
+        xi_1 = jnp.where(
+            jnp.isnan(xi_1), a_min[:, jnp.newaxis, jnp.newaxis, jnp.newaxis], xi_1
+        )
         xi_2 = jnp.where(jnp.isnan(xi_2), xi_1, xi_2)
         xi_3 = jnp.where(jnp.isnan(xi_3), xi_2, xi_3)
-        xi = jnp.stack(np.broadcast_arrays(a_min, xi_1, xi_2, xi_3, a_max), axis=-1)
+        # todo: use correct stacking method
+        xi = jnp.vstack([a_min, xi_1, xi_2, xi_3, a_max])
     return xi
 
 
@@ -1557,8 +1560,6 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
     ).c
     coef = jnp.swapaxes(coef, 1, -1)
     der = polyder(coef)
-    # There are zeta.size splines per field line.
-    # The last spline is a duplicate of the first.
     assert coef.shape == (4, rho.size, alpha.size, zeta.size - 1)
     assert der.shape == (3, rho.size, alpha.size, zeta.size - 1)
 
@@ -1589,21 +1590,26 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         # comparable results to a composite Simpson Newton-Cotes with quadrature
         # points near bounce points.
         lambda_pitch = jnp.atleast_1d(lambda_pitch)
-        bp = cubic_poly_roots(
+        interpolation_points = cubic_poly_roots(
             coef,
             constant=1 / lambda_pitch,
             a_min=zeta[:-1],
             a_max=zeta[1:],
             fill=True,
         ).reshape(lambda_pitch.size, rho.size, alpha.size, zeta.size - 1, 5)
-        # Use the filter bp[..., 1:-1] to compute only on potential bounce points.
-        b_norm_z = polyeval(der[:, jnp.newaxis], bp[..., 1:-1]).reshape(
-            lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 3
-        )
+        b_norm_z = polyeval(
+            der[:, jnp.newaxis], interpolation_points[..., 1:-1]
+        ).reshape(lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 3)
         # Check sign of gradient to determine whether root is a valid bounce point.
         # Periodic boundary to compute bounce integrals of particles
         # trapped outside this snapshot of the field lines.
-        is_well = (b_norm_z <= 0) & (jnp.roll(b_norm_z, -1, axis=-1) >= 0)  # noqa: F841
+        is_well = (b_norm_z <= 0) & (jnp.roll(b_norm_z, -1, axis=-1) >= 0)
+        is_well_broadcast = jnp.zeros(
+            shape=(lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 5),
+            dtype=bool,
+        )
+        idx = jnp.arange((zeta.size - 1) * 3)
+        is_well_broadcast[..., (idx // 3) * 5 + 1 + (idx % 3)] = is_well
         # Can precompute everything above if lambda_pitch given to parent function.
 
         y = jnp.nan_to_num(
@@ -1616,17 +1622,16 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         y = CubicSpline(zeta, y, axis=-1, extrapolate="periodic").c
         y = jnp.moveaxis(y, [1, -1], [-1, 2])
         assert y.shape == (4, lambda_pitch.size, rho.size, alpha.size, zeta.size - 1)
-        Y = polyeval(polyint(y), bp).reshape(
+        Y = polyeval(polyint(y), interpolation_points).reshape(
             lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 5
         )
-        integrals = jnp.roll(Y, -1, axis=-1) - Y
-        # TODO: For each every two True values along last axis of is_well, indexed
-        #   along the last axis by i, j, we should
-        #   compute jnp.sum(match[..., i:j], axis=-1) where
-        #   the variable match is integrals.reshape(..., (zeta.size - 1), 5))[..., 1:-1]
-        #   then we are done. maybe can do this with a mask
-        #   like F = jnp.squeeze(is_well * integrals)
-        F = integrals
+        mask = jnp.append(jnp.arange(1, Y.size) % 5 != 0, True)
+        sums = jnp.cumsum(
+            (jnp.diff(Y, axis=-1, append=Y[..., 0]) - Y[..., -1]) * mask,
+            axis=-1,
+        )
+        # todo: there should be a jitable way for this, then we are done
+        F = jnp.diff(sums[..., is_well_broadcast], axis=-1)
         return F
 
     return _bounce_integral

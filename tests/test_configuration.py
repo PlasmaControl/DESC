@@ -40,12 +40,14 @@ class TestConstructor:
         iota = SplineProfile([2, 3, 4])
         surface = FourierRZToroidalSurface(NFP=2, sym=False)
         axis = FourierRZCurve([-0.2, 10, 0.3], [0.3, 0, -0.2], NFP=2, sym=False)
+        xsection = PoincareSurface(spectral_indexing="ansi")
         eq = Equilibrium(
             M=2,
             pressure=pressure,
             iota=iota,
             surface=surface,
             axis=axis,
+            xsection=xsection,
             N=1,
             sym=False,
         )
@@ -55,21 +57,18 @@ class TestConstructor:
         assert eq.spectral_indexing == "ansi"
         assert eq.NFP == 2
         assert eq.axis.NFP == 2
+        assert eq.xsection.eq(xsection)
 
         np.testing.assert_allclose(axis.R_n, eq.Ra_n)
         np.testing.assert_allclose(axis.Z_n, eq.Za_n)
 
-        xsection = PoincareSurface(spectral_indexing="ansi")
-        eq2 = Equilibrium(xsection=xsection)
-        assert eq2.xsection.eq(xsection)
+        surface2 = FourierRZToroidalSurface(NFP=3)
+        eq2 = Equilibrium(surface=surface2)
+        assert eq2.NFP == 3
+        assert eq2.axis.NFP == 3
 
-        surface3 = FourierRZToroidalSurface(NFP=3)
-        eq3 = Equilibrium(surface=surface3)
-        assert eq3.NFP == 3
-        assert eq3.axis.NFP == 3
-
-        eq4 = Equilibrium(xsection=xsection, axis=None)
-        np.testing.assert_allclose(eq4.axis.R_n, [10])
+        eq3 = Equilibrium(xsection=xsection, axis=None)
+        np.testing.assert_allclose(eq3.axis.R_n, [10])
 
     @pytest.mark.unit
     def test_dict(self):

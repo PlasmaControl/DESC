@@ -180,6 +180,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
             eq.Za_n = copy_coeffs(
                 eq1.Za_n, eq1.axis.Z_basis.modes, eq.axis.Z_basis.modes
             )
+            eq.xsection = eq1.xsection
 
         elif isinstance(args[0], (str, os.PathLike)):
             # from file

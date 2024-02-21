@@ -368,7 +368,9 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
 @jit
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
     """Copy coefficients from one resolution to another."""
-    modes_old, modes_new = jnp.atleast_1d(modes_old), jnp.atleast_1d(modes_new)
+    modes_old, modes_new = jnp.atleast_1d(jnp.asarray(modes_old)), jnp.atleast_1d(
+        jnp.asarray(modes_new)
+    )
 
     if modes_old.ndim == 1:
         modes_old = modes_old.reshape((-1, 1))

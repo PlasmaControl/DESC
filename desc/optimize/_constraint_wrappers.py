@@ -535,7 +535,7 @@ class ProximalProjection(ObjectiveFunction):
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
 
-        x = jnp.atleast_1d(x)
+        x = jnp.atleast_1d(jnp.asarray(x))
         if x.size != self.dim_x:
             raise ValueError(
                 "Input vector dimension is invalid, expected "

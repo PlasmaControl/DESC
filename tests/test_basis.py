@@ -23,7 +23,6 @@ from desc.basis import (
     zernike_radial_coeffs,
     zernike_radial_poly,
 )
-from desc.derivatives import Derivative
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.transform import Transform
@@ -436,6 +435,7 @@ class TestBasis:
         with pytest.raises(AssertionError):
             ZernikePolynomial(L=L, M=M)
 
+
 @pytest.mark.unit
 def test_get_basis_poincare():
     """Test FourierZernike to ZernikePolynomial utility function."""
@@ -463,4 +463,3 @@ def test_FourierZernike_to_FourierZernike_no_N_modes():
     L_2D = transf.transform(L_lmn_no_N)
     L_3D = eq.compute("lambda", grid=grid)["lambda"]
     np.testing.assert_allclose(L_2D, L_3D, atol=1e-14)
-

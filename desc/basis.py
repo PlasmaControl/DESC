@@ -2099,7 +2099,8 @@ def _zernike_radial_vectorized_d4(r, l, m, dr):
     out = fori_loop(0, (M_max + 1).astype(int), body, (out))
     return out
 
-  def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
+
+def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
     """Convert 3D FourierZernikeBasis to 2D ZernikePolynomial at zeta=0.
 
     Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates

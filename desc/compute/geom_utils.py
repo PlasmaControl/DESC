@@ -1,6 +1,10 @@
 """Functions for converting between coordinate systems."""
 
+import functools
+
 from desc.backend import jnp
+
+from .utils import safenorm, safenormalize
 
 
 def reflection_matrix(normal):
@@ -33,17 +37,20 @@ def rotation_matrix(axis, angle=None):
 
     Returns
     -------
-    rot : ndarray, shape(3,3)
-        Matrix to rotate points in cartesian (X,Y,Z) coordinates
+    rotmat : ndarray, shape(3,3)
+        Matrix to rotate points in cartesian (X,Y,Z) coordinates.
+
     """
     axis = jnp.asarray(axis)
+    norm = safenorm(axis)
+    axis = safenormalize(axis)
     if angle is None:
-        angle = jnp.linalg.norm(axis)
-    axis = axis / jnp.linalg.norm(axis)
+        angle = norm
+    eps = 1e2 * jnp.finfo(axis.dtype).eps
     R1 = jnp.cos(angle) * jnp.eye(3)
     R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
     R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
-    return R1 + R2 + R3
+    return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
 
 
 def xyz2rpz(pts):
@@ -51,13 +58,14 @@ def xyz2rpz(pts):
 
     Parameters
     ----------
-    pts : ndarray, shape(n,3)
+    pts : ndarray, shape(...,3)
         points in cartesian (X,Y,Z) coordinates
 
     Returns
     -------
-    pts : ndarray, shape(n,3)
+    pts : ndarray, shape(...,3)
         points in polar (R,phi,Z) coordinates
+
     """
     x, y, z = pts.T
     r = jnp.sqrt(x**2 + y**2)
@@ -70,13 +78,14 @@ def rpz2xyz(pts):
 
     Parameters
     ----------
-    pts : ndarray, shape(n,3)
+    pts : ndarray, shape(...,3)
         points in polar (R,phi,Z) coordinates
 
     Returns
     -------
-    pts : ndarray, shape(n,3)
+    pts : ndarray, shape(...,3)
         points in cartesian (X,Y,Z) coordinates
+
     """
     r, p, z = pts.T
     x = r * jnp.cos(p)
@@ -89,28 +98,34 @@ def xyz2rpz_vec(vec, x=None, y=None, phi=None):
 
     Parameters
     ----------
-    vec : ndarray, shape(n,3)
+    vec : ndarray, shape(...,3)
         vectors, in cartesian (X,Y,Z) form
-    x, y, phi : ndarray, shape(n,)
+    x, y, phi : ndarray, shape(...,)
         anchor points for vectors. Either x and y, or phi must be supplied
 
     Returns
     -------
-    vec : ndarray, shape(n,3)
+    vec : ndarray, shape(...,3)
         vectors, in polar (R,phi,Z) form
+
     """
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)
-    rot = jnp.array(
-        [
-            [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
-            [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
-            [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
-        ]
-    )
-    rot = rot.T
-    polar = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
-    return polar.reshape((-1, 3))
+
+    @functools.partial(jnp.vectorize, signature="(3),()->(3)")
+    def inner(vec, phi):
+        rot = jnp.array(
+            [
+                [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
+                [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+                [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+            ]
+        )
+        rot = rot.T
+        polar = jnp.matmul(rot, vec)
+        return polar
+
+    return inner(vec, phi)
 
 
 def rpz2xyz_vec(vec, x=None, y=None, phi=None):
@@ -127,30 +142,22 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
     -------
     vec : ndarray, shape(n,3)
         vectors, in cartesian (X,Y,Z) form
+
     """
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)
-    rot = jnp.array(
-        [
-            [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
-            [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
-            [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
-        ]
-    )
-    rot = rot.T
-    cart = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
-    return cart.reshape((-1, 3))
 
+    @functools.partial(jnp.vectorize, signature="(3),()->(3)")
+    def inner(vec, phi):
+        rot = jnp.array(
+            [
+                [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
+                [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+                [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+            ]
+        )
+        rot = rot.T
+        cart = jnp.matmul(rot, vec)
+        return cart
 
-def _rotation_matrix_from_normal(normal):
-    nx, ny, nz = normal
-    nxny = jnp.sqrt(nx**2 + ny**2)
-    R = jnp.array(
-        [
-            [ny / nxny, -nx / nxny, 0],
-            [nx * nx / nxny, ny * nz / nxny, -nxny],
-            [nx, ny, nz],
-        ]
-    ).T
-    R = jnp.where(nxny == 0, jnp.eye(3), R)
-    return R
+    return inner(vec, phi)

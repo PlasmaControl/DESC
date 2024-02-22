@@ -4,7 +4,9 @@ import numpy as np
 import pytest
 
 import desc.examples
+from desc.backend import jit
 from desc.basis import (
+    ChebyshevDoubleFourierBasis,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
@@ -112,7 +114,36 @@ class TestTransform:
         np.testing.assert_allclose(dtz, correct_dtz, atol=1e-8)
 
     @pytest.mark.unit
-    def test_volume(self):
+    def test_volume_chebyshev(self):
+        """Tests transform of Chebyshev-Fourier basis in a toroidal volume."""
+        grid = ConcentricGrid(L=4, M=2, N=2)
+        basis = ChebyshevDoubleFourierBasis(L=1, M=1, N=1, sym="sin")
+        transf = Transform(grid, basis)
+
+        r = grid.nodes[:, 0]  # rho coordinates
+        t = grid.nodes[:, 1]  # theta coordinates
+        z = grid.nodes[:, 2]  # zeta coordinates
+
+        x = 2 * r - 1
+        correct_vals = (
+            2 * x * np.sin(t) * np.cos(z) - 0.5 * x * np.cos(t) * np.sin(z) + np.sin(z)
+        )
+
+        idx_0 = np.where((basis.modes == [1, -1, 1]).all(axis=1))[0]
+        idx_1 = np.where((basis.modes == [1, 1, -1]).all(axis=1))[0]
+        idx_2 = np.where((basis.modes == [0, 0, -1]).all(axis=1))[0]
+
+        c = np.zeros((basis.modes.shape[0],))
+        c[idx_0] = 2
+        c[idx_1] = -0.5
+        c[idx_2] = 1
+
+        values = transf.transform(c, 0, 0, 0)
+
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_volume_zernike(self):
         """Tests transform of Fourier-Zernike basis in a toroidal volume."""
         grid = ConcentricGrid(L=4, M=2, N=2)
         basis = FourierZernikeBasis(L=-1, M=1, N=1, sym="sin")
@@ -429,9 +460,22 @@ class TestTransform:
 
         g = LinearGrid(rho=2, theta=2, zeta=2, NFP=2)
         b = DoubleFourierSeries(M=2, N=2)
-        with pytest.warns(UserWarning, match="nodes complete 1 full field period"):
+        # this actually will emit 2 warnings, one for the NFP for
+        # basis and grid not matching, and one for nodes completing 1 full period
+        # we will catch the UserWarning generically then check each message
+        with pytest.warns(
+            UserWarning
+        ) as record:  # , match="nodes complete 1 full field period"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
+        NFP_grid_basis_warning_exists = False
+        nodes_warning_exists = False
+        for r in record:
+            if "Unequal number of field periods" in str(r.message):
+                NFP_grid_basis_warning_exists = True
+            if "nodes complete 1 full field period" in str(r.message):
+                nodes_warning_exists = True
+        assert NFP_grid_basis_warning_exists and nodes_warning_exists
 
         g = LinearGrid(rho=2, theta=2, zeta=2)
         b = DoubleFourierSeries(M=1, N=1)
@@ -557,7 +601,6 @@ class TestTransform:
             NFP=eq.NFP,
             sym=eq.sym,
             axis=False,
-            node_pattern=eq.node_pattern,
         )
         tr = get_transforms(data_keys, eq, grid)
         f = np.ones(grid.num_nodes)
@@ -567,3 +610,76 @@ class TestTransform:
             eq.Z_basis.num_modes,
         )
         _ = tr["Z"].project(f)
+
+
+@pytest.mark.unit
+def test_transform_pytree():
+    """Ensure that Transforms are valid pytree/JAX types."""
+    grid = LinearGrid(5, 6, 7)
+    basis = FourierZernikeBasis(4, 5, 6)
+    transform = Transform(grid, basis, build=True)
+
+    import jax
+
+    leaves, treedef = jax.tree_util.tree_flatten(transform)
+    transform = jax.tree_util.tree_unflatten(treedef, leaves)
+
+    @jit
+    def foo(x, tr):
+        # this one we pass in transform as a pytree
+        return tr.transform(x)
+
+    @jit
+    def bar(x):
+        # this one we close over it
+        return transform.transform(x)
+
+    x = np.random.random(basis.num_modes)
+    np.testing.assert_allclose(foo(x, transform), transform.transform(x))
+    np.testing.assert_allclose(bar(x), transform.transform(x))
+
+
+@pytest.mark.unit
+def test_NFP_warning():
+    """Make sure we only warn about basis/grid NFP in cases where it matters."""
+    rho = np.linspace(0, 1, 20)
+    g01 = LinearGrid(rho=rho, L=5, N=0, NFP=1)
+    g02 = LinearGrid(rho=rho, L=5, N=0, NFP=2)
+    g21 = LinearGrid(rho=rho, L=5, N=5, NFP=1)
+    g22 = LinearGrid(rho=rho, L=5, N=5, NFP=2)
+    b01 = FourierZernikeBasis(L=2, M=2, N=0, NFP=1)
+    b02 = FourierZernikeBasis(L=2, M=2, N=0, NFP=2)
+    b21 = FourierZernikeBasis(L=2, M=2, N=2, NFP=1)
+    b22 = FourierZernikeBasis(L=2, M=2, N=2, NFP=2)
+
+    # No toroidal nodes, shouldn't warn
+    _ = Transform(g01, b01)
+    _ = Transform(g01, b02)
+    _ = Transform(g01, b21)
+    _ = Transform(g01, b22)
+
+    # No toroidal nodes, shouldn't warn
+    _ = Transform(g02, b01)
+    _ = Transform(g02, b02)
+    _ = Transform(g02, b21)
+    _ = Transform(g02, b22)
+
+    # toroidal nodes but no toroidal modes, no warning
+    _ = Transform(g21, b01)
+    # toroidal nodes but no toroidal modes, no warning
+    _ = Transform(g21, b02)
+    # toroidal nodes and modes, but equal nfp, no warning
+    _ = Transform(g21, b21)
+    # toroidal modes and nodes and unequal NFP -> warning
+    with pytest.warns(UserWarning):
+        _ = Transform(g21, b22)
+
+    # no toroidal modes, no warning
+    _ = Transform(g22, b01)
+    # no toroidal modes, no warning
+    _ = Transform(g22, b02)
+    # toroidal modes and nodes and unequal NFP -> warning
+    with pytest.warns(UserWarning):
+        _ = Transform(g22, b21)
+    # toroidal nodes and modes, but equal nfp, no warning
+    _ = Transform(g22, b22)

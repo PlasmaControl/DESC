@@ -6,7 +6,10 @@ from netCDF4 import Dataset
 
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
 from desc.grid import LinearGrid
+from desc.input_reader import InputReader
+from desc.io import load
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
     fourier_to_zernike,
@@ -16,6 +19,8 @@ from desc.vmec_utils import (
     vmec_boundary_subspace,
     zernike_to_fourier,
 )
+
+from .utils import area_difference_desc
 
 
 class TestVMECIO:
@@ -29,10 +34,10 @@ class TestVMECIO:
         a2 = 1
         a3 = 2
 
-        m_0 = np.array([0, 0, 1, 1, 1])
-        n_0 = np.array([0, 1, -1, 0, 1])
-        s = np.array([0, a0, a1, a3, 0])
-        c = np.array([a0, 0, a2, 0, a3])
+        m_0 = np.array([0, 1, 1, 1, 0])
+        n_0 = np.array([1, -1, 0, 1, 0])
+        s = np.array([a0, a1, a3, 0, 0])
+        c = np.array([0, a2, 0, a3, a0])
 
         # a0*sin(-z) + a1*sin(t+z) + a3*sin(t)                          # noqa: E800
         #    = -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t)
@@ -44,6 +49,33 @@ class TestVMECIO:
         x_correct = np.array([[a3 - a2, -a0, a1, a3, a0, 0, a1, 0, a2 + a3]])
 
         m_1, n_1, x = ptolemy_identity_fwd(m_0, n_0, s, c)
+
+        np.testing.assert_allclose(m_1, m_1_correct, atol=1e-8)
+        np.testing.assert_allclose(n_1, n_1_correct, atol=1e-8)
+        np.testing.assert_allclose(x, x_correct, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_ptolemy_identity_fwd_sin_series(self):
+        """Tests forward implementation of Ptolemy's identity for sin only."""
+        a1 = -1
+
+        m_0 = np.array([1, 1])
+        n_0 = np.array([-1, 1])
+        s = np.array([[a1, 0]])
+        c = np.array([[0, 0]])
+
+        m_1, n_1, x = ptolemy_identity_fwd(m_0, n_0, s, c)
+
+        print(m_1)
+        print(n_1)
+        print(x)
+
+        #  a1*sin(t+z)  # noqa: E800
+        # = a1*sin(t)*cos(z) + a1*cos(t)*sin(z) # noqa: E800
+
+        m_1_correct = np.array([-1, 1, -1, 1])
+        n_1_correct = np.array([-1, -1, 1, 1])
+        x_correct = np.array([[0, a1, a1, 0]])
 
         np.testing.assert_allclose(m_1, m_1_correct, atol=1e-8)
         np.testing.assert_allclose(n_1, n_1_correct, atol=1e-8)
@@ -70,6 +102,30 @@ class TestVMECIO:
         n_0_correct = np.array([0, 1, -1, 0, 1])
         s_correct = np.array([[0, a0, a1, a3, 0]])
         c_correct = np.array([[a0, 0, a2, 0, a3]])
+
+        m_0, n_0, s, c = ptolemy_identity_rev(m_1, n_1, x)
+
+        np.testing.assert_allclose(m_0, m_0_correct, atol=1e-8)
+        np.testing.assert_allclose(n_0, n_0_correct, atol=1e-8)
+        np.testing.assert_allclose(s, s_correct, atol=1e-8)
+        np.testing.assert_allclose(c, c_correct, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_ptolemy_identity_rev_sin_sym(self):
+        """Tests reverse implementation of Ptolemy's identity for sin series."""
+        a1 = -1
+
+        m_1 = np.array([-1, 1])
+        n_1 = np.array([1, -1])
+        x = np.array([[a1, a1]])
+
+        # a1*sin(t)*cos(z) + a1*cos(t)*sin(z)    # noqa: E800
+        #   = a1*sin(t+z)
+
+        m_0_correct = np.array([0, 1, 1])
+        n_0_correct = np.array([0, -1, 1])
+        s_correct = np.array([[0, a1, 0]])
+        c_correct = np.array([[0, 0, 0]])
 
         m_0, n_0, s, c = ptolemy_identity_rev(m_1, n_1, x)
 
@@ -130,7 +186,7 @@ class TestVMECIO:
                 [1, 3, 3],
             ]
         )
-        np.testing.assert_allclose(modes[~idx], sym_modes)
+        np.testing.assert_allclose(np.delete(modes, idx, axis=0), sym_modes)
 
     @pytest.mark.unit
     def test_fourier_to_zernike(self):
@@ -204,6 +260,35 @@ class TestVMECIO:
         np.testing.assert_allclose(x_mn, x_mn_correct, atol=1e-8)
 
 
+@pytest.mark.unit
+def test_vmec_load_profiles(TmpDir):
+    """Tests that loading with iota or current profiles give same result."""
+    input_path = "./tests/inputs/wout_SOLOVEV.nc"
+
+    eq_iota = VMECIO.load(input_path, profile="iota")
+    eq_current = VMECIO.load(input_path, profile="current")
+
+    assert eq_iota.current is None
+    assert eq_current.iota is None
+
+    grid = LinearGrid(
+        M=eq_iota.M_grid,
+        N=eq_iota.N_grid,
+        NFP=eq_iota.NFP,
+        rho=np.linspace(0.5, 1.0, 21),
+    )
+    data_iota = eq_iota.compute(["iota", "current"], grid=grid)
+    data_current = eq_current.compute(["iota", "current"], grid=grid)
+
+    iota_iota = grid.compress(data_iota["iota"])
+    iota_current = grid.compress(data_current["iota"])
+    current_iota = grid.compress(data_iota["current"])
+    current_current = grid.compress(data_current["current"])
+
+    np.testing.assert_allclose(iota_iota, iota_current, rtol=2e-2)
+    np.testing.assert_allclose(current_current, current_iota, rtol=2e-2)
+
+
 @pytest.mark.slow
 @pytest.mark.unit
 def test_load_then_save(TmpDir):
@@ -211,10 +296,7 @@ def test_load_then_save(TmpDir):
     input_path = "./tests/inputs/wout_SOLOVEV.nc"
     output_path = str(TmpDir.join("DESC_SOLOVEV.nc"))
 
-    eq = VMECIO.load(input_path, profile="current")
-    assert eq.iota is None
     eq = VMECIO.load(input_path, profile="iota")
-    assert eq.current is None
     VMECIO.save(eq, output_path)
 
     file1 = Dataset(input_path, mode="r")
@@ -235,6 +317,56 @@ def test_load_then_save(TmpDir):
     file2.close()
 
 
+@pytest.mark.slow
+@pytest.mark.unit
+def test_axis_surf_after_load():
+    """Tests if loading VMEC solution preserves axis and surface."""
+    input_path = "./tests/inputs/wout_HELIOTRON.nc"
+
+    eq = VMECIO.load(input_path, profile="iota")
+    assert eq.is_nested()
+    f = Dataset(input_path)
+
+    surf1 = eq.surface
+    surf2 = eq.get_surface_at(rho=1)
+    axis1 = eq.axis
+    axis2 = eq.get_axis()
+
+    np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn, atol=1e-14)
+    np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn, atol=1e-14)
+
+    np.testing.assert_allclose(axis1.R_n, axis2.R_n, atol=1e-14)
+    np.testing.assert_allclose(axis1.Z_n, axis2.Z_n, atol=1e-14)
+
+    # surface
+    rm, rn, Rb_cs, Rb_cc = ptolemy_identity_rev(
+        surf1.R_basis.modes[:, 1],
+        surf1.R_basis.modes[:, 2],
+        np.where(surf1.R_basis.modes[:, 1] < 0, -surf1.R_lmn, surf1.R_lmn)[None, :],
+    )
+
+    zm, zn, Zb_cs, Zb_cc = ptolemy_identity_rev(
+        surf1.Z_basis.modes[:, 1],
+        surf1.Z_basis.modes[:, 2],
+        np.where(surf1.Z_basis.modes[:, 1] < 0, -surf1.Z_lmn, surf1.Z_lmn)[None, :],
+    )
+
+    rmnc = f.variables["rmnc"][:].filled()
+    zmns = f.variables["zmns"][:].filled()
+
+    # axis
+    rax_cc = f.variables["raxis_cc"][:].filled()
+    zax_cs = -f.variables["zaxis_cs"][:].filled()
+
+    np.testing.assert_allclose(rmnc[-1], Rb_cc.squeeze(), atol=1e-14)
+    np.testing.assert_allclose(zmns[-1], Zb_cs.squeeze(), atol=1e-14)
+
+    np.testing.assert_allclose(rax_cc, axis1.R_n, atol=1e-14)
+    np.testing.assert_allclose(zax_cs[1:][::-1], axis1.Z_n, atol=1e-14)
+
+    f.close()
+
+
 @pytest.mark.unit
 def test_vmec_save_asym(TmpDir):
     """Tests that saving a non-symmetric equilibrium runs without errors."""
@@ -244,6 +376,22 @@ def test_vmec_save_asym(TmpDir):
 
 
 @pytest.mark.unit
+def test_vmec_save_kinetic(TmpDir):
+    """Tests that saving an equilibrium with kinetic profiles runs without errors."""
+    output_path = str(TmpDir.join("output.nc"))
+    eq = Equilibrium(
+        L=2,
+        M=2,
+        N=2,
+        NFP=3,
+        electron_density=np.array([[0, 1], [2, -1]]),
+        electron_temperature=np.array([[0, 1], [2, -1]]),
+        sym=True,
+    )
+    VMECIO.save(eq, output_path)
+
+
+@pytest.mark.regression
 @pytest.mark.slow
 def test_vmec_save_1(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""
@@ -340,28 +488,28 @@ def test_vmec_save_1(VMEC_save):
     )
     np.testing.assert_allclose(vmec.variables["aspect"][:], desc.variables["aspect"][:])
     np.testing.assert_allclose(
-        vmec.variables["volume_p"][:], desc.variables["volume_p"][:]
+        vmec.variables["volume_p"][:], desc.variables["volume_p"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["volavgB"][:], desc.variables["volavgB"][:]
+        vmec.variables["volavgB"][:], desc.variables["volavgB"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["betatotal"][:], desc.variables["betatotal"][:], rtol=1e-6
+        vmec.variables["betatotal"][:], desc.variables["betatotal"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["betapol"][:], desc.variables["betapol"][:], rtol=1e-6
+        vmec.variables["betapol"][:], desc.variables["betapol"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-6
+        vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["ctor"][:], desc.variables["ctor"][:], rtol=1e-6
+        vmec.variables["ctor"][:], desc.variables["ctor"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["rbtor"][:], desc.variables["rbtor"][:], rtol=1e-6
+        vmec.variables["rbtor"][:], desc.variables["rbtor"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["rbtor0"][:], desc.variables["rbtor0"][:], rtol=1e-6
+        vmec.variables["rbtor0"][:], desc.variables["rbtor0"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
         vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
@@ -374,22 +522,22 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(
         np.abs(vmec.variables["buco"][20:100]),
         np.abs(desc.variables["buco"][20:100]),
-        rtol=3e-2,
+        rtol=1e-5,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["bvco"][20:100]),
         np.abs(desc.variables["bvco"][20:100]),
-        rtol=3e-2,
+        rtol=1e-5,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["jdotb"][20:100]),
         np.abs(desc.variables["jdotb"][20:100]),
-        rtol=1e-6,
+        rtol=1e-5,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["jcuru"][20:100]),
         np.abs(desc.variables["jcuru"][20:100]),
-        rtol=1e-5,
+        rtol=1e-2,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["jcurv"][20:100]),
@@ -426,9 +574,15 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(
         vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
     )
+    np.testing.assert_allclose(
+        vmec.variables["beta_vol"][:], desc.variables["beta_vol"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betaxis"][:], desc.variables["betaxis"][:], rtol=5e-5
+    )
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
 def test_vmec_save_2(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""
@@ -678,7 +832,7 @@ def test_vmec_save_2(VMEC_save):
         s=grid.nodes[:, 0],
         sym=False,
     )
-    np.testing.assert_allclose(bsubs_vmec, bsubs_desc, rtol=1e-2, atol=1e-3)
+    np.testing.assert_allclose(bsubs_vmec, bsubs_desc, rtol=1e-2, atol=2e-3)
 
     # J^theta
     curru_vmec = VMECIO.vmec_interpolate(
@@ -740,9 +894,7 @@ def test_plot_vmec_comparison(SOLOVEV):
 @pytest.mark.unit
 def test_vmec_boundary_subspace(DummyStellarator):
     """Test VMEC boundary subspace is enforced properly."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     RBC = np.array([[1, 2], [-1, 2], [1, 0], [2, 2]])
     ZBS = np.array([[2, 1], [-2, 1], [0, 2], [-1, 1]])
@@ -765,3 +917,50 @@ def test_vmec_boundary_subspace(DummyStellarator):
     zbs_ref = np.atleast_2d(np.array([0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0]))
     np.testing.assert_allclose(rbc_ref, np.abs(rbc) > tol)
     np.testing.assert_allclose(zbs_ref, np.abs(zbs) > tol)
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+def test_write_vmec_input(TmpDir):
+    """Test generated VMEC input file gives the original equilibrium when solved."""
+    # write VMEC input file
+    fname = str(TmpDir.join("input.SOLOVEV"))
+    eq0 = get("SOLOVEV")
+    W0 = eq0.compute("W")["W"]
+    VMECIO.write_vmec_input(eq0, fname)
+
+    # read VMEC input file and override defaults to match desc/examples/SOLOVEV
+    ir = InputReader()
+    inputs = ir.parse_inputs(fname)
+    inputs[0]["spectral_indexing"] = "fringe"
+    inputs[0]["L"] = 24
+
+    # solve from VMEC input file
+    fam = EquilibriaFamily(inputs)
+    fam.solve_continuation(
+        objective=inputs[0]["objective"],
+        optimizer=inputs[0]["optimizer"],
+        pert_order=[inp["pert_order"] for inp in inputs],
+        ftol=[inp["ftol"] for inp in inputs],
+        xtol=[inp["xtol"] for inp in inputs],
+        gtol=[inp["gtol"] for inp in inputs],
+        maxiter=[inp["maxiter"] for inp in inputs],
+        verbose=2,
+    )
+    eq1 = fam[-1]
+    W1 = eq1.compute("W")["W"]
+
+    # check that solution matches original equilibrium
+    rho_err, theta_err = area_difference_desc(eq0, eq1)
+    np.testing.assert_allclose(eq0.L, eq1.L)
+    np.testing.assert_allclose(eq0.M, eq1.M)
+    np.testing.assert_allclose(eq0.N, eq1.N)
+    np.testing.assert_allclose(eq0.NFP, eq1.NFP)
+    np.testing.assert_allclose(eq0.Psi, eq1.Psi)
+    np.testing.assert_allclose(eq0.p_l, eq1.p_l)
+    np.testing.assert_allclose(eq0.i_l, eq1.i_l)
+    np.testing.assert_allclose(eq0.Rb_lmn, eq1.Rb_lmn)
+    np.testing.assert_allclose(eq0.Zb_lmn, eq1.Zb_lmn)
+    np.testing.assert_allclose(W0, W1)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)

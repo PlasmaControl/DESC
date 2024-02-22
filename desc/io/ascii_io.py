@@ -34,7 +34,7 @@ def write_ascii(fname, eq):
     file.write("NFP = {:3d}\n".format(int(eq.NFP)))
     file.write("Psi = {:16.8E}\n".format(eq.Psi))
 
-    # boundary paramters
+    # boundary parameters
     if eq.sym:
         nbdry = len(np.nonzero(eq.Rb_lmn)[0]) + len(np.nonzero(eq.Zb_lmn)[0])
         file.write("Nbdry = {:3d}\n".format(nbdry))
@@ -128,6 +128,7 @@ def read_ascii(filename):
     eq = {}
     f = open(filename)
     lines = list(f)
+    f.close()
     eq["NFP"] = int(lines[0].strip("\n").split()[-1])
     eq["Psi"] = float(lines[1].strip("\n").split()[-1])
     lines = lines[2:]

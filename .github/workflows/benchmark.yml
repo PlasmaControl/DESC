@@ -1,28 +1,38 @@
 name: Benchmarks
 
 on:
-  push:
   pull_request:
-    types: [labeled]
+    branches:
+      - master
     paths-ignore:
-      - 'tests/benchmarks/.benchmarks/**'
-      - 'tests/benchmarks/Figures/**'
-      - 'devtools/**'
       - 'docs/**'
+      - 'devtools/**'
   workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        required: false
+        default: false
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   benchmark:
-    if: ${{ github.event.label.name == 'run_benchmarks' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      # Enable tmate debugging of manually-triggered workflows if the input option was provided
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Set up Python 3.9
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.9
       - name: Install dependencies
@@ -34,18 +44,20 @@ jobs:
           pwd
           lscpu
           cd tests/benchmarks
-          python -m pytest benchmark_cpu_small.py --benchmark-save='Latest_Commit'
-      - name:  Checkout current master
-        uses: actions/checkout@v3
+          python -m pytest benchmark_cpu_small.py --benchmark-save='Latest_Commit' -vv --durations=0 --benchmark-save-data
+      - name: Checkout current master
+        uses: actions/checkout@v4
         with:
           ref: master
           clean: false
+      - name: Checkout benchmarks from PR head
+        run: git checkout ${{ github.event.pull_request.head.sha }} -- tests/benchmarks
       - name: Benchmark with pytest-benchmark
         run: |
           pwd
           lscpu
           cd tests/benchmarks
-          python -m pytest benchmark_cpu_small.py --benchmark-save='master'
+          python -m pytest benchmark_cpu_small.py --benchmark-save='master' -vv --durations=0 --benchmark-save-data
       - name: put benchmark results in same folder
         run: |
           pwd
@@ -64,8 +76,18 @@ jobs:
           python compare_bench_results.py
           cat commit_msg.txt
       - name: comment PR with the results
-        uses: machine-learning-apps/pr-comment@master
+        uses: thollander/actions-comment-pull-request@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          path: tests/benchmarks/commit_msg.txt
+          filePath: tests/benchmarks/commit_msg.txt
+          comment_tag: benchmark
+      - name: Upload benchmark data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark_artifact
+          path: tests/benchmarks/.benchmarks
+      - name: Setup tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3

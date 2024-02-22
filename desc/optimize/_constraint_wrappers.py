@@ -3,20 +3,15 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import arg_order
 from desc.objectives import (
-    CurrentDensity,
-    ForceBalance,
-    HelicalForceBalance,
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     ObjectiveFunction,
-    RadialForceBalance,
-)
-from desc.objectives.utils import (
-    align_jacobian,
-    factorize_linear_constraints,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
-from desc.utils import Timer
+from desc.objectives.utils import factorize_linear_constraints
+from desc.utils import Timer, get_instance
 
 from .utils import compute_jac_scale, f_where_x
 
@@ -30,7 +25,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     We can write any feasible x=xp + Z*x_reduced where xp is a particular solution to
     Ax=b (taken to be the least norm solution), Z is a representation for the null
-    space of A (A*Z=0) and x_reduced is conconstrained. This transforms the problem into
+    space of A (A*Z=0) and x_reduced is unconstrained. This transforms the problem into
 
     min_x_reduced f(x_reduced)
 
@@ -41,13 +36,11 @@ class LinearConstraintProjection(ObjectiveFunction):
     constraints : tuple of Objective
         Linear constraints to enforce. Should be a tuple or list of Objective,
         and must all be linear.
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the objectives.
     verbose : int, optional
         Level of output.
     """
 
-    def __init__(self, objective, constraints, eq=None, verbose=1):
+    def __init__(self, objective, constraints, verbose=1):
         assert isinstance(objective, ObjectiveFunction), (
             "objective should be instance of ObjectiveFunction." ""
         )
@@ -64,16 +57,11 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._use_jit = False
         self._compiled = False
 
-        if eq is not None:
-            self.build(eq, verbose=verbose)
-
-    def build(self, eq, use_jit=None, verbose=1):
+    def build(self, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
             Note: unused by this class, should pass to sub-objectives directly.
@@ -84,18 +72,20 @@ class LinearConstraintProjection(ObjectiveFunction):
         timer = Timer()
         timer.start("Linear constraint projection build")
 
+        # we don't always build here because in ~all cases the user doesn't interact
+        # with this directly, so if the user wants to manually rebuild they should
+        # do it before this wrapper is created for them.
         if not self._objective.built:
-            self._objective.build(eq, verbose=verbose)
+            self._objective.build(verbose=verbose)
         for con in self._constraints:
             if not con.built:
-                con.build(eq, verbose=verbose)
-        self._args = self._objective.args
+                con.build(verbose=verbose)
+
         self._dim_f = self._objective.dim_f
         self._scalar = self._objective.scalar
         (
             self._xp,
             self._A,
-            self._Ainv,
             self._b,
             self._Z,
             self._unfixed_idx,
@@ -103,10 +93,10 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._recover,
         ) = factorize_linear_constraints(
             self._constraints,
-            self._objective.args,
+            self._objective,
         )
-        self._dim_x = self._Z.shape[1]
-        self._dim_x_full = self._objective.dim_x
+        self._dim_x = self._objective.dim_x
+        self._dim_x_reduced = self._Z.shape[1]
 
         self._built = True
         timer.stop("Linear constraint projection build")
@@ -136,36 +126,48 @@ class LinearConstraintProjection(ObjectiveFunction):
         """Recover the full state vector from the reduced optimization vector."""
         return self._recover(x_reduced)
 
-    def x(self, eq):
+    def x(self, *things):
         """Return the reduced state vector from the Equilibrium eq."""
-        x = self._objective.x(eq)
+        x = self._objective.x(*things)
         return self.project(x)
 
-    def unpack_state(self, x):
+    def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
 
         Parameters
         ----------
         x : ndarray
-            State vector, either full or reduced.
+            Reduced state vector (e.g. from calling self.x(*things)).
+        per_objective : bool
+            Whether to return param dicts for each objective (default) or for each
+            unique optimizable thing.
 
         Returns
         -------
-        kwargs : dict
-            Dictionary of the state components with argument names as keys.
+        params : pytree of dict
+            if per_objective is True, this is a nested list of of parameters for each
+            sub-Objective, such that self.objectives[i] has parameters params[i].
+            Otherwise, it is a list of parameters tied to each optimizable thing
+            such that params[i] = self.things[i].params_dict
 
         """
-        if len(x) == self._dim_x:
-            x = self.recover(x)
-        return self._objective.unpack_state(x)
+        if x.size != self._dim_x_reduced:
+            raise ValueError(
+                "Input vector dimension is invalid, expected "
+                + f"{self._dim_x_reduced} got {x.size}."
+            )
+        x = self.recover(x)
+        return self._objective.unpack_state(x, per_objective)
 
-    def compute(self, x_reduced):
-        """Compute the objective function.
+    def compute_unscaled(self, x_reduced, constants=None):
+        """Compute the unscaled form of the objective function.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -174,16 +176,58 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         x = self.recover(x_reduced)
-        f = self._objective.compute(x)
+        f = self._objective.compute_unscaled(x, constants)
         return f
 
-    def compute_scalar(self, x_reduced):
+    def compute_scaled(self, x_reduced, constants=None):
+        """Compute the objective function and apply weighting / normalization.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        x = self.recover(x_reduced)
+        f = self._objective.compute_scaled(x, constants)
+        return f
+
+    def compute_scaled_error(self, x_reduced, constants=None):
+        """Compute the objective function and apply weighting / bounds.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        x = self.recover(x_reduced)
+        f = self._objective.compute_scaled_error(x, constants)
+        return f
+
+    def compute_scalar(self, x_reduced, constants=None):
         """Compute the scalar form of the objective function.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -192,15 +236,17 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         x = self.recover(x_reduced)
-        return self._objective.compute_scalar(x)
+        return self._objective.compute_scalar(x, constants)
 
-    def grad(self, x_reduced):
+    def grad(self, x_reduced, constants=None):
         """Compute gradient of the sum of squares of residuals.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -208,16 +254,18 @@ class LinearConstraintProjection(ObjectiveFunction):
             gradient vector.
         """
         x = self.recover(x_reduced)
-        df = self._objective.grad(x)
+        df = self._objective.grad(x, constants)
         return df[self._unfixed_idx] @ self._Z
 
-    def hess(self, x_reduced):
+    def hess(self, x_reduced, constants=None):
         """Compute Hessian of the sum of squares of residuals.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -225,16 +273,18 @@ class LinearConstraintProjection(ObjectiveFunction):
             Hessian matrix.
         """
         x = self.recover(x_reduced)
-        df = self._objective.hess(x)
+        df = self._objective.hess(x, constants)
         return self._Z.T @ df[self._unfixed_idx, :][:, self._unfixed_idx] @ self._Z
 
-    def jac(self, x_reduced):
-        """Compute Jacobian of the vector objective function.
+    def jac_unscaled(self, x_reduced, constants):
+        """Compute Jacobian of the vector objective function without weighting / bounds.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -242,8 +292,65 @@ class LinearConstraintProjection(ObjectiveFunction):
             Jacobian matrix.
         """
         x = self.recover(x_reduced)
-        df = self._objective.jac(x)
+        df = self._objective.jac_unscaled(x, constants)
         return df[:, self._unfixed_idx] @ self._Z
+
+    def jac_scaled(self, x_reduced, constants=None):
+        """Compute Jacobian of the vector objective function with weighting / bounds.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.jac_scaled(x, constants)
+        return df[:, self._unfixed_idx] @ self._Z
+
+    def vjp_scaled(self, v, x_reduced):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x_reduced : ndarray
+            Optimization variables.
+
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.vjp_scaled(v, x)
+        return df[self._unfixed_idx] @ self._Z
+
+    def vjp_unscaled(self, v, x_reduced):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the unscaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x_reduced : ndarray
+            Optimization variables.
+
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.vjp_unscaled(v, x)
+        return df[self._unfixed_idx] @ self._Z
+
+    def __getattr__(self, name):
+        """For other attributes we defer to the base objective."""
+        return getattr(self._objective, name)
 
 
 class ProximalProjection(ObjectiveFunction):
@@ -253,7 +360,7 @@ class ProximalProjection(ObjectiveFunction):
     to an unconstrained optimizer.
 
     At each iteration, after a step is taken to reduce the objective, the equilibrium
-    is perturbed and re-solved to bring it back into force balance. This is analagous
+    is perturbed and re-solved to bring it back into force balance. This is analogous
     to a proximal method where each iterate is projected back onto the feasible set.
 
     Parameters
@@ -264,7 +371,7 @@ class ProximalProjection(ObjectiveFunction):
         Equilibrium constraint to enforce. Should be an ObjectiveFunction with one or
         more of the following objectives: {ForceBalance, CurrentDensity,
         RadialForceBalance, HelicalForceBalance}
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the objectives.
     verbose : int, optional
         Level of output.
@@ -277,10 +384,10 @@ class ProximalProjection(ObjectiveFunction):
         self,
         objective,
         constraint,
-        eq=None,
+        eq,
         verbose=1,
-        perturb_options={},
-        solve_options={},
+        perturb_options=None,
+        solve_options=None,
     ):
         assert isinstance(objective, ObjectiveFunction), (
             "objective should be instance of ObjectiveFunction." ""
@@ -289,21 +396,15 @@ class ProximalProjection(ObjectiveFunction):
             "constraint should be instance of ObjectiveFunction." ""
         )
         for con in constraint.objectives:
-            if not isinstance(
-                con,
-                (
-                    ForceBalance,
-                    RadialForceBalance,
-                    HelicalForceBalance,
-                    CurrentDensity,
-                ),
-            ):
+            if not con._equilibrium:
                 raise ValueError(
                     "ProximalProjection method "
                     + "cannot handle general nonlinear constraint {}.".format(con)
                 )
         self._objective = objective
         self._constraint = constraint
+        solve_options = {} if solve_options is None else solve_options
+        perturb_options = {} if perturb_options is None else perturb_options
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
         solve_options.setdefault("verbose", 0)
@@ -313,17 +414,50 @@ class ProximalProjection(ObjectiveFunction):
         # don't want to compile this, just use the compiled objective and constraint
         self._use_jit = False
         self._compiled = False
+        self._eq = eq
 
-        if eq is not None:
-            self.build(eq, verbose=verbose)
+    def _set_eq_state_vector(self):
+        full_args = self._eq.optimizable_params.copy()
+        self._args = self._eq.optimizable_params.copy()
+        for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
+            self._args.remove(arg)
+        (
+            xp,
+            A,
+            b,
+            self._Z,
+            self._unfixed_idx,
+            project,
+            recover,
+        ) = factorize_linear_constraints(self._linear_constraints, self._constraint)
 
-    def build(self, eq, use_jit=None, verbose=1):  # noqa: C901
+        # dx/dc - goes from the full state to optimization variables
+        dxdc = []
+        xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
+
+        for arg in self._args:
+            if arg not in ["Rb_lmn", "Zb_lmn"]:
+                x_idx = self._eq.x_idx[arg]
+                dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
+            if arg == "Rb_lmn":
+                c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
+                A = c.jac_unscaled(xz)[0]["R_lmn"]
+                Ainv = np.linalg.pinv(A)
+                dxdRb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
+                dxdc.append(dxdRb)
+            if arg == "Zb_lmn":
+                c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
+                A = c.jac_unscaled(xz)[0]["Z_lmn"]
+                Ainv = np.linalg.pinv(A)
+                dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
+                dxdc.append(dxdZb)
+        self._dxdc = np.hstack(dxdc)
+
+    def build(self, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
             Note: unused by this class, should pass to sub-objectives directly.
@@ -331,31 +465,35 @@ class ProximalProjection(ObjectiveFunction):
             Level of output.
 
         """
+        eq = self._eq
         timer = Timer()
         timer.start("Proximal projection build")
 
-        self._eq = eq.copy()
-        self._linear_constraints = get_fixed_boundary_constraints(
-            iota=not isinstance(self._constraint.objectives[0], CurrentDensity)
-            and self._eq.iota is not None,
-            kinetic=eq.electron_temperature is not None,
+        self._eq = eq
+        self._linear_constraints = get_fixed_boundary_constraints(eq=eq)
+        self._linear_constraints = maybe_add_self_consistency(
+            self._eq, self._linear_constraints
         )
 
+        # we don't always build here because in ~all cases the user doesn't interact
+        # with this directly, so if the user wants to manually rebuild they should
+        # do it before this wrapper is created for them.
         if not self._objective.built:
-            self._objective.build(self._eq, verbose=verbose)
+            self._objective.build(use_jit=use_jit, verbose=verbose)
         if not self._constraint.built:
-            self._constraint.build(self._eq, verbose=verbose)
-        # remove constraints that aren't necessary
-        self._linear_constraints = tuple(
-            [
-                con
-                for con in self._linear_constraints
-                if con.args[0] in self._constraint.args
-            ]
-        )
+            self._constraint.build(use_jit=use_jit, verbose=verbose)
+
         for constraint in self._linear_constraints:
-            constraint.build(self._eq, verbose=verbose)
-        self._objectives = self._objective.objectives
+            constraint.build(use_jit=use_jit, verbose=verbose)
+
+        assert self._constraint.things == [
+            eq
+        ], "ProximalProjection can only handle constraints on the equilibrium."
+
+        self._objectives = [self._objective, self._constraint]
+        self._set_things(self._all_things)
+
+        self._eq_idx = self.things.index(self._eq)
 
         self._dim_f = self._objective.dim_f
         if self._dim_f == 1:
@@ -363,88 +501,94 @@ class ProximalProjection(ObjectiveFunction):
         else:
             self._scalar = False
 
-        # this is everything taken by either objective
-        self._full_args = self._constraint.args + self._objective.args
-        self._full_args = [arg for arg in arg_order if arg in self._full_args]
-
-        # arguments being optimized are all args, but with internal degrees of freedom
-        # replaced by boundary terms
-        self._args = self._full_args.copy()
-        if "L_lmn" in self._args:
-            self._args.remove("L_lmn")
-        if "R_lmn" in self._args:
-            self._args.remove("R_lmn")
-            if "Rb_lmn" not in self._args:
-                self._args.append("Rb_lmn")
-        if "Z_lmn" in self._args:
-            self._args.remove("Z_lmn")
-            if "Zb_lmn" not in self._args:
-                self._args.append("Zb_lmn")
-
-        self._dimensions = self._objective.dimensions
-        self._dim_x = 0
-        self._x_idx = {}
-        for arg in self.args:
-            self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
-            self._dim_x += self.dimensions[arg]
-        self._dim_x_full = 0
-        self._x_idx_full = {}
-        for arg in self._full_args:
-            self._x_idx_full[arg] = np.arange(
-                self._dim_x_full, self._dim_x_full + self.dimensions[arg]
-            )
-            self._dim_x_full += self.dimensions[arg]
-
-        (
-            xp,
-            A,
-            self._Ainv,
-            b,
-            self._Z,
-            self._unfixed_idx,
-            project,
-            recover,
-        ) = factorize_linear_constraints(self._linear_constraints, self._full_args)
-
-        # dx/dc - goes from the full state to optimization variables
-        x_idx = np.concatenate(
-            [
-                self._x_idx_full[arg]
-                for arg in self._args
-                if arg not in ["Rb_lmn", "Zb_lmn"]
-            ]
-        )
-        x_idx.sort(kind="mergesort")
-        self._dxdc = np.eye(self._dim_x_full)[:, x_idx]
-        if "Rb_lmn" in self._args:
-            dxdRb = (
-                np.eye(self._dim_x_full)[:, self._x_idx_full["R_lmn"]]
-                @ self._Ainv["R_lmn"]
-            )
-            self._dxdc = np.hstack((self._dxdc, dxdRb))
-        if "Zb_lmn" in self._args:
-            dxdZb = (
-                np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]]
-                @ self._Ainv["Z_lmn"]
-            )
-            self._dxdc = np.hstack((self._dxdc, dxdZb))
-
+        self._set_eq_state_vector()
         # history and caching
-        self._x_old = np.zeros((self._dim_x,))
-        for arg in self.args:
-            self._x_old[self.x_idx[arg]] = getattr(eq, arg)
-
+        self._x_old = self.x(self.things)
         self._allx = [self._x_old]
-        self._allxopt = [self._objective.x(eq)]
-        self._allxeq = [self._constraint.x(eq)]
-        self.history = {}
-        for arg in arg_order:
-            self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
+        self._allxopt = [self._objective.x(*self.things)]
+        self._allxeq = [self._eq.pack_params(self._eq.params_dict)]
+        self.history = [[t.params_dict.copy() for t in self.things]]
 
         self._built = True
         timer.stop("Proximal projection build")
         if verbose > 1:
             timer.disp("Proximal projection build")
+
+    def unpack_state(self, x, per_objective=True):
+        """Unpack the state vector into its components.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        per_objective : bool
+            Whether to return param dicts for each objective (default) or for each
+            unique optimizable thing.
+
+        Returns
+        -------
+        params : dict
+            Parameter dictionary for equilibrium, with just external degrees of freedom
+            visible to the optimizer.
+
+        """
+        if not self.built:
+            raise RuntimeError("ObjectiveFunction must be built first.")
+
+        x = jnp.atleast_1d(x)
+        if x.size != self.dim_x:
+            raise ValueError(
+                "Input vector dimension is invalid, expected "
+                + f"{self.dim_x} got {x.size}."
+            )
+
+        xs_splits = [t.dim_x for t in self.things]
+        xs_splits[self._eq_idx] = np.sum(
+            [self._eq.dimensions[arg] for arg in self._args]
+        )
+        xs_splits = np.cumsum(xs_splits)
+        xs = jnp.split(x, xs_splits)
+        params = []
+        for t, xi in zip(self.things, xs):
+            if t is self._eq:
+                xi_splits = np.cumsum([self._eq.dimensions[arg] for arg in self._args])
+                p = {arg: xis for arg, xis in zip(self._args, jnp.split(xi, xi_splits))}
+                params += [p]
+            else:
+                params += [t.unpack_params(xi)]
+
+        if per_objective:
+            params = self._unflatten(params)
+        return params
+
+    def x(self, *things):
+        """Return the full state vector from the Optimizable objects things."""
+        # TODO: also check resolution etc?
+        things = things or self.things
+        assert [type(t1) == type(t2) for t1, t2 in zip(things, self.things)]
+        xs = []
+        for t in self.things:
+            if t is self._eq:
+                xs += [
+                    jnp.concatenate(
+                        [jnp.atleast_1d(t.params_dict[arg]) for arg in self._args]
+                    )
+                ]
+            else:
+                xs += [t.pack_params(t.params_dict)]
+
+        return jnp.concatenate(xs)
+
+    @property
+    def dim_x(self):
+        """int: Dimension of the state vector."""
+        s = 0
+        for t in self.things:
+            if t is self._eq:
+                s += sum(self._eq.dimensions[arg] for arg in self._args)
+            else:
+                s += t.dim_x
+        return s
 
     def compile(self, mode="lsq", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
@@ -484,57 +628,58 @@ class ProximalProjection(ObjectiveFunction):
         if xopt.size > 0 and xeq.size > 0:
             pass
         else:
-            x_dict = self.unpack_state(x)
-            x_dict_old = self.unpack_state(self._x_old)
+            x_list = self.unpack_state(x, False)
+            x_list_old = self.unpack_state(self._x_old, False)
+            x_dict = x_list[self._eq_idx]
+            x_dict_old = x_list_old[self._eq_idx]
             deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
             self._eq = self._eq.perturb(
                 objective=self._constraint,
                 constraints=self._linear_constraints,
                 deltas=deltas,
-                **self._perturb_options
+                **self._perturb_options,
             )
             self._eq.solve(
                 objective=self._constraint,
                 constraints=self._linear_constraints,
-                **self._solve_options
+                **self._solve_options,
             )
-            xopt = self._objective.x(self._eq)
-            xeq = self._constraint.x(self._eq)
+            xeq = self._eq.pack_params(self._eq.params_dict)
+            x_list[self._eq_idx] = self._eq.params_dict.copy()
+            xopt = jnp.concatenate(
+                [t.pack_params(xi) for t, xi in zip(self.things, x_list)]
+            )
             self._allx.append(x)
             self._allxopt.append(xopt)
             self._allxeq.append(xeq)
 
         if store:
             self._x_old = x
-            xd = self.unpack_state(x)
-            xod = self._objective.unpack_state(xopt)
-            xed = self._constraint.unpack_state(xeq)
-            xd.update(xod)
-            xd.update(xed)
-            for arg in arg_order:
-                val = xd.get(arg, self.history[arg][-1])
-                self.history[arg] += [np.asarray(val).copy()]
-                # ensure eq has correct values if we didn't go into else block above.
-                if val.size:
-                    setattr(self._eq, arg, val)
+            x_list = self.unpack_state(x, False)
+            xeq_dict = self._eq.unpack_params(xeq)
+            self._eq.params_dict = xeq_dict
+            x_list[self._eq_idx] = xeq_dict
+            self.history.append(x_list)
             for con in self._linear_constraints:
-                con.update_target(self._eq)
+                if hasattr(con, "update_target"):
+                    con.update_target(self._eq)
         else:
-            for arg in arg_order:
-                val = self.history[arg][-1].copy()
-                if val.size:
-                    setattr(self._eq, arg, val)
+            # reset to last good params
+            self._eq.params_dict = self.history[-1][self._eq_idx]
             for con in self._linear_constraints:
-                con.update_target(self._eq)
+                if hasattr(con, "update_target"):
+                    con.update_target(self._eq)
         return xopt, xeq
 
-    def compute(self, x):
-        """Compute the objective function.
+    def compute_scaled(self, x, constants=None):
+        """Compute the objective function and apply weights/normalization.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -542,47 +687,117 @@ class ProximalProjection(ObjectiveFunction):
             Objective function value(s).
 
         """
+        if constants is None:
+            constants = self.constants
         xopt, _ = self._update_equilibrium(x, store=False)
-        return self._objective.compute(xopt)
+        return self._objective.compute_scaled(xopt, constants[0])
 
-    def grad(self, x):
+    def compute_scaled_error(self, x, constants=None):
+        """Compute the error between target and objective and apply weights etc.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        if constants is None:
+            constants = self.constants
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_scaled_error(xopt, constants[0])
+
+    def compute_unscaled(self, x, constants=None):
+        """Compute the raw value of the objective function.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        if constants is None:
+            constants = self.constants
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_unscaled(xopt, constants[0])
+
+    def grad(self, x, constants=None):
         """Compute gradient of the sum of squares of residuals.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
         g : ndarray
             gradient vector.
         """
-        f = jnp.atleast_1d(self.compute(x))
-        J = self.jac(x)
+        f = jnp.atleast_1d(self.compute_scaled_error(x, constants))
+        J = self.jac_scaled(x, constants)
         return f.T @ J
 
-    def jac(self, x):
-        """Compute Jacobian of the vector objective function.
+    def jac_unscaled(self, x, constants=None):
+        """Compute Jacobian of the vector objective function without weights / bounds.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
         J : ndarray
             Jacobian matrix.
         """
+        raise NotImplementedError("Unscaled jacobian of proximal projection is hard.")
+
+    def jac_scaled(self, x, constants=None):
+        """Compute Jacobian of the vector objective function with weights / bounds.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
+        if constants is None:
+            constants = self.constants
         xg, xf = self._update_equilibrium(x, store=True)
 
         # Jacobian matrices wrt combined state vectors
-        Fx = self._constraint.jac(xf)
-        Gx = self._objective.jac(xg)
-        Fx = align_jacobian(Fx, self._constraint, self._objective)
-        Gx = align_jacobian(Gx, self._objective, self._constraint)
+        Fx = self._constraint.jac_scaled(xf, constants[1])
+        Gx = self._objective.jac_scaled(xg, constants[0])
 
+        # f depends only on eq, g can depend on other things
+        # all the fancy projection/prox stuff only applies to eq dofs
+        # so we split Gx into parts that depend only on eq, and stuff on other things
+        Gxs = jnp.split(Gx, np.cumsum([t.dim_x for t in self.things]), axis=-1)
+        Gx = Gxs[self._eq_idx]
         # projections onto optimization space
         # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
@@ -598,7 +813,7 @@ class ProximalProjection(ObjectiveFunction):
         Gxh = Gx_reduced * wx
 
         cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
-        uf, sf, vtf = np.linalg.svd(Fxh, full_matrices=False)
+        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
         sf += sf[-1]  # add a tiny bit of regularization
         sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
         Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
@@ -606,9 +821,11 @@ class ProximalProjection(ObjectiveFunction):
         # TODO: make this more efficient for finite differences etc. Can probably
         # reduce the number of operations and tangents
         LHS = Gxh @ (Fxh_inv @ Fc) - Gc
-        return -LHS
+        # now add back in non-eq dofs
+        Gxs[self._eq_idx] = -LHS
+        return jnp.hstack(Gxs)
 
-    def hess(self, x):
+    def hess(self, x, constants=None):
         """Compute Hessian of the sum of squares of residuals.
 
         Uses the "small residual approximation" where the Hessian is replaced by
@@ -618,11 +835,52 @@ class ProximalProjection(ObjectiveFunction):
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
         H : ndarray
             Hessian matrix.
         """
-        J = self.jac(x)
+        J = self.jac_scaled(x, constants)
         return J.T @ J
+
+    def vjp_scaled(self, v, x):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x : ndarray
+            Optimization variables.
+
+        """
+        raise NotImplementedError
+
+    def vjp_unscaled(self, v, x):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the unscaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x : ndarray
+            Optimization variables.
+
+        """
+        raise NotImplementedError
+
+    @property
+    def constants(self):
+        """list: constant parameters for each sub-objective."""
+        return [self._objective.constants, self._constraint.constants]
+
+    def __getattr__(self, name):
+        """For other attributes we defer to the base objective."""
+        return getattr(self._objective, name)

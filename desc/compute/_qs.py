@@ -1,10 +1,20 @@
-"""Compute functions for quasisymmetry objectives."""
+"""Compute functions for quasisymmetry objectives.
+
+Notes
+-----
+Some quantities require additional work to compute at the magnetic axis.
+A Python lambda function is used to lazily compute the magnetic axis limits
+of these quantities. These lambda functions are evaluated only when the
+computational grid has a node on the magnetic axis to avoid potentially
+expensive computations.
+"""
 
 import numpy as np
 
 from desc.backend import jnp, put, sign
 
 from .data_index import register_compute_fun
+from .utils import cross, dot
 
 
 @register_compute_fun(
@@ -47,7 +57,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer_mn",
-    label="w_{Boozer,m,n}",
+    label="w_{\\mathrm{Boozer},m,n}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to "
@@ -69,9 +79,9 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     # indices of matching modes in w and B bases
     # need to use np instead of jnp here as jnp.where doesn't work under jit
     # even if the args are static
-    ib, iw = np.where((Bm[:, None] == -wm) * (Bn[:, None] == wn) * (wm != 0))
+    ib, iw = np.where((Bm[:, None] == -wm) & (Bn[:, None] == wn) & (wm != 0))
     jb, jw = np.where(
-        (Bm[:, None] == wm) * (Bn[:, None] == -wn) * (wm == 0) * (wn != 0)
+        (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
     )
     w_mn = put(w_mn, iw, sign(wn[iw]) * data["B_theta_mn"][ib] / jnp.abs(wm[iw]))
     w_mn = put(w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(NFP * wn[jw]))
@@ -81,7 +91,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer",
-    label="w_{Boozer}",
+    label="w_{\\mathrm{Boozer}}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -100,7 +110,7 @@ def _w(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer_t",
-    label="\\partial_{\\theta} w_{Boozer}",
+    label="\\partial_{\\theta} w_{\\mathrm{Boozer}}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -119,7 +129,7 @@ def _w_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="w_Boozer_z",
-    label="\\partial_{\\zeta} w_{Boozer}",
+    label="\\partial_{\\zeta} w_{\\mathrm{Boozer}}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -251,7 +261,7 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|B|_mn",
-    label="B_{mn}^{Boozer}",
+    label="B_{mn}^{\\mathrm{Boozer}}",
     units="T",
     units_long="Tesla",
     description="Boozer harmonics of magnetic field",
@@ -267,9 +277,7 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
     data["|B|_mn"] = (
         norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * jnp.matmul(
-            transforms["B"].basis.evaluate(nodes).T, data["sqrt(g)_B"] * data["|B|"]
-        )
+        * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] * data["|B|"]))
         / transforms["B"].grid.num_nodes
     )
     return data
@@ -277,7 +285,7 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B modes",
-    label="Boozer modes",
+    label="\\mathrm{Boozer~modes}",
     units="~",
     units_long="None",
     description="Boozer harmonics",
@@ -305,23 +313,12 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "iota",
-        "psi_r",
-        "sqrt(g)",
-        "B_theta",
-        "B_zeta",
-        "|B|_t",
-        "|B|_z",
-        "G",
-        "I",
-        "B*grad(|B|)",
-    ],
+    data=["iota", "B0", "B_theta", "B_zeta", "|B|_t", "|B|_z", "G", "I", "B*grad(|B|)"],
     helicity="helicity",
 )
 def _f_C(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))
-    data["f_C"] = (M * data["iota"] - N) * (data["psi_r"] / data["sqrt(g)"]) * (
+    data["f_C"] = (M * data["iota"] - N) * data["B0"] * (
         data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
     ) - (M * data["G"] + N * data["I"]) * data["B*grad(|B|)"]
     return data
@@ -339,18 +336,32 @@ def _f_C(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "psi_r",
-        "sqrt(g)",
-        "|B|_t",
-        "|B|_z",
-        "(B*grad(|B|))_t",
-        "(B*grad(|B|))_z",
-    ],
+    data=["B0", "|B|_t", "|B|_z", "(B*grad(|B|))_t", "(B*grad(|B|))_z"],
 )
 def _f_T(params, transforms, profiles, data, **kwargs):
-    data["f_T"] = (data["psi_r"] / data["sqrt(g)"]) * (
+    data["f_T"] = data["B0"] * (
         data["|B|_t"] * data["(B*grad(|B|))_z"]
         - data["|B|_z"] * data["(B*grad(|B|))_t"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="isodynamicity",
+    label="1/|B|^2 (\\mathbf{b} \\times \\nabla B) \\cdot \\nabla \\psi",
+    units="~",
+    units_long="None",
+    description="Measure of cross field drift at each point, "
+    + "unweighted by particle energy",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["b", "grad(|B|)", "|B|", "grad(psi)"],
+)
+def _isodynamicity(params, transforms, profiles, data, **kwargs):
+    data["isodynamicity"] = (
+        dot(cross(data["b"], data["grad(|B|)"]), data["grad(psi)"]) / data["|B|"] ** 2
     )
     return data

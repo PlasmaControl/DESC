@@ -1,6 +1,5 @@
 # This DESC input file was auto generated from the VMEC input file
-# /home/dpanici/DESC/tests/inputs/input.DSHAPE
-# on 01/21/2023 at 17:19:17.
+# /DESC/tests/inputs/input.DSHAPE
 # For details on the various options see https://desc-docs.readthedocs.io/en/stable/input.html
 
 # global parameters
@@ -9,18 +8,15 @@ NFP =   1
 Psi = 1.00000000
 
 # spectral resolution
-L_rad = 6, 12, 12, 12
-M_pol = 12, 12, 12, 12
-N_tor = 0, 0, 0, 0
-L_grid = 12, 24, 24, 24
-M_grid = 24, 24, 24, 24
-N_grid = 0, 0, 0, 0
+L_rad = 11
+M_pol = 11
+N_tor = 0
+L_grid = 22
+M_grid = 22
+N_grid = 0
 
 # continuation parameters
-bdry_ratio = 1.0, 1.0, 1.0, 1.0
-pres_ratio = 0.0, 0.0, 0.5, 1.0
-curr_ratio = 0.0, 0.0, 0.5, 1.0
-pert_order = 1.0, 1.0, 2.0, 2.0
+pert_order = 2.0
 
 # solver tolerances
 
@@ -29,7 +25,6 @@ optimizer = lsq-exact
 objective = force
 bdry_mode = lcfs
 spectral_indexing = ansi
-node_pattern = jacobi
 
 # pressure and rotational transform/current profiles
 l:   0	p =   1.60000000E+03	i =   1.00000000E+00

@@ -5,10 +5,18 @@ import inspect
 import warnings
 
 import numpy as np
-from scipy.interpolate import CubicHermiteSpline, CubicSpline
+from scipy.interpolate import Akima1DInterpolator, CubicHermiteSpline
 from termcolor import colored
 
-from desc.backend import complex_sqrt, cond, fori_loop, jnp, put
+from desc.backend import (
+    complex_sqrt,
+    cond,
+    fori_loop,
+    jnp,
+    nonzero,
+    put,
+    put_along_axis,
+)
 from desc.grid import ConcentricGrid, Grid, LinearGrid, _meshgrid_expand
 
 from .data_index import data_index
@@ -1413,14 +1421,11 @@ def cubic_poly_roots(
     xi_3 = 1
     xi = jnp.stack([roots(xi_1), roots(xi_2), roots(xi_3)], axis=-1)
     if fill:
-        xi_1, xi_2, xi_3 = jnp.sort(xi, axis=-1).T
-        xi_1 = jnp.where(
-            jnp.isnan(xi_1), a_min[:, jnp.newaxis, jnp.newaxis, jnp.newaxis], xi_1
-        )
-        xi_2 = jnp.where(jnp.isnan(xi_2), xi_1, xi_2)
-        xi_3 = jnp.where(jnp.isnan(xi_3), xi_2, xi_3)
-        # todo: use correct stacking method
-        xi = jnp.vstack([a_min, xi_1, xi_2, xi_3, a_max])
+        xi = jnp.sort(xi, axis=-1)
+        xi_1 = jnp.where(jnp.isnan(xi[..., 0]), a_min, xi[..., 0])
+        xi_2 = jnp.where(jnp.isnan(xi[..., 1]), xi[..., 0], xi[..., 1])
+        xi_3 = jnp.where(jnp.isnan(xi[..., 2]), xi[..., 1], xi[..., 2])
+        xi = jnp.stack(jnp.broadcast_arrays(a_min, xi_1, xi_2, xi_3, a_max), axis=-1)
     return xi
 
 
@@ -1493,6 +1498,45 @@ def polyeval(coef, x):
     sub = alphabet[: coef.ndim]
     f = jnp.einsum(f"{sub},{sub}...->{sub[1:]}...", coef, X)
     return f
+
+
+def tanh_sinh_quadrature(N, quad_limit=3.16):
+    """
+    tanh_sinh quadrature.
+
+    This function outputs the quadrature points and weights
+    for a tanh-sinh quadrature.
+
+    ∫₋₁¹ f(x) dx = Σ wₖ f(xₖ)
+
+    Parameters
+    ----------
+    N: int
+        Number of quadrature points, preferable odd
+    quad_limit: float
+        The range of quadrature points to be mapped.
+        Larger quad_limit implies better result but limited due to overflow in sinh
+
+    Returns
+    -------
+    x_k : numpy array
+        Quadrature points
+    w_k : numpy array
+        Quadrature weights
+
+    """
+    initial_points = jnp.linspace(-quad_limit, quad_limit, N)
+    h = 2 * quad_limit / (N - 1)
+    x_k = jnp.tanh(0.5 * jnp.pi * jnp.sinh(initial_points))
+    w_k = (
+        0.5
+        * jnp.pi
+        * h
+        * jnp.cosh(initial_points)
+        / jnp.cosh(0.5 * jnp.pi * jnp.sinh(initial_points)) ** 2
+    )
+
+    return x_k, w_k
 
 
 def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=20):
@@ -1580,15 +1624,15 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
             Bounce integrals evaluated at ``lambda_pitch`` for every field line.
 
         """
-        # Gauss-Quadrature is expensive to perform because evaluating the integrand
-        # at the optimal quadrature points along the field line would require
-        # root finding to map field line coordinates to desc coordinates.
-        # Newton-Cotes quadrature is inaccurate as the bounce points are not
-        # guaranteed to be near the fixed quadrature points. Instead, we
-        # construct interpolating cubic splines of the integrand and integrate
-        # the spline exactly between the bounce points. This should give
-        # comparable results to a composite Simpson Newton-Cotes with quadrature
-        # points near bounce points.
+        # Newton-Cotes quadrature would be inaccurate as the bounce points are not
+        # guaranteed to be near the fixed quadrature points.
+        # Gauss-Quadrature on the exact integrand is expensive to perform because
+        # evaluating the integrand at the optimal quadrature points along the field
+        # line would require root finding to map field line coordinates to desc
+        # coordinates. So we approximate functions in the integrand with splines
+        # and perform Gauss-Quadrature.
+        # TODO: spline functions separately since no polynomial cannot capture the
+        #  division accurately near the bounce points.
         lambda_pitch = jnp.atleast_1d(lambda_pitch)
         interpolation_points = cubic_poly_roots(
             coef,
@@ -1604,12 +1648,16 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         # Periodic boundary to compute bounce integrals of particles
         # trapped outside this snapshot of the field lines.
         is_well = (b_norm_z <= 0) & (jnp.roll(b_norm_z, -1, axis=-1) >= 0)
-        is_well_broadcast = jnp.zeros(
-            shape=(lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 5),
-            dtype=bool,
-        )
         idx = jnp.arange((zeta.size - 1) * 3)
-        is_well_broadcast[..., (idx // 3) * 5 + 1 + (idx % 3)] = is_well
+        # Make is_well broadcast with interpolation_points.
+        is_well = put_along_axis(
+            jnp.zeros(
+                shape=(lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 5),
+                dtype=bool,
+            ),
+            (idx // 3) * 5 + 1 + (idx % 3),
+            is_well,
+        )
         # Can precompute everything above if lambda_pitch given to parent function.
 
         y = jnp.nan_to_num(
@@ -1619,19 +1667,25 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
                 * jnp.sqrt(1 - lambda_pitch[:, jnp.newaxis] * data["|B|"])
             )
         ).reshape(lambda_pitch.size, alpha.size, rho.size, zeta.size)
-        y = CubicSpline(zeta, y, axis=-1, extrapolate="periodic").c
+        y = Akima1DInterpolator(zeta, y, axis=-1).c
         y = jnp.moveaxis(y, [1, -1], [-1, 2])
         assert y.shape == (4, lambda_pitch.size, rho.size, alpha.size, zeta.size - 1)
         Y = polyeval(polyint(y), interpolation_points).reshape(
             lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 5
         )
-        mask = jnp.append(jnp.arange(1, Y.size) % 5 != 0, True)
         sums = jnp.cumsum(
-            (jnp.diff(Y, axis=-1, append=Y[..., 0]) - Y[..., -1]) * mask,
+            jnp.diff(Y, axis=-1, append=Y[..., 0, jnp.newaxis])
+            # Multiply by mask that is false at knots of piecewise spline
+            # to avoid adding difference between primitives of splines at knots.
+            * jnp.append(jnp.arange(1, Y.shape[-1]) % 5 != 0, True),
             axis=-1,
         )
-        # todo: there should be a jitable way for this, then we are done
-        F = jnp.diff(sums[..., is_well_broadcast], axis=-1)
+        # TODO: jnp.diff(sums[is_well], axis=-1)[::2] except
+        #    padded with zeros at end to avoid dynamically sized output.
+        F = jnp.diff(
+            sums[nonzero(is_well, size=sums.size, fill_value=sums.size - 1)],
+            axis=-1,
+        )[::2]
         return F
 
     return _bounce_integral

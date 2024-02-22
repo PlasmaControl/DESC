@@ -73,6 +73,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     vmap = jax.vmap
     scan = jax.lax.scan
     bincount = jnp.bincount
+    nonzero = jnp.nonzero
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
@@ -103,6 +104,32 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             arr[inds] = vals
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
+
+    # TODO: Add axis parameter.
+    def put_along_axis(arr, inds, vals):
+        """Functional interface for array "fancy indexing".
+
+        Provides a way to do arr[..., inds] = vals in a way that works with JAX.
+
+        Parameters
+        ----------
+        arr : array-like
+            Array to populate
+        inds : array-like of int
+            Indices to populate
+        vals : array-like
+            Values to insert
+
+        Returns
+        -------
+        arr : array-like
+            Input array with vals inserted at inds.
+
+        """
+        if isinstance(arr, np.ndarray):
+            arr[..., inds] = vals
+            return arr
+        return jnp.asarray(arr).at[..., inds].set(vals)
 
     def sign(x):
         """Sign function, but returns 1 for x==0.
@@ -393,6 +420,9 @@ else:  # pragma: no cover
     )
     from scipy.special import gammaln, logsumexp  # noqa: F401
 
+    complex_sqrt = np.emath.sqrt
+    put_along_axis = np.put_along_axis
+
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""
         raise NotImplementedError
@@ -629,44 +659,6 @@ else:  # pragma: no cover
         fun.defjvps = lambda *args, **kwargs: None
         return fun
 
-    def tanh_sinh_quadrature(N, quad_limit=3.16):
-        """
-        tanh_sinh quadrature.
-
-        This function outputs the quadrature points and weights
-        for a tanh-sinh quadrature.
-
-        ∫₋₁¹ f(x) dx = Σ wₖ f(xₖ)
-
-        Parameters
-        ----------
-        N: int
-            Number of quadrature points, preferable odd
-        quad_limit: float
-            The range of quadrature points to be mapped.
-            Larger quad_limit implies better result but limited due to overflow in sinh
-
-        Returns
-        -------
-        x_k : numpy array
-            Quadrature points
-        w_k : numpy array
-            Quadrature weights
-
-        """
-        initial_points = np.linspace(-quad_limit, quad_limit, N)
-        h = np.diff(initial_points)[0]
-        x_k = np.tanh(0.5 * np.pi * np.sinh(initial_points))
-        w_k = (
-            0.5
-            * np.pi
-            * h
-            * np.cosh(initial_points)
-            / (np.cosh(0.5 * np.pi * np.sinh(initial_points))) ** 2
-        )
-
-        return x_k, w_k
-
     def root_scalar(
         fun,
         x0,
@@ -771,23 +763,6 @@ else:  # pragma: no cover
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
         return out.x, out
 
-    def complex_sqrt(x):
-        """Compute the square root of x.
-
-        For negative input elements, a complex value is returned
-        (unlike numpy.sqrt which returns NaN).
-
-        Parameters
-        ----------
-        x : array_like
-            The input value(s).
-
-        Returns
-        -------
-        out : ndarray or scalar
-            The square root of x. If x was a scalar, so is out,
-            otherwise an array is returned.
-
-        """
-        out = np.emath.sqrt(x)
-        return out
+    def nonzero(a, *, size=None, fill_value=None):
+        """Same as np.nonzero but with dummy parameters to match jnp.nonzero API."""
+        return np.nonzero(a)

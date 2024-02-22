@@ -4,7 +4,6 @@ import mpmath
 import numpy as np
 import pytest
 
-from desc.backend import jnp
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     DoubleFourierSeries,
@@ -13,10 +12,10 @@ from desc.basis import (
     FourierZernikeBasis,
     PowerSeries,
     ZernikePolynomial,
-    _jacobi,
     chebyshev,
     fourier,
     get_basis_poincare,
+    jacobi_poly_single,
     polyder_vec,
     polyval_vec,
     powers,
@@ -102,10 +101,10 @@ class TestBasis:
         ).T
 
         mpmath.mp.dps = 15
-        approx1f = zernike_radial(r[:, np.newaxis], l, m)
-        approx1df = zernike_radial(r[:, np.newaxis], l, m, dr=1)
-        approx1ddf = zernike_radial(r[:, np.newaxis], l, m, dr=2)
-        approx1dddf = zernike_radial(r[:, np.newaxis], l, m, dr=3)
+        approx1f = zernike_radial(r, l, m)
+        approx1df = zernike_radial(r, l, m, dr=1)
+        approx1ddf = zernike_radial(r, l, m, dr=2)
+        approx1dddf = zernike_radial(r, l, m, dr=3)
         approx2f = zernike_radial_poly(r[:, np.newaxis], l, m)
         approx2df = zernike_radial_poly(r[:, np.newaxis], l, m, dr=1)
         approx2ddf = zernike_radial_poly(r[:, np.newaxis], l, m, dr=2)
@@ -197,17 +196,15 @@ class TestBasis:
             if dx >= 7:
                 return np.zeros_like(x)
 
-        l = np.array([3, 4, 6])
-        m = np.array([1, 2, 2])
+        l = np.array([3, 4, 6, 4])
+        m = np.array([1, 2, 2, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
         max_dr = 4
         desired = {
-            dr: np.array([Z3_1(r, dr), Z4_2(r, dr), Z6_2(r, dr)]).T
+            dr: np.array([Z3_1(r, dr), Z4_2(r, dr), Z6_2(r, dr), Z4_2(r, dr)]).T
             for dr in range(max_dr + 1)
         }
-        radial = {
-            dr: zernike_radial(r[:, np.newaxis], l, m, dr) for dr in range(max_dr + 1)
-        }
+        radial = {dr: zernike_radial(r, l, m, dr) for dr in range(max_dr + 1)}
         radial_poly = {
             dr: zernike_radial_poly(r[:, np.newaxis], l, m, dr)
             for dr in range(max_dr + 1)
@@ -215,6 +212,43 @@ class TestBasis:
         for dr in range(max_dr + 1):
             np.testing.assert_allclose(radial[dr], desired[dr], err_msg=dr)
             np.testing.assert_allclose(radial_poly[dr], desired[dr], err_msg=dr)
+
+    @pytest.mark.unit
+    def test_jacobi_poly_single(self):
+        """Test Jacobi Polynomial evaluation for special cases."""
+        # https://en.wikipedia.org/wiki/Jacobi_polynomials#Special_cases
+
+        def exact(r, n, alpha, beta):
+            if n == 0:
+                return np.ones_like(r)
+            elif n == 1:
+                return (alpha + 1) + (alpha + beta + 2) * ((r - 1) / 2)
+            elif n == 2:
+                a0 = (alpha + 1) * (alpha + 2) / 2
+                a1 = (alpha + 2) * (alpha + beta + 3)
+                a2 = (alpha + beta + 3) * (alpha + beta + 4) / 2
+                z = (r - 1) / 2
+                return a0 + a1 * z + a2 * z**2
+            elif n < 0:
+                return np.zeros_like(r)
+
+        r = np.linspace(0, 1, 11)
+        # alpha and beta pairs for test
+        pairs = np.array([[2, 3], [3, 0], [1, 1], [10, 4]])
+        n_values = np.array([-1, -2, 0, 1, 2])
+
+        for pair in pairs:
+            alpha = pair[0]
+            beta = pair[1]
+            P0 = jacobi_poly_single(r, 0, alpha, beta)
+            P1 = jacobi_poly_single(r, 1, alpha, beta)
+            desired = {n: exact(r, n, alpha, beta) for n in n_values}
+            values = {
+                n: jacobi_poly_single(r, n, alpha, beta, P1, P0) for n in n_values
+            }
+
+            for n in n_values:
+                np.testing.assert_allclose(values[n], desired[n], err_msg=n)
 
     @pytest.mark.unit
     def test_fourier(self):
@@ -402,7 +436,6 @@ class TestBasis:
         with pytest.raises(AssertionError):
             ZernikePolynomial(L=L, M=M)
 
-
 @pytest.mark.unit
 def test_get_basis_poincare():
     """Test FourierZernike to ZernikePolynomial utility function."""
@@ -431,22 +464,3 @@ def test_FourierZernike_to_FourierZernike_no_N_modes():
     L_3D = eq.compute("lambda", grid=grid)["lambda"]
     np.testing.assert_allclose(L_2D, L_3D, atol=1e-14)
 
-
-@pytest.mark.unit
-def test_jacobi_jvp():
-    """Test that custom derivative rule for jacobi polynomials works."""
-    basis = ZernikePolynomial(25, 25)
-    l, m = basis.modes[:, :2].T
-    m = jnp.abs(m)
-    alpha = m
-    beta = 0
-    n = (l - m) // 2
-    r = np.linspace(0, 1, 1000)
-    jacobi_arg = 1 - 2 * r**2
-    for i in range(5):
-        # custom jvp rule for derivative of jacobi should just call jacobi with dx+1
-        f1 = jnp.vectorize(Derivative(_jacobi, 3, "grad"))(
-            n, alpha, beta, jacobi_arg[:, None], i
-        )
-        f2 = _jacobi(n, alpha, beta, jacobi_arg[:, None], i + 1)
-        np.testing.assert_allclose(f1, f2)

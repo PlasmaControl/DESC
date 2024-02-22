@@ -421,13 +421,17 @@ def test_equilibrium_unused_kwargs():
     _ = Equilibrium(pressure=pres, current=curr)
 
 
-@pytest.mark.slow
 @pytest.mark.unit
 @pytest.mark.solve
 def test_backward_compatible_load_and_resolve():
     """Test backwards compatibility of load and re-solve."""
     with pytest.warns(RuntimeWarning):
         eq = EquilibriaFamily.load(load_from=".//tests//inputs//NCSX_older.h5")[-1]
+
+    # reducing resolution since we only want to test eq.solve
+    eq.L = 4
+    eq.M = 4
+    eq.N = 4
 
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj)

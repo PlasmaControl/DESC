@@ -437,6 +437,7 @@ class Equilibrium(IOAble, Optimizable):
             "a_lmn",
             "Ra_n",
             "Za_n",
+            "Wa_n",
             "Rb_lmn",
             "Zb_lmn",
             "Wb_lmn",
@@ -1390,6 +1391,7 @@ class Equilibrium(IOAble, Optimizable):
     def Za_n(self, Za_n):
         self.axis.Z_n = Za_n
 
+    @optimizable_parameter
     @property
     def Wa_n(self):
         """ndarray: W coefficients for axis Fourier series."""

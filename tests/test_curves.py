@@ -94,7 +94,7 @@ class TestRZCurve:
         """Test getting/setting misc attributes of FourierRZCurve."""
         c = FourierRZCurve()
 
-        R, Z = c.get_coeffs(0)
+        R, Z, W = c.get_coeffs(0)
         np.testing.assert_allclose(R, 10)
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 5, None)

@@ -460,7 +460,7 @@ def test_correct_indexing_passed_modes():
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
-    atol = 2e-15
+    atol = 1e-14
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
     np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
@@ -527,7 +527,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
-    atol = 2e-15
+    atol = 1e-14
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
     np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)

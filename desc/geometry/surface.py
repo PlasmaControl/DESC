@@ -338,7 +338,7 @@ class FourierRZToroidalSurface(Surface):
 
     def set_coeffs(self, m, n=0, R=None, Z=None, W=None):
         """Set specific Fourier coefficients."""
-        m, n, R, Z = (
+        m, n, R, Z, W = (
             np.atleast_1d(m),
             np.atleast_1d(n),
             np.atleast_1d(R),
@@ -565,7 +565,7 @@ class FourierRZToroidalSurface(Surface):
 
             Rb_lmn = x_lmn[0 : R_basis.num_modes]
             Zb_lmn = x_lmn[R_basis.num_modes : R_basis.num_modes + Z_basis.num_modes]
-            Wb_lmn = x_lmn[R_basis.num_modes + Z_basis.num_modes + W_basis.num_modes :]
+            Wb_lmn = x_lmn[R_basis.num_modes + Z_basis.num_modes :]
 
         surf = cls(
             R_lmn=Rb_lmn,

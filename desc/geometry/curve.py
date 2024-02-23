@@ -68,7 +68,7 @@ class FourierRZCurve(Curve):
         if modes_Z is None:
             modes_Z = np.arange(-(Z_n.size // 2), Z_n.size // 2 + 1)
         if modes_W is None:
-            modes_Z = np.arange(-(W_n.size // 2), W_n.size // 2 + 1)
+            modes_W = np.arange(-(W_n.size // 2), W_n.size // 2 + 1)
 
         if R_n.size == 0:
             raise ValueError("At least 1 coefficient for R must be supplied")
@@ -289,12 +289,12 @@ class FourierRZCurve(Curve):
         """
         inputs = InputReader().parse_inputs(path)[-1]
         curve = FourierRZCurve(
-            inputs["axis"][:, 1],
-            inputs["axis"][:, 2],
-            inputs["axis"][:, 0].astype(int),
-            inputs["axis"][:, 0].astype(int),
-            inputs["NFP"],
-            inputs["sym"],
+            R_n=inputs["axis"][:, 1],
+            Z_n=inputs["axis"][:, 2],
+            modes_R=inputs["axis"][:, 0].astype(int),
+            modes_Z=inputs["axis"][:, 0].astype(int),
+            NFP=inputs["NFP"],
+            sym=inputs["sym"],
         )
         return curve
 

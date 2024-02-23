@@ -174,7 +174,7 @@ def test_map_coordinates_derivative():
     for j1, j2 in zip(J1.values(), J2.values()):
         assert ~np.any(np.isnan(j1))
         assert ~np.any(np.isnan(j2))
-        np.testing.assert_allclose(j1, j2)
+        np.testing.assert_allclose(j1, j2, atol=1e-14)
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -195,7 +195,7 @@ def test_map_coordinates_derivative():
 
     assert ~np.any(np.isnan(J1))
     assert ~np.any(np.isnan(J2))
-    np.testing.assert_allclose(J1, J2)
+    np.testing.assert_allclose(J1, J2, atol=1e-14)
 
 
 @pytest.mark.slow

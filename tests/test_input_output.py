@@ -622,3 +622,16 @@ def test_io_OmnigenousField(tmpdir_factory):
     data2 = field2.compute(["|B|_omni", "theta_B", "zeta_B"])
     for key in data1.keys():
         np.testing.assert_allclose(data1[key], data2[key])
+
+
+def test_save_after_load(tmpdir_factory):
+    """Test saving a DESC .h5 file after loading it (see gh #871)."""
+    tmpdir = tmpdir_factory.mktemp("save_after_load_test")
+    tmp_path = tmpdir.join("save_after_load_test.h5")
+    eq = Equilibrium()
+    eq.save(tmp_path)
+    eq2 = load(tmp_path)
+    # ensure can save again without an error being thrown due
+    # to the .h5 file not being closed
+    eq2.save(tmp_path)
+    assert eq2.eq(eq)

@@ -179,7 +179,7 @@ class VMECIO:
         ) + get_fixed_boundary_constraints(eq=eq)
         constraints = maybe_add_self_consistency(eq, constraints)
         objective = ObjectiveFunction(constraints, verbose=0)
-        objective.build()
+        objective.build(verbose=0)
         _, _, _, _, _, project, recover = factorize_linear_constraints(
             constraints, objective
         )
@@ -539,98 +539,101 @@ class VMECIO:
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[0.0], NFP=NFP)
         b0[:] = eq.compute("G", grid=grid)["G"][0] / eq.compute("R", grid=grid)["R"][0]
 
-        # grid for computing radial profile data
-        grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
-        data = eq.compute(
-            [
-                "<|B|^2>",
-                "I",
-                "G",
-                "<J*B>",
-                "sqrt(g)",
-                "J^theta*sqrt(g)",
-                "J^zeta",
-                "D_Mercier",
-            ],
-            grid=grid,
+        # grids for computing radial profile data
+        grid_full = LinearGrid(
+            M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full
         )
+        grid_half = LinearGrid(
+            M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_half
+        )
+        data_full = eq.compute(
+            ["<|B|^2>", "<J*B>", "sqrt(g)", "J^theta*sqrt(g)", "J^zeta", "D_Mercier"],
+            grid=grid_full,
+        )
+        data_half = eq.compute(["I", "G"], grid=grid_half)
 
         bdotb = file.createVariable("bdotb", np.float64, ("radius",))
-        bdotb.long_name = "flux surface average of magnetic field squared"
+        bdotb.long_name = "flux surface average of magnetic field squared, on full mesh"
         bdotb.units = "T^2"
-        bdotb[:] = grid.compress(data["<|B|^2>"])
+        bdotb[:] = grid_full.compress(data_full["<|B|^2>"])
         bdotb[0] = 0
 
         # currents
         buco = file.createVariable("buco", np.float64, ("radius",))
-        buco.long_name = "Boozer toroidal current I"
+        buco.long_name = "Boozer toroidal current I, on half mesh"
         buco.units = "T*m"
-        buco[:] = grid.compress(data["I"])
+        buco[1:] = grid_half.compress(data_half["I"])
         buco[0] = 0
 
         bvco = file.createVariable("bvco", np.float64, ("radius",))
-        bvco.long_name = "Boozer poloidal current G"
+        bvco.long_name = "Boozer poloidal current G, on half mesh"
         bvco.units = "T*m"
-        bvco[:] = grid.compress(data["G"])
+        bvco[1:] = grid_half.compress(data_half["G"])
         bvco[0] = 0
 
         jdotb = file.createVariable("jdotb", np.float64, ("radius",))
-        jdotb.long_name = "flux surface average of J*B"
+        jdotb.long_name = "flux surface average of J*B, on full mesh"
         jdotb.units = "N/m^3"
-        jdotb[:] = grid.compress(data["<J*B>"])
+        jdotb[:] = grid_full.compress(data_full["<J*B>"])
         jdotb[0] = 0
 
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
-        jcuru.long_name = "flux surface average of sqrt(g)*J^theta"
+        jcuru.long_name = "flux surface average of sqrt(g)*J^theta, on full mesh"
         jcuru.units = "A/m^3"
         jcuru[:] = surface_averages(
-            grid,
-            data["J^theta*sqrt(g)"] / (2 * data["rho"]),
-            sqrt_g=data["sqrt(g)"],
+            grid_full,
+            data_full["J^theta*sqrt(g)"] / (2 * data_full["rho"]),
+            sqrt_g=data_full["sqrt(g)"],
             expand_out=False,
         )
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
-        jcuru.long_name = "flux surface average of sqrt(g)*J^zeta"
+        jcuru.long_name = "flux surface average of sqrt(g)*J^zeta, on full mesh"
         jcurv.units = "A/m^3"
         jcurv[:] = surface_averages(
-            grid,
-            data["sqrt(g)"] * data["J^zeta"] / (2 * data["rho"]),
-            sqrt_g=data["sqrt(g)"],
+            grid_full,
+            data_full["sqrt(g)"] * data_full["J^zeta"] / (2 * data_full["rho"]),
+            sqrt_g=data_full["sqrt(g)"],
             expand_out=False,
         )
         jcurv[0] = 0
 
         # Mercier stability
         DShear = file.createVariable("DShear", np.float64, ("radius",))
-        DShear.long_name = "Mercier stability criterion magnetic shear term"
+        DShear.long_name = (
+            "Mercier stability criterion magnetic shear term, on full mesh"
+        )
         DShear.units = "1/Wb^2"
-        DShear[:] = grid.compress(data["D_shear"])
+        DShear[:] = grid_full.compress(data_full["D_shear"])
         DShear[0] = 0
 
         DCurr = file.createVariable("DCurr", np.float64, ("radius",))
-        DCurr.long_name = "Mercier stability criterion toroidal current term"
+        DCurr.long_name = (
+            "Mercier stability criterion toroidal current term, on full mesh"
+        )
         DCurr.units = "1/Wb^2"
-        DCurr[:] = grid.compress(data["D_current"])
+        DCurr[:] = grid_full.compress(data_full["D_current"])
         DCurr[0] = 0
 
         DWell = file.createVariable("DWell", np.float64, ("radius",))
-        DWell.long_name = "Mercier stability criterion magnetic well term"
+        DWell.long_name = "Mercier stability criterion magnetic well term, on full mesh"
         DWell.units = "1/Wb^2"
-        DWell[:] = grid.compress(data["D_well"])
+        DWell[:] = grid_full.compress(data_full["D_well"])
         DWell[0] = 0
 
         DGeod = file.createVariable("DGeod", np.float64, ("radius",))
-        DGeod.long_name = "Mercier stability criterion geodesic curvature term"
+        DGeod.long_name = (
+            "Mercier stability criterion geodesic curvature term, on full mesh"
+        )
         DGeod.units = "1/Wb^2"
-        DGeod[:] = grid.compress(data["D_geodesic"])
+        DGeod[:] = grid_full.compress(data_full["D_geodesic"])
         DGeod[0] = 0
 
         DMerc = file.createVariable("DMerc", np.float64, ("radius",))
-        DMerc.long_name = "Mercier stability criterion"
+        DMerc.long_name = "Mercier stability criterion, on full mesh"
         DMerc.units = "1/Wb^2"
-        DMerc[:] = grid.compress(data["D_Mercier"])
+        DMerc[:] = grid_full.compress(data_full["D_Mercier"])
         DMerc[0] = 0
 
         timer.stop("parameters")
@@ -1129,7 +1132,7 @@ class VMECIO:
             .reshape((full_grid.num_rho, -1), order="F")
         )
         x_mn = np.zeros((surfs, m.size))
-        for i in range(surfs):
+        for i in range(1, surfs):  # skip NaN values at magnetic axis
             if eq.sym:
                 x_mn[i, :] = cosfit(data[i, :])
             else:
@@ -1183,7 +1186,7 @@ class VMECIO:
             .reshape((full_grid.num_rho, -1), order="F")
         )
         x_mn = np.zeros((surfs, m.size))
-        for i in range(surfs):
+        for i in range(1, surfs):  # skip NaN values at magnetic axis
             if eq.sym:
                 x_mn[i, :] = cosfit(data[i, :])
             else:

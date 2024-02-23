@@ -157,6 +157,7 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+        test(Equilibrium(iota=PowerSeriesProfile(0)).surface)
 
     @pytest.mark.unit
     def test_elongation(self):
@@ -171,6 +172,7 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
 
         test(get("HELIOTRON"))
+        test(get("HELIOTRON").surface)
 
     @pytest.mark.unit
     def test_energy(self):

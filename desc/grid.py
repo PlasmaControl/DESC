@@ -1,10 +1,13 @@
 """Classes for representing flux coordinates."""
 
+from abc import ABC, abstractmethod
+
 import numpy as np
 from scipy import optimize, special
 
 from desc.backend import jnp, put
 from desc.io import IOAble
+from desc.utils import Index
 
 __all__ = [
     "Grid",
@@ -16,20 +19,8 @@ __all__ = [
 ]
 
 
-class Grid(IOAble):
-    """Base class for collocation grids.
-
-    Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
-    to pass in a custom set of collocation nodes.
-
-    Parameters
-    ----------
-    nodes : ndarray of float, size(num_nodes,3)
-        node coordinates, in (rho,theta,zeta)
-    sort : bool
-        whether to sort the nodes for use with FFT method.
-
-    """
+class _Grid(IOAble, ABC):
+    """Base class for collocation grids."""
 
     # TODO: calculate weights automatically using voronoi / delaunay triangulation
     _io_attrs_ = [
@@ -51,57 +42,10 @@ class Grid(IOAble):
         "_inverse_zeta_idx",
     ]
 
-    def __init__(self, nodes, sort=True):
-        # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
-        # This change measurably reduces memory usage of objects that
-        # define all attributes in their __init__ method.
-        self._NFP = 1
-        self._sym = False
-        self._node_pattern = "custom"
-        self._nodes, self._spacing = self._create_nodes(nodes)
-        self._enforce_symmetry()
-        if sort:
-            self._sort_nodes()
-        self._axis = self._find_axis()
-        (
-            self._unique_rho_idx,
-            self._inverse_rho_idx,
-            self._unique_theta_idx,
-            self._inverse_theta_idx,
-            self._unique_zeta_idx,
-            self._inverse_zeta_idx,
-        ) = self._find_unique_inverse_nodes()
-        self._L = self.num_rho
-        self._M = self.num_theta
-        self._N = self.num_zeta
-        self._weights = self._scale_weights()
-
-    def _create_nodes(self, nodes):
-        """Allow for custom node creation.
-
-        Parameters
-        ----------
-        nodes : ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
-
-        Returns
-        -------
-        nodes : ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
-        spacing : ndarray of float, size(num_nodes,3)
-            Node spacing, in (rho,theta,zeta).
-
-        """
-        nodes = np.atleast_2d(nodes).reshape((-1, 3)).astype(float)
-        # Do not alter nodes given by the user for custom grids.
-        # In particular, do not modulo nodes by 2pi or 2pi/NFP.
-        # This may cause the surface_integrals() function to fail recognizing
-        # surfaces outside the interval [0, 2pi] as duplicates. However, most
-        # surface integral computations are done with LinearGrid anyway.
-        spacing = (  # make weights sum to 4pi^2
-            np.ones_like(nodes) * np.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
-        )
-        return nodes, spacing
+    @abstractmethod
+    def _create_nodes(self, *args, **kwargs):
+        """Allow for custom node creation."""
+        pass
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry.
@@ -193,8 +137,8 @@ class Grid(IOAble):
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce duplicate node weights."""
         nodes = self.nodes.copy().astype(float)
-        nodes[:, 1] %= 2 * np.pi
-        nodes[:, 2] %= 2 * np.pi / self.NFP
+        nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
+        nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))
         # reduce weights for duplicated nodes
         _, inverse, counts = np.unique(
             nodes, axis=0, return_inverse=True, return_counts=True
@@ -203,7 +147,10 @@ class Grid(IOAble):
         temp_spacing = self.spacing.copy()
         temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
         # scale weights sum to full volume
-        temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
+        if temp_spacing.prod(axis=1).sum():
+            temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (
+                1 / 3
+            )
         weights = temp_spacing.prod(axis=1)
 
         # Spacing is the differential element used for integration over surfaces.
@@ -226,9 +173,12 @@ class Grid(IOAble):
         # For this reason, duplicates should typically be deleted rather than rescaled.
         # Note we multiply each column by duplicates^(1/6) to account for the extra
         # division by duplicates^(1/2) in one of the columns above.
-        self._spacing *= (
-            4 * np.pi**2 / (self.spacing.T * duplicates ** (1 / 6)).prod(axis=0).sum()
-        ) ** (1 / 3)
+        if (self.spacing.T * duplicates ** (1 / 6)).prod(axis=0).sum():
+            self._spacing *= (
+                4
+                * np.pi**2
+                / (self.spacing.T * duplicates ** (1 / 6)).prod(axis=0).sum()
+            ) ** (1 / 3)
         return weights
 
     @property
@@ -437,7 +387,95 @@ class Grid(IOAble):
         return x
 
 
-class LinearGrid(Grid):
+class Grid(_Grid):
+    """Collocation grid with custom node placement.
+
+    Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
+    to pass in a custom set of collocation nodes.
+
+    Parameters
+    ----------
+    nodes : ndarray of float, size(num_nodes,3)
+        Node coordinates, in (rho,theta,zeta)
+    sort : bool
+        Whether to sort the nodes for use with FFT method.
+    jitable : bool
+        Whether to skip certain checks and conditionals that don't work under jit.
+        Allows grid to be created on the fly with custom nodes, but weights, symmetry
+        etc may be wrong if grid contains duplicate nodes.
+    """
+
+    def __init__(self, nodes, sort=False, jitable=False):
+        # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
+        # This change measurably reduces memory usage of objects that
+        # define all attributes in their __init__ method.
+        self._NFP = 1
+        self._sym = False
+        self._node_pattern = "custom"
+        self._nodes, self._spacing = self._create_nodes(nodes)
+        if sort:
+            self._sort_nodes()
+        if jitable:
+            # dont do anything with symmetry since that changes # of nodes
+            # avoid point at the axis, for now. FIXME: make axis boolean mask?
+            r, t, z = self._nodes.T
+            r = jnp.where(r == 0, 1e-12, r)
+            self._nodes = jnp.array([r, t, z]).T
+            self._axis = np.array([], dtype=int)
+            self._unique_rho_idx = np.arange(self._nodes.shape[0])
+            self._unique_theta_idx = np.arange(self._nodes.shape[0])
+            self._unique_zeta_idx = np.arange(self._nodes.shape[0])
+            self._inverse_rho_idx = np.arange(self._nodes.shape[0])
+            self._inverse_theta_idx = np.arange(self._nodes.shape[0])
+            self._inverse_zeta_idx = np.arange(self._nodes.shape[0])
+            # don't do anything fancy with weights
+            self._weights = self._spacing.prod(axis=1)
+        else:
+            self._enforce_symmetry()
+            self._axis = self._find_axis()
+            (
+                self._unique_rho_idx,
+                self._inverse_rho_idx,
+                self._unique_theta_idx,
+                self._inverse_theta_idx,
+                self._unique_zeta_idx,
+                self._inverse_zeta_idx,
+            ) = self._find_unique_inverse_nodes()
+            self._weights = self._scale_weights()
+
+        self._L = self.num_rho
+        self._M = self.num_theta
+        self._N = self.num_zeta
+
+    def _create_nodes(self, nodes):
+        """Allow for custom node creation.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+
+        Returns
+        -------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        spacing : ndarray of float, size(num_nodes,3)
+            Node spacing, in (rho,theta,zeta).
+
+        """
+        nodes = jnp.atleast_2d(nodes).reshape((-1, 3)).astype(float)
+        # Do not alter nodes given by the user for custom grids.
+        # In particular, do not modulo nodes by 2pi or 2pi/NFP.
+        # This may cause the surface_integrals() function to fail recognizing
+        # surfaces outside the interval [0, 2pi] as duplicates. However, most
+        # surface integral computations are done with LinearGrid anyway.
+        spacing = (  # make weights sum to 4pi^2
+            jnp.ones_like(nodes) * jnp.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
+        )
+        return nodes, spacing
+
+
+class LinearGrid(_Grid):
     """Grid in which the nodes are linearly spaced in each coordinate.
 
     Useful for plotting and other analysis, though not very efficient for using as the
@@ -461,13 +499,18 @@ class LinearGrid(Grid):
         If True, theta=0 and zeta=0 are duplicated after a full period.
         Should be False for use with FFT. (Default = False).
         This boolean is ignored if an array is given for theta or zeta.
-    rho : ndarray of float, optional
+    rho : int or ndarray of float, optional
         Radial coordinates (Default = 1.0).
-    theta : ndarray of float, optional
+        Alternatively, the number of radial coordinates (if an integer).
+        Note that if supplied the values may be reordered in the resulting grid.
+    theta : int or ndarray of float, optional
         Poloidal coordinates (Default = 0.0).
-    zeta : ndarray of float, optional
+        Alternatively, the number of poloidal coordinates (if an integer).
+        Note that if supplied the values may be reordered in the resulting grid.
+    zeta : int or ndarray of float, optional
         Toroidal coordinates (Default = 0.0).
-
+        Alternatively, the number of toroidal coordinates (if an integer).
+        Note that if supplied the values may be reordered in the resulting grid.
     """
 
     def __init__(
@@ -727,9 +770,22 @@ class LinearGrid(Grid):
         self._endpoint = (
             t.size > 0
             and z.size > 0
-            and (t[0] == 0 and t[-1] == THETA_ENDPOINT)
-            and (z[0] == 0 and z[-1] == ZETA_ENDPOINT)
-        )
+            and (
+                (
+                    np.isclose(t[0], 0, atol=1e-12)
+                    and np.isclose(t[-1], THETA_ENDPOINT, atol=1e-12)
+                )
+                or (t.size == 1 and z.size > 1)
+            )
+            and (
+                (
+                    np.isclose(z[0], 0, atol=1e-12)
+                    and np.isclose(z[-1], ZETA_ENDPOINT, atol=1e-12)
+                )
+                or (z.size == 1 and t.size > 1)
+            )
+        )  # if only one theta or one zeta point, can have endpoint=True
+        # if the other one is a full array
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()
@@ -786,7 +842,7 @@ class LinearGrid(Grid):
         return self.__dict__.setdefault("_endpoint", False)
 
 
-class QuadratureGrid(Grid):
+class QuadratureGrid(_Grid):
     """Grid used for numerical quadrature.
 
     Exactly integrates a Fourier-Zernike basis of resolution (L,M,N)
@@ -916,7 +972,7 @@ class QuadratureGrid(Grid):
             self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
 
 
-class ConcentricGrid(Grid):
+class ConcentricGrid(_Grid):
     """Grid in which the nodes are arranged in concentric circles.
 
     Nodes are arranged concentrically within each toroidal cross-section, with more
@@ -951,7 +1007,6 @@ class ConcentricGrid(Grid):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
-
         self._L = L
         self._M = M
         self._N = N
@@ -1318,7 +1373,7 @@ def find_most_rational_surfaces(iota, n, atol=1e-14, itol=1e-14, eps=1e-12, **kw
     itol : float, optional
         tolerance for rounding float to nearest int
     eps : float, optional
-        amount to dislace points to avoid duplicates
+        amount to displace points to avoid duplicates
 
     Returns
     -------

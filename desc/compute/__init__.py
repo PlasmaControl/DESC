@@ -5,11 +5,11 @@ All compute functions take the following arguments:
 Parameters
 ----------
 params : dict of ndarray
-    Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+    Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc.
 transforms : dict of Transform
-    Transforms for R, Z, lambda, etc
+    Transforms for R, Z, lambda, etc.
 profiles : dict of Profile
-    Profile objects for pressure, iota, current, etc
+    Profile objects for pressure, iota, current, etc.
 data : dict of ndarray
     Data computed so far, generally output from other compute functions
 kwargs : dict
@@ -30,6 +30,7 @@ from . import (
     _basis_vectors,
     _bootstrap,
     _core,
+    _curve,
     _equil,
     _field,
     _geometry,
@@ -37,10 +38,11 @@ from . import (
     _profiles,
     _qs,
     _stability,
+    _surface,
 )
 from .data_index import data_index
+from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from .utils import (
-    arg_order,
     compute,
     get_data_deps,
     get_derivs,
@@ -55,36 +57,38 @@ from .utils import (
 # compute something, it's easier to just do it once for all quantities when we first
 # import the compute module.
 def _build_data_index():
-    for key in data_index.keys():
-        full = {
-            "data": get_data_deps(key, has_axis=False),
-            "transforms": get_derivs(key, has_axis=False),
-            "params": get_params(key, has_axis=False),
-            "profiles": get_profiles(key, has_axis=False),
-        }
-        data_index[key]["full_dependencies"] = full
 
-        full_with_axis_data = get_data_deps(key, has_axis=True)
-        if len(full["data"]) >= len(full_with_axis_data):
-            # Then this quantity and all its dependencies do not need anything
-            # extra to evaluate its limit at the magnetic axis.
-            # The dependencies in the `full` dictionary and the `full_with_axis`
-            # dictionary will be identical, so we assign the same reference to
-            # avoid storing a copy.
-            full_with_axis = full
-        else:
-            full_with_axis = {
-                "data": full_with_axis_data,
-                "transforms": get_derivs(key, has_axis=True),
-                "params": get_params(key, has_axis=True),
-                "profiles": get_profiles(key, has_axis=True),
+    for p in data_index:
+        for key in data_index[p]:
+            full = {
+                "data": get_data_deps(key, p, has_axis=False),
+                "transforms": get_derivs(key, p, has_axis=False),
+                "params": get_params(key, p, has_axis=False),
+                "profiles": get_profiles(key, p, has_axis=False),
             }
-            for _key, val in full_with_axis.items():
-                if full[_key] == val:
-                    # Nothing extra was needed to evaluate this quantity's limit.
-                    # One is a copy of the other; dereference to save memory.
-                    full_with_axis[_key] = full[_key]
-        data_index[key]["full_with_axis_dependencies"] = full_with_axis
+            data_index[p][key]["full_dependencies"] = full
+
+            full_with_axis_data = get_data_deps(key, p, has_axis=True)
+            if len(full["data"]) >= len(full_with_axis_data):
+                # Then this quantity and all its dependencies do not need anything
+                # extra to evaluate its limit at the magnetic axis.
+                # The dependencies in the `full` dictionary and the `full_with_axis`
+                # dictionary will be identical, so we assign the same reference to
+                # avoid storing a copy.
+                full_with_axis = full
+            else:
+                full_with_axis = {
+                    "data": full_with_axis_data,
+                    "transforms": get_derivs(key, p, has_axis=True),
+                    "params": get_params(key, p, has_axis=True),
+                    "profiles": get_profiles(key, p, has_axis=True),
+                }
+                for _key, val in full_with_axis.items():
+                    if full[_key] == val:
+                        # Nothing extra was needed to evaluate this quantity's limit.
+                        # One is a copy of the other; dereference to save memory.
+                        full_with_axis[_key] = full[_key]
+            data_index[p][key]["full_with_axis_dependencies"] = full_with_axis
 
 
 _build_data_index()

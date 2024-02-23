@@ -5,12 +5,15 @@ import numpy as np
 import pytest
 
 from desc.basis import (
+    ChebyshevDoubleFourierBasis,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
     PowerSeries,
     ZernikePolynomial,
+    chebyshev,
     fourier,
+    jacobi_poly_single,
     polyder_vec,
     polyval_vec,
     powers,
@@ -29,7 +32,7 @@ class TestBasis:
         """Test polyder_vec function."""
         p0 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
         p1 = polyder_vec(p0, 1)
-        p2 = polyder_vec(p0, 2)
+        p2 = polyder_vec(p0, 2, exact=True)
 
         correct_p1 = np.array([[0, 2, 0], [0, 0, 1], [0, 0, 0], [0, 2, 1]])
         correct_p2 = np.array([[0, 0, 2], [0, 0, 0], [0, 0, 0], [0, 0, 2]])
@@ -76,27 +79,27 @@ class TestBasis:
         exactdf = np.array(
             [
                 np.asarray(mpmath.polyval(list(ci), r), dtype=float)
-                for ci in polyder_vec(coeffs, 1)
+                for ci in polyder_vec(coeffs, 1, exact=True)
             ]
         ).T
         exactddf = np.array(
             [
                 np.asarray(mpmath.polyval(list(ci), r), dtype=float)
-                for ci in polyder_vec(coeffs, 2)
+                for ci in polyder_vec(coeffs, 2, exact=True)
             ]
         ).T
         exactdddf = np.array(
             [
                 np.asarray(mpmath.polyval(list(ci), r), dtype=float)
-                for ci in polyder_vec(coeffs, 3)
+                for ci in polyder_vec(coeffs, 3, exact=True)
             ]
         ).T
 
         mpmath.mp.dps = 15
-        approx1f = zernike_radial(r[:, np.newaxis], l, m)
-        approx1df = zernike_radial(r[:, np.newaxis], l, m, dr=1)
-        approx1ddf = zernike_radial(r[:, np.newaxis], l, m, dr=2)
-        approx1dddf = zernike_radial(r[:, np.newaxis], l, m, dr=3)
+        approx1f = zernike_radial(r, l, m)
+        approx1df = zernike_radial(r, l, m, dr=1)
+        approx1ddf = zernike_radial(r, l, m, dr=2)
+        approx1dddf = zernike_radial(r, l, m, dr=3)
         approx2f = zernike_radial_poly(r[:, np.newaxis], l, m)
         approx2df = zernike_radial_poly(r[:, np.newaxis], l, m, dr=1)
         approx2ddf = zernike_radial_poly(r[:, np.newaxis], l, m, dr=2)
@@ -127,44 +130,120 @@ class TestBasis:
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     @pytest.mark.unit
-    def test_zernike_radial(self):
-        """Test zernike_radial function, comparing to analytic formulas."""
-        l = np.array([3, 4, 6])
-        m = np.array([1, 2, 2])
+    def test_chebyshev(self):
+        """Test chebyshev function for Chebyshev polynomial evaluation."""
+        l = np.array([0, 1, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
 
-        # correct value functions
-        def Z3_1(x):
-            return 3 * x**3 - 2 * x
+        correct_vals = np.array([np.ones_like(r), 2 * r - 1, 8 * r**2 - 8 * r + 1]).T
+        values = chebyshev(r[:, np.newaxis], l, dr=0)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
-        def Z4_2(x):
-            return 4 * x**4 - 3 * x**2
+        with pytest.raises(NotImplementedError):
+            chebyshev(r[:, np.newaxis], l, dr=1)
 
-        def Z6_2(x):
-            return 15 * x**6 - 20 * x**4 + 6 * x**2
+    @pytest.mark.unit
+    def test_zernike_radial(self):  # noqa: C901
+        """Test zernike_radial function, comparing to analytic formulas."""
+        # https://en.wikipedia.org/wiki/Zernike_polynomials#Radial_polynomials
 
-        # correct derivative functions
-        def dZ3_1(x):
-            return 9 * x**2 - 2
+        def Z3_1(x, dx=0):
+            if dx == 0:
+                return 3 * x**3 - 2 * x
+            if dx == 1:
+                return 9 * x**2 - 2
+            if dx == 2:
+                return 18 * x
+            if dx == 3:
+                return np.full_like(x, 18)
+            if dx >= 4:
+                return np.zeros_like(x)
 
-        def dZ4_2(x):
-            return 16 * x**3 - 6 * x
+        def Z4_2(x, dx=0):
+            if dx == 0:
+                return 4 * x**4 - 3 * x**2
+            if dx == 1:
+                return 16 * x**3 - 6 * x
+            if dx == 2:
+                return 48 * x**2 - 6
+            if dx == 3:
+                return 96 * x
+            if dx == 4:
+                return np.full_like(x, 96)
+            if dx >= 5:
+                return np.zeros_like(x)
 
-        def dZ6_2(x):
-            return 90 * x**5 - 80 * x**3 + 12 * x
+        def Z6_2(x, dx=0):
+            if dx == 0:
+                return 15 * x**6 - 20 * x**4 + 6 * x**2
+            if dx == 1:
+                return 90 * x**5 - 80 * x**3 + 12 * x
+            if dx == 2:
+                return 450 * x**4 - 240 * x**2 + 12
+            if dx == 3:
+                return 1800 * x**3 - 480 * x
+            if dx == 4:
+                return 5400 * x**2 - 480
+            if dx == 5:
+                return 10800 * x
+            if dx == 6:
+                return np.full_like(x, 10800)
+            if dx >= 7:
+                return np.zeros_like(x)
 
-        correct_vals = np.array([Z3_1(r), Z4_2(r), Z6_2(r)]).T
-        correct_ders = np.array([dZ3_1(r), dZ4_2(r), dZ6_2(r)]).T
+        l = np.array([3, 4, 6, 4])
+        m = np.array([1, 2, 2, 2])
+        r = np.linspace(0, 1, 11)  # rho coordinates
+        max_dr = 4
+        desired = {
+            dr: np.array([Z3_1(r, dr), Z4_2(r, dr), Z6_2(r, dr), Z4_2(r, dr)]).T
+            for dr in range(max_dr + 1)
+        }
+        radial = {dr: zernike_radial(r, l, m, dr) for dr in range(max_dr + 1)}
+        radial_poly = {
+            dr: zernike_radial_poly(r[:, np.newaxis], l, m, dr)
+            for dr in range(max_dr + 1)
+        }
+        for dr in range(max_dr + 1):
+            np.testing.assert_allclose(radial[dr], desired[dr], err_msg=dr)
+            np.testing.assert_allclose(radial_poly[dr], desired[dr], err_msg=dr)
 
-        values1 = zernike_radial(r[:, np.newaxis], l, m, 0)
-        derivs1 = zernike_radial(r[:, np.newaxis], l, m, 1)
-        values2 = zernike_radial_poly(r[:, np.newaxis], l, m, 0)
-        derivs2 = zernike_radial_poly(r[:, np.newaxis], l, m, 1)
+    @pytest.mark.unit
+    def test_jacobi_poly_single(self):
+        """Test Jacobi Polynomial evaluation for special cases."""
+        # https://en.wikipedia.org/wiki/Jacobi_polynomials#Special_cases
 
-        np.testing.assert_allclose(values1, correct_vals, atol=1e-8)
-        np.testing.assert_allclose(derivs1, correct_ders, atol=1e-8)
-        np.testing.assert_allclose(values2, correct_vals, atol=1e-8)
-        np.testing.assert_allclose(derivs2, correct_ders, atol=1e-8)
+        def exact(r, n, alpha, beta):
+            if n == 0:
+                return np.ones_like(r)
+            elif n == 1:
+                return (alpha + 1) + (alpha + beta + 2) * ((r - 1) / 2)
+            elif n == 2:
+                a0 = (alpha + 1) * (alpha + 2) / 2
+                a1 = (alpha + 2) * (alpha + beta + 3)
+                a2 = (alpha + beta + 3) * (alpha + beta + 4) / 2
+                z = (r - 1) / 2
+                return a0 + a1 * z + a2 * z**2
+            elif n < 0:
+                return np.zeros_like(r)
+
+        r = np.linspace(0, 1, 11)
+        # alpha and beta pairs for test
+        pairs = np.array([[2, 3], [3, 0], [1, 1], [10, 4]])
+        n_values = np.array([-1, -2, 0, 1, 2])
+
+        for pair in pairs:
+            alpha = pair[0]
+            beta = pair[1]
+            P0 = jacobi_poly_single(r, 0, alpha, beta)
+            P1 = jacobi_poly_single(r, 1, alpha, beta)
+            desired = {n: exact(r, n, alpha, beta) for n in n_values}
+            values = {
+                n: jacobi_poly_single(r, n, alpha, beta, P1, P0) for n in n_values
+            }
+
+            for n in n_values:
+                np.testing.assert_allclose(values[n], desired[n], err_msg=n)
 
     @pytest.mark.unit
     def test_fourier(self):
@@ -245,6 +324,10 @@ class TestBasis:
         zpf = ZernikePolynomial(L=0, M=3, spectral_indexing="fringe")
         zpf.change_resolution(L=6, M=3)
         assert zpf.num_modes == 16
+
+        cdf = ChebyshevDoubleFourierBasis(L=2, M=2, N=0)
+        cdf.change_resolution(L=3, M=2, N=1)
+        assert cdf.num_modes == 60
 
         fz = FourierZernikeBasis(L=3, M=3, N=0)
         fz.change_resolution(L=3, M=3, N=1)

@@ -2,7 +2,7 @@
 
 import sys
 
-from desc.io import InputReader
+from desc.input_reader import InputReader
 
 
 def main(cl_args=sys.argv[1:]):
@@ -37,7 +37,7 @@ def main(cl_args=sys.argv[1:]):
         and (inputs[-1]["pres_ratio"] is None)
         and (inputs[-1]["bdry_ratio"] is None)
     ):
-        eq = Equilibrium(**inputs[-1])
+        eq = Equilibrium(**inputs[-1], check_kwargs=False)
         equil_fam = EquilibriaFamily.solve_continuation_automatic(
             eq,
             objective=inputs[-1]["objective"],

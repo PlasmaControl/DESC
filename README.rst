@@ -14,10 +14,10 @@ DESC solves for and optimizes 3D MHD equilibria using pseudo-spectral numerical 
 The theoretical approach and implementation details used by DESC are presented in these papers [1]_ [2]_ [3]_ [4]_ and documented at Theory_.
 Please cite our work if you use DESC!
 
-.. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. [`Physics of Plasmas <https://aip.scitation.org/doi/full/10.1063/5.0020743>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf>`__]
-.. [2] Panici, D. et al (2022). The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations. [`arxiv <https://arxiv.org/abs/2203.17173>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/panici2022/panici2022equilibria.pdf>`__]
-.. [3] Conlin, R. et al. (2022). The DESC Stellarator Code Suite Part II: Perturbation and continuation methods. [`arxiv <https://arxiv.org/abs/2203.15927>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/conlin2022/conlin2022perturbations.pdf>`__]
-.. [4] Dudt, D. et al. (2022). The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization. [`arxiv <https://arxiv.org/abs/2204.00078>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/dudt2022/dudt2022optimization.pdf>`__]
+.. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. [`Physics of Plasmas <https://doi.org/10.1063/5.0020743>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/dudt2020/dudt2020desc.pdf>`__]
+.. [2] Panici, D. et al (2023). The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations. [`JPP <https://doi.org/10.1017/S0022377823000272>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/panici2022/Panici_DESC_Stellarator_suite_part_I_quick_accurate_equilibria.pdf>`__]
+.. [3] Conlin, R. et al. (2023). The DESC Stellarator Code Suite Part II: Perturbation and continuation methods. [`JPP <https://doi.org/10.1017/S0022377823000399>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/conlin2022/conlin2022perturbations.pdf>`__]
+.. [4] Dudt, D. et al. (2023). The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization. [`JPP <https://doi.org/10.1017/S0022377823000235>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/publications/dudt2022/dudt2022optimization.pdf>`__]
 .. _Theory: https://desc-docs.readthedocs.io/en/latest/theory_general.html
 
 Quick Start
@@ -29,19 +29,28 @@ Quick Start
 The easiest way to install DESC is from pypi: :console:`pip install desc-opt`
 
 For more detailed instructions on installing DESC and its dependencies, see Installation_.
-The code is run using the syntax :console:`desc <path/to/input_file>` and the full list of command line options are given in `Command Line Interface`_. (Note that you may have to prepend the command with :console:`python -m`)
-DESC requires an input file to specify the equilibrium and solver options, and can also accept VMEC input files.
-Refer to Inputs_ for documentation on how to format the input file.
-The equilibrium solution is output in a HDF5 binary file, whose format is detailed in Outputs_.
+The code is run using the syntax :console:`desc <path/to/inputfile>` and the full list of command line options are given in `Command Line Interface`_. (Note that you may have to prepend the command with :console:`python -m`)
 
-As an example usage, to use DESC to solve for the equilibrium of the high-beta, D-shaped plasma described with the DSHAPE input file, the command from the :console:`DESC` directory is
-:console:`desc -p examples/DESC/DSHAPE`
-Where the :console:`-p` flag tells DESC to plot the results once it finishes.
+DESC can be ran in two ways:
+
+The first is through an input file specifying the equilibrium and solver options, this way can also can also accept VMEC input files.
+
+The second is through a python script, where the equilibrium and solver options are specified programmatically, this method offers much more flexibility over what types of equilibrium solution, optimization and analysis can be performed.
+See the tutorial `Script Interface`_ for more detailed information.
+
+Refer to `Inputs`_ for documentation on how to format the input file.
+The equilibrium solution is output in a HDF5 binary file, whose format is detailed in `Outputs`_.
+
+As an example usage of the input file method, to use DESC to solve for the equilibrium of the high-beta, D-shaped plasma described with the DSHAPE input file, the command from the :console:`DESC` directory is
+:console:`desc -p desc/examples/DSHAPE`, where the :console:`-p` flag tells DESC to plot the results once it finishes.
+
+An example of the script usage to solve and optimize an equilibrium, refer to the python script `desc/examples/precise_QA.py`, which can be run from the :console:`DESC` directory from the command line with :console:`python3 desc/examples/precise_QA.py`
 
 .. _Installation: https://desc-docs.readthedocs.io/en/latest/installation.html
 .. _Command Line Interface: https://desc-docs.readthedocs.io/en/latest/command_line.html
 .. _Inputs: https://desc-docs.readthedocs.io/en/latest/input.html
 .. _Outputs: https://desc-docs.readthedocs.io/en/latest/output.html
+.. _Script Interface: https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/02_Script_Interface.html
 
 Repository Contents
 ===================

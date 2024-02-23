@@ -1,6 +1,7 @@
 """Functions for flux surface averages and vector algebra operations."""
 
 import copy
+import inspect
 import warnings
 
 import numpy as np
@@ -11,27 +12,6 @@ from desc.grid import ConcentricGrid, LinearGrid
 
 from .data_index import data_index
 
-# defines the order in which objective arguments get concatenated into the state vector
-arg_order = (
-    "R_lmn",
-    "Z_lmn",
-    "L_lmn",
-    "W_lmn",
-    "p_l",
-    "i_l",
-    "c_l",
-    "Psi",
-    "Te_l",
-    "ne_l",
-    "Ti_l",
-    "Zeff_l",
-    "Ra_n",
-    "Za_n",
-    "Wa_n",
-    "Rb_lmn",
-    "Zb_lmn",
-    "Wb_lmn",
-)
 # map from profile name to equilibrium parameter name
 profile_names = {
     "pressure": "p_l",
@@ -44,19 +24,27 @@ profile_names = {
 }
 
 
-def _sort_args(args):
-    return [arg for arg in arg_order if arg in args]
+def _parse_parameterization(p):
+    if isinstance(p, str):
+        return p
+    klass = p.__class__
+    module = klass.__module__
+    if module == "builtins":
+        return klass.__qualname__  # avoid outputs like 'builtins.str'
+    return module + "." + klass.__qualname__
 
 
-def compute(names, params, transforms, profiles, data=None, **kwargs):
+def compute(parameterization, names, params, transforms, profiles, data=None, **kwargs):
     """Compute the quantity given by name on grid.
 
     Parameters
     ----------
+    parameterization : str, class, or instance
+        Type of object to compute for, eg Equilibrium, Curve, etc.
     names : str or array-like of str
         Name(s) of the quantity(s) to compute.
     params : dict of ndarray
-        Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+        Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc.
         Defaults to attributes of self.
     transforms : dict of Transform
         Transforms for R, Z, lambda, etc. Default is to build from grid
@@ -72,27 +60,31 @@ def compute(names, params, transforms, profiles, data=None, **kwargs):
         Computed quantity and intermediate variables.
 
     """
+    p = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]
     for name in names:
-        if name not in data_index:
-            raise ValueError("Unrecognized value '{}'.".format(name))
-    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma"}
+        if name not in data_index[p]:
+            raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
+    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma", "basis", "method"}
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
 
     for name in names:
-        assert _has_params(name, params), f"Don't have params to compute {name}"
-        assert _has_profiles(name, profiles), f"Don't have profiles to compute {name}"
+        assert _has_params(name, params, p), f"Don't have params to compute {name}"
+        assert _has_profiles(
+            name, profiles, p
+        ), f"Don't have profiles to compute {name}"
         assert _has_transforms(
-            name, transforms
+            name, transforms, p
         ), f"Don't have transforms to compute {name}"
 
     if data is None:
         data = {}
 
     data = _compute(
+        p,
         names,
         params=params,
         transforms=transforms,
@@ -103,16 +95,21 @@ def compute(names, params, transforms, profiles, data=None, **kwargs):
     return data
 
 
-def _compute(names, params, transforms, profiles, data=None, **kwargs):
+def _compute(
+    parameterization, names, params, transforms, profiles, data=None, **kwargs
+):
     """Same as above but without checking inputs for faster recursion."""
     for name in names:
         if name in data:
             # don't compute something that's already been computed
             continue
-        if not has_dependencies(name, params, transforms, profiles, data):
+        if not has_dependencies(
+            parameterization, name, params, transforms, profiles, data
+        ):
             # then compute the missing dependencies
             data = _compute(
-                data_index[name]["dependencies"]["data"],
+                parameterization,
+                data_index[parameterization][name]["dependencies"]["data"],
                 params=params,
                 transforms=transforms,
                 profiles=profiles,
@@ -121,7 +118,10 @@ def _compute(names, params, transforms, profiles, data=None, **kwargs):
             )
             if transforms["grid"].axis.size:
                 data = _compute(
-                    data_index[name]["dependencies"]["axis_limit_data"],
+                    parameterization,
+                    data_index[parameterization][name]["dependencies"][
+                        "axis_limit_data"
+                    ],
                     params=params,
                     transforms=transforms,
                     profiles=profiles,
@@ -129,17 +129,22 @@ def _compute(names, params, transforms, profiles, data=None, **kwargs):
                     **kwargs,
                 )
         # now compute the quantity
-        data = data_index[name]["fun"](params, transforms, profiles, data, **kwargs)
+        data = data_index[parameterization][name]["fun"](
+            params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
+        )
+
     return data
 
 
-def get_data_deps(keys, has_axis=False):
+def get_data_deps(keys, obj, has_axis=False):
     """Get list of data keys needed to compute a given quantity.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
 
@@ -148,22 +153,23 @@ def get_data_deps(keys, has_axis=False):
     deps : list of str
         Names of quantities needed to compute key
     """
+    p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
 
     def _get_deps_1_key(key):
         if has_axis:
-            if "full_with_axis_dependencies" in data_index[key]:
-                return data_index[key]["full_with_axis_dependencies"]["data"]
-        elif "full_dependencies" in data_index[key]:
-            return data_index[key]["full_dependencies"]["data"]
-        deps = data_index[key]["dependencies"]["data"]
+            if "full_with_axis_dependencies" in data_index[p][key]:
+                return data_index[p][key]["full_with_axis_dependencies"]["data"]
+        elif "full_dependencies" in data_index[p][key]:
+            return data_index[p][key]["full_dependencies"]["data"]
+        deps = data_index[p][key]["dependencies"]["data"]
         if len(deps) == 0:
             return deps
         out = deps.copy()  # to avoid modifying the data_index
         for dep in deps:
             out += _get_deps_1_key(dep)
         if has_axis:
-            axis_limit_deps = data_index[key]["dependencies"]["axis_limit_data"]
+            axis_limit_deps = data_index[p][key]["dependencies"]["axis_limit_data"]
             out += axis_limit_deps.copy()  # to be safe
             for dep in axis_limit_deps:
                 out += _get_deps_1_key(dep)
@@ -175,13 +181,15 @@ def get_data_deps(keys, has_axis=False):
     return sorted(list(set(out)))
 
 
-def get_derivs(keys, has_axis=False):
+def get_derivs(keys, obj, has_axis=False):
     """Get dict of derivative orders needed to compute a given quantity.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
 
@@ -191,18 +199,19 @@ def get_derivs(keys, has_axis=False):
         Orders of derivatives needed to compute key.
         Keys for R, Z, L, etc
     """
+    p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
 
     def _get_derivs_1_key(key):
         if has_axis:
-            if "full_with_axis_dependencies" in data_index[key]:
-                return data_index[key]["full_with_axis_dependencies"]["transforms"]
-        elif "full_dependencies" in data_index[key]:
-            return data_index[key]["full_dependencies"]["transforms"]
-        deps = [key] + get_data_deps(key, has_axis=has_axis)
+            if "full_with_axis_dependencies" in data_index[p][key]:
+                return data_index[p][key]["full_with_axis_dependencies"]["transforms"]
+        elif "full_dependencies" in data_index[p][key]:
+            return data_index[p][key]["full_dependencies"]["transforms"]
+        deps = [key] + get_data_deps(key, p, has_axis=has_axis)
         derivs = {}
         for dep in deps:
-            for key, val in data_index[dep]["dependencies"]["transforms"].items():
+            for key, val in data_index[p][dep]["dependencies"]["transforms"].items():
                 if key not in derivs:
                     derivs[key] = []
                 derivs[key] += val
@@ -218,19 +227,21 @@ def get_derivs(keys, has_axis=False):
     return {key: np.unique(val, axis=0).tolist() for key, val in derivs.items()}
 
 
-def get_profiles(keys, eq=None, grid=None, has_axis=False, **kwargs):
+def get_profiles(keys, obj, grid=None, has_axis=False, jitable=False, **kwargs):
     """Get profiles needed to compute a given quantity on a given grid.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index.
-    eq : Equilibrium
-        Equilibrium to compute quantity for.
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     grid : Grid
         Grid to compute quantity on.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
+    jitable: bool
+        Whether to skip certain checks so that this operation works under JIT
 
     Returns
     -------
@@ -240,69 +251,71 @@ def get_profiles(keys, eq=None, grid=None, has_axis=False, **kwargs):
         otherwise, returns a dict of Profiles
         Keys for pressure, iota, etc.
     """
+    p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
     has_axis = has_axis or (grid is not None and grid.axis.size)
-    deps = list(keys) + get_data_deps(keys, has_axis=has_axis)
+    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis)
     profs = []
     for key in deps:
-        profs += data_index[key]["dependencies"]["profiles"]
-    # kludge for now to always get all profiles until we break up compute funs
-    profs += ["iota", "current"]
+        profs += data_index[p][key]["dependencies"]["profiles"]
     profs = sorted(list(set(profs)))
-    if eq is None:
+    if isinstance(obj, str) or inspect.isclass(obj):
         return profs
     # need to use copy here because profile may be None
-    profiles = {name: copy.deepcopy(getattr(eq, name)) for name in profs}
-    if grid is None:
-        return profiles
-    for val in profiles.values():
-        if val is not None:
-            val.grid = grid
+    profiles = {name: copy.deepcopy(getattr(obj, name)) for name in profs}
     return profiles
 
 
-def get_params(keys, eq=None, has_axis=False, **kwargs):
+def get_params(keys, obj, has_axis=False, **kwargs):
     """Get parameters needed to compute a given quantity.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
-    eq : Equilibrium
-        Equilibrium to compute quantity for.
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
 
     Returns
     -------
-    profiles : list of str or dict of ndarray
+    params : list of str or dict of ndarray
         Parameters needed to compute key.
         If eq is None, returns a list of the names of params needed
         otherwise, returns a dict of ndarray with keys for R_lmn, Z_lmn, etc.
     """
+    p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-    deps = list(keys) + get_data_deps(keys, has_axis=has_axis)
+    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis)
     params = []
     for key in deps:
-        params += data_index[key]["dependencies"]["params"]
-    params = _sort_args(list(set(params)))
-    if eq is None:
+        params += data_index[p][key]["dependencies"]["params"]
+    if isinstance(obj, str) or inspect.isclass(obj):
         return params
-    params = {name: np.atleast_1d(getattr(eq, name)).copy() for name in params}
-    return params
+    temp_params = {}
+    for name in params:
+        p = getattr(obj, name)
+        if isinstance(p, dict):
+            temp_params[name] = p.copy()
+        else:
+            temp_params[name] = jnp.atleast_1d(p)
+    return temp_params
 
 
-def get_transforms(keys, eq, grid, **kwargs):
+def get_transforms(keys, obj, grid, jitable=False, **kwargs):
     """Get transforms needed to compute a given quantity on a given grid.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
-    eq : Equilibrium
-        Equilibrium to compute quantity for.
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     grid : Grid
         Grid to compute quantity on
+    jitable: bool
+        Whether to skip certain checks so that this operation works under JIT
 
     Returns
     -------
@@ -314,48 +327,60 @@ def get_transforms(keys, eq, grid, **kwargs):
     from desc.basis import DoubleFourierSeries
     from desc.transform import Transform
 
+    method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
     keys = [keys] if isinstance(keys, str) else keys
-    derivs = get_derivs(keys, has_axis=grid.axis.size)
+    derivs = get_derivs(keys, obj, has_axis=grid.axis.size)
     transforms = {"grid": grid}
-    for c in ["R", "L", "Z", "W"]:
-        if c in derivs:
+    for c in derivs.keys():
+        if hasattr(obj, c + "_basis"):
             transforms[c] = Transform(
-                grid, getattr(eq, c + "_basis"), derivs=derivs[c], build=True
+                grid,
+                getattr(obj, c + "_basis"),
+                derivs=derivs[c],
+                build=True,
+                method=method,
             )
-    if "B" in derivs:
-        transforms["B"] = Transform(
-            grid,
-            DoubleFourierSeries(
-                M=kwargs.get("M_booz", 2 * eq.M),
-                N=kwargs.get("N_booz", 2 * eq.N),
-                NFP=eq.NFP,
-                sym=eq.R_basis.sym,
-            ),
-            derivs=derivs["B"],
-            build=True,
-            build_pinv=True,
-        )
-    if "w" in derivs:
-        transforms["w"] = Transform(
-            grid,
-            DoubleFourierSeries(
-                M=kwargs.get("M_booz", 2 * eq.M),
-                N=kwargs.get("N_booz", 2 * eq.N),
-                NFP=eq.NFP,
-                sym=eq.Z_basis.sym,
-            ),
-            derivs=derivs["w"],
-            build=True,
-            build_pinv=True,
-        )
+        elif c == "B":
+            transforms["B"] = Transform(
+                grid,
+                DoubleFourierSeries(
+                    M=kwargs.get("M_booz", 2 * obj.M),
+                    N=kwargs.get("N_booz", 2 * obj.N),
+                    NFP=obj.NFP,
+                    sym=obj.R_basis.sym,
+                ),
+                derivs=derivs["B"],
+                build=True,
+                build_pinv=True,
+                method=method,
+            )
+        elif c == "w":
+            transforms["w"] = Transform(
+                grid,
+                DoubleFourierSeries(
+                    M=kwargs.get("M_booz", 2 * obj.M),
+                    N=kwargs.get("N_booz", 2 * obj.N),
+                    NFP=obj.NFP,
+                    sym=obj.Z_basis.sym,
+                ),
+                derivs=derivs["w"],
+                build=True,
+                build_pinv=True,
+                method=method,
+            )
+        elif c not in transforms:
+            transforms[c] = getattr(obj, c)
+
     return transforms
 
 
-def has_dependencies(qty, params, transforms, profiles, data):
+def has_dependencies(parameterization, qty, params, transforms, profiles, data):
     """Determine if we have the ingredients needed to compute qty.
 
     Parameters
     ----------
+    parameterization : str or class
+        Type of thing we're checking dependencies for. eg desc.equilibrium.Equilibrium
     qty : str
         Name of something from the data index.
     params : dict of ndarray
@@ -373,47 +398,52 @@ def has_dependencies(qty, params, transforms, profiles, data):
         Whether we have what we need.
     """
     return (
-        _has_data(qty, data)
-        and (not transforms["grid"].axis.size or _has_axis_limit_data(qty, data))
-        and _has_params(qty, params)
-        and _has_profiles(qty, profiles)
-        and _has_transforms(qty, transforms)
+        _has_data(qty, data, parameterization)
+        and (
+            not transforms["grid"].axis.size
+            or _has_axis_limit_data(qty, data, parameterization)
+        )
+        and _has_params(qty, params, parameterization)
+        and _has_profiles(qty, profiles, parameterization)
+        and _has_transforms(qty, transforms, parameterization)
     )
 
 
-def _has_data(qty, data):
-    deps = data_index[qty]["dependencies"]["data"]
+def _has_data(qty, data, parameterization):
+    p = _parse_parameterization(parameterization)
+    deps = data_index[p][qty]["dependencies"]["data"]
     return all(d in data for d in deps)
 
 
-def _has_axis_limit_data(qty, data):
-    deps = data_index[qty]["dependencies"]["axis_limit_data"]
+def _has_axis_limit_data(qty, data, parameterization):
+    p = _parse_parameterization(parameterization)
+    deps = data_index[p][qty]["dependencies"]["axis_limit_data"]
     return all(d in data for d in deps)
 
 
-def _has_params(qty, params):
-    deps = data_index[qty]["dependencies"]["params"]
+def _has_params(qty, params, parameterization):
+    p = _parse_parameterization(parameterization)
+    deps = data_index[p][qty]["dependencies"]["params"]
     return all(d in params for d in deps)
 
 
-def _has_profiles(qty, profiles):
-    deps = data_index[qty]["dependencies"]["profiles"]
+def _has_profiles(qty, profiles, parameterization):
+    p = _parse_parameterization(parameterization)
+    deps = data_index[p][qty]["dependencies"]["profiles"]
     return all(d in profiles for d in deps)
 
 
-def _has_transforms(qty, transforms):
+def _has_transforms(qty, transforms, parameterization):
+    p = _parse_parameterization(parameterization)
     flags = {}
-    derivs = data_index[qty]["dependencies"]["transforms"]
-    for key in ["R", "Z", "L", "W", "w", "B"]:
-        if key not in derivs:
-            flags[key] = True
-        elif key not in transforms:
+    derivs = data_index[p][qty]["dependencies"]["transforms"]
+    for key in derivs.keys():
+        if key not in transforms:
             return False
         else:
             flags[key] = np.array(
                 [d in transforms[key].derivatives.tolist() for d in derivs[key]]
             ).all()
-
     return all(flags.values())
 
 
@@ -459,118 +489,70 @@ def cross(a, b, axis=-1):
     return jnp.cross(a, b, axis=axis)
 
 
-def _get_grid_surface(grid, surface_label):
-    """Return grid quantities associated with the given surface label.
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+    """Like jnp.linalg.norm, but without nan gradient at x=0.
 
     Parameters
     ----------
-    grid : Grid
-        Collocation grid containing the nodes to evaluate at.
-    surface_label : str
-        The surface label of rho, theta, or zeta.
-
-    Returns
-    -------
-    unique_size : ndarray
-        The number of the unique values of the surface_label.
-    inverse_idx : ndarray
-        Indexing array to go from unique values to full grid.
-    spacing : ndarray
-        The relevant columns of grid.spacing.
-    has_endpoint_dupe : bool
-        Whether this surface label's nodes have a duplicate at the endpoint
-        of a periodic domain. (e.g. a node at 0 and 2π).
-
-    """
-    assert surface_label in {"rho", "theta", "zeta"}
-    if surface_label == "rho":
-        unique_size = grid.num_rho
-        inverse_idx = grid.inverse_rho_idx
-        spacing = grid.spacing[:, 1:]
-        has_endpoint_dupe = False
-    elif surface_label == "theta":
-        unique_size = grid.num_theta
-        inverse_idx = grid.inverse_theta_idx
-        spacing = grid.spacing[:, [0, 2]]
-        has_endpoint_dupe = (grid.nodes[grid.unique_theta_idx[0], 1] == 0) & (
-            grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi
-        )
-    else:
-        unique_size = grid.num_zeta
-        inverse_idx = grid.inverse_zeta_idx
-        spacing = grid.spacing[:, :2]
-        has_endpoint_dupe = (grid.nodes[grid.unique_zeta_idx[0], 2] == 0) & (
-            grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP
-        )
-    return unique_size, inverse_idx, spacing, has_endpoint_dupe
-
-
-def compress(grid, x, surface_label="rho"):
-    """Compress x by returning only the elements at unique surface_label indices.
-
-    Parameters
-    ----------
-    grid : Grid
-        Collocation grid containing the nodes to evaluate at.
     x : ndarray
-        The array to compress.
-        Should usually represent a surface function (a function constant over a surface)
-        in an array that matches the grid's pattern.
-    surface_label : str
-        The surface label of rho, theta, or zeta.
-
-    Returns
-    -------
-    compress_x : ndarray
-        x[grid.unique_surface_label_indices]
-        This array will be sorted such that the
-            first element corresponds to the value associated with the smallest surface
-            last element  corresponds to the value associated with the largest surface
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
 
     """
-    assert surface_label in {"rho", "theta", "zeta"}
-    assert len(x) == grid.num_nodes
-    if surface_label == "rho":
-        return x[grid.unique_rho_idx]
-    if surface_label == "theta":
-        return x[grid.unique_theta_idx]
-    if surface_label == "zeta":
-        return x[grid.unique_zeta_idx]
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = jnp.linalg.norm(y, ord=ord, axis=axis)
+    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    return n
 
 
-def expand(grid, x, surface_label="rho"):
-    """Expand x by duplicating elements to match the grid's pattern.
+def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
+    """Normalize a vector to unit length, but without nan gradient at x=0.
 
     Parameters
     ----------
-    grid : Grid
-        Collocation grid containing the nodes to evaluate at.
     x : ndarray
-        Stores the values of a surface function (a function constant over a surface)
-        for all unique surfaces of the specified label on the grid.
-        - len(x) should be grid.num_surface_label
-        - x should be sorted such that the
-            first element corresponds to the value associated with the smallest surface
-            last element  corresponds to the value associated with the largest surface
-    surface_label : str
-        The surface label of rho, theta, or zeta.
-
-    Returns
-    -------
-    expand_x : ndarray
-        X expanded to match the grid's pattern.
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
 
     """
-    assert surface_label in {"rho", "theta", "zeta"}
-    if surface_label == "rho":
-        assert len(x) == grid.num_rho
-        return x[grid.inverse_rho_idx]
-    if surface_label == "theta":
-        assert len(x) == grid.num_theta
-        return x[grid.inverse_theta_idx]
-    if surface_label == "zeta":
-        assert len(x) == grid.num_zeta
-        return x[grid.inverse_zeta_idx]
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
+    # return unit vector with equal components if norm <= threshold
+    return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
+
+
+def safediv(a, b, fill=0, threshold=0):
+    """Divide a/b with guards for division by zero.
+
+    Parameters
+    ----------
+    a, b : ndarray
+        Numerator and denominator.
+    fill : float, ndarray, optional
+        Value to return where b is zero.
+    threshold : float >= 0
+        How small is b allowed to be.
+    """
+    mask = jnp.abs(b) <= threshold
+    num = jnp.where(mask, fill, a)
+    den = jnp.where(mask, 1, b)
+    return num / den
 
 
 def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
@@ -647,6 +629,52 @@ def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
         )
 
     return res
+
+
+def _get_grid_surface(grid, surface_label):
+    """Return grid quantities associated with the given surface label.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    surface_label : str
+        The surface label of rho, theta, or zeta.
+
+    Returns
+    -------
+    unique_size : int
+        The number of the unique values of the surface_label.
+    inverse_idx : ndarray
+        Indexing array to go from unique values to full grid.
+    spacing : ndarray
+        The relevant columns of grid.spacing.
+    has_endpoint_dupe : bool
+        Whether this surface label's nodes have a duplicate at the endpoint
+        of a periodic domain. (e.g. a node at 0 and 2π).
+
+    """
+    assert surface_label in {"rho", "theta", "zeta"}
+    if surface_label == "rho":
+        unique_size = grid.num_rho
+        inverse_idx = grid.inverse_rho_idx
+        spacing = grid.spacing[:, 1:]
+        has_endpoint_dupe = False
+    elif surface_label == "theta":
+        unique_size = grid.num_theta
+        inverse_idx = grid.inverse_theta_idx
+        spacing = grid.spacing[:, [0, 2]]
+        has_endpoint_dupe = (grid.nodes[grid.unique_theta_idx[0], 1] == 0) & (
+            grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi
+        )
+    else:
+        unique_size = grid.num_zeta
+        inverse_idx = grid.inverse_zeta_idx
+        spacing = grid.spacing[:, :2]
+        has_endpoint_dupe = (grid.nodes[grid.unique_zeta_idx[0], 2] == 0) & (
+            grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP
+        )
+    return unique_size, inverse_idx, spacing, has_endpoint_dupe
 
 
 def line_integrals(
@@ -747,7 +775,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho", expand_out=
 
     Notes
     -----
-        It is assumed that the integration surface has area 4π^2 when the
+        It is assumed that the integration surface has area 4π² when the
         surface label is rho and area 2π when the surface label is theta or
         zeta. You may want to multiply the input by the surface area Jacobian.
 
@@ -822,8 +850,8 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         grid, surface_label
     )
 
-    # Todo: Define masks as a sparse matrix once sparse matrices are
-    #       are no longer experimental in jax.
+    # Todo: Define masks as a sparse matrix once sparse matrices are no longer
+    #       experimental in jax.
     # The ith row of masks is True only at the indices which correspond to the
     # ith surface. The integral over the ith surface is the dot product of the
     # ith row vector and the vector of integrands of all surfaces.
@@ -838,7 +866,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
     # surface will have the correct total area of π+π = 2π.
     #     An edge case exists if the duplicate surface has nodes with
     # different values for the surface label, which only occurs when
-    # has_endpoint_dupe is true. If has_endpoint_dupe is true, this grid
+    # has_endpoint_dupe is true. If ``has_endpoint_dupe`` is true, this grid
     # has a duplicate surface at surface_label=0 and
     # surface_label=max surface value. Although the modulo of these values
     # are equal, their numeric values are not, so the integration
@@ -848,9 +876,9 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
     # previous paragraph.
     masks = cond(
         has_endpoint_dupe,
-        lambda masks: put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1]),
-        lambda masks: masks,
-        masks,
+        lambda _: put(masks, jnp.array([0, -1]), masks[0] | masks[-1]),
+        lambda _: masks,
+        operand=None,
     )
     spacing = jnp.prod(spacing, axis=1)
 
@@ -859,7 +887,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
 
         Notes
         -----
-            It is assumed that the integration surface has area 4π^2 when the
+            It is assumed that the integration surface has area 4π² when the
             surface label is rho and area 2π when the surface label is theta or
             zeta. You may want to multiply the input by the surface area Jacobian.
 
@@ -887,6 +915,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
             Surface integral of the input over each surface in the grid.
 
         """
+        axis_to_move = (jnp.ndim(q) == 3) * 2
         integrands = (spacing * jnp.nan_to_num(q).T).T
         # `integrands` may have shape (g.size, f.size, v.size), where
         #     g is the grid function depending on the integration variables
@@ -918,11 +947,10 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         # shape (v.size, g.size, f.size). As we expect f.size >> v.size, the
         # integration is in theory faster since numpy optimizes large matrix
         # products. However, timing results showed no difference.
-        axis_to_move = (integrands.ndim == 3) * 2
         integrals = jnp.moveaxis(
             masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
         )
-        return expand(grid, integrals, surface_label) if expand_out else integrals
+        return grid.expand(integrals, surface_label) if expand_out else integrals
 
     return _surface_integrals
 
@@ -966,9 +994,10 @@ def surface_averages(
     surface_label : str
         The surface label of rho, theta, or zeta to compute the average over.
     denominator : ndarray
-        This can optionally be supplied to avoid redundant computations.
-        Volume enclosed by the surfaces, derivative wrt the surface label.
-        This array should succeed broadcasting with arrays of size
+        By default, the denominator is computed as the surface integral of
+        ``sqrt_g``. This parameter can optionally be supplied to avoid
+        redundant computations or to use a different denominator to compute
+        the average. This array should broadcast with arrays of size
         ``grid.num_nodes`` (``grid.num_surface_label``) if ``expand_out``
         is true (false).
     expand_out : bool
@@ -1006,7 +1035,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True):
     -------
     function : callable
         Method to compute any surface average of the input ``q`` and optionally
-        the volume Jacobian ``sqrt_g``  over each surface in the grid with code:
+        the volume Jacobian ``sqrt_g`` over each surface in the grid with code:
         ``function(q, sqrt_g)``.
 
     """
@@ -1040,9 +1069,10 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True):
         sqrt_g : ndarray
             Coordinate system Jacobian determinant; see ``data_index["sqrt(g)"]``.
         denominator : ndarray
-            This can optionally be supplied to avoid redundant computations.
-            Volume enclosed by the surfaces, derivative wrt the surface label.
-            This array should succeed broadcasting with arrays of size
+            By default, the denominator is computed as the surface integral of
+            ``sqrt_g``. This parameter can optionally be supplied to avoid
+            redundant computations or to use a different denominator to compute
+            the average. This array should broadcast with arrays of size
             ``grid.num_nodes`` (``grid.num_surface_label``) if ``expand_out``
             is true (false).
 
@@ -1065,11 +1095,11 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True):
             )
             averages = (numerator.T / denominator).T
             if expand_out:
-                averages = expand(grid, averages, surface_label)
+                averages = grid.expand(averages, surface_label)
         else:
             if expand_out:
                 # implies denominator given with size grid.num_nodes
-                numerator = expand(grid, numerator, surface_label)
+                numerator = grid.expand(numerator, surface_label)
             averages = (numerator.T / denominator).T
         return averages
 
@@ -1085,15 +1115,15 @@ def surface_integrals_transform(grid, surface_label="rho"):
     five variables, the returned method computes an integral transform,
     reducing ``q`` to a set of functions of at most three variables.
 
-    Define the domain D = u_1 × u_2 × u_3 and the codomain C = u_4 × u_5 × u_6.
-    For every surface of constant u_1 in the domain, the returned method
-    evaluates the transform T_{u_1}: (u_2 × u_3) × C → C, where T_{u_1} projects
-    away the parameters u_2 and u_3 via an integration of the given kernel
-    function K_{u_1} over the corresponding surface of constant u_1.
+    Define the domain D = u₁ × u₂ × u₃ and the codomain C = u₄ × u₅ × u₆.
+    For every surface of constant u₁ in the domain, the returned method
+    evaluates the transform Tᵤ₁ : u₂ × u₃ × C → C, where Tᵤ₁ projects
+    away the parameters u₂ and u₃ via an integration of the given kernel
+    function Kᵤ₁ over the corresponding surface of constant u₁.
 
     Notes
     -----
-        It is assumed that the integration surface has area 4π^2 when the
+        It is assumed that the integration surface has area 4π² when the
         surface label is rho and area 2π when the surface label is theta or
         zeta. You may want to multiply the input ``q`` by the surface area
         Jacobian.
@@ -1105,7 +1135,7 @@ def surface_integrals_transform(grid, surface_label="rho"):
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
         These correspond to the domain parameters discussed in this method's
-        description. In particular, ``surface_label`` names u_1.
+        description. In particular, ``surface_label`` names u₁.
 
     Returns
     -------
@@ -1144,8 +1174,8 @@ def surface_integrals_transform(grid, surface_label="rho"):
         Output
         ------
         Each element along the first dimension of the returned array, stores
-        T_{u_1} for a particular surface of constant u_1 in the given grid.
-        The order is sorted in increasing order of the values which specify u_1.
+        Tᵤ₁ for a particular surface of constant u₁ in the given grid.
+        The order is sorted in increasing order of the values which specify u₁.
 
         If ``q`` is one-dimensional, the returned array has shape
         (grid.num_surface_label, ).
@@ -1165,6 +1195,100 @@ def surface_integrals_transform(grid, surface_label="rho"):
     # discretizes f over the codomain will typically have size grid.num_nodes
     # to broadcast with quantities in data_index.
     return surface_integrals_map(grid, surface_label, expand_out=False)
+
+
+def surface_variance(
+    grid,
+    q,
+    weights=jnp.array([1.0]),
+    bias=False,
+    surface_label="rho",
+    expand_out=True,
+):
+    """Compute the weighted sample variance of ``q`` on each surface of the grid.
+
+    Computes nₑ / (nₑ − b) * (∑ᵢ₌₁ⁿ (qᵢ − q̅)² wᵢ) / (∑ᵢ₌₁ⁿ wᵢ).
+    wᵢ is the weight assigned to qᵢ given by the product of ``weights[i]`` and
+       the differential surface area element (not already weighted by the area
+       Jacobian) at the node where qᵢ is evaluated,
+    q̅ is the weighted mean of q,
+    b is 0 if the biased sample variance is to be returned and 1 otherwise,
+    n is the number of samples on a surface, and
+    nₑ ≝ (∑ᵢ₌₁ⁿ wᵢ)² / ∑ᵢ₌₁ⁿ wᵢ² is the effective number of samples.
+
+    As the weights wᵢ approach each other, nₑ approaches n, and the output
+    converges to ∑ᵢ₌₁ⁿ (qᵢ − q̅)² / (n − b).
+
+    Notes
+    -----
+        There are three different methods to unbias the variance of a weighted
+        sample so that the computed variance better estimates the true variance.
+        Whether the method is correct for a particular use case depends on what
+        the weights assigned to each sample represent.
+
+        This function implements the first case, where the weights are not random
+        and are intended to assign more weight to some samples for reasons
+        unrelated to differences in uncertainty between samples. See
+        https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights.
+
+        The second case is when the weights are intended to assign more weight
+        to samples with less uncertainty. See
+        https://en.wikipedia.org/wiki/Inverse-variance_weighting.
+        The unbiased sample variance for this case is obtained by replacing the
+        effective number of samples in the formula this function implements,
+        nₑ, with the actual number of samples n.
+
+        The third case is when the weights denote the integer frequency of each
+        sample. See
+        https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Frequency_weights.
+        This is indeed a distinct case from the above two because here the
+        weights encode additional information about the distribution.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    q : ndarray
+        Quantity to compute the sample variance.
+    weights : ndarray
+        Weight assigned to each sample of ``q``.
+        A good candidate for this parameter is the surface area Jacobian.
+    bias : bool
+        If this condition is true, then the biased estimator of the sample
+        variance is returned. This is desirable if you are only concerned with
+        computing the variance of the given set of numbers and not the
+        distribution the numbers are (potentially) sampled from.
+    surface_label : str
+        The surface label of rho, theta, or zeta to compute the variance over.
+    expand_out : bool
+        Whether to expand the output array so that the output has the same
+        shape as the input. Defaults to true so that the output may be
+        broadcast in the same way as the input. Setting to false will save
+        memory.
+
+    Returns
+    -------
+    variance : ndarray
+        Variance of the given weighted sample over each surface in the grid.
+        By default, the returned array has the same shape as the input.
+
+    """
+    _, _, spacing, _ = _get_grid_surface(grid, surface_label)
+    integrate = surface_integrals_map(grid, surface_label, expand_out=False)
+
+    v1 = integrate(weights)
+    v2 = integrate(weights**2 * jnp.prod(spacing, axis=-1))
+    # effective number of samples per surface
+    n_e = v1**2 / v2
+    # analogous to Bessel's bias correction
+    correction = n_e / (n_e - (not bias))
+
+    q = jnp.atleast_1d(q)
+    # compute variance in two passes to avoid catastrophic round off error
+    mean = (integrate((weights * q.T).T).T / v1).T
+    mean = grid.expand(mean, surface_label)
+    variance = (correction * integrate((weights * ((q - mean) ** 2).T).T).T / v1).T
+    return grid.expand(variance, surface_label) if expand_out else variance
 
 
 def surface_max(grid, x, surface_label="rho"):
@@ -1220,8 +1344,38 @@ def surface_min(grid, x, surface_label="rho"):
         return mins
 
     mins = fori_loop(0, inverse_idx.size, body, mins)
-    # The above implementation was benchmarked to be more efficient, after jit
-    # compilation, than the alternative given in the two lines below.
-    # masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]  # noqa: E501,E800
-    # mins = jnp.amin(x[jnp.newaxis, :], axis=1, initial=jnp.inf, where=masks)  # noqa: E501,E800
-    return expand(grid, mins, surface_label)
+    # The above implementation was benchmarked to be more efficient than
+    # alternatives without explicit loops in GitHub pull request #501.
+    return grid.expand(mins, surface_label)
+
+
+# defines the order in which objective arguments get concatenated into the state vector
+arg_order = (
+    "R_lmn",
+    "Z_lmn",
+    "L_lmn",
+    "p_l",
+    "i_l",
+    "c_l",
+    "Psi",
+    "Te_l",
+    "ne_l",
+    "Ti_l",
+    "Zeff_l",
+    "a_lmn",
+    "Ra_n",
+    "Za_n",
+    "Rb_lmn",
+    "Zb_lmn",
+)
+# map from profile name to equilibrium parameter name
+profile_names = {
+    "pressure": "p_l",
+    "iota": "i_l",
+    "current": "c_l",
+    "electron_temperature": "Te_l",
+    "electron_density": "ne_l",
+    "ion_temperature": "Ti_l",
+    "atomic_number": "Zeff_l",
+    "anisotropy": "a_lmn",
+}

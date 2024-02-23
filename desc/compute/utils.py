@@ -1629,6 +1629,22 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         interpolation_points = cubic_poly_roots(
             coef, constant=1 / lambda_pitch, a_min=zeta[:-1], a_max=zeta[1:], fill=True
         ).reshape(lambda_pitch.size, ML, N, NUM_ROOTS + 2)
+        b_norm_z = polyeval(
+            der[:, jnp.newaxis], interpolation_points[..., 1:-1]
+        ).reshape(lambda_pitch.size, ML, N * NUM_ROOTS)
+        # Check sign of gradient to determine whether root is a valid bounce point.
+        # Periodic boundary to compute bounce integrals of particles
+        # trapped outside this snapshot of the field lines.
+        is_well = (b_norm_z <= 0) & (jnp.roll(b_norm_z, -1, axis=-1) >= 0)
+        # Make is_well broadcast with interpolation_points.
+        idx = jnp.arange(N * NUM_ROOTS)
+        is_well = put_along_axis(
+            arr=jnp.zeros(shape=(lambda_pitch.size, ML, N * 5), dtype=bool),
+            indices=(idx // NUM_ROOTS) * (NUM_ROOTS + 2) + 1 + (idx % NUM_ROOTS),
+            values=is_well,
+            axis=-1,
+        ).reshape(lambda_pitch.size * ML, N * 5)
+        # Can precompute everything above if lambda_pitch given to parent function.
 
         integrand = jnp.nan_to_num(
             eq.compute(name, grid=grid, override_grid=False, data=data)[name]
@@ -1651,25 +1667,9 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
             # to avoid adding difference between primitives of splines at knots.
             * jnp.append(jnp.arange(1, primitive.shape[-1]) % 5 != 0, True),
             axis=-1,
-        )
+        ).reshape(lambda_pitch.size * ML, N * (NUM_ROOTS + 2))
 
-        b_norm_z = polyeval(
-            der[:, jnp.newaxis], interpolation_points[..., 1:-1]
-        ).reshape(lambda_pitch.size, ML, N * NUM_ROOTS)
-        # Check sign of gradient to determine whether root is a valid bounce point.
-        # Periodic boundary to compute bounce integrals of particles
-        # trapped outside this snapshot of the field lines.
-        is_well = (b_norm_z <= 0) & (jnp.roll(b_norm_z, -1, axis=-1) >= 0)
-        # Make is_well broadcast with interpolation_points.
-        idx = jnp.arange(N * NUM_ROOTS)
-        is_well = put_along_axis(
-            arr=jnp.zeros(shape=(lambda_pitch.size, ML, N * 5), dtype=bool),
-            indices=(idx // NUM_ROOTS) * (NUM_ROOTS + 2) + 1 + (idx % NUM_ROOTS),
-            values=is_well,
-            axis=-1,
-        ).reshape(lambda_pitch.size * ML, N * 5)
-        args = (sums.reshape(lambda_pitch.size * ML, N * (NUM_ROOTS + 2)), is_well)
-        result = vmap(_diff_between_bounce_points)(args).reshape(
+        result = vmap(_diff_between_bounce_points)((sums, is_well)).reshape(
             lambda_pitch.size, alpha.size, rho.size, N * (NUM_ROOTS + 2) // 2
         )
         return result

@@ -11,11 +11,12 @@ from termcolor import colored
 from desc.backend import (
     complex_sqrt,
     cond,
+    diff_mask,
     fori_loop,
     jnp,
-    nonzero,
     put,
     put_along_axis,
+    vmap,
 )
 from desc.grid import ConcentricGrid, Grid, LinearGrid, _meshgrid_expand
 
@@ -1359,12 +1360,7 @@ def surface_min(grid, x, surface_label="rho"):
 
 
 def cubic_poly_roots(
-    coef,
-    constant=jnp.array([0]),
-    a_min=-jnp.inf,
-    a_max=jnp.inf,
-    return_complex=False,
-    fill=False,
+    coef, constant=jnp.array([0]), a_min=-jnp.inf, a_max=jnp.inf, fill=False
 ):
     """Roots of cubic polynomial.
 
@@ -1382,15 +1378,11 @@ def cubic_poly_roots(
     a_max : ndarray
         Return nan if real part of root is less than ``a_max``.
         Should broadcast with arrays of shape ``coef.shape[1:]``.
-    return_complex : bool
-        If set to false, will return nan for complex roots.
     fill : bool
         If set to True, then the last axis of the output has size 5 instead
         of 3, where the first element is ``a_min`` and the last is ``a_max``.
-        This option also replaces undesirable roots with by duplicating a
-        desirable root with smaller real part.  If no such root exists,
-        then ``a_min`` is used. The roots will be sorted from from smallest
-        to largest real part.
+        This option also replaces complex roots with ``a_min``.
+        The roots will be sorted from smallest to largest real part.
 
     Returns
     -------
@@ -1411,21 +1403,22 @@ def cubic_poly_roots(
     def roots(xi_k):
         t_3 = jnp.where(C_is_zero, 0, t_0 / (xi_k * C))
         r = -(b + xi_k * C + t_3) / (3 * a)
-        r = jnp.where(
-            (return_complex | jnp.isreal(r)) & (a_min <= r) & (r <= a_max), r, jnp.nan
-        )
+        return r
+
+    def replace_roots(r):
+        r = jnp.where(jnp.isreal(r) & (a_min <= r) & (r <= a_max), jnp.real(r), a_min)
         return r
 
     xi_1 = (-1 + (-3) ** 0.5) / 2
     xi_2 = xi_1**2
     xi_3 = 1
-    xi = jnp.stack([roots(xi_1), roots(xi_2), roots(xi_3)], axis=-1)
+    xi_1, xi_2, xi_3 = map(roots, (xi_1, xi_2, xi_3))
     if fill:
-        xi = jnp.sort(xi, axis=-1)
-        xi_1 = jnp.where(jnp.isnan(xi[..., 0]), a_min, xi[..., 0])
-        xi_2 = jnp.where(jnp.isnan(xi[..., 1]), xi[..., 0], xi[..., 1])
-        xi_3 = jnp.where(jnp.isnan(xi[..., 2]), xi[..., 1], xi[..., 2])
-        xi = jnp.stack(jnp.broadcast_arrays(a_min, xi_1, xi_2, xi_3, a_max), axis=-1)
+        xi_1, xi_2, xi_3 = map(replace_roots, (xi_1, xi_2, xi_3))
+        xi = jnp.sort(jnp.stack([xi_1, xi_2, xi_3], axis=0), axis=0)
+        xi = jnp.stack(jnp.broadcast_arrays(a_min, xi[0], xi[1], xi[2], a_max), axis=-1)
+    else:
+        xi = jnp.stack([xi_1, xi_2, xi_3], axis=-1)
     return xi
 
 
@@ -1527,15 +1520,11 @@ def tanh_sinh_quadrature(N, quad_limit=3.16):
     """
     initial_points = jnp.linspace(-quad_limit, quad_limit, N)
     h = 2 * quad_limit / (N - 1)
-    x_k = jnp.tanh(0.5 * jnp.pi * jnp.sinh(initial_points))
+    sinh = jnp.sinh(initial_points)
+    x_k = jnp.tanh(0.5 * jnp.pi * sinh)
     w_k = (
-        0.5
-        * jnp.pi
-        * h
-        * jnp.cosh(initial_points)
-        / jnp.cosh(0.5 * jnp.pi * jnp.sinh(initial_points)) ** 2
+        0.5 * jnp.pi * h * jnp.cosh(initial_points) / jnp.cosh(0.5 * jnp.pi * sinh) ** 2
     )
-
     return x_k, w_k
 
 
@@ -1594,18 +1583,21 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
     data = eq.compute(
         ["B^zeta", "|B|", "|B|_z constant rho alpha"], grid=grid, data=data
     )
+    ML = alpha.size * rho.size
+    N = zeta.size - 1  # number of splines per field line
+    NUM_ROOTS = 3  # max number of roots for cubic polynomial
     # TODO: https://github.com/f0uriest/interpax/issues/19
     coef = CubicHermiteSpline(
         zeta,
-        data["|B|"].reshape(alpha.size, rho.size, zeta.size),
-        data["|B|_z constant rho alpha"].reshape(alpha.size, rho.size, zeta.size),
+        data["|B|"].reshape(ML, zeta.size),
+        data["|B|_z constant rho alpha"].reshape(ML, zeta.size),
         axis=-1,
         extrapolate="periodic",
     ).c
     coef = jnp.swapaxes(coef, 1, -1)
     der = polyder(coef)
-    assert coef.shape == (4, rho.size, alpha.size, zeta.size - 1)
-    assert der.shape == (3, rho.size, alpha.size, zeta.size - 1)
+    assert coef.shape == (4, ML, N)
+    assert der.shape == (3, ML, N)
 
     def _bounce_integral(name, lambda_pitch):
         """Compute the bounce integral of the named quantity.
@@ -1619,8 +1611,8 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
 
         Returns
         -------
-        F : ndarray, shape(lambda_pitch.size, rho.size, alpha.size, resolution, 2)
-            Axes with size one will be squeezed out.
+        result : ndarray, shape(lambda_pitch.size, alpha.size, rho.size,
+                                (resolution - 1) * 5 // 2)
             Bounce integrals evaluated at ``lambda_pitch`` for every field line.
 
         """
@@ -1635,60 +1627,60 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         #  division accurately near the bounce points.
         lambda_pitch = jnp.atleast_1d(lambda_pitch)
         interpolation_points = cubic_poly_roots(
-            coef,
-            constant=1 / lambda_pitch,
-            a_min=zeta[:-1],
-            a_max=zeta[1:],
-            fill=True,
-        ).reshape(lambda_pitch.size, rho.size, alpha.size, zeta.size - 1, 5)
-        b_norm_z = polyeval(
-            der[:, jnp.newaxis], interpolation_points[..., 1:-1]
-        ).reshape(lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 3)
-        # Check sign of gradient to determine whether root is a valid bounce point.
-        # Periodic boundary to compute bounce integrals of particles
-        # trapped outside this snapshot of the field lines.
-        is_well = (b_norm_z <= 0) & (jnp.roll(b_norm_z, -1, axis=-1) >= 0)
-        idx = jnp.arange((zeta.size - 1) * 3)
-        # Make is_well broadcast with interpolation_points.
-        is_well = put_along_axis(
-            jnp.zeros(
-                shape=(lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 5),
-                dtype=bool,
-            ),
-            (idx // 3) * 5 + 1 + (idx % 3),
-            is_well,
-        )
-        # Can precompute everything above if lambda_pitch given to parent function.
+            coef, constant=1 / lambda_pitch, a_min=zeta[:-1], a_max=zeta[1:], fill=True
+        ).reshape(lambda_pitch.size, ML, N, NUM_ROOTS + 2)
 
-        y = jnp.nan_to_num(
+        integrand = jnp.nan_to_num(
             eq.compute(name, grid=grid, override_grid=False, data=data)[name]
             / (
                 data["B^zeta"]
                 * jnp.sqrt(1 - lambda_pitch[:, jnp.newaxis] * data["|B|"])
             )
-        ).reshape(lambda_pitch.size, alpha.size, rho.size, zeta.size)
-        y = Akima1DInterpolator(zeta, y, axis=-1).c
-        y = jnp.moveaxis(y, [1, -1], [-1, 2])
-        assert y.shape == (4, lambda_pitch.size, rho.size, alpha.size, zeta.size - 1)
-        Y = polyeval(polyint(y), interpolation_points).reshape(
-            lambda_pitch.size, rho.size, alpha.size, (zeta.size - 1) * 5
+        ).reshape(lambda_pitch.size, ML, zeta.size)
+        integrand = Akima1DInterpolator(zeta, integrand, axis=-1).c
+        integrand = jnp.moveaxis(integrand, 1, -1)
+        assert integrand.shape == (4, lambda_pitch.size, ML, N)
+        primitive = polyeval(polyint(integrand), interpolation_points).reshape(
+            lambda_pitch.size, ML, N * (NUM_ROOTS + 2)
         )
         sums = jnp.cumsum(
-            jnp.diff(Y, axis=-1, append=Y[..., 0, jnp.newaxis])
+            # Periodic boundary to compute bounce integrals of particles
+            # trapped outside this snapshot of the field lines.
+            jnp.diff(primitive, axis=-1, append=primitive[..., 0, jnp.newaxis])
             # Multiply by mask that is false at knots of piecewise spline
             # to avoid adding difference between primitives of splines at knots.
-            * jnp.append(jnp.arange(1, Y.shape[-1]) % 5 != 0, True),
+            * jnp.append(jnp.arange(1, primitive.shape[-1]) % 5 != 0, True),
             axis=-1,
         )
-        # TODO: jnp.diff(sums[is_well], axis=-1)[::2] except
-        #    padded with zeros at end to avoid dynamically sized output.
-        F = jnp.diff(
-            sums[nonzero(is_well, size=sums.size, fill_value=sums.size - 1)],
+
+        b_norm_z = polyeval(
+            der[:, jnp.newaxis], interpolation_points[..., 1:-1]
+        ).reshape(lambda_pitch.size, ML, N * NUM_ROOTS)
+        # Check sign of gradient to determine whether root is a valid bounce point.
+        # Periodic boundary to compute bounce integrals of particles
+        # trapped outside this snapshot of the field lines.
+        is_well = (b_norm_z <= 0) & (jnp.roll(b_norm_z, -1, axis=-1) >= 0)
+        # Make is_well broadcast with interpolation_points.
+        idx = jnp.arange(N * NUM_ROOTS)
+        is_well = put_along_axis(
+            arr=jnp.zeros(shape=(lambda_pitch.size, ML, N * 5), dtype=bool),
+            indices=(idx // NUM_ROOTS) * (NUM_ROOTS + 2) + 1 + (idx % NUM_ROOTS),
+            values=is_well,
             axis=-1,
-        )[::2]
-        return F
+        ).reshape(lambda_pitch.size * ML, N * 5)
+        args = (sums.reshape(lambda_pitch.size * ML, N * (NUM_ROOTS + 2)), is_well)
+        result = vmap(_diff_between_bounce_points)(args).reshape(
+            lambda_pitch.size, alpha.size, rho.size, N * (NUM_ROOTS + 2) // 2
+        )
+        return result
 
     return _bounce_integral
+
+
+def _diff_between_bounce_points(args):
+    """Compute difference between bounce points specified in mask."""
+    a, mask = args
+    return diff_mask(a, mask)[::2]
 
 
 def bounce_average(eq, rho=None, alpha=None, resolution=20):
@@ -1749,11 +1741,13 @@ def bounce_average(eq, rho=None, alpha=None, resolution=20):
 
         Returns
         -------
-        G : ndarray, shape(lambda_pitch.size, rho.size, alpha.size, resolution, 2)
+        result : ndarray, shape(lambda_pitch.size, alpha.size, rho.size,
+                                (resolution - 1) * 5 // 2)
             Bounce average evaluated at ``lambdas`` for every field line.
 
         """
-        return bi(name, lambda_pitch) / bi("1", lambda_pitch)
+        result = bi(name, lambda_pitch) / bi("1", lambda_pitch)
+        return result
 
     return _bounce_average
 

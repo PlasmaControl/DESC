@@ -73,7 +73,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     vmap = jax.vmap
     scan = jax.lax.scan
     bincount = jnp.bincount
-    nonzero = jnp.nonzero
+    flatnonzero = jnp.flatnonzero
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
@@ -105,31 +105,37 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
 
-    # TODO: Add axis parameter.
-    def put_along_axis(arr, inds, vals):
-        """Functional interface for array "fancy indexing".
+    def put_along_axis(arr, indices, values, axis):
+        """Put values into the destination array by matching 1d index and data slices.
 
-        Provides a way to do arr[..., inds] = vals in a way that works with JAX.
+        This iterates over matching 1d slices oriented along the specified axis in
+        the index and data arrays, and uses the former to place values into the
+        latter.
 
         Parameters
         ----------
-        arr : array-like
-            Array to populate
-        inds : array-like of int
-            Indices to populate
-        vals : array-like
-            Values to insert
-
-        Returns
-        -------
-        arr : array-like
-            Input array with vals inserted at inds.
+        arr : ndarray (Ni..., M, Nk...)
+            Destination array.
+        indices : ndarray (Ni..., J, Nk...)
+            Indices to change along each 1d slice of `arr`. This must match the
+            dimension of arr, but dimensions in Ni and Nj may be 1 to broadcast
+            against `arr`.
+        values : array_like (Ni..., J, Nk...)
+            values to insert at those indices. Its shape and dimension are
+            broadcast to match that of `indices`.
+        axis : int
+            The axis to take 1d slices along. If axis is None, the destination
+            array is treated as if a flattened 1d view had been created of it.
 
         """
+        if axis != -1:
+            raise NotImplementedError(
+                "JAX put_along_axis currently only supports axis=-1."
+            )
         if isinstance(arr, np.ndarray):
-            arr[..., inds] = vals
+            arr[..., indices] = values
             return arr
-        return jnp.asarray(arr).at[..., inds].set(vals)
+        return jnp.asarray(arr).at[..., indices].set(values)
 
     def sign(x):
         """Sign function, but returns 1 for x==0.
@@ -580,7 +586,7 @@ else:  # pragma: no cover
             val = body_fun(val)
         return val
 
-    def vmap(fun, out_axes=0):
+    def vmap(fun, in_axes=0, out_axes=0):
         """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
 
         Like Python's builtin map,
@@ -591,6 +597,8 @@ else:  # pragma: no cover
         ----------
         fun: callable
             Function (A -> B)
+        in_axes: int
+            Axis to map over.
         out_axes: int
             An integer indicating where the mapped axis should appear in the output.
 
@@ -600,6 +608,10 @@ else:  # pragma: no cover
             Vectorized version of fun.
 
         """
+        if in_axes != 0:
+            raise NotImplementedError(
+                "Backend for numpy vmap currently only supports in_axes=0."
+            )
 
         def fun_vmap(fun_inputs):
             return np.stack([fun(fun_input) for fun_input in fun_inputs], axis=out_axes)
@@ -763,6 +775,19 @@ else:  # pragma: no cover
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
         return out.x, out
 
-    def nonzero(a, *, size=None, fill_value=None):
-        """Same as np.nonzero but with dummy parameters to match jnp.nonzero API."""
-        return np.nonzero(a)
+    def flatnonzero(a, *, size=None, fill_value=0):
+        """Numpy implementation of jnp.flatnonzero."""
+        nz = np.flatnonzero(a)
+        if size is not None:
+            nz = np.append(nz, np.repeat(fill_value, max(size - nz.size, 0)))
+        return nz
+
+
+def diff_mask(a, mask, n=1, axis=-1, prepend=None, append=None):
+    """Computes jnp.diff(a[mask], n, axis, prepend, append).
+
+    The result is padded with zeros at the end to be jit compilable.
+    The shape matches the output of jnp.diff(a, n, axis, prepend, append).
+    """
+    idx = flatnonzero(mask, size=a.size, fill_value=a.size - 1)
+    return jnp.diff(a[idx], n, axis, prepend, append)

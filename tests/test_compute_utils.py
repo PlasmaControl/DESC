@@ -598,14 +598,14 @@ class TestComputeUtils:
         assert np.unique(poly.shape).size == poly.ndim
         constant = np.arange(10)
         assert np.unique(poly.shape + constant.shape).size == poly.ndim + constant.ndim
-        out = cubic_poly_roots(poly, constant, return_complex=True)
+        out = np.sort(cubic_poly_roots(poly, constant), axis=-1)
         for j in range(poly.shape[1]):
             for k in range(poly.shape[2]):
                 for s in range(constant.size):
                     a, b, c, d = poly[:, j, k]
                     d = d - constant[s]
                     np.testing.assert_allclose(
-                        np.sort_complex(out[s, j, k]),
+                        out[s, j, k],
                         np.sort_complex(np.roots([a, b, c, d])),
                     )
 

@@ -34,7 +34,7 @@ class Curve(IOAble, Optimizable, ABC):
     @property
     def shift(self):
         """Displacement of curve in X, Y, Z."""
-        return self._shift
+        return self.__dict__.setdefault("_shift", jnp.array([0, 0, 0], dtype=float))
 
     @shift.setter
     def shift(self, new):
@@ -47,7 +47,7 @@ class Curve(IOAble, Optimizable, ABC):
     @property
     def rotmat(self):
         """Rotation matrix of curve in X, Y, Z."""
-        return self._rotmat
+        return self.__dict__.setdefault("_rotmat", jnp.eye(3, dtype=float).flatten())
 
     @rotmat.setter
     def rotmat(self, new):

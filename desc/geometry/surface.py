@@ -202,6 +202,8 @@ class FourierRZToroidalSurface(Surface):
     @property
     def rho(self):
         """float: Flux surface label."""
+        if not (hasattr(self, "_rho")) or self._rho is None:
+            self._rho = 1.0
         return self._rho
 
     @rho.setter

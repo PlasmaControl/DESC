@@ -410,6 +410,7 @@ class Equilibrium(IOAble, Optimizable):
             self._W_basis = self.L_basis.copy()
         if self.W_lmn is None:
             self._W_lmn = np.zeros(self.W_basis.num_modes)
+
         if self.current is not None and hasattr(self.current, "_get_transform"):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.

@@ -262,7 +262,7 @@ def compute_theta_coords(
     return out
 
 
-def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
+def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, W_lmn=None, msg=None):
     """Check that an equilibrium has properly nested flux surfaces in a plane.
 
     Does so by checking coordinate Jacobian (sqrt(g)) sign.
@@ -277,11 +277,12 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     ----------
     eq : Equilibrium
         Equilibrium to use
-    grid  :  Grid, optional
+    grid : Grid, optional
         Grid on which to evaluate the coordinate Jacobian and check for the sign.
         (Default to QuadratureGrid with eq's current grid resolutions)
-    R_lmn, Z_lmn, L_lmn : ndarray, optional
-        spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
+    R_lmn, Z_lmn, L_lmn, W_lmn : ndarray, optional
+        spectral coefficients for R and Z, lambda, omega. Defaults to eq.R_lmn,
+        eq.Z_lmn etc.
     msg : {None, "auto", "manual"}
         Warning to throw if unnested.
 
@@ -297,6 +298,8 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
         Z_lmn = eq.Z_lmn
     if L_lmn is None:
         L_lmn = eq.L_lmn
+    if W_lmn is None:
+        W_lmn = eq.W_lmn
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
@@ -308,6 +311,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
             "L_lmn": L_lmn,
+            "W_lmn": W_lmn,
         },
         transforms=transforms,
         profiles={},  # no profiles needed

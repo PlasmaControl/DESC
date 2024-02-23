@@ -403,6 +403,104 @@ class BoundaryZSelfConsistency(_Objective):
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 
 
+class BoundaryWSelfConsistency(_Objective):
+    """Ensure that the boundary and interior surfaces are self consistent.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    surface_label : float, optional
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(rad)"
+    _print_value_fmt = "omega boundary self consistency error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        surface_label=None,
+        name="self_consistency omega",
+    ):
+        self._surface_label = surface_label
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        modes = eq.surface.W_basis.modes
+        idx = np.arange(eq.surface.W_basis.num_modes)
+
+        self._dim_f = idx.size
+        self._A = np.zeros((self._dim_f, eq.W_basis.num_modes))
+        for i, (l, m, n) in enumerate(eq.W_basis.modes):
+            if eq.bdry_mode == "lcfs":
+                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                surf = (
+                    eq.surface.rho
+                    if self._surface_label is None
+                    else self._surface_label
+                )
+                self._A[j, i] = zernike_radial(surf, l, m)
+            else:
+                raise NotImplementedError(
+                    "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+                )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute boundary omega self-consistency errors.
+
+        IE, the mismatch between the Fourier-Zernike basis evaluated at rho=1 and the
+        double Fourier series defining the equilibrium LCFS
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            boundary omega self-consistency errors.
+
+        """
+        return jnp.dot(self._A, params["W_lmn"]) - params["Wb_lmn"]
+
+
 class AxisRSelfConsistency(_Objective):
     """Ensure consistency between Zernike and Fourier coefficients on axis.
 
@@ -574,6 +672,93 @@ class AxisZSelfConsistency(_Objective):
 
         """
         f = jnp.dot(self._A, params["Z_lmn"]) - params["Za_n"]
+        return f
+
+
+class AxisWSelfConsistency(_Objective):
+    """Ensure consistency between Zernike and Fourier coefficients on axis.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _print_value_fmt = "omega axis self consistency error: {:10.3e} (rad)"
+
+    def __init__(
+        self,
+        eq,
+        name="axis omega self consistency",
+    ):
+
+        super().__init__(
+            things=eq,
+            target=0,
+            weight=1,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        ns = eq.axis.W_basis.modes[:, 2]
+        self._dim_f = ns.size
+        self._A = np.zeros((self._dim_f, eq.W_basis.num_modes))
+
+        for i, (l, m, n) in enumerate(eq.W_basis.modes):
+            if m != 0:
+                continue
+            if (l // 2) % 2 == 0:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = 1
+            else:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = -1
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute axis omega self-consistency errors.
+
+        IE, the mismatch between the Fourier-Zernike basis evaluated at rho=0 and the
+        Fourier series defining the equilibrium axis position
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            axis omega self-consistency errors.
+
+        """
+        f = jnp.dot(self._A, params["W_lmn"]) - params["Wa_n"]
         return f
 
 
@@ -871,6 +1056,149 @@ class FixBoundaryZ(_FixedObjective):
         return jnp.dot(self._A, params["Zb_lmn"])
 
 
+class FixBoundaryW(_FixedObjective):
+    """Boundary condition on the omega boundary parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the surface modes.
+    surface_label : float, optional
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str, optional
+        Name of the objective function.
+
+
+    Notes
+    -----
+    If specifying particular modes to fix, the rows of the resulting constraint `A`
+    matrix and `target` vector will be re-sorted according to the ordering of
+    `basis.modes` which may be different from the order that was passed in.
+    """
+
+    _target_arg = "Wb_lmn"
+    _units = "(rad)"
+    _print_value_fmt = "omega boundary error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        surface_label=None,
+        name="lcfs omega",
+    ):
+        self._modes = modes
+        self._target_from_user = setdefault(bounds, target)
+        self._surface_label = surface_label
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+            modes_idx = idx
+        elif self._modes is True:  # all modes
+            modes = eq.surface.W_basis.modes
+            idx = np.arange(eq.surface.W_basis.num_modes)
+            modes_idx = idx
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.surface.W_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            # rearrange modes to match order of eq.surface.W_basis.modes
+            # and eq.surface.W_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.surface.W_basis.modes[idx, :])
+
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the surface, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = idx.size
+        # Wb_lmn -> Wb optimization space
+        self._A = np.eye(eq.surface.W_basis.num_modes)[idx, :]
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.surface.W_lmn[idx], None, modes_idx
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute boundary omega errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            boundary omega errors.
+
+        """
+        return jnp.dot(self._A, params["Wb_lmn"])
+
+
 class FixLambdaGauge(_Objective):
     """Fixes gauge freedom for lambda: lambda(theta=0,zeta=0)=0.
 
@@ -968,6 +1296,103 @@ class FixLambdaGauge(_Objective):
         return jnp.dot(self._A, params["L_lmn"])
 
 
+class FixOmegaGauge(_Objective):
+    """Fixes gauge freedom for omega: omega(theta=0,zeta=0)=0.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(rad)"
+    _print_value_fmt = "omega gauge error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        name="omega gauge",
+    ):
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        W_basis = eq.W_basis
+
+        if W_basis.sym:
+            self._A = np.zeros((0, W_basis.num_modes))
+        else:
+            # w(rho,0,0) = 0
+            # at theta=zeta=0, basis for omega reduces to just a polynomial in rho
+            # what this constraint does is make all the coefficients of each power
+            # of rho equal to zero
+            # i.e. if omega = (W_200 + 2*W_310) rho**2 + (W_100 + 2*W_210)*rho
+            # this constraint will make
+            # W_200 + 2*W_310 = 0
+            # W_100 + 2*W_210 = 0
+            W_modes = W_basis.modes
+            mnpos = np.where((W_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
+            w_lmn = W_modes[mnpos, :]
+            if len(w_lmn) > 0:
+                c = zernike_radial_coeffs(w_lmn[:, 0], w_lmn[:, 1])
+            else:
+                c = np.zeros((0, 0))
+
+            A = np.zeros((c.shape[1], W_basis.num_modes))
+            A[:, mnpos] = c.T
+            self._A = A
+
+        self._dim_f = self._A.shape[0]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute omega gauge freedom errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            gauge freedom errors.
+
+        """
+        return jnp.dot(self._A, params["W_lmn"])
+
+
 class FixThetaSFL(_Objective):
     """Fixes lambda=0 so that poloidal angle is the SFL poloidal angle.
 
@@ -1030,6 +1455,71 @@ class FixThetaSFL(_Objective):
 
         """
         fixed_params = params["L_lmn"][self._idx]
+        return fixed_params
+
+
+class FixZetaSFL(_Objective):
+    """Fixes omega=0 so that toroidal angle is the SFL toroidal angle.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(rad)"
+    _print_value_fmt = "phi - zeta error: {:10.3e} "
+
+    def __init__(self, eq, name="zeta SFL"):
+
+        super().__init__(things=eq, target=0, weight=1, name=name)
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        idx = np.arange(eq.W_basis.num_modes)
+        modes_idx = idx
+        self._idx = idx
+
+        self._dim_f = modes_idx.size
+
+        self.target = np.zeros_like(modes_idx)
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute zeta SFL errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Theta - zeta SFL errors.
+
+        """
+        fixed_params = params["W_lmn"][self._idx]
         return fixed_params
 
 
@@ -1308,6 +1798,141 @@ class FixAxisZ(_FixedObjective):
 
         """
         f = jnp.dot(self._A, params["Za_n"])
+        return f
+
+
+class FixAxisW(_FixedObjective):
+    """Fixes magnetic axis omega coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of axis modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the axis modes.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _target_arg = "Wa_n"
+    _units = "(rad)"
+    _print_value_fmt = "omega axis error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        name="axis omega",
+    ):
+        self._modes = modes
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+            modes_idx = idx
+        elif self._modes is True:  # all modes
+            modes = eq.axis.W_basis.modes
+            idx = np.arange(eq.axis.W_basis.num_modes)
+            modes_idx = idx
+        else:  # specified modes
+            modes = np.atleast_1d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.axis.W_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            # rearrange modes to match order of eq.axis.W_basis.modes
+            # and eq.axis.W_n,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.axis.W_basis.modes[idx, :])
+
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the axis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = idx.size
+        # Wa_lmn -> Wa optimization space
+        self._A = np.eye(eq.axis.W_basis.num_modes)[idx, :]
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, eq.axis.W_n[idx], None, modes_idx
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute axis omega errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Axis omega errors.
+
+        """
+        f = jnp.dot(self._A, params["Wa_n"])
         return f
 
 

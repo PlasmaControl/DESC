@@ -9,14 +9,18 @@ from ._equilibrium import (
 )
 from .linear_objectives import (
     AxisRSelfConsistency,
+    AxisWSelfConsistency,
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
+    BoundaryWSelfConsistency,
     BoundaryZSelfConsistency,
     FixAnisotropy,
     FixAtomicNumber,
     FixAxisR,
+    FixAxisW,
     FixAxisZ,
     FixBoundaryR,
+    FixBoundaryW,
     FixBoundaryZ,
     FixCurrent,
     FixCurveRotation,
@@ -26,6 +30,7 @@ from .linear_objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixOmegaGauge,
     FixPressure,
     FixPsi,
 )
@@ -103,6 +108,7 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
     """
     constraints = (
         FixAxisR(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixAxisW(eq=eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
@@ -136,6 +142,7 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
     """
     constraints = (
         FixBoundaryR(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixBoundaryW(eq=eq, normalize=normalize, normalize_target=normalize),
         FixBoundaryZ(eq=eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
@@ -190,6 +197,7 @@ def get_NAE_constraints(
         fix_lambda = int(fix_lambda)
     constraints = (
         FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+        FixAxisW(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=desc_eq, normalize=normalize, normalize_target=normalize),
     )
@@ -228,16 +236,24 @@ def maybe_add_self_consistency(thing, constraints):
         and hasattr(thing, "Za_n")
         and hasattr(thing, "Rb_lmn")
         and hasattr(thing, "Zb_lmn")
+        and hasattr(thing, "Wb_lmn")
         and hasattr(thing, "L_lmn")
+        and hasattr(thing, "W_lmn")
     ):
         if not _is_any_instance(constraints, BoundaryRSelfConsistency):
             constraints += (BoundaryRSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, BoundaryWSelfConsistency):
+            constraints += (BoundaryWSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, BoundaryZSelfConsistency):
             constraints += (BoundaryZSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, FixLambdaGauge):
             constraints += (FixLambdaGauge(eq=thing),)
+        if not _is_any_instance(constraints, FixOmegaGauge):
+            constraints += (FixOmegaGauge(eq=thing),)
         if not _is_any_instance(constraints, AxisRSelfConsistency):
             constraints += (AxisRSelfConsistency(eq=thing),)
+        if not _is_any_instance(constraints, AxisWSelfConsistency):
+            constraints += (AxisWSelfConsistency(eq=thing),)
         if not _is_any_instance(constraints, AxisZSelfConsistency):
             constraints += (AxisZSelfConsistency(eq=thing),)
 

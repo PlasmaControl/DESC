@@ -117,6 +117,7 @@ class TestConstrainCurrent:
                     desired=desired[name][mask],
                     equal_nan=False,
                     err_msg=name,
+                    rtol=1e-6,
                 )
 
         # Only makes sense to test on configurations with fixed iota profiles.

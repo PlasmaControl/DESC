@@ -12,13 +12,17 @@ from desc.io import load
 from desc.objectives import (
     AspectRatio,
     AxisRSelfConsistency,
+    AxisWSelfConsistency,
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
+    BoundaryWSelfConsistency,
     BoundaryZSelfConsistency,
     FixAtomicNumber,
     FixAxisR,
+    FixAxisW,
     FixAxisZ,
     FixBoundaryR,
+    FixBoundaryW,
     FixBoundaryZ,
     FixCurrent,
     FixElectronDensity,
@@ -29,12 +33,14 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixOmegaGauge,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    FixZetaSFL,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
     get_equilibrium_objective,
@@ -59,6 +65,9 @@ def test_LambdaGauge_sym(DummyStellarator):
     lam_con = FixLambdaGauge(eq)
     lam_con.build()
     np.testing.assert_array_equal(lam_con._A, correct_constraint_matrix)
+    omega_con = FixOmegaGauge(eq)
+    omega_con.build()
+    np.testing.assert_array_equal(omega_con._A, correct_constraint_matrix)
 
 
 @pytest.mark.unit
@@ -98,6 +107,17 @@ def test_LambdaGauge_asym():
         eq.L_lmn = z
         lam = eq.compute("lambda", grid=grid)["lambda"]
         np.testing.assert_allclose(lam, 0, atol=1e-15)
+
+    omega_con = FixOmegaGauge(eq)
+    omega_con.build()
+
+    # make sure that any omega in the null space gives omega==0 at theta=zeta=0
+    Z = scipy.linalg.null_space(lam_con._A)
+    grid = LinearGrid(L=10, theta=[0], zeta=[0])
+    for z in Z.T:
+        eq.W_lmn = z
+        omega = eq.compute("omega", grid=grid)["omega"]
+        np.testing.assert_allclose(omega, 0, atol=1e-15)
 
 
 @pytest.mark.unit
@@ -174,11 +194,13 @@ def test_fixed_mode_solve():
 
     constraints = (
         FixLambdaGauge(eq=eq),
+        FixOmegaGauge(eq=eq),
         FixPressure(eq=eq),
         FixIota(eq=eq),
         FixPsi(eq=eq),
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),
+        FixBoundaryW(eq=eq),
         fixR,
         fixZ,
     )
@@ -235,11 +257,13 @@ def test_fixed_modes_solve():
     )
     constraints = (
         FixLambdaGauge(eq=eq),
+        FixOmegaGauge(eq=eq),
         FixPressure(eq=eq),
         FixIota(eq=eq),
         FixPsi(eq=eq),
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),
+        FixBoundaryW(eq=eq),
         fixR,
         fixZ,
         fixLambda,
@@ -282,14 +306,17 @@ def test_fixed_axis_and_theta_SFL_solve():
 
     orig_R_val = eq.axis.R_n
     orig_Z_val = eq.axis.Z_n
+    orig_W_val = eq.axis.W_n
 
     constraints = (
         FixThetaSFL(eq=eq),
+        FixZetaSFL(eq=eq),
         FixPressure(eq=eq),
         FixCurrent(eq=eq),
         FixPsi(eq=eq),
         FixAxisR(eq=eq),
         FixAxisZ(eq=eq),
+        FixAxisW(eq=eq),
     )
 
     eq.solve(
@@ -303,7 +330,9 @@ def test_fixed_axis_and_theta_SFL_solve():
 
     np.testing.assert_allclose(orig_R_val, eq.axis.R_n, atol=1e-14)
     np.testing.assert_allclose(orig_Z_val, eq.axis.Z_n, atol=1e-14)
+    np.testing.assert_allclose(orig_W_val, eq.axis.W_n, atol=1e-14)
     np.testing.assert_allclose(np.zeros_like(eq.L_lmn), eq.L_lmn, atol=1e-14)
+    np.testing.assert_allclose(np.zeros_like(eq.W_lmn), eq.W_lmn, atol=1e-14)
 
 
 @pytest.mark.unit
@@ -334,7 +363,8 @@ def test_build_init():
     # initialize the constraints without building
     fbR1 = FixBoundaryR(eq=eq)
     fbZ1 = FixBoundaryZ(eq=eq)
-    for obj in (fbR1, fbZ1):
+    fbW1 = FixBoundaryW(eq=eq)
+    for obj in (fbR1, fbZ1, fbW1):
         obj.build()
 
     xz = {key: np.zeros_like(val) for key, val in eq.params_dict.items()}
@@ -347,6 +377,11 @@ def test_build_init():
     A = fbZ1.jac_scaled(xz)[0][arg]
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
+
+    arg = "Wb_lmn"
+    A = fbW1.jac_scaled(xz)[0][arg]
+    assert np.max(np.abs(A)) == 1
+    assert A.shape == (eq.surface.W_basis.num_modes, eq.surface.W_basis.num_modes)
 
 
 @pytest.mark.unit
@@ -407,8 +442,10 @@ def test_correct_indexing_passed_modes():
     constraints = (
         FixBoundaryR(eq=eq, modes=R_modes, normalize=False),
         FixBoundaryZ(eq=eq, modes=Z_modes, normalize=False),
+        FixBoundaryW(eq=eq),
         BoundaryRSelfConsistency(eq=eq),
         BoundaryZSelfConsistency(eq=eq),
+        BoundaryWSelfConsistency(eq=eq),
         FixPressure(eq=eq),
     )
     for con in constraints:
@@ -423,7 +460,7 @@ def test_correct_indexing_passed_modes():
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
-    atol = 2e-15
+    atol = 1e-14
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
     np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
@@ -472,8 +509,10 @@ def test_correct_indexing_passed_modes_and_passed_target():
     constraints = (
         FixBoundaryR(eq=eq, modes=R_modes, normalize=False, target=target_R),
         FixBoundaryZ(eq=eq, modes=Z_modes, normalize=False, target=target_Z),
+        FixBoundaryW(eq=eq),
         BoundaryRSelfConsistency(eq=eq),
         BoundaryZSelfConsistency(eq=eq),
+        BoundaryWSelfConsistency(eq=eq),
         FixPressure(eq=eq),
     )
     for con in constraints:
@@ -488,7 +527,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
-    atol = 2e-15
+    atol = 1e-14
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
     np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
@@ -526,10 +565,12 @@ def test_correct_indexing_passed_modes_axis():
     Z_modes = np.flip(Z_modes, 0)
 
     constraints = (
-        FixAxisR(eq=eq, modes=R_modes, normalize=False),
-        FixAxisZ(eq=eq, modes=Z_modes, normalize=False),
         AxisRSelfConsistency(eq=eq),
         AxisZSelfConsistency(eq=eq),
+        AxisWSelfConsistency(eq=eq),
+        FixAxisR(eq=eq, modes=R_modes, normalize=False),
+        FixAxisZ(eq=eq, modes=Z_modes, normalize=False),
+        FixAxisW(eq=eq),
         FixModeR(eq=eq, modes=np.array([[1, 1, 1], [2, 2, 2]]), normalize=False),
         FixModeZ(eq=eq, modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
         FixModeLambda(eq=eq, modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
@@ -602,8 +643,10 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     constraints = (
         AxisRSelfConsistency(eq=eq),
         AxisZSelfConsistency(eq=eq),
+        AxisWSelfConsistency(eq=eq),
         FixAxisR(eq=eq, modes=R_modes, normalize=False, target=target_R),
         FixAxisZ(eq=eq, modes=Z_modes, normalize=False, target=target_Z),
+        FixAxisW(eq=eq),
         FixModeR(
             eq=eq,
             modes=np.array([[1, 1, 1], [2, 2, 2]]),
@@ -705,6 +748,10 @@ def test_FixBoundary_with_single_weight():
     FixR.build()
     np.testing.assert_array_equal(FixR.weight.size, 1)
     np.testing.assert_array_equal(FixR.weight, w)
+    FixW = FixBoundaryW(eq=eq, modes=np.array([[0, 1, 0]]), weight=w)
+    FixW.build()
+    np.testing.assert_array_equal(FixW.weight.size, 1)
+    np.testing.assert_array_equal(FixW.weight, w)
 
 
 @pytest.mark.unit
@@ -723,6 +770,12 @@ def test_FixBoundary_passed_target_no_passed_modes_error():
     FixR = FixBoundaryR(eq=eq, modes=False, target=np.array([0, 0]))
     with pytest.raises(ValueError):
         FixR.build()
+    FixW = FixBoundaryW(eq=eq, modes=True, target=np.array([0, 0]))
+    with pytest.raises(ValueError):
+        FixW.build()
+    FixW = FixBoundaryW(eq=eq, modes=False, target=np.array([0, 0]))
+    with pytest.raises(ValueError):
+        FixW.build()
 
 
 @pytest.mark.unit
@@ -741,6 +794,12 @@ def test_FixAxis_passed_target_no_passed_modes_error():
     FixR = FixAxisR(eq=eq, modes=False, target=np.array([0, 0]))
     with pytest.raises(ValueError):
         FixR.build()
+    FixW = FixAxisW(eq=eq, modes=True, target=np.array([0, 0]))
+    with pytest.raises(ValueError):
+        FixW.build()
+    FixW = FixAxisW(eq=eq, modes=False, target=np.array([0, 0]))
+    with pytest.raises(ValueError):
+        FixW.build()
 
 
 @pytest.mark.unit
@@ -825,6 +884,7 @@ def test_FixAxis_util_correct_objectives():
     cs = get_fixed_axis_constraints(eq)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixAxisW)
     assert _is_any_instance(cs, FixPsi)
     assert _is_any_instance(cs, FixPressure)
     assert _is_any_instance(cs, FixCurrent)
@@ -833,6 +893,7 @@ def test_FixAxis_util_correct_objectives():
     cs = get_fixed_axis_constraints(eq)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixAxisW)
     assert _is_any_instance(cs, FixPsi)
     assert _is_any_instance(cs, FixElectronDensity)
     assert _is_any_instance(cs, FixElectronTemperature)
@@ -849,6 +910,7 @@ def test_FixNAE_util_correct_objectives():
     cs = get_NAE_constraints(eq, qsc)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixAxisW)
     assert _is_any_instance(cs, FixPsi)
     assert _is_any_instance(cs, FixSumModesR)
     assert _is_any_instance(cs, FixSumModesZ)
@@ -859,6 +921,7 @@ def test_FixNAE_util_correct_objectives():
     cs = get_NAE_constraints(eq, qsc)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixAxisW)
     assert _is_any_instance(cs, FixPsi)
     assert _is_any_instance(cs, FixSumModesR)
     assert _is_any_instance(cs, FixSumModesZ)

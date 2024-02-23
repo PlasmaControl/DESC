@@ -37,14 +37,18 @@ from .getters import (
 )
 from .linear_objectives import (
     AxisRSelfConsistency,
+    AxisWSelfConsistency,
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
+    BoundaryWSelfConsistency,
     BoundaryZSelfConsistency,
     FixAnisotropy,
     FixAtomicNumber,
     FixAxisR,
+    FixAxisW,
     FixAxisZ,
     FixBoundaryR,
+    FixBoundaryW,
     FixBoundaryZ,
     FixCurrent,
     FixCurveRotation,
@@ -57,6 +61,7 @@ from .linear_objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixOmegaGauge,
     FixParameter,
     FixPressure,
     FixPsi,
@@ -64,5 +69,6 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    FixZetaSFL,
 )
 from .objective_funs import ObjectiveFunction

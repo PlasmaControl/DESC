@@ -1117,19 +1117,19 @@ class _Objective(IOAble, ABC):
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmax / self.normalization)
+                    + self._print_value_fmt.format(fmax / jnp.mean(self.normalization))
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmin / self.normalization)
+                    + self._print_value_fmt.format(fmin / jnp.mean(self.normalization))
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + self._print_value_fmt.format(fmean / self.normalization)
+                    + self._print_value_fmt.format(fmean / jnp.mean(self.normalization))
                     + "(normalized)"
                 )
 

@@ -875,7 +875,7 @@ def test_constrained_AL_lsq():
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
-        FixPressure(eq=eq),
+        FixPressure(eq=eq),  # fix pressure profile
         FixParameter(
             eq, "i_l", bounds=(eq.i_l * 0.9, eq.i_l * 1.1)
         ),  # linear inequality

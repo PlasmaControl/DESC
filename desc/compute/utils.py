@@ -11,11 +11,13 @@ from termcolor import colored
 from desc.backend import (
     complex_sqrt,
     cond,
-    diff_mask,
+    flatnonzero,
     fori_loop,
     jnp,
     put,
     put_along_axis,
+    take,
+    use_jax,
     vmap,
 )
 from desc.grid import ConcentricGrid, Grid, LinearGrid, _meshgrid_expand
@@ -1406,7 +1408,7 @@ def cubic_poly_roots(
         return r
 
     def replace_roots(r):
-        r = jnp.where(jnp.isreal(r) & (a_min <= r) & (r <= a_max), jnp.real(r), a_min)
+        r = jnp.where(jnp.isreal(r), jnp.clip(jnp.real(r), a_min, a_max), a_min)
         return r
 
     xi_1 = (-1 + (-3) ** 0.5) / 2
@@ -1587,17 +1589,17 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
     N = zeta.size - 1  # number of splines per field line
     NUM_ROOTS = 3  # max number of roots for cubic polynomial
     # TODO: https://github.com/f0uriest/interpax/issues/19
-    coef = CubicHermiteSpline(
+    poly_B_norm = CubicHermiteSpline(
         zeta,
         data["|B|"].reshape(ML, zeta.size),
         data["|B|_z constant rho alpha"].reshape(ML, zeta.size),
         axis=-1,
         extrapolate="periodic",
     ).c
-    coef = jnp.swapaxes(coef, 1, -1)
-    der = polyder(coef)
-    assert coef.shape == (4, ML, N)
-    assert der.shape == (3, ML, N)
+    poly_B_norm = jnp.moveaxis(poly_B_norm, 1, -1)
+    poly_B_norm_z = polyder(poly_B_norm)
+    assert poly_B_norm.shape == (4, ML, N)
+    assert poly_B_norm_z.shape == (3, ML, N)
 
     def _bounce_integral(name, lambda_pitch):
         """Compute the bounce integral of the named quantity.
@@ -1623,27 +1625,31 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         # line would require root finding to map field line coordinates to desc
         # coordinates. So we approximate functions in the integrand with splines
         # and perform Gauss-Quadrature.
-        # TODO: spline functions separately since no polynomial cannot capture the
-        #  division accurately near the bounce points.
+        # TODO: spline functions separately since no polynomial can capture the
+        #  division in integrand accurately near the bounce points.
         lambda_pitch = jnp.atleast_1d(lambda_pitch)
         interpolation_points = cubic_poly_roots(
-            coef, constant=1 / lambda_pitch, a_min=zeta[:-1], a_max=zeta[1:], fill=True
+            poly_B_norm,
+            constant=1 / lambda_pitch,
+            a_min=zeta[:-1],
+            a_max=zeta[1:],
+            fill=True,
         ).reshape(lambda_pitch.size, ML, N, NUM_ROOTS + 2)
-        b_norm_z = polyeval(
-            der[:, jnp.newaxis], interpolation_points[..., 1:-1]
+        B_norm_z = polyeval(
+            poly_B_norm_z[:, jnp.newaxis], interpolation_points[..., 1:-1]
         ).reshape(lambda_pitch.size, ML, N * NUM_ROOTS)
         # Check sign of gradient to determine whether root is a valid bounce point.
         # Periodic boundary to compute bounce integrals of particles
         # trapped outside this snapshot of the field lines.
-        is_well = (b_norm_z <= 0) & (jnp.roll(b_norm_z, -1, axis=-1) >= 0)
+        is_well = (B_norm_z <= 0) & (jnp.roll(B_norm_z, -1, axis=-1) >= 0)
         # Make is_well broadcast with interpolation_points.
         idx = jnp.arange(N * NUM_ROOTS)
         is_well = put_along_axis(
-            arr=jnp.zeros(shape=(lambda_pitch.size, ML, N * 5), dtype=bool),
+            arr=jnp.zeros((lambda_pitch.size, ML, N * (NUM_ROOTS + 2)), dtype=bool),
             indices=(idx // NUM_ROOTS) * (NUM_ROOTS + 2) + 1 + (idx % NUM_ROOTS),
             values=is_well,
             axis=-1,
-        ).reshape(lambda_pitch.size * ML, N * 5)
+        ).reshape(lambda_pitch.size * ML, N * (NUM_ROOTS + 2))
         # Can precompute everything above if lambda_pitch given to parent function.
 
         integrand = jnp.nan_to_num(
@@ -1665,7 +1671,9 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
             jnp.diff(primitive, axis=-1, append=primitive[..., 0, jnp.newaxis])
             # Multiply by mask that is false at knots of piecewise spline
             # to avoid adding difference between primitives of splines at knots.
-            * jnp.append(jnp.arange(1, primitive.shape[-1]) % 5 != 0, True),
+            * jnp.append(
+                jnp.arange(1, N * (NUM_ROOTS + 2)) % (NUM_ROOTS + 2) != 0, True
+            ),
             axis=-1,
         ).reshape(lambda_pitch.size * ML, N * (NUM_ROOTS + 2))
 
@@ -1681,6 +1689,74 @@ def _diff_between_bounce_points(args):
     """Compute difference between bounce points specified in mask."""
     a, mask = args
     return diff_mask(a, mask)[::2]
+
+
+def diff_mask(a, mask, n=1, axis=-1, prepend=None):
+    """Calculate the n-th discrete difference along the given axis of ``a[mask]``.
+
+    The first difference is given by ``out[i] = a[i+1] - a[i]`` along
+    the given axis, higher differences are calculated by using `diff`
+    recursively.
+
+    Parameters
+    ----------
+    a : array_like
+        Input array
+    mask : array_like
+        Boolean mask to index like ``a[mask]`` prior to computing difference.
+        Should have same size as ``a``.
+    n : int, optional
+        The number of times values are differenced. If zero, the input
+        is returned as-is.
+    axis : int, optional
+        The axis along which the difference is taken, default is the
+        last axis.
+    prepend : array_like, optional
+        Values to prepend to `a` along axis prior to
+        performing the difference.  Scalar values are expanded to
+        arrays with length 1 in the direction of axis and the shape
+        of the input array in along all other axes.  Otherwise the
+        dimension and shape must match `a` except along axis.
+
+    Returns
+    -------
+    diff : ndarray
+        The n-th differences. The shape of the output is the same as `a`
+        except along `axis` where the dimension is smaller by `n`. The
+        type of the output is the same as the type of the difference
+        between any two elements of `a`. This is the same as the type of
+        `a` in most cases. A notable exception is `datetime64`, which
+        results in a `timedelta64` output array.
+
+    Notes
+    -----
+    The result is padded with zeros at the end to be jit compilable.
+    The current implementation removes all nan values in the output as a side effect.
+
+    """
+    if prepend is None and not use_jax:
+        # https://github.com/numpy/numpy/blob/
+        # d35cd07ea997f033b2d89d349734c61f5de54b0d/
+        # numpy/lib/function_base.py#L1324-L1454
+        prepend = np._NoValue
+    indices = flatnonzero(mask, size=mask.size, fill_value=mask.size)
+    diff = jnp.nan_to_num(
+        jnp.diff(
+            take(
+                a,
+                indices,
+                axis=0,
+                mode="fill",
+                fill_value=jnp.nan,
+                unique_indices=True,
+                indices_are_sorted=True,
+            ),
+            n,
+            axis,
+            prepend,
+        )
+    )
+    return diff
 
 
 def bounce_average(eq, rho=None, alpha=None, resolution=20):

@@ -73,7 +73,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     vmap = jax.vmap
     scan = jax.lax.scan
     bincount = jnp.bincount
+    repeat = jnp.repeat
     flatnonzero = jnp.flatnonzero
+    take = jnp.take
     from jax import custom_jvp
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
@@ -130,7 +132,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         """
         if axis != -1:
             raise NotImplementedError(
-                "JAX put_along_axis currently only supports axis=-1."
+                f"put_along_axis for axis={axis} not implemented yet."
             )
         if isinstance(arr, np.ndarray):
             arr[..., indices] = values
@@ -610,7 +612,7 @@ else:  # pragma: no cover
         """
         if in_axes != 0:
             raise NotImplementedError(
-                "Backend for numpy vmap currently only supports in_axes=0."
+                f"Backend for numpy vmap for in_axes={in_axes} not implemented yet."
             )
 
         def fun_vmap(fun_inputs):
@@ -657,13 +659,21 @@ else:  # pragma: no cover
             ys.append(y)
         return carry, np.stack(ys)
 
-    def bincount(x, weights=None, minlength=None, length=None):
-        """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""
-        return np.bincount(x, weights, minlength)
+    def bincount(x, weights=None, minlength=0, length=None):
+        """Numpy implementation of jnp.bincount."""
+        x = np.clip(x, 0, None)
+        if length is None:
+            length = max(minlength, x.max() + 1)
+        else:
+            minlength = max(minlength, length)
+        return np.bincount(x, weights, minlength)[:length]
 
     def repeat(a, repeats, axis=None, total_repeat_length=None):
-        """Same as np.repeat but with a dummy parameter to match jnp.repeat API."""
-        return np.repeat(a, repeats, axis)
+        """Numpy implementation of jnp.repeat."""
+        out = np.repeat(a, repeats, axis)
+        if total_repeat_length is not None:
+            out = out[:total_repeat_length]
+        return out
 
     def custom_jvp(fun, *args, **kwargs):
         """Dummy function for custom_jvp without JAX."""
@@ -775,19 +785,33 @@ else:  # pragma: no cover
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
         return out.x, out
 
-    def flatnonzero(a, *, size=None, fill_value=0):
+    def flatnonzero(a, size=None, fill_value=0):
         """Numpy implementation of jnp.flatnonzero."""
         nz = np.flatnonzero(a)
         if size is not None:
             nz = np.append(nz, np.repeat(fill_value, max(size - nz.size, 0)))
         return nz
 
-
-def diff_mask(a, mask, n=1, axis=-1, prepend=None, append=None):
-    """Computes jnp.diff(a[mask], n, axis, prepend, append).
-
-    The result is padded with zeros at the end to be jit compilable.
-    The shape matches the output of jnp.diff(a, n, axis, prepend, append).
-    """
-    idx = flatnonzero(mask, size=a.size, fill_value=a.size - 1)
-    return jnp.diff(a[idx], n, axis, prepend, append)
+    def take(
+        a,
+        indices,
+        axis=None,
+        out=None,
+        mode="fill",
+        unique_indices=False,
+        indices_are_sorted=False,
+        fill_value=None,
+    ):
+        """Numpy implementation of jnp.take."""
+        if mode == "fill":
+            if fill_value is None:
+                # TODO: Interpret default fill value based on dtype of a.
+                fill_value = np.nan
+            out = np.where(
+                (-a.size <= indices) & (indices < a.size),
+                np.take(a, indices, axis, out, mode="wrap"),
+                fill_value,
+            )
+        else:
+            out = np.take(a, indices, axis, out, mode)
+        return out

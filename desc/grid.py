@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from scipy import optimize, special
 
-from desc.backend import jnp, put
+from desc.backend import jnp, put, repeat, take
 from desc.io import IOAble
 from desc.utils import Index
 
@@ -315,11 +315,11 @@ class _Grid(IOAble, ABC):
         assert surface_label in {"rho", "theta", "zeta"}
         assert len(x) == self.num_nodes
         if surface_label == "rho":
-            return x[self.unique_rho_idx]
+            return take(x, self.unique_rho_idx, axis=0, unique_indices=True)
         if surface_label == "theta":
-            return x[self.unique_theta_idx]
+            return take(x, self.unique_theta_idx, axis=0, unique_indices=True)
         if surface_label == "zeta":
-            return x[self.unique_zeta_idx]
+            return take(x, self.unique_zeta_idx, axis=0, unique_indices=True)
 
     def expand(self, x, surface_label="rho"):
         """Expand ``x`` by duplicating elements to match the grid's pattern.
@@ -1519,12 +1519,11 @@ def _meshgrid_expand(x, rho_size, theta_size, zeta_size, surface_label="rho"):
     if surface_label == "rho":
         assert len(x) == rho_size
         return jnp.tile(
-            jnp.repeat(x, zeta_size, total_repeat_length=rho_size * zeta_size),
-            theta_size,
+            repeat(x, zeta_size, total_repeat_length=rho_size * zeta_size), theta_size
         )
     if surface_label == "theta":
         assert len(x) == theta_size
-        return jnp.repeat(
+        return repeat(
             x,
             rho_size * zeta_size,
             total_repeat_length=rho_size * theta_size * zeta_size,

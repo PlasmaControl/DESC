@@ -574,20 +574,18 @@ class _CoilObjective(_Objective):
 
         """
         # local import to avoid circular import
-        from desc.coils import CoilSet, MixedCoilSet
+        # TODO: import this from desc backend?
+        import jax.tree_util as jtu
 
-        is_mixed_coils = False
-        if isinstance(self.things[0], CoilSet):
-            if isinstance(self.things[0], MixedCoilSet):
-                is_mixed_coils = True
-                coil = self.things[0].coils
-                self._dim_f = len(coil)
-            else:
-                coil = self.things[0].coils[0]
-                self._dim_f = 1
-        else:
-            coil = self.things[0]
-            self._dim_f = 1
+        from desc.coils import CoilSet, MixedCoilSet, _Coil
+
+        coils = jtu.tree_flatten(
+            self.things[0],
+            is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
+        )[0]
+        self._dim_f = len(coils)
+
+        is_mixed_coils = isinstance(self.things[0], MixedCoilSet)
 
         if self._grid is None:
             # TODO: raise error if grid, transforms are not the same size as mixed coils
@@ -604,15 +602,14 @@ class _CoilObjective(_Objective):
 
         if is_mixed_coils:
             transforms = [
-                get_transforms(self._data_keys, obj=coil[i], grid=self._grid[i])
+                get_transforms(self._data_keys, obj=coils[i], grid=self._grid[i])
                 for i in range(self._dim_f)
             ]
         else:
-            transforms = get_transforms(self._data_keys, obj=coil, grid=self._grid)
+            transforms = get_transforms(self._data_keys, obj=coils[0], grid=self._grid)
 
         self._constants = {
             "transforms": transforms,
-            "is_mixed_coils": is_mixed_coils,
         }
 
         timer.stop("Precomputing transforms")
@@ -735,11 +732,13 @@ class CoilLength(_CoilObjective):
         f : float or array of floats
             Coil length.
         """
+        # TODO: import this from desc backend?
+        import jax.tree_util as jtu
+
         data = super().compute(params, constants=constants)
-        if isinstance(data, list):
-            return [data[i]["length"] for i, dat in enumerate(data)]
-        else:
-            return data["length"]
+        data = jtu.tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        out = jnp.array([dat["length"] for dat in data])
+        return out
 
 
 class CoilCurvature(_CoilObjective):
@@ -826,11 +825,12 @@ class CoilCurvature(_CoilObjective):
         f : float or array of floats
             Coil curvature.
         """
+        import jax.tree_util as jtu
+
         data = super().compute(params, constants=constants)
-        if isinstance(data, list):
-            return [data[i]["curvature"] for i, dat in enumerate(data)]
-        else:
-            return data["curvature"]
+        data = jtu.tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        out = jnp.array([dat["curvature"] for dat in data])
+        return out
 
 
 class PlasmaVesselDistance(_Objective):

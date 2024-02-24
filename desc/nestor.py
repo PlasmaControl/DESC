@@ -1113,7 +1113,7 @@ class Nestor(IOAble):
         """Wrapper for handling fields from different coil types."""
         surf_coords = jnp.array([coords["R"], coords["phi"], coords["Z"]]).T
         B = self.ext_field.compute_magnetic_field(
-            surf_coords, params=params, grid=self.field_grid
+            surf_coords, params=params, source_grid=self.field_grid
         ).T
         B_ex = {}
         B_ex["BR"] = B[0]

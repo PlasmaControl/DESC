@@ -31,8 +31,8 @@ class VacuumBoundaryError(_Objective):
     𝐁ₒᵤₜ² - 𝐁ᵢₙ² = 0
 
     Where 𝐁ᵢₙ is the total field inside the LCFS (from fixed boundary calculation)
-    𝐁ₒᵤₜ is the total field outside the LCFS (from coils)
-    𝐧 is the outward surface normal.
+    𝐁ₒᵤₜ is the total field outside the LCFS (from coils), and 𝐧 is the outward surface
+    normal. All residuals are weighted by the local area element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
 
     (Technically for vacuum equilibria the second condition is redundant with the first,
     but including it makes things more robust).
@@ -79,7 +79,7 @@ class VacuumBoundaryError(_Objective):
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary Error: {:10.3e} "
-    _units = "(mixed units)"
+    _units = "(T*m^2, T^2*m^2)"
     _coordinates = "rtz"
 
     def __init__(
@@ -228,7 +228,7 @@ class VacuumBoundaryError(_Objective):
         )
         x = jnp.array([data["R"], data["phi"], data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(
-            x, grid=self._field_grid, basis="rpz"
+            x, source_grid=self._field_grid, basis="rpz"
         )
         Bex_total = Bext
         Bin_total = data["B"]
@@ -292,7 +292,7 @@ class VacuumBoundaryError(_Objective):
             "Boundary normal field error: {:10.3e} ",
             "Boundary magnetic pressure error: {:10.3e} ",
         ]
-        units = ["(T)", "(T^2)"]
+        units = ["(T*m^2)", "(T^2*m^2)"]
         nn = f.size // 2
         norms = [self.normalization[0], self.normalization[nn]]
         for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
@@ -319,7 +319,8 @@ class BoundaryError(_Objective):
     Where 𝐁ᵢₙ is the total field inside the LCFS (from fixed boundary calculation)
     𝐁ₒᵤₜ is the total field outside the LCFS (from coils and virtual casing principle),
     𝐧 is the outward surface normal, p is the plasma pressure, and Φ is the surface
-    current potential on the LCFS.
+    current potential on the LCFS. All residuals are weighted by the local area
+    element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
 
     The third equation is only included if a sheet current is supplied, otherwise it
     is trivially satisfied. If it is known that the external field accurately reproduces
@@ -369,10 +370,10 @@ class BoundaryError(_Objective):
         Hyperparameters for singular integration scheme, s is roughly equal to the size
         of the local singular grid with respect to the global grid, q is the order of
         integration on the local grid
-    src_grid, eval_grid : Grid, optional
+    source_grid, eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for source terms for Biot-
-        Savart integral and where to evaluate errors. src_grid should not be stellarator
-        symmetric, and both should be at rho=1.
+        Savart integral and where to evaluate errors. source_grid should not be
+        stellarator symmetric, and both should be at rho=1.
     field_grid : Grid, optional
         Grid used to discretize ext_field.
     loop : bool
@@ -386,7 +387,8 @@ class BoundaryError(_Objective):
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary Error: {:10.3e} "
-    _units = "(mixed units)"
+    _units = "(T*m^2, T^2*m^2, T*m^2)"
+
     _coordinates = "rtz"
 
     def __init__(
@@ -403,7 +405,7 @@ class BoundaryError(_Objective):
         deriv_mode="auto",
         s=None,
         q=None,
-        src_grid=None,
+        source_grid=None,
         eval_grid=None,
         field_grid=None,
         loop=True,
@@ -411,7 +413,7 @@ class BoundaryError(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        self._src_grid = src_grid
+        self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._s = s
         self._q = q
@@ -449,19 +451,19 @@ class BoundaryError(_Objective):
         """
         eq = self.things[0]
 
-        if self._src_grid is None:
+        if self._source_grid is None:
             # for axisymmetry we still need to know about toroidal effects, so its
             # cheapest to pretend there are extra field periods
-            src_NFP = eq.NFP if eq.N > 0 else 64
-            src_grid = LinearGrid(
+            source_NFP = eq.NFP if eq.N > 0 else 64
+            source_grid = LinearGrid(
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=eq.N_grid,
-                NFP=src_NFP,
+                NFP=source_NFP,
                 sym=False,
             )
         else:
-            src_grid = self._src_grid
+            source_grid = self._source_grid
 
         if self._eval_grid is None:
             eval_grid = LinearGrid(
@@ -475,9 +477,9 @@ class BoundaryError(_Objective):
             eval_grid = self._eval_grid
 
         errorif(
-            not np.all(src_grid.nodes[:, 0] == 1.0),
+            not np.all(source_grid.nodes[:, 0] == 1.0),
             ValueError,
-            "src_grid contains nodes not on rho=1",
+            "source_grid contains nodes not on rho=1",
         )
         errorif(
             not np.all(eval_grid.nodes[:, 0] == 1.0),
@@ -485,29 +487,29 @@ class BoundaryError(_Objective):
             "eval_grid contains nodes not on rho=1",
         )
         errorif(
-            src_grid.sym,
+            source_grid.sym,
             ValueError,
             "Source grids for singular integrals must be non-symmetric",
         )
         if self._s is None:
-            k = min(src_grid.num_theta, src_grid.num_zeta * src_grid.NFP)
+            k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
             self._s = k - 1
         if self._q is None:
-            k = min(src_grid.num_theta, src_grid.num_zeta * src_grid.NFP)
+            k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
             self._q = k // 2 + int(np.sqrt(k))
 
         try:
-            interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = FFTInterpolator(eval_grid, source_grid, self._s, self._q)
         except AssertionError as e:
             warnings.warn(
                 "Could not built fft interpolator, switching to dft method which is"
                 " much slower. Reason: " + str(e)
             )
-            interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = DFTInterpolator(eval_grid, source_grid, self._s, self._q)
 
         edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))
         warnif(
-            (edge_pres > 1e-6) and not self._sheet_current,
+            (edge_pres * mu_0 > 1e-6) and not self._sheet_current,
             UserWarning,
             f"Boundary pressure is nonzero (max {edge_pres} Pa), "
             + "a sheet current should be included.",
@@ -531,8 +533,8 @@ class BoundaryError(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        src_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=src_grid)
-        src_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=src_grid)
+        source_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=source_grid)
+        source_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=source_grid)
         eval_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eval_grid)
         eval_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=eval_grid)
 
@@ -541,8 +543,8 @@ class BoundaryError(_Objective):
         self._constants = {
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
-            "src_transforms": src_transforms,
-            "src_profiles": src_profiles,
+            "source_transforms": source_transforms,
+            "source_profiles": source_profiles,
             "interpolator": interpolator,
             "ext_field": self._ext_field,
             "quad_weights": np.sqrt(np.tile(eval_transforms["grid"].weights, neq)),
@@ -560,11 +562,11 @@ class BoundaryError(_Objective):
             sheet_eval_transforms = get_transforms(
                 self._sheet_data_keys, obj=sheet_current, grid=eval_grid
             )
-            sheet_src_transforms = get_transforms(
-                self._sheet_data_keys, obj=sheet_current, grid=src_grid
+            sheet_source_transforms = get_transforms(
+                self._sheet_data_keys, obj=sheet_current, grid=source_grid
             )
             self._constants["sheet_eval_transforms"] = sheet_eval_transforms
-            self._constants["sheet_src_transforms"] = sheet_src_transforms
+            self._constants["sheet_source_transforms"] = sheet_source_transforms
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -612,12 +614,12 @@ class BoundaryError(_Objective):
         """
         if constants is None:
             constants = self.constants
-        src_data = compute_fun(
+        source_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
             params=eq_params,
-            transforms=constants["src_transforms"],
-            profiles=constants["src_profiles"],
+            transforms=constants["source_transforms"],
+            profiles=constants["source_profiles"],
         )
         eval_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
@@ -631,11 +633,11 @@ class BoundaryError(_Objective):
             # enforce that they're the same surface
             sheet_params["R_lmn"] = eq_params["Rb_lmn"]
             sheet_params["Z_lmn"] = eq_params["Zb_lmn"]
-            sheet_src_data = compute_fun(
+            sheet_source_data = compute_fun(
                 "desc.magnetic_fields.FourierCurrentPotentialField",
                 self._sheet_data_keys,
                 params=sheet_params,
-                transforms=constants["sheet_src_transforms"],
+                transforms=constants["sheet_source_transforms"],
                 profiles={},
             )
             sheet_eval_data = compute_fun(
@@ -645,11 +647,11 @@ class BoundaryError(_Objective):
                 transforms=constants["sheet_eval_transforms"],
                 profiles={},
             )
-            src_data["K_vc"] += sheet_src_data["K"]
+            source_data["K_vc"] += sheet_source_data["K"]
 
         Bplasma = virtual_casing_biot_savart(
             eval_data,
-            src_data,
+            source_data,
             constants["interpolator"],
             loop=self._loop,
         )
@@ -657,7 +659,7 @@ class BoundaryError(_Objective):
         Bplasma = Bplasma + eval_data["B"] / 2
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(
-            x, grid=self._field_grid, basis="rpz"
+            x, source_grid=self._field_grid, basis="rpz"
         )
         Bex_total = Bext + Bplasma
         Bin_total = eval_data["B"]
@@ -728,7 +730,7 @@ class BoundaryError(_Objective):
             "Boundary magnetic pressure error: {:10.3e} ",
             "Boundary field jump error: {:10.3e} ",
         ]
-        units = ["(T)", "(T^2)", "(T)"]
+        units = ["(T*m^2)", "(T^2*m^2)", "(T*m^2)"]
         if self._sheet_current:
             nn = f.size // 3
             norms = [
@@ -1093,6 +1095,11 @@ class BoundaryErrorNESTOR(_Objective):
 
         1/2mu0*(B_vac + B_coil)^2 - 1/2mu0*B_plasma^2 - p
 
+    Residuals are weighted by the local area element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
+
+    Note: This objective is still experimental and may not work in all cases.
+    Recommend using ``BoundaryError`` or ``VacuumBoundaryError``
+
     Parameters
     ----------
     eq : Equilibrium
@@ -1137,7 +1144,7 @@ class BoundaryErrorNESTOR(_Objective):
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary magnetic pressure error: {:10.3e} "
-    _units = "(T^2)"
+    _units = "(T^2*m^2)"
     _coordinates = "rtz"
 
     def __init__(
@@ -1236,7 +1243,7 @@ class BoundaryErrorNESTOR(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+            self._normalization = scales["B"] ** 2 * scales["R0"] * scales["a"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1254,7 +1261,7 @@ class BoundaryErrorNESTOR(_Objective):
         Returns
         -------
         f : ndarray
-            Boundary magnetic pressure error (T^2).
+            Boundary magnetic pressure error (T^2*m^2).
 
         """
         if constants is None:

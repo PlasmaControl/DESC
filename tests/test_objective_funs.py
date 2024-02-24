@@ -27,7 +27,6 @@ from desc.objectives import (
     AspectRatio,
     BootstrapRedlConsistency,
     BoundaryError,
-    BoundaryErrorNESTOR,
     BScaleLength,
     CurrentDensity,
     Elongation,
@@ -35,6 +34,7 @@ from desc.objectives import (
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixParameter,
     FixPressure,
     FixPsi,
     ForceBalance,
@@ -63,7 +63,7 @@ from desc.objectives import (
     VacuumBoundaryError,
     Volume,
 )
-from desc.objectives.linear_objectives import FixParameter
+from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective
 from desc.objectives.utils import softmax, softmin
@@ -169,6 +169,7 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+        test(Equilibrium(iota=PowerSeriesProfile(0)).surface)
 
     @pytest.mark.unit
     def test_elongation(self):
@@ -183,6 +184,7 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
 
         test(get("HELIOTRON"))
+        test(get("HELIOTRON").surface)
 
     @pytest.mark.unit
     def test_energy(self):
@@ -1413,15 +1415,15 @@ def test_boundary_error_print(capsys):
         "Precomputing transforms\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
@@ -1443,15 +1445,15 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
@@ -1488,15 +1490,15 @@ def test_boundary_error_print(capsys):
         "Precomputing transforms\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
@@ -1518,15 +1520,15 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
@@ -1566,15 +1568,15 @@ def test_boundary_error_print(capsys):
         "Precomputing transforms\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary normal field error: {:10.3e} ".format(
@@ -1596,15 +1598,15 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
-        + "(T^2)"
+        + "(T^2*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary magnetic pressure error: {:10.3e} ".format(
@@ -1626,15 +1628,15 @@ def test_boundary_error_print(capsys):
         + "\n"
         + "Maximum absolute "
         + "Boundary field jump error: {:10.3e} ".format(np.max(f3))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Minimum absolute "
         + "Boundary field jump error: {:10.3e} ".format(np.min(f3))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Average absolute "
         + "Boundary field jump error: {:10.3e} ".format(np.mean(f3))
-        + "(T)"
+        + "(T*m^2)"
         + "\n"
         + "Maximum absolute "
         + "Boundary field jump error: {:10.3e} ".format(
@@ -2270,24 +2272,7 @@ def test_objective_no_nangrad():
     g = obj.grad(obj.x(eq))
     assert not np.any(np.isnan(g)), "redl bootstrap"
 
-    extcur = [
-        3.884526409876309e06,
-        -2.935577123737952e05,
-        -1.734851853677043e04,
-        6.002137016973160e04,
-        6.002540940490887e04,
-        -1.734993103183817e04,
-        -2.935531536308510e05,
-        -3.560639108717275e05,
-        -6.588434719283084e04,
-        -1.154387774712987e04,
-        -1.153546510755219e04,
-        -6.588300858364606e04,
-        -3.560589388468855e05,
-    ]
-    ext_field = SplineMagneticField.from_mgrid(
-        r"tests/inputs/mgrid_solovev.nc", extcur=extcur
-    )
+    ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
     pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
     iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])

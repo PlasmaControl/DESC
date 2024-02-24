@@ -166,7 +166,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
-    constraints = maybe_add_self_consistency(eq=eq, constraints=constraints)
+    constraints = maybe_add_self_consistency(eq, constraints)
     for con in constraints:
         if not con.built:
             con.build(eq, verbose=verbose)
@@ -544,7 +544,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(eq=eq)
-    constraints = maybe_add_self_consistency(eq=eq, constraints=constraints)
+    constraints = maybe_add_self_consistency(eq, constraints)
     for con in constraints:
         if not con.built:
             con.build(eq, verbose=verbose)

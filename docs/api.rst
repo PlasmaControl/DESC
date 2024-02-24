@@ -155,7 +155,6 @@ Objective Functions
     desc.objectives.AspectRatio
     desc.objectives.BootstrapRedlConsistency
     desc.objectives.BoundaryError
-    desc.objectives.BoundaryErrorNESTOR
     desc.objectives.BScaleLength
     desc.objectives.CurrentDensity
     desc.objectives.Elongation

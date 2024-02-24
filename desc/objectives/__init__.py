@@ -9,7 +9,7 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._free_boundary import BoundaryError, BoundaryErrorNESTOR, VacuumBoundaryError
+from ._free_boundary import BoundaryError, VacuumBoundaryError
 from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,

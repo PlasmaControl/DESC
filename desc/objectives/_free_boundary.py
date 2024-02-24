@@ -766,6 +766,9 @@ class BoundaryErrorNESTOR(_Objective):
 
     Residuals are weighted by the local area element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
 
+    Note: This objective is still experimental and may not work in all cases.
+    Recommend using ``BoundaryError`` or ``VacuumBoundaryError``
+
     Parameters
     ----------
     eq : Equilibrium

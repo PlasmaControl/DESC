@@ -1361,9 +1361,7 @@ def surface_min(grid, x, surface_label="rho"):
     return grid.expand(mins, surface_label)
 
 
-def cubic_poly_roots(
-    coef, constant=jnp.array([0]), a_min=-jnp.inf, a_max=jnp.inf, fill=False
-):
+def cubic_poly_roots(coef, constant=jnp.array([0]), a_min=None, a_max=None, fill=False):
     """Roots of cubic polynomial.
 
     Parameters
@@ -1374,27 +1372,34 @@ def cubic_poly_roots(
         It is assumed that c₁ is nonzero.
     constant : ndarray, shape(constant.size, )
         Specify to instead find solutions to c₁ x³ + c₂ x² + c₃ x + c₄ = ``constant``.
-    a_min : ndarray
-        Return nan if real part of root is less than ``a_min``.
-        Should broadcast with arrays of shape ``coef.shape[1:]``.
-    a_max : ndarray
-        Return nan if real part of root is less than ``a_max``.
-        Should broadcast with arrays of shape ``coef.shape[1:]``.
+    a_min, a_max : ndarray
+        Minimum and maximum value to clip roots between.
+        Complex roots are always clipped to ``a_min``.
+        If None, clipping is not performed on the corresponding edge.
+        Both are broadcast against arrays of shape ``coef.shape[1:]``.
     fill : bool
-        If set to True, then the last axis of the output has size 5 instead
-        of 3, where the first element is ``a_min`` and the last is ``a_max``.
-        This option also replaces complex roots with ``a_min``.
-        The roots will be sorted from smallest to largest real part.
+        If true, the last axis of the output has size 5 instead of 3,
+        where the clipping boundaries surround the roots.
+        Along the last axis, the first element is ``a_min``, followed
+        by the three clipped roots in sorted order, then ``a_max``.
+        If no clipping boundaries are specified, the roots are clipped
+        to the real line.
 
     Returns
     -------
-    xi : ndarray, shape(constant.size, coef.shape, ?)
+    xi : ndarray, shape(constant.size, coef.shape, 3 + 2 * bool(fill))
         If constant has one element, the first axis will be squeezed out.
         The roots of the cubic polynomial.
 
     """
     # https://en.wikipedia.org/wiki/Cubic_equation#General_cubic_formula
     # The common libraries use root-finding which isn't compatible with JAX.
+    clip = fill or a_min is not None or a_max is not None
+    if a_min is None:
+        a_min = -jnp.inf
+    if a_max is None:
+        a_max = jnp.inf
+
     a, b, c, d = coef
     d = jnp.squeeze((d[jnp.newaxis].T - constant).T)
     t_0 = b**2 - 3 * a * c
@@ -1407,7 +1412,7 @@ def cubic_poly_roots(
         r = -(b + xi_k * C + t_3) / (3 * a)
         return r
 
-    def replace_roots(r):
+    def clip_roots(r):
         r = jnp.where(jnp.isreal(r), jnp.clip(jnp.real(r), a_min, a_max), a_min)
         return r
 
@@ -1415,10 +1420,13 @@ def cubic_poly_roots(
     xi_2 = xi_1**2
     xi_3 = 1
     xi_1, xi_2, xi_3 = map(roots, (xi_1, xi_2, xi_3))
-    if fill:
-        xi_1, xi_2, xi_3 = map(replace_roots, (xi_1, xi_2, xi_3))
-        xi = jnp.sort(jnp.stack([xi_1, xi_2, xi_3], axis=0), axis=0)
-        xi = jnp.stack(jnp.broadcast_arrays(a_min, xi[0], xi[1], xi[2], a_max), axis=-1)
+    if clip:
+        xi_1, xi_2, xi_3 = map(clip_roots, (xi_1, xi_2, xi_3))
+        if fill:
+            xi = jnp.sort(jnp.stack([xi_1, xi_2, xi_3], axis=0), axis=0)
+            xi = jnp.stack(
+                jnp.broadcast_arrays(a_min, xi[0], xi[1], xi[2], a_max), axis=-1
+            )
     else:
         xi = jnp.stack([xi_1, xi_2, xi_3], axis=-1)
     return xi
@@ -1530,7 +1538,46 @@ def tanh_sinh_quadrature(N, quad_limit=3.16):
     return x_k, w_k
 
 
-def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=20):
+def _interp_well(lambda_pitch, zeta, ML, poly_B_norm, poly_B_norm_z):
+    # Helper function for bounce_integrals().
+    N = zeta.size - 1
+    NUM_ROOTS = 3
+
+    interpolation_points = cubic_poly_roots(
+        poly_B_norm,
+        constant=1 / lambda_pitch,
+        a_min=zeta[:-1],
+        a_max=zeta[1:],
+        fill=True,
+    ).reshape(lambda_pitch.size, ML, N, NUM_ROOTS + 2)
+    B_norm_z = polyeval(
+        poly_B_norm_z[:, jnp.newaxis], interpolation_points[..., 1:-1]
+    ).reshape(lambda_pitch.size, ML, N * NUM_ROOTS)
+    # Check sign of gradient to determine whether root is a valid bounce point.
+    # Periodic boundary to compute bounce integrals of particles
+    # trapped outside this snapshot of the field lines.
+    is_well = (B_norm_z <= 0) & (jnp.roll(B_norm_z, -1, axis=-1) >= 0)
+    # Make last axis of is_well broadcast with interpolation_points.
+    idx = jnp.arange(N * NUM_ROOTS)
+    is_well = put_along_axis(
+        arr=jnp.zeros((lambda_pitch.size, ML, N * (NUM_ROOTS + 2)), dtype=bool),
+        indices=(idx // NUM_ROOTS) * (NUM_ROOTS + 2) + 1 + (idx % NUM_ROOTS),
+        values=is_well,
+        axis=-1,
+    ).reshape(lambda_pitch.size * ML, N * (NUM_ROOTS + 2))
+
+    return interpolation_points, is_well
+
+
+def bounce_integral(
+    eq,
+    rho=None,
+    alpha=None,
+    zeta_max=10 * jnp.pi,
+    lambda_pitch=None,
+    resolution=20,
+    method="spline",
+):
     """Returns a method to compute the bounce integral of any quantity.
 
     The bounce integral is defined as F_ℓ(λ) = ∫ f(ℓ) / √(1 − λ |B|) dℓ, where
@@ -1557,8 +1604,25 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         Unique field line label coordinates over a constant rho surface.
     zeta_max : float
         Max value for field line following coordinate.
+    lambda_pitch : ndarray
+        λ values to evaluate the bounce integral at.
     resolution : int
-        Number of quadrature points used to compute the bounce integral.
+        Number of interpolation points (knots) used for splines in the quadrature.
+        A maximum of three bounce points can be detected in between knots.
+        The accuracy of the quadrature will increase as some function of
+        the number of knots over the number of detected bounce points.
+        So for well-behaved magnetic fields increasing resolution should increase
+        the accuracy of the quadrature.
+    method : str
+        The method to evaluate the integral.
+        The "spline" method exactly integrates a cubic spline of the integrand.
+        The "trapezoid" method performs a trapezoidal quadrature over evenly
+        spaced samples of the integrand. The integrand is estimated by using distinct
+        cubic splines for components in the integrand so that the singularity from
+        the division by zero near the bounce points can be captured more accurately
+        than can be represented by a polynomial.
+        The "quad" method performs a Gauss quadrature estimating the integrand
+        with splines as in the trapezoidal method.
 
     Returns
     -------
@@ -1579,14 +1643,15 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
         rho = jnp.linspace(0, 1, 10)
     if alpha is None:
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 20)
-
+    rho = jnp.atleast_1d(rho)
+    alpha = jnp.atleast_1d(alpha)
     zeta = np.linspace(0, zeta_max, resolution)
     grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
     data = eq.compute(
         ["B^zeta", "|B|", "|B|_z constant rho alpha"], grid=grid, data=data
     )
     ML = alpha.size * rho.size
-    N = zeta.size - 1  # number of splines per field line
+    N = zeta.size - 1  # number of piecewise cubic polynomials per field line
     NUM_ROOTS = 3  # max number of roots for cubic polynomial
     # TODO: https://github.com/f0uriest/interpax/issues/19
     poly_B_norm = CubicHermiteSpline(
@@ -1601,7 +1666,14 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
     assert poly_B_norm.shape == (4, ML, N)
     assert poly_B_norm_z.shape == (3, ML, N)
 
-    def _bounce_integral(name, lambda_pitch):
+    _lambda_pitch = (
+        jnp.empty(0) if lambda_pitch is None else jnp.atleast_1d(lambda_pitch)
+    )
+    _interpolation_points, _is_well = _interp_well(
+        _lambda_pitch, zeta, ML, poly_B_norm, poly_B_norm_z
+    )
+
+    def _spline(name, lambda_pitch=None):
         """Compute the bounce integral of the named quantity.
 
         Parameters
@@ -1610,47 +1682,25 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
             Name of quantity in ``data_index`` to compute the bounce integral of.
         lambda_pitch : ndarray
             λ values to evaluate the bounce integral at.
+            If None, uses the values given to the parent function.
 
         Returns
         -------
         result : ndarray, shape(lambda_pitch.size, alpha.size, rho.size,
                                 (resolution - 1) * 5 // 2)
-            Bounce integrals evaluated at ``lambda_pitch`` for every field line.
+            The last axis iterates through every bounce integral performed
+            along that field line padded by zeros.
 
         """
-        # Newton-Cotes quadrature would be inaccurate as the bounce points are not
-        # guaranteed to be near the fixed quadrature points.
-        # Gauss-Quadrature on the exact integrand is expensive to perform because
-        # evaluating the integrand at the optimal quadrature points along the field
-        # line would require root finding to map field line coordinates to desc
-        # coordinates. So we approximate functions in the integrand with splines
-        # and perform Gauss-Quadrature.
-        # TODO: spline functions separately since no polynomial can capture the
-        #  division in integrand accurately near the bounce points.
-        lambda_pitch = jnp.atleast_1d(lambda_pitch)
-        interpolation_points = cubic_poly_roots(
-            poly_B_norm,
-            constant=1 / lambda_pitch,
-            a_min=zeta[:-1],
-            a_max=zeta[1:],
-            fill=True,
-        ).reshape(lambda_pitch.size, ML, N, NUM_ROOTS + 2)
-        B_norm_z = polyeval(
-            poly_B_norm_z[:, jnp.newaxis], interpolation_points[..., 1:-1]
-        ).reshape(lambda_pitch.size, ML, N * NUM_ROOTS)
-        # Check sign of gradient to determine whether root is a valid bounce point.
-        # Periodic boundary to compute bounce integrals of particles
-        # trapped outside this snapshot of the field lines.
-        is_well = (B_norm_z <= 0) & (jnp.roll(B_norm_z, -1, axis=-1) >= 0)
-        # Make is_well broadcast with interpolation_points.
-        idx = jnp.arange(N * NUM_ROOTS)
-        is_well = put_along_axis(
-            arr=jnp.zeros((lambda_pitch.size, ML, N * (NUM_ROOTS + 2)), dtype=bool),
-            indices=(idx // NUM_ROOTS) * (NUM_ROOTS + 2) + 1 + (idx % NUM_ROOTS),
-            values=is_well,
-            axis=-1,
-        ).reshape(lambda_pitch.size * ML, N * (NUM_ROOTS + 2))
-        # Can precompute everything above if lambda_pitch given to parent function.
+        if lambda_pitch is None:
+            lambda_pitch = _lambda_pitch
+            interpolation_points = _interpolation_points
+            is_well = _is_well
+        else:
+            lambda_pitch = jnp.atleast_1d(lambda_pitch)
+            interpolation_points, is_well = _interp_well(
+                lambda_pitch, zeta, ML, poly_B_norm, poly_B_norm_z
+            )
 
         integrand = jnp.nan_to_num(
             eq.compute(name, grid=grid, override_grid=False, data=data)[name]
@@ -1659,9 +1709,13 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
                 * jnp.sqrt(1 - lambda_pitch[:, jnp.newaxis] * data["|B|"])
             )
         ).reshape(lambda_pitch.size, ML, zeta.size)
+        # TODO: https://github.com/f0uriest/interpax/issues/19
         integrand = Akima1DInterpolator(zeta, integrand, axis=-1).c
         integrand = jnp.moveaxis(integrand, 1, -1)
         assert integrand.shape == (4, lambda_pitch.size, ML, N)
+        # Computing integral via difference of primitives is easiest.
+        # E.g. Simpson's rule on spline requires computing spline on 1.8x more
+        # knots for the same accuracy.
         primitive = polyeval(polyint(integrand), interpolation_points).reshape(
             lambda_pitch.size, ML, N * (NUM_ROOTS + 2)
         )
@@ -1677,16 +1731,56 @@ def bounce_integral(eq, rho=None, alpha=None, zeta_max=10 * jnp.pi, resolution=2
             axis=-1,
         ).reshape(lambda_pitch.size * ML, N * (NUM_ROOTS + 2))
 
-        result = vmap(_diff_between_bounce_points)((sums, is_well)).reshape(
+        result = vmap(_diff_mask_odd_pairs)((sums, is_well)).reshape(
             lambda_pitch.size, alpha.size, rho.size, N * (NUM_ROOTS + 2) // 2
         )
         return result
 
-    return _bounce_integral
+    def _trapezoid(name, lambda_pitch=None):
+        """Compute the bounce integral of the named quantity.
+
+        Parameters
+        ----------
+        name : ndarray
+            Name of quantity in ``data_index`` to compute the bounce integral of.
+        lambda_pitch : ndarray
+            λ values to evaluate the bounce integral at.
+            If None, uses the values given to the parent function.
+
+        Returns
+        -------
+        result : ndarray, shape(lambda_pitch.size, alpha.size, rho.size,
+                                (resolution - 1) * 5 // 2)
+            The last axis iterates through every bounce integral performed
+            along that field line padded by zeros.
+
+        """
+
+    def _quad(name, lambda_pitch=None):
+        """Compute the bounce integral of the named quantity.
+
+        Parameters
+        ----------
+        name : ndarray
+            Name of quantity in ``data_index`` to compute the bounce integral of.
+        lambda_pitch : ndarray
+            λ values to evaluate the bounce integral at.
+            If None, uses the values given to the parent function.
+
+        Returns
+        -------
+        result : ndarray, shape(lambda_pitch.size, alpha.size, rho.size,
+                                (resolution - 1) * 5 // 2)
+            The last axis iterates through every bounce integral performed
+            along that field line padded by zeros.
+
+        """
+
+    return {"spline": _spline, "trapezoid": _trapezoid, "quad": _quad}[method]
 
 
-def _diff_between_bounce_points(args):
-    """Compute difference between bounce points specified in mask."""
+def _diff_mask_odd_pairs(args):
+    """Compute non-overlapping difference between indices specified in mask."""
     a, mask = args
     return diff_mask(a, mask)[::2]
 
@@ -1706,27 +1800,23 @@ def diff_mask(a, mask, n=1, axis=-1, prepend=None):
         Boolean mask to index like ``a[mask]`` prior to computing difference.
         Should have same size as ``a``.
     n : int, optional
-        The number of times values are differenced. If zero, the input
-        is returned as-is.
+        The number of times values are differenced.
     axis : int, optional
         The axis along which the difference is taken, default is the
         last axis.
     prepend : array_like, optional
-        Values to prepend to `a` along axis prior to
-        performing the difference.  Scalar values are expanded to
-        arrays with length 1 in the direction of axis and the shape
-        of the input array in along all other axes.  Otherwise the
-        dimension and shape must match `a` except along axis.
+        Values to prepend to `a` along axis prior to performing the difference.
+        Scalar values are expanded to arrays with length 1 in the direction of
+        axis and the shape of the input array in along all other axes.
+        Otherwise, the dimension and shape must match `a` except along axis.
 
     Returns
     -------
     diff : ndarray
-        The n-th differences. The shape of the output is the same as `a`
-        except along `axis` where the dimension is smaller by `n`. The
+        The n-th differences. The shape of the output is the same as ``a``
+        except along ``axis`` where the dimension is smaller by ``n``. The
         type of the output is the same as the type of the difference
-        between any two elements of `a`. This is the same as the type of
-        `a` in most cases. A notable exception is `datetime64`, which
-        results in a `timedelta64` output array.
+        between any two elements of ``a``.
 
     Notes
     -----
@@ -1759,7 +1849,15 @@ def diff_mask(a, mask, n=1, axis=-1, prepend=None):
     return diff
 
 
-def bounce_average(eq, rho=None, alpha=None, resolution=20):
+def bounce_average(
+    eq,
+    rho=None,
+    alpha=None,
+    zeta_max=10 * jnp.pi,
+    lambda_pitch=None,
+    resolution=20,
+    method="spline",
+):
     """Returns a method to compute the bounce average of any quantity.
 
     The bounce average is defined as
@@ -1780,18 +1878,38 @@ def bounce_average(eq, rho=None, alpha=None, resolution=20):
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium on which the bounce integral is defined.
+        Equilibrium on which the bounce average is defined.
     rho : ndarray
         Unique flux surface label coordinates.
     alpha : ndarray
         Unique field line label coordinates over a constant rho surface.
+    zeta_max : float
+        Max value for field line following coordinate.
+    lambda_pitch : ndarray
+        λ values to evaluate the bounce average at.
+        Defaults to linearly spaced values between min and max of |B|.
     resolution : int
-        Number of quadrature points used to compute the bounce integral.
+        Number of interpolation points (knots) used for splines in the quadrature.
+        A maximum of three bounce points can be detected in between knots.
+        The accuracy of the quadrature will increase as some function of
+        the number of knots over the number of detected bounce points.
+        So for well-behaved magnetic fields increasing resolution should increase
+        the accuracy of the quadrature.
+    method : str
+        The method to evaluate the integral.
+        The "spline" method exactly integrates a cubic spline of the integrand.
+        The "trapezoid" method performs a trapezoidal quadrature over evenly
+        spaced samples of the integrand. The integrand is estimated by using distinct
+        cubic splines for components in the integrand so that the singularity from
+        the division by zero near the bounce points can be captured more accurately
+        than can be represented by a polynomial.
+        The "quad" method performs a Gauss quadrature estimating the integrand
+        with splines as in the trapezoidal method.
 
     Returns
     -------
     ba : callable
-        This callable method computes the bounce integral G_ℓ(λ) for every
+        This callable method computes the bounce average G_ℓ(λ) for every
         specified field line ℓ (constant rho and alpha), for every λ value in
         ``lambdas``.
 
@@ -1803,9 +1921,9 @@ def bounce_average(eq, rho=None, alpha=None, resolution=20):
         G = ba(name, lambda_pitch)
 
     """
-    bi = bounce_integral(eq, rho, alpha, resolution)
+    bi = bounce_integral(eq, rho, alpha, zeta_max, lambda_pitch, resolution, method)
 
-    def _bounce_average(name, lambda_pitch):
+    def _bounce_average(name, lambda_pitch=None):
         """Compute the bounce average of the named quantity.
 
         Parameters
@@ -1813,16 +1931,18 @@ def bounce_average(eq, rho=None, alpha=None, resolution=20):
         name : ndarray
             Name of quantity in ``data_index`` to compute the bounce average of.
         lambda_pitch : ndarray
-            λ values to evaluate the bounce integral at.
+            λ values to evaluate the bounce average at.
+            If None, uses the values given to the parent function.
 
         Returns
         -------
         result : ndarray, shape(lambda_pitch.size, alpha.size, rho.size,
                                 (resolution - 1) * 5 // 2)
-            Bounce average evaluated at ``lambdas`` for every field line.
+            The last axis iterates through every bounce average performed
+            along that field line padded by zeros.
 
         """
-        result = bi(name, lambda_pitch) / bi("1", lambda_pitch)
+        result = safediv(bi(name, lambda_pitch), bi("1", lambda_pitch))
         return result
 
     return _bounce_average
@@ -1842,8 +1962,7 @@ def field_line_to_desc_coords(rho, alpha, zeta, eq):
     # map_coordinates. That method requires an initial guess to be compatible with JIT,
     # and generating a reasonable initial guess requires computing the rotational
     # transform to approximate theta_PEST and the poloidal stream function anyway.
-    # TODO: In general, Linear Grid construction is not jit compatible.
-    #  This issue can be worked around with a specific routine for this.
+    # TODO: map coords recently updated, so maybe just switch to that
     lg = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     lg_data = eq.compute("iota", grid=lg)
     data = {

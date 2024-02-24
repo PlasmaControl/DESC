@@ -6,7 +6,17 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import cond, custom_jvp, fori_loop, gammaln, jit, jnp, sign, switch
+from desc.backend import (
+    cond,
+    custom_jvp,
+    fori_loop,
+    gammaln,
+    jax,
+    jit,
+    jnp,
+    sign,
+    switch,
+)
 from desc.io import IOAble
 from desc.utils import flatten_list
 
@@ -1413,7 +1423,7 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
 
 
 @custom_jvp
-@jit
+@functools.partial(jit, device=jax.devices("cpu")[0])
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 

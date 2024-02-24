@@ -2,8 +2,11 @@
 
 import importlib
 import os
+import platform
 import re
+import subprocess
 import warnings
+from typing import NamedTuple
 
 import colorama
 from termcolor import colored
@@ -58,14 +61,70 @@ _BANNER = r"""
 BANNER = colored(_BANNER, "magenta")
 
 
-config = {"device": None, "avail_mem": None, "kind": None}
+class Device(NamedTuple):
+    """Helper class to represent data about CPU/GPU."""
+
+    name: str
+    kind: str
+    mem: float
+    default: bool
+
+
+config = {"devices": [], "backend": None, "dtype": None}
+
+# Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+
+
+def _get_processor_name():
+    if platform.system() == "Windows":
+        return platform.processor()
+    elif platform.system() == "Darwin":
+        os.environ["PATH"] = os.environ["PATH"] + os.pathsep + "/usr/sbin"
+        command = "sysctl -n machdep.cpu.brand_string"
+        return subprocess.check_output(command).strip()
+    elif platform.system() == "Linux":
+        command = "cat /proc/cpuinfo"
+        all_info = subprocess.check_output(command, shell=True).decode().strip()
+        for line in all_info.split("\n"):
+            if "model name" in line:
+                return re.sub(".*model name.*:", "", line, 1)
+    return ""
+
+
+def set_cpu_count(n):
+    """Set the number of CPUs visible to JAX.
+
+    By default, JAX sees the whole CPU as a single device, regardless of the number of
+    cores or threads. It then uses multiple cores and threads for lower level
+    parallelism within individual operations.
+
+    Alternatively, you can force JAX to expose a given number of "virtual" CPUs that
+    can then be used manually for higher level parallelism (as in at the level of
+    multiple objective functions.)
+
+    Parameters
+    ----------
+    n : int
+        Number of virtual CPUs for high level parallelism.
+
+    Notes
+    -----
+    This function must be called before importing anything else from DESC or JAX,
+    and before calling ``desc.set_device``, otherwise it will have no effect.
+    """
+    xla_flags = os.getenv("XLA_FLAGS", "")
+    xla_flags = re.sub(
+        r"--xla_force_host_platform_device_count=\S+", "", xla_flags
+    ).split()
+    os.environ["XLA_FLAGS"] = " ".join(
+        [f"--xla_force_host_platform_device_count={n}"] + xla_flags
+    )
 
 
 def set_device(kind="cpu"):
-    """Sets the device to use for computation.
+    """Sets the default device type to use for computation.
 
-    If kind==``'gpu'``, checks available GPUs and selects the one with the most
-    available memory.
     Respects environment variable CUDA_VISIBLE_DEVICES for selecting from multiple
     available GPUs
 
@@ -74,68 +133,53 @@ def set_device(kind="cpu"):
     kind : {``'cpu'``, ``'gpu'``}
         whether to use CPU or GPU.
 
+    Notes
+    -----
+    This function must be called before importing anything else from DESC or JAX,
+    otherwise it will have no effect.
+
     """
-    config["kind"] = kind
-    if kind == "cpu":
-        os.environ["JAX_PLATFORM_NAME"] = "cpu"
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        import psutil
+    os.environ["JAX_PLATFORM_NAME"] = kind
 
-        cpu_mem = psutil.virtual_memory().available / 1024**3  # RAM in GB
-        config["device"] = "CPU"
-        config["avail_mem"] = cpu_mem
+    import psutil
 
-    if kind == "gpu":
-        # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
-        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        import nvgpu
+    cpu_mem = psutil.virtual_memory().available / 1024**2  # RAM in MB
+    # see if we're in a slurm job, in which case report allocated memory
+    ntask = int(os.environ.get("SLURM_NTASKS", 1))
+    cpupertask = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
+    mempercpu = float(os.environ.get("SLURM_MEM_PER_CPU", 0))  # in MB
+    cpu_avail_mem = ntask * cpupertask * mempercpu
+    # sometimes slurm doesn't set all flags?
+    cpu_avail_mem = max(cpu_avail_mem, float(os.environ.get("SLURM_MEM_PER_NODE", 0)))
+    cpu_avail_mem /= 1024  # put into GB
 
-        try:
-            devices = nvgpu.gpu_info()
-        except FileNotFoundError:
-            devices = []
-        if len(devices) == 0:
+    try:
+        import jax
+
+        jax_cpu = jax.devices("cpu")
+        n = len(jax_cpu)
+    except ModuleNotFoundError:
+        jax = None
+        n = 1
+    cpu = Device(
+        _get_processor_name().strip() + f" (x{n})", "CPU", cpu_avail_mem, kind == "cpu"
+    )
+    config["devices"].append(cpu)
+
+    import nvgpu
+
+    try:
+        gpus = nvgpu.gpu_info()
+    except FileNotFoundError:
+        gpus = []
+    if (len(gpus) == 0) or (jax is None):
+        if kind == "gpu":
             warnings.warn(colored("No GPU found, falling back to CPU", "yellow"))
             set_device(kind="cpu")
-            return
+        return
 
-        maxmem = 0
-        selected_gpu = None
-        gpu_ids = [dev["index"] for dev in devices]
-        if "CUDA_VISIBLE_DEVICES" in os.environ:
-            cuda_ids = [
-                s for s in re.findall(r"\b\d+\b", os.environ["CUDA_VISIBLE_DEVICES"])
-            ]
-            # check that the visible devices actually exist and are gpus
-            gpu_ids = [i for i in cuda_ids if i in gpu_ids]
-        if len(gpu_ids) == 0:
-            # cuda visible devices = '' -> don't use any gpu
-            warnings.warn(
-                colored(
-                    (
-                        "CUDA_VISIBLE_DEVICES={} ".format(
-                            os.environ["CUDA_VISIBLE_DEVICES"]
-                        )
-                        + "did not match any physical GPU "
-                        + "(id={}), falling back to CPU".format(
-                            [dev["index"] for dev in devices]
-                        )
-                    ),
-                    "yellow",
-                )
-            )
-            set_device(kind="cpu")
-            return
-        devices = [dev for dev in devices if dev["index"] in gpu_ids]
-        for dev in devices:
-            mem = dev["mem_total"] - dev["mem_used"]
-            if mem > maxmem:
-                maxmem = mem
-                selected_gpu = dev
-        config["device"] = selected_gpu["type"] + " (id={})".format(
-            selected_gpu["index"]
-        )
-        config["avail_mem"] = (
-            selected_gpu["mem_total"] - selected_gpu["mem_used"]
-        ) / 1024  # in GB
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu["index"])
+    for i, (jaxgpu, gpuinfo) in enumerate(zip(jax.devices("gpu"), gpus)):
+        mem = (gpuinfo["mem_total"] - gpuinfo["mem_used"]) / 1024  # in GB
+        name = gpuinfo["type"] + " (id={})".format(gpuinfo["index"])
+        device = Device(name, "GPU", mem, (i == 0) and (kind == "gpu"))
+        config["devices"].append(device)

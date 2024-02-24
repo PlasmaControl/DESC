@@ -57,6 +57,9 @@ class ForceBalance(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -79,6 +82,7 @@ class ForceBalance(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         grid=None,
         name="force",
     ):
@@ -94,6 +98,7 @@ class ForceBalance(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            device=device,
             name=name,
         )
 
@@ -234,6 +239,9 @@ class ForceBalanceAnisotropic(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     name : str
         Name of the objective function.
 
@@ -254,6 +262,7 @@ class ForceBalanceAnisotropic(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         grid=None,
         name="force-anisotropic",
     ):
@@ -269,6 +278,7 @@ class ForceBalanceAnisotropic(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            device=device,
             name=name,
         )
 
@@ -388,6 +398,9 @@ class RadialForceBalance(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -410,6 +423,7 @@ class RadialForceBalance(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         grid=None,
         name="radial force",
     ):
@@ -425,6 +439,7 @@ class RadialForceBalance(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            device=device,
             name=name,
         )
 
@@ -544,6 +559,9 @@ class HelicalForceBalance(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -566,6 +584,7 @@ class HelicalForceBalance(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         grid=None,
         name="helical force",
     ):
@@ -581,6 +600,7 @@ class HelicalForceBalance(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            device=device,
             name=name,
         )
 
@@ -696,6 +716,9 @@ class Energy(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     gamma : float, optional
@@ -722,6 +745,7 @@ class Energy(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         grid=None,
         gamma=0,
         name="energy",
@@ -739,6 +763,7 @@ class Energy(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            device=device,
             name=name,
         )
 
@@ -863,6 +888,9 @@ class CurrentDensity(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -885,6 +913,7 @@ class CurrentDensity(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         grid=None,
         name="current density",
     ):
@@ -900,6 +929,7 @@ class CurrentDensity(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            device=device,
             name=name,
         )
 

@@ -57,6 +57,9 @@ class BootstrapRedlConsistency(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
@@ -82,6 +85,7 @@ class BootstrapRedlConsistency(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         grid=None,
         helicity=(1, 0),
         name="Bootstrap current self-consistency (Redl)",
@@ -101,6 +105,7 @@ class BootstrapRedlConsistency(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            device=device,
             name=name,
         )
 

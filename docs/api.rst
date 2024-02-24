@@ -2,6 +2,17 @@
 API Documentation
 =================
 
+config
+******
+
+.. autosummary::
+    :toctree: _api/basis/
+    :recursive:
+    :template: class.rst
+
+    desc.set_cpu_count
+    desc.set_device
+
 Basis
 *****
 

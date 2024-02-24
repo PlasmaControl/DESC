@@ -47,6 +47,9 @@ class Pressure(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -68,6 +71,7 @@ class Pressure(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         grid=None,
         name="pressure",
     ):
@@ -83,6 +87,7 @@ class Pressure(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            device=device,
             name=name,
         )
 
@@ -201,6 +206,9 @@ class RotationalTransform(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -222,6 +230,7 @@ class RotationalTransform(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         grid=None,
         name="rotational transform",
     ):
@@ -237,6 +246,7 @@ class RotationalTransform(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            device=device,
             name=name,
         )
 
@@ -355,6 +365,9 @@ class Shear(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -376,6 +389,7 @@ class Shear(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         grid=None,
         name="shear",
     ):
@@ -391,6 +405,7 @@ class Shear(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            device=device,
             name=name,
         )
 
@@ -507,6 +522,9 @@ class ToroidalCurrent(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    device : jax.Device, optional
+        Device to use for computing the objective and its derivatives. Defaults to
+        ``jax.devices()[0]``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
@@ -528,6 +546,7 @@ class ToroidalCurrent(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        device=None,
         grid=None,
         name="toroidal current",
     ):
@@ -543,6 +562,7 @@ class ToroidalCurrent(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            device=device,
             name=name,
         )
 

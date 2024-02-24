@@ -87,6 +87,7 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
+    "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
 }

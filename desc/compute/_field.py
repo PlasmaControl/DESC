@@ -3451,3 +3451,21 @@ def _grad_B_vec_fro(params, transforms, profiles, data, **kwargs):
 def _L_grad_B(params, transforms, profiles, data, **kwargs):
     data["L_grad(B)"] = jnp.sqrt(2) * data["|B|"] / data["|grad(B)|"]
     return data
+
+
+@register_compute_fun(
+    name="K_vc",
+    label="\\mathbf{K}_{VC} = \\mathbf{n} \\times \\mathbf{B}",
+    units="A \\cdot m^{-1}",
+    units_long="Amps / meter",
+    description="Virtual casing sheet current",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B", "n_rho"],
+)
+def _K_vc(params, transforms, profiles, data, **kwargs):
+    data["K_vc"] = cross(data["n_rho"], data["B"]) / mu_0
+    return data

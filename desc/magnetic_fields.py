@@ -1473,7 +1473,6 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         _MagneticField._io_attrs_
         + FourierRZToroidalSurface._io_attrs_
         + [
-            "_surface_grid",
             "_params",
         ]
     )
@@ -1603,6 +1602,11 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field at specified points
 
         """
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * self.M,
+            N=30 + 2 * self.N,
+            NFP=self.NFP,
+        )
         return _compute_magnetic_field_from_CurrentPotentialField(
             field=self,
             coords=coords,
@@ -1844,6 +1848,16 @@ class FourierCurrentPotentialField(
         """str: Type of symmetry of periodic part of Phi (no symmetry if False)."""
         return self._sym_Phi
 
+    @property
+    def M_Phi(self):
+        """int: Poloidal resolution of periodic part of Phi."""
+        return self._M_Phi
+
+    @property
+    def N_Phi(self):
+        """int: Toroidal resolution of periodic part of Phi."""
+        return self._N_Phi
+
     def change_Phi_resolution(self, M=None, N=None, NFP=None, sym_Phi=None):
         """Change the maximum poloidal and toroidal resolution for Phi.
 
@@ -1904,8 +1918,10 @@ class FourierCurrentPotentialField(
             magnetic field at specified points
 
         """
-        coords = coords or LinearGrid(
-            M=self._M_Phi * 4 + 1, N=self._N_Phi * 4 + 1, NFP=self.NFP
+        source_grid = source_grid or LinearGrid(
+            M=30 + 2 * max(self.M, self.M_Phi),
+            N=30 + 2 * max(self.N, self.N_Phi),
+            NFP=self.NFP,
         )
         return _compute_magnetic_field_from_CurrentPotentialField(
             field=self,
@@ -1988,7 +2004,11 @@ class FourierCurrentPotentialField(
 
 
 def _compute_magnetic_field_from_CurrentPotentialField(
-    field, coords, params=None, basis="rpz", source_grid=None
+    field,
+    coords,
+    source_grid,
+    params=None,
+    basis="rpz",
 ):
     """Compute magnetic field at a set of points.
 
@@ -1998,13 +2018,14 @@ def _compute_magnetic_field_from_CurrentPotentialField(
         current potential field object from which to compute magnetic field.
     coords : array-like shape(N,3)
         cylindrical or cartesian coordinates
+    source_grid : Grid,
+        source grid upon which to evaluate the surface current density K
     params : dict, optional
         parameters to pass to compute function
         should include the potential
     basis : {"rpz", "xyz"}
         basis for input coordinates and returned magnetic field
-    source_grid : Grid,
-        source grid upon which to evaluate the surface current density K
+
 
     Returns
     -------
@@ -2016,24 +2037,23 @@ def _compute_magnetic_field_from_CurrentPotentialField(
     coords = jnp.atleast_2d(jnp.asarray(coords))
     if basis == "rpz":
         coords = rpz2xyz(coords)
-    surface_grid = source_grid or LinearGrid(M=30, N=30, NFP=field.NFP)
 
     # compute surface current, and store grid quantities
     # needed for integration in class
     # TODO: does this have to be xyz, or can it be computed in rpz as well?
-    data = field.compute(["K", "x"], grid=surface_grid, basis="xyz", params=params)
+    data = field.compute(["K", "x"], grid=source_grid, basis="xyz", params=params)
 
     _rs = xyz2rpz(data["x"])
-    _K = xyz2rpz_vec(data["K"], phi=surface_grid.nodes[:, 2])
+    _K = xyz2rpz_vec(data["K"], phi=source_grid.nodes[:, 2])
 
     # surface element, must divide by NFP to remove the NFP multiple on the
     # surface grid weights, as we account for that when doing the for loop
     # over NFP
-    _dV = surface_grid.weights * data["|e_theta x e_zeta|"] / surface_grid.NFP
+    _dV = source_grid.weights * data["|e_theta x e_zeta|"] / source_grid.NFP
 
     def nfp_loop(j, f):
         # calculate (by rotating) rs, rs_t, rz_t
-        phi = (surface_grid.nodes[:, 2] + j * 2 * jnp.pi / surface_grid.NFP) % (
+        phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
             2 * jnp.pi
         )
         # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
@@ -2049,7 +2069,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
         f += fj
         return f
 
-    B = fori_loop(0, surface_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+    B = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
     if basis == "rpz":
         B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
     return B

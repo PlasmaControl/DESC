@@ -13,8 +13,8 @@ from desc.compute.utils import (
     field_line_to_desc_coords,
     line_integrals,
     polyder,
-    polyeval,
     polyint,
+    polyval,
     surface_averages,
     surface_integrals,
     surface_integrals_transform,
@@ -598,14 +598,14 @@ class TestComputeUtils:
         assert np.unique(poly.shape).size == poly.ndim
         constant = np.arange(10)
         assert np.unique(poly.shape + constant.shape).size == poly.ndim + constant.ndim
-        out = np.sort(cubic_poly_roots(poly, constant), axis=-1)
+        roots = cubic_poly_roots(poly, constant, sort=True)
         for j in range(poly.shape[1]):
             for k in range(poly.shape[2]):
                 for s in range(constant.size):
                     a, b, c, d = poly[:, j, k]
                     d = d - constant[s]
                     np.testing.assert_allclose(
-                        out[s, j, k],
+                        roots[s, j, k],
                         np.sort_complex(np.roots([a, b, c, d])),
                     )
 
@@ -632,7 +632,7 @@ class TestComputeUtils:
                 np.testing.assert_allclose(out[:, j, k], np.polyder(poly[:, j, k]))
 
     @pytest.mark.unit
-    def test_polyeval(self):
+    def test_polyval(self):
         """Test vectorized computation of polynomial evaluation."""
         quintic = 6
         poly = np.arange(-90, 90).reshape(quintic, 3, -1) * np.e * np.pi
@@ -645,10 +645,10 @@ class TestComputeUtils:
         assert np.unique(x.shape).size == x.ndim
         assert poly.shape[1:] == x.shape[: poly.ndim - 1]
         assert np.unique((poly.shape[0],) + x.shape[poly.ndim - 1 :]).size == x.ndim - 1
-        out = polyeval(poly, x)
+        val = polyval(x, poly)
         for j in range(poly.shape[1]):
             for k in range(poly.shape[2]):
-                np.testing.assert_allclose(out[j, k], np.poly1d(poly[:, j, k])(x[j, k]))
+                np.testing.assert_allclose(val[j, k], np.poly1d(poly[:, j, k])(x[j, k]))
 
     # TODO: FIXME
     def bounce_point(

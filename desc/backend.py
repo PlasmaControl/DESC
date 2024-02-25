@@ -616,6 +616,10 @@ else:  # pragma: no cover
             )
 
         def fun_vmap(fun_inputs):
+            if isinstance(fun_inputs, tuple):
+                raise NotImplementedError(
+                    "Backend implementation of vmap fails for multiple arguments."
+                )
             return np.stack([fun(fun_input) for fun_input in fun_inputs], axis=out_axes)
 
         return fun_vmap

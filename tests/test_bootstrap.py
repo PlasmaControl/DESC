@@ -1611,7 +1611,6 @@ def test_bootstrap_optimization_comparison_qa():
     # method 1
     objective = ObjectiveFunction(
         BootstrapRedlConsistency(eq=eq1, grid=grid, helicity=(1, 0)),
-        verbose=0,
     )
     constraints = (
         FixAtomicNumber(eq=eq1),

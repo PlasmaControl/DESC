@@ -1631,7 +1631,7 @@ def stretch_batches(in_arr, in_batch_size, out_batch_size, fill):
     return out_arr
 
 
-def _compute_bp_if_given_pitch(pitch, method, *original, err=False, **kwargs):
+def _compute_bp_if_given_pitch(pitch, *original, err=False, **kwargs):
     """Return the quantities needed by the ``bounce_integrals`` function.
 
     Parameters
@@ -1639,8 +1639,6 @@ def _compute_bp_if_given_pitch(pitch, method, *original, err=False, **kwargs):
     pitch : ndarray
         λ values representing the constant function 1 / λ.
         If None, returns the given ``original`` tuple.
-    method : str
-        "quad" or "spline".
     original : tuple
         pitch, intersect, is_bp, bp1, bp2.
     err : bool
@@ -1661,26 +1659,6 @@ def _compute_bp_if_given_pitch(pitch, method, *original, err=False, **kwargs):
     else:
         pitch = jnp.atleast_1d(pitch)
         intersect, is_bp, bp1, bp2 = _get_bounce_points(pitch, **kwargs)
-        if method == "spline":
-            intersect = intersect.reshape(
-                (intersect.shape[0] * intersect.shape[1],) + intersect.shape[2:]
-            )
-            # include knots of spline along with intersection points
-            intersect = jnp.stack(
-                jnp.broadcast_arrays(
-                    kwargs["zeta"][:-1],
-                    intersect[..., 0],
-                    intersect[..., 1],
-                    intersect[..., 2],
-                    kwargs["zeta"][1:],
-                ),
-                axis=-1,
-            )
-            is_bp = stretch_batches(is_bp, 3, 5, fill=False)
-        else:
-            intersect = intersect.reshape(bp1.shape)
-            bp1 = kwargs["fun"]((intersect, bp1))
-            bp2 = kwargs["fun"]((intersect, bp2))
         return pitch, intersect, is_bp, bp1, bp2
 
 
@@ -1691,7 +1669,7 @@ def bounce_integral(
     zeta_max=10 * jnp.pi,
     pitch=None,
     resolution=20,
-    method="quad",
+    method="tanh_sinh",
 ):
     """Returns a method to compute the bounce integral of any quantity.
 
@@ -1730,11 +1708,10 @@ def bounce_integral(
         the accuracy of the quadrature.
     method : str
         The method to evaluate the integral.
-        The "spline" method exactly integrates a cubic spline of the integrand.
-        The "quad" method performs a Gauss quadrature and estimates the integrand
-        by using distinct cubic splines for components in the integrand so that
-        the singularity from the division by zero near the bounce points can be
-        captured more accurately than can be represented by a polynomial.
+        The "direct" method exactly integrates a cubic spline of the integrand.
+        The other methods perform a Gauss quadrature and use independent cubic splines
+        for components in the integrand so that the singularity near the bounce points
+        can be captured more accurately than can be represented by a polynomial.
 
     Returns
     -------
@@ -1752,8 +1729,8 @@ def bounce_integral(
 
     """
 
-    def _spline(name, pitch=None):
-        """Compute the bounce integral of the named quantity using the spline method.
+    def _direct(name, pitch=None):
+        """Compute the bounce integral of the named quantity.
 
         Parameters
         ----------
@@ -1771,14 +1748,25 @@ def bounce_integral(
 
         """
         pitch, intersect, is_bp, _, _ = _compute_bp_if_given_pitch(
-            pitch,
-            method,
-            *original,
-            err=True,
-            zeta=zeta,
-            poly_B=poly_B,
-            poly_B_z=poly_B_z,
+            pitch, *original, err=True, zeta=zeta, poly_B=poly_B, poly_B_z=poly_B_z
         )
+        intersect = intersect.reshape(
+            (intersect.shape[0] * intersect.shape[1],) + intersect.shape[2:]
+        )
+        # include knots of spline along with intersection points
+        intersect = jnp.stack(
+            jnp.broadcast_arrays(
+                zeta[:-1],
+                intersect[..., 0],
+                intersect[..., 1],
+                intersect[..., 2],
+                zeta[1:],
+            ),
+            axis=-1,
+        )
+        R = NUM_ROOTS + 2
+        is_bp = stretch_batches(is_bp, NUM_ROOTS, R, fill=False)
+
         integrand = jnp.nan_to_num(
             eq.compute(name, grid=grid, override_grid=False, data=data)[name]
             / (data["B^zeta"] * jnp.sqrt(1 - pitch[:, jnp.newaxis] * data["|B|"]))
@@ -1793,7 +1781,6 @@ def bounce_integral(
         # is preferable to any numerical quadrature. For example, even if the
         # intersection points were evenly spaced, a composite Simpson's quadrature
         # would require computing the spline on 1.8x more knots for the same accuracy.
-        R = NUM_ROOTS + 2
         primitive = polyval(intersect, polyint(integrand)).reshape(
             pitch.size * M * L, N * R
         )
@@ -1808,8 +1795,8 @@ def bounce_integral(
         )
         return fun((sums, is_bp)).reshape(pitch.size, M, L, N * R // 2)
 
-    def _quad(name, pitch=None):
-        """Compute the bounce integral of the named quantity using the quad method.
+    def _tanh_sinh(name, pitch=None):
+        """Compute the bounce integral of the named quantity.
 
         Parameters
         ----------
@@ -1826,17 +1813,13 @@ def bounce_integral(
             along that field line padded by zeros.
 
         """
-        pitch, _, _, bp1, bp2 = _compute_bp_if_given_pitch(
-            pitch,
-            method,
-            *original,
-            err=True,
-            zeta=zeta,
-            poly_B=poly_B,
-            poly_B_z=poly_B_z,
-            fun=fun,
+        pitch, intersect, _, bp1, bp2 = _compute_bp_if_given_pitch(
+            pitch, *original, err=True, zeta=zeta, poly_B=poly_B, poly_B_z=poly_B_z
         )
-        X = x * ((bp2 - bp1) + bp2)[..., jnp.newaxis]
+        intersect = intersect.reshape(bp1.shape)
+        bp1 = fun((intersect, bp1))
+        bp2 = fun((intersect, bp2))
+        X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
         assert X.shape == (pitch.size * M * L, N * 2, x.size)
 
         def body(i, integral):
@@ -1860,7 +1843,9 @@ def bounce_integral(
             # TODO: Vectorize interpax to do this with 1 call with einsum.
             fori_loop(0, pitch.size * M * L * N * 2, body, jnp.empty(X.shape[:-1]))
             * jnp.pi
-            / (bp2 - bp1)
+            / (bp2 - bp1),
+            posinf=0,
+            neginf=0,
         ).reshape(pitch.size, M, L, N * 2)
 
     if rho is None:
@@ -1895,22 +1880,16 @@ def bounce_integral(
     assert poly_B.shape == (4, M * L, N)
     assert poly_B_z.shape == (3, M * L, N)
 
-    if method == "quad":
-        bi = _quad
+    if method == "direct":
+        bi = _direct
+        fun = vmap(lambda args: mask_diff(*args)[::2])
+    else:
+        bi = _tanh_sinh
         fun = vmap(lambda args: mask_take(*args, size=N * 2, fill_value=0))
         x, w = tanh_sinh_quadrature(resolution)
         x = jnp.arcsin(x) / jnp.pi - 0.5
-    else:
-        bi = _spline
-        fun = vmap(lambda args: mask_diff(*args)[::2])
     original = _compute_bp_if_given_pitch(
-        pitch,
-        method,
-        err=False,
-        zeta=zeta,
-        poly_B=poly_B,
-        poly_B_z=poly_B_z,
-        fun=fun,
+        pitch, err=False, zeta=zeta, poly_B=poly_B, poly_B_z=poly_B_z
     )
     return bi
 

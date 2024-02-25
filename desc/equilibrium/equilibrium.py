@@ -798,6 +798,8 @@ class Equilibrium(IOAble, Optimizable):
                 "must pass in a Grid object for argument grid!"
                 f" instead got type {type(grid)}"
             )
+        else:  # grid is not None, so override_grid should be False
+            override_grid = False
 
         if params is None:
             params = get_params(names, obj=self, has_axis=grid.axis.size)

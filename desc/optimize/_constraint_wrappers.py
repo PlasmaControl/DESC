@@ -1,8 +1,10 @@
 """Wrappers for doing STELLOPT/SIMSOPT like optimization."""
 
+import functools
+
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import jit, jnp
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -902,6 +904,7 @@ class ProximalProjection(ObjectiveFunction):
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="unscaled")
         return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
 
+    @functools.partial(jit, static_argnames=("self", "op"))
     def _jvp_f(self, xf, dc, constants, op):
         Fx = getattr(self._constraint, "jac_" + op)(xf, constants)
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
@@ -914,6 +917,7 @@ class ProximalProjection(ObjectiveFunction):
         Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
         return Fxh_inv @ Fc
 
+    @functools.partial(jit, static_argnames=("self", "op"))
     def _jvp(self, v, xf, xg, constants, op):
         # we're replacing stuff like this with jvps
         # Fx_reduced = Fx[:, unfixed_idx] @ Z               # noqa: E800

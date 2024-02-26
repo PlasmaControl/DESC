@@ -177,7 +177,7 @@ class VMECIO:
             profiles=False, eq=eq
         ) + get_fixed_boundary_constraints(eq=eq)
         constraints = maybe_add_self_consistency(eq, constraints)
-        objective = ObjectiveFunction(constraints, verbose=0)
+        objective = ObjectiveFunction(constraints)
         objective.build(verbose=0)
         _, _, _, _, _, project, recover = factorize_linear_constraints(
             objective, objective

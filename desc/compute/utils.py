@@ -1465,11 +1465,11 @@ def tanh_sinh_quadrature(N, quad_limit=3.16):
         Quadrature weights
 
     """
-    initial_points = jnp.linspace(-quad_limit, quad_limit, N)
+    points = jnp.linspace(-quad_limit, quad_limit, N)
     h = 2 * quad_limit / (N - 1)
-    sinh = jnp.sinh(initial_points)
+    sinh = jnp.sinh(points)
     x = jnp.tanh(0.5 * jnp.pi * sinh)
-    w = 0.5 * jnp.pi * h * jnp.cosh(initial_points) / jnp.cosh(0.5 * jnp.pi * sinh) ** 2
+    w = 0.5 * jnp.pi * h * jnp.cosh(points) / jnp.cosh(0.5 * jnp.pi * sinh) ** 2
     return x, w
 
 
@@ -1535,7 +1535,7 @@ def cubic_poly_roots(coef, constant=jnp.array([0]), a_min=None, a_max=None, sort
     return roots
 
 
-def _get_bounce_points(pitch, zeta, poly_B, poly_B_z, **kwargs):
+def _get_bounce_points(pitch, zeta, poly_B, poly_B_z):
     """Get the bounce points given |B| and 1 / λ.
 
     Parameters
@@ -1555,26 +1555,25 @@ def _get_bounce_points(pitch, zeta, poly_B, poly_B_z, **kwargs):
         The polynomials' intersection points with 1 / λ is given by ``intersect``.
         In order to be JIT compilable, the returned array must have a shape that
         accommodates the case where each cubic polynomial intersects 1 / λ thrice.
-        This requires that ``intersect`` have shape
-          (pitch.size, poly_B_norm.shape[1], poly_B_norm.shape[2], 3)
+        The returned array ``intersect`` has shape (pitch.size, M * L, N, NUM_ROOTS).
 
         The boolean mask ``is_bp`` encodes whether a given entry in ``intersect``
         is a valid bounce point. The boolean masks ``bp1`` and ``bp2`` encode whether
         a given entry in ``intersect`` is a valid starting and ending bounce point,
-        respectively. These arrays have shape
-          (pitch.size * poly_B_norm.shape[1], poly_B_norm.shape[2] * 3)
+        respectively. These arrays have shape (pitch.size * M * L, N * NUM_ROOTS).
 
     """
     ML = poly_B.shape[1]
     N = poly_B.shape[2]
     NUM_ROOTS = 3
-
     a_min = zeta[:-1]
     a_max = zeta[1:]
     intersect = cubic_poly_roots(poly_B, 1 / pitch, a_min, a_max, sort=True).reshape(
         pitch.size, ML, N, NUM_ROOTS
     )
-
+    # Typically, this is the shape that is needed later, (as is the case in
+    # bounce_integrals because jax.vmap works over one axis at a time), so we
+    # reshape early here to prevent unnecessary data movement.
     B_z = polyval(intersect, poly_B_z[:, jnp.newaxis]).reshape(
         pitch.size * ML, N * NUM_ROOTS
     )
@@ -1589,49 +1588,7 @@ def _get_bounce_points(pitch, zeta, poly_B, poly_B_z, **kwargs):
     return intersect, is_bp, bp1, bp2
 
 
-def stretch_batches(in_arr, in_batch_size, out_batch_size, fill):
-    """Stretch batches of ``in_arr``.
-
-    Given that ``in_arr`` is composed of N batches of ``in_batch_size``
-    along its last axis, stretch the last axis so that it is composed of
-    N batches of ``out_batch_size``. The ``out_batch_size - in_batch_size``
-    missing elements in each batch are populated with ``fill``.
-    By default, these elements are populated evenly surrounding the input batches.
-
-    Parameters
-    ----------
-    in_arr : ndarray, shape(..., in_batch_size * N)
-        Input array
-    in_batch_size : int
-        Length of batches along last axis of input array.
-    out_batch_size : int
-        Length of batches along last axis of output array.
-    fill : bool or int or float
-        Value to fill at missing indices of each batch.
-
-    Returns
-    -------
-    out_arr : ndarray, shape(..., out_batch_size * N)
-        Output array
-
-    """
-    assert out_batch_size >= in_batch_size
-    N = in_arr.shape[-1] // in_batch_size
-    out_shape = in_arr.shape[:-1] + (N * out_batch_size,)
-    offset = (out_batch_size - in_batch_size) // 2
-    idx = jnp.arange(in_arr.shape[-1])
-    out_arr = put_along_axis(
-        arr=jnp.full(out_shape, fill, dtype=in_arr.dtype),
-        indices=(idx // in_batch_size) * out_batch_size
-        + offset
-        + (idx % in_batch_size),
-        values=in_arr,
-        axis=-1,
-    )
-    return out_arr
-
-
-def _compute_bp_if_given_pitch(pitch, *original, err=False, **kwargs):
+def _compute_bp_if_given_pitch(pitch, zeta, poly_B, poly_B_z, *original, err=False):
     """Return the quantities needed by the ``bounce_integrals`` function.
 
     Parameters
@@ -1639,12 +1596,16 @@ def _compute_bp_if_given_pitch(pitch, *original, err=False, **kwargs):
     pitch : ndarray
         λ values representing the constant function 1 / λ.
         If None, returns the given ``original`` tuple.
+    zeta : ndarray
+        Field line-following ζ coordinates of spline knots.
+    poly_B : ndarray
+        Polynomial coefficients of the cubic spline of |B|.
+    poly_B_z : ndarray
+        Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
     original : tuple
         pitch, intersect, is_bp, bp1, bp2.
     err : bool
         Whether to raise an error if ``pitch`` is None and ``original`` is empty.
-    kwargs
-        Additional keyword arguments passed to ``_get_bounce_points``.
 
     Returns
     -------
@@ -1658,7 +1619,7 @@ def _compute_bp_if_given_pitch(pitch, *original, err=False, **kwargs):
         return original
     else:
         pitch = jnp.atleast_1d(pitch)
-        intersect, is_bp, bp1, bp2 = _get_bounce_points(pitch, **kwargs)
+        intersect, is_bp, bp1, bp2 = _get_bounce_points(pitch, zeta, poly_B, poly_B_z)
         return pitch, intersect, is_bp, bp1, bp2
 
 
@@ -1707,11 +1668,12 @@ def bounce_integral(
         So for well-behaved magnetic fields increasing resolution should increase
         the accuracy of the quadrature.
     method : str
-        The method to evaluate the integral.
+        The quadrature scheme used to evaluate the integral.
         The "direct" method exactly integrates a cubic spline of the integrand.
-        The other methods perform a Gauss quadrature and use independent cubic splines
-        for components in the integrand so that the singularity near the bounce points
-        can be captured more accurately than can be represented by a polynomial.
+        The "tanh_sinh" method performs a Tanh-sinh quadrature, where independent cubic
+        splines are used for components in the integrand so that the singularity near
+        the bounce points can be captured more accurately than can be represented by a
+        polynomial.
 
     Returns
     -------
@@ -1748,12 +1710,10 @@ def bounce_integral(
 
         """
         pitch, intersect, is_bp, _, _ = _compute_bp_if_given_pitch(
-            pitch, *original, err=True, zeta=zeta, poly_B=poly_B, poly_B_z=poly_B_z
+            pitch, zeta, poly_B, poly_B_z, *original, err=True
         )
-        intersect = intersect.reshape(
-            (intersect.shape[0] * intersect.shape[1],) + intersect.shape[2:]
-        )
-        # include knots of spline along with intersection points
+        intersect = intersect.reshape(pitch.size * M * L, N, NUM_ROOTS)
+        # Include knots of spline along with intersection points.
         intersect = jnp.stack(
             jnp.broadcast_arrays(
                 zeta[:-1],
@@ -1787,7 +1747,7 @@ def bounce_integral(
         sums = jnp.cumsum(
             # Periodic boundary to compute bounce integrals of particles
             # trapped outside this snapshot of the field lines.
-            jnp.diff(primitive, axis=-1, append=primitive[:, 0, jnp.newaxis])
+            jnp.diff(primitive, axis=-1, append=primitive[..., 0, jnp.newaxis])
             # Multiply by mask that is false at knots of piecewise spline
             # to avoid adding difference between primitives of splines at knots.
             * jnp.append(jnp.arange(1, N * R) % R != 0, True),
@@ -1795,7 +1755,7 @@ def bounce_integral(
         )
         return fun((sums, is_bp)).reshape(pitch.size, M, L, N * R // 2)
 
-    def _tanh_sinh(name, pitch=None):
+    def _quad_sin(name, pitch=None):
         """Compute the bounce integral of the named quantity.
 
         Parameters
@@ -1814,9 +1774,9 @@ def bounce_integral(
 
         """
         pitch, intersect, _, bp1, bp2 = _compute_bp_if_given_pitch(
-            pitch, *original, err=True, zeta=zeta, poly_B=poly_B, poly_B_z=poly_B_z
+            pitch, zeta, poly_B, poly_B_z, *original, err=True
         )
-        intersect = intersect.reshape(bp1.shape)
+        intersect = intersect.reshape(pitch.size * M * L, N * NUM_ROOTS)
         bp1 = fun((intersect, bp1))
         bp2 = fun((intersect, bp2))
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
@@ -1880,17 +1840,15 @@ def bounce_integral(
     assert poly_B.shape == (4, M * L, N)
     assert poly_B_z.shape == (3, M * L, N)
 
+    original = _compute_bp_if_given_pitch(pitch, zeta, poly_B, poly_B_z, err=False)
     if method == "direct":
         bi = _direct
         fun = vmap(lambda args: mask_diff(*args)[::2])
     else:
-        bi = _tanh_sinh
+        bi = _quad_sin
         fun = vmap(lambda args: mask_take(*args, size=N * 2, fill_value=0))
         x, w = tanh_sinh_quadrature(resolution)
         x = jnp.arcsin(x) / jnp.pi - 0.5
-    original = _compute_bp_if_given_pitch(
-        pitch, err=False, zeta=zeta, poly_B=poly_B, poly_B_z=poly_B_z
-    )
     return bi
 
 
@@ -1978,6 +1936,48 @@ def mask_diff(a, mask, n=1, axis=-1, prepend=None):
         jnp.diff(mask_take(a, mask, mask.size, fill_value=jnp.nan), n, axis, prepend)
     )
     return diff
+
+
+def stretch_batches(in_arr, in_batch_size, out_batch_size, fill):
+    """Stretch batches of ``in_arr``.
+
+    Given that ``in_arr`` is composed of N batches of ``in_batch_size``
+    along its last axis, stretch the last axis so that it is composed of
+    N batches of ``out_batch_size``. The ``out_batch_size - in_batch_size``
+    missing elements in each batch are populated with ``fill``.
+    By default, these elements are populated evenly surrounding the input batches.
+
+    Parameters
+    ----------
+    in_arr : ndarray, shape(..., in_batch_size * N)
+        Input array
+    in_batch_size : int
+        Length of batches along last axis of input array.
+    out_batch_size : int
+        Length of batches along last axis of output array.
+    fill : bool or int or float
+        Value to fill at missing indices of each batch.
+
+    Returns
+    -------
+    out_arr : ndarray, shape(..., out_batch_size * N)
+        Output array
+
+    """
+    assert out_batch_size >= in_batch_size
+    N = in_arr.shape[-1] // in_batch_size
+    out_shape = in_arr.shape[:-1] + (N * out_batch_size,)
+    offset = (out_batch_size - in_batch_size) // 2
+    idx = jnp.arange(in_arr.shape[-1])
+    out_arr = put_along_axis(
+        arr=jnp.full(out_shape, fill, dtype=in_arr.dtype),
+        indices=(idx // in_batch_size) * out_batch_size
+        + offset
+        + (idx % in_batch_size),
+        values=in_arr,
+        axis=-1,
+    )
+    return out_arr
 
 
 def bounce_average(

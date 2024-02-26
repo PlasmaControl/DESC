@@ -63,7 +63,6 @@ for k in range(1, eq.M + 1):
             # we could optionally set normalize=True which would compute things in
             # normalized/dimensionless units, effectively changing the weights
         ),
-        verbose=0,
     )
     # as opposed to SIMSOPT and STELLOPT where variables are assumed fixed, in DESC
     # we assume variables are free. Here we decide which ones to fix, starting with

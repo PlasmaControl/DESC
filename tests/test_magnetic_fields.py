@@ -622,6 +622,26 @@ class TestMagneticFields:
                 eq, source_grid=LinearGrid(M=1), eval_grid=LinearGrid(M=1), verbose=0
             )
 
+    @pytest.mark.unit
+    def test_fourier_current_potential_field_coil_cut_warnings(self):
+        """Test Fourier current potential coil cut method warning."""
+        curr = 1e4
+        # with this choice of Phi_mn, the constant Phi contours
+        # move so much that they intersect the boundaries of where we
+        # plot them, that should return a warning
+        field = FourierCurrentPotentialField(
+            I=curr,
+            G=curr,
+            Phi_mn=np.array([-4 * curr / 13]),
+            modes_Phi=np.array([[-1, 0]]),
+        )
+
+        with pytest.warns(
+            UserWarning,
+            match="Detected",
+        ):
+            field.cut_surface_current_into_coils(1)
+
     @pytest.mark.slow
     @pytest.mark.unit
     def test_spline_field(self):

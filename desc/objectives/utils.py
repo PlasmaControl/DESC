@@ -77,9 +77,20 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     b = -constraint.compute_scaled_error(x0)
 
     if isinstance(objective, ProximalProjection):
-        # the full state vector is reduced to the optimization variables
-        A = A @ objective._dxdc
-    assert A.shape[-1] == xp.size
+        # remove cols of A corresponding to ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        c = 0
+        cols = np.array([], dtype=int)
+        for t in objective.things:
+            if t is objective._eq:
+                for arg, dim in objective._eq.dimensions.items():
+                    if arg in objective._args:  # these Equilibrium args are kept
+                        cols = np.append(cols, np.arange(c, c + dim))
+                    c += dim  # other Equilibrium args are removed
+            else:  # non-Equilibrium args are always included
+                cols = np.append(cols, np.arange(c, c + t.dim_x))
+                c += t.dim_x
+        A = A[:, cols]
+    assert A.shape[1] == xp.size
 
     # fixed just means there is a single element in A, so A_ij*x_j = b_i
     fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
@@ -225,7 +236,7 @@ def combine_args(*objectives):
     # unique list of things from all objectives
     things, _ = unique_list(flatten_list([obj.things for obj in objectives]))
     for obj in objectives:
-        obj._all_things = [things]
+        obj._all_things = [things for _ in obj.objectives]
         obj._set_things()  # obj.things will be in the same order for all objectives
     return objectives
 

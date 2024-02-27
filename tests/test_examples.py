@@ -749,7 +749,7 @@ def test_multiobject_optimization():
     eq.solve(verbose=3)
 
     optimizer = Optimizer("fmin-auglag")
-    (eq, surf), result = optimizer.optimize(
+    (eq, surf), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=500
     )
 
@@ -792,7 +792,7 @@ def test_multiobject_optimization_prox():
     eq.solve(verbose=3)
 
     optimizer = Optimizer("proximal-lsq-exact")
-    (eq, surf), result = optimizer.optimize(
+    (eq, surf), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=100
     )
 

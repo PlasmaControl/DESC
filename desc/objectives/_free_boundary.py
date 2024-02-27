@@ -14,7 +14,6 @@ from desc.objectives.objective_funs import _Objective
 from desc.singularities import (
     DFTInterpolator,
     FFTInterpolator,
-    singular_integral,
     virtual_casing_biot_savart,
 )
 from desc.utils import Timer, errorif, warnif
@@ -801,6 +800,9 @@ class QuadraticFlux(_Objective):
         Whether or not the external field's DOF (params) change during optimization.
     vacuum : bool
         If true, Bplasma is set to zero.
+    loop : bool
+        If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
+        less memory.
     name : str
         Name of the objective function.
 
@@ -829,6 +831,7 @@ class QuadraticFlux(_Objective):
         eq_fixed=False,
         field_fixed=False,
         vacuum=False,
+        loop=True,
         name="Quadratic flux",
     ):
         self._src_grid = src_grid
@@ -841,6 +844,7 @@ class QuadraticFlux(_Objective):
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
         self._vacuum = vacuum
+        self._loop = loop
         if not eq_fixed and not field_fixed:
             things = [ext_field, eq]
         elif eq_fixed and not field_fixed:
@@ -859,13 +863,11 @@ class QuadraticFlux(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -985,11 +987,11 @@ class QuadraticFlux(_Objective):
             )
 
             # don't need extra B/2 since we only care about normal component
-            Bplasma = -singular_integral(
+            Bplasma = virtual_casing_biot_savart(
                 eval_data,
                 src_data,
-                "biot_savart",
-                interpolator,
+                self._constants["interpolator"],
+                loop=self._loop,
             )
 
             self._constants.update(
@@ -1063,11 +1065,11 @@ class QuadraticFlux(_Objective):
             )
 
             # don't need extra B/2 since we only care about normal component
-            Bplasma = -singular_integral(
+            Bplasma = virtual_casing_biot_savart(
                 eval_data,
                 src_data,
-                "biot_savart",
-                constants["interpolator"],
+                self._constants["interpolator"],
+                loop=self._loop,
             )
 
         x = jnp.array(
@@ -1080,7 +1082,7 @@ class QuadraticFlux(_Objective):
 
         # can't pre-compute Bext because it is dependent on eval_grid
         Bext = self._ext_field.compute_magnetic_field(
-            x, grid=self._field_grid, basis="rpz", params=field_params
+            x, source_grid=self._field_grid, basis="rpz", params=field_params
         )
 
         f = jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)

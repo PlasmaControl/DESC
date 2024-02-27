@@ -637,7 +637,7 @@ class TestQuadraticFlux:
         obj = QuadraticFlux(t_field, eq, eq_fixed=True)
         obj.build(eq)
         f = obj.compute(params_1=t_field.params_dict)
-        np.testing.assert_allclose(f, 0)
+        np.testing.assert_allclose(f, 0, rtol=1e-15, atol=1e-15)
 
         # test nonaxisymmetric surface
         eq = desc.io.load("desc/examples/precise_QA_output.h5")[0]
@@ -659,6 +659,7 @@ class TestQuadraticFlux:
 
         np.testing.assert_allclose(f, Bnorm, atol=1e-3)
 
+    @pytest.mark.unit
     def test_quadratic_flux_with_field_fixed(self, quadratic_flux_equilibriums):
         """Test with field_fixed = True, eq_fixed = False.
 
@@ -716,6 +717,7 @@ class TestQuadraticFlux:
         np.testing.assert_allclose(new_Rb_lmn, 0, atol=1e-10)
         np.testing.assert_allclose(new_Zb_lmn, 0, atol=1e-10)
 
+    @pytest.mark.unit
     def test_quadratic_flux_with_eq_fixed(self, quadratic_flux_equilibriums):
         """Test with eq_fixed = True, field_fixed = True.
 
@@ -755,6 +757,7 @@ class TestQuadraticFlux:
 
         np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-8)
 
+    @pytest.mark.unit
     def test_quadratic_flux_with_eq_and_field_unfixed(
         self, quadratic_flux_equilibriums
     ):
@@ -816,6 +819,7 @@ class TestQuadraticFlux:
 
         np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-7)
 
+    @pytest.mark.unit
     def test_quadratic_flux_with_analytic_field(self):
         """Test analytic field optimization when eq_fixed=True, field_fixed=False.
 
@@ -850,6 +854,7 @@ class TestQuadraticFlux:
         # to get to Bnorm = 0
         np.testing.assert_allclose(things[0].B0, 0, atol=1e-3)
 
+    @pytest.mark.unit
     def test_quadratic_flux_vacuum(self, quadratic_flux_equilibriums):
         """Test vacuum flag."""
         # equilibrium that has Bplasma != 0

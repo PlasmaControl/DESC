@@ -129,7 +129,6 @@ class GenericObjective(_Objective):
             "transforms": transforms,
             "profiles": profiles,
         }
-
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):

@@ -112,6 +112,7 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
+    "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
 }
@@ -419,7 +420,7 @@ def test_reverse_mode_ad_axis(name):
     grid = LinearGrid(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
     eq.change_resolution(2, 2, 2, 4, 4, 4)
 
-    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), verbose=0)
+    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid))
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))

@@ -12,15 +12,21 @@ from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
 from desc.backend import jnp
+from desc.coils import CoilSet, FourierXYZCoil
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
-from desc.magnetic_fields import OmnigenousField
+from desc.magnetic_fields import (
+    FourierCurrentPotentialField,
+    OmnigenousField,
+    SplineMagneticField,
+)
 from desc.objectives import (
     AspectRatio,
     BootstrapRedlConsistency,
+    BoundaryError,
     BScaleLength,
     CurrentDensity,
     Elongation,
@@ -48,8 +54,10 @@ from desc.objectives import (
     RotationalTransform,
     Shear,
     ToroidalCurrent,
+    VacuumBoundaryError,
     Volume,
 )
+from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective
 from desc.objectives.utils import softmax, softmin
@@ -154,6 +162,7 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+        test(Equilibrium(iota=PowerSeriesProfile(0)).surface)
 
     @pytest.mark.unit
     def test_elongation(self):
@@ -168,6 +177,7 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
 
         test(get("HELIOTRON"))
+        test(get("HELIOTRON").surface)
 
     @pytest.mark.unit
     def test_energy(self):
@@ -273,7 +283,7 @@ class TestObjectiveFunction:
             """Ensure compilation without any errors from JAX, related to issue #625."""
             obj = ObjectiveFunction(QuasisymmetryBoozer(eq=eq))
             obj.build()
-            obj.compile()
+            obj.compile("all")
             fb = obj.compute_scaled_error(obj.x(eq))
             np.testing.assert_allclose(fb, 0, atol=1e-12)
 
@@ -431,6 +441,74 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_boundary_error_biestsc(self):
+        """Test calculation of boundary error using BIEST w/ sheet current."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        sheet_current = FourierCurrentPotentialField()
+        sheet_current.change_resolution(M=eq.M, N=eq.N, NFP=eq.NFP, sym=eq.sym)
+        eq.solve()
+        obj = BoundaryError(eq, coilset, sheet_current, field_grid=coil_grid)
+        obj.build()
+        f = obj.compute_scaled_error(*obj.xs(eq, sheet_current))
+        n = len(f) // 3
+        # first n should be B*n errors
+        np.testing.assert_allclose(f[:n], 0, atol=1e-4)
+        # next n should be B^2 errors
+        np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
+        # last n should be K errors
+        np.testing.assert_allclose(f[2 * n :], 0, atol=3e-2)
+
+    @pytest.mark.unit
+    def test_boundary_error_biest(self):
+        """Test calculation of boundary error using BIEST."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+        obj = BoundaryError(eq, coilset, field_grid=coil_grid)
+        obj.build()
+        f = obj.compute_scaled_error(*obj.xs(eq))
+        n = len(f) // 2
+        # first n should be B*n errors
+        np.testing.assert_allclose(f[:n], 0, atol=1e-4)
+        # next n should be B^2 errors
+        np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
+
+    @pytest.mark.unit
+    def test_boundary_error_vacuum(self):
+        """Test calculation of vacuum boundary error."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+        obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
+        obj.build()
+        f = obj.compute_scaled_error(*obj.xs(eq))
+        n = len(f) // 2
+        # first n should be B*n errors
+        np.testing.assert_allclose(f[:n], 0, atol=1e-4)
+        # next n should be B^2 errors
+        np.testing.assert_allclose(f[n : 2 * n], 0, atol=4e-2)
+
+    @pytest.mark.unit
+    def test_boundary_error_nestor(self):
+        """Test calculation of boundary error using NESTOR."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+        obj = BoundaryErrorNESTOR(eq, coilset, field_grid=coil_grid)
+        obj.build()
+        f = obj.compute_scaled_error(*obj.xs(eq))
+        np.testing.assert_allclose(f, 0, atol=2e-3)
 
     @pytest.mark.unit
     def test_target_mean_iota(self):
@@ -1021,6 +1099,273 @@ def test_plasma_vessel_distance_print(capsys):
 
 
 @pytest.mark.unit
+def test_boundary_error_print(capsys):
+    """Test that the boundary error objectives print correctly."""
+    coil = FourierXYZCoil(5e5)
+    coilset = CoilSet.linspaced_angular(coil, n=100)
+    coil_grid = LinearGrid(N=20)
+    eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+
+    obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
+    obj.build()
+
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
+    n = len(f) // 2
+    f1 = f[:n]
+    f2 = f[n:]
+    obj.print_value(*obj.xs(eq))
+    out = capsys.readouterr()
+
+    corr_out = str(
+        "Precomputing transforms\n"
+        + "Maximum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
+        + "(T*m^2)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
+        + "(T*m^2)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
+        + "(T*m^2)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.max(f1 / obj.normalization[0])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.min(f1 / obj.normalization[0])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.mean(f1 / obj.normalization[0])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
+        + "(T^2*m^2)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
+        + "(T^2*m^2)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
+        + "(T^2*m^2)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.max(f2 / obj.normalization[-1])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.min(f2 / obj.normalization[-1])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.mean(f2 / obj.normalization[-1])
+        )
+        + "(normalized)"
+        + "\n"
+    )
+    assert out.out == corr_out
+
+    obj = BoundaryError(eq, coilset, field_grid=coil_grid)
+    obj.build()
+
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
+    n = len(f) // 2
+    f1 = f[:n]
+    f2 = f[n:]
+    obj.print_value(*obj.xs(eq))
+    out = capsys.readouterr()
+
+    corr_out = str(
+        "Precomputing transforms\n"
+        + "Maximum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
+        + "(T*m^2)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
+        + "(T*m^2)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
+        + "(T*m^2)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.max(f1 / obj.normalization[0])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.min(f1 / obj.normalization[0])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.mean(f1 / obj.normalization[0])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
+        + "(T^2*m^2)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
+        + "(T^2*m^2)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
+        + "(T^2*m^2)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.max(f2 / obj.normalization[-1])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.min(f2 / obj.normalization[-1])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.mean(f2 / obj.normalization[-1])
+        )
+        + "(normalized)"
+        + "\n"
+    )
+    assert out.out == corr_out
+
+    sheet_current = FourierCurrentPotentialField()
+    sheet_current.change_resolution(M=eq.M, N=eq.N, NFP=eq.NFP, sym=eq.sym)
+    obj = BoundaryError(eq, coilset, sheet_current, field_grid=coil_grid)
+    obj.build()
+
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq, sheet_current)))
+    n = len(f) // 3
+    f1 = f[:n]
+    f2 = f[n : 2 * n]
+    f3 = f[2 * n :]
+    obj.print_value(*obj.xs(eq, sheet_current))
+    out = capsys.readouterr()
+
+    corr_out = str(
+        "Precomputing transforms\n"
+        + "Maximum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.max(f1))
+        + "(T*m^2)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.min(f1))
+        + "(T*m^2)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary normal field error: {:10.3e} ".format(np.mean(f1))
+        + "(T*m^2)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.max(f1 / obj.normalization[0])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.min(f1 / obj.normalization[0])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary normal field error: {:10.3e} ".format(
+            np.mean(f1 / obj.normalization[0])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.max(f2))
+        + "(T^2*m^2)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.min(f2))
+        + "(T^2*m^2)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(np.mean(f2))
+        + "(T^2*m^2)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.max(f2 / obj.normalization[n])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.min(f2 / obj.normalization[n])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary magnetic pressure error: {:10.3e} ".format(
+            np.mean(f2 / obj.normalization[n])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary field jump error: {:10.3e} ".format(np.max(f3))
+        + "(T*m^2)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary field jump error: {:10.3e} ".format(np.min(f3))
+        + "(T*m^2)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary field jump error: {:10.3e} ".format(np.mean(f3))
+        + "(T*m^2)"
+        + "\n"
+        + "Maximum absolute "
+        + "Boundary field jump error: {:10.3e} ".format(
+            np.max(f3 / obj.normalization[-1])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Minimum absolute "
+        + "Boundary field jump error: {:10.3e} ".format(
+            np.min(f3 / obj.normalization[-1])
+        )
+        + "(normalized)"
+        + "\n"
+        + "Average absolute "
+        + "Boundary field jump error: {:10.3e} ".format(
+            np.mean(f3 / obj.normalization[-1])
+        )
+        + "(normalized)"
+        + "\n"
+    )
+    assert out.out == corr_out
+
+
+@pytest.mark.unit
 def test_rebuild():
     """Test that the objective is rebuilt correctly when needed."""
     eq = Equilibrium(L=3, M=3)
@@ -1283,7 +1628,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(CurrentDensity(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(CurrentDensity(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=3e-2)
@@ -1298,7 +1643,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(Energy(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(Energy(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1313,7 +1658,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(ForceBalance(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(ForceBalance(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1328,7 +1673,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1343,7 +1688,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(HelicalForceBalance(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(HelicalForceBalance(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-1)
@@ -1358,7 +1703,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(RadialForceBalance(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(RadialForceBalance(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-1)
@@ -1370,9 +1715,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(
-            GenericObjective("<beta>_vol", eq=eq, grid=grid), verbose=0
-        )
+        obj = ObjectiveFunction(GenericObjective("<beta>_vol", eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1387,7 +1730,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             sym=eq.sym,
             axis=False,
         )
-        obj = ObjectiveFunction(GenericObjective("<J*B>", eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(GenericObjective("<J*B>", eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1401,9 +1744,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(
-            GenericObjective("sqrt(g)", eq=eq, grid=grid), verbose=0
-        )
+        obj = ObjectiveFunction(GenericObjective("sqrt(g)", eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1414,7 +1755,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(AspectRatio(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(AspectRatio(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1423,7 +1764,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(BScaleLength(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(BScaleLength(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1434,7 +1775,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(Elongation(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(Elongation(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1443,7 +1784,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(MeanCurvature(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(MeanCurvature(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1459,7 +1800,6 @@ def test_compute_scalar_resolution():  # noqa: C901
             PlasmaVesselDistance(
                 surface=surface, eq=eq, surface_grid=grid, plasma_grid=grid
             ),
-            verbose=0,
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq, surface))
@@ -1469,7 +1809,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(PrincipalCurvature(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(PrincipalCurvature(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1480,7 +1820,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(Volume(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(Volume(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1496,7 +1836,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             sym=eq.sym,
             axis=False,
         )
-        obj = ObjectiveFunction(RotationalTransform(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(RotationalTransform(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1512,7 +1852,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             sym=eq.sym,
             axis=False,
         )
-        obj = ObjectiveFunction(ToroidalCurrent(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(ToroidalCurrent(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=4e-2)
@@ -1527,7 +1867,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(Isodynamicity(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(Isodynamicity(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1537,8 +1877,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     for i, res in enumerate((res_array + 4) * 2):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
         obj = ObjectiveFunction(
-            QuasisymmetryBoozer(eq=eq, helicity=(1, -eq.NFP), grid=grid),
-            verbose=0,
+            QuasisymmetryBoozer(eq=eq, helicity=(1, -eq.NFP), grid=grid)
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
@@ -1554,7 +1893,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(QuasisymmetryTripleProduct(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(QuasisymmetryTripleProduct(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1571,7 +1910,6 @@ def test_compute_scalar_resolution():  # noqa: C901
         )
         obj = ObjectiveFunction(
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, -eq.NFP), grid=grid),
-            verbose=0,
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
@@ -1584,7 +1922,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = LinearGrid(
             rho=rho, M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym
         )
-        obj = ObjectiveFunction(MagneticWell(eq=eq, grid=grid, target=0), verbose=0)
+        obj = ObjectiveFunction(MagneticWell(eq=eq, grid=grid, target=0))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1596,7 +1934,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = LinearGrid(
             rho=rho, M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym
         )
-        obj = ObjectiveFunction(MercierStability(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(MercierStability(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1666,6 +2004,30 @@ def test_objective_no_nangrad():
     obj.build()
     g = obj.grad(obj.x(eq))
     assert not np.any(np.isnan(g)), "redl bootstrap"
+
+    ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+
+    pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
+    iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
+    surf = FourierRZToroidalSurface(
+        R_lmn=[4.0, 1.0],
+        modes_R=[[0, 0], [1, 0]],
+        Z_lmn=[-1.0],
+        modes_Z=[[-1, 0]],
+        NFP=1,
+    )
+
+    eq = Equilibrium(M=10, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
+    obj = ObjectiveFunction(BoundaryError(eq, ext_field))
+    obj.build()
+    g = obj.grad(obj.x(eq))
+    assert not np.any(np.isnan(g)), "boundary error"
+
+    obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field))
+    with pytest.warns(UserWarning):
+        obj.build()
+    g = obj.grad(obj.x(eq))
+    assert not np.any(np.isnan(g)), "vacuum boundary error"
 
     # these only need basic equilibrium
     eq = Equilibrium(L=2, M=2, N=2)

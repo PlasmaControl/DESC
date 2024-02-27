@@ -3903,6 +3903,10 @@ def plot_regcoil_outputs(
         dictionary of the data plotted, only returned if ``return_data=True``
         This is the same as data_regcoil
     """
+    field = (
+        field.copy()
+    )  # copy the field so that we are not changing the passed-in field
+    # TODO: check that field has correct NFP and resolutions?
     scan = isinstance(data["Phi_mn"], list)
     # TODO: add flags for each subplot, also add |K| plot
     Bn_tot = data["Bn_total"]

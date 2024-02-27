@@ -7,7 +7,7 @@ import numpy as np
 from interpax import approx_df, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 
-from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.backend import fori_loop, jit, jnp, odeint
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
@@ -410,7 +410,7 @@ class _MagneticField(IOAble, ABC):
         None
 
         """
-        # cyclindrical coordinates grid
+        # cylindrical coordinates grid
         NFP = self.NFP if hasattr(self, "_NFP") else 1
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
@@ -1469,6 +1469,9 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         whether to enforce stellarator symmetry for the surface geometry.
         Default is "auto" which enforces if modes are symmetric. If True,
         non-symmetric modes will be truncated.
+    M, N: int or None
+        Maximum poloidal and toroidal mode numbers. Defaults to maximum from modes_R
+        and modes_Z.
     name : str
         name for this field
     check_orientation : bool
@@ -1498,6 +1501,8 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         modes_Z=None,
         NFP=1,
         sym="auto",
+        M=None,
+        N=None,
         name="",
         check_orientation=True,
     ):
@@ -1511,12 +1516,14 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         self._params = params
 
         super().__init__(
-            R_lmn,
-            Z_lmn,
-            modes_R,
-            modes_Z,
-            NFP,
-            sym,
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            modes_R=modes_R,
+            modes_Z=modes_Z,
+            NFP=NFP,
+            sym=sym,
+            M=M,
+            N=N,
             name=name,
             check_orientation=check_orientation,
         )
@@ -1720,10 +1727,12 @@ class FourierCurrentPotentialField(
         and increasing when going in the clockwise direction, which with the
         convention n x grad(phi) will result in a toroidal field in the negative
         toroidal direction.
-    sym_Phi :  {"auto","cos","sin",False}
+    sym_Phi :  {False,"cos","sin"}
         whether to enforce a given symmetry for the DoubleFourierSeries part of the
-        current potential. Default is "auto" which enforces if modes are symmetric.
-        If True, non-symmetric modes will be truncated.
+        current potential.
+    M_Phi, N_Phi: int or None
+        Maximum poloidal and toroidal mode numbers for the single valued part of the
+        current potential.
     R_lmn, Z_lmn : array-like, shape(k,)
         Fourier coefficients for winding surface R and Z in cylindrical coordinates
     modes_R : array-like, shape(k,2)
@@ -1736,6 +1745,9 @@ class FourierCurrentPotentialField(
         whether to enforce stellarator symmetry for the surface geometry.
         Default is "auto" which enforces if modes are symmetric. If True,
         non-symmetric modes will be truncated.
+    M, N: int or None
+        Maximum poloidal and toroidal mode numbers. Defaults to maximum from modes_R
+        and modes_Z.
     name : str
         name for this field
     check_orientation : bool
@@ -1757,13 +1769,17 @@ class FourierCurrentPotentialField(
         modes_Phi=np.array([[0, 0]]),
         I=0,
         G=0,
-        sym_Phi="auto",
+        sym_Phi=False,
+        M_Phi=None,
+        N_Phi=None,
         R_lmn=None,
         Z_lmn=None,
         modes_R=None,
         modes_Z=None,
         NFP=1,
         sym="auto",
+        M=None,
+        N=None,
         name="",
         check_orientation=True,
     ):
@@ -1774,26 +1790,12 @@ class FourierCurrentPotentialField(
 
         assert np.issubdtype(modes_Phi.dtype, np.integer)
 
-        M_Phi = np.max(abs(modes_Phi[:, 0]))
-        N_Phi = np.max(abs(modes_Phi[:, 1]))
+        M_Phi = setdefault(M_Phi, np.max(abs(modes_Phi[:, 0])))
+        N_Phi = setdefault(N_Phi, np.max(abs(modes_Phi[:, 1])))
 
         self._M_Phi = M_Phi
         self._N_Phi = N_Phi
 
-        if sym_Phi == "auto":
-            if np.all(
-                Phi_mn[np.where(sign(modes_Phi[:, 0]) == sign(modes_Phi[:, 1]))] == 0
-            ):
-                sym_Phi = "sin"
-            elif np.all(
-                Phi_mn[np.where(sign(modes_Phi[:, 0]) != sign(modes_Phi[:, 1]))] == 0
-            ):
-                sym_Phi = "cos"
-            else:
-                sym_Phi = False
-            # catch case where only (0,0) mode is given as 0
-            if np.all(Phi_mn == 0.0) and np.all(modes_Phi == 0):
-                sym_Phi = "cos"
         self._sym_Phi = sym_Phi
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
         self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
@@ -1804,12 +1806,14 @@ class FourierCurrentPotentialField(
         self._G = float(G)
 
         super().__init__(
-            R_lmn,
-            Z_lmn,
-            modes_R,
-            modes_Z,
-            NFP,
-            sym,
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            modes_R=modes_R,
+            modes_Z=modes_Z,
+            NFP=NFP,
+            sym=sym,
+            M=M,
+            N=N,
             name=name,
             check_orientation=check_orientation,
         )
@@ -1953,7 +1957,9 @@ class FourierCurrentPotentialField(
         modes_Phi=np.array([[0, 0]]),
         I=0,
         G=0,
-        sym_Phi="auto",
+        sym_Phi=False,
+        M_Phi=None,
+        N_Phi=None,
     ):
         """Create FourierCurrentPotentialField using geometry of given surface.
 
@@ -1979,10 +1985,12 @@ class FourierCurrentPotentialField(
             and increasing when going in the clockwise direction, which with the
             convention n x grad(phi) will result in a toroidal field in the negative
             toroidal direction.
-        sym_Phi :  {"auto","cos","sin",False}
+        sym_Phi :  {False,"cos","sin"}
             whether to enforce a given symmetry for the DoubleFourierSeries part of the
-            current potential. Default is "auto" which enforces if modes are symmetric.
-            If True, non-symmetric modes will be truncated.
+            current potential.
+        M_Phi, N_Phi: int or None
+            Maximum poloidal and toroidal mode numbers for the single valued part of the
+            current potential.
 
         """
         if not isinstance(surface, FourierRZToroidalSurface):
@@ -1999,17 +2007,19 @@ class FourierCurrentPotentialField(
         name = surface.name
 
         return cls(
-            Phi_mn,
-            modes_Phi,
-            I,
-            G,
-            sym_Phi,
-            R_lmn,
-            Z_lmn,
-            modes_R,
-            modes_Z,
-            NFP,
-            sym,
+            Phi_mn=Phi_mn,
+            modes_Phi=modes_Phi,
+            I=I,
+            G=G,
+            sym_Phi=sym_Phi,
+            M_Phi=M_Phi,
+            N_Phi=N_Phi,
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            modes_R=modes_R,
+            modes_Z=modes_Z,
+            NFP=NFP,
+            sym=sym,
             name=name,
             check_orientation=False,
         )

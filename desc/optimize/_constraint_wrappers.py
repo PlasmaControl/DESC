@@ -534,7 +534,7 @@ class ProximalProjection(ObjectiveFunction):
         ], "ProximalProjection can only handle constraints on the equilibrium."
 
         self._objectives = [self._objective, self._constraint]
-        self._set_things(self._all_things)
+        self._set_things(self.all_things)
 
         self._eq_idx = self.things.index(self._eq)
 

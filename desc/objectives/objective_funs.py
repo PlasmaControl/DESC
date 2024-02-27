@@ -200,10 +200,11 @@ class ObjectiveFunction(IOAble):
         Sets ``self._flatten`` as a function to return unique flattened list of things
         and ``self._unflatten`` to recreate full nested list of things
         from unique flattened version.
+
         """
         from jax.tree_util import tree_flatten, tree_unflatten
 
-        things = setdefault(things, [obj.things for obj in self.objectives])
+        things = setdefault(things, self.all_things)
 
         flat_, treedef_ = tree_flatten(
             things, is_leaf=lambda x: isinstance(x, Optimizable)
@@ -686,11 +687,11 @@ class ObjectiveFunction(IOAble):
         )
 
     @property
-    def _all_things(self):
+    def all_things(self):
         """list: all things known to this objective, used and unused."""
-        if not hasattr(self, "_extra_things"):
-            self._extra_things = []
-        return [obj.things for obj in self.objectives] + self._extra_things
+        if hasattr(self, "_all_things"):
+            return self._all_things
+        return [obj.things for obj in self.objectives]
 
     @property
     def things(self):
@@ -700,7 +701,7 @@ class ObjectiveFunction(IOAble):
             RuntimeError,
             "ObjectiveFunction must be built with ObjectiveFunction.build() first",
         )
-        return self._flatten(self._all_things)
+        return self._flatten(self.all_things)
 
     @things.setter
     def things(self, new):
@@ -723,7 +724,7 @@ class ObjectiveFunction(IOAble):
         # now we know that new and self.things contains instances of unique classes, so
         # we should be able to just replace like with like
         things = self._unflatten(new)
-        for obj, t in zip(self.objectives, things[: -len(self._extra_things)]):
+        for obj, t in zip(self.objectives, things):
             obj.things = t
             # can maybe improve this later to not rebuild if resolution is the same
             obj._built = False

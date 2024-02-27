@@ -8,7 +8,7 @@ import warnings
 import numpy as np
 
 from desc.backend import cond, jnp, logsumexp, put
-from desc.utils import Index, flatten_list, svd_inv_null
+from desc.utils import Index, flatten_list, svd_inv_null, unique_list
 
 
 def _tree_zeros_like(x):
@@ -66,6 +66,8 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
                     + " but not included in objective."
                 )
 
+    from desc.optimize import ProximalProjection
+
     # particular solution to Ax=b
     xp = jnp.zeros(objective.dim_x)
 
@@ -73,6 +75,11 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
     x0 = jnp.zeros(constraint.dim_x)
     A = constraint.jac_scaled(x0)
     b = -constraint.compute_scaled_error(x0)
+
+    if isinstance(objective, ProximalProjection):
+        # the full state vector is reduced to the optimization variables
+        A = A @ objective._dxdc
+    assert A.shape[-1] == xp.size
 
     # fixed just means there is a single element in A, so A_ij*x_j = b_i
     fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
@@ -215,14 +222,11 @@ def combine_args(*objectives):
         Original ObjectiveFunctions modified to take the same state vector.
 
     """
-    things = flatten_list([obj.things for obj in objectives])
+    # unique list of things from all objectives
+    things, _ = unique_list(flatten_list([obj.things for obj in objectives]))
     for obj in objectives:
-        extras = []
-        for thing in things:
-            if thing not in obj.things:
-                extras.append(thing)
-        obj._extra_things = extras
-        obj._set_things(obj._all_things)
+        obj._all_things = [things]
+        obj._set_things()  # obj.things will be in the same order for all objectives
     return objectives
 
 

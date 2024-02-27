@@ -1,6 +1,40 @@
 Changelog
 =========
 
+
+New Features
+
+- Adds new objectives for free boundary equilibria: ``BoundaryError`` and ``VacuumBoundaryError``,
+along with a new tutorial notebook demonstrating their usage.
+- Objectives ``Volume``, ``AspectRatio``, ``Elongation`` now work for
+``FourierRZToroidalSurface`` objects as well as ``Equilibrium``.
+- ``MagneticField`` objects now have a method ``save_mgrid`` for saving field data
+in the MAKEGRID format for use with other codes.
+- ``SplineMagneticField.from_mgrid`` now defaults to using ``extcur`` from the mgrid file.
+- When converting a near axis solution from QSC/QIC to a desc ``Equilibrium``, the
+least squares fit is now weighted inversely with the distance from the axis to improve
+the accuracy for low aspect ratio.
+
+Speed Improvements
+
+- ``CoilSet`` is now more efficient when stellarator or field period symmetry is used.
+- Improves the efficiency of ``proximal`` optimizers by reducing the number of objective
+derivative evaluations. Optimization steps should now be 2-5x faster.
+- Improved performance of Zernike polynomial evaluation.
+
+Bug Fixes
+
+- Fix bug causing NaN in ``ForceBalance`` objective when the grid contained nodes at
+the magnetic axis.
+- When saving VMEC output, ``buco`` and ``bvco`` are now correctly saved on the half
+mesh. Previously they were saved on the full mesh.
+- Fixed a bug where hdf5 files were not properly closed after reading.
+- Fixed bugs relating to `Curve` objects not being optimizable.
+- Fixed incorrect rotation matrix for `FourierPlanarCurve`.
+- Fixed bug where ``plot_boundaries`` with a single ``phi`` value would return an
+empty plot.
+
+
 v0.10.4
 -------
 

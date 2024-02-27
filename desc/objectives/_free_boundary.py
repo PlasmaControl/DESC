@@ -388,9 +388,10 @@ class BoundaryError(_Objective):
         from desc.magnetic_fields import FourierCurrentPotentialField
         # turn the regular FourierRZToroidalSurface into a current potential on the
         # last closed flux surface
-        eq.surface = FourierCurrentPotentialField.from_suface(eq.surface)
-        # set the spectral resolution of the sheet current
-        eq.surface.change_Phi_resolution(eq.M, eq.N)
+        eq.surface = FourierCurrentPotentialField.from_suface(eq.surface,
+                                                              M_Phi=eq.M,
+                                                              N_Phi=eq.N,
+                                                              )
         objective = BoundaryError(eq, ext_field)
 
     """

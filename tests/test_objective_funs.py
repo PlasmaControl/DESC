@@ -444,7 +444,9 @@ class TestObjectiveFunction:
         coilset = CoilSet.linspaced_angular(coil, n=100)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
-        eq.surface = FourierCurrentPotentialField.from_surface(eq.surface)
+        eq.surface = FourierCurrentPotentialField.from_surface(
+            eq.surface, M_Phi=eq.M, N_Phi=eq.N
+        )
         eq.solve()
         obj = BoundaryError(eq, coilset, field_grid=coil_grid)
         obj.build()

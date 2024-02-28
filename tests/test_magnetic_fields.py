@@ -678,6 +678,12 @@ class TestMagneticFields:
         r, z = field_line_integrate(r0, z0, phis, field)
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+        # test that bounds work correctly, and stop integration when trajectory
+        # hits the bounds
+        r, z = field_line_integrate(r0, z0, phis, field, bounds_R=(10.05, np.inf))
+        np.testing.assert_allclose(r[-1], 10.05, rtol=1e-6)
+        r, z = field_line_integrate(r0, z0, phis, field, bounds_Z=(-np.inf, 0.05))
+        np.testing.assert_allclose(z[-1], 0.05, rtol=1e-6)
 
     @pytest.mark.unit
     def test_Bnormal_calculation(self):

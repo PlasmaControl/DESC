@@ -829,7 +829,6 @@ class QuadraticFlux(_Objective):
         eval_grid=None,
         field_grid=None,
         vacuum=False,
-        loop=True,
         name="Quadratic flux",
     ):
         self._src_grid = src_grid
@@ -840,7 +839,6 @@ class QuadraticFlux(_Objective):
         self._ext_field = ext_field
         self._field_grid = field_grid
         self._vacuum = vacuum
-        self._loop = loop
         things = [ext_field]
         super().__init__(
             things=things,
@@ -973,7 +971,6 @@ class QuadraticFlux(_Objective):
                 eval_data,
                 src_data,
                 self._constants["interpolator"],
-                loop=self._loop,
             )
 
             self._constants.update(
@@ -998,10 +995,8 @@ class QuadraticFlux(_Objective):
 
         Parameters
         ----------
-        params_1, params_2 : dict
-            Dictionary of the external field's or equilibrium's degrees of freedom.
-            If both the equilibrium and field are not fixed then `params_1` is the
-            field params and `params_2` is the eq params.
+        field_params : dict
+            Dictionary of the external field's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants

@@ -4075,6 +4075,9 @@ def plot_regcoil_outputs(
         )
         figdata["fig_scan_Phi"] = plt.gcf()
         axdata["ax_scan_Phi"] = plt.gca()
+        ########################################################
+        # Plot Bn
+        ########################################################
         plt.figure(figsize=(16, 12))
         for whichPlot in range(numPlots):
             plt.subplot(numRows, numCols, whichPlot + 1)
@@ -4116,6 +4119,45 @@ def plot_regcoil_outputs(
         )
         figdata["fig_scan_Bn"] = plt.gcf()
         axdata["ax_scan_Bn"] = plt.gca()
+        ########################################################
+        # Plot Surface Current |K|
+        ########################################################
+        plt.figure(figsize=(16, 12))
+        for whichPlot in range(numPlots):
+            plt.subplot(numRows, numCols, whichPlot + 1)
+            field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            K = field.compute("K", grid=source_grid, basis="xyz")["K"]
+            K_mag = np.linalg.norm(K, axis=1)
+
+            plt.rcParams.update({"font.size": 18})
+
+            plt.contourf(
+                source_grid.nodes[source_grid.unique_zeta_idx, 2],
+                source_grid.nodes[source_grid.unique_theta_idx, 1],
+                (K_mag).reshape(source_grid.num_theta, source_grid.num_zeta, order="F"),
+                levels=ncontours,
+            )
+            plt.ylabel("theta")
+            plt.xlabel("zeta")
+            plt.title(
+                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                fontsize="x-small",
+            )
+            plt.colorbar()
+            plt.xlim([0, 2 * np.pi / field.NFP])
+        plt.tight_layout()
+        units = " (A/m)"
+        plt.figtext(
+            0.5,
+            0.995,
+            "|K|" + units,
+            horizontalalignment="center",
+            verticalalignment="top",
+            fontsize="small",
+        )
+        figdata["fig_scan_K"] = plt.gcf()
+        axdata["ax_scan_K"] = plt.gca()
         if return_data:
             return (
                 figdata,

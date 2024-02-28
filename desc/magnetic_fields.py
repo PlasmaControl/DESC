@@ -1380,6 +1380,8 @@ def field_line_integrate(
     rtol=1e-8,
     atol=1e-8,
     maxstep=1000,
+    bounds_R=(0, np.inf),
+    bounds_Z=(-np.inf, np.inf),
 ):
     """Trace field lines by integration.
 
@@ -1401,6 +1403,19 @@ def field_line_integrate(
         relative and absolute tolerances for ode integration
     maxstep : int
         maximum number of steps between different phis
+    bounds_R : tuple of (float,float), optional
+        R bounds for field line integration bounding box.
+        If supplied, the RHS of the field line equations will be
+        multipled by exp(-r) where r is the distance from the origin,
+        this is meant to prevent the field lines which escape to infinity from
+        slowing the integration down by being traced to infinity.
+    bounds_Z : tuple of (float,float), optional
+        Z bounds for field line integration bounding box.
+        If supplied, the RHS of the field line equations will be
+        multipled by exp(-r) where r is the distance from the origin,
+        this is meant to prevent the field lines which escape to infinity from
+        slowing the integration down by being traced to infinity.
+
 
     Returns
     -------
@@ -1419,12 +1434,31 @@ def field_line_integrate(
     def odefun(rpz, s):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
+        z = rpz[:, 2]
+        decay_factor = jnp.where(
+            jnp.any(
+                jnp.array(
+                    [
+                        jnp.less(r, bounds_R[0]),
+                        jnp.greater(r, bounds_R[1]),
+                        jnp.less(z, bounds_Z[0]),
+                        jnp.greater(z, bounds_Z[1]),
+                    ]
+                )
+            ),
+            jnp.exp(-(r**2 + z**2)),
+            1.0,
+        )
+
         br, bp, bz = field.compute_magnetic_field(
             rpz, params, basis="rpz", source_grid=source_grid
         ).T
-        return jnp.array(
-            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
-        ).squeeze()
+        return (
+            decay_factor
+            * jnp.array(
+                [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
+            ).squeeze()
+        )
 
     intfun = lambda x: odeint(odefun, x, phis, rtol=rtol, atol=atol, mxstep=maxstep)
     x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)

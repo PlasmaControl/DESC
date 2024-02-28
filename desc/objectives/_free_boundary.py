@@ -868,8 +868,8 @@ class QuadraticFlux(_Objective):
         if self._src_grid is None:
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
-                M=eq.M_grid,
-                N=eq.N_grid,
+                M=15,
+                N=15,
                 NFP=int(eq.NFP),
                 sym=False,
             )

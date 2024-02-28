@@ -828,8 +828,6 @@ class QuadraticFlux(_Objective):
         src_grid=None,
         eval_grid=None,
         field_grid=None,
-        eq_fixed=False,
-        field_fixed=False,
         vacuum=False,
         loop=True,
         name="Quadratic flux",
@@ -841,18 +839,9 @@ class QuadraticFlux(_Objective):
         self._q = q
         self._ext_field = ext_field
         self._field_grid = field_grid
-        self._eq_fixed = eq_fixed
-        self._field_fixed = field_fixed
         self._vacuum = vacuum
         self._loop = loop
-        if not eq_fixed and not field_fixed:
-            things = [ext_field, eq]
-        elif eq_fixed and not field_fixed:
-            things = [ext_field]
-        elif field_fixed and not eq_fixed:
-            things = [eq]
-        else:
-            raise ValueError("Cannot fix both the eq and field.")
+        things = [ext_field]
         super().__init__(
             things=things,
             target=target,
@@ -874,15 +863,7 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
-        if self._eq_fixed:
-            eq = self._eq
-        elif self._field_fixed:
-            eq = self.things[0]
-        else:
-            eq = self.things[1]
-
-        if eq != self._eq:
-            self._eq = eq
+        eq = self._eq
 
         if self._src_grid is None:
             src_grid = LinearGrid(
@@ -959,6 +940,7 @@ class QuadraticFlux(_Objective):
             quad_weights=w,
         )
 
+        # pre-compute Bplasma because we are assuming eq is fixed
         if self._vacuum:
             eval_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
@@ -970,7 +952,7 @@ class QuadraticFlux(_Objective):
             Bplasma = np.zeros(np.shape(eval_grid.nodes))
             self._constants.update(Bplasma=Bplasma, eval_data=eval_data)
 
-        elif self._eq_fixed:
+        else:
             eval_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,
@@ -1011,7 +993,7 @@ class QuadraticFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1=None, params_2=None, constants=None):
+    def compute(self, field_params, constants=None):
         """Compute boundary force error.
 
         Parameters
@@ -1033,44 +1015,9 @@ class QuadraticFlux(_Objective):
         if constants is None:
             constants = self.constants
 
-        # get params based on the order of what is in `things`
-        if self._eq_fixed:
-            field_params = params_1
-        elif self._field_fixed:
-            eq_params = params_1
-            field_params = self._ext_field.params_dict
-        else:
-            field_params = params_1
-            eq_params = params_2
-
         # Now, calculate Bplasma and Bext
-        if self._eq_fixed or self._vacuum:
-            eval_data = constants["eval_data"]
-            Bplasma = constants["Bplasma"]
-        else:
-            eval_data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                self._data_keys,
-                params=eq_params,
-                transforms=constants["eval_transforms"],
-                profiles=constants["eval_profiles"],
-            )
-
-            src_data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                self._data_keys,
-                params=eq_params,
-                transforms=constants["src_transforms"],
-                profiles=constants["src_profiles"],
-            )
-
-            # don't need extra B/2 since we only care about normal component
-            Bplasma = virtual_casing_biot_savart(
-                eval_data,
-                src_data,
-                self._constants["interpolator"],
-                loop=self._loop,
-            )
+        eval_data = constants["eval_data"]
+        Bplasma = constants["Bplasma"]
 
         x = jnp.array(
             [
@@ -1080,7 +1027,7 @@ class QuadraticFlux(_Objective):
             ]
         ).T
 
-        # can't pre-compute Bext because it is dependent on eval_grid
+        # Bext is not pre-computed because field is not fixed
         Bext = self._ext_field.compute_magnetic_field(
             x, source_grid=self._field_grid, basis="rpz", params=field_params
         )

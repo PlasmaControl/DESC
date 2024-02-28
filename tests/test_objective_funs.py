@@ -31,12 +31,7 @@ from desc.objectives import (
     CurrentDensity,
     Elongation,
     Energy,
-    FixBoundaryR,
-    FixBoundaryZ,
-    FixCurrent,
     FixParameter,
-    FixPressure,
-    FixPsi,
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
@@ -634,9 +629,9 @@ class TestQuadraticFlux:
 
         # test that torus (axisymmetric) Bnorm is exactly 0
         __, eq, __ = quadratic_flux_equilibriums
-        obj = QuadraticFlux(t_field, eq, eq_fixed=True)
+        obj = QuadraticFlux(t_field, eq)
         obj.build(eq)
-        f = obj.compute(params_1=t_field.params_dict)
+        f = obj.compute(field_params=t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-15, atol=1e-15)
 
         # test nonaxisymmetric surface
@@ -649,77 +644,18 @@ class TestQuadraticFlux:
             eq,
             eval_grid=eval_grid,
             src_grid=source_grid,
-            eq_fixed=True,
         )
         Bnorm = t_field.compute_Bnormal(
             eq.surface, eval_grid=eval_grid, source_grid=source_grid
         )[0]
         obj.build(eq)
-        f = obj.compute(params_1=t_field.params_dict)
+        f = obj.compute(field_params=t_field.params_dict)
 
         np.testing.assert_allclose(f, Bnorm, atol=1e-3)
 
     @pytest.mark.unit
-    def test_quadratic_flux_with_field_fixed(self, quadratic_flux_equilibriums):
-        """Test with field_fixed = True, eq_fixed = False.
-
-        Checks that a non-axisymmetric field becomes axisymmetric
-        given an axisymmetric equilibrium.
-        """
-        # axisymmetric field
-        field = ToroidalMagneticField(1, 1)
-
-        # make non-axisymmetric equilibrium
-        eq, __, __ = quadratic_flux_equilibriums
-
-        optimizer = Optimizer("proximal-lsq-exact")
-
-        field_grid, eval_grid, source_grid = self.get_grids(eq, field)
-
-        # fix modes where Rb_lmn = 0 so optimizer only pays attention to
-        # nonaxisymmetric modes
-        zero_indices = np.where(eq.Rb_lmn == 0)
-        fixed_R_modes = eq.surface.R_basis.modes[zero_indices]
-
-        zero_indices = np.where(eq.Zb_lmn == 0)
-        fixed_Z_modes = eq.surface.Z_basis.modes[zero_indices]
-
-        constraints = (
-            ForceBalance(eq),
-            FixPressure(eq),
-            FixCurrent(eq),
-            FixPsi(eq),
-            FixBoundaryR(eq, modes=fixed_R_modes),
-            FixBoundaryZ(eq, modes=fixed_Z_modes),
-        )
-        quadflux_obj = QuadraticFlux(
-            ext_field=field,
-            eq=eq,
-            src_grid=source_grid,
-            eval_grid=eval_grid,
-            field_grid=field_grid,
-            field_fixed=True,
-        )
-        objective = ObjectiveFunction(quadflux_obj)
-
-        things, __ = optimizer.optimize(
-            eq,
-            objective=objective,
-            constraints=constraints,
-            gtol=0,
-            ftol=0,
-            copy=True,
-        )
-
-        new_Rb_lmn = things[0].Rb_lmn[np.where(eq.surface.R_basis.modes[:, 2] != 0)]
-        new_Zb_lmn = things[0].Rb_lmn[np.where(eq.surface.R_basis.modes[:, 2] != 0)]
-
-        np.testing.assert_allclose(new_Rb_lmn, 0, atol=1e-10)
-        np.testing.assert_allclose(new_Zb_lmn, 0, atol=1e-10)
-
-    @pytest.mark.unit
     def test_quadratic_flux_with_eq_fixed(self, quadratic_flux_equilibriums):
-        """Test with eq_fixed = True, field_fixed = True.
+        """Test with eq_fixed = True, field_fixed = False.
 
         Checks that a non-axisymmetric field becomes axisymmetric
         given an axisymmetric field.
@@ -742,7 +678,6 @@ class TestQuadraticFlux:
             src_grid=source_grid,
             eval_grid=eval_grid,
             field_grid=field_grid,
-            eq_fixed=True,
         )
         objective = ObjectiveFunction(quadflux_obj)
 
@@ -756,68 +691,6 @@ class TestQuadraticFlux:
         )
 
         np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-8)
-
-    @pytest.mark.unit
-    def test_quadratic_flux_with_eq_and_field_unfixed(
-        self, quadratic_flux_equilibriums
-    ):
-        """Test with eq_fixed = field_fixed = False.
-
-        Nonaxisymmetric field and nonaxisymmetric equilibrium.
-        """
-        __, __, eq = quadratic_flux_equilibriums
-
-        # keep equilibrium within winding surface
-        field = self.make_nonaxisym_field(eq)
-
-        optimizer = Optimizer("proximal-lsq-exact")
-
-        field_grid, eval_grid, source_grid = self.get_grids(eq, field)
-        surface_grid = LinearGrid(
-            rho=np.array([1.0]),
-            M=20,
-            N=20,
-            NFP=eq.NFP,
-            sym=False,
-        )
-
-        quadflux_obj = QuadraticFlux(
-            ext_field=field,
-            eq=eq,
-            src_grid=source_grid,
-            eval_grid=eval_grid,
-            field_grid=field_grid,
-        )
-
-        plasma_vessel_obj = PlasmaVesselDistance(
-            surface=field,
-            eq=eq,
-            plasma_grid=source_grid,
-            surface_grid=surface_grid,
-            bounds=(0.2, 2),
-        )
-        mean_curvature_obj = MeanCurvature(eq, bounds=(-3, 3), grid=surface_grid)
-        objective = ObjectiveFunction(
-            (quadflux_obj, plasma_vessel_obj, mean_curvature_obj)
-        )
-
-        constraints = (
-            ForceBalance(eq),
-            FixPressure(eq),
-            FixCurrent(eq),
-            FixPsi(eq),
-            FixParameter(field, ["I", "G", "R_lmn", "Z_lmn"]),
-        )
-        things, __ = optimizer.optimize(
-            (field, eq),
-            objective=objective,
-            constraints=constraints,
-            ftol=0,
-            gtol=0,
-            copy=True,
-        )
-
-        np.testing.assert_allclose(things[0].Phi_mn, 0, atol=1e-7)
 
     @pytest.mark.unit
     def test_quadratic_flux_with_analytic_field(self):
@@ -838,7 +711,6 @@ class TestQuadraticFlux:
             src_grid=source_grid,
             eval_grid=eval_grid,
             field_grid=field_grid,
-            eq_fixed=True,
         )
         objective = ObjectiveFunction(quadflux_obj)
         things, __ = optimizer.optimize(
@@ -868,7 +740,7 @@ class TestQuadraticFlux:
         )
         Bnorm = t_field.compute_Bnormal(eq.surface)[0]
         obj.build(eq)
-        f = obj.compute(params_1=t_field.params_dict)
+        f = obj.compute(field_params=t_field.params_dict)
 
         # check that they're the same since we set Bplasma = 0
         np.testing.assert_allclose(f, Bnorm, atol=1e-14)

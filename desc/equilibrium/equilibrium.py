@@ -1300,7 +1300,7 @@ class Equilibrium(IOAble, Optimizable):
     @optimizable_parameter
     @property
     def I(self):  # noqa: E743
-        """float: Net current linking the plasma surface toroidally."""
+        """float: Net toroidal current on the sheet current at the LCFS."""
         return self.surface.I if hasattr(self.surface, "I") else np.empty(0)
 
     @I.setter
@@ -1315,7 +1315,7 @@ class Equilibrium(IOAble, Optimizable):
     @optimizable_parameter
     @property
     def G(self):
-        """float: Net current linking the plasma surface poloidally."""
+        """float: Net poloidal current on the sheet current at the LCFS."""
         return self.surface.G if hasattr(self.surface, "G") else np.empty(0)
 
     @G.setter

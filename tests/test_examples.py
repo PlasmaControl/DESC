@@ -913,8 +913,7 @@ def test_omnigenity_optimization():
         sym=True,
     )
     eq = Equilibrium(Psi=3e-2, M=4, N=4, surface=surf)
-    constraints = get_fixed_boundary_constraints(eq)
-    eq, _ = eq.solve(objective="vacuum", constraints=constraints, verbose=3)
+    eq, _ = eq.solve(objective="force", verbose=3)
 
     # omnigenity optimization
     field = OmnigenousField(
@@ -977,6 +976,7 @@ def test_omnigenity_optimization():
     (eq, field), _ = optimizer.optimize(
         (eq, field), objective, constraints, maxiter=100, verbose=3
     )
+    eq, _ = eq.solve(objective="force", verbose=3)
 
     # check omnigenity error is low
     f = objective.compute_unscaled(objective.x(*(eq, field)))  # error in Tesla

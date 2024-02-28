@@ -3859,9 +3859,9 @@ def _plot_omnigenous_field(
 
     # compute data from omnigenous magnetic field
     data = field.compute(
-        ["theta_B", "zeta_B", "|B|_omni"], grid=grid, helicity=field.helicity, iota=iota
+        ["theta_B", "zeta_B", "|B|"], grid=grid, helicity=field.helicity, iota=iota
     )
-    B = data["|B|_omni"]
+    B = data["|B|"]
     theta_B = np.mod(data["theta_B"], 2 * np.pi)
     zeta_B = np.mod(data["zeta_B"], 2 * np.pi / field.NFP)
 

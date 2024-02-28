@@ -299,6 +299,7 @@ class TestMagneticFields:
             modes_Phi=basis.modes[:, 1:],
             I=0,
             G=-G,
+            sym_Phi="sin",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -397,6 +398,7 @@ class TestMagneticFields:
         field = FourierCurrentPotentialField(
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
+            sym_Phi="cos",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -530,6 +532,7 @@ class TestMagneticFields:
         field = FourierCurrentPotentialField(
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
+            sym_Phi="cos",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -747,38 +750,6 @@ class TestMagneticFields:
         with pytest.raises(AssertionError, match="sym"):
             Bnorm_from_file = read_BNORM_file(path, asym_surf, grid)
 
-    @pytest.mark.unit
-    def test_omnigenous_field_change_resolution_B(self):
-        """Test OmnigenousField.change_resolution() of the B_lm parameters."""
-        L_B_old = 1
-        L_B_new = 2
-        M_B_old = 3
-        M_B_new = 6
-        NFP = 4
-        field = OmnigenousField(
-            L_B=L_B_old,
-            M_B=M_B_old,
-            L_x=0,
-            M_x=0,
-            N_x=0,
-            NFP=NFP,
-            helicity=(0, NFP),
-            B_lm=np.array([0.9, 1.0, 1.1, 0.2, 0.05, -0.2]),
-        )
-        grid_axis = LinearGrid(rho=[0.0], M=50)
-        grid_half = LinearGrid(rho=[0.5], M=50)
-        grid_lcfs = LinearGrid(rho=[1.0], M=50)
-        B_axis_lowres = field.compute("|B|_omni", grid=grid_axis)["|B|_omni"]
-        B_half_lowres = field.compute("|B|_omni", grid=grid_half)["|B|_omni"]
-        B_lcfs_lowres = field.compute("|B|_omni", grid=grid_lcfs)["|B|_omni"]
-        field.change_resolution(L_B=L_B_new, M_B=M_B_new)
-        B_axis_highres = field.compute("|B|_omni", grid=grid_axis)["|B|_omni"]
-        B_half_highres = field.compute("|B|_omni", grid=grid_half)["|B|_omni"]
-        B_lcfs_highres = field.compute("|B|_omni", grid=grid_lcfs)["|B|_omni"]
-        np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
-        np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
-        np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
-
     def test_spline_field_jit(self):
         """Test that the spline field can be passed to a jitted function."""
         extcur = [4700.0, 1000.0]
@@ -827,3 +798,35 @@ class TestMagneticFields:
         B_saved = save_field.compute_magnetic_field(grid)
         B_loaded = load_field.compute_magnetic_field(grid)
         np.testing.assert_allclose(B_loaded, B_saved, rtol=1e-6)
+
+    @pytest.mark.unit
+    def test_omnigenous_field_change_resolution_B(self):
+        """Test OmnigenousField.change_resolution() of the B_lm parameters."""
+        L_B_old = 1
+        L_B_new = 2
+        M_B_old = 3
+        M_B_new = 6
+        NFP = 4
+        field = OmnigenousField(
+            L_B=L_B_old,
+            M_B=M_B_old,
+            L_x=0,
+            M_x=0,
+            N_x=0,
+            NFP=NFP,
+            helicity=(0, NFP),
+            B_lm=np.array([0.9, 1.0, 1.1, 0.2, 0.05, -0.2]),
+        )
+        grid_axis = LinearGrid(rho=[0.0], M=50)
+        grid_half = LinearGrid(rho=[0.5], M=50)
+        grid_lcfs = LinearGrid(rho=[1.0], M=50)
+        B_axis_lowres = field.compute("|B|", grid=grid_axis)["|B|"]
+        B_half_lowres = field.compute("|B|", grid=grid_half)["|B|"]
+        B_lcfs_lowres = field.compute("|B|", grid=grid_lcfs)["|B|"]
+        field.change_resolution(L_B=L_B_new, M_B=M_B_new)
+        B_axis_highres = field.compute("|B|", grid=grid_axis)["|B|"]
+        B_half_highres = field.compute("|B|", grid=grid_half)["|B|"]
+        B_lcfs_highres = field.compute("|B|", grid=grid_lcfs)["|B|"]
+        np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
+        np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
+        np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)

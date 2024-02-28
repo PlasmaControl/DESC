@@ -618,8 +618,8 @@ def test_io_OmnigenousField(tmpdir_factory):
         else:
             np.testing.assert_allclose(attr1, attr2, err_msg=attr)
 
-    data1 = field1.compute(["|B|_omni", "theta_B", "zeta_B"])
-    data2 = field2.compute(["|B|_omni", "theta_B", "zeta_B"])
+    data1 = field1.compute(["|B|", "theta_B", "zeta_B"])
+    data2 = field2.compute(["|B|", "theta_B", "zeta_B"])
     for key in data1.keys():
         np.testing.assert_allclose(data1[key], data2[key])
 

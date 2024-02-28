@@ -8,7 +8,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
-from desc.grid import ConcentricGrid, LinearGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid
 
 from .data_index import data_index
 
@@ -348,7 +348,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build=True,
                 method=method,
             )
-        elif c == "B":
+        elif c == "B":  # used for Boozer transform
             transforms["B"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -362,7 +362,20 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c == "w":
+        elif c == "h":  # used for omnigenity
+            rho = grid.nodes[:, 0]
+            eta = (grid.nodes[:, 1] - np.pi) / 2
+            alpha = grid.nodes[:, 2] * grid.NFP
+            nodes = jnp.array([rho, eta, alpha]).T
+            transforms["h"] = Transform(
+                Grid(nodes),
+                obj.x_basis,
+                derivs=derivs["h"],
+                build=True,
+                build_pinv=False,
+                method=method,
+            )
+        elif c == "w":  # used for Boozer transfrom
             transforms["w"] = Transform(
                 grid,
                 DoubleFourierSeries(

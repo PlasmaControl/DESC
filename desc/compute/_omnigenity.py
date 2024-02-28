@@ -12,7 +12,7 @@ expensive computations.
 import numpy as np
 from interpax import interp1d
 
-from desc.backend import jnp, put, sign
+from desc.backend import jnp, put, sign, vmap
 
 from .data_index import register_compute_fun
 from .utils import cross, dot
@@ -68,7 +68,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_theta_mn", "B_zeta_mn", "NFP"],
+    data=["B_theta_mn", "B_zeta_mn"],
 )
 def _w_mn(params, transforms, profiles, data, **kwargs):
     w_mn = jnp.zeros((transforms["w"].basis.num_modes,))
@@ -76,6 +76,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     Bn = transforms["B"].basis.modes[:, 2]
     wm = transforms["w"].basis.modes[:, 1]
     wn = transforms["w"].basis.modes[:, 2]
+    NFP = transforms["w"].basis.NFP
     # indices of matching modes in w and B bases
     # need to use np instead of jnp here as jnp.where doesn't work under jit
     # even if the args are static
@@ -84,9 +85,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
         (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
     )
     w_mn = put(w_mn, iw, sign(wn[iw]) * data["B_theta_mn"][ib] / jnp.abs(wm[iw]))
-    w_mn = put(
-        w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(data["NFP"] * wn[jw])
-    )
+    w_mn = put(w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(NFP * wn[jw]))
     data["w_Boozer_mn"] = w_mn
     return data
 
@@ -356,15 +355,14 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     description="Intermediate omnigenity coordinate along field lines",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={"h": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=[],
     parameterization="desc.magnetic_fields.OmnigenousField",
 )
 def _eta(params, transforms, profiles, data, **kwargs):
-    # theta is used as a placeholder for eta (angle along field lines)
-    data["eta"] = (transforms["grid"].nodes[:, 1] - jnp.pi) / 2
+    data["eta"] = transforms["h"].grid.nodes[:, 1]
     return data
 
 
@@ -376,15 +374,14 @@ def _eta(params, transforms, profiles, data, **kwargs):
     description="Field line label, defined on [0, 2pi)",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={"h": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["NFP"],
+    data=[],
     parameterization="desc.magnetic_fields.OmnigenousField",
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
-    # zeta is used as a placeholder for alpha (field line label)
-    data["alpha"] = transforms["grid"].nodes[:, 2] * data["NFP"]
+    data["alpha"] = transforms["h"].grid.nodes[:, 2]
     return data
 
 
@@ -396,19 +393,14 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     description="Omnigenity symmetry angle",
     dim=1,
     params=["x_lmn"],
-    transforms={"x": [[0, 0, 0]]},
+    transforms={"h": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["rho", "alpha", "eta"],
+    data=["eta"],
     parameterization="desc.magnetic_fields.OmnigenousField",
 )
 def _omni_angle(params, transforms, profiles, data, **kwargs):
-    nodes = jnp.array([data["rho"], data["eta"], data["alpha"]]).T
-    data["h"] = (
-        transforms["x"].basis.evaluate(nodes) @ params["x_lmn"]
-        + 2 * data["eta"]
-        + jnp.pi
-    )
+    data["h"] = transforms["h"].transform(params["x_lmn"]) + 2 * data["eta"] + jnp.pi
     return data
 
 
@@ -452,8 +444,8 @@ def _omni_map(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="|B|_omni",
-    label="|\\mathbf{B}_{omni}|",
+    name="|B|",
+    label="|\\mathbf{B}|",
     units="T",
     units_long="Tesla",
     description="Magnitude of omnigenous magnetic field",
@@ -469,12 +461,12 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_B, M_B)
     B_lm = params["B_lm"].reshape((transforms["B"].basis.L + 1, -1))
     # assuming single flux surface, so only take first row (single node)
-    B_input = (transforms["B"].matrices["direct1"][0][0][0] @ B_lm)[0, :]
+    B_input = vmap(lambda x: transforms["B"].transform(x))(B_lm.T)[:, 0]
     B_input = jnp.sort(B_input)  # sort to ensure monotonicity
     eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
 
     # |B|_omnigeneous is an even function so B(-eta) = B(+eta) = B(|eta|)
-    data["|B|_omni"] = interp1d(
+    data["|B|"] = interp1d(
         jnp.abs(data["eta"]), eta_input, B_input, method="monotonic-0"
     )
     return data

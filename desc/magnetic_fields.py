@@ -1409,12 +1409,14 @@ def field_line_integrate(
         multipled by exp(-r) where r is the distance from the origin,
         this is meant to prevent the field lines which escape to infinity from
         slowing the integration down by being traced to infinity.
+        defaults to (0,np.inf)
     bounds_Z : tuple of (float,float), optional
         Z bounds for field line integration bounding box.
         If supplied, the RHS of the field line equations will be
         multipled by exp(-r) where r is the distance from the origin,
         this is meant to prevent the field lines which escape to infinity from
         slowing the integration down by being traced to infinity.
+        Defaults to (-np.inf,np.inf)
 
 
     Returns
@@ -1435,6 +1437,10 @@ def field_line_integrate(
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
         z = rpz[:, 2]
+        # if bounds are given, will decay the magnetic field line eqn
+        # RHS if the trajectory is outside of bounds to avoid
+        # integrating the field line to infinity, which is costly
+        # and not useful in most cases
         decay_factor = jnp.where(
             jnp.any(
                 jnp.array(

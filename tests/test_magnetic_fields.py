@@ -298,6 +298,7 @@ class TestMagneticFields:
             modes_Phi=basis.modes[:, 1:],
             I=0,
             G=-G,
+            sym_Phi="sin",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -396,6 +397,7 @@ class TestMagneticFields:
         field = FourierCurrentPotentialField(
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
+            sym_Phi="cos",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -529,6 +531,7 @@ class TestMagneticFields:
         field = FourierCurrentPotentialField(
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
+            sym_Phi="cos",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],

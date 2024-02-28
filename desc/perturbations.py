@@ -309,7 +309,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 1:
             timer.disp("df/dx factorization")
 
-        dx1_h, hit, alpha = trust_region_step_exact_svd(
+        dx1_h, _, alpha = trust_region_step_exact_svd(
             RHS1,
             u,
             s,
@@ -335,7 +335,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 1:
             timer.disp("d^2f computation")
 
-        dx2_h, hit, alpha = trust_region_step_exact_svd(
+        dx2_h, _, alpha = trust_region_step_exact_svd(
             RHS2,
             u,
             s,
@@ -361,7 +361,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 1:
             timer.disp("d^3f computation")
 
-        dx3_h, hit, alpha = trust_region_step_exact_svd(
+        dx3_h, _, alpha = trust_region_step_exact_svd(
             RHS3,
             u,
             s,
@@ -386,9 +386,9 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # update perturbation attributes
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + value)
-    for constraint in constraints:
-        if hasattr(constraint, "update_target"):
-            constraint.update_target(eq_new)
+    for con in constraints:
+        if hasattr(con, "update_target"):
+            con.update_target(eq_new)
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
     xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -752,9 +752,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + dc[idx0 : idx0 + len(value)])
         idx0 += len(value)
-    for constraint in constraints:
-        if hasattr(constraint, "update_target"):
-            constraint.update_target(eq_new)
+    for con in constraints:
+        if hasattr(con, "update_target"):
+            con.update_target(eq_new)
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
     _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(

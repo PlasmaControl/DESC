@@ -1035,7 +1035,7 @@ class _Objective(IOAble, ABC):
         jvpfun = lambda *dx: Derivative.compute_jvp(
             compute_scaled, tuple(range(len(x))), dx, *x
         )
-        sig = "(n)," * len(x) + "->(k)"
+        sig = "(n)," * (len(x) - 1) + "(n)" + "->(k)"
         return jnp.vectorize(jvpfun, signature=sig)(*v)
 
     def jvp_unscaled(self, v, x, constants=None):
@@ -1061,7 +1061,7 @@ class _Objective(IOAble, ABC):
         jvpfun = lambda *dx: Derivative.compute_jvp(
             compute_unscaled, tuple(range(len(x))), dx, *x
         )
-        sig = "(n)," * len(x) + "->(k)"
+        sig = "(n)," * (len(x) - 1) + "(n)" + "->(k)"
         return jnp.vectorize(jvpfun, signature=sig)(*v)
 
     def print_value(self, *args, **kwargs):

@@ -630,7 +630,7 @@ class TestQuadraticFlux:
         # test that torus (axisymmetric) Bnorm is exactly 0
         __, eq = quadratic_flux_equilibriums
         obj = QuadraticFlux(t_field, eq)
-        obj.build(eq)
+        obj.build(eq, verbose=2)
         f = obj.compute(field_params=t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-15, atol=1e-15)
 

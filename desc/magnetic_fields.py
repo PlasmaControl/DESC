@@ -4,10 +4,19 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
+from diffrax import (
+    AbstractSolver,
+    DiscreteTerminatingEvent,
+    ODETerm,
+    PIDController,
+    SaveAt,
+    Tsit5,
+    diffeqsolve,
+)
 from interpax import approx_df, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 
-from desc.backend import fori_loop, jit, jnp, odeint
+from desc.backend import fori_loop, jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
@@ -1380,8 +1389,15 @@ def field_line_integrate(
     rtol=1e-8,
     atol=1e-8,
     maxstep=1000,
+    min_step_size=1e-8,
+    solver=Tsit5(),
+    terminating_event=None,
+    bounds_R=None,
+    bounds_Z=None,
+    bounds_phi=None,
+    kwargs={},
 ):
-    """Trace field lines by integration.
+    """Trace field lines by integration, using diffrax package.
 
     Parameters
     ----------
@@ -1393,7 +1409,7 @@ def field_line_integrate(
         and the negative toroidal angle for negative Bphi
     field : MagneticField
         source of magnetic field to integrate
-    params: dict
+    params: dict, optional
         parameters passed to field
     source_grid : Grid, optional
         Collocation points used to discretize source field.
@@ -1401,6 +1417,43 @@ def field_line_integrate(
         relative and absolute tolerances for ode integration
     maxstep : int
         maximum number of steps between different phis
+    min_step_size: float
+        minimum step size (in phi) that the integration can take. default is 1e-8
+    solver: diffrax.Solver
+        diffrax Solver object to use in integration,
+        defaults to Tsit5(), a RK45 explicit solver
+    terminating_event: fxn
+        Function which takes as input the state of the ODE solution at each timestep
+        and **kwargs, and outputs a bool which, if True, terminates the solve at that
+        timestep.
+
+        fxn must have signature of (state, **kwargs) -> Bool
+
+        If not given and one of bounds_R,Z,phi are given, will
+        default to a terminating event which ends integration
+        once R,Z,or phi exit the domain defined by the given bounds
+
+        NOTE: If the solve is terminated early, the output returned is still
+        length(phis), however all values from the step point the fxn evaluated
+        to True and on will be inf
+        state has attributes such as state.y (array of length 3 with current (R,phi,Z))
+        see diffrax documentation for more in-depth information
+    bounds_R: tuple
+        tuple of (R_min,R_max) of the R bounds for the domain of interest.
+        Integration will terminate when the field line exits this domain
+        (when using the default terminating event)
+    bounds_Z: tuple
+        tuple of (Z_min,Z_max) of the Z bounds for the domain of interest.
+        Integration will terminate when the field line exits this domain
+        (when using the default terminating event)
+    bounds_phi: tuple
+        tuple of (phi_min,phi_max) of the phi bounds for the domain of interest.
+        Integration will terminate when the field line exits this domain
+        (when using the default terminating event)
+    kwargs: dict
+        keyword arguments to be passed into the diffrax diffeqsolve function call
+
+
 
     Returns
     -------
@@ -1408,6 +1461,16 @@ def field_line_integrate(
         arrays of r, z coordinates at specified phi angles
 
     """
+    if not isinstance(solver, AbstractSolver):
+        try:
+            # maybe they passed in the correct object but did not
+            # instantiate it
+            solver = solver()
+        except TypeError:
+            raise TypeError(
+                "Expected a diffrax Solver object as solver,"
+                + f"instead got type {type(solver)}!"
+            )
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
     rshape = r0.shape
@@ -1416,7 +1479,7 @@ def field_line_integrate(
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
 
     @jit
-    def odefun(rpz, s):
+    def odefun(s, rpz, args):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
         br, bp, bz = field.compute_magnetic_field(
@@ -1426,10 +1489,81 @@ def field_line_integrate(
             [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
         ).squeeze()
 
-    intfun = lambda x: odeint(odefun, x, phis, rtol=rtol, atol=atol, mxstep=maxstep)
+    # diffrax parameters
+    stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+
+    if np.all(
+        [
+            bounds_R is None,
+            bounds_Z is None,
+            bounds_phi is None,
+            terminating_event is None,
+        ]
+    ):
+        # no bounds or terminating event given, so dont use a terminating event
+        terminating_event = None
+    else:
+        bounds_R = (-np.inf, np.inf) if bounds_R is None else bounds_R
+        bounds_Z = (-np.inf, np.inf) if bounds_Z is None else bounds_Z
+        bounds_phi = (-np.inf, np.inf) if bounds_phi is None else bounds_phi
+
+        def default_terminating_event_fxn(state, **kwargs):
+            R_out_of_bounds = jnp.any(
+                jnp.array(
+                    [
+                        jnp.less(state.y[0], bounds_R[0]),
+                        jnp.greater(state.y[0], bounds_R[1]),
+                    ]
+                )
+            )
+            Z_out_of_bounds = jnp.any(
+                jnp.array(
+                    [
+                        jnp.less(state.y[2], bounds_Z[0]),
+                        jnp.greater(state.y[2], bounds_Z[1]),
+                    ]
+                )
+            )
+            phi_out_of_bounds = jnp.any(
+                jnp.array(
+                    [
+                        jnp.less(state.y[1], bounds_phi[0]),
+                        jnp.greater(state.y[1], bounds_phi[1]),
+                    ]
+                )
+            )
+
+            return jnp.any(
+                jnp.array([R_out_of_bounds, Z_out_of_bounds, phi_out_of_bounds])
+            )
+
+        terminating_event = (
+            DiscreteTerminatingEvent(terminating_event)
+            if terminating_event
+            else DiscreteTerminatingEvent(default_terminating_event_fxn)
+        )
+
+    term = ODETerm(odefun)
+    saveat = kwargs.get("saveat", SaveAt(ts=phis))
+
+    intfun = lambda x: diffeqsolve(
+        term,
+        solver,
+        y0=x,
+        t0=phis[0],
+        t1=phis[-1],
+        saveat=saveat,
+        max_steps=maxstep,
+        dt0=min_step_size,
+        stepsize_controller=stepsize_controller,
+        discrete_terminating_event=terminating_event,
+        **kwargs,
+    ).ys
+
     x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
-    r = x[:, :, 0].T.reshape((len(phis), *rshape))
-    z = x[:, :, 2].T.reshape((len(phis), *rshape))
+    r = x[:, :, 0].squeeze().T.reshape((len(phis), *rshape))
+    z = x[:, :, 2].squeeze().T.reshape((len(phis), *rshape))
+
     return r, z
 
 

@@ -1,4 +1,5 @@
 colorama
+diffrax>=0.4.1
 h5py >= 3.0.0
 interpax
 jax[cpu] >= 0.3.2, <= 0.4.14

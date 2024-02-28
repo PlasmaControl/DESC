@@ -256,7 +256,8 @@ class TestMagneticFields:
 
         np.testing.assert_allclose(
             sumfield.compute_magnetic_field(
-                [10.0, 0, 0], grid=[None, LinearGrid(M=30, N=30, NFP=surface.NFP)]
+                [10.0, 0, 0],
+                source_grid=[None, LinearGrid(M=30, N=30, NFP=surface.NFP)],
             ),
             correct_field(10.0, 0, 0) + B_TF([10.0, 0, 0]),
             atol=1e-16,
@@ -298,6 +299,7 @@ class TestMagneticFields:
             modes_Phi=basis.modes[:, 1:],
             I=0,
             G=-G,
+            sym_Phi="sin",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -314,13 +316,15 @@ class TestMagneticFields:
         field.change_Phi_resolution(2, 2)
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
+            field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
             correct_field(10.0, 0, 0),
             atol=1e-16,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=surface_grid),
+            field.compute_magnetic_field(
+                [10.0, np.pi / 4, 0], source_grid=surface_grid
+            ),
             correct_field(10.0, np.pi / 4, 0),
             atol=1e-16,
             rtol=1e-8,
@@ -330,14 +334,14 @@ class TestMagneticFields:
         field.I = 0
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
+            field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
             correct_field(10.0, 0, 0) * 2,
             atol=1e-16,
             rtol=1e-8,
         )
         # use default grid
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=None),
+            field.compute_magnetic_field([10.0, np.pi / 4, 0], source_grid=None),
             correct_field(10.0, np.pi / 4, 0) * 2,
             atol=1e-12,
             rtol=1e-8,
@@ -352,13 +356,15 @@ class TestMagneticFields:
         )
 
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, 0, 0], grid=surface_grid),
+            field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
             correct_field(10.0, 0, 0),
             atol=1e-16,
             rtol=1e-8,
         )
         np.testing.assert_allclose(
-            field.compute_magnetic_field([10.0, np.pi / 4, 0], grid=surface_grid),
+            field.compute_magnetic_field(
+                [10.0, np.pi / 4, 0], source_grid=surface_grid
+            ),
             correct_field(10.0, np.pi / 4, 0),
             atol=1e-16,
             rtol=1e-8,
@@ -392,6 +398,7 @@ class TestMagneticFields:
         field = FourierCurrentPotentialField(
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
+            sym_Phi="cos",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -525,6 +532,7 @@ class TestMagneticFields:
         field = FourierCurrentPotentialField(
             Phi_mn=phi_mn,
             modes_Phi=basis.modes[:, 1:],
+            sym_Phi="cos",
             R_lmn=surface.R_lmn,
             Z_lmn=surface.Z_lmn,
             modes_R=surface._R_basis.modes[:, 1:],
@@ -720,7 +728,7 @@ class TestMagneticFields:
     @pytest.mark.unit
     def test_Bnormal_save_and_load_HELIOTRON(self, tmpdir_factory):
         """Tests Bnormal save/load for simple toroidal field with HELIOTRON."""
-        ### test on simple field with stellarator
+        # test on simple field with stellarator
         tmpdir = tmpdir_factory.mktemp("BNORM_files")
         path = tmpdir.join("BNORM_desc_heliotron.txt")
         tfield = ToroidalMagneticField(2, 1)
@@ -758,6 +766,39 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             foo(field, x), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
         )
+
+    @pytest.mark.unit
+    def test_mgrid_io(self, tmpdir_factory):
+        """Test saving to and loading from an mgrid file."""
+        tmpdir = tmpdir_factory.mktemp("mgrid_dir")
+        path = tmpdir.join("mgrid.nc")
+
+        # field to test on
+        toroidal_field = ToroidalMagneticField(B0=1, R0=5)
+        poloidal_field = PoloidalMagneticField(B0=1, R0=5, iota=2 / np.pi)
+        vertical_field = VerticalMagneticField(B0=0.2)
+        save_field = toroidal_field + poloidal_field + vertical_field
+
+        # save and load mgrid file
+        Rmin = 3
+        Rmax = 7
+        Zmin = -2
+        Zmax = 2
+        save_field.save_mgrid(path, Rmin, Rmax, Zmin, Zmax)
+        load_field = SplineMagneticField.from_mgrid(path)
+
+        # check that the fields are the same
+        num_nodes = 50
+        grid = np.array(
+            [
+                np.linspace(Rmin, Rmax, num_nodes),
+                np.linspace(0, 2 * np.pi, num_nodes, endpoint=False),
+                np.linspace(Zmin, Zmax, num_nodes),
+            ]
+        ).T
+        B_saved = save_field.compute_magnetic_field(grid)
+        B_loaded = load_field.compute_magnetic_field(grid)
+        np.testing.assert_allclose(B_loaded, B_saved, rtol=1e-6)
 
     @pytest.mark.unit
     def test_omnigenous_field_change_resolution_B(self):

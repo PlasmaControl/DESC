@@ -587,6 +587,20 @@ def test_io_SplineMagneticField(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_save_after_load(tmpdir_factory):
+    """Test saving a DESC .h5 file after loading it (see gh #871)."""
+    tmpdir = tmpdir_factory.mktemp("save_after_load_test")
+    tmp_path = tmpdir.join("save_after_load_test.h5")
+    eq = Equilibrium()
+    eq.save(tmp_path)
+    eq2 = load(tmp_path)
+    # ensure can save again without an error being thrown due
+    # to the .h5 file not being closed
+    eq2.save(tmp_path)
+    assert eq2.eq(eq)
+
+
+@pytest.mark.unit
 def test_io_OmnigenousField(tmpdir_factory):
     """Test saving/loading an OmnigenousField works (tests dict saving)."""
     tmpdir = tmpdir_factory.mktemp("save_omnigenous_field_test")

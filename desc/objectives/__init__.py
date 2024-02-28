@@ -6,6 +6,7 @@ from ._equilibrium import (
     Energy,
     ForceBalance,
     ForceBalanceAnisotropic,
+    ForceBalanceGalerkin,
     HelicalForceBalance,
     RadialForceBalance,
 )
@@ -19,6 +20,7 @@ from ._geometry import (
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    SpectralCondensation,
     Volume,
 )
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent

@@ -628,7 +628,7 @@ class TestQuadraticFlux:
         t_field = ToroidalMagneticField(1, 1)
 
         # test that torus (axisymmetric) Bnorm is exactly 0
-        __, eq, __ = quadratic_flux_equilibriums
+        __, eq = quadratic_flux_equilibriums
         obj = QuadraticFlux(t_field, eq)
         obj.build(eq)
         f = obj.compute(field_params=t_field.params_dict)
@@ -660,7 +660,7 @@ class TestQuadraticFlux:
         Checks that a non-axisymmetric field becomes axisymmetric
         given an axisymmetric field.
         """
-        __, eq, __ = quadratic_flux_equilibriums
+        __, eq = quadratic_flux_equilibriums
 
         # create a winding surface that surrounds the equilibrium
         field = self.make_nonaxisym_field(eq)
@@ -730,7 +730,7 @@ class TestQuadraticFlux:
     def test_quadratic_flux_vacuum(self, quadratic_flux_equilibriums):
         """Test vacuum flag."""
         # equilibrium that has Bplasma != 0
-        eq, __, __ = quadratic_flux_equilibriums
+        eq, __ = quadratic_flux_equilibriums
         t_field = ToroidalMagneticField(1, 1)
 
         obj = QuadraticFlux(

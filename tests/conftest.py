@@ -341,10 +341,7 @@ def quadratic_flux_equilibriums(tmpdir_factory):
     nonaxisym_eq_with_surface = Equilibrium(L=4, M=4, N=4, surface=surface)
     nonaxisym_eq_with_surface.solve(verbose=0)
 
-    nonaxisym_eq = Equilibrium(L=2, M=2, N=4)
-    nonaxisym_eq.solve(verbose=0)
-
     axisym_eq = Equilibrium(L=4, M=4)
     axisym_eq.solve(verbose=0)
 
-    return nonaxisym_eq_with_surface, axisym_eq, nonaxisym_eq
+    return nonaxisym_eq_with_surface, axisym_eq

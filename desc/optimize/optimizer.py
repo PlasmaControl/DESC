@@ -146,6 +146,8 @@ class Optimizer(IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
+        if not isinstance(constraints, (tuple, list)):
+            constraints = (constraints,)
         things = flatten_list(things, flatten_tuple=True)
         things0 = [t.copy() for t in things]
         # need local import to avoid circular dependencies
@@ -202,25 +204,6 @@ class Optimizer(IOAble):
                 np.diag(Z.T @ np.diag(x_scale[objective._unfixed_idx]) @ Z)
             )
             x_scale = np.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
-
-        if not objective.compiled:
-            if optimizers[method]["scalar"] and optimizers[method]["hessian"]:
-                mode = "scalar"
-            elif optimizers[method]["scalar"]:
-                mode = "bfgs"
-            else:
-                mode = "lsq"
-            try:
-                objective.compile(mode, verbose)
-            except ValueError:
-                objective.build(verbose=verbose)
-                objective.compile(mode, verbose=verbose)
-        if nonlinear_constraint is not None and not nonlinear_constraint.compiled:
-            try:
-                nonlinear_constraint.compile("lsq", verbose)
-            except ValueError:
-                nonlinear_constraint.build(verbose=verbose)
-                nonlinear_constraint.compile("lsq", verbose)
 
         if objective.scalar and (not optimizers[method]["scalar"]):
             warnings.warn(

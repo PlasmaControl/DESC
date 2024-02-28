@@ -378,6 +378,12 @@ class Equilibrium(IOAble, Optimizable):
             self.set_initial_guess(ensure_nested=ensure_nested)
         if check_orientation:
             ensure_positive_jacobian(self)
+        if kwargs.get("check_kwargs", True):
+            errorif(
+                len(kwargs),
+                TypeError,
+                f"Equilibrium got unexpected kwargs: {kwargs.keys()}",
+            )
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -389,6 +395,7 @@ class Equilibrium(IOAble, Optimizable):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+
         if self.current is not None and hasattr(self.current, "_get_transform"):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.
@@ -617,6 +624,8 @@ class Equilibrium(IOAble, Optimizable):
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
 
+            # TODO: Don't call zernike_radial for each mode, instead compute all
+            # Populate i, j, l, m and call zernike_radial once
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -634,6 +643,7 @@ class Equilibrium(IOAble, Optimizable):
                     )
                 )
                 AZ[j, i] = zernike_radial(rho, l, m)
+
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
@@ -1580,7 +1590,15 @@ class Equilibrium(IOAble, Optimizable):
 
     @classmethod
     def from_near_axis(
-        cls, na_eq, r=0.1, L=None, M=8, N=None, ntheta=None, spectral_indexing="ansi"
+        cls,
+        na_eq,
+        r=0.1,
+        L=None,
+        M=8,
+        N=None,
+        ntheta=None,
+        spectral_indexing="ansi",
+        w=2,
     ):
         """Initialize an Equilibrium from a near-axis solution.
 
@@ -1601,6 +1619,10 @@ class Equilibrium(IOAble, Optimizable):
             Number of poloidal grid points used in the conversion. Default 2*M+1
         spectral_indexing : str (optional)
             Type of Zernike indexing scheme to use. Default ``'ansi'``
+        w : float
+            Weight exponent for fit. Surfaces are fit using a weighted least squares
+            using weight = 1/rho**w, so that points near axis are captured more
+            accurately.
 
         Returns
         -------
@@ -1630,7 +1652,7 @@ class Equilibrium(IOAble, Optimizable):
                 "M": M,
                 "N": N,
                 "sym": not na_eq.lasym,
-                "spectral_indexing ": spectral_indexing,
+                "spectral_indexing": spectral_indexing,
                 "pressure": np.array([[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]),
                 "iota": None,
                 "current": np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]]),
@@ -1673,9 +1695,17 @@ class Equilibrium(IOAble, Optimizable):
             spectral_indexing=spectral_indexing,
         )
 
-        transform_R = Transform(grid, basis_R, build_pinv=True)
-        transform_Z = Transform(grid, basis_Z, build_pinv=True)
-        transform_L = Transform(grid, basis_L, build_pinv=True)
+        transform_R = Transform(grid, basis_R, method="direct1")
+        transform_Z = Transform(grid, basis_Z, method="direct1")
+        transform_L = Transform(grid, basis_L, method="direct1")
+        A_R = transform_R.matrices["direct1"][0][0][0]
+        A_Z = transform_Z.matrices["direct1"][0][0][0]
+        A_L = transform_L.matrices["direct1"][0][0][0]
+
+        W = 1 / grid.nodes[:, 0].flatten() ** w
+        A_Rw = A_R * W[:, None]
+        A_Zw = A_Z * W[:, None]
+        A_Lw = A_L * W[:, None]
 
         R_1D = np.zeros((grid.num_nodes,))
         Z_1D = np.zeros((grid.num_nodes,))
@@ -1693,9 +1723,9 @@ class Equilibrium(IOAble, Optimizable):
             Z_1D[idx] = Z_2D.flatten(order="F")
             L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
 
-        inputs["R_lmn"] = transform_R.fit(R_1D)
-        inputs["Z_lmn"] = transform_Z.fit(Z_1D)
-        inputs["L_lmn"] = transform_L.fit(L_1D)
+        inputs["R_lmn"] = np.linalg.lstsq(A_Rw, R_1D * W, rcond=None)[0]
+        inputs["Z_lmn"] = np.linalg.lstsq(A_Zw, Z_1D * W, rcond=None)[0]
+        inputs["L_lmn"] = np.linalg.lstsq(A_Lw, L_1D * W, rcond=None)[0]
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
@@ -1969,7 +1999,7 @@ class Equilibrium(IOAble, Optimizable):
                 print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
             # perturb + solve
-            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit,) = optimal_perturb(
+            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit) = optimal_perturb(
                 self,
                 constraint,
                 objective,
@@ -2148,7 +2178,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 # ensure that first step is nested
                 ensure_nested_bool = True if i == 0 else False
                 self.equilibria.append(
-                    Equilibrium(**inp, ensure_nested=ensure_nested_bool)
+                    Equilibrium(
+                        **inp, ensure_nested=ensure_nested_bool, check_kwargs=False
+                    )
                 )
         else:
             for i, arg in enumerate(args):
@@ -2157,7 +2189,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 elif isinstance(arg, dict):
                     ensure_nested_bool = True if i == 0 else False
                     self.equilibria.append(
-                        Equilibrium(**arg, ensure_nested=ensure_nested_bool)
+                        Equilibrium(
+                            **arg, ensure_nested=ensure_nested_bool, check_kwargs=False
+                        )
                     )
                 else:
                     raise TypeError(

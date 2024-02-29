@@ -497,11 +497,11 @@ def test_wrappers():
     )
     con_nl = (ForceBalance(eq=eq),)
     obj = ForceBalance(eq=eq)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         _ = LinearConstraintProjection(obj, con)
     with pytest.raises(ValueError):
         _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
-    ob = LinearConstraintProjection(ObjectiveFunction(obj), con)
+    ob = LinearConstraintProjection(ObjectiveFunction(obj), ObjectiveFunction(con))
     ob.build()
     assert ob.built
 

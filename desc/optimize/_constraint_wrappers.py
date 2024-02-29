@@ -42,15 +42,24 @@ class LinearConstraintProjection(ObjectiveFunction):
     """
 
     def __init__(self, objective, constraint, name="LinearConstraintProjection"):
-        assert isinstance(objective, ObjectiveFunction), (
-            "objective should be instance of ObjectiveFunction." ""
+        errorif(
+            not isinstance(objective, ObjectiveFunction),
+            ValueError,
+            "objective should be instance of ObjectiveFunction.",
+        )
+        errorif(
+            not isinstance(constraint, ObjectiveFunction),
+            ValueError,
+            "constraint should be instance of ObjectiveFunction.",
         )
         for con in constraint.objectives:
-            if not con.linear:
-                raise ValueError(
-                    "LinearConstraintProjection method "
-                    + "cannot handle nonlinear constraint {}.".format(con)
-                )
+            errorif(
+                not con.linear,
+                ValueError,
+                "LinearConstraintProjection method cannot handle "
+                + f"nonlinear constraint {con}.",
+            )
+
         self._objective = objective
         self._constraint = constraint
         self._built = False

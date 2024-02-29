@@ -1968,7 +1968,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     for i, res in enumerate(res_array + 0.5):  # omnigenity needs higher resolution
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
         obj = ObjectiveFunction(
-            Omnigenity(eq=eq, field=field, eq_grid=grid, field_grid=grid), verbose=0
+            Omnigenity(eq=eq, field=field, eq_grid=grid, field_grid=grid)
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq, field))

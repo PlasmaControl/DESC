@@ -2061,6 +2061,7 @@ class OmnigenousField(Optimizable, IOAble):
         array of shape (L_B + 1, M_B), where the rows are Chebyshev coefficients
         corresponding to the modes in `B_basis` for the radial variation, and the
         columns are the values of ||B|| atlinearly spaced monotonic spline knots.
+        (The array is flattened in the default row-major or 'C'-style order.)
         If not supplied, `B_lm` defaults to a constant field of 1 T.
     x_lmn : ndarray, optional
         Omnigenity parameters describing h(ρ,η,α). The coefficients correspond to the
@@ -2148,20 +2149,20 @@ class OmnigenousField(Optimizable, IOAble):
         N_x=None,
         NFP=None,
     ):
-        """Set the spectral resolution of well and shift terms.
+        """Set the spectral resolution of field parameters.
 
         Parameters
         ----------
         L_B : int
-            Radial resolution of the magnetic well parameters B_lm.
+            Resolution of the radial Chebyshev polynomials for magnetic well params.
         M_B : int
-            Number of spline points in the magnetic well parameters B_lm.
+            Number of monotonic spline knots per surface of the magnetic well params.
         L_x : int
-            Radial resolution of x_lmn.
+            Resolution of the radial Chebyshev polynomials for the omnigenity params.
         M_x : int
-            Poloidal resolution of x_lmn.
+            Resolution of the Fourier series in eta for the omnigenity params.
         N_x : int
-            Toroidal resolution of x_lmn.
+            Resolution of the Fourier series in alpha for the omnigenity params.
         NFP : int
             Number of field periods.
 
@@ -2227,7 +2228,9 @@ class OmnigenousField(Optimizable, IOAble):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : Grid, optional
-            Grid of coordinates to evaluate at. Defaults to the quadrature grid.
+            Grid of coordinates to evaluate at. The grid nodes are given in the usual
+            (ρ,θ,ζ) coordinates, but θ is mapped to η and ζ is mapped to α.
+            Defaults to a linearly space grid on the rho=1 surface.
         params : dict of ndarray
             Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
             Defaults to attributes of self.
@@ -2314,7 +2317,7 @@ class OmnigenousField(Optimizable, IOAble):
 
     @property
     def x_basis(self):
-        """FourierZernikeBasis: Spectral basis for x_lmn."""
+        """ChebyshevDoubleFourierBasis: Spectral basis for x_lmn."""
         return self._x_basis
 
     @optimizable_parameter

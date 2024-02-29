@@ -582,29 +582,33 @@ class Omnigenity(_Objective):
         reverse mode and forward over reverse mode respectively.
     eq_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for equilibrium data.
-        Must be a single flux suface.
+        Defaults to a linearly space grid on the rho=1 surface.
+        Must be a single flux suface without stellarator symmetry.
     field_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for omnigenous field data.
-        Must be a single flux suface.
+        The grid nodes are given in the usual (ρ,θ,ζ) coordinates, but θ is mapped to η
+        and ζ is mapped to α. Defaults to a linearly space grid on the rho=1 surface.
+        Must be a single flux suface without stellarator symmetry.
     M_booz : int, optional
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
     eta_weight : float, optional
-        Magnitude of relative weight as a function of η. Used to weight the minimum of
-        the magnetic well (B_min at η=0) relative to the maximum (B_max at η=±π/2).
-        For example, `eta_weight = 2` will weight the nodes at B_min twice as much as
-        the nodes at B_max. Default value of 1 weights all nodes equally.
+        Magnitude of relative weight as a function of η:
+        w(η) = (`eta_weight` + 1) / 2 + (`eta_weight` - 1) / 2 * cos(η)
+        Default value of 1 weights all nodes equally.
     eq_fixed: bool, optional
         Whether the Equilibrium `eq` is fixed or not.
         If True, the equilibrium is fixed and its values are precomputed, which saves on
         computation time during optimization and self.things = [field] only.
-        If False, the equilibrium values are computed at every iteration (Default).
+        If False, the equilibrium is allowed to change during the optimization and its
+        associated data are re-computed at every iteration (Default).
     field_fixed: bool, optional
         Whether the OmnigenousField `field` is fixed or not.
         If True, the field is fixed and its values are precomputed, which saves on
         computation time during optimization and self.things = [eq] only.
-        If False, the field values are computed at every iteration (Default).
+        If False, the field is allowed to change during the optimization and its
+        associated data are re-computed at every iteration (Default).
     name : str
         Name of the objective function.
 
@@ -719,6 +723,10 @@ class Omnigenity(_Objective):
             != field_grid.nodes[field_grid.unique_rho_idx, 0],
             msg="eq_grid and field_grid must be the same surface",
         )
+        errorif(
+            jnp.any(field.B_lm[: field.M_B] < 0),
+            "|B| on axis must be positive! Check B_lm input.",
+        )
 
         timer = Timer()
         if verbose > 0:
@@ -782,10 +790,6 @@ class Omnigenity(_Objective):
         if self._normalize:
             # average |B| on axis
             self._normalization = jnp.mean(field.B_lm[: field.M_B])
-            errorif(
-                self._normalization <= 0,
-                "|B| on axis is not positive! Check B_lm input.",
-            )
 
         super().build(use_jit=use_jit, verbose=verbose)
 

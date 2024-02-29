@@ -2402,7 +2402,7 @@ def plot_boozer_modes(  # noqa: C901
 
 
 def plot_boozer_surface(
-    eq,
+    thing,
     grid_compute=None,
     grid_plot=None,
     rho=1,
@@ -2417,7 +2417,7 @@ def plot_boozer_surface(
 
     Parameters
     ----------
-    eq : Equilibrium or OmnigenousField
+    thing : Equilibrium or OmnigenousField
         Object from which to plot.
     grid_compute : Grid, optional
         grid to use for computing boozer spectrum
@@ -2442,6 +2442,7 @@ def plot_boozer_surface(
 
         Valid keyword arguments are:
 
+        * ``iota``: rotational transform, used when `thing` is an OmnigenousField
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
@@ -2468,65 +2469,87 @@ def plot_boozer_surface(
         from desc.plotting import plot_boozer_surface
         fig, ax = plot_boozer_surface(eq)
 
+    .. image:: ../../_static/images/plotting/plot_omnigenous_field.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_boozer_surface
+        fig, ax = plot_boozer_surface(field, iota=0.32)
+
     """
-    if hasattr(eq, "_B_basis"):
-        # eq is really an OmnigenousField
-        grid_kwargs = {
-            "rho": rho,
-            "M": 50,
-            "N": 50,
-            "NFP": eq.NFP,
-            "endpoint": False,
-        }
-        grid = _get_grid(**grid_kwargs)
-        return _plot_omnigenous_field(
-            eq,
-            iota=kwargs.pop("iota", 1),
-            grid=grid,
-            fill=fill,
-            ncontours=ncontours,
-            fieldlines=fieldlines,
-            ax=ax,
-            return_data=return_data,
-            **kwargs,
-        )
+    eq_switch = True
+    if hasattr(thing, "_x_lmn"):
+        eq_switch = False  # thing is an OmnigenousField, not an Equilibrium
+
+    # default grids
     if grid_compute is None:
-        grid_kwargs = {
-            "rho": rho,
-            "M": 4 * eq.M,
-            "N": 4 * eq.N,
-            "NFP": eq.NFP,
-            "endpoint": False,
-        }
+        if eq_switch:
+            grid_kwargs = {
+                "rho": rho,
+                "M": 4 * thing.M,
+                "N": 4 * thing.N,
+                "NFP": thing.NFP,
+                "endpoint": False,
+            }
+        else:
+            grid_kwargs = {
+                "rho": rho,
+                "M": 50,
+                "N": 50,
+                "NFP": thing.NFP,
+                "endpoint": False,
+            }
         grid_compute = _get_grid(**grid_kwargs)
     if grid_plot is None:
         grid_kwargs = {
             "rho": rho,
             "theta": 91,
             "zeta": 91,
-            "NFP": eq.NFP,
+            "NFP": thing.NFP,
             "endpoint": True,
         }
         grid_plot = _get_grid(**grid_kwargs)
 
-    M_booz = kwargs.pop("M_booz", 2 * eq.M)
-    N_booz = kwargs.pop("N_booz", 2 * eq.N)
-    title_fontsize = kwargs.pop("title_fontsize", None)
-    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
-    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
-
-    transforms_compute = get_transforms(
-        "|B|_mn", obj=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
-    )
-    transforms_plot = get_transforms(
-        "|B|_mn", obj=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
-    )
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        data = eq.compute("|B|_mn", grid=grid_compute, transforms=transforms_compute)
-    iota = grid_compute.compress(data["iota"])
-    data = transforms_plot["B"].transform(data["|B|_mn"])
-    data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+    # compute
+    if eq_switch:  # Equilibrium
+        M_booz = kwargs.pop("M_booz", 2 * thing.M)
+        N_booz = kwargs.pop("N_booz", 2 * thing.N)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data = thing.compute(
+                "|B|_mn", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+            )
+        B_transform = get_transforms(
+            "|B|_mn", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+        )["B"]
+        B = B_transform.transform(data["|B|_mn"]).reshape(
+            (grid_plot.num_theta, grid_plot.num_zeta), order="F"
+        )
+        theta_B = (
+            grid_plot.nodes[:, 1]
+            .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+            .squeeze()
+        )
+        zeta_B = (
+            grid_plot.nodes[:, 2]
+            .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+            .squeeze()
+        )
+        iota = grid_compute.compress(data["iota"])
+    else:  # OmnigenousField
+        iota = kwargs.pop("iota", None)
+        errorif(iota is None, ValueError, "iota must be supplied for OmnigenousField")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data = thing.compute(
+                ["theta_B", "zeta_B", "|B|"],
+                grid=grid_compute,
+                helicity=thing.helicity,
+                iota=iota,
+            )
+        B = data["|B|"]
+        theta_B = np.mod(data["theta_B"], 2 * np.pi)
+        zeta_B = np.mod(data["zeta_B"], 2 * np.pi / thing.NFP)
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
@@ -2534,33 +2557,33 @@ def plot_boozer_surface(
     contourf_kwargs = {
         "norm": matplotlib.colors.Normalize(),
         "levels": kwargs.pop(
-            "levels", np.linspace(np.nanmin(data), np.nanmax(data), ncontours)
+            "levels", np.linspace(np.nanmin(B), np.nanmax(B), ncontours)
         ),
         "cmap": kwargs.pop("cmap", "jet"),
         "extend": "both",
     }
 
+    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+
     assert (
         len(kwargs) == 0
     ), f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
 
+    # plot
+    if eq_switch:  # Equilibrium
+        if fill:
+            im = ax.contourf(zeta_B, theta_B, B, **contourf_kwargs)
+        else:
+            im = ax.contour(zeta_B, theta_B, B, **contourf_kwargs)
+    else:  # OmnigenousField
+        if fill:
+            im = ax.tricontourf(zeta_B, theta_B, B, **contourf_kwargs)
+        else:
+            im = ax.tricontour(zeta_B, theta_B, B, **contourf_kwargs)
+
     cax_kwargs = {"size": "5%", "pad": 0.05}
-
-    zz = (
-        grid_plot.nodes[:, 2]
-        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
-        .squeeze()
-    )
-    tt = (
-        grid_plot.nodes[:, 1]
-        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
-        .squeeze()
-    )
-
-    if fill:
-        im = ax.contourf(zz, tt, data, **contourf_kwargs)
-    else:
-        im = ax.contour(zz, tt, data, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
@@ -2578,14 +2601,17 @@ def plot_boozer_surface(
         alphas = np.hstack((alpha1, alpha2))
         ax.plot(zeta, alphas, color="k", ls="-", lw=2)
 
+    ax.set_xlim([0, 2 * np.pi / thing.NFP])
+    ax.set_ylim([0, 2 * np.pi])
+
     ax.set_xlabel(r"$\zeta_{Boozer}$", fontsize=xlabel_fontsize)
     ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
     ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
 
     _set_tight_layout(fig)
-    plot_data = {"zeta_Boozer": zz, "theta_Boozer": tt, "|B|": data}
 
     if return_data:
+        plot_data = {"theta_B": theta_B, "zeta_B": zeta_B, "|B|": B}
         return fig, ax, plot_data
 
     return fig, ax
@@ -3783,141 +3809,6 @@ def plot_field_lines_real_space(
         )
     else:
         return fig, ax
-
-
-def _plot_omnigenous_field(
-    field,
-    iota,
-    grid=None,
-    fill=False,
-    ncontours=30,
-    fieldlines=0,
-    ax=None,
-    return_data=False,
-    **kwargs,
-):
-    """Plot :math:`|B|` on a surface vs the Boozer poloidal and toroidal angles.
-
-    Parameters
-    ----------
-    field : OmnigenousField
-        Object from which to plot.
-    iota : float
-        Rotational transform.
-    rho : float, optional
-        Radial coordinate of flux surface.
-    fill : bool, optional
-        Whether the contours are filled, i.e. whether to use `contourf` or `contour`.
-    ncontours : int, optional
-        Number of contours to plot.
-    fieldlines : int, optional
-        Number of (linearly spaced) magnetic fieldlines to plot. Default is 0 (none).
-    ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
-    return_data : bool
-        if True, return the data plotted as well as fig,ax
-    **kwargs : dict, optional
-        Specify properties of the figure, axis, and plot appearance e.g.::
-
-            plot_X(figsize=(4,6),cmap="plasma")
-
-        Valid keyword arguments are:
-
-        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
-          matplotlib)
-        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``levels``: int or array-like, passed to contourf
-        * ``title_fontsize``: integer, font size of the title
-        * ``xlabel_fontsize``: float, fontsize of the xlabel
-        * ``ylabel_fontsize``: float, fontsize of the ylabel
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        figure being plotted to
-    ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
-    plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
-
-    Examples
-    --------
-    .. image:: ../../_static/images/plotting/plot_omnigenous_field.png
-
-    .. code-block:: python
-
-        from desc.plotting import plot_omnigenous_field
-        fig, ax = plot_omnigenous_field(field)
-
-    """
-    if grid is None:
-        grid = LinearGrid(rho=[1.0], theta=101, zeta=101, endpoint=False, NFP=field.NFP)
-
-    title_fontsize = kwargs.pop("title_fontsize", None)
-    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
-    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
-
-    # compute data from omnigenous magnetic field
-    data = field.compute(
-        ["theta_B", "zeta_B", "|B|"], grid=grid, helicity=field.helicity, iota=iota
-    )
-    B = data["|B|"]
-    theta_B = np.mod(data["theta_B"], 2 * np.pi)
-    zeta_B = np.mod(data["zeta_B"], 2 * np.pi / field.NFP)
-
-    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
-    divider = make_axes_locatable(ax)
-
-    contourf_kwargs = {
-        "norm": matplotlib.colors.Normalize(),
-        "levels": kwargs.pop(
-            "levels", np.linspace(np.nanmin(B), np.nanmax(B), ncontours)
-        ),
-        "cmap": kwargs.pop("cmap", "jet"),
-        "extend": "both",
-    }
-
-    assert (
-        len(kwargs) == 0
-    ), f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
-
-    cax_kwargs = {"size": "5%", "pad": 0.05}
-
-    if fill:
-        im = ax.tricontourf(zeta_B, theta_B, B, **contourf_kwargs)
-    else:
-        im = ax.tricontour(zeta_B, theta_B, B, **contourf_kwargs)
-    cax = divider.append_axes("right", **cax_kwargs)
-    cbar = fig.colorbar(im, cax=cax)
-    cbar.update_ticks()
-
-    if fieldlines:
-        theta0 = np.linspace(0, 2 * np.pi, fieldlines, endpoint=False)
-        zeta = np.linspace(0, 2 * np.pi / grid.NFP, 100)
-        alpha = np.atleast_2d(theta0) + iota * np.atleast_2d(zeta).T
-        alpha1 = np.where(np.logical_and(alpha >= 0, alpha <= 2 * np.pi), alpha, np.nan)
-        alpha2 = np.where(
-            np.logical_or(alpha < 0, alpha > 2 * np.pi),
-            alpha % (sign(iota) * 2 * np.pi) + (sign(iota) < 0) * (2 * np.pi),
-            np.nan,
-        )
-        alphas = np.hstack((alpha1, alpha2))
-        ax.plot(zeta, alphas, color="k", ls="-", lw=2)
-
-    ax.set_xlim([0, 2 * np.pi / field.NFP])
-    ax.set_ylim([0, 2 * np.pi])
-
-    ax.set_xlabel(r"$\zeta_{Boozer}$", fontsize=xlabel_fontsize)
-    ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
-    ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
-
-    _set_tight_layout(fig)
-    plot_data = {"theta_Boozer": theta_B, "zeta_Boozer": zeta_B, "|B|": B}
-
-    if return_data:
-        return fig, ax, plot_data
-
-    return fig, ax
 
 
 def _find_idx(rho0, theta0, phi0, grid):

@@ -851,11 +851,7 @@ def test_plot_boozer_surface():
     fig, ax, data = plot_boozer_surface(
         eq, M_booz=eq.M, N_booz=eq.N, return_data=True, rho=0.5, fieldlines=4
     )
-    for string in [
-        "|B|",
-        "theta_Boozer",
-        "zeta_Boozer",
-    ]:
+    for string in ["|B|", "theta_B", "zeta_B"]:
         assert string in data.keys()
     return fig
 

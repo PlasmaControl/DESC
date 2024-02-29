@@ -544,7 +544,7 @@ class ProximalProjection(ObjectiveFunction):
         )
 
         self._objectives = [self._objective, self._constraint]
-        self._set_things(self.all_things)
+        self._set_things()
 
         self._eq_idx = self.things.index(self._eq)
 
@@ -631,7 +631,13 @@ class ProximalProjection(ObjectiveFunction):
                 params += [t.unpack_params(xi)]
 
         if per_objective:
+            # params is a list of lists of dicts, for each thing and for each objective
             params = self._unflatten(params)
+            # this filters out the params of things that are unused by each objective
+            params = [
+                [par for par, thing in zip(param, self.things) if thing in obj.things]
+                for param, obj in zip(params, self.objectives)
+            ]
         return params
 
     def x(self, *things):

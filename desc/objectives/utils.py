@@ -3,12 +3,10 @@
 Functions in this module should not depend on any other submodules in desc.objectives.
 """
 
-import warnings
-
 import numpy as np
 
 from desc.backend import cond, jnp, logsumexp, put
-from desc.utils import Index, flatten_list, svd_inv_null, unique_list
+from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
 def _tree_zeros_like(x):
@@ -55,16 +53,17 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
 
     """
     for con in constraint.objectives:
-        if con.bounds is not None:
-            raise ValueError(
-                f"Linear constraint {con} must use target instead of bounds."
-            )
+        errorif(not con.linear, f"Constraint {con} is not linear.")
+        errorif(
+            con.bounds is not None,
+            f"Linear constraint {con} must use target instead of bounds.",
+        )
         for thing in con.things:
-            if thing not in objective.things:
-                warnings.warn(
-                    f"Optimizable object {thing} is constrained by {con}"
-                    + " but not included in objective."
-                )
+            warnif(
+                thing not in objective.things,
+                f"Optimizable object {thing} is constrained by {con}"
+                + " but not included in objective.",
+            )
 
     from desc.optimize import ProximalProjection
 

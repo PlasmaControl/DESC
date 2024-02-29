@@ -1450,22 +1450,21 @@ def field_line_integrate(
                     jnp.greater(z, bounds_Z[1]),
                 ]
             ),
-            1e-2
-            * jnp.array(
+            jnp.array(
                 [
-                    # we mult by 1e-2 to accelerate the decay so that the integration
+                    # we mult by 1e-1 to accelerate the decay so that the integration
                     # is stopped soon after the bounds are exited.
-                    jnp.exp(-((r - bounds_R[0]) ** 2)),
-                    jnp.exp(-((r - bounds_R[1]) ** 2)),
-                    jnp.exp(-((z - bounds_Z[0]) ** 2)),
-                    jnp.exp(-((z - bounds_Z[1]) ** 2)),
+                    jnp.exp(-(1e1 * (r - bounds_R[0]) ** 2)),
+                    jnp.exp(-(1e1 * (r - bounds_R[1]) ** 2)),
+                    jnp.exp(-(1e1 * (z - bounds_Z[0]) ** 2)),
+                    jnp.exp(-(1e1 * (z - bounds_Z[1]) ** 2)),
                 ]
             ),
             1.0,
         )
         # multiply all together, the conditions that are not violated
         # are just one while the violated ones are continous decaying exponentials
-        decay_factor = jnp.prod(decay_factor)
+        decay_factor = jnp.prod(decay_factor, axis=0)
 
         br, bp, bz = field.compute_magnetic_field(
             rpz, params, basis="rpz", source_grid=source_grid

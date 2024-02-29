@@ -13,7 +13,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
-from desc.utils import Timer, get_instance, setdefault
+from desc.utils import Timer, errorif, get_instance, setdefault
 
 from .utils import f_where_x
 
@@ -42,15 +42,24 @@ class LinearConstraintProjection(ObjectiveFunction):
     """
 
     def __init__(self, objective, constraint, name="LinearConstraintProjection"):
-        assert isinstance(objective, ObjectiveFunction), (
-            "objective should be instance of ObjectiveFunction." ""
+        errorif(
+            not isinstance(objective, ObjectiveFunction),
+            ValueError,
+            "objective should be instance of ObjectiveFunction.",
+        )
+        errorif(
+            not isinstance(constraint, ObjectiveFunction),
+            ValueError,
+            "constraint should be instance of ObjectiveFunction.",
         )
         for con in constraint.objectives:
-            if not con.linear:
-                raise ValueError(
-                    "LinearConstraintProjection method "
-                    + "cannot handle nonlinear constraint {}.".format(con)
-                )
+            errorif(
+                not con.linear,
+                ValueError,
+                "LinearConstraintProjection method cannot handle "
+                + f"nonlinear constraint {con}.",
+            )
+
         self._objective = objective
         self._constraint = constraint
         self._built = False

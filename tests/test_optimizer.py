@@ -497,11 +497,11 @@ def test_wrappers():
     )
     con_nl = (ForceBalance(eq=eq),)
     obj = ForceBalance(eq=eq)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         _ = LinearConstraintProjection(obj, con)
     with pytest.raises(ValueError):
         _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
-    ob = LinearConstraintProjection(ObjectiveFunction(obj), con)
+    ob = LinearConstraintProjection(ObjectiveFunction(obj), ObjectiveFunction(con))
     ob.build()
     assert ob.built
 
@@ -1252,9 +1252,9 @@ def test_LinearConstraint_jacobian():
     obj2 = ObjectiveFunction(ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped")
     obj3 = ObjectiveFunction(ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked")
 
-    con1 = get_fixed_boundary_constraints(eq1)
-    con2 = get_fixed_boundary_constraints(eq2)
-    con3 = get_fixed_boundary_constraints(eq3)
+    con1 = ObjectiveFunction(get_fixed_boundary_constraints(eq1))
+    con2 = ObjectiveFunction(get_fixed_boundary_constraints(eq2))
+    con3 = ObjectiveFunction(get_fixed_boundary_constraints(eq3))
 
     lc1 = LinearConstraintProjection(obj1, con1)
     lc2 = LinearConstraintProjection(obj2, con2)

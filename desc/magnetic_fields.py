@@ -1452,12 +1452,12 @@ def field_line_integrate(
             ),
             jnp.array(
                 [
-                    # we mult by 1e-1 to accelerate the decay so that the integration
+                    # we mult by 1e6 to accelerate the decay so that the integration
                     # is stopped soon after the bounds are exited.
-                    jnp.exp(-(1e1 * (r - bounds_R[0]) ** 2)),
-                    jnp.exp(-(1e1 * (r - bounds_R[1]) ** 2)),
-                    jnp.exp(-(1e1 * (z - bounds_Z[0]) ** 2)),
-                    jnp.exp(-(1e1 * (z - bounds_Z[1]) ** 2)),
+                    jnp.exp(-(1e6 * (r - bounds_R[0]) ** 2)),
+                    jnp.exp(-(1e6 * (r - bounds_R[1]) ** 2)),
+                    jnp.exp(-(1e6 * (z - bounds_Z[0]) ** 2)),
+                    jnp.exp(-(1e6 * (z - bounds_Z[1]) ** 2)),
                 ]
             ),
             1.0,

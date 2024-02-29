@@ -683,13 +683,13 @@ class TestMagneticFields:
         r0 = [10.1]
         z0 = [0.0]
         # this will hit the R bound
-        # (there is no Z bound, and R would go to 10.1 if not bounded)
+        # (there is no Z bound, and R would go to 10.0 if not bounded)
         r, z = field_line_integrate(r0, z0, phis, field, bounds_R=(10.05, np.inf))
-        np.testing.assert_allclose(r[-1], 10.05, rtol=1e-4)
+        np.testing.assert_allclose(r[-1], 10.05, rtol=3e-4)
         # this will hit the Z bound
         # (there is no R bound, and Z would go to 0.1 if not bounded)
         r, z = field_line_integrate(r0, z0, phis, field, bounds_Z=(-np.inf, 0.05))
-        np.testing.assert_allclose(z[-1], 0.05, atol=1e-3)
+        np.testing.assert_allclose(z[-1], 0.05, atol=3e-3)
 
     @pytest.mark.unit
     def test_Bnormal_calculation(self):

@@ -30,6 +30,7 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixParameter,
     FixPressure,
     FixPsi,
     FixSumModesLambda,
@@ -311,12 +312,27 @@ def test_fixed_axis_and_theta_SFL_solve():
 def test_factorize_linear_constraints_asserts():
     """Test error checking for factorize_linear_constraints."""
     eq = Equilibrium()
+    surf = eq.get_surface_at(rho=1)
     objective = get_equilibrium_objective(eq, "force")
     objective.build()
+
+    # nonlinear constraint
+    constraint = ObjectiveFunction(AspectRatio(eq=eq))
+    constraint.build(verbose=0)
+    with pytest.raises(ValueError):
+        _ = factorize_linear_constraints(objective, constraint)
+
+    # bounds instead of target
     constraint = ObjectiveFunction(get_fixed_boundary_constraints(eq=eq))
     constraint.build(verbose=0)
     constraint.objectives[3].bounds = (0, 1)  # bounds on FixPsi
     with pytest.raises(ValueError):
+        _ = factorize_linear_constraints(objective, constraint)
+
+    # constraining a foreign thing
+    constraint = ObjectiveFunction(FixParameter(surf))
+    constraint.build(verbose=0)
+    with pytest.raises(UserWarning):
         _ = factorize_linear_constraints(objective, constraint)
 
 

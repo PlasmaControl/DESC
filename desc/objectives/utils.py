@@ -53,14 +53,16 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
 
     """
     for con in constraint.objectives:
-        errorif(not con.linear, f"Constraint {con} is not linear.")
+        errorif(not con.linear, ValueError, f"Constraint {con} is not linear.")
         errorif(
             con.bounds is not None,
+            ValueError,
             f"Linear constraint {con} must use target instead of bounds.",
         )
         for thing in con.things:
             warnif(
                 thing not in objective.things,
+                UserWarning,
                 f"Optimizable object {thing} is constrained by {con}"
                 + " but not included in objective.",
             )

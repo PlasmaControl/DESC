@@ -990,19 +990,21 @@ class _Objective(IOAble, ABC):
         ----------
         v : tuple of ndarray
             Vectors to right-multiply the Jacobian by.
-        x : ndarray
+        x : tuple of ndarray
             Optimization variables.
         constants : list
             Constant parameters passed to sub-objectives.
 
         """
         v = v if isinstance(v, (tuple, list)) else (v,)
+        x = x if isinstance(x, (tuple, list)) else (x,)
+        assert len(x) == len(v)
 
         compute_scaled = lambda *x: self.compute_scaled(*x, constants=constants)
         jvpfun = lambda *dx: Derivative.compute_jvp(
             compute_scaled, tuple(range(len(x))), dx, *x
         )
-        sig = "(n)" * len(x) + "->(k)"
+        sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
         return jnp.vectorize(jvpfun, signature=sig)(*v)
 
     def jvp_unscaled(self, v, x, constants=None):
@@ -1014,19 +1016,21 @@ class _Objective(IOAble, ABC):
         ----------
         v : tuple of ndarray
             Vectors to right-multiply the Jacobian by.
-        x : ndarray
+        x : tuple of ndarray
             Optimization variables.
         constants : list
             Constant parameters passed to sub-objectives.
 
         """
         v = v if isinstance(v, (tuple, list)) else (v,)
+        x = x if isinstance(x, (tuple, list)) else (x,)
+        assert len(x) == len(v)
 
         compute_unscaled = lambda *x: self.compute_unscaled(*x, constants=constants)
         jvpfun = lambda *dx: Derivative.compute_jvp(
             compute_unscaled, tuple(range(len(x))), dx, *x
         )
-        sig = "(n)" * len(x) + "->(k)"
+        sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
         return jnp.vectorize(jvpfun, signature=sig)(*v)
 
     def print_value(self, *args, **kwargs):

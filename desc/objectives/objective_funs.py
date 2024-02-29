@@ -9,14 +9,7 @@ from desc.backend import jit, jnp, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
-from desc.utils import (
-    Timer,
-    errorif,
-    flatten_list,
-    is_broadcastable,
-    setdefault,
-    unique_list,
-)
+from desc.utils import Timer, flatten_list, is_broadcastable, setdefault, unique_list
 
 
 class ObjectiveFunction(IOAble):
@@ -204,10 +197,17 @@ class ObjectiveFunction(IOAble):
         """
         from jax.tree_util import tree_flatten, tree_unflatten
 
-        things = setdefault(things, self.all_things)
+        # This is a unique list of the things the ObjectiveFunction knows about.
+        # By default it is only the things that each sub-Objective needs,
+        # but it can be set to include extra things from other objectives.
+        self._things = setdefault(
+            things,
+            unique_list(flatten_list([obj.things for obj in self.objectives]))[0],
+        )
+        things_per_objective = [self._things for _ in self.objectives]
 
         flat_, treedef_ = tree_flatten(
-            things, is_leaf=lambda x: isinstance(x, Optimizable)
+            things_per_objective, is_leaf=lambda x: isinstance(x, Optimizable)
         )
         unique_, inds_ = unique_list(flat_)
 
@@ -222,7 +222,7 @@ class ObjectiveFunction(IOAble):
             )
             assert treedef == treedef_
             assert len(flat) == len(flat_)
-            unique, inds = unique_list(flat)
+            unique, _ = unique_list(flat)
             return unique
 
         self._unflatten = unflatten
@@ -384,7 +384,13 @@ class ObjectiveFunction(IOAble):
         xs = jnp.split(x, xs_splits)
         params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
         if per_objective:
+            # params is a list of lists of dicts, for each thing and for each objective
             params = self._unflatten(params)
+            # this filters out the params of things that are unused by each objective
+            params = [
+                [par for par, thing in zip(param, self.things) if thing in obj.things]
+                for param, obj in zip(params, self.objectives)
+            ]
         return params
 
     def x(self, *things):
@@ -687,47 +693,9 @@ class ObjectiveFunction(IOAble):
         )
 
     @property
-    def all_things(self):
-        """list: all things known to this objective, used and unused."""
-        if hasattr(self, "_all_things"):
-            return self._all_things
-        return [obj.things for obj in self.objectives]
-
-    @property
     def things(self):
-        """list: Optimizable things that this objective is tied to."""
-        errorif(
-            not hasattr(self, "_flatten"),
-            RuntimeError,
-            "ObjectiveFunction must be built with ObjectiveFunction.build() first",
-        )
-        return self._flatten(self.all_things)
-
-    @things.setter
-    def things(self, new):
-        if not isinstance(new, (tuple, list)):
-            new = [new]
-        assert all(isinstance(x, Optimizable) for x in new)
-        # in general this is a hard problem, since we don't really know which object
-        # to replace with which if there are multiple of the same type, but we can
-        # do our best and throw an error if we can't figure it out here.
-        expected_types = [type(a) for a in self.things]
-        got_types = [type(a) for a in new]
-        errorif(
-            expected_types != got_types,
-            TypeError,
-            "Cannot unambiguously parse Optimizable objects to individual Objectives, "
-            + f"expected types {expected_types} but got types {got_types}. "
-            + "Try setting Objective.things on each sub Objective individually then "
-            + "call ObjectiveFunction.build().",
-        )
-        # now we know that new and self.things contains instances of unique classes, so
-        # we should be able to just replace like with like
-        things = self._unflatten(new)
-        for obj, t in zip(self.objectives, things):
-            obj.things = t
-            # can maybe improve this later to not rebuild if resolution is the same
-            obj._built = False
+        """list: Unique list of optimizable things that this objective is tied to."""
+        return self._things
 
 
 class _Objective(IOAble, ABC):

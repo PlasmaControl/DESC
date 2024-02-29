@@ -13,7 +13,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import combine_args
-from desc.utils import Timer, flatten_list, get_instance
+from desc.utils import Timer, flatten_list, get_instance, unique_list
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 
@@ -147,7 +147,7 @@ class Optimizer(IOAble):
         """
         if not isinstance(constraints, (tuple, list)):
             constraints = (constraints,)
-        things = flatten_list(things, flatten_tuple=True)
+        things = unique_list(flatten_list(things, flatten_tuple=True))[0]
         things0 = [t.copy() for t in things]
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium

@@ -1248,13 +1248,14 @@ def test_LinearConstraint_jacobian():
     eq1 = eq.copy()
     eq2 = eq.copy()
     eq3 = eq.copy()
+
     obj1 = ObjectiveFunction(ForceBalance(eq1, deriv_mode="auto"), deriv_mode="batched")
     obj2 = ObjectiveFunction(ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped")
     obj3 = ObjectiveFunction(ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked")
 
-    con1 = get_fixed_boundary_constraints(eq1)
-    con2 = get_fixed_boundary_constraints(eq2)
-    con3 = get_fixed_boundary_constraints(eq3)
+    con1 = ObjectiveFunction(get_fixed_boundary_constraints(eq1))
+    con2 = ObjectiveFunction(get_fixed_boundary_constraints(eq2))
+    con3 = ObjectiveFunction(get_fixed_boundary_constraints(eq3))
 
     lc1 = LinearConstraintProjection(obj1, con1)
     lc2 = LinearConstraintProjection(obj2, con2)

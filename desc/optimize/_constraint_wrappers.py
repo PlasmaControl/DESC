@@ -13,7 +13,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
-from desc.utils import Timer, get_instance, setdefault
+from desc.utils import Timer, errorif, get_instance, setdefault
 
 from .utils import f_where_x
 
@@ -529,9 +529,10 @@ class ProximalProjection(ObjectiveFunction):
         for constraint in self._linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)
 
-        assert self._constraint.things == [
-            eq
-        ], "ProximalProjection can only handle constraints on the equilibrium."
+        errorif(
+            self._constraint.things != [eq],
+            "ProximalProjection can only handle constraints on the equilibrium.",
+        )
 
         self._objectives = [self._objective, self._constraint]
         self._set_things(self.all_things)

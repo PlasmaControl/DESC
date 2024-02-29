@@ -844,7 +844,7 @@ def test_non_eq_optimization():
     )
     objective = ObjectiveFunction((obj,))
     optimizer = Optimizer("lsq-auglag")
-    (eq, surf), result = optimizer.optimize(
+    (eq, surf), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=100
     )
 

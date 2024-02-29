@@ -234,10 +234,9 @@ def combine_args(*objectives):
 
     """
     # unique list of things from all objectives
-    things, _ = unique_list(flatten_list([obj.things for obj in objectives]))
+    things = unique_list(flatten_list([obj.things for obj in objectives]))[0]
     for obj in objectives:
-        obj._all_things = [things for _ in obj.objectives]
-        obj._set_things()  # obj.things will be in the same order for all objectives
+        obj._set_things(things)  # obj.things will have same order for all objectives
     return objectives
 
 

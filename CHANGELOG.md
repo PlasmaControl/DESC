@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Adds a bounding box to the `field_line_integrate` defined by `bounds_R` and `bounds_Z` keyword arguments, which form a hollow cylindrical bounding box. If the field line trajectory exits these bounds, the RHS will be multiplied by an exponentially decaying function of the distance to the box to stop the trajectory and prevent tracing the field line out to infinity, which is both costly and unnecessary when making a Poincare plot, the principle purpose of the function.
+
 v0.10.4
 -------
 

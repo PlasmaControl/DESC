@@ -1433,6 +1433,7 @@ def field_line_integrate(
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
+    assert decay_accel > 0, "decay_accel must be positive"
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()
@@ -1458,8 +1459,8 @@ def field_line_integrate(
             ),
             jnp.array(
                 [
-                    # we mult by 1e6 to accelerate the decay so that the integration
-                    # is stopped soon after the bounds are exited.
+                    # we mult by decay_accel to accelerate the decay so that the
+                    # integration is stopped soon after the bounds are exited.
                     jnp.exp(-(decay_accel * (r - bounds_R[0]) ** 2)),
                     jnp.exp(-(decay_accel * (r - bounds_R[1]) ** 2)),
                     jnp.exp(-(decay_accel * (z - bounds_Z[0]) ** 2)),

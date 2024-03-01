@@ -5,7 +5,7 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import jit, jnp, use_jax
+from desc.backend import jit, jnp, tree_flatten, tree_unflatten, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
@@ -195,8 +195,6 @@ class ObjectiveFunction(IOAble):
         from unique flattened version.
 
         """
-        from jax.tree_util import tree_flatten, tree_unflatten
-
         # This is a unique list of the things the ObjectiveFunction knows about.
         # By default it is only the things that each sub-Objective needs,
         # but it can be set to include extra things from other objectives.

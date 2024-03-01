@@ -333,13 +333,26 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
     transforms = {"grid": grid}
     for c in derivs.keys():
         if hasattr(obj, c + "_basis"):
-            transforms[c] = Transform(
-                grid,
-                getattr(obj, c + "_basis"),
-                derivs=derivs[c],
-                build=True,
-                method=method,
-            )
+            basis = getattr(obj, c + "_basis")
+            # first check if we already have a transform with a compatible basis
+            for transform in transforms.values():
+                if basis.eq(getattr(transform, "basis", None)):
+                    ders = np.unique(
+                        np.vstack([derivs[c], transform.derivatives]), axis=0
+                    )
+                    # don't build until we know all the derivs we need
+                    transform.change_derivatives(ders, build=False)
+                    c_transform = transform
+                    break
+            else:  # if we didn't exit the loop early
+                c_transform = Transform(
+                    grid,
+                    basis,
+                    derivs=derivs[c],
+                    build=False,
+                    method=method,
+                )
+            transforms[c] = c_transform
         elif c == "B":
             transforms["B"] = Transform(
                 grid,
@@ -350,7 +363,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     sym=obj.R_basis.sym,
                 ),
                 derivs=derivs["B"],
-                build=True,
+                build=False,
                 build_pinv=True,
                 method=method,
             )
@@ -364,12 +377,17 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     sym=obj.Z_basis.sym,
                 ),
                 derivs=derivs["w"],
-                build=True,
+                build=False,
                 build_pinv=True,
                 method=method,
             )
         elif c not in transforms:
             transforms[c] = getattr(obj, c)
+
+    # now build them
+    for t in transforms.values():
+        if hasattr(t, "build"):
+            t.build()
 
     return transforms
 

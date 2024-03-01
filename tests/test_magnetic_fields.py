@@ -12,8 +12,6 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import (
-    CD_m_k,
-    CN_m_k,
     CurrentPotentialField,
     DommaschkPotentialField,
     FourierCurrentPotentialField,
@@ -25,6 +23,7 @@ from desc.magnetic_fields import (
     field_line_integrate,
     read_BNORM_file,
 )
+from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
 
 
 def phi_lm(R, phi, Z, a, m):

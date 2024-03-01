@@ -633,14 +633,14 @@ class BoundaryError(_Objective):
             sheet_params["R_lmn"] = eq_params["Rb_lmn"]
             sheet_params["Z_lmn"] = eq_params["Zb_lmn"]
             sheet_source_data = compute_fun(
-                "desc.magnetic_fields.FourierCurrentPotentialField",
+                "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
                 self._sheet_data_keys,
                 params=sheet_params,
                 transforms=constants["sheet_source_transforms"],
                 profiles={},
             )
             sheet_eval_data = compute_fun(
-                "desc.magnetic_fields.FourierCurrentPotentialField",
+                "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
                 self._sheet_data_keys,
                 params=sheet_params,
                 transforms=constants["sheet_eval_transforms"],

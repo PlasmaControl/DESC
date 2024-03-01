@@ -325,7 +325,7 @@ def test_factorize_linear_constraints_asserts():
     # bounds instead of target
     constraint = ObjectiveFunction(get_fixed_boundary_constraints(eq=eq))
     constraint.build(verbose=0)
-    constraint.objectives[3].bounds = (0, 1)  # bounds on FixPsi
+    constraint.objectives[3].bounds = (0, 1)
     with pytest.raises(ValueError):
         _ = factorize_linear_constraints(objective, constraint)
 

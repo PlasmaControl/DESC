@@ -53,7 +53,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
 
     """
     for con in constraint.objectives:
-        errorif(not con.linear, ValueError, f"Constraint {con} is not linear.")
+        errorif(not con.linear, ValueError, f"Cannot handle nonlinear onstraint {con}.")
         errorif(
             con.bounds is not None,
             ValueError,

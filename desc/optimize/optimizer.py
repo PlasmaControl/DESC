@@ -13,7 +13,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import combine_args
-from desc.utils import Timer, flatten_list, get_instance, unique_list
+from desc.utils import Timer, flatten_list, get_instance, unique_list, warnif
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 
@@ -58,7 +58,7 @@ class Optimizer(IOAble):
 
     @method.setter
     def method(self, method):
-        wrapper, submethod = _parse_method(method)
+        _, submethod = _parse_method(method)
         if submethod not in optimizers:
             raise NotImplementedError(
                 colored(
@@ -145,10 +145,16 @@ class Optimizer(IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
-        if not isinstance(constraints, (tuple, list)):
-            constraints = (constraints,)
-        things = unique_list(flatten_list(things, flatten_tuple=True))[0]
+        things, indices = unique_list(flatten_list(things, flatten_tuple=True))
+        counts = np.unique(indices, return_counts=True)[1]
+        duplicate_idx = np.where(counts > 1)[0]
+        warnif(
+            len(duplicate_idx),
+            UserWarning,
+            f"{things[duplicate_idx]} is duplicated in things.",
+        )
         things0 = [t.copy() for t in things]
+
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
 
@@ -183,11 +189,19 @@ class Optimizer(IOAble):
             nonlinear_constraint.build(verbose=verbose)
 
         # combine arguments from all three objective functions
-        if nonlinear_constraint is not None:
+        if linear_constraint is not None and nonlinear_constraint is not None:
             objective, linear_constraint, nonlinear_constraint = combine_args(
                 objective, linear_constraint, nonlinear_constraint
             )
             assert set(objective.things) == set(linear_constraint.things)
+            assert set(objective.things) == set(nonlinear_constraint.things)
+        elif linear_constraint is not None:
+            objective, linear_constraint = combine_args(objective, linear_constraint)
+            assert set(objective.things) == set(linear_constraint.things)
+        elif nonlinear_constraint is not None:
+            objective, nonlinear_constraint = combine_args(
+                objective, nonlinear_constraint
+            )
             assert set(objective.things) == set(nonlinear_constraint.things)
         assert set(objective.things) == set(things)
 

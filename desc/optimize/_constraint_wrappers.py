@@ -45,12 +45,12 @@ class LinearConstraintProjection(ObjectiveFunction):
         errorif(
             not isinstance(objective, ObjectiveFunction),
             ValueError,
-            "objective should be instance of ObjectiveFunction.",
+            "Objective should be instance of ObjectiveFunction.",
         )
         errorif(
             not isinstance(constraint, ObjectiveFunction),
             ValueError,
-            "constraint should be instance of ObjectiveFunction.",
+            "Constraint should be instance of ObjectiveFunction.",
         )
         for con in constraint.objectives:
             errorif(
@@ -58,6 +58,11 @@ class LinearConstraintProjection(ObjectiveFunction):
                 ValueError,
                 "LinearConstraintProjection method cannot handle "
                 + f"nonlinear constraint {con}.",
+            )
+            errorif(
+                con.bounds is not None,
+                ValueError,
+                f"Linear constraint {con} must use target instead of bounds.",
             )
 
         self._objective = objective
@@ -451,11 +456,12 @@ class ProximalProjection(ObjectiveFunction):
             "constraint should be instance of ObjectiveFunction." ""
         )
         for con in constraint.objectives:
-            if not con._equilibrium:
-                raise ValueError(
-                    "ProximalProjection method "
-                    + "cannot handle general nonlinear constraint {}.".format(con)
-                )
+            errorif(
+                not con._equilibrium,
+                ValueError,
+                "ProximalProjection method cannot handle general "
+                + "nonlinear constraint {}.".format(con),
+            )
         self._objective = objective
         self._constraint = constraint
         solve_options = {} if solve_options is None else solve_options
@@ -540,6 +546,7 @@ class ProximalProjection(ObjectiveFunction):
 
         errorif(
             self._constraint.things != [eq],
+            ValueError,
             "ProximalProjection can only handle constraints on the equilibrium.",
         )
 

@@ -149,6 +149,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
             y1,
             y2,
             atol=3e-14,
+            rtol=3e-14,
             err_msg="Incompatible constraints detected, cannot satisfy constraint "
             + f"{con}.",
         )

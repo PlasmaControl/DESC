@@ -758,7 +758,8 @@ class QuadraticFlux(_Objective):
     """Target B*n = 0 on LCFS.
 
     Uses virtual casing to find plasma component of B and penalizes
-    (B_coil + B_plasma)*n
+    (B_coil + B_plasma)*n. The equilibrium is kept fixed while the
+    field is unfixed.
 
     Parameters
     ----------
@@ -793,16 +794,8 @@ class QuadraticFlux(_Objective):
     field_grid : Grid, optional
         Grid used to discretize ext_field (e.g. grid for the magnetic field source from
         coils).
-    eq_fixed : bool
-        Whether or not the equilibrium's DOF (params) change during optimization.
-        If true, Bplasma will be precomputed in build().
-    field_fixed : bool
-        Whether or not the external field's DOF (params) change during optimization.
     vacuum : bool
         If true, Bplasma is set to zero.
-    loop : bool
-        If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
-        less memory.
     name : str
         Name of the objective function.
 
@@ -863,18 +856,6 @@ class QuadraticFlux(_Objective):
         """
         eq = self._eq
 
-        if self._src_grid is None:
-            src_grid = LinearGrid(
-                rho=np.array([1.0]),
-                M=15,
-                N=15,
-                NFP=int(eq.NFP),
-                sym=False,
-            )
-            self._src_grid = src_grid
-        else:
-            src_grid = self._src_grid
-
         if self._eval_grid is None:
             eval_grid = LinearGrid(
                 rho=np.array([1.0]),
@@ -886,23 +867,7 @@ class QuadraticFlux(_Objective):
             self._eval_grid = eval_grid
         else:
             eval_grid = self._eval_grid
-        if self._s is None:
-            k = min(src_grid.num_theta, src_grid.num_zeta)
-            self._s = k // 2 + int(np.sqrt(k))
-        if self._q is None:
-            k = min(src_grid.num_theta, src_grid.num_zeta)
-            self._q = k // 2 + int(np.sqrt(k))
 
-        try:
-            interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
-        except AssertionError as e:
-            warnings.warn(
-                "Could not built fft interpolator, switching to dft method which is"
-                " much slower. Reason: " + str(e)
-            )
-            interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
-
-        self._constants = {"interpolator": interpolator}
         self._data_keys = [
             "R",
             "zeta",
@@ -911,53 +876,64 @@ class QuadraticFlux(_Objective):
             "K_vc",
             "phi",
         ]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=False,
-        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
-        src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
-        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
-        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+        self._dim_f = eval_grid.num_nodes
 
         w = eval_grid.weights
         w *= jnp.sqrt(eval_grid.num_nodes)
 
-        self._constants.update(
-            eval_transforms=eval_transforms,
-            eval_profiles=eval_profiles,
-            src_transforms=src_transforms,
-            src_profiles=src_profiles,
-            quad_weights=w,
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+        eval_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=eq.params_dict,
+            transforms=eval_transforms,
+            profiles=eval_profiles,
         )
+
+        self._constants = {}
 
         # pre-compute Bplasma because we are assuming eq is fixed
         if self._vacuum:
-            eval_data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                self._data_keys,
-                params=eq.params_dict,
-                transforms=eval_transforms,
-                profiles=eval_profiles,
-            )
             Bplasma = np.zeros(np.shape(eval_grid.nodes))
-            self._constants.update(Bplasma=Bplasma, eval_data=eval_data)
 
         else:
-            eval_data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                self._data_keys,
-                params=eq.params_dict,
-                transforms=eval_transforms,
-                profiles=eval_profiles,
-            )
+            if self._src_grid is None:
+                src_grid = LinearGrid(
+                    rho=np.array([1.0]),
+                    M=3 * eq.M_grid,
+                    N=3 * eq.N_grid,
+                    NFP=int(eq.NFP),
+                    sym=False,
+                )
+                self._src_grid = src_grid
+            else:
+                src_grid = self._src_grid
+            if self._s is None:
+                k = min(src_grid.num_theta, src_grid.num_zeta)
+                self._s = k // 2 + int(np.sqrt(k))
+            if self._q is None:
+                k = min(src_grid.num_theta, src_grid.num_zeta)
+                self._q = k // 2 + int(np.sqrt(k))
+            try:
+                interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            except AssertionError as e:
+                warnings.warn(
+                    "Could not built fft interpolator, switching to dft method which is"
+                    " much slower. Reason: " + str(e)
+                )
+                interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
+
+            self._constants.update(interpolator=interpolator)
+
+            src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
+            src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
             src_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,
@@ -973,16 +949,15 @@ class QuadraticFlux(_Objective):
                 self._constants["interpolator"],
             )
 
-            self._constants.update(
-                eval_data=eval_data,
-                Bplasma=Bplasma,
-            )
+        self._constants.update(
+            quad_weights=w,
+            eval_data=eval_data,
+            Bplasma=Bplasma,
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
-
-        self._dim_f = eval_grid.num_nodes
 
         if self._normalize:
             scales = compute_scaling_factors(eq)

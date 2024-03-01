@@ -1382,6 +1382,7 @@ def field_line_integrate(
     maxstep=1000,
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
+    decay_accel=1e6,
 ):
     """Trace field lines by integration.
 
@@ -1406,17 +1407,22 @@ def field_line_integrate(
     bounds_R : tuple of (float,float), optional
         R bounds for field line integration bounding box.
         If supplied, the RHS of the field line equations will be
-        multipled by exp(-r) where r is the distance from the origin,
+        multipled by exp(-r) where r is the distance to the bounding box,
         this is meant to prevent the field lines which escape to infinity from
         slowing the integration down by being traced to infinity.
         defaults to (0,np.inf)
     bounds_Z : tuple of (float,float), optional
         Z bounds for field line integration bounding box.
         If supplied, the RHS of the field line equations will be
-        multipled by exp(-r) where r is the distance from the origin,
+        multipled by exp(-r) where r is the distance to the bounding box,
         this is meant to prevent the field lines which escape to infinity from
         slowing the integration down by being traced to infinity.
         Defaults to (-np.inf,np.inf)
+    decay_accel : float, optional
+        An extra factor to the exponential that decays the RHS, i.e.
+        the RHS is multiplied by exp(-r * decay_accel), this is to
+        accelerate the decay of the RHS and stop the integration sooner
+        after exiting the bounds. Defaults to 1e6
 
 
     Returns
@@ -1454,10 +1460,10 @@ def field_line_integrate(
                 [
                     # we mult by 1e6 to accelerate the decay so that the integration
                     # is stopped soon after the bounds are exited.
-                    jnp.exp(-(1e6 * (r - bounds_R[0]) ** 2)),
-                    jnp.exp(-(1e6 * (r - bounds_R[1]) ** 2)),
-                    jnp.exp(-(1e6 * (z - bounds_Z[0]) ** 2)),
-                    jnp.exp(-(1e6 * (z - bounds_Z[1]) ** 2)),
+                    jnp.exp(-(decay_accel * (r - bounds_R[0]) ** 2)),
+                    jnp.exp(-(decay_accel * (r - bounds_R[1]) ** 2)),
+                    jnp.exp(-(decay_accel * (z - bounds_Z[0]) ** 2)),
+                    jnp.exp(-(decay_accel * (z - bounds_Z[1]) ** 2)),
                 ]
             ),
             1.0,

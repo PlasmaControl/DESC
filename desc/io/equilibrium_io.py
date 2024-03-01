@@ -251,7 +251,7 @@ class IOAble(ABC, metaclass=_CombinedMeta):
         if hasattr(self, "_set_up"):
             self._set_up()
 
-    def eq(self, other):
+    def equiv(self, other):
         """Compare equivalence between DESC objects.
 
         Two objects are considered equivalent if they will be saved and loaded
@@ -265,7 +265,7 @@ class IOAble(ABC, metaclass=_CombinedMeta):
 
         Returns
         -------
-        eq : bool
+        equiv : bool
             whether this and other are equivalent
         """
         if self.__class__ != other.__class__:

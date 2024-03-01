@@ -4,8 +4,8 @@ Changelog
 
 New Features
 
-- Adds new objectives for free boundary equilibria: ``BoundaryError`` and ``VacuumBoundaryError``,
-along with a new tutorial notebook demonstrating their usage.
+- Adds new objectives for free boundary equilibria: ``BoundaryError`` and
+``VacuumBoundaryError``, along with a new tutorial notebook demonstrating their usage.
 - Objectives ``Volume``, ``AspectRatio``, ``Elongation`` now work for
 ``FourierRZToroidalSurface`` objects as well as ``Equilibrium``.
 - ``MagneticField`` objects now have a method ``save_mgrid`` for saving field data
@@ -21,6 +21,13 @@ Speed Improvements
 - Improves the efficiency of ``proximal`` optimizers by reducing the number of objective
 derivative evaluations. Optimization steps should now be 2-5x faster.
 - Improved performance of Zernike polynomial evaluation.
+- Adds a bounding box to the `field_line_integrate` defined by `bounds_R` and `bounds_Z`
+keyword arguments, which form a hollow cylindrical bounding box. If the field line
+trajectory exits these bounds, the RHS will be multiplied by an exponentially decaying
+function of the distance to the box to stop the trajectory and prevent tracing the
+field line out to infinity, which is both costly and unnecessary when making a Poincare
+plot, the principle purpose of the function.
+
 
 Bug Fixes
 
@@ -33,6 +40,7 @@ mesh. Previously they were saved on the full mesh.
 - Fixed incorrect rotation matrix for `FourierPlanarCurve`.
 - Fixed bug where ``plot_boundaries`` with a single ``phi`` value would return an
 empty plot.
+
 
 
 v0.10.4

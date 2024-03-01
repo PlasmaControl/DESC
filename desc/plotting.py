@@ -340,6 +340,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         title_fontsize: integer, font size of the title
         xlabel_fontsize: integer, font size of the x axis label
+        color: str or tuple, color to use for scatter plot
+        marker: str, marker to use for scatter plot
+
 
     Returns
     -------
@@ -377,19 +380,33 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     fig, ax = _format_ax(ax, rows=1, cols=3, figsize=kwargs.pop("figsize", None))
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    marker = kwargs.pop("marker", "o")
+    color = kwargs.pop("color", "b")
 
     assert (
         len(kwargs) == 0
     ), f"plot_coefficients got unexpected keyword argument: {kwargs.keys()}"
 
     ax[0, 0].semilogy(
-        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1), np.abs(eq.R_lmn), "bo"
+        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.R_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
     ax[0, 1].semilogy(
-        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1), np.abs(eq.Z_lmn), "bo"
+        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.Z_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
     ax[0, 2].semilogy(
-        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1), np.abs(eq.L_lmn), "bo"
+        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.L_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
 
     ax[0, 0].set_xlabel(xlabel, fontsize=xlabel_fontsize)
@@ -1685,7 +1702,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     phi = (1 if eq.N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi + 1)  # +1 to include pi and 2pi
+        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
     phi = np.atleast_1d(phi)
     nphi = len(phi)
     # don't plot axis for FourierRZToroidalSurface, since it's not defined.
@@ -1708,15 +1725,15 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     )
 
     if colors is None:
-        colors = _get_cmap(cmap, nz)(np.linspace(0, 1, nz))
+        colors = _get_cmap(cmap)((phi * eq.NFP / (2 * np.pi)) % 1)
     if lw is None:
         lw = 1
     if isinstance(lw, int):
-        lw = [lw for i in range(nz - 1)]
+        lw = [lw for _ in range(nz)]
     if ls is None:
         ls = "-"
     if isinstance(ls, str):
-        ls = [ls for i in range(nz - 1)]
+        ls = [ls for _ in range(nz)]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -1726,7 +1743,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     fig, ax = _format_ax(ax, figsize=figsize, equal=True)
 
-    for i in range(nphi - 1):
+    for i in range(nphi):
         ax.plot(
             R[:, -1, i],
             Z[:, -1, i],

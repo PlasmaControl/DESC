@@ -15,8 +15,10 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.magnetic_fields import SplineMagneticField
 from desc.objectives import (
     AspectRatio,
+    BoundaryError,
     CurrentDensity,
     FixBoundaryR,
     FixBoundaryZ,
@@ -36,6 +38,7 @@ from desc.objectives import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
+    VacuumBoundaryError,
     Volume,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
@@ -273,7 +276,6 @@ def run_qh_step(n, eq):
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
-        verbose=0,
     )
     R_modes = np.vstack(
         (
@@ -302,11 +304,7 @@ def run_qh_step(n, eq):
         maxiter=50,
         verbose=3,
         copy=True,
-        options={
-            "initial_trust_ratio": 1.0,  # for backwards consistency
-            "perturb_options": {"verbose": 0},
-            "solve_options": {"verbose": 0},
-        },
+        options={},
     )
 
     return eq1
@@ -325,7 +323,7 @@ def test_qh_optimization():
         modes_Z=[[-1, 0], [0, -1]],
         NFP=4,
     )
-    eq = Equilibrium(M=4, N=4, Psi=0.04, surface=surf)
+    eq = Equilibrium(M=5, N=5, Psi=0.04, surface=surf)
     eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[
         -1
     ]
@@ -873,6 +871,115 @@ def test_only_non_eq_optimization():
     )
     surf = surf[0]
     np.testing.assert_allclose(obj.compute(*obj.xs(surf)), 1, atol=1e-5)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_freeb_vacuum():
+    """Test for free boundary vacuum stellarator."""
+    # currents from VMEC input this test is meant to reproduce
+    extcur = [4700.0, 1000.0]
+    ext_field = SplineMagneticField.from_mgrid(
+        "tests/inputs/mgrid_test.nc", extcur=extcur
+    )
+    surf = FourierRZToroidalSurface(
+        R_lmn=[0.70, 0.10],
+        modes_R=[[0, 0], [1, 0]],
+        Z_lmn=[-0.10],
+        modes_Z=[[-1, 0]],
+        NFP=5,
+    )
+
+    eq = Equilibrium(M=6, N=6, Psi=-0.035, surface=surf)
+    eq.solve()
+    constraints = (
+        ForceBalance(eq=eq),
+        FixCurrent(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    objective = ObjectiveFunction(VacuumBoundaryError(eq=eq, ext_field=ext_field))
+    eq, out = eq.optimize(
+        objective,
+        constraints,
+        optimizer="proximal-lsq-exact",
+        verbose=3,
+        options={},
+    )
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_test_freeb.nc")
+
+    np.testing.assert_allclose(rho_err[:, -1], 0, atol=4e-2)  # only check rho=1
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_freeb_axisym():
+    """Test for free boundary finite beta tokamak."""
+    # currents from VMEC input this test is meant to reproduce
+    extcur = [
+        3.884526409876309e06,
+        -2.935577123737952e05,
+        -1.734851853677043e04,
+        6.002137016973160e04,
+        6.002540940490887e04,
+        -1.734993103183817e04,
+        -2.935531536308510e05,
+        -3.560639108717275e05,
+        -6.588434719283084e04,
+        -1.154387774712987e04,
+        -1.153546510755219e04,
+        -6.588300858364606e04,
+        -3.560589388468855e05,
+    ]
+    ext_field = SplineMagneticField.from_mgrid(
+        r"tests/inputs/mgrid_solovev.nc", extcur=extcur
+    )
+
+    pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
+    iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
+    surf = FourierRZToroidalSurface(
+        R_lmn=[4.0, 1.0],
+        modes_R=[[0, 0], [1, 0]],
+        Z_lmn=[-1.0],
+        modes_Z=[[-1, 0]],
+        NFP=1,
+    )
+
+    eq = Equilibrium(M=10, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
+    eq.solve()
+    constraints = (
+        ForceBalance(eq=eq),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    objective = ObjectiveFunction(BoundaryError(eq=eq, ext_field=ext_field))
+
+    # we know this is a pretty simple shape so we'll only use |m| <= 2
+    R_modes = (
+        eq.surface.R_basis.modes[np.max(np.abs(eq.surface.R_basis.modes), 1) > 2, :],
+    )
+
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 2, :
+    ]
+
+    bdry_constraints = (
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+    )
+    eq, out = eq.optimize(
+        objective,
+        constraints + bdry_constraints,
+        optimizer="proximal-lsq-exact",
+        verbose=3,
+        options={},
+    )
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
+
+    np.testing.assert_allclose(rho_err[:, -1], 0, atol=2e-2)  # only check rho=1
 
 
 class TestGetExample:

@@ -145,10 +145,13 @@ class Optimizer(IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
+        if not isinstance(constraints, (tuple, list)):
+            constraints = (constraints,)
+
+        # get unique things
         things, indices = unique_list(flatten_list(things, flatten_tuple=True))
         counts = np.unique(indices, return_counts=True)[1]
         duplicate_idx = np.where(counts > 1)[0]
-        print(bool(len(duplicate_idx)))
         warnif(
             len(duplicate_idx),
             UserWarning,

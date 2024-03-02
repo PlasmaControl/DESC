@@ -35,6 +35,12 @@
    :maxdepth: 1
    :caption: Public API
 
+   api_equilibrium
+   api_objectives
+   api_io
+   api_plotting
+   api_continuation
+   api_fields
    api
 
 

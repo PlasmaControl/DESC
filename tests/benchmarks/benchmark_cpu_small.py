@@ -124,7 +124,8 @@ def test_objective_compile_dshape_current(benchmark):
         jax.clear_caches()
         eq = desc.examples.get("DSHAPE_current")
         objective = LinearConstraintProjection(
-            get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+            get_equilibrium_objective(eq),
+            ObjectiveFunction(get_fixed_boundary_constraints(eq)),
         )
         objective.build(eq)
         args = (
@@ -149,7 +150,8 @@ def test_objective_compile_atf(benchmark):
         jax.clear_caches()
         eq = desc.examples.get("ATF")
         objective = LinearConstraintProjection(
-            get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+            get_equilibrium_objective(eq),
+            ObjectiveFunction(get_fixed_boundary_constraints(eq)),
         )
         objective.build(eq)
         args = (objective, eq)
@@ -169,7 +171,8 @@ def test_objective_compute_dshape_current(benchmark):
     jax.clear_caches()
     eq = desc.examples.get("DSHAPE_current")
     objective = LinearConstraintProjection(
-        get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
     )
     objective.build(eq)
     objective.compile()
@@ -188,7 +191,8 @@ def test_objective_compute_atf(benchmark):
     jax.clear_caches()
     eq = desc.examples.get("ATF")
     objective = LinearConstraintProjection(
-        get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
     )
     objective.build(eq)
     objective.compile()
@@ -207,7 +211,8 @@ def test_objective_jac_dshape_current(benchmark):
     jax.clear_caches()
     eq = desc.examples.get("DSHAPE_current")
     objective = LinearConstraintProjection(
-        get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
     )
     objective.build(eq)
     objective.compile()
@@ -226,7 +231,8 @@ def test_objective_jac_atf(benchmark):
     jax.clear_caches()
     eq = desc.examples.get("ATF")
     objective = LinearConstraintProjection(
-        get_equilibrium_objective(eq), get_fixed_boundary_constraints(eq)
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
     )
     objective.build(eq)
     objective.compile()
@@ -248,7 +254,7 @@ def test_perturb_1(benchmark):
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
         objective.build(eq)
-        constraints = get_fixed_boundary_constraints(eq)
+        constraints = ObjectiveFunction(get_fixed_boundary_constraints(eq))
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
@@ -281,7 +287,7 @@ def test_perturb_2(benchmark):
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
         objective.build(eq)
-        constraints = get_fixed_boundary_constraints(eq)
+        constraints = ObjectiveFunction(get_fixed_boundary_constraints(eq))
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])

@@ -13,7 +13,8 @@ field configurations, as well as classes for combining and scaling these fields.
 For interfacing with MAKEGRID type files, the ``SplineMagneticField`` class has a
 ``from_mgrid`` option allowing you to load an mgrid file and interpolate where needed.
 All `MagneticField` objects also have a `save_mgrid` method to save field data so that
-it can be read by VMEC and STELLOPT.
+it can be read by VMEC and STELLOPT. They also have a `compute_Bnormal` method which accepts
+a surface and computes the normal field strength on that surface.
 
 .. autosummary::
     :toctree: _api/magnetic_fields
@@ -65,7 +66,8 @@ Coils
 *****
 ``Coil`` objects in ``desc.coils`` are themselves subclasses of ``MagneticField``, allowing
 them to be used anywhere that expects a magnetic field type. There are a number of parameterizations
-based on the ``Curve`` classes defined in ``desc.geometry``:
+based on the ``Curve`` classes defined in ``desc.geometry`` (which, since they are based on ``Curve``
+classes, can also use the same ``Curve`` conversion methods to convert between coil representations):
 
 .. autosummary::
     :toctree: _api/coils/
@@ -89,3 +91,7 @@ another ``CoilSet``).
 
     desc.coils.CoilSet
     desc.coils.MixedCoilSet
+
+DESC ``CoilSet`` or ``MixedCoilSet`` objects can also be created from MAKEGRID-formatted coil text files via
+the `from_makegrid_coilfile` method. They can also be saved in a MAKEGRID-formatted text file with
+the `save_in_makegrid_format` method.

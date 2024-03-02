@@ -133,13 +133,14 @@ class Transform(IOAble):
 
     def _get_matrices(self):
         """Get matrices to compute all derivatives."""
-        n = np.amax(self.derivatives) + 1
+        n = 4  # hardcode max derivative order for now,
         matrices = {
             "direct1": {
-                i: {j: {k: {} for k in range(n)} for j in range(n)} for i in range(n)
+                i: {j: {k: {} for k in range(n + 1)} for j in range(n + 1)}
+                for i in range(n + 1)
             },
-            "fft": {i: {j: {} for j in range(n)} for i in range(n)},
-            "direct2": {i: {} for i in range(n)},
+            "fft": {i: {j: {} for j in range(n + 1)} for i in range(n + 1)},
+            "direct2": {i: {} for i in range(n + 1)},
         }
         return matrices
 
@@ -372,8 +373,6 @@ class Transform(IOAble):
         if self.basis.num_modes == 0:
             self._built = True
             return
-
-        self._matrices = self._get_matrices()
 
         if self.method == "direct1":
             for d in self.derivatives:

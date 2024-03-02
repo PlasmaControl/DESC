@@ -254,7 +254,7 @@ def test_perturb_1(benchmark):
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
         objective.build(eq)
-        constraints = ObjectiveFunction(get_fixed_boundary_constraints(eq))
+        constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
@@ -287,7 +287,7 @@ def test_perturb_2(benchmark):
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
         objective.build(eq)
-        constraints = ObjectiveFunction(get_fixed_boundary_constraints(eq))
+        constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
@@ -342,7 +342,7 @@ def test_proximal_freeb_compute(benchmark):
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(objective, constraint, eq)
     obj = LinearConstraintProjection(
-        prox, (FixCurrent(eq), FixPressure(eq), FixPsi(eq))
+        prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
     obj.build()
     obj.compile()
@@ -366,7 +366,7 @@ def test_proximal_freeb_jac(benchmark):
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(objective, constraint, eq)
     obj = LinearConstraintProjection(
-        prox, (FixCurrent(eq), FixPressure(eq), FixPsi(eq))
+        prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
     obj.build()
     obj.compile()

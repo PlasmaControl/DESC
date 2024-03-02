@@ -645,11 +645,11 @@ class Transform(IOAble):
         if basis is None:
             basis = self.basis
 
-        if not self.grid.eq(grid):
+        if not self.grid.equiv(grid):
             self._grid = grid
             self._built = False
             self._built_pinv = False
-        if not self.basis.eq(basis):
+        if not self.basis.equiv(basis):
             self._basis = basis
             self._built = False
             self._built_pinv = False
@@ -666,7 +666,7 @@ class Transform(IOAble):
 
     @grid.setter
     def grid(self, grid):
-        if not self.grid.eq(grid):
+        if not self.grid.equiv(grid):
             self._grid = grid
             if self.method == "fft":
                 self._check_inputs_fft(self.grid, self.basis)
@@ -686,7 +686,7 @@ class Transform(IOAble):
 
     @basis.setter
     def basis(self, basis):
-        if not self.basis.eq(basis):
+        if not self.basis.equiv(basis):
             self._basis = basis
             if self.method == "fft":
                 self._check_inputs_fft(self.grid, self.basis)

@@ -391,7 +391,6 @@ def test_correct_indexing_passed_modes():
             QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
-        verbose=0,
     )
     R_modes = np.vstack(
         (
@@ -447,7 +446,6 @@ def test_correct_indexing_passed_modes_and_passed_target():
             QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
-        verbose=0,
     )
     R_modes = np.vstack(
         (
@@ -512,7 +510,6 @@ def test_correct_indexing_passed_modes_axis():
             QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
-        verbose=0,
     )
     R_modes = np.vstack(
         (
@@ -578,7 +575,6 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
-        verbose=0,
     )
     R_modes = np.vstack(
         (

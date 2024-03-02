@@ -33,6 +33,7 @@
    notebooks/tutorials/basic_equilibrium.ipynb
    notebooks/tutorials/advanced_equilibrium_continuation.ipynb
    notebooks/tutorials/continuation_step_by_step.ipynb
+   notebooks/tutorials/free_boundary_equilibrium.ipynb
    notebooks/tutorials/use_outputs.ipynb
    notebooks/tutorials/basic_optimization.ipynb
    notebooks/tutorials/advanced_optimization.ipynb

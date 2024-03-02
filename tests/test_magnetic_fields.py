@@ -448,7 +448,7 @@ class TestMagneticFields:
         )
         field.save("test_field.h5")
         field2 = load("test_field.h5")
-        assert field.eq(field2)
+        assert field.equiv(field2)
 
     @pytest.mark.unit
     def test_fourier_current_potential_field_asserts(self):

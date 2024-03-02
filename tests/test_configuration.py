@@ -31,7 +31,7 @@ class TestConstructor:
         assert eq.M == 1
         assert eq.N == 0
         assert eq.sym is False
-        assert eq.surface.eq(FourierRZToroidalSurface(sym=False))
+        assert eq.surface.equiv(FourierRZToroidalSurface(sym=False))
         assert isinstance(eq.pressure, PowerSeriesProfile)
         assert isinstance(eq.current, PowerSeriesProfile)
         np.testing.assert_allclose(eq.p_l, [0])
@@ -54,8 +54,8 @@ class TestConstructor:
             sym=False,
         )
 
-        assert eq.pressure.eq(pressure)
-        assert eq.iota.eq(iota)
+        assert eq.pressure.equiv(pressure)
+        assert eq.iota.equiv(iota)
         assert eq.spectral_indexing == "ansi"
         assert eq.NFP == 2
         assert eq.axis.NFP == 2
@@ -65,7 +65,7 @@ class TestConstructor:
 
         surface2 = ZernikeRZToroidalSection(spectral_indexing="ansi")
         eq2 = Equilibrium(surface=surface2)
-        assert eq2.surface.eq(surface2)
+        assert eq2.surface.equiv(surface2)
 
         surface3 = FourierRZToroidalSurface(NFP=3)
         eq3 = Equilibrium(surface=surface3)

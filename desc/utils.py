@@ -222,8 +222,8 @@ def equals(a, b):
         if len(a) != len(b):
             return False
         return all([equals(a[i], b[i]) for i in range(len(a))])
-    if hasattr(a, "eq"):
-        return a.eq(b)
+    if hasattr(a, "equiv"):
+        return a.equiv(b)
     return a == b
 
 

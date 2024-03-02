@@ -336,7 +336,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
             basis = getattr(obj, c + "_basis")
             # first check if we already have a transform with a compatible basis
             for transform in transforms.values():
-                if basis.eq(getattr(transform, "basis", None)):
+                if basis.equiv(getattr(transform, "basis", None)):
                     ders = np.unique(
                         np.vstack([derivs[c], transform.derivatives]), axis=0
                     ).astype(int)

@@ -1,4 +1,4 @@
-By default, DESC saves to in the hdf5 self-describing binary format [1]_, [2]_
+By default, DESC saves to the hdf5 self-describing binary format [1]_, [2]_
 (".h5" file extension). The file contains all information necessary to reconstruct
 the python object that was saved. The file structure will depend slightly upon which
 object was saved (all objects in DESC have a ``save`` method), but generally all
@@ -59,7 +59,7 @@ reconstruction of the object(s) saved within. Some data may not be saved (fields
 in ``_io_attrs_``), generally things that require large amounts of memory but are
 trivially recomputable (i.e., transform matrices).
 
-DESC also has the option of saving to pythons standard binary format, known as
+DESC also has the option of saving to python's standard binary format, known as
 ``pickle`` [3]_ (".pkl" file extension). The internal structure of this is somewhat
 more complicated than hdf5 and is meant only for saving and loading data between
 python environments.

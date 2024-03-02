@@ -332,14 +332,14 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
     derivs = get_derivs(keys, obj, has_axis=grid.axis.size)
     transforms = {"grid": grid}
     for c in derivs.keys():
-        if hasattr(obj, c + "_basis"):
+        if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
             basis = getattr(obj, c + "_basis")
             # first check if we already have a transform with a compatible basis
             for transform in transforms.values():
                 if basis.eq(getattr(transform, "basis", None)):
                     ders = np.unique(
                         np.vstack([derivs[c], transform.derivatives]), axis=0
-                    )
+                    ).astype(int)
                     # don't build until we know all the derivs we need
                     transform.change_derivatives(ders, build=False)
                     c_transform = transform
@@ -353,7 +353,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     method=method,
                 )
             transforms[c] = c_transform
-        elif c == "B":
+        elif c == "B":  # for fitting Boozer harmonics
             transforms["B"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -367,7 +367,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c == "w":
+        elif c == "w":  # for fitting Boozer toroidal stream function
             transforms["w"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -381,7 +381,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c not in transforms:
+        elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
 
     # now build them

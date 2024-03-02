@@ -82,7 +82,6 @@ class Transform(IOAble):
         self._method = method
         # assign according to logic in setter function
         self.method = method
-        self._matrices = self._get_matrices()
         if build:
             self.build()
         if build_pinv:
@@ -374,6 +373,8 @@ class Transform(IOAble):
             self._built = True
             return
 
+        self._matrices = self._get_matrices()
+
         if self.method == "direct1":
             for d in self.derivatives:
                 self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
@@ -389,7 +390,7 @@ class Transform(IOAble):
         if self.method in ["fft", "direct2"]:
             temp_d = np.hstack(
                 [self.derivatives[:, :2], np.zeros((len(self.derivatives), 1))]
-            )
+            ).astype(int)
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             for d in temp_d:
                 self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
@@ -398,7 +399,7 @@ class Transform(IOAble):
         if self.method == "direct2":
             temp_d = np.hstack(
                 [np.zeros((len(self.derivatives), 2)), self.derivatives[:, 2:]]
-            )
+            ).astype(int)
             temp_modes = np.hstack(
                 [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
             )

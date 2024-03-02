@@ -1493,14 +1493,14 @@ def field_line_integrate(
 class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
-        surface current K is assumed given by
-         K = n x ∇ Φ
-        where:
-               n is the winding surface unit normal.
-               Phi is the current potential function,
-                which is a function of theta and zeta.
-        This function then uses biot-savart to find the
-        B field from this current density K on the surface.
+    Surface current K is assumed given by K = n x ∇ Φ
+    where:
+
+        - n is the winding surface unit normal.
+        - Phi is the current potential function, which is a function of theta and zeta.
+
+    This function then uses biot-savart to find the B field from this current
+    density K on the surface.
 
     Parameters
     ----------
@@ -1636,7 +1636,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     def save(self, file_name, file_format=None, file_mode="w"):
         """Save the object.
 
-        **Not supported for this object!
+        **Not supported for this object!**
 
         Parameters
         ----------
@@ -1752,19 +1752,20 @@ class FourierCurrentPotentialField(
 ):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
-        surface current K is assumed given by
+    Surface current K is assumed given by
 
-        K = n x ∇ Φ
-        Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+    K = n x ∇ Φ
 
-        where:
-              n is the winding surface unit normal.
-              Phi is the current potential function,
-                which is a function of theta and zeta,
-                and is given as a secular linear term in theta/zeta
-                and a double Fourier series in theta/zeta.
-        This function then uses biot-savart to find the
-        B field from this current density K on the surface.
+    Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
+
+    where:
+        - n is the winding surface unit normal.
+        - Phi is the current potential function, which is a function of theta and zeta,
+          and is given as a secular linear term in theta/zeta and a double Fourier
+          series in theta/zeta.
+
+    This function then uses biot-savart to find the B field from this current
+    density K on the surface.
 
     Parameters
     ----------

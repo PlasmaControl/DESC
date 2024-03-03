@@ -14,6 +14,13 @@ in the MAKEGRID format for use with other codes.
 - When converting a near axis solution from QSC/QIC to a desc ``Equilibrium``, the
 least squares fit is now weighted inversely with the distance from the axis to improve
 the accuracy for low aspect ratio.
+- Adds a bounding box to the `field_line_integrate` defined by `bounds_R` and `bounds_Z`
+keyword arguments, which form a hollow cylindrical bounding box. If the field line 
+trajectory exits these bounds, the RHS will be multiplied by an exponentially decaying 
+function of the distance to the box to stop the trajectory and prevent tracing the field 
+line out to infinity, which is both costly and unnecessary when making a Poincare plot, 
+the principle purpose of the function.
+
 
 Speed Improvements
 
@@ -40,7 +47,8 @@ mesh. Previously they were saved on the full mesh.
 - Fixed incorrect rotation matrix for `FourierPlanarCurve`.
 - Fixed bug where ``plot_boundaries`` with a single ``phi`` value would return an
 empty plot.
-
+- Renames the method for comparing equivalence between DESC objects from `eq` to `equiv`
+to avoid confusion with the common shorthand for `Equilibrium`.
 
 
 v0.10.4

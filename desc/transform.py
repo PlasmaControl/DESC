@@ -82,7 +82,6 @@ class Transform(IOAble):
         self._method = method
         # assign according to logic in setter function
         self.method = method
-        self._matrices = self._get_matrices()
         if build:
             self.build()
         if build_pinv:
@@ -134,13 +133,14 @@ class Transform(IOAble):
 
     def _get_matrices(self):
         """Get matrices to compute all derivatives."""
-        n = np.amax(self.derivatives) + 1
+        n = 4  # hardcode max derivative order for now,
         matrices = {
             "direct1": {
-                i: {j: {k: {} for k in range(n)} for j in range(n)} for i in range(n)
+                i: {j: {k: {} for k in range(n + 1)} for j in range(n + 1)}
+                for i in range(n + 1)
             },
-            "fft": {i: {j: {} for j in range(n)} for i in range(n)},
-            "direct2": {i: {} for i in range(n)},
+            "fft": {i: {j: {} for j in range(n + 1)} for i in range(n + 1)},
+            "direct2": {i: {} for i in range(n + 1)},
         }
         return matrices
 
@@ -389,7 +389,7 @@ class Transform(IOAble):
         if self.method in ["fft", "direct2"]:
             temp_d = np.hstack(
                 [self.derivatives[:, :2], np.zeros((len(self.derivatives), 1))]
-            )
+            ).astype(int)
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             for d in temp_d:
                 self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
@@ -398,7 +398,7 @@ class Transform(IOAble):
         if self.method == "direct2":
             temp_d = np.hstack(
                 [np.zeros((len(self.derivatives), 2)), self.derivatives[:, 2:]]
-            )
+            ).astype(int)
             temp_modes = np.hstack(
                 [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
             )
@@ -645,11 +645,11 @@ class Transform(IOAble):
         if basis is None:
             basis = self.basis
 
-        if not self.grid.eq(grid):
+        if not self.grid.equiv(grid):
             self._grid = grid
             self._built = False
             self._built_pinv = False
-        if not self.basis.eq(basis):
+        if not self.basis.equiv(basis):
             self._basis = basis
             self._built = False
             self._built_pinv = False
@@ -666,7 +666,7 @@ class Transform(IOAble):
 
     @grid.setter
     def grid(self, grid):
-        if not self.grid.eq(grid):
+        if not self.grid.equiv(grid):
             self._grid = grid
             if self.method == "fft":
                 self._check_inputs_fft(self.grid, self.basis)
@@ -686,7 +686,7 @@ class Transform(IOAble):
 
     @basis.setter
     def basis(self, basis):
-        if not self.basis.eq(basis):
+        if not self.basis.equiv(basis):
             self._basis = basis
             if self.method == "fft":
                 self._check_inputs_fft(self.grid, self.basis)

@@ -173,7 +173,6 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-
         constraints = get_fixed_axis_constraints(
             profiles=False, eq=eq
         ) + get_fixed_boundary_constraints(eq=eq)
@@ -181,7 +180,7 @@ class VMECIO:
         objective = ObjectiveFunction(constraints)
         objective.build(verbose=0)
         _, _, _, _, _, project, recover = factorize_linear_constraints(
-            constraints, objective
+            objective, objective
         )
         args = objective.unpack_state(recover(project(objective.x(eq))), False)[0]
         eq.params_dict = args

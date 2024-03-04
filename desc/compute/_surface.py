@@ -474,14 +474,14 @@ def _e_theta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
     transforms={},
     profiles=[],
     coordinates="tz",
-    data=["R_tz", "Z_tz"],
+    data=["R_tz", "Z_tz", "R_t"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_theta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     dR = data["R_tz"]
     dZ = data["Z_tz"]
-    dphi = jnp.zeros(transforms["grid"].num_nodes)
+    dphi = data["R_t"]
     coords = jnp.stack([dR, dphi, dZ], axis=1)
     if kwargs.get("basis", "rpz").lower() == "xyz":
         coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
@@ -547,14 +547,14 @@ def _e_zeta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
     transforms={},
     profiles=[],
     coordinates="tz",
-    data=["R_tz", "Z_tz"],
+    data=["R_tz", "Z_tz", "R_t"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
 def _e_zeta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     dR = data["R_tz"]
     dZ = data["Z_tz"]
-    dphi = jnp.zeros(transforms["grid"].num_nodes)
+    dphi = data["R_t"]
     coords = jnp.stack([dR, dphi, dZ], axis=1)
     if kwargs.get("basis", "rpz").lower() == "xyz":
         coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])

@@ -1035,6 +1035,34 @@ def test_metric_derivatives(DummyStellarator):
         )
 
 
+@pytest.mark.unit
+def test_surface_basis_vectors_eq_versus_surface(DummyStellarator):
+    """Compare surface basis vectors from eq.compute and surface.compute."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+
+    # TODO: expand this to include all angular derivatives once they are implemented
+    # for surfaces
+    basis_vectors = [
+        "e_theta",
+        "e_zeta",
+        "e_theta_t",
+        "e_theta_z",
+        "e_zeta_t",
+        "e_zeta_z",
+    ]
+
+    # compare at rho=1, where we expect the eq.compute and the
+    # surface.compute to agree for these surface basis vectors
+    grid = LinearGrid(rho=np.array(1.0), M=10, N=10, NFP=eq.NFP)
+    data_eq = eq.compute(basis_vectors, grid=grid)
+    data_surf = eq.surface.compute(basis_vectors, grid=grid, basis="rpz")
+
+    for thing in basis_vectors:
+        np.testing.assert_allclose(
+            data_eq[thing], data_surf[thing], err_msg=thing, rtol=1e-12, atol=1e-15
+        )
+
+
 @pytest.mark.slow
 @pytest.mark.unit
 def test_magnetic_pressure_gradient(DummyStellarator):

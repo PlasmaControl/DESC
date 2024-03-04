@@ -1,4 +1,5 @@
 """Functions to convert DESC or VMEC output files into .csv files for the Datbase."""
+# flake8: noqa
 import csv
 import os
 from datetime import date
@@ -113,7 +114,7 @@ def desc_to_csv(  # noqa
     ############ DESC_runs Data Table ############
     # FIXME: what to do for these?
     data_desc_runs[
-        "desc_run_ID"
+        "descrunid"
     ] = None  # FIXME what should this be? how to hash? commit ID?
     data_desc_runs["configid"] = name  # FIXME what should this be? how to hash?
 
@@ -189,14 +190,14 @@ def desc_to_csv(  # noqa
 
     today = date.today()
     data_desc_runs["date_created"] = kwargs.get("date_created", today)
-    data_desc_runs["user_created"] = kwargs.get(
-        "user_created", None
-    )  # FIXME: what is this?
+    # data_desc_runs["user_created"] = kwargs.get(
+    #     "user_created", None
+    # )  # FIXME: what is this?
     data_desc_runs["date_updated"] = kwargs.get("date_updated", today)
-    data_desc_runs["user_updated"] = kwargs.get(
-        "user_updated", None
-    )  # FIXME: what is this?
-    data_desc_runs["publicationid"] = kwargs.get("publicationid", None)
+    # data_desc_runs["user_updated"] = kwargs.get(
+    #     "user_updated", None
+    # )  # FIXME: what is this?
+    # data_desc_runs["publicationid"] = kwargs.get("publicationid", None)
 
     ############ configuration Data Table ############
     data_configurations["configid"] = name  # FIXME what should this be? how to hash?
@@ -303,13 +304,13 @@ def desc_to_csv(  # noqa
         data_configurations["current_profile_data2"] = None
 
     data_configurations["date_created"] = kwargs.get("date_created", today)
-    data_configurations["user_created"] = kwargs.get(
-        "user_created", None
-    )  # FIXME: what is this?
+    # data_configurations["user_created"] = kwargs.get(
+    #     "user_created", None
+    # )  # FIXME: what is this?
     data_configurations["date_updated"] = kwargs.get("date_updated", today)
-    data_configurations["user_updated"] = kwargs.get(
-        "user_updated", None
-    )  # FIXME: what is this?
+    # data_configurations["user_updated"] = kwargs.get(
+    #     "user_updated", None
+    # )  # FIXME: what is this?
 
     csv_columns_desc_runs = list(data_desc_runs.keys())
     csv_columns_desc_runs.sort()

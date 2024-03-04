@@ -42,8 +42,8 @@ for root, dirs, files in os.walk("desc/examples"):
                 if file.find(name) != -1:
                     inputs[name] = file
 for name in names:
-    # if "SOLOVEV" not in name or "CURRENT" in name:
-    #     continue
+    if "SOLOVEV" not in name or "CURRENT" in name:
+        continue
     try:
         used_current = is_current[name]
     except KeyError:

@@ -611,7 +611,9 @@ def _x_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwargs
     coords = jnp.stack([data_surf["R"], data_surf["phi"], data_surf["Z"]], axis=1)
     # convert to xyz for displacement and rotation
     coords = rpz2xyz(coords)
-    coords = coords @ params["rotmat"].T + params["shift"][jnp.newaxis, :]
+    coords = (
+        coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
+    )
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz(coords)
     data["x"] = coords
@@ -688,7 +690,7 @@ def _x_s_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwar
     )
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=data_surf["phi"])
-    coords = coords @ params["rotmat"].T
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(coords, phi=data_surf["phi"])
     data["x_s"] = coords
@@ -811,7 +813,7 @@ def _x_ss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kwa
     )
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=data_surf["phi"])
-    coords = coords @ params["rotmat"].T
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(coords, phi=data_surf["phi"])
     data["x_ss"] = coords
@@ -999,7 +1001,7 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
     )
     # convert to xyz for displacement and rotation
     coords = rpz2xyz_vec(coords, phi=data_surf["phi"])
-    coords = coords @ params["rotmat"].T
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(coords, phi=data_surf["phi"])
     data["x_sss"] = coords

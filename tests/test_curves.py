@@ -333,23 +333,23 @@ class TestRZWindingSurfaceCurve:
     @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting misc attributes of FourierRZWindingSurfaceCurve."""
-        c = FourierRZWindingSurfaceCurve()
+        c = FourierRZWindingSurfaceCurve(sym_theta="cos", sym_zeta="cos")
 
         theta_n, zeta_n = c.get_coeffs(0)
         np.testing.assert_allclose(theta_n, 0)
         np.testing.assert_allclose(zeta_n, 0)
-        c.set_coeffs(0, 5, None)
+        c.set_coeffs(0, 5, 1)
         np.testing.assert_allclose(c.theta_n, [5])
-        np.testing.assert_allclose(c.zeta_n, [])
+        np.testing.assert_allclose(c.zeta_n, [1])
 
         s = c.copy()
-        assert s.eq(c)
+        assert s.equiv(c)
 
         c.change_resolution(5)
         assert c.N == 5
-        c.set_coeffs(-1, None, 2)
+        c.set_coeffs(5, None, 2)
         np.testing.assert_allclose(c.theta_n, [5, 0, 0, 0, 0, 0])
-        np.testing.assert_allclose(c.zeta_n, [0, 0, 0, 0, 2])
+        np.testing.assert_allclose(c.zeta_n, [1, 0, 0, 0, 0, 2])
 
         with pytest.raises(ValueError):
             c.theta_n = s.theta_n
@@ -362,10 +362,10 @@ class TestRZWindingSurfaceCurve:
         assert "FourierRZWindingSurfaceCurve" in str(c)
         assert c.sym
 
-        c.NFP = 3
+        c.change_resolution(NFP=3)
         assert c.NFP == 3
-        assert c.R_basis.NFP == 3
-        assert c.Z_basis.NFP == 3
+        assert c.theta_basis.NFP == 3
+        assert c.zeta_basis.NFP == 3
 
     @pytest.mark.unit
     def test_asserts(self):
@@ -385,7 +385,7 @@ class TestRZWindingSurfaceCurve:
         tmp_path = tmpdir.join("windingsurfacecurve.h5")
         c.save(tmp_path)
         c2 = load(tmp_path)
-        assert c.eq(c2)
+        assert c.equiv(c2)
         # the curve is a toroidally closed curve at constant theta
         # check it correctly computes coords after load
         x, y, z = c.compute("x", grid=0, basis="xyz")["x"].T

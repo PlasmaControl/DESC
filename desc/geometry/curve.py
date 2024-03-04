@@ -1012,7 +1012,9 @@ class FourierRZWindingSurfaceCurve(Curve):
             or (sym is not None)
             and (sym != self.sym)
         ):
-            self._NFP = int(NFP if NFP is not None else self.NFP)
+            self._surface.change_resolution(
+                NFP=int(NFP if NFP is not None else self.NFP)
+            )
             self._sym = sym if sym is not None else self.sym
             N = int(N if N is not None else self.N)
             theta_modes_old = self.theta_basis.modes

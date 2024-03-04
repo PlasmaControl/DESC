@@ -170,19 +170,21 @@ If the 2nd case is the reason, then you must update the ``master_compute_data.pk
 -  First , run the test with ``pytest tests -k test_compute_everything`` and inspect the compute quantities whose values are in error, to ensure that only the quantities you expect to be different are shown (and that the new values are indeed the correct ones, you should have a test elsewhere for that though).
 -  If the values are as expected and only the expected compute quantities are different, then change the block
 
-```python
-except AssertionError as e:
-    error = True
-    print(e)
-```
+.. code-block:: python
+
+   except AssertionError as e:
+      error = True
+       print(e)
+
 with
 
-```python
-except AssertionError as e:
-    error = False
-    update_master_data = True
-    print(e)
-```
+.. code-block:: python
+
+   except AssertionError as e:
+      error = False
+      update_master_data = True
+       print(e)
+
 
 -  rerun the test  ``pytest tests -k test_compute_everything`` , now any compute quantity that is different between the PR and master will be updated with the PR value
 -  ``git restore tests/test_compute_funs.py`` to remove the change you made to the test

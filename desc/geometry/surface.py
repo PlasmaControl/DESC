@@ -13,7 +13,7 @@ from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, isposint
+from desc.utils import copy_coeffs, isposint, setdefault
 
 from .core import Surface
 
@@ -36,6 +36,9 @@ class FourierRZToroidalSurface(Surface):
     sym : bool
         whether to enforce stellarator symmetry. Default is "auto" which enforces if
         modes are symmetric. If True, non-symmetric modes will be truncated.
+    M, N: int or None
+        Maximum poloidal and toroidal mode numbers. Defaults to maximum from modes_R
+        and modes_Z.
     rho : float [0,1]
         flux surface label for the toroidal surface
     name : str
@@ -64,6 +67,8 @@ class FourierRZToroidalSurface(Surface):
         modes_Z=None,
         NFP=1,
         sym="auto",
+        M=None,
+        N=None,
         rho=1,
         name="",
         check_orientation=True,
@@ -96,8 +101,8 @@ class FourierRZToroidalSurface(Surface):
         MZ = np.max(abs(modes_Z[:, 0]))
         NZ = np.max(abs(modes_Z[:, 1]))
         self._L = 0
-        self._M = max(MR, MZ)
-        self._N = max(NR, NZ)
+        self._M = setdefault(M, max(MR, MZ))
+        self._N = setdefault(N, max(NR, NZ))
         if sym == "auto":
             if np.all(
                 R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
@@ -109,10 +114,10 @@ class FourierRZToroidalSurface(Surface):
                 sym = False
 
         self._R_basis = DoubleFourierSeries(
-            M=MR, N=NR, NFP=NFP, sym="cos" if sym else False
+            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
         )
         self._Z_basis = DoubleFourierSeries(
-            M=MZ, N=NZ, NFP=NFP, sym="sin" if sym else False
+            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
         )
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
@@ -158,6 +163,8 @@ class FourierRZToroidalSurface(Surface):
     @property
     def rho(self):
         """float: Flux surface label."""
+        if not (hasattr(self, "_rho")) or self._rho is None:
+            self._rho = 1.0
         return self._rho
 
     @rho.setter
@@ -430,7 +437,7 @@ class FourierRZToroidalSurface(Surface):
         theta = np.asarray(theta)
         assert (
             coords.shape[0] == theta.size
-        ), "coords first dimenson and theta must have same size"
+        ), "coords first dimension and theta must have same size"
         if zeta is None:
             zeta = coords[:, 1]
         else:
@@ -642,6 +649,9 @@ class ZernikeRZToroidalSection(Surface):
         decreasing size, ending in a diamond shape for L=2*M where
         the traditional fringe/U of Arizona indexing is recovered.
         For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond
+    L, M : int or None
+        Maximum radial and poloidal mode numbers. Defaults to max from modes_R and
+        modes_Z.
     zeta : float [0,2pi)
         toroidal angle for the section.
     name : str
@@ -670,6 +680,8 @@ class ZernikeRZToroidalSection(Surface):
         modes_Z=None,
         spectral_indexing="ansi",
         sym="auto",
+        L=None,
+        M=None,
         zeta=0.0,
         name="",
         check_orientation=True,
@@ -700,8 +712,8 @@ class ZernikeRZToroidalSection(Surface):
         MR = np.max(abs(modes_R[:, 1]))
         LZ = np.max(abs(modes_Z[:, 0]))
         MZ = np.max(abs(modes_Z[:, 1]))
-        self._L = max(LR, LZ)
-        self._M = max(MR, MZ)
+        self._L = setdefault(L, max(LR, LZ))
+        self._M = setdefault(M, max(MR, MZ))
         self._N = 0
 
         if sym == "auto":
@@ -715,14 +727,14 @@ class ZernikeRZToroidalSection(Surface):
                 sym = False
 
         self._R_basis = ZernikePolynomial(
-            L=max(LR, MR),
-            M=max(LR, MR),
+            L=self._L,
+            M=self._M,
             spectral_indexing=spectral_indexing,
             sym="cos" if sym else False,
         )
         self._Z_basis = ZernikePolynomial(
-            L=max(LZ, MZ),
-            M=max(LZ, MZ),
+            L=self._L,
+            M=self._M,
             spectral_indexing=spectral_indexing,
             sym="sin" if sym else False,
         )

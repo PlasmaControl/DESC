@@ -336,15 +336,28 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
     derivs = get_derivs(keys, obj, has_axis=grid.axis.size)
     transforms = {"grid": grid}
     for c in derivs.keys():
-        if hasattr(obj, c + "_basis"):
-            transforms[c] = Transform(
-                grid,
-                getattr(obj, c + "_basis"),
-                derivs=derivs[c],
-                build=True,
-                method=method,
-            )
-        elif c == "B":
+        if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
+            basis = getattr(obj, c + "_basis")
+            # first check if we already have a transform with a compatible basis
+            for transform in transforms.values():
+                if basis.equiv(getattr(transform, "basis", None)):
+                    ders = np.unique(
+                        np.vstack([derivs[c], transform.derivatives]), axis=0
+                    ).astype(int)
+                    # don't build until we know all the derivs we need
+                    transform.change_derivatives(ders, build=False)
+                    c_transform = transform
+                    break
+            else:  # if we didn't exit the loop early
+                c_transform = Transform(
+                    grid,
+                    basis,
+                    derivs=derivs[c],
+                    build=False,
+                    method=method,
+                )
+            transforms[c] = c_transform
+        elif c == "B":  # for fitting Boozer harmonics
             transforms["B"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -354,11 +367,11 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     sym=obj.R_basis.sym,
                 ),
                 derivs=derivs["B"],
-                build=True,
+                build=False,
                 build_pinv=True,
                 method=method,
             )
-        elif c == "w":
+        elif c == "w":  # for fitting Boozer toroidal stream function
             transforms["w"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -368,12 +381,17 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     sym=obj.Z_basis.sym,
                 ),
                 derivs=derivs["w"],
-                build=True,
+                build=False,
                 build_pinv=True,
                 method=method,
             )
-        elif c not in transforms:
+        elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
+
+    # now build them
+    for t in transforms.values():
+        if hasattr(t, "build"):
+            t.build()
 
     return transforms
 
@@ -1351,35 +1369,3 @@ def surface_min(grid, x, surface_label="rho"):
     # The above implementation was benchmarked to be more efficient than
     # alternatives without explicit loops in GitHub pull request #501.
     return grid.expand(mins, surface_label)
-
-
-# defines the order in which objective arguments get concatenated into the state vector
-arg_order = (
-    "R_lmn",
-    "Z_lmn",
-    "L_lmn",
-    "p_l",
-    "i_l",
-    "c_l",
-    "Psi",
-    "Te_l",
-    "ne_l",
-    "Ti_l",
-    "Zeff_l",
-    "a_lmn",
-    "Ra_n",
-    "Za_n",
-    "Rb_lmn",
-    "Zb_lmn",
-)
-# map from profile name to equilibrium parameter name
-profile_names = {
-    "pressure": "p_l",
-    "iota": "i_l",
-    "current": "c_l",
-    "electron_temperature": "Te_l",
-    "electron_density": "ne_l",
-    "ion_temperature": "Ti_l",
-    "atomic_number": "Zeff_l",
-    "anisotropy": "a_lmn",
-}

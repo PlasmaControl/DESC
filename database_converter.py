@@ -13,11 +13,6 @@ from desc.io.hdf5_io import hdf5Reader
 from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
 
 
-def get_DESC_runid(eq):  # or take in the data from a DESC eq?
-    """Take in a DESC equilibrium and return a unique hash for the run."""
-    return None
-
-
 def get_config_hash(eq):  # or take in the data from a DESC eq?
     """Take in a DESC equilibrium and return a unique hash for the configuration."""
     # what to do? first 10 bdry modes and their strengths?
@@ -46,6 +41,8 @@ def desc_to_csv(  # noqa
     description=None,
     inputfilename=None,
     initialization_method="surface",
+    user_created=None,
+    user_updated=None,
     **kwargs,
 ):
     """Save DESC output file as a csv with relevant information.
@@ -113,9 +110,6 @@ def desc_to_csv(  # noqa
 
     ############ DESC_runs Data Table ############
     # FIXME: what to do for these?
-    data_desc_runs[
-        "descrunid"
-    ] = None  # FIXME what should this be? how to hash? commit ID?
     data_desc_runs["configid"] = name  # FIXME what should this be? how to hash?
 
     # FIXME: Defaults for these?
@@ -190,14 +184,13 @@ def desc_to_csv(  # noqa
 
     today = date.today()
     data_desc_runs["date_created"] = kwargs.get("date_created", today)
-    # data_desc_runs["user_created"] = kwargs.get(
-    #     "user_created", None
-    # )  # FIXME: what is this?
     data_desc_runs["date_updated"] = kwargs.get("date_updated", today)
-    # data_desc_runs["user_updated"] = kwargs.get(
-    #     "user_updated", None
-    # )  # FIXME: what is this?
+    if user_created is not None:
+        data_desc_runs["user_created"] = user_created
+    if user_updated is not None:
+        data_desc_runs["user_updated"] = user_updated
     # data_desc_runs["publicationid"] = kwargs.get("publicationid", None)
+    # FIXME: publicationid should exist in the database
 
     ############ configuration Data Table ############
     data_configurations["configid"] = name  # FIXME what should this be? how to hash?
@@ -304,13 +297,11 @@ def desc_to_csv(  # noqa
         data_configurations["current_profile_data2"] = None
 
     data_configurations["date_created"] = kwargs.get("date_created", today)
-    # data_configurations["user_created"] = kwargs.get(
-    #     "user_created", None
-    # )  # FIXME: what is this?
     data_configurations["date_updated"] = kwargs.get("date_updated", today)
-    # data_configurations["user_updated"] = kwargs.get(
-    #     "user_updated", None
-    # )  # FIXME: what is this?
+    if user_created is not None:
+        data_configurations["user_created"] = user_created
+    if user_updated is not None:
+        data_configurations["user_updated"] = user_updated
 
     csv_columns_desc_runs = list(data_desc_runs.keys())
     csv_columns_desc_runs.sort()

@@ -65,6 +65,8 @@ for name in names:
         inputfilename=inputs[name],
         current=used_current,
         deviceid=device,
-        config_class=sym_class
+        config_class=sym_class,
+        user_updated="yge",
+        user_created="dpanici",
         # TODO: Add config class (symmetry)
     )

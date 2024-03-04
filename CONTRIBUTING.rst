@@ -167,7 +167,7 @@ The three main reasons this could occur are:
 
 If the 2nd case is the reason, then you must update the ``master_compute_data.pkl`` file with the correct quantities being computed by your PR:
 
--  First , run the test with ``pytest tests -k test_compute_everything`` and inspect the compute quantities whose values are in error, to ensure that only the quantities you expect to be different are shown (and that the new values are indeed the correct ones, you should have a test elsewhere for that though).
+-  First, run the test with ``pytest tests -k test_compute_everything`` and inspect the compute quantities whose values are in error, to ensure that only the quantities you expect to be different are shown (and that the new values are indeed the correct ones, you should have a test elsewhere for that though).
 -  If the values are as expected and only the expected compute quantities are different, then replace the block
 
 .. code-block:: python
@@ -186,7 +186,7 @@ with
        print(e)
 
 
--  rerun the test  ``pytest tests -k test_compute_everything`` , now any compute quantity that is different between the PR and master will be updated with the PR value
+-  rerun the test ``pytest tests -k test_compute_everything``, now any compute quantity that is different between the PR and master will be updated with the PR value
 -  ``git restore tests/test_compute_funs.py`` to remove the change you made to the test
 -  ``git add tests/inputs/master_compute_data.pkl`` and commit to commit the new data file
 

@@ -271,6 +271,7 @@ class VMECIO:
             np.array([" " * 100], "S" + str(file.dimensions["dim_00100"].size))
         )  # VMEC input filename: input.[input_extension]
 
+        # TODO: instead of hard-coding for fixed-boundary, allow for free-boundary?
         mgrid_mode = file.createVariable("mgrid_mode", "S1", ("dim_00001",))
         mgrid_mode[:] = stringtochar(
             np.array([""], "S" + str(file.dimensions["dim_00001"].size))
@@ -480,7 +481,7 @@ class VMECIO:
         chipf.long_name = "d(chi)/ds: poloidal flux derivative"
         chipf[:] = phipf[:] * iotaf[:]
 
-        # scalars on Quadrature grid
+        # scalars computed on a Quadrature grid
         data = eq.compute(
             ["R0/a", "V", "<|B|>_rms", "<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"]
         )
@@ -525,7 +526,7 @@ class VMECIO:
         betator.units = "None"
         betator[:] = data["<beta_tor>_vol"]
 
-        # scalars at last closed flux surface
+        # scalars computed at the last closed flux surface
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=NFP)
         data = eq.compute(["G", "I"], grid=grid)
 
@@ -539,7 +540,7 @@ class VMECIO:
         rbtor.units = "T*m"
         rbtor[:] = data["G"][0]
 
-        # scalars at the magnetic axis
+        # scalars computed at the magnetic axis
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
         data = eq.compute(["G", "p", "R", "<|B|^2>"], grid=grid)
 

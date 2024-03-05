@@ -552,15 +552,9 @@ class VMECIO:
             ["<|B|^2>", "<J*B>", "sqrt(g)", "J^theta*sqrt(g)", "J^zeta", "D_Mercier"],
             grid=grid_full,
         )
-        data_half = eq.compute(["I", "G"], grid=grid_half)
+        data_half = eq.compute(["I", "G", "V_r(r)"], grid=grid_half)
 
-        bdotb = file.createVariable("bdotb", np.float64, ("radius",))
-        bdotb.long_name = "flux surface average of magnetic field squared, on full mesh"
-        bdotb.units = "T^2"
-        bdotb[:] = grid_full.compress(data_full["<|B|^2>"])
-        bdotb[0] = 0
-
-        # currents
+        # half mesh quantities
         buco = file.createVariable("buco", np.float64, ("radius",))
         buco.long_name = "Boozer toroidal current I, on half mesh"
         buco.units = "T*m"
@@ -572,6 +566,21 @@ class VMECIO:
         bvco.units = "T*m"
         bvco[1:] = grid_half.compress(data_half["G"])
         bvco[0] = 0
+
+        vp = file.createVariable("vp", np.float64, ("radius",))
+        vp.long_name = "dV/ds normalized by 4*pi^2, on half mesh"
+        vp.units = "m^3"
+        vp[1:] = grid_half.compress(data_half["V_r(r)"]) / (
+            8 * np.pi**2 * grid_half.compress(data_half["rho"])
+        )
+        vp[0] = 0
+
+        # full mesh quantities
+        bdotb = file.createVariable("bdotb", np.float64, ("radius",))
+        bdotb.long_name = "flux surface average of magnetic field squared, on full mesh"
+        bdotb.units = "T^2"
+        bdotb[:] = grid_full.compress(data_full["<|B|^2>"])
+        bdotb[0] = 0
 
         jdotb = file.createVariable("jdotb", np.float64, ("radius",))
         jdotb.long_name = "flux surface average of J*B, on full mesh"
@@ -1282,10 +1291,6 @@ class VMECIO:
 
         specw = file.createVariable("specw", np.float64, ("radius",))
         specw[:] = np.zeros((file.dimensions["radius"].size,))
-
-        # this is not the same as DESC's "V(r)"
-        vp = file.createVariable("vp", np.float64, ("radius",))
-        vp[:] = np.zeros((file.dimensions["radius"].size,))
 
         # this is not the same as DESC's "W_B"
         wb = file.createVariable("wb", np.float64)

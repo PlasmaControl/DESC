@@ -515,11 +515,6 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["bdotb"][20:100]),
-        np.abs(desc.variables["bdotb"][20:100]),
-        rtol=1e-6,
-    )
-    np.testing.assert_allclose(
         np.abs(vmec.variables["buco"][20:100]),
         np.abs(desc.variables["buco"][20:100]),
         rtol=1e-5,
@@ -528,6 +523,16 @@ def test_vmec_save_1(VMEC_save):
         np.abs(vmec.variables["bvco"][20:100]),
         np.abs(desc.variables["bvco"][20:100]),
         rtol=1e-5,
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["vp"][20:100]),
+        np.abs(desc.variables["vp"][20:100]),
+        rtol=1e-6,
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["bdotb"][20:100]),
+        np.abs(desc.variables["bdotb"][20:100]),
+        rtol=1e-6,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["jdotb"][20:100]),

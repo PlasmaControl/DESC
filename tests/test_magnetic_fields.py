@@ -426,7 +426,7 @@ class TestMagneticFields:
         with pytest.raises(ValueError):
             field.Phi_mn = np.ones((basis.num_modes + 1,))
 
-    def test_io_fourier_current_field(self):
+    def test_io_fourier_current_field(self, tmpdir_factory):
         """Test that i/o works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
             R_lmn=jnp.array([10, 1]),
@@ -448,8 +448,9 @@ class TestMagneticFields:
             modes_Z=surface._Z_basis.modes[:, 1:],
             NFP=10,
         )
-        field.save("test_field.h5")
-        field2 = load("test_field.h5")
+        tmpdir = tmpdir_factory.mktemp("test_io_fourier_current_field")
+        field.save(tmpdir.join("test_field.h5"))
+        field2 = load(tmpdir.join("test_field.h5"))
         assert field.equiv(field2)
 
     @pytest.mark.unit

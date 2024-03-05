@@ -255,7 +255,7 @@ def _e_rho_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs
     transforms={},
     profiles=[],
     coordinates="tz",
-    data=["R", "R_t", "Z_t"],
+    data=["R_t", "Z_t"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )
@@ -573,7 +573,7 @@ def _e_zeta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     transforms={},
     profiles=[],
     coordinates="tz",
-    data=["R", "R_z", "Z_z", "R_zz", "Z_zz"],
+    data=["R", "R_z", "R_zz", "Z_zz"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     basis="basis",
 )

@@ -360,6 +360,10 @@ class VMECIO:
         gamma.long_name = "compressibility index (0 = pressure prescribed)"
         gamma[:] = 0
 
+        nextcur = file.createVariable("nextcur", np.int32)
+        nextcur.long_name = "number of coils (external currents)"
+        nextcur[:] = 0
+
         # profiles
         # TODO: add option for saving spline profiles
         power_series = stringtochar(
@@ -476,70 +480,83 @@ class VMECIO:
         chipf.long_name = "d(chi)/ds: poloidal flux derivative"
         chipf[:] = phipf[:] * iotaf[:]
 
-        # geometric scalars
+        # scalars on Quadrature grid
+        data = eq.compute(
+            ["R0/a", "V", "<|B|>_rms", "<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"]
+        )
+
         Rmajor_p = file.createVariable("Rmajor_p", np.float64)
         Rmajor_p.long_name = "major radius"
         Rmajor_p.units = "m"
-        Rmajor_p[:] = eq.compute("R0")["R0"]
+        Rmajor_p[:] = data["R0"]
 
         Aminor_p = file.createVariable("Aminor_p", np.float64)
         Aminor_p.long_name = "minor radius"
         Aminor_p.units = "m"
-        Aminor_p[:] = eq.compute("a")["a"]
+        Aminor_p[:] = data["a"]
 
         aspect = file.createVariable("aspect", np.float64)
         aspect.long_name = "aspect ratio = R_major / A_minor"
         aspect.units = "None"
-        aspect[:] = eq.compute("R0/a")["R0/a"]
+        aspect[:] = data["R0/a"]
 
         volume_p = file.createVariable("volume_p", np.float64)
         volume_p.long_name = "plasma volume"
         volume_p.units = "m^3"
-        volume_p[:] = eq.compute("V")["V"]
+        volume_p[:] = data["V"]
 
         volavgB = file.createVariable("volavgB", np.float64)
         volavgB.long_name = "volume average magnetic field, root mean square"
         volavgB.units = "T"
-        volavgB[:] = eq.compute("<|B|>_rms")["<|B|>_rms"]
+        volavgB[:] = data["<|B|>_rms"]
 
         betatotal = file.createVariable("betatotal", np.float64)
         betatotal.long_name = "normalized plasma pressure"
         betatotal.units = "None"
-        betatotal[:] = eq.compute("<beta>_vol")["<beta>_vol"]
+        betatotal[:] = data["<beta>_vol"]
 
         betapol = file.createVariable("betapol", np.float64)
         betapol.long_name = "normalized poloidal plasma pressure"
         betapol.units = "None"
-        betapol[:] = eq.compute("<beta_pol>_vol")["<beta_pol>_vol"]
+        betapol[:] = data["<beta_pol>_vol"]
 
         betator = file.createVariable("betator", np.float64)
         betator.long_name = "normalized toroidal plasma pressure"
         betator.units = "None"
-        betator[:] = eq.compute("<beta_tor>_vol")["<beta_tor>_vol"]
+        betator[:] = data["<beta_tor>_vol"]
+
+        # scalars at last closed flux surface
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=NFP)
+        data = eq.compute(["G", "I"], grid=grid)
 
         ctor = file.createVariable("ctor", np.float64)
         ctor.long_name = "total toroidal plasma current"
         ctor.units = "A"
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=NFP)
-        ctor[:] = eq.compute("I", grid=grid)["I"][0] * 2 * np.pi / mu_0
+        ctor[:] = data["I"][0] * 2 * np.pi / mu_0
 
         rbtor = file.createVariable("rbtor", np.float64)
         rbtor.long_name = "<R*B_tor> on last closed flux surface"
         rbtor.units = "T*m"
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=NFP)
-        rbtor[:] = eq.compute("G", grid=grid)["G"][0]
+        rbtor[:] = data["G"][0]
+
+        # scalars at the magnetic axis
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
+        data = eq.compute(["G", "p", "R", "<|B|^2>"], grid=grid)
 
         rbtor0 = file.createVariable("rbtor0", np.float64)
         rbtor0.long_name = "<R*B_tor> on axis"
         rbtor0.units = "T*m"
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
-        rbtor0[:] = eq.compute("G", grid=grid)["G"][0]
+        rbtor0[:] = data["G"][0]
 
         b0 = file.createVariable("b0", np.float64)
         b0.long_name = "average B_tor on axis"
         b0.units = "T"
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
-        b0[:] = eq.compute("G", grid=grid)["G"][0] / eq.compute("R", grid=grid)["R"][0]
+        b0[:] = data["G"][0] / data["R"][0]
+
+        betaxis = file.createVariable("betaxis", np.float64)
+        betaxis.long_name = "2 * mu_0 * pressure / <|B|^2> on the magnetic axis"
+        betaxis.units = "None"
+        betaxis[:] = 2 * mu_0 * data["p"][0] / data["<|B|^2>"][0]
 
         # grids for computing radial profile data
         grid_full = LinearGrid(
@@ -552,7 +569,7 @@ class VMECIO:
             ["<|B|^2>", "<J*B>", "sqrt(g)", "J^theta*sqrt(g)", "J^zeta", "D_Mercier"],
             grid=grid_full,
         )
-        data_half = eq.compute(["I", "G", "V_r(r)"], grid=grid_half)
+        data_half = eq.compute(["I", "G", "<|B|^2>", "V_r(r)"], grid=grid_half)
 
         # half mesh quantities
         buco = file.createVariable("buco", np.float64, ("radius",))
@@ -568,6 +585,12 @@ class VMECIO:
         bvco.units = "T*m"
         bvco[1:] = grid_half.compress(data_half["G"])
         bvco[0] = 0
+
+        beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
+        beta_vol.long_name = "2 * mu_0 * pressure / <|B|^2>, on half mesh"
+        beta_vol.units = "None"
+        beta_vol[1:] = 2 * mu_0 * p_half / grid_half.compress(data_half["<|B|^2>"])
+        beta_vol[0] = 0.0
 
         vp = file.createVariable("vp", np.float64, ("radius",))
         vp.long_name = "dV/ds normalized by 4*pi^2, on half mesh"
@@ -1019,7 +1042,7 @@ class VMECIO:
         bsubsmns[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # Todo: evaluate current at rho=0 nodes instead of extrapolation
+        # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             bsubsmnc[:, :] = c
             bsubsmnc[0, :] = (
@@ -1155,7 +1178,7 @@ class VMECIO:
         currumnc[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # Todo: evaluate current at rho=0 nodes instead of extrapolation
+        # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currumns[:, :] = s
             currumns[0, :] = (
@@ -1209,7 +1232,7 @@ class VMECIO:
         currvmnc[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # Todo: evaluate current at rho=0 nodes instead of extrapolation
+        # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currvmns[:, :] = -s
             currumns[0, :] = -(
@@ -1218,21 +1241,6 @@ class VMECIO:
         timer.stop("J^zeta*sqrt(g)")
         if verbose > 1:
             timer.disp("J^zeta*sqrt(g)")
-
-        # beta_vol = 2 μ₀ p / ⟨|B|^2⟩
-        beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
-        beta_vol[0] = 0.0
-        beta_vol[1:] = 2 * mu_0 * p_half / half_grid.compress(data_half_grid["<|B|^2>"])
-        beta_vol.long_name = "2 * mu_0 * pressure / <|B|^2>, on half mesh"
-        beta_vol.units = "None"
-
-        # betaxis = beta_vol at the magnetic axis
-        betaxis = file.createVariable("betaxis", np.float64)
-        betaxis[:] = (
-            2 * mu_0 * p_full[0] / full_grid.compress(data_full_grid["<|B|^2>"])[0]
-        )
-        betaxis.long_name = "2 * mu_0 * pressure / <|B|^2> on the magnetic axis"
-        betaxis.units = "None"
 
         # TODO: these output quantities need to be added
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
@@ -1262,7 +1270,8 @@ class VMECIO:
         am_aux_s[:] = -np.ones((file.dimensions["ndfmax"].size,))
 
         extcur = file.createVariable("extcur", np.float64)
-        extcur[:] = 0.0
+        extcur.long_name = "external current?"
+        extcur[:] = np.nan  # VMEC gives nothing for fixed-boundary solutions
 
         fsql = file.createVariable("fsql", np.float64)
         fsql[:] = 1e-16
@@ -1281,9 +1290,6 @@ class VMECIO:
 
         itfsq = file.createVariable("itfsq", np.int32)
         itfsq[:] = 1
-
-        nextcur = file.createVariable("nextcur", np.int32)
-        nextcur[:] = 0
 
         niter = file.createVariable("niter", np.int32)
         niter[:] = 1

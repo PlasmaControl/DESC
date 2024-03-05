@@ -430,6 +430,7 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(vmec.variables["xn_nyq"][:], desc.variables["xn_nyq"][:])
     assert vmec.variables["signgs"][:] == desc.variables["signgs"][:]
     assert vmec.variables["gamma"][:] == desc.variables["gamma"][:]
+    assert vmec.variables["nextcur"][:] == desc.variables["nextcur"][:]
     assert np.all(
         np.char.compare_chararrays(
             vmec.variables["pmass_type"][:],

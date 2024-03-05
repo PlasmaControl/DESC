@@ -515,39 +515,25 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["buco"][20:100]),
-        np.abs(desc.variables["buco"][20:100]),
-        rtol=1e-5,
+        vmec.variables["buco"][20:100], desc.variables["buco"][20:100], rtol=1e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["bvco"][20:100]),
-        np.abs(desc.variables["bvco"][20:100]),
-        rtol=1e-5,
+        vmec.variables["bvco"][20:100], desc.variables["bvco"][20:100], rtol=1e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["vp"][20:100]),
-        np.abs(desc.variables["vp"][20:100]),
-        rtol=1e-6,
+        vmec.variables["vp"][20:100], desc.variables["vp"][20:100], rtol=1e-6
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["bdotb"][20:100]),
-        np.abs(desc.variables["bdotb"][20:100]),
-        rtol=1e-6,
+        vmec.variables["bdotb"][20:100], desc.variables["bdotb"][20:100], rtol=1e-6
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["jdotb"][20:100]),
-        np.abs(desc.variables["jdotb"][20:100]),
-        rtol=1e-5,
+        vmec.variables["jdotb"][20:100], desc.variables["jdotb"][20:100], rtol=1e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["jcuru"][20:100]),
-        np.abs(desc.variables["jcuru"][20:100]),
-        rtol=1e-2,
+        vmec.variables["jcuru"][20:100], desc.variables["jcuru"][20:100], rtol=1e-2
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["jcurv"][20:100]),
-        np.abs(desc.variables["jcurv"][20:100]),
-        rtol=3e-2,
+        vmec.variables["jcurv"][20:100], desc.variables["jcurv"][20:100], rtol=3e-2
     )
     np.testing.assert_allclose(
         vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=1e-2

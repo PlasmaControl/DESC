@@ -558,7 +558,9 @@ class VMECIO:
         buco = file.createVariable("buco", np.float64, ("radius",))
         buco.long_name = "Boozer toroidal current I, on half mesh"
         buco.units = "T*m"
-        buco[1:] = grid_half.compress(data_half["I"])
+        buco[1:] = -grid_half.compress(
+            data_half["I"]
+        )  # negative sign for negative Jacobian (opposite poloidal angle)
         buco[0] = 0
 
         bvco = file.createVariable("bvco", np.float64, ("radius",))
@@ -591,12 +593,12 @@ class VMECIO:
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^theta, on full mesh"
         jcuru.units = "A/m^3"
-        jcuru[:] = surface_averages(
+        jcuru[:] = -surface_averages(
             grid_full,
             data_full["J^theta*sqrt(g)"] / (2 * data_full["rho"]),
             sqrt_g=data_full["sqrt(g)"],
             expand_out=False,
-        )
+        )  # negative sign for negative Jacobian (opposite poloidal angle)
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))

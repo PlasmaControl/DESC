@@ -173,15 +173,14 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-
         constraints = get_fixed_axis_constraints(
             profiles=False, eq=eq
         ) + get_fixed_boundary_constraints(eq=eq)
         constraints = maybe_add_self_consistency(eq, constraints)
-        objective = ObjectiveFunction(constraints, verbose=0)
+        objective = ObjectiveFunction(constraints)
         objective.build(verbose=0)
         _, _, _, _, _, project, recover = factorize_linear_constraints(
-            constraints, objective
+            objective, objective
         )
         args = objective.unpack_state(recover(project(objective.x(eq))), False)[0]
         eq.params_dict = args
@@ -470,7 +469,7 @@ class VMECIO:
         chi[:] = (
             -2  # negative sign for negative Jacobian
             * Psi
-            * integrate.cumtrapz(r_full * iotaf[:], r_full, initial=0)
+            * integrate.cumulative_trapezoid(r_full * iotaf[:], r_full, initial=0)
         )
 
         chipf = file.createVariable("chipf", np.float64, ("radius",))

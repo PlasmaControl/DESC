@@ -205,7 +205,7 @@ class AutoDiffDerivative(_Derivative):
         """
         _ = kwargs.pop("rel_step", None)  # unused by autodiff
         argnum = (argnum,) if jnp.isscalar(argnum) else tuple(argnum)
-        v = (v,) if not isinstance(v, tuple) else v
+        v = (v,) if not isinstance(v, (tuple, list)) else v
 
         def _fun(*x):
             _args = list(args)
@@ -241,14 +241,14 @@ class AutoDiffDerivative(_Derivative):
 
         """
         if np.isscalar(argnum1):
-            v1 = (v1,) if not isinstance(v1, tuple) else v1
+            v1 = (v1,) if not isinstance(v1, (tuple, list)) else v1
             argnum1 = (argnum1,)
         else:
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
             argnum2 = (argnum2 + 1,)
-            v2 = (v2,) if not isinstance(v2, tuple) else v2
+            v2 = (v2,) if not isinstance(v2, (tuple, list)) else v2
         else:
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
@@ -284,21 +284,21 @@ class AutoDiffDerivative(_Derivative):
 
         """
         if np.isscalar(argnum1):
-            v1 = (v1,) if not isinstance(v1, tuple) else v1
+            v1 = (v1,) if not isinstance(v1, (tuple, list)) else v1
             argnum1 = (argnum1,)
         else:
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
             argnum2 = (argnum2 + 1,)
-            v2 = (v2,) if not isinstance(v2, tuple) else v2
+            v2 = (v2,) if not isinstance(v2, (tuple, list)) else v2
         else:
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
 
         if np.isscalar(argnum3):
             argnum3 = (argnum3 + 2,)
-            v3 = (v3,) if not isinstance(v3, tuple) else v3
+            v3 = (v3,) if not isinstance(v3, (tuple, list)) else v3
         else:
             argnum3 = tuple([i + 2 for i in argnum3])
             v3 = tuple(v3)

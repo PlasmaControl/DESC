@@ -35,6 +35,7 @@ class _FixedObjective(_Objective):
 
         """
         self.target = np.atleast_1d(getattr(eq, self._target_arg, self.target))
+        self._target_from_user = self.target  # in case the Objective is re-built
         if self._use_jit:
             self.jit()
 

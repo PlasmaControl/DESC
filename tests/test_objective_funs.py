@@ -1962,7 +1962,9 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), "vacuum boundary error"
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("objective", other_objectives)
+    @pytest.mark.parametrize(
+        "objective", sorted(other_objectives, key=lambda x: str(x.__name__))
+    )
     def test_objective_no_nangrad(self, objective):
         """Generic test for other objectives."""
         eq = Equilibrium(L=2, M=2, N=2)

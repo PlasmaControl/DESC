@@ -361,7 +361,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     method=method,
                 )
             transforms[c] = c_transform
-        elif c == "B":  # for fitting Boozer harmonics  # used for Boozer transform
+        elif c == "B":  # used for Boozer transform
             transforms["B"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -375,22 +375,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=True,
                 method=method,
             )
-        elif c == "h":  # used for omnigenity
-            rho = grid.nodes[:, 0]
-            eta = (grid.nodes[:, 1] - np.pi) / 2
-            alpha = grid.nodes[:, 2] * grid.NFP
-            nodes = jnp.array([rho, eta, alpha]).T
-            transforms["h"] = Transform(
-                Grid(nodes),
-                obj.x_basis,
-                derivs=derivs["h"],
-                build=True,
-                build_pinv=False,
-                method=method,
-            )
-        elif (
-            c == "w"
-        ):  # for fitting Boozer toroidal stream function  # used for Boozer transfrom
+        elif c == "w":  # used for Boozer transfrom
             transforms["w"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -402,6 +387,19 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 derivs=derivs["w"],
                 build=False,
                 build_pinv=True,
+                method=method,
+            )
+        elif c == "h":  # used for omnigenity
+            rho = grid.nodes[:, 0]
+            eta = (grid.nodes[:, 1] - np.pi) / 2
+            alpha = grid.nodes[:, 2] * grid.NFP
+            nodes = jnp.array([rho, eta, alpha]).T
+            transforms["h"] = Transform(
+                Grid(nodes, jitable=jitable),
+                obj.x_basis,
+                derivs=derivs["h"],
+                build=True,
+                build_pinv=False,
                 method=method,
             )
         elif c not in transforms:  # possible other stuff lumped in with transforms

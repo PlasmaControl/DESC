@@ -3,18 +3,17 @@ dependencies:
   # standard install
   - colorama
   - h5py >= 3.0.0
-  - matplotlib >= 3.5.0, <= 3.7.2
-  - mpmath >= 1.0.0
-  - netcdf4 >= 1.5.4
-  - numpy >= 1.20.0, < 1.25.0
+  - matplotlib >= 3.5.0, < 4.0.0
+  - mpmath >= 1.0.0, < 2.0
+  - netcdf4 >= 1.5.4, < 2.0
+  - numpy >= 1.20.0, < 2.0
   - psutil
-
-  - scipy >= 1.5.0, < 1.11.0
+  - scipy >= 1.7.0, < 2.0
   - termcolor
   - pip
   - pip:
     - interpax
-    - jax[cpu] >= 0.3.2, <= 0.4.14
+    - jax[cpu] >= 0.3.2, < 0.5.0
     - nvgpu
-    - plotly >= 5.16, <= 6.0
-    - pylatexenc >= 2.0, <= 3.0
+    - plotly >= 5.16, < 6.0
+    - pylatexenc >= 2.0, < 3.0

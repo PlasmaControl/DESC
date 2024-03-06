@@ -273,7 +273,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                     (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
                 )
             weight = w
-        weight = jnp.atleast_1d(weight)
+        weight = jnp.atleast_1d(jnp.asarray(weight))
         assert (
             len(weight) == objective.dim_x
         ), "Size of weight supplied to perturbation does not match objective.dim_x."

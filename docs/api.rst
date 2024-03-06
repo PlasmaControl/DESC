@@ -25,10 +25,23 @@ Coils
     :recursive:
     :template: class.rst
 
+    desc.coils.CoilSet
     desc.coils.FourierRZCoil
     desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
-    desc.coils.CoilSet
+    desc.coils.MixedCoilSet
+    desc.coils.SplineXYZCoil
+
+Compatibility
+*************
+
+.. autosummary::
+    :toctree: _api/compat
+    :recursive:
+
+    desc.compat.ensure_positive_jacobian
+    desc.compat.flip_helicity
+    desc.compat.rescale
 
 Continuation
 ************
@@ -38,7 +51,6 @@ Continuation
 
     desc.continuation.solve_continuation
     desc.continuation.solve_continuation_automatic
-
 
 Derivatives
 ***********
@@ -52,7 +64,6 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
     desc.derivatives.AutoDiffDerivative
     desc.derivatives.FiniteDiffDerivative
 
-
 Equilibrium
 ***********
 
@@ -64,7 +75,6 @@ Equilibrium
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
 
-
 Examples
 ********
 
@@ -74,7 +84,6 @@ Examples
 
     desc.examples.get
     desc.examples.listall
-
 
 Geometry
 ********
@@ -88,6 +97,7 @@ Geometry
     desc.geometry.FourierXYZCurve
     desc.geometry.FourierPlanarCurve
     desc.geometry.FourierRZToroidalSurface
+    desc.geometry.SplineXYZCurve
     desc.geometry.ZernikeRZToroidalSection
 
 Grid
@@ -120,8 +130,9 @@ Magnetic Fields
 ***************
 
 .. autosummary::
-    :toctree: _api/magnetic_fields/
+    :toctree: _api/magnetic_fields
     :recursive:
+    :template: class.rst
 
     desc.magnetic_fields.ScaledMagneticField
     desc.magnetic_fields.SumMagneticField
@@ -131,6 +142,7 @@ Magnetic Fields
     desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.field_line_integrate
+    desc.magnetic_fields.read_BNORM_file
 
 Objective Functions
 *******************
@@ -142,6 +154,7 @@ Objective Functions
 
     desc.objectives.AspectRatio
     desc.objectives.BootstrapRedlConsistency
+    desc.objectives.BoundaryError
     desc.objectives.BScaleLength
     desc.objectives.CurrentDensity
     desc.objectives.Elongation
@@ -158,17 +171,20 @@ Objective Functions
     desc.objectives.FixIota
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
+    desc.objectives.FixParameter
     desc.objectives.FixPressure
     desc.objectives.FixPsi
     desc.objectives.FixSumModesR
     desc.objectives.FixSumModesZ
     desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
+    desc.objectives.ForceBalanceAnisotropic
     desc.objectives.GenericObjective
     desc.objectives.get_equilibrium_objective
     desc.objectives.get_fixed_axis_constraints
     desc.objectives.get_fixed_boundary_constraints
     desc.objectives.get_NAE_constraints
+    desc.objectives.GoodCoordinates
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
     desc.objectives.MagneticWell
@@ -177,15 +193,17 @@ Objective Functions
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.PlasmaVesselDistance
+    desc.objectives.Pressure
     desc.objectives.PrincipalCurvature
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
+    desc.objectives.Shear
     desc.objectives.ToroidalCurrent
+    desc.objectives.VacuumBoundaryError
     desc.objectives.Volume
-
 
 Optimize
 ********
@@ -196,8 +214,12 @@ Optimize
    :template: class.rst
 
    desc.optimize.Optimizer
+   desc.optimize.fmin_auglag
    desc.optimize.fmintr
+   desc.optimize.lsq_auglag
    desc.optimize.lsqtr
+   desc.optimize.register_optimizer
+   desc.optimize.sgd
 
 Perturbations
 *************

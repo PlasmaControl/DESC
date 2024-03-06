@@ -120,7 +120,7 @@ def _modes_x_to_mnsc(vmec_modes, x):
     cmask = vmec_modes[:, 0] == 1
     smask = vmec_modes[:, 0] == -1
     _, xm, xn = vmec_modes[cmask].T
-    if not np.any(cmask):  #  there are no cos modes, so use smask to get modenumbers
+    if not np.any(cmask):  #  there are no cos modes, so use mask to get mode numbers
         _, xm, xn = vmec_modes[smask].T
         # concatenate the 0,0 mode
         xm = np.insert(xm, 0, 0)
@@ -175,7 +175,7 @@ def _desc_modes_from_vmec_modes(vmec_modes):
 
 
 def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=None):
-    """Compute linear trasformation matrix equivalent to reverse Ptolemy's identity.
+    """Compute linear transformation matrix equivalent to reverse Ptolemy's identity.
 
     Parameters
     ----------
@@ -267,7 +267,7 @@ def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=Non
         else:
             idx_MN = np.nonzero(vmec_modes[:, 1] * N == vmec_modes[:, 2] * M)[0]
         idx[idx_MN] = False
-
+        idx = np.nonzero(idx)[0]
         return matrix, vmec_modes, idx
 
     return matrix, vmec_modes
@@ -299,19 +299,17 @@ def fourier_to_zernike(m, n, x_mn, basis):
     surfs = x_mn.shape[0]
     rho = np.sqrt(np.linspace(0, 1, surfs))
 
+    As = zernike_radial(rho, basis.modes[:, 0], basis.modes[:, 1])
     for k in range(len(m)):
         idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
         if len(idx):
-            A = zernike_radial(
-                rho[:, np.newaxis], basis.modes[idx, 0], basis.modes[idx, 1]
-            )
+            A = As[:, idx]
             c = np.linalg.lstsq(A, x_mn[:, k], rcond=None)[0]
             x_lmn[idx] = c
 
     return x_lmn
 
 
-# FIXME: this always returns the full double Fourier basis regardless of symmetry
 def zernike_to_fourier(x_lmn, basis, rho):
     """Convert from a Fourier-Zernike basis to a double Fourier series.
 
@@ -336,6 +334,7 @@ def zernike_to_fourier(x_lmn, basis, rho):
         axis to the boundary.
 
     """
+    # FIXME: this always returns the full double Fourier basis regardless of symmetry
     M = basis.M
     N = basis.N
 
@@ -344,12 +343,11 @@ def zernike_to_fourier(x_lmn, basis, rho):
     n = mn[:, 1]
 
     x_mn = np.zeros((rho.size, m.size))
+    As = zernike_radial(rho, basis.modes[:, 0], basis.modes[:, 1])
     for k in range(len(m)):
         idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
         if len(idx):
-            A = zernike_radial(
-                rho[:, np.newaxis], basis.modes[idx, 0], basis.modes[idx, 1]
-            )
+            A = As[:, idx]
             x_mn[:, k] = np.matmul(A, x_lmn[idx])
 
     return m, n, x_mn

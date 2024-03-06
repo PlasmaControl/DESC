@@ -10,32 +10,41 @@ from qic import Qic
 from qsc import Qsc
 
 import desc.examples
-from desc.compute.utils import compress
+from desc.continuation import _solve_axisym, solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.magnetic_fields import SplineMagneticField
 from desc.objectives import (
     AspectRatio,
+    BoundaryError,
     CurrentDensity,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
     FixIota,
+    FixParameter,
     FixPressure,
     FixPsi,
+    FixSumModesLambda,
     ForceBalance,
+    ForceBalanceAnisotropic,
     HelicalForceBalance,
+    MeanCurvature,
     ObjectiveFunction,
+    PlasmaVesselDistance,
+    PrincipalCurvature,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
+    VacuumBoundaryError,
+    Volume,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
 )
 from desc.optimize import Optimizer
-from desc.plotting import plot_boozer_surface
-from desc.profiles import PowerSeriesProfile
+from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
@@ -49,7 +58,16 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
     data = eq.compute("|J|")
 
     np.testing.assert_allclose(data["iota"], 0, atol=1e-16)
-    np.testing.assert_allclose(data["|J|"], 0, atol=1e-3)
+    np.testing.assert_allclose(data["|J|"], 0, atol=3e-3)
+
+    # test that solving with the continuation method works correctly
+    # when eq resolution is lower than the mres_step
+    eq.change_resolution(L=3, M=3)
+    eqf = _solve_axisym(eq, mres_step=6)
+    assert len(eqf) == 1
+    assert eqf[-1].L == eq.L
+    assert eqf[-1].M == eq.M
+    assert eqf[-1].N == eq.N
 
 
 @pytest.mark.regression
@@ -57,6 +75,27 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
 def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
+
+    np.testing.assert_allclose(rho_err, 0, atol=1e-3)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_SOLOVEV_anisotropic_results(SOLOVEV):
+    """Tests that SOLOVEV with zero anisotropic pressure gives the same result."""
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    # reset to start
+    eq.set_initial_guess()
+    # give it a zero anisotropy profile
+    anisotropy = FourierZernikeProfile()
+    anisotropy.change_resolution(eq.L, eq.M, eq.N)
+    eq.anisotropy = anisotropy
+
+    obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq))
+    constraints = get_fixed_boundary_constraints(eq=eq)
+    eq.solve(obj, constraints, verbose=3)
     rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
     np.testing.assert_allclose(rho_err, 0, atol=1e-3)
@@ -107,23 +146,12 @@ def test_HELIOTRON_vac_results(HELIOTRON_vac):
 
 @pytest.mark.regression
 @pytest.mark.solve
-def test_precise_QH_results(precise_QH):
-    """Tests that the precise QH initial solve gives the same results as a base case."""
-    eq1 = EquilibriaFamily.load(load_from=str(precise_QH["desc_h5_path"]))[-1]
-    eq2 = EquilibriaFamily.load(load_from=str(precise_QH["output_path"]))[-1]
-    rho_err, theta_err = area_difference_desc(eq1, eq2)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-2)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
 def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
     """Tests that the 2 methods for solving vacuum give the same results."""
     eq1 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
     eq2 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac2["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_desc(eq1, eq2)
-    np.testing.assert_allclose(rho_err[:, 3:], 0, atol=1e-2)
+    np.testing.assert_allclose(rho_err[:, 4:], 0, atol=1e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
     curr1 = eq1.get_profile("current")
     curr2 = eq2.get_profile("current")
@@ -135,6 +163,7 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
     # When ConcentricGrid had a rotation option, RadialForceBalance, HelicalForceBalance
@@ -143,9 +172,8 @@ def test_force_balance_grids():
 
     def test(iota=False):
         if iota:
-            # pick quad here just to increase code coverage
-            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True, node_pattern="quad")
-            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True, node_pattern="quad")
+            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
+            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
         else:
             eq1 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
             eq2 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
@@ -177,6 +205,7 @@ def test_force_balance_grids():
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_solve_bounds():
     """Tests optimizing with bounds=(lower bound, upper bound)."""
     # decrease resolution and double pressure so no longer in force balance
@@ -188,7 +217,7 @@ def test_solve_bounds():
     obj = ObjectiveFunction(
         ForceBalance(normalize=False, normalize_target=False, bounds=(-1e3, 1e3), eq=eq)
     )
-    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=3)
+    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=200, verbose=3)
 
     # check that all errors are nearly 0, since residual values are within target bounds
     f = obj.compute_scaled_error(obj.x(eq))
@@ -196,6 +225,7 @@ def test_solve_bounds():
 
 
 @pytest.mark.regression
+@pytest.mark.optimize
 def test_1d_optimization():
     """Tests 1D optimization for target aspect ratio."""
     eq = desc.examples.get("SOLOVEV")
@@ -216,6 +246,7 @@ def test_1d_optimization():
 
 
 @pytest.mark.regression
+@pytest.mark.optimize
 def test_1d_optimization_old():
     """Tests 1D optimization for target aspect ratio."""
     eq = desc.examples.get("SOLOVEV")
@@ -235,8 +266,9 @@ def test_1d_optimization_old():
 
 def run_qh_step(n, eq):
     """Run 1 step of the precise QH optimization example from Landreman & Paul."""
+    print(f"==========QH step {n+1}==========")
     grid = LinearGrid(
-        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
+        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
     )
 
     objective = ObjectiveFunction(
@@ -283,65 +315,48 @@ def run_qh_step(n, eq):
     return eq1
 
 
-@pytest.mark.xfail
 @pytest.mark.regression
-@pytest.mark.solve
-def test_qh_optimization1():
-    """Tests precise QH optimization, step 1."""
-    eq0 = load(".//tests//inputs//precise_QH_step0.h5")[-1]
-    eq1 = load(".//tests//inputs//precise_QH_step1.h5")
-    eq1a = run_qh_step(0, eq0)
-    rho_err, theta_err = area_difference_desc(eq1, eq1a, Nr=1, Nt=1)
-    # only need crude tolerances here to make sure the boundaries are
-    # similar, the main test is ensuring its not pathological and has good qs
-    assert rho_err.mean() < 1
+@pytest.mark.slow
+@pytest.mark.optimize
+def test_qh_optimization():
+    """Tests first 3 steps of precise QH optimization."""
+    # create initial equilibrium
+    surf = FourierRZToroidalSurface(
+        R_lmn=[1, 0.125, 0.1],
+        Z_lmn=[-0.125, -0.1],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        modes_Z=[[-1, 0], [0, -1]],
+        NFP=4,
+    )
+    eq = Equilibrium(M=4, N=4, Psi=0.04, surface=surf)
+    eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[
+        -1
+    ]
 
-    obj = QuasisymmetryBoozer(helicity=(1, eq1a.NFP), eq=eq1a)
+    eq1 = run_qh_step(0, eq)
+
+    obj = QuasisymmetryBoozer(helicity=(1, eq1.NFP), eq=eq1)
     obj.build()
-    B_asym = obj.compute(*obj.xs(eq1a))
-    np.testing.assert_array_less(B_asym, 1e-1)
+    B_asym = obj.compute(*obj.xs(eq1))
 
+    np.testing.assert_array_less(np.abs(B_asym).max(), 1e-1)
+    np.testing.assert_array_less(eq1.compute("a_major/a_minor")["a_major/a_minor"], 5)
 
-@pytest.mark.xfail
-@pytest.mark.regression
-@pytest.mark.solve
-def test_qh_optimization2():
-    """Tests precise QH optimization, step 2."""
-    eq1 = load(".//tests//inputs//precise_QH_step1.h5")
-    eq2 = load(".//tests//inputs//precise_QH_step2.h5")
-    eq2a = run_qh_step(1, eq1)
-    rho_err, theta_err = area_difference_desc(eq2, eq2a, Nr=1, Nt=1)
-    # only need crude tolerances here to make sure the boundaries are
-    # similar, the main test is ensuring its not pathological and has good qs
-    assert rho_err.mean() < 1
+    eq2 = run_qh_step(1, eq1)
 
-    obj = QuasisymmetryBoozer(helicity=(1, eq2a.NFP), eq=eq2a)
+    obj = QuasisymmetryBoozer(helicity=(1, eq2.NFP), eq=eq2)
     obj.build()
-    B_asym = obj.compute(*obj.xs(eq2a))
-    np.testing.assert_array_less(B_asym, 1e-2)
+    B_asym = obj.compute(*obj.xs(eq2))
+    np.testing.assert_array_less(np.abs(B_asym).max(), 1e-2)
+    np.testing.assert_array_less(eq2.compute("a_major/a_minor")["a_major/a_minor"], 5)
 
+    eq3 = run_qh_step(2, eq2)
 
-@pytest.mark.xfail
-@pytest.mark.regression
-@pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=15)
-def test_qh_optimization3():
-    """Tests precise QH optimization, step 3."""
-    eq2 = load(".//tests//inputs//precise_QH_step2.h5")
-    eq3 = load(".//tests//inputs//precise_QH_step3.h5")
-    eq3a = run_qh_step(2, eq2)
-    rho_err, theta_err = area_difference_desc(eq3, eq3a, Nr=1, Nt=1)
-    # only need crude tolerances here to make sure the boundaries are
-    # similar, the main test is ensuring its not pathological and has good qs
-    assert rho_err.mean() < 1
-
-    obj = QuasisymmetryBoozer(helicity=(1, eq3a.NFP), eq=eq3a)
+    obj = QuasisymmetryBoozer(helicity=(1, eq3.NFP), eq=eq3)
     obj.build()
-    B_asym = obj.compute(*obj.xs(eq3a))
-    np.testing.assert_array_less(B_asym, 1e-3)
-
-    fig, ax = plot_boozer_surface(eq3a)
-    return fig
+    B_asym = obj.compute(*obj.xs(eq3))
+    np.testing.assert_array_less(np.abs(B_asym).max(), 2e-3)
+    np.testing.assert_array_less(eq3.compute("a_major/a_minor")["a_major/a_minor"], 5)
 
 
 @pytest.mark.regression
@@ -359,7 +374,6 @@ def test_ATF_results(tmpdir_factory):
         L_grid=eq0.L_grid,
         M_grid=eq0.M_grid,
         N_grid=eq0.N_grid,
-        node_pattern=eq0.node_pattern,
         pressure=eq0.pressure,
         iota=eq0.iota,
         surface=eq0.get_surface_at(rho=1),
@@ -392,7 +406,6 @@ def test_ESTELL_results(tmpdir_factory):
         L_grid=eq0.L_grid,
         M_grid=eq0.M_grid,
         N_grid=eq0.N_grid,
-        node_pattern=eq0.node_pattern,
         pressure=eq0.pressure,
         current=eq0.current,
         surface=eq0.get_surface_at(rho=1),
@@ -411,7 +424,7 @@ def test_ESTELL_results(tmpdir_factory):
 
 
 @pytest.mark.regression
-@pytest.mark.solve
+@pytest.mark.optimize
 def test_simsopt_QH_comparison():
     """Test case that previously stalled before getting to the solution.
 
@@ -500,8 +513,8 @@ def test_simsopt_QH_comparison():
     )
     # Cancel factor of 1/2 in desc objective which is not present in simsopt:
     aspect_weight = np.sqrt(2)
-    # Also scale QS weight so objective is approximately independent of grid resolution:
-    qs_weight = np.sqrt(len(grid.weights) / (8 * (np.pi**4)))
+    # Also scale QS weight to match simsopt/VMEC
+    qs_weight = np.sqrt(1 / (8 * (np.pi**4)))
     objective = ObjectiveFunction(
         (
             AspectRatio(
@@ -530,7 +543,6 @@ def test_simsopt_QH_comparison():
 @pytest.mark.slow
 def test_NAE_QSC_solve():
     """Test O(rho) NAE QSC constraints solve."""
-    # get Qsc example
     qsc = Qsc.from_paper("precise QA")
     ntheta = 75
     r = 0.01
@@ -541,84 +553,76 @@ def test_NAE_QSC_solve():
     orig_Zax_val = eq.axis.Z_n
 
     eq_fit = eq.copy()
+    eq_lambda_fixed_0th_order = eq.copy()
+    eq_lambda_fixed_1st_order = eq.copy()
 
     # this has all the constraints we need,
-    #  iota=False specifies we want to fix current instead of iota
-    cs = get_NAE_constraints(eq, qsc, iota=False, order=1, N=eq.N)
+    cs = get_NAE_constraints(eq, qsc, order=1, fix_lambda=False, N=eq.N)
+    cs_lambda_fixed_0th_order = get_NAE_constraints(
+        eq_lambda_fixed_0th_order, qsc, order=1, fix_lambda=0, N=eq.N
+    )
+    cs_lambda_fixed_1st_order = get_NAE_constraints(
+        eq_lambda_fixed_1st_order, qsc, order=1, fix_lambda=True, N=eq.N
+    )
 
-    objectives = ForceBalance(eq=eq)
-    obj = ObjectiveFunction(objectives)
+    for c in cs:
+        # should be no FixSumModeslambda in the fix_lambda=False constraint
+        assert not isinstance(c, FixSumModesLambda)
 
-    eq.solve(verbose=3, ftol=1e-2, objective=obj, maxiter=50, xtol=1e-6, constraints=cs)
+    for eqq, constraints in zip(
+        [eq, eq_lambda_fixed_0th_order, eq_lambda_fixed_1st_order],
+        [cs, cs_lambda_fixed_0th_order, cs_lambda_fixed_1st_order],
+    ):
+        objectives = ForceBalance(eq=eqq)
+        obj = ObjectiveFunction(objectives)
+        print(constraints)
 
-    # Make sure axis is same
-    np.testing.assert_array_almost_equal(orig_Rax_val, eq.axis.R_n)
-    np.testing.assert_array_almost_equal(orig_Zax_val, eq.axis.Z_n)
-
-    # Make sure surfaces of solved equilibrium are similar near axis as QSC
-    rho_err, theta_err = area_difference_desc(eq, eq_fit)
-
-    np.testing.assert_allclose(rho_err[:, 0:-4], 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3)
-
-    # Make sure iota of solved equilibrium is same near axis as QSC
-    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
-    iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
-
-    np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5)
-    np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3)
-
-    # check lambda to match near axis
-    grid_2d_05 = LinearGrid(rho=np.array(1e-6), M=50, N=50, NFP=eq.NFP, endpoint=True)
-
-    # Evaluate lambda near the axis
-    data_nae = eq.compute("lambda", grid=grid_2d_05)
-    lam_nae = data_nae["lambda"]
-
-    # Reshape to form grids on theta and phi
-    zeta = (
-        grid_2d_05.nodes[:, 2]
-        .reshape(
-            (grid_2d_05.num_theta, grid_2d_05.num_rho, grid_2d_05.num_zeta), order="F"
+        eqq.solve(
+            verbose=3,
+            ftol=1e-2,
+            objective=obj,
+            maxiter=175,
+            xtol=1e-6,
+            constraints=constraints,
         )
-        .squeeze()
-    )
+    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
+    grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
+    # Make sure axis is same
+    for eqq, string in zip(
+        [eq, eq_lambda_fixed_0th_order, eq_lambda_fixed_1st_order],
+        ["no lambda constraint", "lambda_fixed_0th_order", "lambda_fixed_1st_order"],
+    ):
+        np.testing.assert_array_almost_equal(orig_Rax_val, eqq.axis.R_n, err_msg=string)
+        np.testing.assert_array_almost_equal(orig_Zax_val, eqq.axis.Z_n, err_msg=string)
 
-    lam_nae = lam_nae.reshape(
-        (grid_2d_05.num_theta, grid_2d_05.num_rho, grid_2d_05.num_zeta), order="F"
-    )
+        # Make sure surfaces of solved equilibrium are similar near axis as QSC
+        rho_err, theta_err = area_difference_desc(eqq, eq_fit)
 
-    phi = np.squeeze(zeta[0, :])
-    lam_nae = np.squeeze(lam_nae[:, 0, :])
+        np.testing.assert_allclose(rho_err[:, 0:-4], 0, atol=1e-2, err_msg=string)
+        np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3, err_msg=string)
 
-    lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5)
+        # Make sure iota of solved equilibrium is same near axis as QSC
 
-    # check |B| on axis
+        iota = grid.compress(eqq.compute("iota", grid=grid)["iota"])
 
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(1e-6))
-    # Evaluate B modes near the axis
-    data_nae = eq.compute(["|B|_mn", "B modes"], grid=grid)
-    modes = data_nae["B modes"]
-    B_mn_nae = data_nae["|B|_mn"]
-    # Evaluate B on an angular grid
-    theta = np.linspace(0, 2 * np.pi, 150)
-    phi = np.linspace(0, 2 * np.pi, qsc.nphi)
-    th, ph = np.meshgrid(theta, phi)
-    B_nae = np.zeros((qsc.nphi, 150))
+        np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
+        np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3, err_msg=string)
 
-    for i, (l, m, n) in enumerate(modes):
-        if m >= 0 and n >= 0:
-            B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
-        elif m >= 0 > n:
-            B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
-        elif m < 0 <= n:
-            B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
-        elif m < 0 and n < 0:
-            B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
-    # Eliminate the poloidal angle to focus on the toroidal behaviour
-    B_av_nae = np.mean(B_nae, axis=1)
-    np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=1e-4)
+        ### check lambda to match near axis
+        # Evaluate lambda near the axis
+        data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
+        lam_nae = data_nae["lambda"]
+        # Reshape to form grids on theta and phi
+
+        phi = np.squeeze(grid_axis.nodes[:, 2])
+        np.testing.assert_allclose(
+            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5, err_msg=string
+        )
+
+        # check |B| on axis
+        np.testing.assert_allclose(
+            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=1e-4, err_msg=string
+        )
 
 
 @pytest.mark.regression
@@ -627,12 +631,12 @@ def test_NAE_QSC_solve():
 def test_NAE_QIC_solve():
     """Test O(rho) NAE QIC constraints solve."""
     # get Qic example
-    qsc = Qic.from_paper("QI NFP2 r2", nphi=301, order="r1")
-    qsc.lasym = False  # don't need to consider stell asym for order 1 constraints
+    qic = Qic.from_paper("QI NFP2 r2", nphi=301, order="r1")
+    qic.lasym = False  # don't need to consider stellarator asym for order 1 constraints
     ntheta = 75
     r = 0.01
     N = 11
-    eq = Equilibrium.from_near_axis(qsc, r=r, L=7, M=7, N=N, ntheta=ntheta)
+    eq = Equilibrium.from_near_axis(qic, r=r, L=7, M=7, N=N, ntheta=ntheta)
 
     orig_Rax_val = eq.axis.R_n
     orig_Zax_val = eq.axis.Z_n
@@ -640,8 +644,7 @@ def test_NAE_QIC_solve():
     eq_fit = eq.copy()
 
     # this has all the constraints we need,
-    #  iota=False specifies we want to fix current instead of iota
-    cs = get_NAE_constraints(eq, qsc, iota=False, order=1)
+    cs = get_NAE_constraints(eq, qic, order=1)
 
     objectives = ForceBalance(eq=eq)
     obj = ObjectiveFunction(objectives)
@@ -659,16 +662,16 @@ def test_NAE_QIC_solve():
 
     np.testing.assert_allclose(rho_err[:, 0:3], 0, atol=5e-2)
     # theta error isn't really an indicator of near axis behavior
-    # since its computed over the full radius, but just indicates that
+    # since it's computed over the full radius, but just indicates that
     # eq is similar to eq_fit
     np.testing.assert_allclose(theta_err, 0, atol=5e-2)
 
     # Make sure iota of solved equilibrium is same near axis as QIC
     grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
-    iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
+    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
-    np.testing.assert_allclose(iota[1], qsc.iota, atol=5e-4)
-    np.testing.assert_allclose(iota[1:10], qsc.iota, atol=5e-4)
+    np.testing.assert_allclose(iota[1], qic.iota, atol=2e-5)
+    np.testing.assert_allclose(iota[1:10], qic.iota, atol=5e-4)
 
     # check lambda to match near axis
     grid_2d_05 = LinearGrid(rho=np.array(1e-6), M=50, N=50, NFP=eq.NFP, endpoint=True)
@@ -694,7 +697,9 @@ def test_NAE_QIC_solve():
     lam_nae = np.squeeze(lam_nae[:, 0, :])
 
     lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -qsc.iota * qsc.nu_spline(phi), atol=5e-4)
+    np.testing.assert_allclose(
+        lam_av_nae, -qic.iota * qic.nu_spline(phi), atol=1e-4, rtol=1e-2
+    )
 
     # check |B| on axis
 
@@ -705,9 +710,9 @@ def test_NAE_QIC_solve():
     B_mn_nae = data_nae["|B|_mn"]
     # Evaluate B on an angular grid
     theta = np.linspace(0, 2 * np.pi, 150)
-    phi = np.linspace(0, 2 * np.pi, qsc.nphi)
+    phi = np.linspace(0, 2 * np.pi, qic.nphi)
     th, ph = np.meshgrid(theta, phi)
-    B_nae = np.zeros((qsc.nphi, 150))
+    B_nae = np.zeros((qic.nphi, 150))
 
     for i, (l, m, n) in enumerate(modes):
         if m >= 0 and n >= 0:
@@ -718,9 +723,268 @@ def test_NAE_QIC_solve():
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
-    # Eliminate the poloidal angle to focus on the toroidal behaviour
+    # Eliminate the poloidal angle to focus on the toroidal behavior
     B_av_nae = np.mean(B_nae, axis=1)
-    np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=2e-2)
+    np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qic.B0, atol=2e-2)
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_multiobject_optimization():
+    """Test for optimizing multiple objects at once."""
+    eq = Equilibrium(L=4, M=4, N=0, iota=2)
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 2.1],
+        Z_lmn=[-2],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+    )
+    surf.change_resolution(M=4, N=0)
+    constraints = (
+        ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
+        FixPressure(eq=eq),
+        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
+        FixParameter(eq, ["Psi", "i_l"]),
+        FixBoundaryR(eq, modes=[[0, 0, 0]]),
+        PlasmaVesselDistance(surface=surf, eq=eq, target=1),
+    )
+
+    objective = ObjectiveFunction((Volume(eq=eq, target=eq.compute("V")["V"] * 2),))
+
+    eq.solve(verbose=3)
+
+    optimizer = Optimizer("fmin-auglag")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=500
+    )
+
+    np.testing.assert_allclose(
+        constraints[-1].compute(*constraints[-1].xs(eq, surf)), 1, rtol=1e-3
+    )
+    assert surf.R_lmn[0] == 10
+    assert surf.Z_lmn[-1] == -2
+    assert eq.Psi == 1.0
+    np.testing.assert_allclose(eq.i_l, [2, 0, 0])
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_multiobject_optimization_prox():
+    """Test for optimizing multiple objects at once using proximal projection."""
+    eq = Equilibrium(L=4, M=4, N=0, iota=2)
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 2.1],
+        Z_lmn=[-2],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[-1, 0]]),
+    )
+    surf.change_resolution(M=4, N=0)
+    constraints = (
+        ForceBalance(eq=eq, bounds=(-1e-4, 1e-4), normalize_target=False),
+        FixPressure(eq=eq),
+        FixParameter(surf, ["Z_lmn", "R_lmn"], [[-1], [0]]),
+        FixParameter(eq, ["Psi", "i_l"]),
+        FixBoundaryR(eq, modes=[[0, 0, 0]]),
+    )
+
+    objective = ObjectiveFunction(
+        (
+            Volume(eq=eq, target=eq.compute("V")["V"] * 2),
+            PlasmaVesselDistance(surface=surf, eq=eq, target=1),
+        )
+    )
+
+    eq.solve(verbose=3)
+
+    optimizer = Optimizer("proximal-lsq-exact")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=100
+    )
+
+    np.testing.assert_allclose(
+        objective.objectives[-1].compute(*objective.objectives[-1].xs(eq, surf)),
+        1,
+        rtol=1e-2,
+    )
+    assert surf.R_lmn[0] == 10
+    assert surf.Z_lmn[-1] == -2
+    assert eq.Psi == 1.0
+    np.testing.assert_allclose(eq.i_l, [2, 0, 0])
+
+
+@pytest.mark.unit
+def test_non_eq_optimization():
+    """Test for optimizing a non-eq object by fixing all eq parameters."""
+    eq = desc.examples.get("DSHAPE")
+    Rmax = 4
+    Rmin = 2
+
+    a = 2
+    R0 = (Rmax + Rmin) / 2
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+
+    surf.change_resolution(M=eq.M, N=eq.N)
+    constraints = (
+        FixParameter(eq),
+        MeanCurvature(surf, bounds=(-8, 8)),
+        PrincipalCurvature(surf, bounds=(0, 15)),
+    )
+
+    grid = LinearGrid(M=18, N=0, NFP=eq.NFP)
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=0.5,
+        use_softmin=True,
+        surface_grid=grid,
+        plasma_grid=grid,
+        alpha=5000,
+    )
+    objective = ObjectiveFunction((obj,))
+    optimizer = Optimizer("lsq-auglag")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=100
+    )
+
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.5, atol=1e-5)
+
+
+@pytest.mark.unit
+def test_only_non_eq_optimization():
+    """Test for optimizing only a non-eq object."""
+    eq = desc.examples.get("DSHAPE")
+    surf = eq.surface
+
+    surf.change_resolution(M=eq.M, N=eq.N)
+    constraints = (
+        FixParameter(surf, params="R_lmn", indices=surf.R_basis.get_idx(0, 0, 0)),
+    )
+
+    obj = PrincipalCurvature(surf, target=1)
+
+    objective = ObjectiveFunction((obj,))
+    optimizer = Optimizer("lsq-exact")
+    (surf), result = optimizer.optimize(
+        (surf), objective, constraints, verbose=3, maxiter=100
+    )
+    surf = surf[0]
+    np.testing.assert_allclose(obj.compute(*obj.xs(surf)), 1, atol=1e-5)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_freeb_vacuum():
+    """Test for free boundary vacuum stellarator."""
+    # currents from VMEC input this test is meant to reproduce
+    extcur = [4700.0, 1000.0]
+    ext_field = SplineMagneticField.from_mgrid(
+        "tests/inputs/mgrid_test.nc", extcur=extcur
+    )
+    surf = FourierRZToroidalSurface(
+        R_lmn=[0.70, 0.10],
+        modes_R=[[0, 0], [1, 0]],
+        Z_lmn=[-0.10],
+        modes_Z=[[-1, 0]],
+        NFP=5,
+    )
+
+    eq = Equilibrium(M=6, N=6, Psi=-0.035, surface=surf)
+    eq.solve()
+    constraints = (
+        ForceBalance(eq=eq),
+        FixCurrent(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    objective = ObjectiveFunction(VacuumBoundaryError(eq=eq, ext_field=ext_field))
+    eq, out = eq.optimize(
+        objective,
+        constraints,
+        optimizer="proximal-lsq-exact",
+        verbose=3,
+        options={},
+    )
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_test_freeb.nc")
+
+    np.testing.assert_allclose(rho_err[:, -1], 0, atol=4e-2)  # only check rho=1
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_freeb_axisym():
+    """Test for free boundary finite beta tokamak."""
+    # currents from VMEC input this test is meant to reproduce
+    extcur = [
+        3.884526409876309e06,
+        -2.935577123737952e05,
+        -1.734851853677043e04,
+        6.002137016973160e04,
+        6.002540940490887e04,
+        -1.734993103183817e04,
+        -2.935531536308510e05,
+        -3.560639108717275e05,
+        -6.588434719283084e04,
+        -1.154387774712987e04,
+        -1.153546510755219e04,
+        -6.588300858364606e04,
+        -3.560589388468855e05,
+    ]
+    ext_field = SplineMagneticField.from_mgrid(
+        r"tests/inputs/mgrid_solovev.nc", extcur=extcur
+    )
+
+    pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
+    iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
+    surf = FourierRZToroidalSurface(
+        R_lmn=[4.0, 1.0],
+        modes_R=[[0, 0], [1, 0]],
+        Z_lmn=[-1.0],
+        modes_Z=[[-1, 0]],
+        NFP=1,
+    )
+
+    eq = Equilibrium(M=10, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
+    eq.solve()
+    constraints = (
+        ForceBalance(eq=eq),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    objective = ObjectiveFunction(BoundaryError(eq=eq, ext_field=ext_field))
+
+    # we know this is a pretty simple shape so we'll only use |m| <= 2
+    R_modes = (
+        eq.surface.R_basis.modes[np.max(np.abs(eq.surface.R_basis.modes), 1) > 2, :],
+    )
+
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 2, :
+    ]
+
+    bdry_constraints = (
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+    )
+    eq, out = eq.optimize(
+        objective,
+        constraints + bdry_constraints,
+        optimizer="proximal-lsq-exact",
+        verbose=3,
+        options={},
+    )
+    rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
+
+    np.testing.assert_allclose(rho_err[:, -1], 0, atol=2e-2)  # only check rho=1
 
 
 class TestGetExample:
@@ -759,22 +1023,22 @@ class TestGetExample:
     @pytest.mark.unit
     def test_example_get_iota(self):
         """Test getting iota profile."""
-        iota = desc.examples.get("NCSX", "iota")
+        iota = desc.examples.get("W7-X", "iota")
         np.testing.assert_allclose(
             iota.params[:5],
             [
-                -3.49197642e-01,
-                -6.81105159e-01,
-                1.29781695e00,
-                -2.07888586e00,
-                1.15800135e00,
+                -8.56047021e-01,
+                -3.88095412e-02,
+                -6.86795128e-02,
+                -1.86970315e-02,
+                1.90561179e-02,
             ],
         )
 
     @pytest.mark.unit
     def test_example_get_current(self):
         """Test getting current profile."""
-        current = desc.examples.get("QAS", "current")
+        current = desc.examples.get("NCSX", "current")
         np.testing.assert_allclose(
             current.params[:11],
             [

@@ -12,7 +12,7 @@ expensive computations.
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import cross
+from .utils import cross, safediv
 
 
 @register_compute_fun(
@@ -26,10 +26,10 @@ from .utils import cross
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B"],
+    data=["B", "|B|"],
 )
 def _b(params, transforms, profiles, data, **kwargs):
-    data["b"] = (data["B"].T / jnp.linalg.norm(data["B"], axis=-1)).T
+    data["b"] = (data["B"].T / data["|B|"]).T
     return data
 
 
@@ -47,13 +47,15 @@ def _b(params, transforms, profiles, data, **kwargs):
     data=["e_theta/sqrt(g)", "e_zeta"],
 )
 def _e_sup_rho(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis, this function returns the multivalued map whose
+    # image is the set { 𝐞^ρ | ρ=0 }.
     data["e^rho"] = cross(data["e_theta/sqrt(g)"], data["e_zeta"])
     return data
 
 
 @register_compute_fun(
     name="e^rho_r",
-    label="\\partial{\\rho} \\mathbf{e}^{\\rho}",
+    label="\\partial_{\\rho} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector, derivative wrt radial coordinate",
@@ -69,26 +71,187 @@ def _e_sup_rho_r(params, transforms, profiles, data, **kwargs):
     a = cross(data["e_theta_r"], data["e_zeta"])
     data["e^rho_r"] = transforms["grid"].replace_at_axis(
         (
-            (a + cross(data["e_theta"], data["e_zeta_r"])).T / data["sqrt(g)"]
+            safediv((a + cross(data["e_theta"], data["e_zeta_r"])).T, data["sqrt(g)"])
             - cross(data["e_theta"], data["e_zeta"]).T
-            * data["sqrt(g)_r"]
-            / data["sqrt(g)"] ** 2
+            * safediv(data["sqrt(g)_r"], data["sqrt(g)"] ** 2)
         ).T,
         lambda: (
-            (
-                cross(data["e_theta_rr"], data["e_zeta"])
-                + 2 * cross(data["e_theta_r"], data["e_zeta_r"])
-            ).T
-            / (2 * data["sqrt(g)_r"])
-            - a.T * data["sqrt(g)_rr"] / (2 * data["sqrt(g)_r"] ** 2)
+            safediv(
+                (
+                    cross(data["e_theta_rr"], data["e_zeta"])
+                    + 2 * cross(data["e_theta_r"], data["e_zeta_r"])
+                ).T,
+                (2 * data["sqrt(g)_r"]),
+            )
+            - a.T * safediv(data["sqrt(g)_rr"], (2 * data["sqrt(g)_r"] ** 2))
         ).T,
     )
     return data
 
 
 @register_compute_fun(
+    name="e^rho_rr",
+    label="\\partial_{\\rho\\rho} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Radial basis vector, 2nd derivative"
+    " wrt radial coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta",
+        "e_theta_r",
+        "e_theta_rr",
+        "e_zeta",
+        "e_zeta_r",
+        "e_zeta_rr",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rr",
+    ],
+)
+def _e_sup_rho_rr(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_theta"], data["e_zeta"])
+    temp_r = cross(data["e_theta_r"], data["e_zeta"]) + cross(
+        data["e_theta"], data["e_zeta_r"]
+    )
+
+    temp_rr = (
+        cross(data["e_theta_rr"], data["e_zeta"])
+        + cross(data["e_theta_r"], data["e_zeta_r"])
+        + cross(data["e_theta_r"], data["e_zeta_r"])
+        + cross(data["e_theta"], data["e_zeta_rr"])
+    )
+
+    data["e^rho_rr"] = (
+        temp_rr.T / data["sqrt(g)"]
+        - (
+            temp_r.T * data["sqrt(g)_r"]
+            + temp_r.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rr"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e^rho_rt",
+    label="\\partial_{\\rho\\theta} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Radial basis vector, derivative"
+    " wrt radial and poloidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta",
+        "e_theta_r",
+        "e_theta_rt",
+        "e_theta_t",
+        "e_zeta",
+        "e_zeta_r",
+        "e_zeta_rt",
+        "e_zeta_t",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rt",
+        "sqrt(g)_t",
+    ],
+)
+def _e_sup_rho_rt(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_theta"], data["e_zeta"])
+    temp_r = cross(data["e_theta_r"], data["e_zeta"]) + cross(
+        data["e_theta"], data["e_zeta_r"]
+    )
+    temp_t = cross(data["e_theta_t"], data["e_zeta"]) + cross(
+        data["e_theta"], data["e_zeta_t"]
+    )
+    temp_rt = (
+        cross(data["e_theta_rt"], data["e_zeta"])
+        + cross(data["e_theta_r"], data["e_zeta_t"])
+        + cross(data["e_theta_t"], data["e_zeta_r"])
+        + cross(data["e_theta"], data["e_zeta_rt"])
+    )
+
+    data["e^rho_rt"] = (
+        temp_rt.T / data["sqrt(g)"]
+        - (
+            temp_r.T * data["sqrt(g)_t"]
+            + temp_t.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rt"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e^rho_rz",
+    label="\\partial_{\\rho\\zeta} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Radial basis vector, derivative"
+    " wrt radial and toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta",
+        "e_theta_r",
+        "e_theta_rz",
+        "e_theta_z",
+        "e_zeta",
+        "e_zeta_r",
+        "e_zeta_rz",
+        "e_zeta_z",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rz",
+        "sqrt(g)_z",
+    ],
+)
+def _e_sup_rho_rz(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_theta"], data["e_zeta"])
+    temp_r = cross(data["e_theta_r"], data["e_zeta"]) + cross(
+        data["e_theta"], data["e_zeta_r"]
+    )
+    temp_z = cross(data["e_theta_z"], data["e_zeta"]) + cross(
+        data["e_theta"], data["e_zeta_z"]
+    )
+    temp_rz = (
+        cross(data["e_theta_rz"], data["e_zeta"])
+        + cross(data["e_theta_r"], data["e_zeta_z"])
+        + cross(data["e_theta_z"], data["e_zeta_r"])
+        + cross(data["e_theta"], data["e_zeta_rz"])
+    )
+
+    data["e^rho_rz"] = (
+        temp_rz.T / data["sqrt(g)"]
+        - (
+            temp_r.T * data["sqrt(g)_z"]
+            + temp_z.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rz"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="e^rho_t",
-    label="\\partial{\\theta} \\mathbf{e}^{\\rho}",
+    label="\\partial_{\\theta} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector, derivative wrt poloidal coordinate",
@@ -103,32 +266,137 @@ def _e_sup_rho_r(params, transforms, profiles, data, **kwargs):
 def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
     data["e^rho_t"] = transforms["grid"].replace_at_axis(
         (
-            (
-                cross(data["e_theta_t"], data["e_zeta"])
-                + cross(data["e_theta"], data["e_zeta_t"])
-            ).T
-            / data["sqrt(g)"]
-            - cross(data["e_theta"], data["e_zeta"]).T
-            * data["sqrt(g)_t"]
-            / data["sqrt(g)"] ** 2
+            safediv(
+                (
+                    cross(data["e_theta_t"], data["e_zeta"])
+                    + cross(data["e_theta"], data["e_zeta_t"])
+                ).T,
+                data["sqrt(g)"],
+            )
+            - safediv(
+                cross(data["e_theta"], data["e_zeta"]).T * data["sqrt(g)_t"],
+                data["sqrt(g)"] ** 2,
+            )
         ).T,
         lambda: (
-            (
-                cross(data["e_theta_r"], data["e_zeta_t"])
-                + cross(data["e_theta_rt"], data["e_zeta"])
-            ).T
-            / data["sqrt(g)_r"]
-            - cross(data["e_theta_r"], data["e_zeta"]).T
-            * data["sqrt(g)_rt"]
-            / data["sqrt(g)_r"] ** 2
+            safediv(cross(data["e_theta_rt"], data["e_zeta"]).T, data["sqrt(g)_r"])
+            - safediv(
+                cross(data["e_theta_r"], data["e_zeta"]).T * data["sqrt(g)_rt"],
+                data["sqrt(g)_r"] ** 2,
+            )
         ).T,
     )
     return data
 
 
 @register_compute_fun(
+    name="e^rho_tt",
+    label="\\partial_{\\theta\\theta} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Radial basis vector, 2nd derivative"
+    " wrt poloidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta",
+        "e_theta_t",
+        "e_theta_tt",
+        "e_zeta",
+        "e_zeta_t",
+        "e_zeta_tt",
+        "sqrt(g)",
+        "sqrt(g)_t",
+        "sqrt(g)_tt",
+    ],
+)
+def _e_sup_rho_tt(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_theta"], data["e_zeta"])
+    temp_t = cross(data["e_theta_t"], data["e_zeta"]) + cross(
+        data["e_theta"], data["e_zeta_t"]
+    )
+
+    temp_tt = (
+        cross(data["e_theta_tt"], data["e_zeta"])
+        + cross(data["e_theta_t"], data["e_zeta_t"])
+        + cross(data["e_theta_t"], data["e_zeta_t"])
+        + cross(data["e_theta"], data["e_zeta_tt"])
+    )
+
+    data["e^rho_tt"] = (
+        temp_tt.T / data["sqrt(g)"]
+        - (
+            temp_t.T * data["sqrt(g)_t"]
+            + temp_t.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tt"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e^rho_tz",
+    label="\\partial_{\\theta\\zeta} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Radial basis vector, derivative"
+    " wrt poloidal and toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta",
+        "e_theta_t",
+        "e_theta_tz",
+        "e_theta_z",
+        "e_zeta",
+        "e_zeta_t",
+        "e_zeta_tz",
+        "e_zeta_z",
+        "sqrt(g)",
+        "sqrt(g)_t",
+        "sqrt(g)_tz",
+        "sqrt(g)_z",
+    ],
+)
+def _e_sup_rho_tz(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_theta"], data["e_zeta"])
+    temp_t = cross(data["e_theta_t"], data["e_zeta"]) + cross(
+        data["e_theta"], data["e_zeta_t"]
+    )
+    temp_z = cross(data["e_theta_z"], data["e_zeta"]) + cross(
+        data["e_theta"], data["e_zeta_z"]
+    )
+    temp_tz = (
+        cross(data["e_theta_tz"], data["e_zeta"])
+        + cross(data["e_theta_t"], data["e_zeta_z"])
+        + cross(data["e_theta_z"], data["e_zeta_t"])
+        + cross(data["e_theta"], data["e_zeta_tz"])
+    )
+
+    data["e^rho_tz"] = (
+        temp_tz.T / data["sqrt(g)"]
+        - (
+            temp_t.T * data["sqrt(g)_z"]
+            + temp_z.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tz"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="e^rho_z",
-    label="\\partial{\\zeta} \\mathbf{e}^{\\rho}",
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\rho}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant radial basis vector, derivative wrt toroidal coordinate",
@@ -143,26 +411,78 @@ def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
 def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
     data["e^rho_z"] = transforms["grid"].replace_at_axis(
         (
-            (
-                cross(data["e_theta_z"], data["e_zeta"])
-                + cross(data["e_theta"], data["e_zeta_z"])
-            ).T
-            / data["sqrt(g)"]
+            safediv(
+                (
+                    cross(data["e_theta_z"], data["e_zeta"])
+                    + cross(data["e_theta"], data["e_zeta_z"])
+                ).T,
+                data["sqrt(g)"],
+            )
             - cross(data["e_theta"], data["e_zeta"]).T
-            * data["sqrt(g)_z"]
-            / data["sqrt(g)"] ** 2
+            * safediv(data["sqrt(g)_z"], data["sqrt(g)"] ** 2)
         ).T,
         lambda: (
-            (
-                cross(data["e_theta_r"], data["e_zeta_z"])
-                + cross(data["e_theta_rz"], data["e_zeta"])
-            ).T
-            / data["sqrt(g)_r"]
+            safediv(
+                (
+                    cross(data["e_theta_r"], data["e_zeta_z"])
+                    + cross(data["e_theta_rz"], data["e_zeta"])
+                ).T,
+                data["sqrt(g)_r"],
+            )
             - cross(data["e_theta_r"], data["e_zeta"]).T
-            * data["sqrt(g)_rz"]
-            / data["sqrt(g)_r"] ** 2
+            * safediv(data["sqrt(g)_rz"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
+    return data
+
+
+@register_compute_fun(
+    name="e^rho_zz",
+    label="\\partial_{\\zeta\\zeta} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Radial basis vector, 2nd derivative"
+    " wrt toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta",
+        "e_theta_z",
+        "e_theta_zz",
+        "e_zeta",
+        "e_zeta_z",
+        "e_zeta_zz",
+        "sqrt(g)",
+        "sqrt(g)_z",
+        "sqrt(g)_zz",
+    ],
+)
+def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_theta"], data["e_zeta"])
+    temp_z = cross(data["e_theta_z"], data["e_zeta"]) + cross(
+        data["e_theta"], data["e_zeta_z"]
+    )
+
+    temp_zz = (
+        cross(data["e_theta_zz"], data["e_zeta"])
+        + cross(data["e_theta_z"], data["e_zeta_z"])
+        + cross(data["e_theta_z"], data["e_zeta_z"])
+        + cross(data["e_theta"], data["e_zeta_zz"])
+    )
+
+    data["e^rho_zz"] = (
+        temp_zz.T / data["sqrt(g)"]
+        - (
+            temp_z.T * data["sqrt(g)_z"]
+            + temp_z.T * data["sqrt(g)_z"]
+            + temp.T * data["sqrt(g)_zz"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
+    ).T
     return data
 
 
@@ -196,15 +516,21 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis, this function returns the multivalued map whose
+    # image is the set { 𝐞^θ √g | ρ=0 }.
     data["e^theta*sqrt(g)"] = cross(data["e_zeta"], data["e_rho"])
     return data
 
 
 @register_compute_fun(
     name="e^theta_r",
-    label="\\partial{\\rho} \\mathbf{e}^{\\theta}",
+    label="\\partial_{\\rho} \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal basis vector, derivative wrt radial coordinate",
@@ -230,8 +556,169 @@ def _e_sup_theta_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e^theta_rr",
+    label="\\partial_{\\rho\\rho} \\mathbf{e}^{\\theta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Poloidal basis vector, 2nd derivative"
+    " wrt radial coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_r",
+        "e_rho_rr",
+        "e_zeta",
+        "e_zeta_r",
+        "e_zeta_rr",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rr",
+    ],
+)
+def _e_sup_theta_rr(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_zeta"], data["e_rho"])
+    temp_r = cross(data["e_zeta_r"], data["e_rho"]) + cross(
+        data["e_zeta"], data["e_rho_r"]
+    )
+
+    temp_rr = (
+        cross(data["e_zeta_rr"], data["e_rho"])
+        + cross(data["e_zeta_r"], data["e_rho_r"])
+        + cross(data["e_zeta_r"], data["e_rho_r"])
+        + cross(data["e_zeta"], data["e_rho_rr"])
+    )
+
+    data["e^theta_rr"] = (
+        temp_rr.T / data["sqrt(g)"]
+        - (
+            temp_r.T * data["sqrt(g)_r"]
+            + temp_r.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rr"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
+    ).T
+
+    return data
+
+
+@register_compute_fun(
+    name="e^theta_rt",
+    label="\\partial_{\\rho\\theta} \\mathbf{e}^{\\theta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Poloidal basis vector, derivative"
+    " wrt radial and poloidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_r",
+        "e_rho_rt",
+        "e_rho_t",
+        "e_zeta",
+        "e_zeta_r",
+        "e_zeta_rt",
+        "e_zeta_t",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rt",
+        "sqrt(g)_t",
+    ],
+)
+def _e_sup_theta_rt(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_zeta"], data["e_rho"])
+    temp_r = cross(data["e_zeta_r"], data["e_rho"]) + cross(
+        data["e_zeta"], data["e_rho_r"]
+    )
+    temp_t = cross(data["e_zeta_t"], data["e_rho"]) + cross(
+        data["e_zeta"], data["e_rho_t"]
+    )
+    temp_rt = (
+        cross(data["e_zeta_rt"], data["e_rho"])
+        + cross(data["e_zeta_r"], data["e_rho_t"])
+        + cross(data["e_zeta_t"], data["e_rho_r"])
+        + cross(data["e_zeta"], data["e_rho_rt"])
+    )
+
+    data["e^theta_rt"] = (
+        temp_rt.T / data["sqrt(g)"]
+        - (
+            temp_r.T * data["sqrt(g)_t"]
+            + temp_t.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rt"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e^theta_rz",
+    label="\\partial_{\\rho\\zeta} \\mathbf{e}^{\\theta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Poloidal basis vector, derivative"
+    " wrt radial and toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_r",
+        "e_rho_rz",
+        "e_rho_z",
+        "e_zeta",
+        "e_zeta_r",
+        "e_zeta_rz",
+        "e_zeta_z",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rz",
+        "sqrt(g)_z",
+    ],
+)
+def _e_sup_theta_rz(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_zeta"], data["e_rho"])
+    temp_r = cross(data["e_zeta_r"], data["e_rho"]) + cross(
+        data["e_zeta"], data["e_rho_r"]
+    )
+    temp_z = cross(data["e_zeta_z"], data["e_rho"]) + cross(
+        data["e_zeta"], data["e_rho_z"]
+    )
+    temp_rz = (
+        cross(data["e_zeta_rz"], data["e_rho"])
+        + cross(data["e_zeta_r"], data["e_rho_z"])
+        + cross(data["e_zeta_z"], data["e_rho_r"])
+        + cross(data["e_zeta"], data["e_rho_rz"])
+    )
+
+    data["e^theta_rz"] = (
+        temp_rz.T / data["sqrt(g)"]
+        - (
+            temp_r.T * data["sqrt(g)_z"]
+            + temp_z.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rz"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="e^theta_t",
-    label="\\partial{\\theta} \\mathbf{e}^{\\theta}",
+    label="\\partial_{\\theta} \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal basis vector, derivative wrt poloidal"
@@ -258,8 +745,113 @@ def _e_sup_theta_t(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e^theta_tt",
+    label="\\partial_{\\theta\\theta} \\mathbf{e}^{\\theta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Poloidal basis vector, 2nd derivative"
+    " wrt poloidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_t",
+        "e_rho_tt",
+        "e_zeta",
+        "e_zeta_t",
+        "e_zeta_tt",
+        "sqrt(g)",
+        "sqrt(g)_t",
+        "sqrt(g)_tt",
+    ],
+)
+def _e_sup_theta_tt(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_zeta"], data["e_rho"])
+    temp_t = cross(data["e_zeta_t"], data["e_rho"]) + cross(
+        data["e_zeta"], data["e_rho_t"]
+    )
+
+    temp_tt = (
+        cross(data["e_zeta_tt"], data["e_rho"])
+        + cross(data["e_zeta_t"], data["e_rho_t"])
+        + cross(data["e_zeta_t"], data["e_rho_t"])
+        + cross(data["e_zeta"], data["e_rho_tt"])
+    )
+
+    data["e^theta_tt"] = (
+        temp_tt.T / data["sqrt(g)"]
+        - (
+            temp_t.T * data["sqrt(g)_t"]
+            + temp_t.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tt"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e^theta_tz",
+    label="\\partial_{\\theta\\zeta} \\mathbf{e}^{\\theta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Poloidal basis vector, derivative"
+    " wrt poloidal and toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_t",
+        "e_rho_tz",
+        "e_rho_z",
+        "e_zeta",
+        "e_zeta_t",
+        "e_zeta_tz",
+        "e_zeta_z",
+        "sqrt(g)",
+        "sqrt(g)_t",
+        "sqrt(g)_tz",
+        "sqrt(g)_z",
+    ],
+)
+def _e_sup_theta_tz(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_zeta"], data["e_rho"])
+    temp_t = cross(data["e_zeta_t"], data["e_rho"]) + cross(
+        data["e_zeta"], data["e_rho_t"]
+    )
+    temp_z = cross(data["e_zeta_z"], data["e_rho"]) + cross(
+        data["e_zeta"], data["e_rho_z"]
+    )
+    temp_tz = (
+        cross(data["e_zeta_tz"], data["e_rho"])
+        + cross(data["e_zeta_t"], data["e_rho_z"])
+        + cross(data["e_zeta_z"], data["e_rho_t"])
+        + cross(data["e_zeta"], data["e_rho_tz"])
+    )
+
+    data["e^theta_tz"] = (
+        temp_tz.T / data["sqrt(g)"]
+        - (
+            temp_t.T * data["sqrt(g)_z"]
+            + temp_z.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tz"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="e^theta_z",
-    label="\\partial{\\zeta} \\mathbf{e}^{\\theta}",
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal basis vector, derivative wrt toroidal"
@@ -286,6 +878,56 @@ def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e^theta_zz",
+    label="\\partial_{\\zeta\\zeta} \\mathbf{e}^{\\theta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Poloidal basis vector, 2nd derivative"
+    " wrt toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_z",
+        "e_rho_zz",
+        "e_zeta",
+        "e_zeta_z",
+        "e_zeta_zz",
+        "sqrt(g)",
+        "sqrt(g)_z",
+        "sqrt(g)_zz",
+    ],
+)
+def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_zeta"], data["e_rho"])
+    temp_z = cross(data["e_zeta_z"], data["e_rho"]) + cross(
+        data["e_zeta"], data["e_rho_z"]
+    )
+
+    temp_zz = (
+        cross(data["e_zeta_zz"], data["e_rho"])
+        + cross(data["e_zeta_z"], data["e_rho_z"])
+        + cross(data["e_zeta_z"], data["e_rho_z"])
+        + cross(data["e_zeta"], data["e_rho_zz"])
+    )
+
+    data["e^theta_zz"] = (
+        temp_zz.T / data["sqrt(g)"]
+        - (
+            temp_z.T * data["sqrt(g)_z"]
+            + temp_z.T * data["sqrt(g)_z"]
+            + temp.T * data["sqrt(g)_zz"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="e^zeta",
     label="\\mathbf{e}^{\\zeta}",
     units="m^{-1}",
@@ -299,13 +941,15 @@ def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
     data=["e_rho", "e_theta/sqrt(g)"],
 )
 def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis, this function returns the multivalued map whose
+    # image is the set { 𝐞^ζ | ρ=0 }.
     data["e^zeta"] = cross(data["e_rho"], data["e_theta/sqrt(g)"])
     return data
 
 
 @register_compute_fun(
     name="e^zeta_r",
-    label="\\partial{\\rho} \\mathbf{e}^{\\zeta}",
+    label="\\partial_{\\rho} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt radial coordinate",
@@ -321,26 +965,187 @@ def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
     b = cross(data["e_rho"], data["e_theta_r"])
     data["e^zeta_r"] = transforms["grid"].replace_at_axis(
         (
-            (cross(data["e_rho_r"], data["e_theta"]) + b).T / data["sqrt(g)"]
+            safediv((cross(data["e_rho_r"], data["e_theta"]) + b).T, data["sqrt(g)"])
             - cross(data["e_rho"], data["e_theta"]).T
-            * data["sqrt(g)_r"]
-            / data["sqrt(g)"] ** 2
+            * safediv(data["sqrt(g)_r"], data["sqrt(g)"] ** 2)
         ).T,
         lambda: (
-            (
-                2 * cross(data["e_rho_r"], data["e_theta_r"])
-                + cross(data["e_rho"], data["e_theta_rr"])
-            ).T
-            / (2 * data["sqrt(g)_r"])
-            - b.T * data["sqrt(g)_rr"] / (2 * data["sqrt(g)_r"] ** 2)
+            safediv(
+                (
+                    2 * cross(data["e_rho_r"], data["e_theta_r"])
+                    + cross(data["e_rho"], data["e_theta_rr"])
+                ).T,
+                (2 * data["sqrt(g)_r"]),
+            )
+            - b.T * safediv(data["sqrt(g)_rr"], (2 * data["sqrt(g)_r"] ** 2))
         ).T,
     )
     return data
 
 
 @register_compute_fun(
+    name="e^zeta_rr",
+    label="\\partial_{\\rho\\rho} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Toroidal basis vector, 2nd derivative"
+    " wrt radial coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_r",
+        "e_rho_rr",
+        "e_theta",
+        "e_theta_r",
+        "e_theta_rr",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rr",
+    ],
+)
+def _e_sup_zeta_rr(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_rho"], data["e_theta"])
+    temp_r = cross(data["e_rho_r"], data["e_theta"]) + cross(
+        data["e_rho"], data["e_theta_r"]
+    )
+
+    temp_rr = (
+        cross(data["e_rho_rr"], data["e_theta"])
+        + cross(data["e_rho_r"], data["e_theta_r"])
+        + cross(data["e_rho_r"], data["e_theta_r"])
+        + cross(data["e_rho"], data["e_theta_rr"])
+    )
+
+    data["e^zeta_rr"] = (
+        temp_rr.T / data["sqrt(g)"]
+        - (
+            temp_r.T * data["sqrt(g)_r"]
+            + temp_r.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rr"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta_rt",
+    label="\\partial_{\\rho\\theta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Toroidal basis vector, derivative"
+    " wrt radial and poloidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_r",
+        "e_rho_rt",
+        "e_rho_t",
+        "e_theta",
+        "e_theta_r",
+        "e_theta_rt",
+        "e_theta_t",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rt",
+        "sqrt(g)_t",
+    ],
+)
+def _e_sup_zeta_rt(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_rho"], data["e_theta"])
+    temp_r = cross(data["e_rho_r"], data["e_theta"]) + cross(
+        data["e_rho"], data["e_theta_r"]
+    )
+    temp_t = cross(data["e_rho_t"], data["e_theta"]) + cross(
+        data["e_rho"], data["e_theta_t"]
+    )
+    temp_rt = (
+        cross(data["e_rho_rt"], data["e_theta"])
+        + cross(data["e_rho_r"], data["e_theta_t"])
+        + cross(data["e_rho_t"], data["e_theta_r"])
+        + cross(data["e_rho"], data["e_theta_rt"])
+    )
+
+    data["e^zeta_rt"] = (
+        temp_rt.T / data["sqrt(g)"]
+        - (
+            temp_r.T * data["sqrt(g)_t"]
+            + temp_t.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rt"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta_rz",
+    label="\\partial_{\\rho\\zeta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Toroidal basis vector, derivative"
+    " wrt radial and toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_r",
+        "e_rho_rz",
+        "e_rho_z",
+        "e_theta",
+        "e_theta_r",
+        "e_theta_rz",
+        "e_theta_z",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rz",
+        "sqrt(g)_z",
+    ],
+)
+def _e_sup_zeta_rz(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_rho"], data["e_theta"])
+    temp_r = cross(data["e_rho_r"], data["e_theta"]) + cross(
+        data["e_rho"], data["e_theta_r"]
+    )
+    temp_z = cross(data["e_rho_z"], data["e_theta"]) + cross(
+        data["e_rho"], data["e_theta_z"]
+    )
+    temp_rz = (
+        cross(data["e_rho_rz"], data["e_theta"])
+        + cross(data["e_rho_r"], data["e_theta_z"])
+        + cross(data["e_rho_z"], data["e_theta_r"])
+        + cross(data["e_rho"], data["e_theta_rz"])
+    )
+
+    data["e^zeta_rz"] = (
+        temp_rz.T / data["sqrt(g)"]
+        - (
+            temp_r.T * data["sqrt(g)_z"]
+            + temp_z.T * data["sqrt(g)_r"]
+            + temp.T * data["sqrt(g)_rz"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="e^zeta_t",
-    label="\\partial{\\theta} \\mathbf{e}^{\\zeta}",
+    label="\\partial_{\\theta} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt poloidal"
@@ -356,32 +1161,139 @@ def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
 def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     data["e^zeta_t"] = transforms["grid"].replace_at_axis(
         (
-            (
-                cross(data["e_rho_t"], data["e_theta"])
-                + cross(data["e_rho"], data["e_theta_t"])
-            ).T
-            / data["sqrt(g)"]
+            safediv(
+                (
+                    cross(data["e_rho_t"], data["e_theta"])
+                    + cross(data["e_rho"], data["e_theta_t"])
+                ).T,
+                data["sqrt(g)"],
+            )
             - cross(data["e_rho"], data["e_theta"]).T
-            * data["sqrt(g)_t"]
-            / data["sqrt(g)"] ** 2
+            * safediv(data["sqrt(g)_t"], data["sqrt(g)"] ** 2)
         ).T,
         lambda: (
-            (
-                cross(data["e_rho_t"], data["e_theta_r"])
-                + cross(data["e_rho"], data["e_theta_rt"])
-            ).T
-            / data["sqrt(g)_r"]
+            safediv(
+                (
+                    cross(data["e_rho_t"], data["e_theta_r"])
+                    + cross(data["e_rho"], data["e_theta_rt"])
+                ).T,
+                data["sqrt(g)_r"],
+            )
             - cross(data["e_rho"], data["e_theta_r"]).T
-            * data["sqrt(g)_rt"]
-            / data["sqrt(g)_r"] ** 2
+            * safediv(data["sqrt(g)_rt"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
     return data
 
 
 @register_compute_fun(
+    name="e^zeta_tt",
+    label="\\partial_{\\theta\\theta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Toroidal basis vector, 2nd derivative"
+    " wrt poloidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_t",
+        "e_rho_tt",
+        "e_theta",
+        "e_theta_t",
+        "e_theta_tt",
+        "sqrt(g)",
+        "sqrt(g)_t",
+        "sqrt(g)_tt",
+    ],
+)
+def _e_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_rho"], data["e_theta"])
+    temp_t = cross(data["e_rho_t"], data["e_theta"]) + cross(
+        data["e_rho"], data["e_theta_t"]
+    )
+
+    temp_tt = (
+        cross(data["e_rho_tt"], data["e_theta"])
+        + cross(data["e_rho_t"], data["e_theta_t"])
+        + cross(data["e_rho_t"], data["e_theta_t"])
+        + cross(data["e_rho"], data["e_theta_tt"])
+    )
+
+    data["e^zeta_tt"] = (
+        temp_tt.T / data["sqrt(g)"]
+        - (
+            temp_t.T * data["sqrt(g)_t"]
+            + temp_t.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tt"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta_tz",
+    label="\\partial_{\\theta\\zeta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Toroidal basis vector, derivative"
+    " wrt poloidal and toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_t",
+        "e_rho_tz",
+        "e_rho_z",
+        "e_theta",
+        "e_theta_t",
+        "e_theta_tz",
+        "e_theta_z",
+        "sqrt(g)",
+        "sqrt(g)_t",
+        "sqrt(g)_tz",
+        "sqrt(g)_z",
+    ],
+)
+def _e_sup_zeta_tz(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_rho"], data["e_theta"])
+    temp_t = cross(data["e_rho_t"], data["e_theta"]) + cross(
+        data["e_rho"], data["e_theta_t"]
+    )
+    temp_z = cross(data["e_rho_z"], data["e_theta"]) + cross(
+        data["e_rho"], data["e_theta_z"]
+    )
+    temp_tz = (
+        cross(data["e_rho_tz"], data["e_theta"])
+        + cross(data["e_rho_t"], data["e_theta_z"])
+        + cross(data["e_rho_z"], data["e_theta_t"])
+        + cross(data["e_rho"], data["e_theta_tz"])
+    )
+
+    data["e^zeta_tz"] = (
+        temp_tz.T / data["sqrt(g)"]
+        - (
+            temp_t.T * data["sqrt(g)_z"]
+            + temp_z.T * data["sqrt(g)_t"]
+            + temp.T * data["sqrt(g)_tz"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="e^zeta_z",
-    label="\\partial{\\zeta} \\mathbf{e}^{\\zeta}",
+    label="\\partial_{\\zeta} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt toroidal"
@@ -397,26 +1309,79 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
 def _e_sup_zeta_z(params, transforms, profiles, data, **kwargs):
     data["e^zeta_z"] = transforms["grid"].replace_at_axis(
         (
-            (
-                cross(data["e_rho_z"], data["e_theta"])
-                + cross(data["e_rho"], data["e_theta_z"])
-            ).T
-            / data["sqrt(g)"]
+            safediv(
+                (
+                    cross(data["e_rho_z"], data["e_theta"])
+                    + cross(data["e_rho"], data["e_theta_z"])
+                ).T,
+                data["sqrt(g)"],
+            )
             - cross(data["e_rho"], data["e_theta"]).T
-            * data["sqrt(g)_z"]
-            / data["sqrt(g)"] ** 2
+            * safediv(data["sqrt(g)_z"], data["sqrt(g)"] ** 2)
         ).T,
         lambda: (
-            (
-                cross(data["e_rho_z"], data["e_theta_r"])
-                + cross(data["e_rho"], data["e_theta_rz"])
-            ).T
-            / data["sqrt(g)_r"]
+            safediv(
+                (
+                    cross(data["e_rho_z"], data["e_theta_r"])
+                    + cross(data["e_rho"], data["e_theta_rz"])
+                ).T,
+                data["sqrt(g)_r"],
+            )
             - cross(data["e_rho"], data["e_theta_r"]).T
-            * data["sqrt(g)_rz"]
-            / data["sqrt(g)_r"] ** 2
+            * safediv(data["sqrt(g)_rz"], data["sqrt(g)_r"] ** 2)
         ).T,
     )
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta_zz",
+    label="\\partial_{\\zeta\\zeta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse square meters",
+    description="Contravariant Toroidal basis vector, 2nd derivative"
+    " wrt toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_rho_z",
+        "e_rho_zz",
+        "e_theta",
+        "e_theta_z",
+        "e_theta_zz",
+        "sqrt(g)",
+        "sqrt(g)_z",
+        "sqrt(g)_zz",
+    ],
+)
+def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
+    temp = cross(data["e_rho"], data["e_theta"])
+    temp_z = cross(data["e_rho_z"], data["e_theta"]) + cross(
+        data["e_rho"], data["e_theta_z"]
+    )
+
+    temp_zz = (
+        cross(data["e_rho_zz"], data["e_theta"])
+        + cross(data["e_rho_z"], data["e_theta_z"])
+        + cross(data["e_rho_z"], data["e_theta_z"])
+        + cross(data["e_rho"], data["e_theta_zz"])
+    )
+
+    data["e^zeta_zz"] = (
+        temp_zz.T / data["sqrt(g)"]
+        - (
+            temp_z.T * data["sqrt(g)_z"]
+            + temp_z.T * data["sqrt(g)_z"]
+            + temp.T * data["sqrt(g)_zz"]
+        )
+        / data["sqrt(g)"] ** 2
+        + 2 * temp.T * data["sqrt(g)_z"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 3
+    ).T
+
     return data
 
 
@@ -453,6 +1418,8 @@ def _e_sub_phi(params, transforms, profiles, data, **kwargs):
     data=["R", "R_r", "Z_r", "omega_r"],
 )
 def _e_sub_rho(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis, this function returns the multivalued map whose
+    # image is the set { 𝐞ᵨ | ρ=0 }.
     data["e_rho"] = jnp.array([data["R_r"], data["R"] * data["omega_r"], data["Z_r"]]).T
     return data
 
@@ -486,7 +1453,7 @@ def _e_sub_rho_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rr",
-    label="\\partial_{\\rho}{\\rho} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -516,7 +1483,7 @@ def _e_sub_rho_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rrr",
-    label="\\partial_{\\rho}{\\rho}{\\rho} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\rho \\rho} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -565,7 +1532,7 @@ def _e_sub_rho_rrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rrt",
-    label="\\partial_{\\rho}{\\rho}{\\theta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\rho \\theta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -640,7 +1607,7 @@ def _e_sub_rho_rrt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rrz",
-    label="\\partial_{\\rho}{\\rho}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\rho \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -735,7 +1702,7 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rt",
-    label="\\partial_{\\rho}{\\theta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -761,6 +1728,7 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
         "omega_rt",
         "omega_t",
     ],
+    aliases=["x_rrt", "x_rtr", "x_trr"],
 )
 def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
     data["e_rho_rt"] = jnp.array(
@@ -783,7 +1751,7 @@ def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rtt",
-    label="\\partial_{\\rho}{\\theta}{\\theta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\theta \\theta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -859,7 +1827,7 @@ def _e_sub_rho_rtt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rtz",
-    label="\\partial_{\\rho}{\\theta}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\theta \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -994,7 +1962,7 @@ def _e_sub_rho_rtz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rz",
-    label="\\partial_{\\rho}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -1043,7 +2011,7 @@ def _e_sub_rho_rz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_rzz",
-    label="\\partial_{\\rho}{\\zeta}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\rho \\zeta \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -1166,7 +2134,7 @@ def _e_sub_rho_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_tt",
-    label="\\partial_{\\theta}{\\theta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\theta \\theta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -1215,7 +2183,7 @@ def _e_sub_rho_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_tz",
-    label="\\partial_{\\theta}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\theta \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -1304,7 +2272,7 @@ def _e_sub_rho_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_rho_zz",
-    label="\\partial_{\\zeta}{\\zeta} \\mathbf{e}_{\\rho}",
+    label="\\partial_{\\zeta \\zeta} \\mathbf{e}_{\\rho}",
     units="m",
     units_long="meters",
     description=(
@@ -1386,9 +2354,11 @@ def _e_sub_theta(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["e_theta_r", "sqrt(g)_r"],
 )
 def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis, this function returns the multivalued map whose
+    # image is the set { 𝐞_θ / √g | ρ=0 }.
     data["e_theta/sqrt(g)"] = transforms["grid"].replace_at_axis(
-        (data["e_theta"].T / data["sqrt(g)"]).T,
-        lambda: (data["e_theta_r"].T / data["sqrt(g)_r"]).T,
+        safediv(data["e_theta"].T, data["sqrt(g)"]).T,
+        lambda: safediv(data["e_theta_r"].T, data["sqrt(g)_r"]).T,
     )
     return data
 
@@ -1426,6 +2396,8 @@ def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
     data=["R", "R_r", "R_rt", "R_t", "Z_rt", "omega_r", "omega_rt", "omega_t"],
 )
 def _e_sub_theta_r(params, transforms, profiles, data, **kwargs):
+    # At the magnetic axis, this function returns the multivalued map whose
+    # image is the set { ∂ᵨ 𝐞_θ | ρ=0 }
     data["e_theta_r"] = jnp.array(
         [
             -data["R"] * data["omega_t"] * data["omega_r"] + data["R_rt"],
@@ -1440,7 +2412,7 @@ def _e_sub_theta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rr",
-    label="\\partial_{\\rho}{\\rho} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -1488,7 +2460,7 @@ def _e_sub_theta_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rrr",
-    label="\\partial_{\\rho}{\\rho}{\\rho} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\rho \\rho} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -1560,7 +2532,7 @@ def _e_sub_theta_rrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rrt",
-    label="\\partial_{\\rho}{\\rho}{\\theta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\rho \\theta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -1658,7 +2630,7 @@ def _e_sub_theta_rrt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rrz",
-    label="\\partial_{\\rho}{\\rho}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\rho \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -1795,7 +2767,7 @@ def _e_sub_theta_rrz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rt",
-    label="\\partial_{\\rho}{\\theta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -1844,7 +2816,7 @@ def _e_sub_theta_rt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rtt",
-    label="\\partial_{\\rho}{\\theta}{\\theta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\theta \\theta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -1920,7 +2892,7 @@ def _e_sub_theta_rtt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rtz",
-    label="\\partial_{\\rho}{\\theta}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\theta \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2023,7 +2995,7 @@ def _e_sub_theta_rtz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rz",
-    label="\\partial_{\\rho}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2087,7 +3059,7 @@ def _e_sub_theta_rz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_rzz",
-    label="\\partial_{\\rho}{\\zeta}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\rho \\zeta \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2217,7 +3189,7 @@ def _e_sub_theta_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_tt",
-    label="\\partial_{\\theta}{\\theta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\theta \\theta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2247,7 +3219,7 @@ def _e_sub_theta_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_tz",
-    label="\\partial_{\\theta}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\theta \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2322,7 +3294,7 @@ def _e_sub_theta_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_theta_zz",
-    label="\\partial_{\\zeta}{\\zeta} \\mathbf{e}_{\\theta}",
+    label="\\partial_{\\zeta \\zeta} \\mathbf{e}_{\\theta}",
     units="m",
     units_long="meters",
     description=(
@@ -2417,7 +3389,7 @@ def _e_sub_zeta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rr",
-    label="\\partial_{\\rho}{\\rho} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -2466,7 +3438,7 @@ def _e_sub_zeta_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rrr",
-    label="\\partial_{\\rho}{\\rho}{\\rho} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\rho \\rho} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -2544,7 +3516,7 @@ def _e_sub_zeta_rrr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rrt",
-    label="\\partial_{\\rho}{\\theta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -2681,7 +3653,7 @@ def _e_sub_zeta_rrt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rrz",
-    label="\\partial_{\\rho}{\\rho}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\rho \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -2780,7 +3752,7 @@ def _e_sub_zeta_rrz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rt",
-    label="\\partial_{\\rho}{\\theta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\theta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -2844,7 +3816,7 @@ def _e_sub_zeta_rt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rtt",
-    label="\\partial_{\\rho}{\\theta}{\\theta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\theta \\theta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -2947,7 +3919,7 @@ def _e_sub_zeta_rtt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rtz",
-    label="\\partial_{\\rho}{\\theta}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\theta \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3055,7 +4027,7 @@ def _e_sub_zeta_rtz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rz",
-    label="\\partial_{\\rho}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3104,7 +4076,7 @@ def _e_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_rzz",
-    label="\\partial_{\\rho}{\\zeta}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\rho \\zeta \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3218,7 +4190,7 @@ def _e_sub_zeta_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_tt",
-    label="\\partial_{\\theta}{\\theta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\theta \\theta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3267,7 +4239,7 @@ def _e_sub_zeta_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_tz",
-    label="\\partial_{\\theta}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\theta \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3340,7 +4312,7 @@ def _e_sub_zeta_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e_zeta_zz",
-    label="\\partial_{\\zeta}{\\zeta} \\mathbf{e}_{\\zeta}",
+    label="\\partial_{\\zeta \\zeta} \\mathbf{e}_{\\zeta}",
     units="m",
     units_long="meters",
     description=(
@@ -3428,16 +4400,60 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "e_zeta", "|e_theta x e_zeta|"],
+    axis_limit_data=["e_theta_r", "|e_theta x e_zeta|_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
 )
 def _n_rho(params, transforms, profiles, data, **kwargs):
-    # equal to e^rho / |e^rho| but works correctly for surfaces as well that don't have
-    # contravariant basis defined
-    data["n_rho"] = (
-        cross(data["e_theta"], data["e_zeta"]) / data["|e_theta x e_zeta|"][:, None]
+    # Equal to 𝐞^ρ / ‖𝐞^ρ‖ but works correctly for surfaces as well that don't
+    # have contravariant basis defined.
+    data["n_rho"] = transforms["grid"].replace_at_axis(
+        safediv(cross(data["e_theta"], data["e_zeta"]).T, data["|e_theta x e_zeta|"]).T,
+        # At the magnetic axis, this function returns the multivalued map whose
+        # image is the set { 𝐞^ρ / ‖𝐞^ρ‖ | ρ=0 }.
+        lambda: safediv(
+            cross(data["e_theta_r"], data["e_zeta"]).T, data["|e_theta x e_zeta|_r"]
+        ).T,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="n_rho_z",
+    label="\\partial_{\\zeta}\\hat{\\mathbf{n}}_{\\rho}",
+    units="~",
+    units_long="None",
+    description="Unit vector normal to constant rho surface (direction of e^rho),"
+    " derivative wrt toroidal angle",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_theta",
+        "e_theta_z",
+        "e_zeta",
+        "e_zeta_z",
+        "|e_theta x e_zeta|",
+        "|e_theta x e_zeta|_z",
+        "n_rho",
+    ],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _n_rho_z(params, transforms, profiles, data, **kwargs):
+    data["n_rho_z"] = (
+        cross(data["e_theta_z"], data["e_zeta"])
+        + cross(data["e_theta"], data["e_zeta_z"])
+    ) / data["|e_theta x e_zeta|"][:, None] - data["n_rho"] / (
+        data["|e_theta x e_zeta|"][:, None]
+    ) * (
+        data["|e_theta x e_zeta|_z"][:, None]
     )
     return data
 
@@ -3460,9 +4476,11 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _n_theta(params, transforms, profiles, data, **kwargs):
+    # Equal to 𝐞^θ / ‖𝐞^θ‖ but works correctly for surfaces as well that don't
+    # have contravariant basis defined.
     data["n_theta"] = (
-        cross(data["e_zeta"], data["e_rho"]) / data["|e_zeta x e_rho|"][:, None]
-    )
+        cross(data["e_zeta"], data["e_rho"]).T / data["|e_zeta x e_rho|"]
+    ).T
     return data
 
 
@@ -3478,13 +4496,21 @@ def _n_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_theta", "|e_rho x e_theta|"],
+    axis_limit_data=["e_theta_r", "|e_rho x e_theta|_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
 )
 def _n_zeta(params, transforms, profiles, data, **kwargs):
-    data["n_zeta"] = (
-        cross(data["e_rho"], data["e_theta"]) / data["|e_rho x e_theta|"][:, None]
+    # Equal to 𝐞^ζ / ‖𝐞^ζ‖ but works correctly for surfaces as well that don't
+    # have contravariant basis defined.
+    data["n_zeta"] = transforms["grid"].replace_at_axis(
+        safediv(cross(data["e_rho"], data["e_theta"]).T, data["|e_rho x e_theta|"]).T,
+        # At the magnetic axis, this function returns the multivalued map whose
+        # image is the set { 𝐞^ζ / ‖𝐞^ζ‖ | ρ=0 }.
+        lambda: safediv(
+            cross(data["e_rho"], data["e_theta_r"]).T, data["|e_rho x e_theta|_r"]
+        ).T,
     )
     return data

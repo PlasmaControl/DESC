@@ -66,7 +66,7 @@ for name in names:
         current=used_current,
         deviceid=device,
         config_class=sym_class,
-        user_updated="yge",
+        user_updated="ygeakjshd",
         user_created="dpanici",
         # TODO: Add config class (symmetry)
     )

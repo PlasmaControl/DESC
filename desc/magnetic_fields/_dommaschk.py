@@ -3,8 +3,8 @@
 based off Representations for vacuum potentials in stellarators
 https://doi.org/10.1016/0010-4655(86)90109-8
 
-written with naive for loops initially and can jax-ify later
 """
+
 from desc.backend import cond, fori_loop, gammaln, jit, jnp
 from desc.derivatives import Derivative
 
@@ -157,6 +157,9 @@ class DommaschkPotentialField(ScalarPotentialField):
             [],
             [],
         ]  # indices that should be 0 due to symmetry
+        # if sym is True, when l is even then we need a=d=0
+        # and if l is odd then b=c=0
+
         for l in range(max_l + 1):
             for m in range(max_m + 1):
                 if not sym:
@@ -184,6 +187,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         for i in range(4):
             abcd_zero_due_to_sym_inds[i] = jnp.asarray(abcd_zero_due_to_sym_inds[i])
         assert (len(a_s) + len(b_s) + len(c_s) + len(d_s)) == num_modes - 1
+
         params = {
             "ms": ms,
             "ls": ls,

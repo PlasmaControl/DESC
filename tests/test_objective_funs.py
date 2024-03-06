@@ -699,6 +699,7 @@ class TestQuadraticFlux:
         Checks that B goes to zero for axisymmetric eq and field.
         """
         eq = desc.examples.get("precise_QA")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
         field = ToroidalMagneticField(1, 1)
         field_grid, eval_grid, source_grid = self.get_grids(eq, field, N_grid=20)
 

@@ -810,8 +810,8 @@ class QuadraticFlux(_Objective):
     def __init__(
         self,
         ext_field,
-        eq=None,
-        target=0,
+        eq,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -824,6 +824,8 @@ class QuadraticFlux(_Objective):
         vacuum=False,
         name="Quadratic flux",
     ):
+        if target is None and bounds is None:
+            target = 0
         self._src_grid = src_grid
         self._eval_grid = eval_grid
         self._eq = eq

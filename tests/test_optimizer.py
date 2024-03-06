@@ -1,5 +1,7 @@
 """Tests for optimizers and Optimizer class."""
 
+import warnings
+
 import numpy as np
 import pytest
 from numpy.random import default_rng
@@ -629,20 +631,22 @@ def test_scipy_constrained_solve():
         MeanCurvature(eq=eq, bounds=Hbounds),
     )
     obj = ObjectiveFunction(ForceBalance(eq=eq))
-    eq2, result = eq.optimize(
-        objective=obj,
-        constraints=constraints,
-        optimizer="scipy-trust-constr",
-        maxiter=50,
-        verbose=1,
-        x_scale="auto",
-        copy=True,
-        options={
-            "disp": 1,
-            "verbose": 3,
-            "initial_barrier_parameter": 1e-4,
-        },
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="delta_grad == 0.0")
+        eq2, result = eq.optimize(
+            objective=obj,
+            constraints=constraints,
+            optimizer="scipy-trust-constr",
+            maxiter=50,
+            verbose=1,
+            x_scale="auto",
+            copy=True,
+            options={
+                "disp": 1,
+                "verbose": 3,
+                "initial_barrier_parameter": 1e-4,
+            },
+        )
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
     H2 = eq2.compute(

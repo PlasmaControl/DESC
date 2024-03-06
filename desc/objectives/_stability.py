@@ -119,7 +119,7 @@ class MercierStability(_Objective):
             grid = self._grid
 
         warnif(
-            grid.num_theta < 2 * eq.M,
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             RuntimeWarning,
             "MercierStability objective grid requires poloidal "
             "resolution for surface averages",
@@ -295,7 +295,7 @@ class MagneticWell(_Objective):
             grid = self._grid
 
         warnif(
-            grid.num_theta < 2 * eq.M,
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             RuntimeWarning,
             "MagneticWell objective grid requires poloidal "
             "resolution for surface averages",

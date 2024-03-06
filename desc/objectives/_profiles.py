@@ -265,13 +265,13 @@ class RotationalTransform(_Objective):
             grid = self._grid
 
         warnif(
-            grid.num_theta < 2 * eq.M,
+            (eq.iota is None) and ((grid.num_theta * (1 + eq.sym)) < 2 * eq.M),
             RuntimeWarning,
             "RotationalTransform objective grid requires poloidal "
             "resolution for surface averages",
         )
         warnif(
-            grid.num_zeta < 2 * eq.N,
+            (eq.iota is None) and (grid.num_zeta < 2 * eq.N),
             RuntimeWarning,
             "RotationalTransform objective grid requires toroidal "
             "resolution for surface averages",
@@ -432,12 +432,12 @@ class Shear(_Objective):
             grid = self._grid
 
         warnif(
-            grid.num_theta < 2 * eq.M,
+            (eq.iota is None) and ((grid.num_theta * (1 + eq.sym)) < 2 * eq.M),
             RuntimeWarning,
             "Shear objective grid requires poloidal " "resolution for surface averages",
         )
         warnif(
-            grid.num_zeta < 2 * eq.N,
+            (eq.iota is None) and (grid.num_zeta < 2 * eq.N),
             RuntimeWarning,
             "Shear objective grid requires toroidal " "resolution for surface averages",
         )
@@ -595,13 +595,13 @@ class ToroidalCurrent(_Objective):
             grid = self._grid
 
         warnif(
-            grid.num_theta < 2 * eq.M,
+            (eq.current is None) and ((grid.num_theta * (1 + eq.sym)) < 2 * eq.M),
             RuntimeWarning,
             "ToroidalCurrent objective grid requires poloidal "
             "resolution for surface averages",
         )
         warnif(
-            grid.num_zeta < 2 * eq.N,
+            (eq.current is None) and (grid.num_zeta < 2 * eq.N),
             RuntimeWarning,
             "ToroidalCurrent objective grid requires toroidal "
             "resolution for surface averages",

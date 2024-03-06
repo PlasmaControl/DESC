@@ -337,7 +337,7 @@ class QuasisymmetryTwoTerm(_Objective):
             grid = self._grid
 
         warnif(
-            grid.num_theta < 2 * eq.M,
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             RuntimeWarning,
             "QuasisymmetryTwoTerm objective grid requires poloidal "
             "resolution for surface averages",

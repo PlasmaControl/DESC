@@ -40,7 +40,7 @@ class Optimizable(ABC):
     def params_dict(self):
         """dict: dictionary of arrays of optimizable parameters."""
         return {
-            key: jnp.atleast_1d(getattr(self, key)).copy()
+            key: jnp.atleast_1d(jnp.asarray(getattr(self, key))).copy()
             for key in self.optimizable_params
         }
 
@@ -88,7 +88,7 @@ class Optimizable(ABC):
             given by ``x_idx``
         """
         return jnp.concatenate(
-            [jnp.atleast_1d(p[key]) for key in self.optimizable_params]
+            [jnp.atleast_1d(jnp.asarray(p[key])) for key in self.optimizable_params]
         )
 
     def unpack_params(self, x):
@@ -108,7 +108,7 @@ class Optimizable(ABC):
         x_idx = self.x_idx
         params = {}
         for arg in self.optimizable_params:
-            params[arg] = jnp.atleast_1d(x[x_idx[arg]])
+            params[arg] = jnp.atleast_1d(jnp.asarray(x[x_idx[arg]]))
         return params
 
     def _sort_args(self, args):

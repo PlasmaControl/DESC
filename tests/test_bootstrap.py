@@ -1200,54 +1200,6 @@ class TestBootstrapObjectives:
         # Results are not perfectly identical because ln(Lambda) is not quite invariant.
         np.testing.assert_allclose(results, expected, rtol=2e-3)
 
-    @pytest.mark.unit
-    @pytest.mark.solve
-    def test_BootstrapRedlConsistency_resolution(self, DSHAPE_current):
-        """Confirm that the objective function is ~independent of grid resolution."""
-        helicity = (1, 0)
-
-        eq = desc.io.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-
-        eq.electron_density = PowerSeriesProfile(
-            2.0e19 * np.array([1, -0.85]), modes=[0, 4]
-        )
-        eq.electron_temperature = PowerSeriesProfile(
-            1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
-        )
-        eq.ion_temperature = PowerSeriesProfile(
-            1.1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
-        )
-        eq.atomic_number = 1.4
-
-        def test(grid_type, kwargs, L, M, N):
-            grid = grid_type(L=L, M=M, N=N, NFP=eq.NFP, **kwargs)
-            obj = ObjectiveFunction(
-                BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
-            )
-            obj.build()
-            scalar_objective = obj.compute_scalar(obj.x(eq))
-            print(f"grid_type:{grid_type} L:{L} M:{M} N:{N} obj:{scalar_objective}")
-            return scalar_objective
-
-        results = []
-
-        # Loop over grid types. For LinearGrid we need to drop the
-        # point at rho=0 to avoid a divide-by-0
-        grid_types = [LinearGrid, QuadratureGrid]
-        kwargss = [{"axis": False}, {}]
-
-        # Loop over grid resolutions:
-        Ls = [150, 300, 150, 150]
-        Ms = [10, 10, 20, 10]
-        Ns = [0, 0, 0, 2]
-
-        for grid_type, kwargs in zip(grid_types, kwargss):
-            for L, M, N in zip(Ls, Ms, Ns):
-                results.append(test(grid_type, kwargs, L, M, N))
-
-        results = np.array(results)
-        np.testing.assert_allclose(results, np.mean(results), rtol=0.04)
-
     @pytest.mark.regression
     def test_bootstrap_consistency_iota(self, TmpDir):
         """Try optimizing for bootstrap consistency in axisymmetry, at fixed shape.

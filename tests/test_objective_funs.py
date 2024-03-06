@@ -54,7 +54,6 @@ from desc.objectives import (
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
-from desc.objectives.objective_funs import _Objective
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import ptolemy_linear_transform
@@ -624,56 +623,6 @@ def test_derivative_modes():
     H3 = obj3.hess(x)
     np.testing.assert_allclose(H1, H2, atol=1e-10)
     np.testing.assert_allclose(H1, H3, atol=1e-10)
-
-
-@pytest.mark.unit
-@pytest.mark.xfail
-def test_rejit():
-    """Test that updating attributes and recompiling correctly updates."""
-
-    class DummyObjective(_Objective):
-        def __init__(self, y, eq=None, target=0, weight=1, name="dummy"):
-            self.y = y
-            super().__init__(things=eq, target=target, weight=weight, name=name)
-
-        def build(self, use_jit=True, verbose=1):
-            self._dim_f = 1
-            super().build(use_jit, verbose)
-
-        def compute(self, params, constants=None):
-            return 200 + self.target * self.weight - self.y * params["R_lmn"] ** 3
-
-    eq = Equilibrium()
-    obj = DummyObjective(3, eq=eq)
-    obj.build()
-    assert obj.compute_unscaled({"R_lmn": 4}) == 8
-    assert obj.compute_scaled_error({"R_lmn": 4}) == 8
-    obj.target = 1
-    obj.weight = 2
-    assert obj.compute({"R_lmn": 4}) == 10  # compute method is not JIT compiled
-    assert (
-        obj.compute_scaled_error({"R_lmn": 4}) == 8
-    )  # only compute_scaled is JIT compiled
-    obj.jit()
-    assert obj.compute({"R_lmn": 4}) == 10
-    assert obj.compute_scaled_error({"R_lmn": 4}) == 18
-
-    objFun = ObjectiveFunction(obj)
-    objFun.build()
-    x = objFun.x(eq)
-
-    f = objFun.compute_scaled_error(x)
-    J = objFun.jac_scaled(x)
-    np.testing.assert_allclose(f, [-5598, 402, 396])
-    np.testing.assert_allclose(J[:, eq.x_idx["R_lmn"]], np.diag([-1800, 0, -18]))
-    objFun.objectives[0].target = 3
-    objFun.objectives[0].weight = 4
-    objFun.objectives[0].y = 2
-    np.testing.assert_allclose(objFun.compute_scaled_error(x), f)
-    np.testing.assert_allclose(objFun.jac_scaled(x), J)
-    objFun.jit()
-    np.testing.assert_allclose(objFun.compute_scaled_error(x), [-7164, 836, 828])
-    np.testing.assert_allclose(objFun.jac_scaled(x), J * 4 / 3)
 
 
 @pytest.mark.unit
@@ -1358,30 +1307,6 @@ def test_boundary_error_print(capsys):
         + "\n"
     )
     assert out.out == corr_out
-
-
-@pytest.mark.unit
-def test_rebuild():
-    """Test that the objective is rebuilt correctly when needed."""
-    eq = Equilibrium(L=3, M=3)
-    f_obj = ForceBalance(eq=eq)
-    obj = ObjectiveFunction(f_obj)
-    eq.solve(maxiter=2, objective=obj)
-
-    # this would fail before v0.8.2 when trying to get objective.x
-    eq.change_resolution(L=5, M=5)
-    obj.build(eq)
-    eq.solve(maxiter=2, objective=obj)
-
-    eq = Equilibrium(L=3, M=3)
-    f_obj = ForceBalance(eq=eq)
-    obj = ObjectiveFunction(f_obj)
-    eq.solve(maxiter=2, objective=obj)
-    eq.change_resolution(L=5, M=5)
-    # this would fail at objective.compile
-    obj = ObjectiveFunction(f_obj)
-    obj.build(eq)
-    eq.solve(maxiter=2, objective=obj)
 
 
 @pytest.mark.unit

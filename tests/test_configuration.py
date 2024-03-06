@@ -27,7 +27,7 @@ class TestConstructor:
         assert eq.M == 1
         assert eq.N == 0
         assert eq.sym is False
-        assert eq.surface.eq(FourierRZToroidalSurface(sym=False))
+        assert eq.surface.equiv(FourierRZToroidalSurface(sym=False))
         assert isinstance(eq.pressure, PowerSeriesProfile)
         assert isinstance(eq.current, PowerSeriesProfile)
         np.testing.assert_allclose(eq.p_l, [0])
@@ -52,8 +52,8 @@ class TestConstructor:
             sym=False,
         )
 
-        assert eq.pressure.eq(pressure)
-        assert eq.iota.eq(iota)
+        assert eq.pressure.equiv(pressure)
+        assert eq.iota.equiv(iota)
         assert eq.spectral_indexing == "ansi"
         assert eq.NFP == 2
         assert eq.axis.NFP == 2
@@ -66,6 +66,7 @@ class TestConstructor:
         eq2 = Equilibrium(surface=surface2)
         assert eq2.NFP == 3
         assert eq2.axis.NFP == 3
+        assert eq2.surface.equiv(surface2)
 
         eq3 = Equilibrium(xsection=xsection, axis=None)
         np.testing.assert_allclose(eq3.axis.R_n, [10])

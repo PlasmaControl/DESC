@@ -812,8 +812,8 @@ class QuadraticFlux(_Objective):
 
     def __init__(
         self,
-        ext_field,
         eq,
+        ext_field,
         target=None,
         bounds=None,
         weight=1,

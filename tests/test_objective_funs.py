@@ -630,19 +630,20 @@ class TestQuadraticFlux:
 
         # test that torus (axisymmetric) Bnorm is exactly 0
         __, eq = quadratic_flux_equilibriums
-        obj = QuadraticFlux(t_field, eq)
+        obj = QuadraticFlux(eq, t_field)
         obj.build(eq, verbose=2)
         f = obj.compute(field_params=t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-15, atol=1e-15)
 
         # test nonaxisymmetric surface
-        eq = desc.io.load("desc/examples/precise_QA_output.h5")[0]
+        eq = desc.examples.get("precise_QA", "all")[0]
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
 
         __, eval_grid, source_grid = self.get_grids(eq, t_field)
 
         obj = QuadraticFlux(
-            t_field,
             eq,
+            t_field,
             eval_grid=eval_grid,
             src_grid=source_grid,
         )
@@ -674,8 +675,8 @@ class TestQuadraticFlux:
         constraints = (FixParameter(field, ["I", "G", "R_lmn", "Z_lmn"]),)
 
         quadflux_obj = QuadraticFlux(
-            ext_field=field,
             eq=eq,
+            ext_field=field,
             src_grid=source_grid,
             eval_grid=eval_grid,
             field_grid=field_grid,
@@ -708,8 +709,8 @@ class TestQuadraticFlux:
 
         constraints = (FixParameter(field, ["R0"]),)
         quadflux_obj = QuadraticFlux(
-            ext_field=field,
             eq=eq,
+            ext_field=field,
             src_grid=source_grid,
             eval_grid=eval_grid,
             field_grid=field_grid,
@@ -736,8 +737,8 @@ class TestQuadraticFlux:
         t_field = ToroidalMagneticField(1, 1)
 
         obj = QuadraticFlux(
-            t_field,
             eq,
+            t_field,
             vacuum=True,
         )
         Bnorm = t_field.compute_Bnormal(eq.surface)[0]

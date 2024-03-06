@@ -530,10 +530,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
 
     def __init__(self, scale, field):
-        assert (
-            np.isscalar(scale) or np.asarray(scale).size == 1
-        ), "scale must be a scalar value"
-        scale = float(scale)
+        scale = float(np.squeeze(scale))
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
@@ -553,8 +550,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
 
     @scale.setter
     def scale(self, new):
-        assert float(new) == new, "scale must be a scalar"
-        self._scale = new
+        self._scale = float(np.squeeze(new))
 
     # want this class to pretend like its the underlying field
     def __getattr__(self, attr):
@@ -707,9 +703,8 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0"]
 
     def __init__(self, B0, R0):
-        assert float(R0) == R0, "R0 must be a scalar"
-        self.B0 = float(B0)
-        self.R0 = float(R0)
+        self.B0 = float(np.squeeze(B0))
+        self.R0 = float(np.squeeze(R0))
 
     @optimizable_parameter
     @property
@@ -719,8 +714,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        assert float(new) == new, "R0 must be a scalar"
-        self._R0 = new
+        self._R0 = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -730,8 +724,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        assert float(new) == new, "B0 must be a scalar"
-        self._B0 = new
+        self._B0 = float(np.squeeze(new))
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -760,7 +753,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         R0 = params.get("R0", self.R0)
 
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "xyz":
             coords = xyz2rpz(coords)
         bp = B0 * R0 / coords[:, 0]
@@ -795,8 +788,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        assert float(new) == new, "B0 must be a scalar"
-        self._B0 = new
+        self._B0 = float(np.squeeze(new))
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -824,7 +816,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         B0 = params.get("B0", self.B0)
 
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "xyz":
             coords = xyz2rpz(coords)
         bz = B0 * jnp.ones_like(coords[:, 2])
@@ -875,8 +867,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        assert float(new) == new, "R0 must be a scalar"
-        self._R0 = new
+        self._R0 = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -886,8 +877,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        assert float(new) == new, "B0 must be a scalar"
-        self._B0 = new
+        self._B0 = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -897,8 +887,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @iota.setter
     def iota(self, new):
-        assert float(new) == new, "iota must be a scalar"
-        self._iota = new
+        self._iota = float(np.squeeze(new))
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -928,7 +917,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         iota = params.get("iota", self.iota)
 
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "xyz":
             coords = xyz2rpz(coords)
 
@@ -992,7 +981,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
     def __init__(
         self, R, phi, Z, BR, Bphi, BZ, currents=1.0, NFP=1, method="cubic", extrap=False
     ):
-        R, phi, Z, currents = map(jnp.atleast_1d, (R, phi, Z, currents))
+        R, phi, Z, currents = map(
+            lambda x: jnp.atleast_1d(jnp.asarray(x)), (R, phi, Z, currents)
+        )
         assert R.ndim == 1
         assert phi.ndim == 1
         assert Z.ndim == 1
@@ -1000,7 +991,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shape = (R.size, phi.size, Z.size, currents.size)
 
         def _atleast_4d(x):
-            x = jnp.atleast_3d(x)
+            x = jnp.atleast_3d(jnp.asarray(x))
             if x.ndim < 4:
                 x = x.reshape(x.shape + (1,))
             return x
@@ -1044,7 +1035,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
 
     @currents.setter
     def currents(self, new):
-        new = jnp.atleast_1d(new)
+        new = jnp.atleast_1d(jnp.asarray(new))
         assert len(new) == len(self.currents)
         self._currents = new
 
@@ -1092,7 +1083,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         """
         assert basis.lower() in ["rpz", "xyz"]
         currents = self.currents if params is None else params["currents"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "xyz":
             coords = xyz2rpz(coords)
         Rq, phiq, Zq = coords.T
@@ -1350,7 +1341,7 @@ class ScalarPotentialField(_MagneticField):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "xyz":
             coords = xyz2rpz(coords)
         Rq, phiq, Zq = coords.T
@@ -1858,10 +1849,8 @@ class FourierCurrentPotentialField(
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
         self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
 
-        assert np.isscalar(I) or np.asarray(I).size == 1, "I must be a scalar"
-        assert np.isscalar(G) or np.asarray(G).size == 1, "G must be a scalar"
-        self._I = float(I)
-        self._G = float(G)
+        self._I = float(np.squeeze(I))
+        self._G = float(np.squeeze(G))
 
         super().__init__(
             R_lmn=R_lmn,
@@ -1884,8 +1873,7 @@ class FourierCurrentPotentialField(
 
     @I.setter
     def I(self, new):  # noqa: E743
-        assert np.isscalar(new) or np.asarray(new).size == 1, "I must be a scalar"
-        self._I = float(new)
+        self._I = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -1895,8 +1883,7 @@ class FourierCurrentPotentialField(
 
     @G.setter
     def G(self, new):
-        assert np.isscalar(new) or np.asarray(new).size == 1, "G must be a scalar"
-        self._G = float(new)
+        self._G = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -2114,7 +2101,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
 
     """
     assert basis.lower() in ["rpz", "xyz"]
-    coords = jnp.atleast_2d(coords)
+    coords = jnp.atleast_2d(jnp.asarray(coords))
     if basis == "rpz":
         coords = rpz2xyz(coords)
 

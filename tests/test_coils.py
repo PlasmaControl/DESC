@@ -491,7 +491,7 @@ class TestCoilSet:
         assert coils1[-2].__class__ is coil1.__class__
 
         coils2 = CoilSet.linspaced_angular(coil1)
-        assert coils2[0].eq(coil1) and not (coils2[0] is coil1)
+        assert coils2[0].equiv(coil1) and not (coils2[0] is coil1)
         coils2[0] = coil1
         assert coils2[0] is coil1
         with pytest.raises(TypeError):

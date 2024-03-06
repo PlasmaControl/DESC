@@ -194,7 +194,7 @@ class _Profile(IOAble, ABC):
     def __call__(self, grid, params=None, dr=0, dt=0, dz=0):
         """Evaluate the profile at a given set of points."""
         if not isinstance(grid, _Grid):
-            grid = jnp.atleast_1d(grid)
+            grid = jnp.atleast_1d(jnp.asarray(grid))
             if grid.ndim == 1:
                 grid = jnp.array([grid, jnp.zeros_like(grid), jnp.zeros_like(grid)]).T
             grid = Grid(grid, sort=False)
@@ -585,7 +585,7 @@ class PowerSeriesProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = jnp.atleast_1d(new)
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size == self._basis.num_modes:
             self._params = jnp.asarray(new)
         else:
@@ -828,7 +828,7 @@ class MTanhProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = jnp.atleast_1d(new)
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size >= 5:
             self._params = jnp.asarray(new)
         else:
@@ -1095,7 +1095,7 @@ class FourierZernikeProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        new = jnp.atleast_1d(new)
+        new = jnp.atleast_1d(jnp.asarray(new))
         if new.size == self._basis.num_modes:
             self._params = jnp.asarray(new)
         else:

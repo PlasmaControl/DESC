@@ -37,9 +37,9 @@ class TestTransform:
         transf_32 = Transform(grid_3, basis_2)
         transf_32b = Transform(grid_3, basis_2)
 
-        assert not transf_11.eq(transf_21)
-        assert not transf_31.eq(transf_32)
-        assert transf_32.eq(transf_32b)
+        assert not transf_11.equiv(transf_21)
+        assert not transf_31.equiv(transf_32)
+        assert transf_32.equiv(transf_32b)
 
     @pytest.mark.unit
     def test_transform_order_error(self):
@@ -185,10 +185,10 @@ class TestTransform:
             transf_5 = Transform(grid_5, basis, method="fft")
 
         transf_3.grid = grid_5
-        assert transf_3.eq(transf_5)
+        assert transf_3.equiv(transf_5)
 
         transf_3.grid = grid_1
-        assert transf_3.eq(transf_1)
+        assert transf_3.equiv(transf_1)
 
         np.testing.assert_allclose(transf_3.nodes, grid_1.nodes)
 
@@ -206,10 +206,10 @@ class TestTransform:
         transf_31 = Transform(grid, basis_31, method="fft")
 
         transf_21.basis = basis_31
-        assert transf_21.eq(transf_31)
+        assert transf_21.equiv(transf_31)
 
         transf_21.basis = basis_20
-        assert transf_21.eq(transf_20)
+        assert transf_21.equiv(transf_20)
 
         np.testing.assert_allclose(transf_21.modes, basis_20.modes)
 

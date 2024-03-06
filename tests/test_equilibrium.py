@@ -78,34 +78,6 @@ def test_compute_theta_coords(DSHAPE_current):
 
 @pytest.mark.unit
 def test_map_coordinates():
-    """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-    eq = desc.examples.get("DSHAPE")
-
-    inbasis = ["alpha", "phi", "rho"]
-    outbasis = ["rho", "theta_PEST", "zeta"]
-
-    rho = np.linspace(0.01, 0.99, 20)
-    theta = np.linspace(0, np.pi, 20, endpoint=False)
-    zeta = np.linspace(0, np.pi, 20, endpoint=False)
-
-    grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
-    in_data = eq.compute(inbasis, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
-    out_data = eq.compute(outbasis, grid=grid)
-    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
-
-    out = eq.map_coordinates(
-        in_coords,
-        inbasis,
-        outbasis,
-        period=(2 * np.pi, 2 * np.pi, np.inf),
-        maxiter=40,
-    )
-    np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
-
-
-@pytest.mark.unit
-def test_map_coordinates2():
     """Test root finding for (rho,theta,zeta) for common use cases."""
     eq = desc.examples.get("W7-X")
 

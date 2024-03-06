@@ -385,6 +385,7 @@ def _reverse_mode_unsafe_names():
     return unsafe_names
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("name", _reverse_mode_unsafe_names())
 def test_reverse_mode_ad_axis(name):
     """Asserts that the rho=0 axis limits are reverse mode differentiable."""

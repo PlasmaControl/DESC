@@ -424,6 +424,7 @@ class TestMagneticFields:
         with pytest.raises(ValueError):
             field.Phi_mn = np.ones((basis.num_modes + 1,))
 
+    @pytest.mark.unit
     def test_io_fourier_current_field(self, tmpdir_factory):
         """Test that i/o works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
@@ -516,6 +517,7 @@ class TestMagneticFields:
                 NFP=10,
             )
 
+    @pytest.mark.unit
     def test_change_Phi_basis_fourier_current_field(self):
         """Test that change_Phi_resolution works for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(
@@ -572,6 +574,7 @@ class TestMagneticFields:
         np.testing.assert_allclose(field.Phi_basis.modes, basis.modes)
         assert field.Phi_basis.sym == "sin"
 
+    @pytest.mark.unit
     def test_init_Phi_mn_fourier_current_field(self):
         """Test initial Phi_mn size is correct for FourierCurrentPotentialField."""
         surface = FourierRZToroidalSurface(

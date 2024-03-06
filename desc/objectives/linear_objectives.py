@@ -3525,7 +3525,7 @@ class FixOmniWell(_FixedObjective):
         return params["B_lm"][self._idx]
 
 
-class FixOmniShift(_FixedObjective):
+class FixOmniMap(_FixedObjective):
     """Fixes OmnigenousField.x_lmn coefficients.
 
     Parameters
@@ -3555,7 +3555,7 @@ class FixOmniShift(_FixedObjective):
 
     _target_arg = "x_lmn"
     _units = "(rad)"
-    _print_value_fmt = "Fixed omnigenity shift error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity map error: {:10.3e} "
 
     def __init__(
         self,
@@ -3566,7 +3566,7 @@ class FixOmniShift(_FixedObjective):
         normalize=False,
         normalize_target=False,
         indices=True,
-        name="fixed omnigenity shift",
+        name="fixed omnigenity map",
     ):
         self._field = field
         self._indices = indices
@@ -3611,7 +3611,7 @@ class FixOmniShift(_FixedObjective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute fixed omnigenity shift error.
+        """Compute fixed omnigenity map error.
 
         Parameters
         ----------
@@ -3624,7 +3624,7 @@ class FixOmniShift(_FixedObjective):
         Returns
         -------
         f : ndarray
-            Fixed omnigenity shift error.
+            Fixed omnigenity map error.
 
         """
         return params["x_lmn"][self._idx]

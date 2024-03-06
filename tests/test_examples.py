@@ -26,7 +26,7 @@ from desc.objectives import (
     FixCurrent,
     FixIota,
     FixOmniBmax,
-    FixOmniShift,
+    FixOmniMap,
     FixParameter,
     FixPressure,
     FixPsi,
@@ -969,7 +969,7 @@ def test_omnigenity_optimization():
         FixCurrent(eq=eq),
         FixPsi(eq=eq),
         FixOmniBmax(field=field),
-        FixOmniShift(field=field, indices=np.where(field.x_basis.modes[:, 1] == 0)[0]),
+        FixOmniMap(field=field, indices=np.where(field.x_basis.modes[:, 1] == 0)[0]),
         LinearObjectiveFromUser(mirrorRatio, field, target=[0.8, 1.2]),
     )
     optimizer = Optimizer("lsq-auglag")

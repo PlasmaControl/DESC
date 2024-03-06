@@ -60,7 +60,7 @@ from .linear_objectives import (
     FixModeR,
     FixModeZ,
     FixOmniBmax,
-    FixOmniShift,
+    FixOmniMap,
     FixOmniWell,
     FixParameter,
     FixPressure,

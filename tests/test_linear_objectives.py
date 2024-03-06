@@ -31,7 +31,7 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
-    FixOmniShift,
+    FixOmniMap,
     FixOmniWell,
     FixParameter,
     FixPressure,
@@ -889,7 +889,7 @@ def test_fix_omni_indices():
     constraint = FixOmniWell(field=field, indices=False)
     constraint.build()
     assert constraint._idx.size == 0
-    constraint = FixOmniShift(field=field, indices=False)
+    constraint = FixOmniMap(field=field, indices=False)
     constraint.build()
     assert constraint._idx.size == 0
 
@@ -897,7 +897,7 @@ def test_fix_omni_indices():
     constraint = FixOmniWell(field=field, indices=True)
     constraint.build()
     assert constraint._idx.size == field.B_lm.size
-    constraint = FixOmniShift(field=field, indices=True)
+    constraint = FixOmniMap(field=field, indices=True)
     constraint.build()
     assert constraint._idx.size == field.x_lmn.size
 
@@ -906,6 +906,6 @@ def test_fix_omni_indices():
     constraint = FixOmniWell(field=field, indices=indices)
     constraint.build()
     assert constraint._idx.size == indices.size
-    constraint = FixOmniShift(field=field, indices=indices)
+    constraint = FixOmniMap(field=field, indices=indices)
     constraint.build()
     assert constraint._idx.size == indices.size

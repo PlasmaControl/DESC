@@ -2248,12 +2248,12 @@ class OmnigenousField(Optimizable, IOAble):
             )
         self._B_lm = B_lm_new.flatten()
 
-        # change shift parameters and basis
-        old_modes_shift = self.x_basis.modes
+        # change mapping parameters and basis
+        old_modes_map = self.x_basis.modes
         self.x_basis.change_resolution(
             self.L_x, self.M_x, self.N_x, NFP=self.NFP, sym="cos(t)"
         )
-        self._x_lmn = copy_coeffs(self.x_lmn, old_modes_shift, self.x_basis.modes)
+        self._x_lmn = copy_coeffs(self.x_lmn, old_modes_map, self.x_basis.modes)
 
     def compute(
         self,

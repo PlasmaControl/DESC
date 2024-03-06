@@ -173,7 +173,7 @@ Objective Functions
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
     desc.objectives.FixOmniBmax
-    desc.objectives.FixOmniShift
+    desc.objectives.FixOmniMap
     desc.objectives.FixOmniWell
     desc.objectives.FixParameter
     desc.objectives.FixPressure

@@ -1092,7 +1092,8 @@ def test_optimize_with_single_constraint():
     optimizer.optimize(eq, objective=objectective, constraints=constraints, verbose=2)
 
 
-@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.regression
 def test_proximal_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")
@@ -1202,7 +1203,8 @@ def test_proximal_jacobian():
     np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)
 
 
-@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.regression
 def test_LinearConstraint_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")

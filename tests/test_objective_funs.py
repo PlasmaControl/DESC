@@ -1526,7 +1526,7 @@ def test_loss_function_asserts():
         RotationalTransform(eq=eq, loss_function=fun)
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
 def test_compute_scalar_resolution():  # noqa: C901
     """Test that compute_scalar values are roughly independent of grid resolution."""

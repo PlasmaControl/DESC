@@ -526,7 +526,7 @@ def test_simsopt_QH_comparison():
             ),
         )
     )
-    eq2, result = eq.optimize(
+    eq2, _ = eq.optimize(
         verbose=3,
         objective=objective,
         constraints=constraints,
@@ -755,7 +755,7 @@ def test_multiobject_optimization():
     eq.solve(verbose=3)
 
     optimizer = Optimizer("fmin-auglag")
-    (eq, surf), result = optimizer.optimize(
+    (eq, surf), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=500
     )
 
@@ -798,7 +798,7 @@ def test_multiobject_optimization_prox():
     eq.solve(verbose=3)
 
     optimizer = Optimizer("proximal-lsq-exact")
-    (eq, surf), result = optimizer.optimize(
+    (eq, surf), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=100
     )
 
@@ -1026,7 +1026,7 @@ def test_non_eq_optimization():
     )
     objective = ObjectiveFunction((obj,))
     optimizer = Optimizer("lsq-auglag")
-    (eq, surf), result = optimizer.optimize(
+    (eq, surf), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=100
     )
 

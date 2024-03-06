@@ -1387,6 +1387,9 @@ def field_line_integrate(
     rtol=1e-8,
     atol=1e-8,
     maxstep=1000,
+    bounds_R=(0, np.inf),
+    bounds_Z=(-np.inf, np.inf),
+    decay_accel=1e6,
 ):
     """Trace field lines by integration.
 
@@ -1408,6 +1411,26 @@ def field_line_integrate(
         relative and absolute tolerances for ode integration
     maxstep : int
         maximum number of steps between different phis
+    bounds_R : tuple of (float,float), optional
+        R bounds for field line integration bounding box.
+        If supplied, the RHS of the field line equations will be
+        multipled by exp(-r) where r is the distance to the bounding box,
+        this is meant to prevent the field lines which escape to infinity from
+        slowing the integration down by being traced to infinity.
+        defaults to (0,np.inf)
+    bounds_Z : tuple of (float,float), optional
+        Z bounds for field line integration bounding box.
+        If supplied, the RHS of the field line equations will be
+        multipled by exp(-r) where r is the distance to the bounding box,
+        this is meant to prevent the field lines which escape to infinity from
+        slowing the integration down by being traced to infinity.
+        Defaults to (-np.inf,np.inf)
+    decay_accel : float, optional
+        An extra factor to the exponential that decays the RHS, i.e.
+        the RHS is multiplied by exp(-r * decay_accel), this is to
+        accelerate the decay of the RHS and stop the integration sooner
+        after exiting the bounds. Defaults to 1e6
+
 
     Returns
     -------
@@ -1417,6 +1440,7 @@ def field_line_integrate(
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
+    assert decay_accel > 0, "decay_accel must be positive"
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()
@@ -1426,12 +1450,45 @@ def field_line_integrate(
     def odefun(rpz, s):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
+        z = rpz[:, 2]
+        # if bounds are given, will decay the magnetic field line eqn
+        # RHS if the trajectory is outside of bounds to avoid
+        # integrating the field line to infinity, which is costly
+        # and not useful in most cases
+        decay_factor = jnp.where(
+            jnp.array(
+                [
+                    jnp.less(r, bounds_R[0]),
+                    jnp.greater(r, bounds_R[1]),
+                    jnp.less(z, bounds_Z[0]),
+                    jnp.greater(z, bounds_Z[1]),
+                ]
+            ),
+            jnp.array(
+                [
+                    # we mult by decay_accel to accelerate the decay so that the
+                    # integration is stopped soon after the bounds are exited.
+                    jnp.exp(-(decay_accel * (r - bounds_R[0]) ** 2)),
+                    jnp.exp(-(decay_accel * (r - bounds_R[1]) ** 2)),
+                    jnp.exp(-(decay_accel * (z - bounds_Z[0]) ** 2)),
+                    jnp.exp(-(decay_accel * (z - bounds_Z[1]) ** 2)),
+                ]
+            ),
+            1.0,
+        )
+        # multiply all together, the conditions that are not violated
+        # are just one while the violated ones are continous decaying exponentials
+        decay_factor = jnp.prod(decay_factor, axis=0)
+
         br, bp, bz = field.compute_magnetic_field(
             rpz, params, basis="rpz", source_grid=source_grid
         ).T
-        return jnp.array(
-            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
-        ).squeeze()
+        return (
+            decay_factor
+            * jnp.array(
+                [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
+            ).squeeze()
+        )
 
     intfun = lambda x: odeint(odefun, x, phis, rtol=rtol, atol=atol, mxstep=maxstep)
     x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)

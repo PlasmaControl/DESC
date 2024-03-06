@@ -525,7 +525,7 @@ def test_copy():
 
     transform3 = transform1.copy(deepcopy=True)
     assert transform1.basis is not transform3.basis
-    assert transform1.basis.eq(transform3.basis)
+    assert transform1.basis.equiv(transform3.basis)
     np.testing.assert_allclose(
         transform1.matrices["direct1"][0][0][0],
         transform3.matrices["direct1"][0][0][0],
@@ -597,7 +597,7 @@ def test_save_after_load(tmpdir_factory):
     # ensure can save again without an error being thrown due
     # to the .h5 file not being closed
     eq2.save(tmp_path)
-    assert eq2.eq(eq)
+    assert eq2.equiv(eq)
 
 
 @pytest.mark.unit

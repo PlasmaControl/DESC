@@ -340,15 +340,28 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
     derivs = get_derivs(keys, obj, has_axis=grid.axis.size)
     transforms = {"grid": grid}
     for c in derivs.keys():
-        if hasattr(obj, c + "_basis"):
-            transforms[c] = Transform(
-                grid,
-                getattr(obj, c + "_basis"),
-                derivs=derivs[c],
-                build=True,
-                method=method,
-            )
-        elif c == "B":  # used for Boozer transform
+        if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
+            basis = getattr(obj, c + "_basis")
+            # first check if we already have a transform with a compatible basis
+            for transform in transforms.values():
+                if basis.equiv(getattr(transform, "basis", None)):
+                    ders = np.unique(
+                        np.vstack([derivs[c], transform.derivatives]), axis=0
+                    ).astype(int)
+                    # don't build until we know all the derivs we need
+                    transform.change_derivatives(ders, build=False)
+                    c_transform = transform
+                    break
+            else:  # if we didn't exit the loop early
+                c_transform = Transform(
+                    grid,
+                    basis,
+                    derivs=derivs[c],
+                    build=False,
+                    method=method,
+                )
+            transforms[c] = c_transform
+        elif c == "B":  # for fitting Boozer harmonics  # used for Boozer transform
             transforms["B"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -358,7 +371,7 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     sym=obj.R_basis.sym,
                 ),
                 derivs=derivs["B"],
-                build=True,
+                build=False,
                 build_pinv=True,
                 method=method,
             )
@@ -375,7 +388,9 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                 build_pinv=False,
                 method=method,
             )
-        elif c == "w":  # used for Boozer transfrom
+        elif (
+            c == "w"
+        ):  # for fitting Boozer toroidal stream function  # used for Boozer transfrom
             transforms["w"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -385,12 +400,17 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     sym=obj.Z_basis.sym,
                 ),
                 derivs=derivs["w"],
-                build=True,
+                build=False,
                 build_pinv=True,
                 method=method,
             )
-        elif c not in transforms:
+        elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
+
+    # now build them
+    for t in transforms.values():
+        if hasattr(t, "build"):
+            t.build()
 
     return transforms
 

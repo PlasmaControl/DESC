@@ -275,7 +275,7 @@ class Transform(IOAble):
         for k in range(basis.num_modes):
             row = np.where((basis.modes[k, :2] == self.lm_modes).all(axis=1))[0]
             col = np.where(basis.modes[k, 2] == n_vals)[0]
-            self.fft_index[k] = self.num_n_modes * row + col + offset
+            self.fft_index[k] = np.squeeze(self.num_n_modes * row + col + offset)
         self.fft_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // self.num_z_nodes],
@@ -354,7 +354,7 @@ class Transform(IOAble):
         for k in range(basis.num_modes):
             row = np.where((basis.modes[k, :2] == self.lm_modes).all(axis=1))[0]
             col = np.where(basis.modes[k, 2] == n_vals)[0]
-            self.fft_index[k] = self.num_n_modes * row + col
+            self.fft_index[k] = np.squeeze(self.num_n_modes * row + col)
         self.fft_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // self.num_z_nodes],

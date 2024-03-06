@@ -632,7 +632,7 @@ def test_scipy_constrained_solve():
     )
     obj = ObjectiveFunction(ForceBalance(eq=eq))
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", message="delta_grad == 0.0")
+        warnings.filterwarnings("ignore", message="delta_grad == 0.0")
         eq2, result = eq.optimize(
             objective=obj,
             constraints=constraints,

@@ -474,7 +474,7 @@ class VMECIO:
         chi[:] = (
             -2  # negative sign for negative Jacobian
             * Psi
-            * integrate.cumtrapz(r_full * iotaf[:], r_full, initial=0)
+            * integrate.cumulative_trapezoid(r_full * iotaf[:], r_full, initial=0)
         )
 
         chipf = file.createVariable("chipf", np.float64, ("radius",))

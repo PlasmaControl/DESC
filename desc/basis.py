@@ -1221,7 +1221,6 @@ def polyder_vec(p, m, exact=False):
 
 
 def _polyder_exact(p, m):
-    factorial = np.math.factorial
     m = np.asarray(m, dtype=int)  # order of derivative
     p = np.atleast_2d(p)
     order = p.shape[1] - 1
@@ -1239,7 +1238,7 @@ def _polyder_exact(p, m):
 
 @jit
 def _polyder_jax(p, m):
-    p = jnp.atleast_2d(p)
+    p = jnp.atleast_2d(jnp.asarray(p))
     m = jnp.asarray(m).astype(int)
     order = p.shape[1] - 1
     D = jnp.arange(order, -1, -1)
@@ -1298,8 +1297,8 @@ def _polyval_exact(p, x, prec):
 
 @jit
 def _polyval_jax(p, x):
-    p = jnp.atleast_2d(p)
-    x = jnp.atleast_1d(x).flatten()
+    p = jnp.atleast_2d(jnp.asarray(p))
+    x = jnp.atleast_1d(jnp.asarray(x)).flatten()
     npoly = p.shape[0]  # number of polynomials
     order = p.shape[1]  # order of polynomials
     nx = len(x)  # number of coordinates

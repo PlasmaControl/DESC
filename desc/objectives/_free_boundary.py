@@ -321,7 +321,8 @@ class BoundaryError(_Objective):
     current potential on the LCFS. All residuals are weighted by the local area
     element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
 
-    The third equation is only included if a sheet current is supplied, otherwise it
+    The third equation is only included if a sheet current is supplied by making
+    the ``equilibrium.surface`` object a FourierCurrentPotentialField, otherwise it
     is trivially satisfied. If it is known that the external field accurately reproduces
     the target equilibrium with low normal field error and pressure at the edge is zero,
     then the sheet current will generally be negligible and can be omitted to save
@@ -337,10 +338,6 @@ class BoundaryError(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     ext_field : MagneticField
         External field produced by coils.
-    sheet_current : FourierCurrentPotentialField
-        Sheet current on the last closed flux surface. Not required for vacuum fields,
-        but generally needed to correctly solve at finite beta/current. Geometry will
-        be automatically constrained to be the same as the equilibrium LCFS.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
@@ -381,6 +378,22 @@ class BoundaryError(_Objective):
     name : str
         Name of the objective function.
 
+
+    Examples
+    --------
+    Assigning a surface current to the equilibrium:
+
+    .. code-block:: python
+
+        from desc.magnetic_fields import FourierCurrentPotentialField
+        # turn the regular FourierRZToroidalSurface into a current potential on the
+        # last closed flux surface
+        eq.surface = FourierCurrentPotentialField.from_suface(eq.surface,
+                                                              M_Phi=eq.M,
+                                                              N_Phi=eq.N,
+                                                              )
+        objective = BoundaryError(eq, ext_field)
+
     """
 
     _scalar = False
@@ -394,7 +407,6 @@ class BoundaryError(_Objective):
         self,
         eq,
         ext_field,
-        sheet_current=None,
         target=None,
         bounds=None,
         weight=1,
@@ -419,11 +431,8 @@ class BoundaryError(_Objective):
         self._ext_field = ext_field
         self._field_grid = field_grid
         self._loop = loop
-        self._sheet_current = None
+        self._sheet_current = hasattr(eq.surface, "Phi_mn")
         things = [eq]
-        if sheet_current:
-            things += [sheet_current]
-            self._sheet_current = True
 
         super().__init__(
             things=things,
@@ -550,19 +559,12 @@ class BoundaryError(_Objective):
         }
 
         if self._sheet_current:
-            sheet_current = self.things[1]
-            assert (
-                (sheet_current.M == eq.surface.M)
-                and (sheet_current.N == eq.surface.N)
-                and (sheet_current.NFP == eq.surface.NFP)
-                and (sheet_current.sym == eq.surface.sym)
-            ), "sheet current must have same resolution as eq.surface"
             self._sheet_data_keys = ["K"]
             sheet_eval_transforms = get_transforms(
-                self._sheet_data_keys, obj=sheet_current, grid=eval_grid
+                self._sheet_data_keys, obj=eq.surface, grid=eval_grid
             )
             sheet_source_transforms = get_transforms(
-                self._sheet_data_keys, obj=sheet_current, grid=source_grid
+                self._sheet_data_keys, obj=eq.surface, grid=source_grid
             )
             self._constants["sheet_eval_transforms"] = sheet_eval_transforms
             self._constants["sheet_source_transforms"] = sheet_source_transforms
@@ -590,15 +592,13 @@ class BoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, sheet_params=None, constants=None):
+    def compute(self, eq_params, constants=None):
         """Compute boundary force error.
 
         Parameters
         ----------
         eq_params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        sheet_params : dict
-            Dictionary of sheet current degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -628,10 +628,13 @@ class BoundaryError(_Objective):
             profiles=constants["eval_profiles"],
         )
         if self._sheet_current:
-            assert sheet_params is not None
-            # enforce that they're the same surface
-            sheet_params["R_lmn"] = eq_params["Rb_lmn"]
-            sheet_params["Z_lmn"] = eq_params["Zb_lmn"]
+            sheet_params = {
+                "R_lmn": eq_params["Rb_lmn"],
+                "Z_lmn": eq_params["Zb_lmn"],
+                "I": eq_params["I"],
+                "G": eq_params["G"],
+                "Phi_mn": eq_params["Phi_mn"],
+            }
             sheet_source_data = compute_fun(
                 "desc.magnetic_fields.FourierCurrentPotentialField",
                 self._sheet_data_keys,

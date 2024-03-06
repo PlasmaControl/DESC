@@ -291,11 +291,15 @@ class TestRZWindingSurfaceCurve:
         """Test torsion of circular curve."""
         c = FourierRZWindingSurfaceCurve()
         # by default the curve is a poloidally closed curve at constant zeta
-        np.testing.assert_allclose(c.compute("torsion", grid=20)["torsion"], 0)
+        np.testing.assert_allclose(
+            c.compute("torsion", grid=20)["torsion"], 0, atol=1e-16
+        )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
-        np.testing.assert_allclose(c.compute("torsion", grid=20)["torsion"], 0)
+        np.testing.assert_allclose(
+            c.compute("torsion", grid=20)["torsion"], 0, atol=1e-16
+        )
 
     @pytest.mark.unit
     def test_frenet(self):

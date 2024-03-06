@@ -888,16 +888,31 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
 
     data_surf = transforms["surface"].compute(
         [
-            "e_theta",
-            "e_theta_t",
-            "e_theta_z",
-            "e_theta_tt",
-            "e_theta_tz",
-            "e_theta_zz",
-            "e_zeta",
-            "e_zeta_t",
-            "e_zeta_z",
-            "e_zeta_zz",
+            "R_t",
+            "Z_t",
+            "R_z",
+            "Z_z",
+            "R_tt",
+            "phi_tt",
+            "Z_tt",
+            "R_tz",
+            "phi_tz",
+            "Z_tz",
+            "R_zz",
+            "phi_zz",
+            "Z_zz",
+            "R_ttt",
+            "phi_ttt",
+            "Z_ttt",
+            "R_ttz",
+            "phi_ttz",
+            "Z_ttz",
+            "R_tzz",
+            "phi_tzz",
+            "Z_tzz",
+            "R_zzz",
+            "phi_zzz",
+            "Z_zzz",
             "phi",
             "phi_z",
             "phi_t",
@@ -906,34 +921,6 @@ def _x_sss_FourierRZWindingSurfaceCurve(params, transforms, profiles, data, **kw
         method="jitable",
         basis="rpz",
     )
-    # first derivs
-    data_surf["R_t"] = data_surf["e_theta"][:, 0]
-    data_surf["Z_t"] = data_surf["e_theta"][:, 2]
-    data_surf["R_z"] = data_surf["e_zeta"][:, 0]
-    data_surf["Z_z"] = data_surf["e_zeta"][:, 2]
-    # second derivs
-    data_surf["R_tt"] = data_surf["e_theta_t"][:, 0]
-    data_surf["phi_tt"] = data_surf["e_theta_t"][:, 1]
-    data_surf["Z_tt"] = data_surf["e_theta_t"][:, 2]
-    data_surf["R_tz"] = data_surf["e_theta_z"][:, 0]
-    data_surf["phi_tz"] = data_surf["e_theta_z"][:, 1]
-    data_surf["Z_tz"] = data_surf["e_theta_z"][:, 2]
-    data_surf["R_zz"] = data_surf["e_zeta_z"][:, 0]
-    data_surf["phi_zz"] = data_surf["e_zeta_z"][:, 1]
-    data_surf["Z_zz"] = data_surf["e_zeta_z"][:, 2]
-    # third derivs
-    data_surf["R_ttt"] = data_surf["e_theta_tt"][:, 0]
-    data_surf["phi_ttt"] = data_surf["e_theta_tt"][:, 1]
-    data_surf["Z_ttt"] = data_surf["e_theta_tt"][:, 2]
-    data_surf["R_ttz"] = data_surf["e_theta_tz"][:, 0]
-    data_surf["phi_ttz"] = data_surf["e_theta_tz"][:, 1]
-    data_surf["Z_ttz"] = data_surf["e_theta_tz"][:, 2]
-    data_surf["R_tzz"] = data_surf["e_theta_zz"][:, 0]
-    data_surf["phi_tzz"] = data_surf["e_theta_zz"][:, 1]
-    data_surf["Z_tzz"] = data_surf["e_theta_zz"][:, 2]
-    data_surf["R_zzz"] = data_surf["e_zeta_zz"][:, 0]
-    data_surf["phi_zzz"] = data_surf["e_zeta_zz"][:, 1]
-    data_surf["Z_zzz"] = data_surf["e_zeta_zz"][:, 2]
 
     d3R = (
         data["zeta_sss"] * data_surf["R_t"]

@@ -1,7 +1,7 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz
 
 
 @register_compute_fun(
@@ -141,16 +141,12 @@ def _phi_Surface(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "phi"],
+    data=["phi"],
     parameterization="desc.geometry.core.Surface",
     basis="basis",
 )
 def _phi_r_Surface(params, transforms, profiles, data, **kwargs):
-    coords_r = data["e_rho"]
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        # if basis is xyz, then "x" is xyz and we must convert to rpz
-        coords_r = xyz2rpz_vec(coords_r, phi=data["phi"])
-    data["phi_r"] = coords_r[:, 1]
+    data["phi_r"] = jnp.zeros_like(data["phi"])
     return data
 
 
@@ -165,16 +161,138 @@ def _phi_r_Surface(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "phi"],
+    data=["phi"],
     parameterization="desc.geometry.core.Surface",
     basis="basis",
 )
 def _phi_t_Surface(params, transforms, profiles, data, **kwargs):
-    coords_t = data["e_theta"]
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        # if basis is xyz, then "x" is xyz and we must convert to rpz
-        coords_t = xyz2rpz_vec(coords_t, phi=data["phi"])
-    data["phi_t"] = coords_t[:, 1]
+    data["phi_t"] = jnp.zeros_like(data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="phi_tt",
+    label="\\partial_{\\theta\\theta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, second derivative wrt"
+    " poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_tt_Surface(params, transforms, profiles, data, **kwargs):
+    data["phi_tt"] = jnp.zeros_like(data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="phi_tz",
+    label="\\partial_{\\theta\\zeta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, first derivative wrt"
+    " poloidal coordinate and first derivative wrt toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_tz_Surface(params, transforms, profiles, data, **kwargs):
+    data["phi_tz"] = jnp.zeros_like(data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="phi_ttt",
+    label="\\partial_{\\theta\\theta\\theta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, third derivative wrt"
+    " poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_ttt_Surface(params, transforms, profiles, data, **kwargs):
+    data["phi_ttt"] = jnp.zeros_like(data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="phi_ttz",
+    label="\\partial_{\\theta\\theta\\zeta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, second derivative wrt"
+    " poloidal coordinate and first derivative wrt toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_ttz_Surface(params, transforms, profiles, data, **kwargs):
+    data["phi_ttz"] = jnp.zeros_like(data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="phi_tzz",
+    label="\\partial_{\\theta\\zeta\\zeta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, first derivative wrt"
+    " poloidal coordinate and second derivative wrt toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_tzz_Surface(params, transforms, profiles, data, **kwargs):
+    data["phi_tzz"] = jnp.zeros_like(data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="phi_zzz",
+    label="\\partial_{\\zeta\\zeta\\zeta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, third derivative wrt"
+    " toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_zzz_Surface(params, transforms, profiles, data, **kwargs):
+    data["phi_zzz"] = jnp.zeros_like(data["phi"])
     return data
 
 
@@ -189,16 +307,36 @@ def _phi_t_Surface(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_zeta", "phi"],
+    data=["phi"],
     parameterization="desc.geometry.core.Surface",
     basis="basis",
 )
 def _phi_z_Surface(params, transforms, profiles, data, **kwargs):
-    coords_z = data["e_zeta"]
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        # if basis is xyz, then "x" is xyz and we must convert to rpz
-        coords_z = xyz2rpz_vec(coords_z, phi=data["phi"])
-    data["phi_z"] = coords_z[:, 1]
+    # TODO: if surfaces eventually get an omega for generalized toroidal angle,
+    # this (and everything else in this file) must be changed, for now this
+    # assumes zeta = phi
+    data["phi_z"] = jnp.ones_like(data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="phi_zz",
+    label="\\partial_{\\zeta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, second derivative"
+    " wrt toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["phi"],
+    parameterization="desc.geometry.core.Surface",
+    basis="basis",
+)
+def _phi_zz_Surface(params, transforms, profiles, data, **kwargs):
+    data["phi_zz"] = jnp.zeros_like(data["phi"])
     return data
 
 

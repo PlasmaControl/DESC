@@ -850,15 +850,15 @@ def test_omnigenity_qa():
     objective = ObjectiveFunction(
         (
             Omnigenity(
-                field=field,
                 eq=eq,
+                field=field,
                 eq_grid=eq_axis_grid,
                 field_grid=field_axis_grid,
                 eq_fixed=True,
             ),
             Omnigenity(
-                field=field,
                 eq=eq,
+                field=field,
                 eq_grid=eq_lcfs_grid,
                 field_grid=field_lcfs_grid,
                 eq_fixed=True,
@@ -948,15 +948,15 @@ def test_omnigenity_optimization():
             GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
             AspectRatio(eq=eq, bounds=(0, 10)),
             Omnigenity(
-                field=field,
                 eq=eq,
+                field=field,
                 eq_grid=eq_half_grid,
                 field_grid=field_half_grid,
                 eta_weight=1,
             ),
             Omnigenity(
-                field=field,
                 eq=eq,
+                field=field,
                 eq_grid=eq_lcfs_grid,
                 field_grid=field_lcfs_grid,
                 eta_weight=2,
@@ -987,6 +987,73 @@ def test_omnigenity_optimization():
     data = eq.compute("|B|", grid=grid)
     np.testing.assert_allclose(np.min(data["|B|"]), 0.8, atol=2e-2)
     np.testing.assert_allclose(np.max(data["|B|"]), 1.2, atol=2e-2)
+
+
+@pytest.mark.unit
+def test_omnigenity_proximal():
+    """Test omnigenity optimization with proximal optimizer."""
+    # this only tests that the optimization runs, not that it gives a good result
+
+    # initial equilibrium and omnigenous field
+    surf = FourierRZToroidalSurface.from_qp_model(
+        major_radius=1,
+        aspect_ratio=10,
+        elongation=3,
+        mirror_ratio=0.2,
+        torsion=0.1,
+        NFP=2,
+        sym=True,
+    )
+    eq = Equilibrium(Psi=3e-2, M=4, N=4, surface=surf)
+    eq, _ = eq.solve(objective="vacuum", verbose=3)
+    field = OmnigenousField(
+        L_B=1,
+        M_B=3,
+        L_x=1,
+        M_x=1,
+        N_x=1,
+        NFP=eq.NFP,
+        helicity=(0, eq.NFP),
+        B_lm=np.array([0.8, 1.0, 1.2, 0, 0, 0]),
+    )
+
+    # first, test optimizing the equilibrium with the field fixed
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            AspectRatio(eq=eq, bounds=(0, 10)),
+            Omnigenity(eq=eq, field=field, field_fixed=True),  # field is fixed
+        )
+    )
+    constraints = (
+        CurrentDensity(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("proximal-lsq-exact")
+    (eq, field), _ = optimizer.optimize(
+        (eq, field), objective, constraints, maxiter=2, verbose=3
+    )
+
+    # second, test optimizing both the equilibrium and the field simultaneously
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("R0", eq=eq, target=1.0, name="major radius"),
+            AspectRatio(eq=eq, bounds=(0, 10)),
+            Omnigenity(eq=eq, field=field),  # field is not fixed
+        )
+    )
+    constraints = (
+        CurrentDensity(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+    )
+    optimizer = Optimizer("proximal-lsq-exact")
+    (eq, field), _ = optimizer.optimize(
+        (eq, field), objective, constraints, maxiter=2, verbose=3
+    )
 
 
 @pytest.mark.unit

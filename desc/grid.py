@@ -463,7 +463,7 @@ class Grid(_Grid):
             Node spacing, in (rho,theta,zeta).
 
         """
-        nodes = jnp.atleast_2d(nodes).reshape((-1, 3)).astype(float)
+        nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
         # Do not alter nodes given by the user for custom grids.
         # In particular, do not modulo nodes by 2pi or 2pi/NFP.
         # This may cause the surface_integrals() function to fail recognizing

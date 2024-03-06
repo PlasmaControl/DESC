@@ -497,9 +497,9 @@ class TestMagneticFields:
         np.testing.assert_allclose(field.G, 2)
 
         # check that we can't set it with a size>1 array
-        with pytest.raises(AssertionError):
+        with pytest.raises(TypeError):
             field.I = np.array([1, 2])
-        with pytest.raises(AssertionError):
+        with pytest.raises(TypeError):
             field.G = np.array([1, 2])
 
         # check that we cant initialize with different size

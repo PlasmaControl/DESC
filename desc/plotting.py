@@ -2589,16 +2589,8 @@ def plot_boozer_surface(
     ), f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
 
     # plot
-    if eq_switch:  # Equilibrium
-        if fill:
-            im = ax.contourf(zeta_B, theta_B, B, **contourf_kwargs)
-        else:
-            im = ax.contour(zeta_B, theta_B, B, **contourf_kwargs)
-    else:  # OmnigenousField
-        if fill:
-            im = ax.tricontourf(zeta_B, theta_B, B, **contourf_kwargs)
-        else:
-            im = ax.tricontour(zeta_B, theta_B, B, **contourf_kwargs)
+    op = ("" if eq_switch else "tri") + "contour" + ("f" if fill else "")
+    im = getattr(ax, op)(zeta_B, theta_B, B, **contourf_kwargs)
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
     cax = divider.append_axes("right", **cax_kwargs)

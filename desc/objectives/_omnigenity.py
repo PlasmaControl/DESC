@@ -694,14 +694,22 @@ class Omnigenity(_Objective):
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
+        # default grids
+        if self._eq_grid is None and self._field_grid is not None:
+            rho = self._field_grid.nodes[0, 0]
+        elif self._eq_grid is not None and self._field_grid is None:
+            rho = self._eq_grid.nodes[0, 0]
+        elif self._eq_grid is None and self._field_grid is None:
+            rho = 1.0
         if self._eq_grid is None:
-            eq_grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False)
+            eq_grid = LinearGrid(
+                rho=rho, M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False
+            )
         else:
             eq_grid = self._eq_grid
-
         if self._field_grid is None:
             field_grid = LinearGrid(
-                theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
+                rho=rho, theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
             )
         else:
             field_grid = self._field_grid
@@ -831,7 +839,6 @@ class Omnigenity(_Objective):
         if self._eq_fixed:
             eq_data = constants["eq_data"]
         else:
-            eq_params = params_1
             eq_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._eq_data_keys,

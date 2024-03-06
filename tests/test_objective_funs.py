@@ -280,7 +280,7 @@ class TestObjectiveFunction:
             """Ensure compilation without any errors from JAX, related to issue #625."""
             obj = ObjectiveFunction(QuasisymmetryBoozer(eq=eq))
             obj.build()
-            obj.compile()
+            obj.compile("all")
             fb = obj.compute_scaled_error(obj.x(eq))
             np.testing.assert_allclose(fb, 0, atol=1e-12)
 
@@ -446,12 +446,13 @@ class TestObjectiveFunction:
         coilset = CoilSet.linspaced_angular(coil, n=100)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
-        sheet_current = FourierCurrentPotentialField()
-        sheet_current.change_resolution(M=eq.M, N=eq.N, NFP=eq.NFP, sym=eq.sym)
+        eq.surface = FourierCurrentPotentialField.from_surface(
+            eq.surface, M_Phi=eq.M, N_Phi=eq.N
+        )
         eq.solve()
-        obj = BoundaryError(eq, coilset, sheet_current, field_grid=coil_grid)
+        obj = BoundaryError(eq, coilset, field_grid=coil_grid)
         obj.build()
-        f = obj.compute_scaled_error(*obj.xs(eq, sheet_current))
+        f = obj.compute_scaled_error(*obj.xs(eq))
         n = len(f) // 3
         # first n should be B*n errors
         np.testing.assert_allclose(f[:n], 0, atol=1e-4)
@@ -1289,17 +1290,16 @@ def test_boundary_error_print(capsys):
     )
     assert out.out == corr_out
 
-    sheet_current = FourierCurrentPotentialField()
-    sheet_current.change_resolution(M=eq.M, N=eq.N, NFP=eq.NFP, sym=eq.sym)
-    obj = BoundaryError(eq, coilset, sheet_current, field_grid=coil_grid)
+    eq.surface = FourierCurrentPotentialField.from_surface(eq.surface)
+    obj = BoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq, sheet_current)))
+    f = np.abs(obj.compute_unscaled(*obj.xs(eq)))
     n = len(f) // 3
     f1 = f[:n]
     f2 = f[n : 2 * n]
     f3 = f[2 * n :]
-    obj.print_value(*obj.xs(eq, sheet_current))
+    obj.print_value(*obj.xs(eq))
     out = capsys.readouterr()
 
     corr_out = str(
@@ -1661,7 +1661,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(CurrentDensity(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(CurrentDensity(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=3e-2)
@@ -1676,7 +1676,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(Energy(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(Energy(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1691,7 +1691,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(ForceBalance(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(ForceBalance(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1706,7 +1706,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1721,7 +1721,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(HelicalForceBalance(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(HelicalForceBalance(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-1)
@@ -1736,7 +1736,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(RadialForceBalance(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(RadialForceBalance(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-1)
@@ -1748,9 +1748,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(
-            GenericObjective("<beta>_vol", eq=eq, grid=grid), verbose=0
-        )
+        obj = ObjectiveFunction(GenericObjective("<beta>_vol", eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1765,7 +1763,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             sym=eq.sym,
             axis=False,
         )
-        obj = ObjectiveFunction(GenericObjective("<J*B>", eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(GenericObjective("<J*B>", eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1779,9 +1777,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(
-            GenericObjective("sqrt(g)", eq=eq, grid=grid), verbose=0
-        )
+        obj = ObjectiveFunction(GenericObjective("sqrt(g)", eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1792,7 +1788,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(AspectRatio(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(AspectRatio(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1801,7 +1797,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(BScaleLength(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(BScaleLength(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1812,7 +1808,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(Elongation(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(Elongation(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1821,7 +1817,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(MeanCurvature(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(MeanCurvature(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1837,7 +1833,6 @@ def test_compute_scalar_resolution():  # noqa: C901
             PlasmaVesselDistance(
                 surface=surface, eq=eq, surface_grid=grid, plasma_grid=grid
             ),
-            verbose=0,
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq, surface))
@@ -1847,7 +1842,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(PrincipalCurvature(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(PrincipalCurvature(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1858,7 +1853,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(Volume(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(Volume(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1874,7 +1869,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             sym=eq.sym,
             axis=False,
         )
-        obj = ObjectiveFunction(RotationalTransform(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(RotationalTransform(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1890,7 +1885,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             sym=eq.sym,
             axis=False,
         )
-        obj = ObjectiveFunction(ToroidalCurrent(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(ToroidalCurrent(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=4e-2)
@@ -1905,7 +1900,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(Isodynamicity(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(Isodynamicity(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1915,8 +1910,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     for i, res in enumerate((res_array + 4) * 2):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
         obj = ObjectiveFunction(
-            QuasisymmetryBoozer(eq=eq, helicity=(1, -eq.NFP), grid=grid),
-            verbose=0,
+            QuasisymmetryBoozer(eq=eq, helicity=(1, -eq.NFP), grid=grid)
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
@@ -1932,7 +1926,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(QuasisymmetryTripleProduct(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(QuasisymmetryTripleProduct(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1949,7 +1943,6 @@ def test_compute_scalar_resolution():  # noqa: C901
         )
         obj = ObjectiveFunction(
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, -eq.NFP), grid=grid),
-            verbose=0,
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
@@ -1962,7 +1955,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = LinearGrid(
             rho=rho, M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym
         )
-        obj = ObjectiveFunction(MagneticWell(eq=eq, grid=grid, target=0), verbose=0)
+        obj = ObjectiveFunction(MagneticWell(eq=eq, grid=grid, target=0))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1974,7 +1967,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = LinearGrid(
             rho=rho, M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym
         )
-        obj = ObjectiveFunction(MercierStability(eq=eq, grid=grid), verbose=0)
+        obj = ObjectiveFunction(MercierStability(eq=eq, grid=grid))
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)

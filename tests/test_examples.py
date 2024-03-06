@@ -276,7 +276,6 @@ def run_qh_step(n, eq):
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
-        verbose=0,
     )
     R_modes = np.vstack(
         (
@@ -305,11 +304,7 @@ def run_qh_step(n, eq):
         maxiter=50,
         verbose=3,
         copy=True,
-        options={
-            "initial_trust_ratio": 1.0,  # for backwards consistency
-            "perturb_options": {"verbose": 0},
-            "solve_options": {"verbose": 0},
-        },
+        options={},
     )
 
     return eq1
@@ -328,7 +323,7 @@ def test_qh_optimization():
         modes_Z=[[-1, 0], [0, -1]],
         NFP=4,
     )
-    eq = Equilibrium(M=4, N=4, Psi=0.04, surface=surf)
+    eq = Equilibrium(M=5, N=5, Psi=0.04, surface=surf)
     eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[
         -1
     ]
@@ -525,7 +520,7 @@ def test_simsopt_QH_comparison():
             ),
         )
     )
-    eq2, result = eq.optimize(
+    eq2, _ = eq.optimize(
         verbose=3,
         objective=objective,
         constraints=constraints,
@@ -754,7 +749,7 @@ def test_multiobject_optimization():
     eq.solve(verbose=3)
 
     optimizer = Optimizer("fmin-auglag")
-    (eq, surf), result = optimizer.optimize(
+    (eq, surf), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=500
     )
 
@@ -797,7 +792,7 @@ def test_multiobject_optimization_prox():
     eq.solve(verbose=3)
 
     optimizer = Optimizer("proximal-lsq-exact")
-    (eq, surf), result = optimizer.optimize(
+    (eq, surf), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=100
     )
 
@@ -849,7 +844,7 @@ def test_non_eq_optimization():
     )
     objective = ObjectiveFunction((obj,))
     optimizer = Optimizer("lsq-auglag")
-    (eq, surf), result = optimizer.optimize(
+    (eq, surf), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=100
     )
 

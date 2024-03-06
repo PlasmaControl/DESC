@@ -7,7 +7,7 @@ import numpy as np
 from interpax import approx_df, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 
-from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.backend import fori_loop, jit, jnp, odeint
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.derivatives import Derivative
@@ -410,7 +410,7 @@ class _MagneticField(IOAble, ABC):
         None
 
         """
-        # cyclindrical coordinates grid
+        # cylindrical coordinates grid
         NFP = self.NFP if hasattr(self, "_NFP") else 1
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
@@ -530,10 +530,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     _io_attrs = _MagneticField._io_attrs_ + ["_field", "_scalar"]
 
     def __init__(self, scale, field):
-        assert (
-            np.isscalar(scale) or np.asarray(scale).size == 1
-        ), "scale must be a scalar value"
-        scale = float(scale)
+        scale = float(np.squeeze(scale))
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
@@ -553,8 +550,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
 
     @scale.setter
     def scale(self, new):
-        assert float(new) == new, "scale must be a scalar"
-        self._scale = new
+        self._scale = float(np.squeeze(new))
 
     # want this class to pretend like its the underlying field
     def __getattr__(self, attr):
@@ -707,9 +703,8 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
     _io_attrs_ = _MagneticField._io_attrs_ + ["_B0", "_R0"]
 
     def __init__(self, B0, R0):
-        assert float(R0) == R0, "R0 must be a scalar"
-        self.B0 = float(B0)
-        self.R0 = float(R0)
+        self.B0 = float(np.squeeze(B0))
+        self.R0 = float(np.squeeze(R0))
 
     @optimizable_parameter
     @property
@@ -719,8 +714,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        assert float(new) == new, "R0 must be a scalar"
-        self._R0 = new
+        self._R0 = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -730,8 +724,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        assert float(new) == new, "B0 must be a scalar"
-        self._B0 = new
+        self._B0 = float(np.squeeze(new))
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -760,7 +753,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
         R0 = params.get("R0", self.R0)
 
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "xyz":
             coords = xyz2rpz(coords)
         bp = B0 * R0 / coords[:, 0]
@@ -795,8 +788,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        assert float(new) == new, "B0 must be a scalar"
-        self._B0 = new
+        self._B0 = float(np.squeeze(new))
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -824,7 +816,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
         B0 = params.get("B0", self.B0)
 
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "xyz":
             coords = xyz2rpz(coords)
         bz = B0 * jnp.ones_like(coords[:, 2])
@@ -875,8 +867,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        assert float(new) == new, "R0 must be a scalar"
-        self._R0 = new
+        self._R0 = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -886,8 +877,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        assert float(new) == new, "B0 must be a scalar"
-        self._B0 = new
+        self._B0 = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -897,8 +887,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @iota.setter
     def iota(self, new):
-        assert float(new) == new, "iota must be a scalar"
-        self._iota = new
+        self._iota = float(np.squeeze(new))
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None
@@ -928,7 +917,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
         iota = params.get("iota", self.iota)
 
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "xyz":
             coords = xyz2rpz(coords)
 
@@ -992,7 +981,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
     def __init__(
         self, R, phi, Z, BR, Bphi, BZ, currents=1.0, NFP=1, method="cubic", extrap=False
     ):
-        R, phi, Z, currents = map(jnp.atleast_1d, (R, phi, Z, currents))
+        R, phi, Z, currents = map(
+            lambda x: jnp.atleast_1d(jnp.asarray(x)), (R, phi, Z, currents)
+        )
         assert R.ndim == 1
         assert phi.ndim == 1
         assert Z.ndim == 1
@@ -1000,7 +991,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shape = (R.size, phi.size, Z.size, currents.size)
 
         def _atleast_4d(x):
-            x = jnp.atleast_3d(x)
+            x = jnp.atleast_3d(jnp.asarray(x))
             if x.ndim < 4:
                 x = x.reshape(x.shape + (1,))
             return x
@@ -1044,7 +1035,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
 
     @currents.setter
     def currents(self, new):
-        new = jnp.atleast_1d(new)
+        new = jnp.atleast_1d(jnp.asarray(new))
         assert len(new) == len(self.currents)
         self._currents = new
 
@@ -1092,7 +1083,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         """
         assert basis.lower() in ["rpz", "xyz"]
         currents = self.currents if params is None else params["currents"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "xyz":
             coords = xyz2rpz(coords)
         Rq, phiq, Zq = coords.T
@@ -1350,7 +1341,7 @@ class ScalarPotentialField(_MagneticField):
 
         """
         assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(coords)
+        coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis == "xyz":
             coords = xyz2rpz(coords)
         Rq, phiq, Zq = coords.T
@@ -1380,6 +1371,9 @@ def field_line_integrate(
     rtol=1e-8,
     atol=1e-8,
     maxstep=1000,
+    bounds_R=(0, np.inf),
+    bounds_Z=(-np.inf, np.inf),
+    decay_accel=1e6,
 ):
     """Trace field lines by integration.
 
@@ -1401,6 +1395,26 @@ def field_line_integrate(
         relative and absolute tolerances for ode integration
     maxstep : int
         maximum number of steps between different phis
+    bounds_R : tuple of (float,float), optional
+        R bounds for field line integration bounding box.
+        If supplied, the RHS of the field line equations will be
+        multipled by exp(-r) where r is the distance to the bounding box,
+        this is meant to prevent the field lines which escape to infinity from
+        slowing the integration down by being traced to infinity.
+        defaults to (0,np.inf)
+    bounds_Z : tuple of (float,float), optional
+        Z bounds for field line integration bounding box.
+        If supplied, the RHS of the field line equations will be
+        multipled by exp(-r) where r is the distance to the bounding box,
+        this is meant to prevent the field lines which escape to infinity from
+        slowing the integration down by being traced to infinity.
+        Defaults to (-np.inf,np.inf)
+    decay_accel : float, optional
+        An extra factor to the exponential that decays the RHS, i.e.
+        the RHS is multiplied by exp(-r * decay_accel), this is to
+        accelerate the decay of the RHS and stop the integration sooner
+        after exiting the bounds. Defaults to 1e6
+
 
     Returns
     -------
@@ -1410,6 +1424,7 @@ def field_line_integrate(
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
+    assert decay_accel > 0, "decay_accel must be positive"
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()
@@ -1419,12 +1434,45 @@ def field_line_integrate(
     def odefun(rpz, s):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
+        z = rpz[:, 2]
+        # if bounds are given, will decay the magnetic field line eqn
+        # RHS if the trajectory is outside of bounds to avoid
+        # integrating the field line to infinity, which is costly
+        # and not useful in most cases
+        decay_factor = jnp.where(
+            jnp.array(
+                [
+                    jnp.less(r, bounds_R[0]),
+                    jnp.greater(r, bounds_R[1]),
+                    jnp.less(z, bounds_Z[0]),
+                    jnp.greater(z, bounds_Z[1]),
+                ]
+            ),
+            jnp.array(
+                [
+                    # we mult by decay_accel to accelerate the decay so that the
+                    # integration is stopped soon after the bounds are exited.
+                    jnp.exp(-(decay_accel * (r - bounds_R[0]) ** 2)),
+                    jnp.exp(-(decay_accel * (r - bounds_R[1]) ** 2)),
+                    jnp.exp(-(decay_accel * (z - bounds_Z[0]) ** 2)),
+                    jnp.exp(-(decay_accel * (z - bounds_Z[1]) ** 2)),
+                ]
+            ),
+            1.0,
+        )
+        # multiply all together, the conditions that are not violated
+        # are just one while the violated ones are continous decaying exponentials
+        decay_factor = jnp.prod(decay_factor, axis=0)
+
         br, bp, bz = field.compute_magnetic_field(
             rpz, params, basis="rpz", source_grid=source_grid
         ).T
-        return jnp.array(
-            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
-        ).squeeze()
+        return (
+            decay_factor
+            * jnp.array(
+                [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
+            ).squeeze()
+        )
 
     intfun = lambda x: odeint(odefun, x, phis, rtol=rtol, atol=atol, mxstep=maxstep)
     x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
@@ -1469,6 +1517,9 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         whether to enforce stellarator symmetry for the surface geometry.
         Default is "auto" which enforces if modes are symmetric. If True,
         non-symmetric modes will be truncated.
+    M, N: int or None
+        Maximum poloidal and toroidal mode numbers. Defaults to maximum from modes_R
+        and modes_Z.
     name : str
         name for this field
     check_orientation : bool
@@ -1498,6 +1549,8 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         modes_Z=None,
         NFP=1,
         sym="auto",
+        M=None,
+        N=None,
         name="",
         check_orientation=True,
     ):
@@ -1511,12 +1564,14 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         self._params = params
 
         super().__init__(
-            R_lmn,
-            Z_lmn,
-            modes_R,
-            modes_Z,
-            NFP,
-            sym,
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            modes_R=modes_R,
+            modes_Z=modes_Z,
+            NFP=NFP,
+            sym=sym,
+            M=M,
+            N=N,
             name=name,
             check_orientation=check_orientation,
         )
@@ -1707,7 +1762,8 @@ class FourierCurrentPotentialField(
     Phi_mn : ndarray
         Fourier coefficients of the double FourierSeries part of the current potential.
     modes_Phi : array-like, shape(k,2)
-        Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn coefficients
+        Poloidal and Toroidal mode numbers corresponding to passed-in Phi_mn
+        coefficients.
     I : float
         Net current linking the plasma and the surface toroidally
         Denoted I in the algorithm
@@ -1719,10 +1775,12 @@ class FourierCurrentPotentialField(
         and increasing when going in the clockwise direction, which with the
         convention n x grad(phi) will result in a toroidal field in the negative
         toroidal direction.
-    sym_Phi :  {"auto","cos","sin",False}
+    sym_Phi :  {False,"cos","sin"}
         whether to enforce a given symmetry for the DoubleFourierSeries part of the
-        current potential. Default is "auto" which enforces if modes are symmetric.
-        If True, non-symmetric modes will be truncated.
+        current potential.
+    M_Phi, N_Phi: int or None
+        Maximum poloidal and toroidal mode numbers for the single valued part of the
+        current potential.
     R_lmn, Z_lmn : array-like, shape(k,)
         Fourier coefficients for winding surface R and Z in cylindrical coordinates
     modes_R : array-like, shape(k,2)
@@ -1735,6 +1793,9 @@ class FourierCurrentPotentialField(
         whether to enforce stellarator symmetry for the surface geometry.
         Default is "auto" which enforces if modes are symmetric. If True,
         non-symmetric modes will be truncated.
+    M, N: int or None
+        Maximum poloidal and toroidal mode numbers. Defaults to maximum from modes_R
+        and modes_Z.
     name : str
         name for this field
     check_orientation : bool
@@ -1756,13 +1817,17 @@ class FourierCurrentPotentialField(
         modes_Phi=np.array([[0, 0]]),
         I=0,
         G=0,
-        sym_Phi="auto",
+        sym_Phi=False,
+        M_Phi=None,
+        N_Phi=None,
         R_lmn=None,
         Z_lmn=None,
         modes_R=None,
         modes_Z=None,
         NFP=1,
         sym="auto",
+        M=None,
+        N=None,
         name="",
         check_orientation=True,
     ):
@@ -1773,42 +1838,28 @@ class FourierCurrentPotentialField(
 
         assert np.issubdtype(modes_Phi.dtype, np.integer)
 
-        M_Phi = np.max(abs(modes_Phi[:, 0]))
-        N_Phi = np.max(abs(modes_Phi[:, 1]))
+        M_Phi = setdefault(M_Phi, np.max(abs(modes_Phi[:, 0])))
+        N_Phi = setdefault(N_Phi, np.max(abs(modes_Phi[:, 1])))
 
         self._M_Phi = M_Phi
         self._N_Phi = N_Phi
 
-        if sym_Phi == "auto":
-            if np.all(
-                Phi_mn[np.where(sign(modes_Phi[:, 0]) == sign(modes_Phi[:, 1]))] == 0
-            ):
-                sym_Phi = "sin"
-            elif np.all(
-                Phi_mn[np.where(sign(modes_Phi[:, 0]) != sign(modes_Phi[:, 1]))] == 0
-            ):
-                sym_Phi = "cos"
-            else:
-                sym_Phi = False
-            # catch case where only (0,0) mode is given as 0
-            if np.all(Phi_mn == 0.0) and np.all(modes_Phi == 0):
-                sym_Phi = "cos"
         self._sym_Phi = sym_Phi
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
         self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
 
-        assert np.isscalar(I) or np.asarray(I).size == 1, "I must be a scalar"
-        assert np.isscalar(G) or np.asarray(G).size == 1, "G must be a scalar"
-        self._I = float(I)
-        self._G = float(G)
+        self._I = float(np.squeeze(I))
+        self._G = float(np.squeeze(G))
 
         super().__init__(
-            R_lmn,
-            Z_lmn,
-            modes_R,
-            modes_Z,
-            NFP,
-            sym,
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            modes_R=modes_R,
+            modes_Z=modes_Z,
+            NFP=NFP,
+            sym=sym,
+            M=M,
+            N=N,
             name=name,
             check_orientation=check_orientation,
         )
@@ -1821,8 +1872,7 @@ class FourierCurrentPotentialField(
 
     @I.setter
     def I(self, new):  # noqa: E743
-        assert np.isscalar(new) or np.asarray(new).size == 1, "I must be a scalar"
-        self._I = float(new)
+        self._I = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -1832,8 +1882,7 @@ class FourierCurrentPotentialField(
 
     @G.setter
     def G(self, new):
-        assert np.isscalar(new) or np.asarray(new).size == 1, "G must be a scalar"
-        self._G = float(new)
+        self._G = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -1952,7 +2001,9 @@ class FourierCurrentPotentialField(
         modes_Phi=np.array([[0, 0]]),
         I=0,
         G=0,
-        sym_Phi="auto",
+        sym_Phi=False,
+        M_Phi=None,
+        N_Phi=None,
     ):
         """Create FourierCurrentPotentialField using geometry of given surface.
 
@@ -1965,7 +2016,7 @@ class FourierCurrentPotentialField(
             Fourier coefficients of the double FourierSeries of the current potential.
             Should correspond to the given DoubleFourierSeries basis object passed in.
         modes_Phi : array-like, shape(k,2)
-            Poloidal and Toroidal modenumbers corresponding to passed-in Phi_mn
+            Poloidal and Toroidal mode numbers corresponding to passed-in Phi_mn
             coefficients
         I : float
             Net current linking the plasma and the surface toroidally
@@ -1978,12 +2029,12 @@ class FourierCurrentPotentialField(
             and increasing when going in the clockwise direction, which with the
             convention n x grad(phi) will result in a toroidal field in the negative
             toroidal direction.
-        name : str
-            name for this field
-        check_orientation : bool
-            ensure that this surface has a right handed orientation. Do not set to False
-            unless you are sure the parameterization you have given is right handed
-            (ie, e_theta x e_zeta points outward from the surface).
+        sym_Phi :  {False,"cos","sin"}
+            whether to enforce a given symmetry for the DoubleFourierSeries part of the
+            current potential.
+        M_Phi, N_Phi: int or None
+            Maximum poloidal and toroidal mode numbers for the single valued part of the
+            current potential.
 
         """
         if not isinstance(surface, FourierRZToroidalSurface):
@@ -2000,17 +2051,19 @@ class FourierCurrentPotentialField(
         name = surface.name
 
         return cls(
-            Phi_mn,
-            modes_Phi,
-            I,
-            G,
-            sym_Phi,
-            R_lmn,
-            Z_lmn,
-            modes_R,
-            modes_Z,
-            NFP,
-            sym,
+            Phi_mn=Phi_mn,
+            modes_Phi=modes_Phi,
+            I=I,
+            G=G,
+            sym_Phi=sym_Phi,
+            M_Phi=M_Phi,
+            N_Phi=N_Phi,
+            R_lmn=R_lmn,
+            Z_lmn=Z_lmn,
+            modes_R=modes_R,
+            modes_Z=modes_Z,
+            NFP=NFP,
+            sym=sym,
             name=name,
             check_orientation=False,
         )
@@ -2047,7 +2100,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
 
     """
     assert basis.lower() in ["rpz", "xyz"]
-    coords = jnp.atleast_2d(coords)
+    coords = jnp.atleast_2d(jnp.asarray(coords))
     if basis == "rpz":
         coords = rpz2xyz(coords)
 

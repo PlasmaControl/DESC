@@ -30,7 +30,6 @@ from desc.objectives import (
     ForceBalance,
     ForceBalanceAnisotropic,
     GenericObjective,
-    GoodCoordinates,
     HelicalForceBalance,
     Isodynamicity,
     LinearObjectiveFromUser,
@@ -1860,88 +1859,113 @@ def test_compute_scalar_resolution():  # noqa: C901
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
 
 
-@pytest.mark.unit
-def test_objective_no_nangrad():
+class TestObjectiveNaNGrad:
     """Make sure reverse mode AD works correctly for all objectives."""
-    # these need some special logic
-    eq = Equilibrium(L=2, M=2, N=2)
-    surf = FourierRZToroidalSurface()
-    obj = ObjectiveFunction(PlasmaVesselDistance(eq, surf))
-    obj.build()
-    g = obj.grad(obj.x(eq, surf))
-    assert not np.any(np.isnan(g)), "plasma vessel distance"
 
-    eq = Equilibrium(L=2, M=2, N=2, anisotropy=FourierZernikeProfile())
-    obj = ObjectiveFunction(ForceBalanceAnisotropic(eq))
-    obj.build()
-    g = obj.grad(obj.x(eq))
-    assert not np.any(np.isnan(g)), "anisotropic"
-
-    eq = Equilibrium(
-        L=2,
-        M=2,
-        N=2,
-        electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
-        electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
-        current=PowerSeriesProfile([1, 0, -1]),
-    )
-    obj = ObjectiveFunction(BootstrapRedlConsistency(eq))
-    obj.build()
-    g = obj.grad(obj.x(eq))
-    assert not np.any(np.isnan(g)), "redl bootstrap"
-
-    ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
-
-    pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
-    iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
-    surf = FourierRZToroidalSurface(
-        R_lmn=[4.0, 1.0],
-        modes_R=[[0, 0], [1, 0]],
-        Z_lmn=[-1.0],
-        modes_Z=[[-1, 0]],
-        NFP=1,
-    )
-
-    eq = Equilibrium(M=10, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
-    obj = ObjectiveFunction(BoundaryError(eq, ext_field))
-    obj.build()
-    g = obj.grad(obj.x(eq))
-    assert not np.any(np.isnan(g)), "boundary error"
-
-    obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field))
-    with pytest.warns(UserWarning):
-        obj.build()
-    g = obj.grad(obj.x(eq))
-    assert not np.any(np.isnan(g)), "vacuum boundary error"
-
-    # these only need basic equilibrium
-    eq = Equilibrium(L=2, M=2, N=2)
+    # get a list of all the objectives
     objectives = [
-        CurrentDensity,
-        Energy,
-        ForceBalance,
-        HelicalForceBalance,
-        RadialForceBalance,
-        AspectRatio,
-        BScaleLength,
-        Elongation,
-        GoodCoordinates,
-        MeanCurvature,
-        PrincipalCurvature,
-        Volume,
-        Pressure,
-        RotationalTransform,
-        Shear,
-        ToroidalCurrent,
-        Isodynamicity,
-        QuasisymmetryBoozer,
-        QuasisymmetryTripleProduct,
-        QuasisymmetryTwoTerm,
-        MagneticWell,
-        MercierStability,
+        getattr(desc.objectives, obj)
+        for obj in dir(desc.objectives)
+        if obj[0].isupper() and not obj.startswith("Fix") and obj != "ObjectiveFunction"
     ]
+    specials = [
+        # these require special logic
+        PlasmaVesselDistance,
+        ForceBalanceAnisotropic,
+        BootstrapRedlConsistency,
+        BoundaryError,
+        VacuumBoundaryError,
+        # we don't test these since they depend too much on what exactly the user wants
+        GenericObjective,
+        LinearObjectiveFromUser,
+        ObjectiveFromUser,
+    ]
+    other_objectives = list(set(objectives) - set(specials))
 
-    for objective in objectives:
+    @pytest.mark.unit
+    def test_objective_no_nangrad_plasma_vessel(self):
+        """PlasmaVesselDistance."""
+        eq = Equilibrium(L=2, M=2, N=2)
+        surf = FourierRZToroidalSurface()
+        obj = ObjectiveFunction(PlasmaVesselDistance(eq, surf))
+        obj.build()
+        g = obj.grad(obj.x(eq, surf))
+        assert not np.any(np.isnan(g)), "plasma vessel distance"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_anisotropy(self):
+        """ForceBalanceAnisotropic."""
+        eq = Equilibrium(L=2, M=2, N=2, anisotropy=FourierZernikeProfile())
+        obj = ObjectiveFunction(ForceBalanceAnisotropic(eq))
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), "anisotropic"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_bootstrap(self):
+        """BootstrapRedlConsistency."""
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+            electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+            current=PowerSeriesProfile([1, 0, -1]),
+        )
+        obj = ObjectiveFunction(BootstrapRedlConsistency(eq))
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), "redl bootstrap"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_boundary_error(self):
+        """BoundaryError."""
+        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+
+        pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
+        iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
+        surf = FourierRZToroidalSurface(
+            R_lmn=[4.0, 1.0],
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=[-1.0],
+            modes_Z=[[-1, 0]],
+            NFP=1,
+        )
+
+        eq = Equilibrium(M=6, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
+        obj = ObjectiveFunction(BoundaryError(eq, ext_field))
+        obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), "boundary error"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_vacuum_boundary_error(self):
+        """VacuumBoundaryError."""
+        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+
+        pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
+        iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
+        surf = FourierRZToroidalSurface(
+            R_lmn=[4.0, 1.0],
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=[-1.0],
+            modes_Z=[[-1, 0]],
+            NFP=1,
+        )
+
+        eq = Equilibrium(M=6, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
+
+        obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field))
+        with pytest.warns(UserWarning):
+            obj.build()
+        g = obj.grad(obj.x(eq))
+        assert not np.any(np.isnan(g)), "vacuum boundary error"
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("objective", other_objectives)
+    def test_objective_no_nangrad(self, objective):
+        """Generic test for other objectives."""
+        eq = Equilibrium(L=2, M=2, N=2)
         obj = ObjectiveFunction(objective(eq))
         obj.build()
         g = obj.grad(obj.x(eq))

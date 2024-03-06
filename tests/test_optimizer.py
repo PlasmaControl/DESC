@@ -559,38 +559,50 @@ def test_wrappers():
     np.testing.assert_allclose(ob.weights, con[0].weight)
 
 
-@pytest.mark.unit
-@pytest.mark.slow
-def test_all_optimizers():
-    """Just tests that the optimizers run without error, eg tests for the wrappers."""
+class TestAllOptimizers:
+    """Tests all optimizers run without error, eg tests for wrappers."""
+
     eqf = desc.examples.get("SOLOVEV")
+    eqf.change_resolution(3, 3, 0, 6, 6, 0)
     eqe = eqf.copy()
     fobj = ObjectiveFunction(ForceBalance(eq=eqf))
     eobj = ObjectiveFunction(Energy(eq=eqe))
-    fobj.build()
-    eobj.build()
     econ = get_fixed_boundary_constraints(eq=eqe)
     fcon = get_fixed_boundary_constraints(eq=eqf)
-    options = {"sgd": {"alpha": 1e-4}}
 
-    for opt in optimizers:
-        print("TESTING ", opt)
-        if optimizers[opt]["scalar"]:
-            obj = eobj
-            eq = eqe
-            con = econ
-        else:
-            obj = fobj
-            eq = eqf
-            con = fcon
-        eq.solve(
-            objective=obj,
-            constraints=con,
+    scalar_methods = [opt for opt in optimizers if optimizers[opt]["scalar"]]
+    lsq_methods = [opt for opt in optimizers if not optimizers[opt]["scalar"]]
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("opt", scalar_methods)
+    def test_all_optimizers_scalar(self, opt):
+        """Test all scalar methods."""
+        if not self.eobj.built:
+            self.eobj.build()
+
+        self.eqe.solve(
+            objective=self.eobj,
+            constraints=self.econ,
             optimizer=opt,
             copy=True,
             verbose=3,
             maxiter=5,
-            options=options.get(opt, None),
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("opt", lsq_methods)
+    def test_all_optimizers_lsq(self, opt):
+        """Test all least squares methods."""
+        if not self.fobj.built:
+            self.fobj.build()
+
+        self.eqf.solve(
+            objective=self.fobj,
+            constraints=self.fcon,
+            optimizer=opt,
+            copy=True,
+            verbose=3,
+            maxiter=5,
         )
 
 

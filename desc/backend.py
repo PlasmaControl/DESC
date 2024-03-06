@@ -28,7 +28,7 @@ else:
             import jax
             import jax.numpy as jnp
             import jaxlib
-            from jax.config import config as jax_config
+            from jax import config as jax_config
 
             jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:

@@ -1,4 +1,4 @@
-"""Script for creating plots in dudt2023."""
+"""Script for creating plots in dudt2024."""
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,11 +7,11 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import desc.io
 from desc.basis import DoubleFourierSeries
-from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
+from desc.magnetic_fields import OmnigenousField
 from desc.transform import Transform
 
-save = False
+save = True
 model = True
 fields = True
 confinement = True
@@ -25,12 +25,12 @@ purple = "#7570b3"
 pink = "#e7298a"
 colormap = "plasma"
 
-eq_pol = desc.io.load("publications/dudt2023/poloidal.h5")[-1]
-eq_tor = desc.io.load("publications/dudt2023/toroidal.h5")[-1]
-eq_hel = desc.io.load("publications/dudt2023/helical.h5")[-1]
-eq_pol_qs = desc.io.load("publications/dudt2023/poloidal_qs.h5")[-1]
-eq_tor_qs = desc.io.load("publications/dudt2023/toroidal_qs.h5")[-1]
-eq_hel_qs = desc.io.load("publications/dudt2023/helical_qs.h5")[-1]
+eq_pol = desc.io.load("publications/dudt2024/poloidal.h5")[-1]
+eq_tor = desc.io.load("publications/dudt2024/toroidal.h5")[-1]
+eq_hel = desc.io.load("publications/dudt2024/helical.h5")[-1]
+eq_pol_qs = desc.io.load("publications/dudt2024/poloidal_qs.h5")[-1]
+eq_tor_qs = desc.io.load("publications/dudt2024/toroidal_qs.h5")[-1]
+eq_hel_qs = desc.io.load("publications/dudt2024/helical_qs.h5")[-1]
 
 
 def interp_helper(y, idx=np.array([], dtype=int)):
@@ -45,26 +45,27 @@ def interp_helper(y, idx=np.array([], dtype=int)):
 # model ===============================================================================
 
 if model:
-    helicity = (0, 1)
     iota = 0.25
-    well_l = np.array([0.8, 0.9, 1.1, 1.2])  # 0, sin, 0, const, 0, cos
-    omni_lmn = np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4])
-    eq = Equilibrium(iota=np.array([iota]), well_l=well_l, omni_lmn=omni_lmn)
-    z = np.linspace(0, np.pi / 2, num=well_l.size)
+    field = OmnigenousField(
+        L_B=0,
+        M_B=4,
+        L_x=0,
+        M_x=1,
+        N_x=1,
+        NFP=1,
+        helicity=(0, 1),
+        B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
+        x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
+    )
+    z = np.linspace(0, np.pi / 2, num=field.M_B)
     grid = LinearGrid(theta=100, zeta=101, endpoint=True)
-    data = eq.compute(["|B|_omni", "|B|(eta,alpha)"], grid=grid, helicity=helicity)
+    data = field.compute(["|B|", "theta_B"], grid=grid, iota=iota)
     eta = data["eta"].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
     theta = (
-        data["theta_B(eta,alpha)"]
-        .reshape((grid.num_theta, grid.num_zeta), order="F")
-        .squeeze()
+        data["theta_B"].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
     )
-    zeta = (
-        data["zeta_B(eta,alpha)"]
-        .reshape((grid.num_theta, grid.num_zeta), order="F")
-        .squeeze()
-    )
-    B = data["|B|_omni"].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
+    zeta = data["zeta_B"].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
+    B = data["|B|"].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
     fig, (ax0, ax1, ax2) = plt.subplots(
         ncols=3, figsize=(18, 6), sharex=False, sharey=False
     )
@@ -79,7 +80,7 @@ if model:
     )
     ax0.plot(
         z,
-        well_l,
+        field.B_lm,
         color=orange,
         linestyle="",
         marker="o",
@@ -162,8 +163,8 @@ if model:
     ax2.set_ylabel(r"$\theta_B$")
     fig.tight_layout()
     if save:
-        plt.savefig("publications/dudt2023/model.png")
-        plt.savefig("publications/dudt2023/model.eps")
+        plt.savefig("publications/dudt2024/model.png")
+        plt.savefig("publications/dudt2024/model.eps")
     else:
         plt.show()
 
@@ -454,8 +455,8 @@ if fields:
     )
     fig.tight_layout()
     if save:
-        plt.savefig("publications/dudt2023/fields.png")
-        plt.savefig("publications/dudt2023/fields.eps")
+        plt.savefig("publications/dudt2024/fields.png")
+        plt.savefig("publications/dudt2024/fields.eps")
     else:
         plt.show()
 
@@ -464,19 +465,19 @@ if fields:
 if confinement:
     fig, (ax0, ax1) = plt.subplots(nrows=2, ncols=1, figsize=(8, 14))
     # effective ripple
-    eps_pol = interp_helper(np.loadtxt("publications/dudt2023/neo_out.poloidal")[:, 1])
-    eps_hel = interp_helper(np.loadtxt("publications/dudt2023/neo_out.helical")[:, 1])
-    eps_tor = interp_helper(np.loadtxt("publications/dudt2023/neo_out.toroidal")[:, 1])
+    eps_pol = interp_helper(np.loadtxt("publications/dudt2024/neo_out.poloidal")[:, 1])
+    eps_hel = interp_helper(np.loadtxt("publications/dudt2024/neo_out.helical")[:, 1])
+    eps_tor = interp_helper(np.loadtxt("publications/dudt2024/neo_out.toroidal")[:, 1])
     eps_pol_qs = interp_helper(
-        np.loadtxt("publications/dudt2023/neo_out.poloidal_qs")[:, 1], idx=248
+        np.loadtxt("publications/dudt2024/neo_out.poloidal_qs")[:, 1], idx=248
     )
     eps_hel_qs = interp_helper(
-        np.loadtxt("publications/dudt2023/neo_out.helical_qs")[:, 1]
+        np.loadtxt("publications/dudt2024/neo_out.helical_qs")[:, 1]
     )
     eps_tor_qs = interp_helper(
-        np.loadtxt("publications/dudt2023/neo_out.toroidal_qs")[:, 1]
+        np.loadtxt("publications/dudt2024/neo_out.toroidal_qs")[:, 1]
     )
-    eps_w7x = interp_helper(np.loadtxt("publications/dudt2023/neo_out.w7x")[:, 1])
+    eps_w7x = interp_helper(np.loadtxt("publications/dudt2024/neo_out.w7x")[:, 1])
     s = np.linspace(0, 1, eps_pol.size + 1)[1:]
     ax0.semilogy(s, eps_pol, color=purple, linestyle="-", lw=4, label="OP")
     ax0.semilogy(s, eps_hel, color=orange, linestyle="-", lw=4, label="OH")
@@ -501,25 +502,25 @@ if confinement:
     # particle losses
     lost_pol = 1 - interp_helper(
         np.sum(
-            np.loadtxt("publications/dudt2023/confined_fraction_poloidal.dat")[:, 1:3],
+            np.loadtxt("publications/dudt2024/confined_fraction_poloidal.dat")[:, 1:3],
             axis=1,
         )
     )
     lost_hel = 1 - interp_helper(
         np.sum(
-            np.loadtxt("publications/dudt2023/confined_fraction_helical.dat")[:, 1:3],
+            np.loadtxt("publications/dudt2024/confined_fraction_helical.dat")[:, 1:3],
             axis=1,
         )
     )
     lost_tor = 1 - interp_helper(
         np.sum(
-            np.loadtxt("publications/dudt2023/confined_fraction_toroidal.dat")[:, 1:3],
+            np.loadtxt("publications/dudt2024/confined_fraction_toroidal.dat")[:, 1:3],
             axis=1,
         )
     )
     lost_pol_qs = 1 - interp_helper(
         np.sum(
-            np.loadtxt("publications/dudt2023/confined_fraction_poloidal_qs.dat")[
+            np.loadtxt("publications/dudt2024/confined_fraction_poloidal_qs.dat")[
                 :, 1:3
             ],
             axis=1,
@@ -527,7 +528,7 @@ if confinement:
     )
     lost_hel_qs = 1 - interp_helper(
         np.sum(
-            np.loadtxt("publications/dudt2023/confined_fraction_helical_qs.dat")[
+            np.loadtxt("publications/dudt2024/confined_fraction_helical_qs.dat")[
                 :, 1:3
             ],
             axis=1,
@@ -535,7 +536,7 @@ if confinement:
     )
     lost_tor_qs = 1 - interp_helper(
         np.sum(
-            np.loadtxt("publications/dudt2023/confined_fraction_toroidal_qs.dat")[
+            np.loadtxt("publications/dudt2024/confined_fraction_toroidal_qs.dat")[
                 :, 1:3
             ],
             axis=1,
@@ -543,18 +544,18 @@ if confinement:
     )
     lost_w7x = 1 - interp_helper(
         np.sum(
-            np.loadtxt("publications/dudt2023/confined_fraction_w7x.dat")[:, 1:3],
+            np.loadtxt("publications/dudt2024/confined_fraction_w7x.dat")[:, 1:3],
             axis=1,
         )
     )
-    t = np.loadtxt("publications/dudt2023/confined_fraction_poloidal.dat")[:, 0]
+    t = np.loadtxt("publications/dudt2024/confined_fraction_poloidal.dat")[:, 0]
     ax1.loglog(t, lost_pol, color=purple, linestyle="-", lw=4, label="OP")
     ax1.loglog(t, lost_pol_qs, color=purple, linestyle=":", lw=4, label="QP")
     ax1.loglog(t, lost_hel, color=orange, linestyle="-", lw=4, label="OH")
     ax1.loglog(t, lost_hel_qs, color=orange, linestyle=":", lw=4, label="QH")
     ax1.loglog(t, lost_tor, color=green, linestyle="-", lw=4, label="OT")
     ax1.loglog(t, lost_tor_qs, color=green, linestyle=":", lw=4, label="QA")
-    t = np.loadtxt("publications/dudt2023/confined_fraction_w7x.dat")[:, 0]
+    t = np.loadtxt("publications/dudt2024/confined_fraction_w7x.dat")[:, 0]
     ax1.loglog(t, lost_w7x, color="k", linestyle="--", lw=4, label="W7-X")
     ax1.legend(loc=(0.12, 0.85), ncol=4)
     ax1.set_xlim([1e-4, 2e-1])
@@ -570,8 +571,8 @@ if confinement:
     )
     fig.tight_layout()
     if save:
-        plt.savefig("publications/dudt2023/confinement.png")
-        plt.savefig("publications/dudt2023/confinement.eps")
+        plt.savefig("publications/dudt2024/confinement.png")
+        plt.savefig("publications/dudt2024/confinement.eps")
     else:
         plt.show()
 

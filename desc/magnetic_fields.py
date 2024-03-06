@@ -2285,6 +2285,11 @@ class OmnigenousField(Optimizable, IOAble):
             of self
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
+        **kwargs : dict, optional
+            Valid keyword arguments are:
+
+            * ``iota``: rotational transform
+            * ``helicity``: helicity (defaults to self.helicity)
 
         Returns
         -------

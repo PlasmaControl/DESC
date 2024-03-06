@@ -1,6 +1,5 @@
 """Magnetic field due to sheet current on a winding surface."""
 
-
 import numpy as np
 
 from desc.backend import fori_loop, jnp
@@ -381,10 +380,8 @@ class FourierCurrentPotentialField(
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
         self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
 
-        assert np.isscalar(I) or np.asarray(I).size == 1, "I must be a scalar"
-        assert np.isscalar(G) or np.asarray(G).size == 1, "G must be a scalar"
-        self._I = float(I)
-        self._G = float(G)
+        self._I = float(np.squeeze(I))
+        self._G = float(np.squeeze(G))
 
         super().__init__(
             R_lmn=R_lmn,
@@ -407,8 +404,7 @@ class FourierCurrentPotentialField(
 
     @I.setter
     def I(self, new):  # noqa: E743
-        assert np.isscalar(new) or np.asarray(new).size == 1, "I must be a scalar"
-        self._I = float(new)
+        self._I = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -418,8 +414,7 @@ class FourierCurrentPotentialField(
 
     @G.setter
     def G(self, new):
-        assert np.isscalar(new) or np.asarray(new).size == 1, "G must be a scalar"
-        self._G = float(new)
+        self._G = float(np.squeeze(new))
 
     @optimizable_parameter
     @property
@@ -637,7 +632,7 @@ def _compute_magnetic_field_from_CurrentPotentialField(
 
     """
     assert basis.lower() in ["rpz", "xyz"]
-    coords = jnp.atleast_2d(coords)
+    coords = jnp.atleast_2d(jnp.asarray(coords))
     if basis == "rpz":
         coords = rpz2xyz(coords)
 

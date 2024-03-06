@@ -1182,7 +1182,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = float(Psi)
+        self._Psi = float(np.squeeze(Psi))
 
     @property
     def NFP(self):
@@ -1234,7 +1234,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @R_lmn.setter
     def R_lmn(self, R_lmn):
-        R_lmn = jnp.atleast_1d(R_lmn)
+        R_lmn = jnp.atleast_1d(jnp.asarray(R_lmn))
         errorif(
             R_lmn.size != self._R_lmn.size,
             ValueError,
@@ -1251,7 +1251,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
-        Z_lmn = jnp.atleast_1d(Z_lmn)
+        Z_lmn = jnp.atleast_1d(jnp.asarray(Z_lmn))
         errorif(
             Z_lmn.size != self._Z_lmn.size,
             ValueError,
@@ -1268,7 +1268,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @L_lmn.setter
     def L_lmn(self, L_lmn):
-        L_lmn = jnp.atleast_1d(L_lmn)
+        L_lmn = jnp.atleast_1d(jnp.asarray(L_lmn))
         errorif(
             L_lmn.size != self._L_lmn.size,
             ValueError,

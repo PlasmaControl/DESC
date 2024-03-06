@@ -28,7 +28,7 @@ else:
             import jax
             import jax.numpy as jnp
             import jaxlib
-            from jax.config import config as jax_config
+            from jax import config as jax_config
 
             jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
@@ -118,7 +118,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             1 where x>=0, -1 where x<0
 
         """
-        x = jnp.atleast_1d(x)
+        x = jnp.asarray(x)
         y = jnp.where(x == 0, 1, jnp.sign(x))
         return y
 
@@ -344,7 +344,11 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
                 xk1, fk1 = backtrack(xk1, fk1, d)
                 return xk1, fk1, k1 + 1
 
-            state = jnp.atleast_1d(guess), jnp.atleast_1d(resfun(guess)), 0
+            state = (
+                jnp.atleast_1d(jnp.asarray(guess)),
+                jnp.atleast_1d(resfun(guess)),
+                0,
+            )
             state = jax.lax.while_loop(condfun, bodyfun, state)
             return state[0], state[1:]
 

@@ -1,5 +1,6 @@
 """Objectives for targeting geometrical quantities."""
 
+import numbers
 import warnings
 
 import jax
@@ -587,13 +588,15 @@ class _CoilObjective(_Objective):
 
         # make single coils and grid a list so they can be used with tree_map
         coils = [coils[0]] if not is_mixed_coils else coils
+
         if self._grid is None:
-            # TODO: raise error if grid, transforms are not the same size as mixed coils
-            self._grid = (
-                [LinearGrid(N=32)]
-                if not is_mixed_coils
-                else [LinearGrid(N=32)] * self._dim_f
-            )
+            NFP = self.NFP if hasattr(self, "NFP") else 1
+            grid = lambda x: LinearGrid(N=2 * x + 5, NFP=NFP, endpoint=False)
+            self._grid = [grid(coil.N) for coil in coils]
+        elif self._grid.num_rho > 1 or self._grid.num_theta > 1:
+            raise TypeError("Only use toroidal resolution for coil grids.")
+        elif isinstance(self._grid, numbers.Integral):
+            raise TypeError("The inputted grid should be of type `Grid`.")
 
         timer = Timer()
         if verbose > 0:

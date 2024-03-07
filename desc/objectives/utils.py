@@ -169,17 +169,20 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         rtol = 3e-14
 
         try:
-            np.testing.assert_allclose(y1, y2, atol=atol, rtol=rtol)
-        except AssertionError:
-            abs_diff = np.abs(y1 - y2)
-            nonzero = np.where(y2 != 0)
+            np.testing.assert_allclose(
+                y1,
+                y2,
+                atol=atol,
+                rtol=rtol,
+                err_msg="Incompatible constraints detected, cannot satisfy constraint "
+                + f"{con}.",
+            )
+        except AssertionError as e:
             warnif(
                 True,
                 UserWarning,
-                f"Detected constraint not satisfied to atol={atol} rtol={rtol},"
-                + f" constraint {con} is only satisfied to max abs diff"
-                + f" {np.max(abs_diff):1.2e} and max rel diff "
-                + f"{np.max(abs_diff[nonzero] / y2[nonzero]):1.2e}.",
+                str(e) + "\n This may indicate incompatible constraints, "
+                "or be due to floating point error.",
             )
 
     return xp, A, b, Z, unfixed_idx, project, recover

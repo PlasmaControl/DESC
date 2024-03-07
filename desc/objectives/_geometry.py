@@ -2,9 +2,10 @@
 
 import warnings
 
+import jax
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import jnp, tree_flatten
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import safenorm
@@ -573,13 +574,10 @@ class _CoilObjective(_Objective):
             Level of output.
 
         """
-        # TODO: import this from desc backend?
-        import jax.tree_util as jtu
-
         # local import to avoid circular import
         from desc.coils import CoilSet, MixedCoilSet, _Coil
 
-        coils = jtu.tree_flatten(
+        coils = tree_flatten(
             self.things[0],
             is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
         )[0]
@@ -596,7 +594,7 @@ class _CoilObjective(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        transforms = jtu.tree_map(
+        transforms = jax.tree_util.tree_map(
             lambda coil_obj, grid: get_transforms(
                 self._data_keys, obj=coil_obj, grid=grid
             ),
@@ -738,11 +736,8 @@ class CoilLength(_CoilObjective):
         f : float or array of floats
             Coil length.
         """
-        # TODO: import this from desc backend?
-        import jax.tree_util as jtu
-
         data = super().compute(params, constants=constants)
-        data = jtu.tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
         out = jnp.array([dat["length"] for dat in data])
         return out
 
@@ -831,10 +826,8 @@ class CoilCurvature(_CoilObjective):
         f : float or array of floats
             Coil curvature.
         """
-        import jax.tree_util as jtu
-
         data = super().compute(params, constants=constants)
-        data = jtu.tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
         out = jnp.array([dat["curvature"] for dat in data])
         return out
 

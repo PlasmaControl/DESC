@@ -26,6 +26,7 @@ from desc.objectives import (
     BScaleLength,
     CoilCurvature,
     CoilLength,
+    CoilTorsion,
     CurrentDensity,
     Elongation,
     Energy,
@@ -600,6 +601,26 @@ class TestObjectiveFunction:
             obj.build()
             f = obj.compute(params=coil.params_dict)
             np.testing.assert_allclose(f, 1 / 2, rtol=1e-8)
+
+        coil = FourierPlanarCoil()
+        coils = CoilSet.linspaced_linear(coil, n=4)
+        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
+        nested_coils = MixedCoilSet.from_symmetry(mixed_coils, NFP=4)
+
+        test(coil)
+        test(coils)
+        test(mixed_coils)
+        test(nested_coils)
+
+    @pytest.mark.unit
+    def test_coil_torsion(self):
+        """Tests coil torsion."""
+
+        def test(coil):
+            obj = CoilTorsion(coil, weight=1)
+            obj.build()
+            f = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f, 0, atol=1e-8)
 
         coil = FourierPlanarCoil()
         coils = CoilSet.linspaced_linear(coil, n=4)

@@ -16,6 +16,7 @@ from ._geometry import (
     BScaleLength,
     CoilCurvature,
     CoilLength,
+    CoilTorsion,
     Elongation,
     GoodCoordinates,
     MeanCurvature,

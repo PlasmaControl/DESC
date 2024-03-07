@@ -133,7 +133,7 @@ def test_constrain_bdry_with_only_one_mode():
 def test_constrain_asserts():
     """Test error checking for incompatible constraints."""
     eqi = Equilibrium(iota=PowerSeriesProfile(0, 0), pressure=PowerSeriesProfile(0, 0))
-    eqc = Equilibrium(current=PowerSeriesProfile(0))
+    eqc = Equilibrium(current=PowerSeriesProfile(1))
     # nonexistent toroidal current can't be constrained
     with pytest.raises(RuntimeError):
         eqi.solve(constraints=FixCurrent(eq=eqi))
@@ -151,6 +151,11 @@ def test_constrain_asserts():
     with pytest.raises(AssertionError):
         con1 = FixCurrent(target=eqc.c_l, eq=eqc)
         con2 = FixCurrent(target=eqc.c_l + 1, eq=eqc)
+        eqc.solve(constraints=(con1, con2))
+    # if only slightly off, should raise only a warning
+    with pytest.warns(UserWarning):
+        con1 = FixCurrent(target=eqc.c_l, eq=eqc)
+        con2 = FixCurrent(target=eqc.c_l * (1 + 1e-9), eq=eqc)
         eqc.solve(constraints=(con1, con2))
 
 

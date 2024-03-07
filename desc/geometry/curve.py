@@ -857,3 +857,8 @@ class SplineXYZCurve(Curve):
         return SplineXYZCurve(
             coords[:, 0], coords[:, 1], coords[:, 2], knots, method, name
         )
+
+
+class DiscontinuousCurve:
+    def __init__(self):
+        pass

@@ -121,16 +121,16 @@ class QuasisymmetryBoozer(_Objective):
         else:
             grid = self._grid
 
-        QuasisymmetryBoozer(
+        warnif(
             grid.num_theta < 2 * eq.M,
             RuntimeWarning,
-            "Boozer objective grid requires poloidal "
+            "QuasisymmetryBoozer objective grid requires poloidal "
             "resolution for surface averages",
         )
-        QuasisymmetryBoozer(
+        warnif(
             grid.num_zeta < 2 * eq.N,
             RuntimeWarning,
-            "Boozer objective grid requires toroidal "
+            "QuasisymmetryBoozer objective grid requires toroidal "
             "resolution for surface averages",
         )
 

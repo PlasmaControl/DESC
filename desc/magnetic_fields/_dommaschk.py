@@ -49,12 +49,12 @@ class DommaschkPotentialField(ScalarPotentialField):
         d_arr=jnp.array([0.0]),
         B0=1.0,
     ):
-        ms = jnp.atleast_1d(ms)
-        ls = jnp.atleast_1d(ls)
-        a_arr = jnp.atleast_1d(a_arr)
-        b_arr = jnp.atleast_1d(b_arr)
-        c_arr = jnp.atleast_1d(c_arr)
-        d_arr = jnp.atleast_1d(d_arr)
+        ms = jnp.atleast_1d(jnp.asarray(ms))
+        ls = jnp.atleast_1d(jnp.asarray(ls))
+        a_arr = jnp.atleast_1d(jnp.asarray(a_arr))
+        b_arr = jnp.atleast_1d(jnp.asarray(b_arr))
+        c_arr = jnp.atleast_1d(jnp.asarray(c_arr))
+        d_arr = jnp.atleast_1d(jnp.asarray(d_arr))
 
         assert (
             ms.size == ls.size == a_arr.size == b_arr.size == c_arr.size == d_arr.size

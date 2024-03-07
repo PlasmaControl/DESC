@@ -260,8 +260,7 @@ class VMECIO:
         if verbose > 0:
             print("Computing data")
 
-        # desc throws NaN for r == 0, so we use something small to approximate it
-        grid_axis = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([1e-6]), NFP=NFP)
+        grid_axis = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([0.0]), NFP=NFP)
         grid_lcfs = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([1.0]), NFP=NFP)
         grid_half = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
         grid_full = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)

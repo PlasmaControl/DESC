@@ -1,4 +1,5 @@
 """Functions to convert DESC or VMEC output files into .csv files for the Datbase."""
+
 # flake8: noqa
 import csv
 import os
@@ -79,8 +80,6 @@ def desc_to_csv(  # noqa
             based on largest Boozer mode? can add a flag to the table like
             "automatically labelled class" if this occurs
             to be transparent about source of the class if it was not a human
-
-
 
     Returns
     -------
@@ -222,9 +221,9 @@ def desc_to_csv(  # noqa
     data_configurations["Z_excursion"] = float(
         f'{np.max(position_data["Z"])-np.min(position_data["Z"]):1.4e}'
     )
-    data_configurations["average_elongation"] = float(
-        f'{position_data["a_major/a_minor"]:1.4e}'
-    )
+    # data_configurations["average_elongation"] = float(
+    #     f'{position_data["a_major/a_minor"]:1.4e}'
+    # )
     data_configurations["class"] = kwargs.get("config_class", None)
     if eq.N == 0:  # is axisymmetric
         data_configurations["class"] = "AS"

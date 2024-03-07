@@ -1366,6 +1366,7 @@ def surface_min(grid, x, surface_label="rho"):
     # alternatives without explicit loops in GitHub pull request #501.
     return grid.expand(mins, surface_label)
 
+
 # defines the order in which objective arguments get concatenated into the state vector
 arg_order = (
     "R_lmn",

@@ -20,7 +20,6 @@ from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
     PoincareSurface,
-    Surface,
     ZernikeRZToroidalSection,
 )
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
@@ -1493,7 +1492,7 @@ class Equilibrium(IOAble, Optimizable):
     @Lp_basis.setter
     def Lp_basis(self, Lp_basis):
         self.xsection.L_basis = Lp_basis
-        
+
     def I(self):  # noqa: E743
         """float: Net toroidal current on the sheet current at the LCFS."""
         return self.surface.I if hasattr(self.surface, "I") else np.empty(0)

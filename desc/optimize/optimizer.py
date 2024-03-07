@@ -209,7 +209,6 @@ class Optimizer(IOAble):
             assert set(objective.things) == set(nonlinear_constraint.things)
         assert set(objective.things) == set(things)
 
-
         # wrap to handle linear constraints
         if linear_constraint is not None:
             objective = LinearConstraintProjection(objective, linear_constraint)

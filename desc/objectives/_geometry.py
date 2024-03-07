@@ -577,17 +577,23 @@ class _CoilObjective(_Objective):
         # local import to avoid circular import
         from desc.coils import CoilSet, MixedCoilSet, _Coil
 
+        is_mixed_coils = isinstance(self.things[0], MixedCoilSet)
+
         coils = tree_flatten(
             self.things[0],
             is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
         )[0]
         self._dim_f = len(coils)
 
-        is_mixed_coils = isinstance(self.things[0], MixedCoilSet)
-
+        # make single coils and grid a list so they can be used with tree_map
+        coils = [coils[0]] if not is_mixed_coils else coils
         if self._grid is None:
             # TODO: raise error if grid, transforms are not the same size as mixed coils
-            self._grid = [LinearGrid(N=32)] * self._dim_f
+            self._grid = (
+                [LinearGrid(N=32)]
+                if not is_mixed_coils
+                else [LinearGrid(N=32)] * self._dim_f
+            )
 
         timer = Timer()
         if verbose > 0:
@@ -595,24 +601,16 @@ class _CoilObjective(_Objective):
         timer.start("Precomputing transforms")
 
         transforms = jax.tree_util.tree_map(
-            lambda coil_obj, grid: get_transforms(
-                self._data_keys, obj=coil_obj, grid=grid
-            ),
+            lambda x, y: get_transforms(self._data_keys, obj=x, grid=y),
             coils,
             self._grid,
-            is_leaf=lambda coil_obj: isinstance(coil_obj, _Coil)
-            and not isinstance(coil_obj, MixedCoilSet),
+            is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, MixedCoilSet),
         )
-
-        if is_mixed_coils:
-            transforms = [
-                get_transforms(self._data_keys, obj=coils[i], grid=self._grid[i])
-                for i in range(self._dim_f)
-            ]
-        else:
-            transforms = get_transforms(
-                self._data_keys, obj=coils[0], grid=self._grid[0]
-            )
+        # tree map always returns a list so take first transform and grid
+        # because they are the same for single coil
+        if not is_mixed_coils:
+            transforms = transforms[0]
+            self._grid = self._grid[0]
 
         self._constants = {"transforms": transforms, "is_mixed_coils": is_mixed_coils}
 
@@ -646,7 +644,7 @@ class _CoilObjective(_Objective):
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
-            grid=self._grid if constants["is_mixed_coils"] else self._grid[0],
+            grid=self._grid,
         )
 
         return data

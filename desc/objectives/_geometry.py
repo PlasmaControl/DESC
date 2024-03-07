@@ -552,6 +552,7 @@ class _CoilObjective(_Objective):
     ):
         self._grid = grid
         self._data_keys = data_keys
+        self._normalize = normalize
         super().__init__(
             things=[coil],
             target=target,
@@ -623,6 +624,9 @@ class _CoilObjective(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            self._scales = compute_scaling_factors(coils[0])
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -708,6 +712,7 @@ class CoilLength(_CoilObjective):
         grid=None,
         name=None,
     ):
+
         self._coils = coils
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -740,6 +745,10 @@ class CoilLength(_CoilObjective):
         from desc.coils import CoilSet
 
         super().build(use_jit=use_jit, verbose=verbose)
+
+        if self._normalize:
+            self._normalization = self._scales["a"]
+
         self._dim_f = len(self._coils.coils) if isinstance(self._coils, CoilSet) else 1
 
     def compute(self, params, constants=None):
@@ -833,6 +842,22 @@ class CoilCurvature(_CoilObjective):
             name=name,
         )
 
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+
+        if self._normalize:
+            self._normalization = 1 / self._scales["a"]
+
     def compute(self, params, constants=None):
         """Compute coil curvature.
 
@@ -923,6 +948,22 @@ class CoilTorsion(_CoilObjective):
             grid=grid,
             name=name,
         )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+
+        if self._normalize:
+            self._normalization = 1 / self._scales["a"] ** 2
 
     def compute(self, params, constants=None):
         """Compute coil torsion.

@@ -579,16 +579,16 @@ class _CoilObjective(_Objective):
         from desc.coils import CoilSet, MixedCoilSet, _Coil
 
         is_mixed_coils = isinstance(self.things[0], MixedCoilSet)
+        is_coil_set = isinstance(self.things[0], CoilSet)
 
         coils = tree_flatten(
             self.things[0],
             is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
         )[0]
-        self._dim_f = len(coils)
 
         # if using single coil, make coils and grid a list so they can be
         # used with tree_map
-        coils = [coils[0]] if not is_mixed_coils else coils
+        coils = [coils[0]] if not is_coil_set else coils
 
         if self._grid is None:
             NFP = self.NFP if hasattr(self, "NFP") else 1
@@ -598,6 +598,8 @@ class _CoilObjective(_Objective):
             raise TypeError("Only use toroidal resolution for coil grids.")
         elif isinstance(self._grid, numbers.Integral):
             raise TypeError("The inputted grid should be of type `Grid`.")
+
+        self._dim_f = np.sum([grid.num_zeta for grid in self._grid])
 
         timer = Timer()
         if verbose > 0:
@@ -616,7 +618,7 @@ class _CoilObjective(_Objective):
             transforms = transforms[0]
             self._grid = self._grid[0]
 
-        self._constants = {"transforms": transforms, "is_mixed_coils": is_mixed_coils}
+        self._constants = {"transforms": transforms}
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -695,7 +697,7 @@ class CoilLength(_CoilObjective):
 
     def __init__(
         self,
-        coil,
+        coils,
         target=None,
         bounds=None,
         weight=1,
@@ -706,11 +708,12 @@ class CoilLength(_CoilObjective):
         grid=None,
         name=None,
     ):
+        self._coils = coils
         if target is None and bounds is None:
             target = 2 * np.pi
 
         super().__init__(
-            coil,
+            coils,
             ["length"],
             target=target,
             bounds=bounds,
@@ -722,6 +725,22 @@ class CoilLength(_CoilObjective):
             grid=grid,
             name=name,
         )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from desc.coils import CoilSet
+
+        super().build(use_jit=use_jit, verbose=verbose)
+        self._dim_f = len(self._coils.coils) if isinstance(self._coils, CoilSet) else 1
 
     def compute(self, params, constants=None):
         """Compute coil length.
@@ -832,9 +851,7 @@ class CoilCurvature(_CoilObjective):
         """
         data = super().compute(params, constants=constants)
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
-        out = jnp.array([dat["curvature"] for dat in data])
-        print(out)
-        print(self._dim_f)
+        out = jnp.concatenate([dat["curvature"] for dat in data])
         return out
 
 
@@ -925,7 +942,7 @@ class CoilTorsion(_CoilObjective):
         """
         data = super().compute(params, constants=constants)
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
-        out = jnp.array([dat["torsion"] for dat in data])
+        out = jnp.concatenate([dat["torsion"] for dat in data])
         return out
 
 

@@ -1,7 +1,7 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from .geom_utils import rpz2xyz, xyz2rpz, xyz2rpz_vec
 
 
 @register_compute_fun(
@@ -245,59 +245,6 @@ def _e_rho_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs
 
 
 @register_compute_fun(
-    name="e_theta",
-    label="\\mathbf{e}_{\\theta}",
-    units="m",
-    units_long="meters",
-    description="Covariant poloidal basis vector",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="tz",
-    data=["R_t", "Z_t", "phi"],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="basis",
-)
-def _e_theta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    R = data["R_t"]
-    Z = data["Z_t"]
-    phi = jnp.zeros_like(R)
-    coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_theta"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="e_zeta",
-    label="\\mathbf{e}_{\\zeta}",
-    units="m",
-    units_long="meters",
-    description="Covariant toroidal basis vector",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="tz",
-    data=["R", "R_z", "Z_z", "phi"],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="basis",
-)
-def _e_zeta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    R0 = data["R"]
-    dR = data["R_z"]
-    dZ = data["Z_z"]
-    dphi = R0
-    coords = jnp.stack([dR, dphi, dZ], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_zeta"] = coords
-    return data
-
-
-@register_compute_fun(
     name="e_rho_r",
     label="\\partial_{\\rho} \\mathbf{e}_{\\rho}",
     units="m",
@@ -438,58 +385,6 @@ def _e_theta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **k
 
 
 @register_compute_fun(
-    name="e_theta_t",
-    label="\\partial_{\\theta} \\mathbf{e}_{\\theta}",
-    units="m",
-    units_long="meters",
-    description="Covariant poloidal basis vector, derivative wrt poloidal angle",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="tz",
-    data=["R_tt", "Z_tt", "phi"],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="basis",
-)
-def _e_theta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    R = data["R_tt"]
-    Z = data["Z_tt"]
-    phi = jnp.zeros_like(R)
-    coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_theta_t"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="e_theta_z",
-    label="\\partial_{\\zeta} \\mathbf{e}_{\\theta}",
-    units="m",
-    units_long="meters",
-    description="Covariant poloidal basis vector, derivative wrt toroidal angle",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="tz",
-    data=["R_tz", "Z_tz", "R_t", "phi"],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="basis",
-)
-def _e_theta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    dR = data["R_tz"]
-    dZ = data["Z_tz"]
-    dphi = data["R_t"]
-    coords = jnp.stack([dR, dphi, dZ], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_theta_z"] = coords
-    return data
-
-
-@register_compute_fun(
     name="e_zeta_r",
     label="\\partial_{\\rho} \\mathbf{e}_{\\zeta}",
     units="m",
@@ -533,60 +428,6 @@ def _e_zeta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
 def _e_zeta_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
     data["e_zeta_rr"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="e_zeta_t",
-    label="\\partial_{\\theta} \\mathbf{e}_{\\zeta}",
-    units="m",
-    units_long="meters",
-    description="Covariant toroidal basis vector, derivative wrt poloidal angle",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="tz",
-    data=["R_tz", "Z_tz", "R_t", "phi"],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="basis",
-)
-def _e_zeta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    dR = data["R_tz"]
-    dZ = data["Z_tz"]
-    dphi = data["R_t"]
-    coords = jnp.stack([dR, dphi, dZ], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_zeta_t"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="e_zeta_z",
-    label="\\partial_{\\zeta} \\mathbf{e}_{\\zeta}",
-    units="m",
-    units_long="meters",
-    description="Covariant toroidal basis vector, derivative wrt toroidal angle",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="tz",
-    data=["R", "R_z", "R_zz", "Z_zz", "phi"],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    basis="basis",
-)
-def _e_zeta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    R0 = data["R"]
-    dR = data["R_z"]
-    d2R = data["R_zz"]
-    d2Z = data["Z_zz"]
-    dphi = 2 * dR
-    coords = jnp.stack([d2R - R0, dphi, d2Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_zeta_z"] = coords
     return data
 
 
@@ -780,58 +621,6 @@ def _x_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="e_rho",
-    label="\\mathbf{e}_{\\rho}",
-    units="m",
-    units_long="meters",
-    description="Covariant radial basis vector",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rt",
-    data=["R_r", "Z_r", "phi"],
-    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-    basis="basis",
-)
-def _e_rho_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
-    R = data["R_r"]
-    Z = data["Z_r"]
-    phi = jnp.zeros_like(R)
-    coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_rho"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="e_theta",
-    label="\\mathbf{e}_{\\theta}",
-    units="m",
-    units_long="meters",
-    description="Covariant poloidal basis vector",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rt",
-    data=["R_t", "Z_t", "phi"],
-    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-    basis="basis",
-)
-def _e_theta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
-    R = data["R_t"]
-    Z = data["Z_t"]
-    phi = jnp.zeros_like(R)
-    coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_theta"] = coords
-    return data
-
-
-@register_compute_fun(
     name="e_zeta",
     label="\\mathbf{e}_{\\zeta}",
     units="m",
@@ -855,86 +644,6 @@ def _e_zeta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwarg
 
 
 @register_compute_fun(
-    name="e_rho_r",
-    label="\\partial_{\\rho} \\mathbf{e}_{\\rho}",
-    units="m",
-    units_long="meters",
-    description="Covariant radial basis vector, derivative wrt radial coordinate",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rt",
-    data=["R_rr", "Z_rr", "phi"],
-    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-    basis="basis",
-)
-def _e_rho_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
-    R = data["R_rr"]
-    Z = data["Z_rr"]
-    phi = jnp.zeros_like(R)
-    coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_rho_r"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="e_rho_rr",
-    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\rho}",
-    units="m",
-    units_long="meters",
-    description="Covariant radial basis vector,"
-    " second derivative wrt radial coordinate",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rt",
-    data=["R_rrr", "Z_rrr", "phi"],
-    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-    basis="basis",
-)
-def _e_rho_rr_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
-    R = data["R_rrr"]
-    Z = data["Z_rrr"]
-    phi = jnp.zeros_like(R)
-    coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_rho_rr"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="e_rho_t",
-    label="\\partial_{\\theta} \\mathbf{e}_{\\rho}",
-    units="m",
-    units_long="meters",
-    description="Covariant radial basis vector, derivative wrt poloidal angle",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rt",
-    data=["R_rt", "Z_rt", "phi"],
-    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-    basis="basis",
-    aliases=["e_theta_r"],
-)
-def _e_rho_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
-    R = data["R_rt"]
-    Z = data["Z_rt"]
-    phi = jnp.zeros_like(R)
-    coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_rho_t"] = coords
-    return data
-
-
-@register_compute_fun(
     name="e_rho_z",
     label="\\partial_{\\zeta} \\mathbf{e}_{\\rho}",
     units="m",
@@ -954,59 +663,6 @@ def _e_rho_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwar
 def _e_rho_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
     data["e_rho_z"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="e_theta_rr",
-    label="\\partial_{\\rho \\rho} \\mathbf{e}_{\\theta}",
-    units="m",
-    units_long="meters",
-    description="Covariant poloidal basis vector,"
-    " second derivative wrt radial coordinate",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rt",
-    data=["R_rrt", "Z_rrt", "phi"],
-    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-    basis="basis",
-)
-def _e_theta_rr_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
-    R = data["R_rrt"]
-    Z = data["Z_rrt"]
-    phi = jnp.zeros_like(R)
-    coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_theta_rr"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="e_theta_t",
-    label="\\partial_{\\theta} \\mathbf{e}_{\\theta}",
-    units="m",
-    units_long="meters",
-    description="Covariant poloidal basis vector, derivative wrt poloidal angle",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rt",
-    data=["R_tt", "Z_tt", "phi"],
-    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-    basis="basis",
-)
-def _e_theta_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
-    R = data["R_tt"]
-    Z = data["Z_tt"]
-    phi = jnp.zeros_like(R)
-    coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz_vec(coords, phi=data["phi"])
-    data["e_theta_t"] = coords
     return data
 
 

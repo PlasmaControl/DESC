@@ -225,9 +225,6 @@ class VMECIO:
         """
         file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
 
-        # desc throws NaN for r == 0, so we use something small to approximate it
-        ONAXIS = np.array([1e-6])
-
         Psi = eq.Psi
         NFP = eq.NFP
         M = eq.M
@@ -258,6 +255,62 @@ class VMECIO:
         file.createDimension("dim_00100", 100)
         file.createDimension("dim_00200", 200)
 
+        # compute data
+        timer.start("compute")
+        if verbose > 0:
+            print("Computing data")
+
+        # desc throws NaN for r == 0, so we use something small to approximate it
+        grid_axis = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([1e-6]), NFP=NFP)
+        grid_lcfs = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([1.0]), NFP=NFP)
+        grid_half = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
+        grid_full = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
+
+        data_quad = eq.compute(
+            ["R0/a", "V", "<|B|>_rms", "<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"]
+        )
+        data_axis = eq.compute(["G", "p", "R", "<|B|^2>"], grid=grid_axis)
+        data_lcfs = eq.compute(["G", "I", "R", "Z"], grid=grid_lcfs)
+        data_half = eq.compute(
+            [
+                "B_rho",
+                "B_theta",
+                "B_zeta",
+                "G",
+                "I",
+                "J",
+                "iota",
+                "p",
+                "sqrt(g)",
+                "V_r(r)",
+                "|B|",
+                "<|B|^2>",
+            ],
+            grid=grid_half,
+        )
+        data_full = eq.compute(
+            [
+                "B_rho",
+                "B_theta",
+                "B_zeta",
+                "current",
+                "D_Mercier",
+                "iota",
+                "J",
+                "J^theta*sqrt(g)",
+                "J^zeta",
+                "p",
+                "sqrt(g)",
+                "<|B|^2>",
+                "<J*B>",
+            ],
+            grid=grid_full,
+        )
+
+        timer.stop("compute")
+        if verbose > 1:
+            timer.disp("compute")
+
         # parameters
         timer.start("parameters")
         if verbose > 0:
@@ -271,7 +324,7 @@ class VMECIO:
             np.array([" " * 100], "S" + str(file.dimensions["dim_00100"].size))
         )  # VMEC input filename: input.[input_extension]
 
-        # TODO: instead of hard-coding for fixed-boundary, allow for free-boundary?
+        # TODO: instead of hard-coding for fixed-boundary, also allow for free-boundary?
         mgrid_mode = file.createVariable("mgrid_mode", "S1", ("dim_00001",))
         mgrid_mode[:] = stringtochar(
             np.array([""], "S" + str(file.dimensions["dim_00001"].size))
@@ -363,9 +416,8 @@ class VMECIO:
 
         nextcur = file.createVariable("nextcur", np.int32)
         nextcur.long_name = "number of coils (external currents)"
-        nextcur[:] = 0
+        nextcur[:] = 0  # hard-coded assuming fixed-boundary solve
 
-        # profiles
         # TODO: add option for saving spline profiles
         power_series = stringtochar(
             np.array(
@@ -385,200 +437,105 @@ class VMECIO:
         pcurr_type.long_name = "parameterization of current density function"
         pcurr_type[:] = power_series
 
-        grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_full, NFP=NFP)
-        grid_half = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
+        # scalars computed on a Quadrature grid
 
-        p_full = grid_full.compress(eq.compute("p", grid=grid_full)["p"])
-        p_half = grid_half.compress(eq.compute("p", grid=grid_half)["p"])
-        i_full = grid_full.compress(eq.compute("iota", grid=grid_full)["iota"])
-        i_half = grid_half.compress(eq.compute("iota", grid=grid_half)["iota"])
-        c_full = grid_full.compress(eq.compute("current", grid=grid_full)["current"])
+        Rmajor_p = file.createVariable("Rmajor_p", np.float64)
+        Rmajor_p.long_name = "major radius"
+        Rmajor_p.units = "m"
+        Rmajor_p[:] = data_quad["R0"]
 
-        am = file.createVariable("am", np.float64, ("preset",))
-        am.long_name = "pressure coefficients"
-        am.units = "Pa"
-        am[:] = np.zeros((file.dimensions["preset"].size,))
-        # only using up to 10th order to avoid poor conditioning
-        am[:11] = PowerSeriesProfile.from_values(
-            s_full, p_full, order=10, sym=False
-        ).params
+        Aminor_p = file.createVariable("Aminor_p", np.float64)
+        Aminor_p.long_name = "minor radius"
+        Aminor_p.units = "m"
+        Aminor_p[:] = data_quad["a"]
 
-        ai = file.createVariable("ai", np.float64, ("preset",))
-        ai.long_name = "rotational transform coefficients"
-        ai[:] = np.zeros((file.dimensions["preset"].size,))
-        if eq.iota is not None:
-            # only using up to 10th order to avoid poor conditioning
-            # negative sign for negative Jacobian
-            ai[:11] = -PowerSeriesProfile.from_values(
-                s_full, i_full, order=10, sym=False
-            ).params
+        aspect = file.createVariable("aspect", np.float64)
+        aspect.long_name = "aspect ratio = R_major / A_minor"
+        aspect.units = "None"
+        aspect[:] = data_quad["R0/a"]
 
-        ac = file.createVariable("ac", np.float64, ("preset",))
-        ac.long_name = "normalized toroidal current density coefficients"
-        ac[:] = np.zeros((file.dimensions["preset"].size,))
-        if eq.current is not None:
-            # only using up to 10th order to avoid poor conditioning
-            ac[:11] = PowerSeriesProfile.from_values(
-                s_full, c_full, order=10, sym=False
-            ).params
+        volume_p = file.createVariable("volume_p", np.float64)
+        volume_p.long_name = "plasma volume"
+        volume_p.units = "m^3"
+        volume_p[:] = data_quad["V"]
 
-        presf = file.createVariable("presf", np.float64, ("radius",))
-        presf.long_name = "pressure on full mesh"
-        presf.units = "Pa"
-        presf[:] = p_full
+        volavgB = file.createVariable("volavgB", np.float64)
+        volavgB.long_name = "volume average magnetic field, root mean square"
+        volavgB.units = "T"
+        volavgB[:] = data_quad["<|B|>_rms"]
+
+        betatotal = file.createVariable("betatotal", np.float64)
+        betatotal.long_name = "normalized plasma pressure"
+        betatotal.units = "None"
+        betatotal[:] = data_quad["<beta>_vol"]
+
+        betapol = file.createVariable("betapol", np.float64)
+        betapol.long_name = "normalized poloidal plasma pressure"
+        betapol.units = "None"
+        betapol[:] = data_quad["<beta_pol>_vol"]
+
+        betator = file.createVariable("betator", np.float64)
+        betator.long_name = "normalized toroidal plasma pressure"
+        betator.units = "None"
+        betator[:] = data_quad["<beta_tor>_vol"]
+
+        # scalars computed at the magnetic axis
+
+        rbtor0 = file.createVariable("rbtor0", np.float64)
+        rbtor0.long_name = "<R*B_tor> on axis"
+        rbtor0.units = "T*m"
+        rbtor0[:] = data_axis["G"][0]
+
+        b0 = file.createVariable("b0", np.float64)
+        b0.long_name = "average B_tor on axis"
+        b0.units = "T"
+        b0[:] = data_axis["G"][0] / data_axis["R"][0]
+
+        betaxis = file.createVariable("betaxis", np.float64)
+        betaxis.long_name = "2 * mu_0 * pressure / <|B|^2> on the magnetic axis"
+        betaxis.units = "None"
+        betaxis[:] = 2 * mu_0 * data_axis["p"][0] / data_axis["<|B|^2>"][0]
+
+        # scalars computed at the last closed flux surface
+
+        ctor = file.createVariable("ctor", np.float64)
+        ctor.long_name = "total toroidal plasma current"
+        ctor.units = "A"
+        ctor[:] = data_lcfs["I"][0] * 2 * np.pi / mu_0
+
+        rbtor = file.createVariable("rbtor", np.float64)
+        rbtor.long_name = "<R*B_tor> on last closed flux surface"
+        rbtor.units = "T*m"
+        rbtor[:] = data_lcfs["G"][0]
+
+        # half mesh quantities
 
         pres = file.createVariable("pres", np.float64, ("radius",))
         pres.long_name = "pressure on half mesh"
         pres.units = "Pa"
         pres[0] = 0
-        pres[1:] = p_half
+        pres[1:] = grid_half.compress(data_half["p"])
 
         mass = file.createVariable("mass", np.float64, ("radius",))
         mass.long_name = "mass on half mesh"
         mass.units = "Pa"
         mass[:] = pres[:]
 
-        iotaf = file.createVariable("iotaf", np.float64, ("radius",))
-        iotaf.long_name = "rotational transform on full mesh"
-        iotaf.units = "None"
-        iotaf[:] = -i_full  # negative sign for negative Jacobian
-
-        q_factor = file.createVariable("q_factor", np.float64, ("radius",))
-        q_factor.long_name = "inverse rotational transform on full mesh"
-        q_factor.units = "None"
-        q_factor[:] = 1 / iotaf[:]
-
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
         iotas.units = "None"
         iotas[0] = 0
-        iotas[1:] = -i_half  # negative sign for negative Jacobian
-
-        phi = file.createVariable("phi", np.float64, ("radius",))
-        phi.long_name = "toroidal flux"
-        phi.units = "Wb"
-        phi[:] = np.linspace(0, Psi, surfs)
-
-        phipf = file.createVariable("phipf", np.float64, ("radius",))
-        phipf.long_name = "d(phi)/ds: toroidal flux derivative"
-        phipf[:] = Psi * np.ones((surfs,))
+        iotas[1:] = -grid_half.compress(data_half["iota"])  # - for negative Jacobian
 
         phips = file.createVariable("phips", np.float64, ("radius",))
-        phips.long_name = "d(phi)/ds * -1/2pi: toroidal flux derivative on half mesh"
+        phips.long_name = "d(phi)/ds * -1/2pi: toroidal flux derivative, on half mesh"
         phips[0] = 0
-        phips[1:] = -phipf[1:] / (2 * np.pi)
+        phips[1:] = -Psi * np.ones((surfs - 1,)) / (2 * np.pi)
 
-        chi = file.createVariable("chi", np.float64, ("radius",))
-        chi.long_name = "poloidal flux"
-        chi.units = "Wb"
-        chi[:] = (
-            -2  # negative sign for negative Jacobian
-            * Psi
-            * integrate.cumulative_trapezoid(r_full * iotaf[:], r_full, initial=0)
-        )
-
-        chipf = file.createVariable("chipf", np.float64, ("radius",))
-        chipf.long_name = "d(chi)/ds: poloidal flux derivative"
-        chipf[:] = phipf[:] * iotaf[:]
-
-        # scalars computed on a Quadrature grid
-        data = eq.compute(
-            ["R0/a", "V", "<|B|>_rms", "<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"]
-        )
-
-        Rmajor_p = file.createVariable("Rmajor_p", np.float64)
-        Rmajor_p.long_name = "major radius"
-        Rmajor_p.units = "m"
-        Rmajor_p[:] = data["R0"]
-
-        Aminor_p = file.createVariable("Aminor_p", np.float64)
-        Aminor_p.long_name = "minor radius"
-        Aminor_p.units = "m"
-        Aminor_p[:] = data["a"]
-
-        aspect = file.createVariable("aspect", np.float64)
-        aspect.long_name = "aspect ratio = R_major / A_minor"
-        aspect.units = "None"
-        aspect[:] = data["R0/a"]
-
-        volume_p = file.createVariable("volume_p", np.float64)
-        volume_p.long_name = "plasma volume"
-        volume_p.units = "m^3"
-        volume_p[:] = data["V"]
-
-        volavgB = file.createVariable("volavgB", np.float64)
-        volavgB.long_name = "volume average magnetic field, root mean square"
-        volavgB.units = "T"
-        volavgB[:] = data["<|B|>_rms"]
-
-        betatotal = file.createVariable("betatotal", np.float64)
-        betatotal.long_name = "normalized plasma pressure"
-        betatotal.units = "None"
-        betatotal[:] = data["<beta>_vol"]
-
-        betapol = file.createVariable("betapol", np.float64)
-        betapol.long_name = "normalized poloidal plasma pressure"
-        betapol.units = "None"
-        betapol[:] = data["<beta_pol>_vol"]
-
-        betator = file.createVariable("betator", np.float64)
-        betator.long_name = "normalized toroidal plasma pressure"
-        betator.units = "None"
-        betator[:] = data["<beta_tor>_vol"]
-
-        # scalars computed at the last closed flux surface
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=NFP)
-        data = eq.compute(["G", "I"], grid=grid)
-
-        ctor = file.createVariable("ctor", np.float64)
-        ctor.long_name = "total toroidal plasma current"
-        ctor.units = "A"
-        ctor[:] = data["I"][0] * 2 * np.pi / mu_0
-
-        rbtor = file.createVariable("rbtor", np.float64)
-        rbtor.long_name = "<R*B_tor> on last closed flux surface"
-        rbtor.units = "T*m"
-        rbtor[:] = data["G"][0]
-
-        # scalars computed at the magnetic axis
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
-        data = eq.compute(["G", "p", "R", "<|B|^2>"], grid=grid)
-
-        rbtor0 = file.createVariable("rbtor0", np.float64)
-        rbtor0.long_name = "<R*B_tor> on axis"
-        rbtor0.units = "T*m"
-        rbtor0[:] = data["G"][0]
-
-        b0 = file.createVariable("b0", np.float64)
-        b0.long_name = "average B_tor on axis"
-        b0.units = "T"
-        b0[:] = data["G"][0] / data["R"][0]
-
-        betaxis = file.createVariable("betaxis", np.float64)
-        betaxis.long_name = "2 * mu_0 * pressure / <|B|^2> on the magnetic axis"
-        betaxis.units = "None"
-        betaxis[:] = 2 * mu_0 * data["p"][0] / data["<|B|^2>"][0]
-
-        # grids for computing radial profile data
-        grid_full = LinearGrid(
-            M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full
-        )
-        grid_half = LinearGrid(
-            M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_half
-        )
-        data_full = eq.compute(
-            ["<|B|^2>", "<J*B>", "sqrt(g)", "J^theta*sqrt(g)", "J^zeta", "D_Mercier"],
-            grid=grid_full,
-        )
-        data_half = eq.compute(["I", "G", "<|B|^2>", "V_r(r)"], grid=grid_half)
-
-        # half mesh quantities
         buco = file.createVariable("buco", np.float64, ("radius",))
         buco.long_name = "Boozer toroidal current I, on half mesh"
         buco.units = "T*m"
-        buco[1:] = -grid_half.compress(
-            data_half["I"]
-        )  # negative sign for negative Jacobian (opposite poloidal angle)
+        buco[1:] = -grid_half.compress(data_half["I"])  # - for negative Jacobian
         buco[0] = 0
 
         bvco = file.createVariable("bvco", np.float64, ("radius",))
@@ -590,7 +547,12 @@ class VMECIO:
         beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
         beta_vol.long_name = "2 * mu_0 * pressure / <|B|^2>, on half mesh"
         beta_vol.units = "None"
-        beta_vol[1:] = 2 * mu_0 * p_half / grid_half.compress(data_half["<|B|^2>"])
+        beta_vol[1:] = (
+            2
+            * mu_0
+            * grid_half.compress(data_half["p"])
+            / grid_half.compress(data_half["<|B|^2>"])
+        )
         beta_vol[0] = 0.0
 
         vp = file.createVariable("vp", np.float64, ("radius",))
@@ -602,6 +564,71 @@ class VMECIO:
         vp[0] = 0
 
         # full mesh quantities
+
+        presf = file.createVariable("presf", np.float64, ("radius",))
+        presf.long_name = "pressure on full mesh"
+        presf.units = "Pa"
+        presf[:] = grid_full.compress(data_full["p"])
+
+        iotaf = file.createVariable("iotaf", np.float64, ("radius",))
+        iotaf.long_name = "rotational transform on full mesh"
+        iotaf.units = "None"
+        iotaf[:] = -grid_full.compress(data_full["iota"])  # - for negative Jacobian
+
+        q_factor = file.createVariable("q_factor", np.float64, ("radius",))
+        q_factor.long_name = "inverse rotational transform on full mesh"
+        q_factor.units = "None"
+        q_factor[:] = 1 / iotaf[:]
+
+        phi = file.createVariable("phi", np.float64, ("radius",))
+        phi.long_name = "toroidal flux, on full mesh"
+        phi.units = "Wb"
+        phi[:] = np.linspace(0, Psi, surfs)
+
+        phipf = file.createVariable("phipf", np.float64, ("radius",))
+        phipf.long_name = "d(phi)/ds: toroidal flux derivative, on full mesh"
+        phipf[:] = Psi * np.ones((surfs,))
+
+        chi = file.createVariable("chi", np.float64, ("radius",))
+        chi.long_name = "poloidal flux, on full mesh"
+        chi.units = "Wb"
+        chi[:] = (
+            -2  # - for negative Jacobian
+            * Psi
+            * integrate.cumulative_trapezoid(r_full * iotaf[:], r_full, initial=0)
+        )
+
+        chipf = file.createVariable("chipf", np.float64, ("radius",))
+        chipf.long_name = "d(chi)/ds: poloidal flux derivative, on full mesh"
+        chipf[:] = phipf[:] * iotaf[:]
+
+        am = file.createVariable("am", np.float64, ("preset",))
+        am.long_name = "pressure coefficients"
+        am.units = "Pa"
+        am[:] = np.zeros((file.dimensions["preset"].size,))
+        # only using up to 10th order to avoid poor conditioning
+        am[:11] = PowerSeriesProfile.from_values(
+            s_full, grid_full.compress(data_full["p"]), order=10, sym=False
+        ).params
+
+        ai = file.createVariable("ai", np.float64, ("preset",))
+        ai.long_name = "rotational transform coefficients"
+        ai[:] = np.zeros((file.dimensions["preset"].size,))
+        if eq.iota is not None:
+            # only using up to 10th order to avoid poor conditioning
+            ai[:11] = -PowerSeriesProfile.from_values(  # - for negative Jacobian
+                s_full, grid_full.compress(data_full["iota"]), order=10, sym=False
+            ).params
+
+        ac = file.createVariable("ac", np.float64, ("preset",))
+        ac.long_name = "normalized toroidal current density coefficients"
+        ac[:] = np.zeros((file.dimensions["preset"].size,))
+        if eq.current is not None:
+            # only using up to 10th order to avoid poor conditioning
+            ac[:11] = PowerSeriesProfile.from_values(
+                s_full, grid_full.compress(data_full["current"]), order=10, sym=False
+            ).params
+
         bdotb = file.createVariable("bdotb", np.float64, ("radius",))
         bdotb.long_name = "flux surface average of magnetic field squared, on full mesh"
         bdotb.units = "T^2"
@@ -617,12 +644,12 @@ class VMECIO:
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^theta, on full mesh"
         jcuru.units = "A/m^3"
-        jcuru[:] = -surface_averages(
+        jcuru[:] = -surface_averages(  # - for negative Jacobian
             grid_full,
             data_full["J^theta*sqrt(g)"] / (2 * data_full["rho"]),
             sqrt_g=data_full["sqrt(g)"],
             expand_out=False,
-        )  # negative sign for negative Jacobian (opposite poloidal angle)
+        )
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
@@ -636,7 +663,6 @@ class VMECIO:
         )
         jcurv[0] = 0
 
-        # Mercier stability
         DShear = file.createVariable("DShear", np.float64, ("radius",))
         DShear.long_name = (
             "Mercier stability criterion magnetic shear term, on full mesh"
@@ -783,17 +809,15 @@ class VMECIO:
 
         # derived quantities (approximate conversion)
 
-        grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP)
-        coords = eq.compute(["R", "Z"], grid=grid)
         sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
         cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
         full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
         if eq.sym:
             sin_transform = Transform(
-                grid=grid, basis=sin_basis, build=False, build_pinv=True
+                grid=grid_lcfs, basis=sin_basis, build=False, build_pinv=True
             )
             cos_transform = Transform(
-                grid=grid, basis=cos_basis, build=False, build_pinv=True
+                grid=grid_lcfs, basis=cos_basis, build=False, build_pinv=True
             )
 
             def cosfit(x):
@@ -806,7 +830,7 @@ class VMECIO:
 
         else:
             full_transform = Transform(
-                grid=grid, basis=full_basis, build=False, build_pinv=True
+                grid=grid_lcfs, basis=full_basis, build=False, build_pinv=True
             )
 
             def fullfit(x):
@@ -816,31 +840,17 @@ class VMECIO:
         rmin_surf = file.createVariable("rmin_surf", np.float64)
         rmin_surf.long_name = "minimum R coordinate range"
         rmin_surf.units = "m"
-        rmin_surf[:] = np.amin(coords["R"])
+        rmin_surf[:] = np.amin(data_lcfs["R"])
 
         rmax_surf = file.createVariable("rmax_surf", np.float64)
         rmax_surf.long_name = "maximum R coordinate range"
         rmax_surf.units = "m"
-        rmax_surf[:] = np.amax(coords["R"])
+        rmax_surf[:] = np.amax(data_lcfs["R"])
 
         zmax_surf = file.createVariable("zmax_surf", np.float64)
         zmax_surf.long_name = "maximum Z coordinate range"
         zmax_surf.units = "m"
-        zmax_surf[:] = np.amax(np.abs(coords["Z"]))
-
-        # half grid quantities
-        half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
-        data_half_grid = eq.compute(
-            ["J", "|B|", "B_rho", "B_theta", "B_zeta", "sqrt(g)", "<|B|^2>"],
-            grid=half_grid,
-        )
-
-        # full grid quantities
-        full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
-        data_full_grid = eq.compute(
-            ["J", "B_rho", "B_theta", "B_zeta", "J^theta*sqrt(g)", "<|B|^2>"],
-            grid=full_grid,
-        )
+        zmax_surf[:] = np.amax(np.abs(data_lcfs["Z"]))
 
         # Jacobian
         timer.start("Jacobian")
@@ -859,12 +869,12 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         # d(rho)/d(s) = 1/(2*rho)
         data = (
-            (data_half_grid["sqrt(g)"] / (2 * data_half_grid["rho"]))
+            (data_half["sqrt(g)"] / (2 * data_half["rho"]))
             .reshape(
-                (half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta), order="F"
+                (grid_half.num_theta, grid_half.num_rho, grid_half.num_zeta), order="F"
             )
             .transpose((1, 0, 2))
-            .reshape((half_grid.num_rho, -1), order="F")
+            .reshape((grid_half.num_rho, -1), order="F")
         )
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
@@ -898,12 +908,12 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            data_half_grid["|B|"]
+            data_half["|B|"]
             .reshape(
-                (half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta), order="F"
+                (grid_half.num_theta, grid_half.num_rho, grid_half.num_zeta), order="F"
             )
             .transpose((1, 0, 2))
-            .reshape((half_grid.num_rho, -1), order="F")
+            .reshape((grid_half.num_rho, -1), order="F")
         )
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
@@ -941,12 +951,12 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            data_half_grid["B^theta"]
+            data_half["B^theta"]
             .reshape(
-                (half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta), order="F"
+                (grid_half.num_theta, grid_half.num_rho, grid_half.num_zeta), order="F"
             )
             .transpose((1, 0, 2))
-            .reshape((half_grid.num_rho, -1), order="F")
+            .reshape((grid_half.num_rho, -1), order="F")
         )
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
@@ -984,12 +994,12 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            data_half_grid["B^zeta"]
+            data_half["B^zeta"]
             .reshape(
-                (half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta), order="F"
+                (grid_half.num_theta, grid_half.num_rho, grid_half.num_zeta), order="F"
             )
             .transpose((1, 0, 2))
-            .reshape((half_grid.num_rho, -1), order="F")
+            .reshape((grid_half.num_rho, -1), order="F")
         )
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
@@ -1026,9 +1036,9 @@ class VMECIO:
             bsubsmnc.units = "T*m"
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
-        data = data_full_grid["B_rho"].reshape(
-            (full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta), order="F"
-        ).transpose((1, 0, 2)).reshape((full_grid.num_rho, -1), order="F") / (
+        data = data_full["B_rho"].reshape(
+            (grid_full.num_theta, grid_full.num_rho, grid_full.num_zeta), order="F"
+        ).transpose((1, 0, 2)).reshape((grid_full.num_rho, -1), order="F") / (
             2 * r_full[:, np.newaxis]
         )
         # B_rho -> B_psi conversion: d(rho)/d(s) = 1/(2*rho)
@@ -1073,12 +1083,12 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            data_half_grid["B_theta"]
+            data_half["B_theta"]
             .reshape(
-                (half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta), order="F"
+                (grid_half.num_theta, grid_half.num_rho, grid_half.num_zeta), order="F"
             )
             .transpose((1, 0, 2))
-            .reshape((half_grid.num_rho, -1), order="F")
+            .reshape((grid_half.num_rho, -1), order="F")
         )
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
@@ -1116,12 +1126,12 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            data_half_grid["B_zeta"]
+            data_half["B_zeta"]
             .reshape(
-                (half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta), order="F"
+                (grid_half.num_theta, grid_half.num_rho, grid_half.num_zeta), order="F"
             )
             .transpose((1, 0, 2))
-            .reshape((half_grid.num_rho, -1), order="F")
+            .reshape((grid_half.num_rho, -1), order="F")
         )
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
@@ -1161,12 +1171,12 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            (data_full_grid["J^theta*sqrt(g)"] / (2 * data_full_grid["rho"]))
+            (data_full["J^theta*sqrt(g)"] / (2 * data_full["rho"]))
             .reshape(
-                (full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta), order="F"
+                (grid_full.num_theta, grid_full.num_rho, grid_full.num_zeta), order="F"
             )
             .transpose((1, 0, 2))
-            .reshape((full_grid.num_rho, -1), order="F")
+            .reshape((grid_full.num_rho, -1), order="F")
         )
         x_mn = np.zeros((surfs, m.size))
         for i in range(1, surfs):  # skip NaN values at magnetic axis
@@ -1211,16 +1221,12 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            (
-                data_full_grid["J^zeta"]
-                * data_full_grid["sqrt(g)"]
-                / (2 * data_full_grid["rho"])
-            )
+            (data_full["J^zeta"] * data_full["sqrt(g)"] / (2 * data_full["rho"]))
             .reshape(
-                (full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta), order="F"
+                (grid_full.num_theta, grid_full.num_rho, grid_full.num_zeta), order="F"
             )
             .transpose((1, 0, 2))
-            .reshape((full_grid.num_rho, -1), order="F")
+            .reshape((grid_full.num_rho, -1), order="F")
         )
         x_mn = np.zeros((surfs, m.size))
         for i in range(1, surfs):  # skip NaN values at magnetic axis

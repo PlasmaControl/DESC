@@ -121,6 +121,13 @@ class QuasisymmetryBoozer(_Objective):
         else:
             grid = self._grid
 
+        errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
+        errorif(
+            grid.num_rho != 1,
+            ValueError,
+            "QuasisymmetryBoozer grid must be on a single surface. "
+            "To target multiple surfaces, use multiple objectives.",
+        )
         warnif(
             grid.num_theta < 2 * eq.M,
             RuntimeWarning,
@@ -135,14 +142,6 @@ class QuasisymmetryBoozer(_Objective):
         )
 
         self._data_keys = ["|B|_mn"]
-
-        errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
-        errorif(
-            grid.num_rho != 1,
-            ValueError,
-            "QuasisymmetryBoozer grid must be on a single surface. "
-            "To target multiple surfaces, use multiple objectives.",
-        )
 
         timer = Timer()
         if verbose > 0:

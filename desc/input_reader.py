@@ -359,8 +359,13 @@ class InputReader:
 
             # solver methods
             match = re.search(r"objective", argument, re.IGNORECASE)
+            vac_flag = False
             if match:
-                inputs["objective"] = words[0].lower()
+                method = words[0].lower()
+                if method == "vacuum":
+                    method == "force"
+                    vac_flag = True
+                inputs["objective"] = method
                 flag = True
             match = re.search(r"optimizer", argument, re.IGNORECASE)
             if match:
@@ -558,20 +563,20 @@ class InputReader:
         if curr_flag and iota_flag:
             raise OSError(colored("Cannot specify both iota and current.", "red"))
 
-        # remove unused profile
-        if iota_flag:
-            if inputs["objective"] != "vacuum":
-                del inputs["current"]
-            else:  # if vacuum objective from input file, use zero current
-                del inputs["iota"]
-        else:
-            del inputs["iota"]
-
-        if inputs["objective"] == "vacuum" and (pres_flag or iota_flag or curr_flag):
+        if vac_flag and (pres_flag or iota_flag or curr_flag):
             warnings.warn(
-                "Vacuum objective does not use any profiles, "
+                "Vacuum equilibrium does not use any profiles, "
                 + "ignoring pressure, iota, and current"
             )
+            _ = inputs.pop("iota", None)
+            _ = inputs.pop("current", None)
+            _ = inputs.pop("pressure", None)
+
+        # remove unused profile
+        if iota_flag:
+            _ = inputs.pop("current", None)
+        else:
+            _ = inputs.pop("iota", None)
 
         # sort axis array
         inputs["axis"] = inputs["axis"][inputs["axis"][:, 0].argsort()]
@@ -644,7 +649,7 @@ class InputReader:
                 else:
                     inputs_ii[key] = inputs[key]
             # apply pressure ratio
-            if inputs_ii["pres_ratio"] is not None:
+            if "pressure" in inputs_ii and inputs_ii["pres_ratio"] is not None:
                 inputs_ii["pressure"][:, 1] *= inputs_ii["pres_ratio"]
             # apply current ratio
             if "current" in inputs_ii and inputs_ii["curr_ratio"] is not None:

@@ -1493,6 +1493,8 @@ class Equilibrium(IOAble, Optimizable):
     def Lp_basis(self, Lp_basis):
         self.xsection.L_basis = Lp_basis
 
+    @optimizable_parameter
+    @property
     def I(self):  # noqa: E743
         """float: Net toroidal current on the sheet current at the LCFS."""
         return self.surface.I if hasattr(self.surface, "I") else np.empty(0)

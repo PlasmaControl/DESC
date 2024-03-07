@@ -149,14 +149,38 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         y1 = con.compute_unscaled(*xpi)
         y2 = con.target
         y1, y2 = np.broadcast_arrays(y1, y2)
+
+        # If the error is very large, likely want to error out as
+        # it probably is due to a real mistake instead of just numerical
+        # roundoff errors.
         np.testing.assert_allclose(
             y1,
             y2,
-            atol=3e-14,
-            rtol=3e-14,
+            atol=1e-6,
+            rtol=1e-1,
             err_msg="Incompatible constraints detected, cannot satisfy constraint "
             + f"{con}.",
         )
+
+        # else check with tighter tols and throw an error, these tolerances
+        # could be tripped due to just numerical roundoff or poor scaling between
+        # constraints, so don't want to error out but we do want to warn the user.
+        atol = 3e-14
+        rtol = 3e-14
+
+        try:
+            np.testing.assert_allclose(y1, y2, atol=atol, rtol=rtol)
+        except AssertionError:
+            abs_diff = np.abs(y1 - y2)
+            nonzero = np.where(y2 != 0)
+            warnif(
+                True,
+                UserWarning,
+                f"Detected constraint not satisfied to atol={atol} rtol={rtol},"
+                + f" constraint {con} is only satisfied to max abs diff"
+                + f" {np.max(abs_diff):1.2e} and max rel diff "
+                + f"{np.max(abs_diff[nonzero] / y2[nonzero]):1.2e}.",
+            )
 
     return xp, A, b, Z, unfixed_idx, project, recover
 

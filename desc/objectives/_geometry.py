@@ -662,7 +662,8 @@ class CoilLength(_CoilObjective):
         Coil(s) that are to be optimized
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. If array, it has to
+        be flattened according to the number of inputs.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -752,7 +753,8 @@ class CoilCurvature(_CoilObjective):
         Coil(s) that are to be optimized
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. If array, it has to
+        be flattened according to the number of inputs.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -834,7 +836,7 @@ class CoilCurvature(_CoilObjective):
 
 
 class CoilTorsion(_CoilObjective):
-    """Coil curvature.
+    """Coil torsion.
 
     Parameters
     ----------
@@ -842,7 +844,8 @@ class CoilTorsion(_CoilObjective):
         Coil(s) that are to be optimized
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to Objective.dim_f. If array, it has to
+        be flattened according to the number of inputs.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -885,6 +888,7 @@ class CoilTorsion(_CoilObjective):
         name=None,
     ):
         if target is None and bounds is None:
+            # TODO: use bounds instead
             target = 0
 
         super().__init__(
@@ -902,7 +906,7 @@ class CoilTorsion(_CoilObjective):
         )
 
     def compute(self, params, constants=None):
-        """Compute coil curvature.
+        """Compute coil torsion.
 
         Parameters
         ----------

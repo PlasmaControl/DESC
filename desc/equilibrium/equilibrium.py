@@ -628,6 +628,8 @@ class Equilibrium(IOAble, Optimizable):
 
             # TODO: Don't call zernike_radial for each mode, instead compute all
             # Populate i, j, l, m and call zernike_radial once
+            arg_zernike = []
+            Js = []
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -635,8 +637,16 @@ class Equilibrium(IOAble, Optimizable):
                         surface.R_basis.modes[:, 2] == n,
                     )
                 )
-                AR[j, i] = zernike_radial(rho, l, m)
+                arg_zernike.append(np.array([i, l, m]))
+                Js.append(j.flatten())
+            arg_zernike = np.array(arg_zernike)
+            Js = np.array(Js)
+            AR[Js[:, 0], arg_zernike[:, 0]] = zernike_radial(
+                rho, arg_zernike[:, 1], arg_zernike[:, 2]
+            )
 
+            arg_zernike = []
+            Js = []
             for i, (l, m, n) in enumerate(self.Z_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -644,7 +654,13 @@ class Equilibrium(IOAble, Optimizable):
                         surface.Z_basis.modes[:, 2] == n,
                     )
                 )
-                AZ[j, i] = zernike_radial(rho, l, m)
+                arg_zernike.append(np.array([i, l, m]))
+                Js.append(j.flatten())
+            arg_zernike = np.array(arg_zernike)
+            Js = np.array(Js)
+            AZ[Js[:, 0], arg_zernike[:, 0]] = zernike_radial(
+                rho, arg_zernike[:, 1], arg_zernike[:, 2]
+            )
 
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn

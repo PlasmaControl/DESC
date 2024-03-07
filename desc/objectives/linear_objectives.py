@@ -267,20 +267,23 @@ class BoundaryRSelfConsistency(_Objective):
 
         self._dim_f = idx.size
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+        arg_zernike = []
+        Js = []
+        surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.R_basis.modes):
             if eq.bdry_mode == "lcfs":
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
+                Js.append(j.flatten())
+                arg_zernike.append(np.array([i, l, m]))
             else:
                 raise NotImplementedError(
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
-
+        arg_zernike = np.array(arg_zernike)
+        Js = np.array(Js)
+        self._A[Js[:, 0], arg_zernike[:, 0]] = zernike_radial(
+            surf, arg_zernike[:, 1], arg_zernike[:, 2]
+        )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -365,20 +368,23 @@ class BoundaryZSelfConsistency(_Objective):
 
         self._dim_f = idx.size
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+        arg_zernike = []
+        Js = []
+        surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.Z_basis.modes):
             if eq.bdry_mode == "lcfs":
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
+                Js.append(j.flatten())
+                arg_zernike.append(np.array([i, l, m]))
             else:
                 raise NotImplementedError(
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
-
+        arg_zernike = np.array(arg_zernike)
+        Js = np.array(Js)
+        self._A[Js[:, 0], arg_zernike[:, 0]] = zernike_radial(
+            surf, arg_zernike[:, 1], arg_zernike[:, 2]
+        )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):

@@ -1960,6 +1960,10 @@ def _lambda_zzz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega(params, transforms, profiles, data, **kwargs):
     data["omega"] = data["0"]
@@ -1978,6 +1982,10 @@ def _omega(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_r(params, transforms, profiles, data, **kwargs):
     data["omega_r"] = data["0"]
@@ -1996,6 +2004,10 @@ def _omega_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rr(params, transforms, profiles, data, **kwargs):
     data["omega_rr"] = data["0"]
@@ -2014,6 +2026,10 @@ def _omega_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rrr(params, transforms, profiles, data, **kwargs):
     data["omega_rrr"] = data["0"]
@@ -2032,6 +2048,10 @@ def _omega_rrr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rrrr(params, transforms, profiles, data, **kwargs):
     data["omega_rrrr"] = data["0"]
@@ -2051,6 +2071,10 @@ def _omega_rrrr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rrrt(params, transforms, profiles, data, **kwargs):
     data["omega_rrrt"] = data["0"]
@@ -2070,6 +2094,10 @@ def _omega_rrrt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rrrz(params, transforms, profiles, data, **kwargs):
     data["omega_rrrz"] = data["0"]
@@ -2089,6 +2117,10 @@ def _omega_rrrz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rrt(params, transforms, profiles, data, **kwargs):
     data["omega_rrt"] = data["0"]
@@ -2108,6 +2140,10 @@ def _omega_rrt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rrtt(params, transforms, profiles, data, **kwargs):
     data["omega_rrtt"] = data["0"]
@@ -2127,6 +2163,10 @@ def _omega_rrtt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rrtz(params, transforms, profiles, data, **kwargs):
     data["omega_rrtz"] = data["0"]
@@ -2146,6 +2186,10 @@ def _omega_rrtz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rrz(params, transforms, profiles, data, **kwargs):
     data["omega_rrz"] = data["0"]
@@ -2165,6 +2209,10 @@ def _omega_rrz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rrzz(params, transforms, profiles, data, **kwargs):
     data["omega_rrzz"] = data["0"]
@@ -2184,6 +2232,10 @@ def _omega_rrzz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rt(params, transforms, profiles, data, **kwargs):
     data["omega_rt"] = data["0"]
@@ -2203,6 +2255,10 @@ def _omega_rt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rtt(params, transforms, profiles, data, **kwargs):
     data["omega_rtt"] = data["0"]
@@ -2222,6 +2278,10 @@ def _omega_rtt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rttt(params, transforms, profiles, data, **kwargs):
     data["omega_rttt"] = data["0"]
@@ -2241,6 +2301,10 @@ def _omega_rttt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rttz(params, transforms, profiles, data, **kwargs):
     data["omega_rttz"] = data["0"]
@@ -2260,6 +2324,10 @@ def _omega_rttz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rtz(params, transforms, profiles, data, **kwargs):
     data["omega_rtz"] = data["0"]
@@ -2279,6 +2347,10 @@ def _omega_rtz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rtzz(params, transforms, profiles, data, **kwargs):
     data["omega_rtzz"] = data["0"]
@@ -2298,6 +2370,10 @@ def _omega_rtzz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rz(params, transforms, profiles, data, **kwargs):
     data["omega_rz"] = data["0"]
@@ -2317,6 +2393,10 @@ def _omega_rz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rzz(params, transforms, profiles, data, **kwargs):
     data["omega_rzz"] = data["0"]
@@ -2336,6 +2416,10 @@ def _omega_rzz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_rzzz(params, transforms, profiles, data, **kwargs):
     data["omega_rzzz"] = data["0"]
@@ -2354,6 +2438,10 @@ def _omega_rzzz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_t(params, transforms, profiles, data, **kwargs):
     data["omega_t"] = data["0"]
@@ -2372,6 +2460,10 @@ def _omega_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_tt(params, transforms, profiles, data, **kwargs):
     data["omega_tt"] = data["0"]
@@ -2390,6 +2482,10 @@ def _omega_tt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_ttt(params, transforms, profiles, data, **kwargs):
     data["omega_ttt"] = data["0"]
@@ -2409,6 +2505,10 @@ def _omega_ttt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_ttz(params, transforms, profiles, data, **kwargs):
     data["omega_ttz"] = data["0"]
@@ -2428,6 +2528,10 @@ def _omega_ttz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_tz(params, transforms, profiles, data, **kwargs):
     data["omega_tz"] = data["0"]
@@ -2447,6 +2551,10 @@ def _omega_tz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_tzz(params, transforms, profiles, data, **kwargs):
     data["omega_tzz"] = data["0"]
@@ -2465,6 +2573,10 @@ def _omega_tzz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_z(params, transforms, profiles, data, **kwargs):
     data["omega_z"] = data["0"]
@@ -2483,6 +2595,10 @@ def _omega_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_zz(params, transforms, profiles, data, **kwargs):
     data["omega_zz"] = data["0"]
@@ -2501,6 +2617,10 @@ def _omega_zz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["0"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _omega_zzz(params, transforms, profiles, data, **kwargs):
     data["omega_zzz"] = data["0"]

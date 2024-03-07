@@ -222,11 +222,7 @@ class FourierRZCurve(Curve):
             Axis with given Fourier coefficients.
 
         """
-        f = open(path)
-        if "&INDATA" in f.readlines()[0].upper():  # vmec input, convert to desc
-            inputs = InputReader.parse_vmec_inputs(f)[-1]
-        else:
-            inputs = InputReader().parse_inputs(f)[-1]
+        inputs = InputReader().parse_inputs(path)[-1]
         curve = FourierRZCurve(
             inputs["axis"][:, 1],
             inputs["axis"][:, 2],
@@ -461,7 +457,9 @@ class FourierXYZCurve(Curve):
         Y = coords_xyz[:, 1]
         Z = coords_xyz[:, 2]
 
-        X, Y, Z, closedX, closedY, closedZ, _ = _unclose_curve(X, Y, Z)
+        X, Y, Z, closedX, closedY, closedZ, input_curve_was_closed = _unclose_curve(
+            X, Y, Z
+        )
 
         if isinstance(s, str):
             assert s == "arclength", f"got unknown specification for s {s}"
@@ -477,6 +475,7 @@ class FourierXYZCurve(Curve):
             s = np.linspace(0, 2 * np.pi, X.size, endpoint=False)
         else:
             s = np.atleast_1d(s)
+            s = s[:-1] if input_curve_was_closed else s
             errorif(
                 not np.all(np.diff(s) > 0),
                 ValueError,
@@ -488,9 +487,9 @@ class FourierXYZCurve(Curve):
         grid = LinearGrid(zeta=s, NFP=1, sym=False)
         basis = FourierSeries(N=N, NFP=1, sym=False)
         transform = Transform(grid, basis, build_pinv=True)
-        X_n = transform.fit(coords_xyz[:, 0])
-        Y_n = transform.fit(coords_xyz[:, 1])
-        Z_n = transform.fit(coords_xyz[:, 2])
+        X_n = transform.fit(X)
+        Y_n = transform.fit(Y)
+        Z_n = transform.fit(Z)
         return FourierXYZCurve(X_n=X_n, Y_n=Y_n, Z_n=Z_n, name=name)
 
 
@@ -771,7 +770,7 @@ class SplineXYZCurve(Curve):
     @knots.setter
     def knots(self, new):
         if len(new) == len(self.knots):
-            knots = jnp.atleast_1d(new)
+            knots = jnp.atleast_1d(jnp.asarray(new))
             errorif(
                 not np.all(np.diff(knots) > 0),
                 ValueError,

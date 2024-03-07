@@ -34,7 +34,7 @@ class TestProfiles:
         input_path = "./tests/inputs/SOLOVEV"
         ir = InputReader(input_path)
 
-        eq1 = Equilibrium(**ir.inputs[-1])
+        eq1 = Equilibrium(**ir.inputs[-1], check_kwargs=False)
         eq2 = eq1.copy()
         eq2.pressure = eq1.pressure.to_spline()
         eq2.iota = eq1.iota.to_spline()
@@ -58,7 +58,9 @@ class TestProfiles:
         with pytest.warns(UserWarning):
             mp = pp.to_mtanh(order=4, ftol=1e-12, xtol=1e-12)
         zp = pp.to_fourierzernike()
-        x = np.linspace(0, 0.8, 10)
+        # don't test to rho=1 bc mtanh is very non-polynomial there,
+        # don't test at axis bc splines and mtanh don't enforce zero slope exactly.
+        x = np.linspace(0.1, 0.8, 10)
 
         np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
         np.testing.assert_allclose(pp(x, dr=2), mp(x, dr=2), rtol=1e-2, atol=1e-1)

@@ -19,7 +19,6 @@ from desc.compute.utils import get_data_deps, get_params, get_profiles, get_tran
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
-    Surface,
     ZernikeRZToroidalSection,
 )
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
@@ -378,6 +377,12 @@ class Equilibrium(IOAble, Optimizable):
             self.set_initial_guess(ensure_nested=ensure_nested)
         if check_orientation:
             ensure_positive_jacobian(self)
+        if kwargs.get("check_kwargs", True):
+            errorif(
+                len(kwargs),
+                TypeError,
+                f"Equilibrium got unexpected kwargs: {kwargs.keys()}",
+            )
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -389,6 +394,7 @@ class Equilibrium(IOAble, Optimizable):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+
         if self.current is not None and hasattr(self.current, "_get_transform"):
             # Need to rebuild derivative matrices to get higher order derivatives
             # on equilibrium's saved before GitHub pull request #586.
@@ -417,6 +423,9 @@ class Equilibrium(IOAble, Optimizable):
             "Za_n",
             "Rb_lmn",
             "Zb_lmn",
+            "I",
+            "G",
+            "Phi_mn",
         )
         assert sorted(args) == sorted(arg_order)
         return [arg for arg in arg_order if arg in args]
@@ -617,6 +626,8 @@ class Equilibrium(IOAble, Optimizable):
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
 
+            # TODO: Don't call zernike_radial for each mode, instead compute all
+            # Populate i, j, l, m and call zernike_radial once
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -634,13 +645,11 @@ class Equilibrium(IOAble, Optimizable):
                     )
                 )
                 AZ[j, i] = zernike_radial(rho, l, m)
+
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
-            surface.grid = LinearGrid(
-                rho=rho, M=2 * surface.M, N=2 * surface.N, endpoint=True, NFP=self.NFP
-            )
             return surface
 
         if zeta is not None:
@@ -672,12 +681,6 @@ class Equilibrium(IOAble, Optimizable):
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
-            surface.grid = LinearGrid(
-                L=2 * surface.L,
-                M=2 * surface.M,
-                zeta=zeta,
-                endpoint=True,
-            )
             return surface
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):
@@ -816,30 +819,32 @@ class Equilibrium(IOAble, Optimizable):
         dep0d = [
             dep
             for dep in deps
-            if (
-                (data_index[p][dep]["coordinates"] == "")
-                or (data_index[p][dep]["grid_type"] == "quad")
-            )
-            and (dep not in data)
+            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
         ]
-        dep1d = [
+        dep1dr = [
             dep
             for dep in deps
             if (data_index[p][dep]["coordinates"] == "r") and (dep not in data)
         ]
+        dep1dz = [
+            dep
+            for dep in deps
+            if (data_index[p][dep]["coordinates"] == "z") and (dep not in data)
+        ]
 
         # whether we need to calculate 0d or 1d quantities on a special grid
         calc0d = bool(len(dep0d))
-        calc1d = bool(len(dep1d))
+        calc1dr = bool(len(dep1dr))
+        calc1dz = bool(len(dep1dz))
         if (  # see if the grid we're already using will work for desired qtys
             (grid.L >= self.L_grid)
             and (grid.M >= self.M_grid)
             and (grid.N >= self.N_grid)
         ):
             if isinstance(grid, QuadratureGrid):
-                calc0d = calc1d = False
+                calc0d = calc1dr = calc1dz = False
             if isinstance(grid, LinearGrid):
-                calc1d = False
+                calc1dr = calc1dz = False
 
         if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
@@ -856,32 +861,63 @@ class Equilibrium(IOAble, Optimizable):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        if calc1d and override_grid:
-            grid1d = LinearGrid(
+        if calc1dr and override_grid:
+            grid1dr = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
                 sym=self.sym,
             )
-            # Todo: Pass in data0d as a seed once there are 1d quantities that
-            #  depend on 0d quantities in data_index.
-            data1d = compute_fun(
+            # TODO: Pass in data0d as a seed once there are 1d quantities that
+            # depend on 0d quantities in data_index.
+            data1dr = compute_fun(
                 self,
-                dep1d,
+                dep1dr,
                 params=params,
-                transforms=get_transforms(dep1d, obj=self, grid=grid1d, **kwargs),
-                profiles=get_profiles(dep1d, obj=self, grid=grid1d),
+                transforms=get_transforms(dep1dr, obj=self, grid=grid1dr, **kwargs),
+                profiles=get_profiles(dep1dr, obj=self, grid=grid1dr),
                 data=None,
                 **kwargs,
             )
             # need to make this data broadcast with the data on the original grid
-            data1d = {
-                key: grid.expand(grid1d.compress(val))
-                for key, val in data1d.items()
-                if key in dep1d
+            data1dr = {
+                key: grid.expand(
+                    grid1dr.compress(val, surface_label="rho"), surface_label="rho"
+                )
+                for key, val in data1dr.items()
+                if key in dep1dr
             }
-            data.update(data1d)
+            data.update(data1dr)
+
+        if calc1dz and override_grid:
+            grid1dz = LinearGrid(
+                zeta=grid.nodes[grid.unique_zeta_idx, 2],
+                L=self.L_grid,
+                M=self.M_grid,
+                NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
+                sym=self.sym,
+            )
+            # TODO: Pass in data0d as a seed once there are 1d quantities that
+            # depend on 0d quantities in data_index.
+            data1dz = compute_fun(
+                self,
+                dep1dz,
+                params=params,
+                transforms=get_transforms(dep1dz, obj=self, grid=grid1dz, **kwargs),
+                profiles=get_profiles(dep1dz, obj=self, grid=grid1dz),
+                data=None,
+                **kwargs,
+            )
+            # need to make this data broadcast with the data on the original grid
+            data1dz = {
+                key: grid.expand(
+                    grid1dz.compress(val, surface_label="zeta"), surface_label="zeta"
+                )
+                for key, val in data1dz.items()
+                if key in dep1dz
+            }
+            data.update(data1dz)
 
         # TODO: we can probably reduce the number of deps computed here if some are only
         #   needed as inputs for 0d and 1d qtys, unless the user asks for them
@@ -1098,14 +1134,12 @@ class Equilibrium(IOAble, Optimizable):
     @surface.setter
     def surface(self, new):
         assert isinstance(
-            new, Surface
-        ), f"surfaces should be of type Surface or a subclass, got {new}"
+            new, FourierRZToroidalSurface
+        ), f"surface should be of type FourierRZToroidalSurface or subclass, got {new}"
         assert (
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"
-        assert self.NFP == getattr(
-            new, "NFP", self.NFP
-        ), "Surface and Equilibrium must have the same NFP"
+        assert self.NFP == new.NFP, "Surface and Equilibrium must have the same NFP"
         new.change_resolution(self.L, self.M, self.N)
         self._surface = new
 
@@ -1148,7 +1182,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = float(Psi)
+        self._Psi = float(np.squeeze(Psi))
 
     @property
     def NFP(self):
@@ -1200,7 +1234,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @R_lmn.setter
     def R_lmn(self, R_lmn):
-        R_lmn = jnp.atleast_1d(R_lmn)
+        R_lmn = jnp.atleast_1d(jnp.asarray(R_lmn))
         errorif(
             R_lmn.size != self._R_lmn.size,
             ValueError,
@@ -1217,7 +1251,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
-        Z_lmn = jnp.atleast_1d(Z_lmn)
+        Z_lmn = jnp.atleast_1d(jnp.asarray(Z_lmn))
         errorif(
             Z_lmn.size != self._Z_lmn.size,
             ValueError,
@@ -1234,7 +1268,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @L_lmn.setter
     def L_lmn(self, L_lmn):
-        L_lmn = jnp.atleast_1d(L_lmn)
+        L_lmn = jnp.atleast_1d(jnp.asarray(L_lmn))
         errorif(
             L_lmn.size != self._L_lmn.size,
             ValueError,
@@ -1262,6 +1296,51 @@ class Equilibrium(IOAble, Optimizable):
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
+
+    @optimizable_parameter
+    @property
+    def I(self):  # noqa: E743
+        """float: Net toroidal current on the sheet current at the LCFS."""
+        return self.surface.I if hasattr(self.surface, "I") else np.empty(0)
+
+    @I.setter
+    def I(self, new):  # noqa: E743
+        errorif(
+            not hasattr(self.surface, "I"),
+            ValueError,
+            "Attempt to set I on an equilibrium without sheet current",
+        )
+        self.surface.I = new
+
+    @optimizable_parameter
+    @property
+    def G(self):
+        """float: Net poloidal current on the sheet current at the LCFS."""
+        return self.surface.G if hasattr(self.surface, "G") else np.empty(0)
+
+    @G.setter
+    def G(self, new):
+        errorif(
+            not hasattr(self.surface, "G"),
+            ValueError,
+            "Attempt to set G on an equilibrium without sheet current",
+        )
+        self.surface.G = new
+
+    @optimizable_parameter
+    @property
+    def Phi_mn(self):
+        """ndarray: coeffs of single-valued part of surface current potential."""
+        return self.surface.Phi_mn if hasattr(self.surface, "Phi_mn") else np.empty(0)
+
+    @Phi_mn.setter
+    def Phi_mn(self, new):
+        errorif(
+            not hasattr(self.surface, "Phi_mn"),
+            ValueError,
+            "Attempt to set Phi_mn on an equilibrium without sheet current",
+        )
+        self.surface.Phi_mn = new
 
     @optimizable_parameter
     @property
@@ -1556,7 +1635,15 @@ class Equilibrium(IOAble, Optimizable):
 
     @classmethod
     def from_near_axis(
-        cls, na_eq, r=0.1, L=None, M=8, N=None, ntheta=None, spectral_indexing="ansi"
+        cls,
+        na_eq,
+        r=0.1,
+        L=None,
+        M=8,
+        N=None,
+        ntheta=None,
+        spectral_indexing="ansi",
+        w=2,
     ):
         """Initialize an Equilibrium from a near-axis solution.
 
@@ -1577,6 +1664,10 @@ class Equilibrium(IOAble, Optimizable):
             Number of poloidal grid points used in the conversion. Default 2*M+1
         spectral_indexing : str (optional)
             Type of Zernike indexing scheme to use. Default ``'ansi'``
+        w : float
+            Weight exponent for fit. Surfaces are fit using a weighted least squares
+            using weight = 1/rho**w, so that points near axis are captured more
+            accurately.
 
         Returns
         -------
@@ -1606,7 +1697,7 @@ class Equilibrium(IOAble, Optimizable):
                 "M": M,
                 "N": N,
                 "sym": not na_eq.lasym,
-                "spectral_indexing ": spectral_indexing,
+                "spectral_indexing": spectral_indexing,
                 "pressure": np.array([[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]),
                 "iota": None,
                 "current": np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]]),
@@ -1649,9 +1740,17 @@ class Equilibrium(IOAble, Optimizable):
             spectral_indexing=spectral_indexing,
         )
 
-        transform_R = Transform(grid, basis_R, build_pinv=True)
-        transform_Z = Transform(grid, basis_Z, build_pinv=True)
-        transform_L = Transform(grid, basis_L, build_pinv=True)
+        transform_R = Transform(grid, basis_R, method="direct1")
+        transform_Z = Transform(grid, basis_Z, method="direct1")
+        transform_L = Transform(grid, basis_L, method="direct1")
+        A_R = transform_R.matrices["direct1"][0][0][0]
+        A_Z = transform_Z.matrices["direct1"][0][0][0]
+        A_L = transform_L.matrices["direct1"][0][0][0]
+
+        W = 1 / grid.nodes[:, 0].flatten() ** w
+        A_Rw = A_R * W[:, None]
+        A_Zw = A_Z * W[:, None]
+        A_Lw = A_L * W[:, None]
 
         R_1D = np.zeros((grid.num_nodes,))
         Z_1D = np.zeros((grid.num_nodes,))
@@ -1669,9 +1768,9 @@ class Equilibrium(IOAble, Optimizable):
             Z_1D[idx] = Z_2D.flatten(order="F")
             L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
 
-        inputs["R_lmn"] = transform_R.fit(R_1D)
-        inputs["Z_lmn"] = transform_Z.fit(Z_1D)
-        inputs["L_lmn"] = transform_L.fit(L_1D)
+        inputs["R_lmn"] = np.linalg.lstsq(A_Rw, R_1D * W, rcond=None)[0]
+        inputs["Z_lmn"] = np.linalg.lstsq(A_Zw, Z_1D * W, rcond=None)[0]
+        inputs["L_lmn"] = np.linalg.lstsq(A_Lw, L_1D * W, rcond=None)[0]
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
@@ -1945,7 +2044,7 @@ class Equilibrium(IOAble, Optimizable):
                 print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
             # perturb + solve
-            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit,) = optimal_perturb(
+            (_, predicted_reduction, dc_opt, dc, c_norm, bound_hit) = optimal_perturb(
                 self,
                 constraint,
                 objective,
@@ -2124,7 +2223,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 # ensure that first step is nested
                 ensure_nested_bool = True if i == 0 else False
                 self.equilibria.append(
-                    Equilibrium(**inp, ensure_nested=ensure_nested_bool)
+                    Equilibrium(
+                        **inp, ensure_nested=ensure_nested_bool, check_kwargs=False
+                    )
                 )
         else:
             for i, arg in enumerate(args):
@@ -2133,7 +2234,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 elif isinstance(arg, dict):
                     ensure_nested_bool = True if i == 0 else False
                     self.equilibria.append(
-                        Equilibrium(**arg, ensure_nested=ensure_nested_bool)
+                        Equilibrium(
+                            **arg, ensure_nested=ensure_nested_bool, check_kwargs=False
+                        )
                     )
                 else:
                     raise TypeError(

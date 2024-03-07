@@ -221,9 +221,9 @@ def desc_to_csv(  # noqa
     data_configurations["Z_excursion"] = float(
         f'{np.max(position_data["Z"])-np.min(position_data["Z"]):1.4e}'
     )
-    # data_configurations["average_elongation"] = float(
-    #     f'{position_data["a_major/a_minor"]:1.4e}'
-    # )
+    data_configurations["average_elongation"] = float(
+        f'{np.mean(position_data["a_major/a_minor"]):1.4e}'
+    )
     data_configurations["class"] = kwargs.get("config_class", None)
     if eq.N == 0:  # is axisymmetric
         data_configurations["class"] = "AS"

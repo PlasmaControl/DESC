@@ -573,10 +573,10 @@ class _CoilObjective(_Objective):
             Level of output.
 
         """
-        # local import to avoid circular import
         # TODO: import this from desc backend?
         import jax.tree_util as jtu
 
+        # local import to avoid circular import
         from desc.coils import CoilSet, MixedCoilSet, _Coil
 
         coils = jtu.tree_flatten(
@@ -589,16 +589,22 @@ class _CoilObjective(_Objective):
 
         if self._grid is None:
             # TODO: raise error if grid, transforms are not the same size as mixed coils
-            self._grid = (
-                LinearGrid(N=32)
-                if not is_mixed_coils
-                else [LinearGrid(N=32)] * self._dim_f
-            )
+            self._grid = [LinearGrid(N=32)] * self._dim_f
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
+
+        transforms = jtu.tree_map(
+            lambda coil_obj, grid: get_transforms(
+                self._data_keys, obj=coil_obj, grid=grid
+            ),
+            coils,
+            self._grid,
+            is_leaf=lambda coil_obj: isinstance(coil_obj, _Coil)
+            and not isinstance(coil_obj, MixedCoilSet),
+        )
 
         if is_mixed_coils:
             transforms = [
@@ -606,11 +612,11 @@ class _CoilObjective(_Objective):
                 for i in range(self._dim_f)
             ]
         else:
-            transforms = get_transforms(self._data_keys, obj=coils[0], grid=self._grid)
+            transforms = get_transforms(
+                self._data_keys, obj=coils[0], grid=self._grid[0]
+            )
 
-        self._constants = {
-            "transforms": transforms,
-        }
+        self._constants = {"transforms": transforms, "is_mixed_coils": is_mixed_coils}
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -642,7 +648,7 @@ class _CoilObjective(_Objective):
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
-            grid=self._grid,
+            grid=self._grid if constants["is_mixed_coils"] else self._grid[0],
         )
 
         return data

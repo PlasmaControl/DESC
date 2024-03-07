@@ -584,10 +584,12 @@ class TestObjectiveFunction:
         coil = FourierPlanarCoil(r_n=1)
         coils = CoilSet.linspaced_linear(coil, n=4)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
+        nested_coils = MixedCoilSet.from_symmetry(mixed_coils, NFP=4)
 
         test(coil)
         test(coils)
         test(mixed_coils)
+        test(nested_coils)
 
     @pytest.mark.unit
     def test_coil_curvature(self):
@@ -602,10 +604,12 @@ class TestObjectiveFunction:
         coil = FourierPlanarCoil()
         coils = CoilSet.linspaced_linear(coil, n=4)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
+        nested_coils = MixedCoilSet.from_symmetry(mixed_coils, NFP=4)
 
         test(coil)
         test(coils)
         test(mixed_coils)
+        test(nested_coils)
 
 
 @pytest.mark.unit

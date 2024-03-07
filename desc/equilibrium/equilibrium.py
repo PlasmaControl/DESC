@@ -626,10 +626,10 @@ class Equilibrium(IOAble, Optimizable):
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
 
-            # TODO: Don't call zernike_radial for each mode, instead compute all
-            # Populate i, j, l, m and call zernike_radial once
-            arg_zernike = []
             Js = []
+            zernikeR = zernike_radial(
+                rho, self.R_basis.modes[:, 0], self.R_basis.modes[:, 1]
+            )
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -637,16 +637,16 @@ class Equilibrium(IOAble, Optimizable):
                         surface.R_basis.modes[:, 2] == n,
                     )
                 )
-                arg_zernike.append(np.array([i, l, m]))
                 Js.append(j.flatten())
-            arg_zernike = np.array(arg_zernike)
             Js = np.array(Js)
-            AR[Js[:, 0], arg_zernike[:, 0]] = zernike_radial(
-                rho, arg_zernike[:, 1], arg_zernike[:, 2]
-            )
+            # Broadcasting at once is faster. We need to use np.arange to avoid
+            # setting the value to the whole row.
+            AR[Js[:, 0], np.arange(self.R_basis.num_modes)] = zernikeR
 
-            arg_zernike = []
             Js = []
+            zernikeZ = zernike_radial(
+                rho, self.Z_basis.modes[:, 0], self.Z_basis.modes[:, 1]
+            )
             for i, (l, m, n) in enumerate(self.Z_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -654,13 +654,11 @@ class Equilibrium(IOAble, Optimizable):
                         surface.Z_basis.modes[:, 2] == n,
                     )
                 )
-                arg_zernike.append(np.array([i, l, m]))
                 Js.append(j.flatten())
-            arg_zernike = np.array(arg_zernike)
             Js = np.array(Js)
-            AZ[Js[:, 0], arg_zernike[:, 0]] = zernike_radial(
-                rho, arg_zernike[:, 1], arg_zernike[:, 2]
-            )
+            # Broadcasting at once is faster. We need to use np.arange to avoid
+            # setting the value to the whole row.
+            AZ[Js[:, 0], np.arange(self.Z_basis.num_modes)] = zernikeZ
 
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn

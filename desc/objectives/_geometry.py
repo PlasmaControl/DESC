@@ -586,7 +586,8 @@ class _CoilObjective(_Objective):
         )[0]
         self._dim_f = len(coils)
 
-        # make single coils and grid a list so they can be used with tree_map
+        # if using single coil, make coils and grid a list so they can be
+        # used with tree_map
         coils = [coils[0]] if not is_mixed_coils else coils
 
         if self._grid is None:
@@ -610,7 +611,7 @@ class _CoilObjective(_Objective):
             is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, MixedCoilSet),
         )
         # tree map always returns a list so take first transform and grid
-        # because they are the same for single coil
+        # for when we are only using a single coil
         if not is_mixed_coils:
             transforms = transforms[0]
             self._grid = self._grid[0]
@@ -797,7 +798,7 @@ class CoilCurvature(_CoilObjective):
         name=None,
     ):
         if target is None and bounds is None:
-            target = 1 / 2
+            bounds = (0, 1)
 
         super().__init__(
             coil,
@@ -832,6 +833,8 @@ class CoilCurvature(_CoilObjective):
         data = super().compute(params, constants=constants)
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
         out = jnp.array([dat["curvature"] for dat in data])
+        print(out)
+        print(self._dim_f)
         return out
 
 
@@ -888,7 +891,6 @@ class CoilTorsion(_CoilObjective):
         name=None,
     ):
         if target is None and bounds is None:
-            # TODO: use bounds instead
             target = 0
 
         super().__init__(

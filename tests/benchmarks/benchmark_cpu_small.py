@@ -1,5 +1,6 @@
 """Benchmarks for timing comparison on cpu (that are small enough to run on CI)."""
 
+import jax
 import numpy as np
 import pytest
 
@@ -9,8 +10,20 @@ desc.set_device("cpu")
 import desc.examples
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
-from desc.grid import ConcentricGrid
-from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
+from desc.grid import ConcentricGrid, LinearGrid
+from desc.magnetic_fields import ToroidalMagneticField
+from desc.objectives import (
+    BoundaryError,
+    FixCurrent,
+    FixPressure,
+    FixPsi,
+    ForceBalance,
+    ObjectiveFunction,
+    QuasisymmetryTwoTerm,
+    get_equilibrium_objective,
+    get_fixed_boundary_constraints,
+)
+from desc.optimize import LinearConstraintProjection, ProximalProjection
 from desc.perturbations import perturb
 from desc.transform import Transform
 
@@ -108,8 +121,12 @@ def test_objective_compile_dshape_current(benchmark):
     """Benchmark compiling objective."""
 
     def setup():
+        jax.clear_caches()
         eq = desc.examples.get("DSHAPE_current")
-        objective = get_equilibrium_objective(eq)
+        objective = LinearConstraintProjection(
+            get_equilibrium_objective(eq),
+            ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+        )
         objective.build(eq)
         args = (
             objective,
@@ -130,8 +147,12 @@ def test_objective_compile_atf(benchmark):
     """Benchmark compiling objective."""
 
     def setup():
+        jax.clear_caches()
         eq = desc.examples.get("ATF")
-        objective = get_equilibrium_objective(eq)
+        objective = LinearConstraintProjection(
+            get_equilibrium_objective(eq),
+            ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+        )
         objective.build(eq)
         args = (objective, eq)
         kwargs = {}
@@ -147,8 +168,12 @@ def test_objective_compile_atf(benchmark):
 @pytest.mark.benchmark
 def test_objective_compute_dshape_current(benchmark):
     """Benchmark computing objective."""
+    jax.clear_caches()
     eq = desc.examples.get("DSHAPE_current")
-    objective = get_equilibrium_objective(eq)
+    objective = LinearConstraintProjection(
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+    )
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
@@ -163,8 +188,12 @@ def test_objective_compute_dshape_current(benchmark):
 @pytest.mark.benchmark
 def test_objective_compute_atf(benchmark):
     """Benchmark computing objective."""
+    jax.clear_caches()
     eq = desc.examples.get("ATF")
-    objective = get_equilibrium_objective(eq)
+    objective = LinearConstraintProjection(
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+    )
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
@@ -179,8 +208,12 @@ def test_objective_compute_atf(benchmark):
 @pytest.mark.benchmark
 def test_objective_jac_dshape_current(benchmark):
     """Benchmark computing jacobian."""
+    jax.clear_caches()
     eq = desc.examples.get("DSHAPE_current")
-    objective = get_equilibrium_objective(eq)
+    objective = LinearConstraintProjection(
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+    )
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
@@ -195,8 +228,12 @@ def test_objective_jac_dshape_current(benchmark):
 @pytest.mark.benchmark
 def test_objective_jac_atf(benchmark):
     """Benchmark computing jacobian."""
+    jax.clear_caches()
     eq = desc.examples.get("ATF")
-    objective = get_equilibrium_objective(eq)
+    objective = LinearConstraintProjection(
+        get_equilibrium_objective(eq),
+        ObjectiveFunction(get_fixed_boundary_constraints(eq)),
+    )
     objective.build(eq)
     objective.compile()
     x = objective.x(eq)
@@ -213,6 +250,7 @@ def test_perturb_1(benchmark):
     """Benchmark 1st order perturbations."""
 
     def setup():
+        jax.clear_caches()
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
         objective.build(eq)
@@ -245,6 +283,7 @@ def test_perturb_2(benchmark):
     """Benchmark 2nd order perturbations."""
 
     def setup():
+        jax.clear_caches()
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
         objective.build(eq)
@@ -269,3 +308,71 @@ def test_perturb_2(benchmark):
         return args, kwargs
 
     benchmark.pedantic(perturb, setup=setup, rounds=10, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_proximal_jac_atf(benchmark):
+    """Benchmark computing jacobian of constrained proximal projection."""
+    jax.clear_caches()
+    eq = desc.examples.get("ATF")
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
+    objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
+    constraint = ObjectiveFunction(ForceBalance(eq))
+    prox = ProximalProjection(objective, constraint, eq)
+    prox.build()
+    prox.compile()
+    x = prox.x(eq)
+
+    def run(x):
+        prox.jac_scaled(x, prox.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x,), rounds=15, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_proximal_freeb_compute(benchmark):
+    """Benchmark computing free boundary objective with proximal constraint."""
+    jax.clear_caches()
+    eq = desc.examples.get("ESTELL")
+    eq.change_resolution(6, 6, 6, 12, 12, 12)
+    field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
+    objective = ObjectiveFunction(BoundaryError(eq, ext_field=field))
+    constraint = ObjectiveFunction(ForceBalance(eq))
+    prox = ProximalProjection(objective, constraint, eq)
+    obj = LinearConstraintProjection(
+        prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
+    )
+    obj.build()
+    obj.compile()
+    x = obj.x(eq)
+
+    def run(x):
+        obj.compute_scaled_error(x, obj.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x,), rounds=50, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_proximal_freeb_jac(benchmark):
+    """Benchmark computing free boundary jacobian with proximal constraint."""
+    jax.clear_caches()
+    eq = desc.examples.get("ESTELL")
+    eq.change_resolution(6, 6, 6, 12, 12, 12)
+    field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
+    objective = ObjectiveFunction(BoundaryError(eq, ext_field=field))
+    constraint = ObjectiveFunction(ForceBalance(eq))
+    prox = ProximalProjection(objective, constraint, eq)
+    obj = LinearConstraintProjection(
+        prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
+    )
+    obj.build()
+    obj.compile()
+    x = obj.x(eq)
+
+    def run(x):
+        obj.jac_scaled(x, prox.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x,), rounds=15, iterations=1)

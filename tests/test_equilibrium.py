@@ -14,7 +14,8 @@ from desc.backend import sign
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
-from desc.objectives import get_equilibrium_objective
+from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
+from desc.profiles import PowerSeriesProfile
 
 from .utils import area_difference, compute_coords
 
@@ -408,3 +409,30 @@ def test_error_when_ndarray_or_integer_passed():
         eq.compute("R", grid=1)
     with pytest.raises(TypeError):
         eq.compute("R", grid=np.linspace(0, 1, 10))
+
+
+@pytest.mark.unit
+def test_equilibrium_unused_kwargs():
+    """Test that invalid kwargs raise an error, for gh issue #850."""
+    pres = PowerSeriesProfile()
+    curr = PowerSeriesProfile()
+    with pytest.raises(TypeError):
+        _ = Equilibrium(pres=pres, curr=curr)
+    _ = Equilibrium(pressure=pres, current=curr)
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+def test_backward_compatible_load_and_resolve():
+    """Test backwards compatibility of load and re-solve."""
+    with pytest.warns(RuntimeWarning):
+        eq = EquilibriaFamily.load(load_from=".//tests//inputs//NCSX_older.h5")[-1]
+
+    # reducing resolution since we only want to test eq.solve
+    eq.L = 4
+    eq.M = 4
+    eq.N = 4
+
+    f_obj = ForceBalance(eq=eq)
+    obj = ObjectiveFunction(f_obj)
+    eq.solve(maxiter=1, objective=obj)

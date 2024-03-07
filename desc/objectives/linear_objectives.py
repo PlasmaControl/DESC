@@ -35,6 +35,7 @@ class _FixedObjective(_Objective):
 
         """
         self.target = np.atleast_1d(getattr(eq, self._target_arg, self.target))
+        self._target_from_user = self.target  # in case the Objective is re-built
         if self._use_jit:
             self.jit()
 
@@ -887,7 +888,7 @@ class FixLambdaGauge(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _units = "(radians)"
+    _units = "(rad)"
     _print_value_fmt = "lambda gauge error: {:10.3e} "
 
     def __init__(
@@ -981,7 +982,7 @@ class FixThetaSFL(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
-    _units = "(radians)"
+    _units = "(rad)"
     _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
     def __init__(self, eq, name="Theta SFL"):
@@ -1599,7 +1600,7 @@ class FixModeLambda(_FixedObjective):
     """
 
     _target_arg = "L_lmn"
-    _units = "(dimensionless)"
+    _units = "(rad)"
     _print_value_fmt = "Fixed-lambda modes error: {:10.3e} "
 
     def __init__(
@@ -2070,7 +2071,7 @@ class FixSumModesLambda(_FixedObjective):
 
     _fixed = False  # not "diagonal", since its fixing a sum
     _target_arg = "L_lmn"
-    _units = "(dimensionless)"
+    _units = "(rad)"
     _print_value_fmt = "Fixed-lambda sum modes error: {:10.3e} "
 
     def __init__(
@@ -3234,6 +3235,196 @@ class FixPsi(_FixedObjective):
 
         """
         return params["Psi"]
+
+
+class FixCurveShift(_FixedObjective):
+    """Fixes Curve.shift attribute, which is redundant with other Curve params.
+
+    Parameters
+    ----------
+    curve : Curve
+        Curve that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _target_arg = "shift"
+    _units = "(m)"
+    _print_value_fmt = "Fixed-shift error: {:10.3e} "
+
+    def __init__(
+        self,
+        curve,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="fixed-shift",
+    ):
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=curve,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        curve = self.things[0]
+        self._dim_f = curve.shift.size
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, curve.shift, None, np.arange(self._dim_f)
+        )
+
+        if self._normalize:
+            self._normalization = 1
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed-shift error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of curve degrees of freedom, eg Curve.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Curve shift (m).
+
+        """
+        return params["shift"]
+
+
+class FixCurveRotation(_FixedObjective):
+    """Fixes Curve.rotmat attribute, which is redundant with other Curve params.
+
+    Parameters
+    ----------
+    curve : Curve
+        Curve that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _target_arg = "rotmat"
+    _units = "(rad)"
+    _print_value_fmt = "Fixed-rotation error: {:10.3e} "
+
+    def __init__(
+        self,
+        curve,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="fixed-rotation",
+    ):
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=curve,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        curve = self.things[0]
+        self._dim_f = curve.rotmat.size
+
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user, curve.rotmat, None, np.arange(self._dim_f)
+        )
+
+        if self._normalize:
+            self._normalization = 1
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed-rotation error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of curve degrees of freedom, eg Curve.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Curve rotation matrix (rad).
+
+        """
+        return params["rotmat"]
 
 
 class FixNearAxisR(_FixedObjective):

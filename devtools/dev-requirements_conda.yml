@@ -50,6 +50,7 @@ dependencies:
   - pytest-mpl = 0.16.1
   - pytest-split == 0.8.2
   - shapely >= 1.8.2
+  - pytest-xdist > 3.0, < 4.0
 
   # building
   - python-build

@@ -11,7 +11,7 @@ on:
     inputs:
       debug_enabled:
         type: boolean
-        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        description: '(https://github.com/marketplace/actions/debugging-with-tmate)'
         required: false
         default: false
 
@@ -44,7 +44,10 @@ jobs:
           pwd
           lscpu
           cd tests/benchmarks
-          python -m pytest benchmark_cpu_small.py --benchmark-save='Latest_Commit' -vv --durations=0 --benchmark-save-data
+          python -m pytest benchmark_cpu_small.py -vv \
+            --benchmark-save='Latest_Commit' \
+            --durations=0 \
+            --benchmark-save-data
       - name: Checkout current master
         uses: actions/checkout@v4
         with:
@@ -57,7 +60,10 @@ jobs:
           pwd
           lscpu
           cd tests/benchmarks
-          python -m pytest benchmark_cpu_small.py --benchmark-save='master' -vv --durations=0 --benchmark-save-data
+          python -m pytest benchmark_cpu_small.py -vv \
+            --benchmark-save='master' \
+            --durations=0 \
+            --benchmark-save-data
       - name: put benchmark results in same folder
         run: |
           pwd
@@ -88,6 +94,3 @@ jobs:
         with:
           name: benchmark_artifact
           path: tests/benchmarks/.benchmarks
-      - name: Setup tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3

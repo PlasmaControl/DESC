@@ -42,7 +42,18 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest -v -m regression --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl --mpl-results-path=mpl_results.html --mpl-generate-summary=html --splits 6 --group ${{ matrix.group }} --splitting-algorithm least_duration --db ./prof.db
+          python -m pytest -v -m regression \
+            --durations=0 \
+            --cov-report xml:cov.xml \
+            --cov-config=setup.cfg \
+            --cov=desc/ \
+            --mpl \
+            --mpl-results-path=mpl_results.html \
+            --mpl-generate-summary=html \
+            --splits 6 \
+            --group ${{ matrix.group }} \
+            --splitting-algorithm least_duration \
+            --db ./prof.db
       - name: save coverage file and plot comparison results
         if: always()
         uses: actions/upload-artifact@v4

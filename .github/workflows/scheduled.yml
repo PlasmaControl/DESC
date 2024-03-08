@@ -11,7 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        combos: [{group: 1, python_version: '3.8'}, {group: 2, python_version: '3.9'}, {group: 3, python_version: '3.10'}, {group: 4, python_version: '3.11'}, {group: 5, python_version: '3.12'}]
+        combos: [{group: 1, python_version: '3.8'},
+                 {group: 2, python_version: '3.9'},
+                 {group: 3, python_version: '3.10'},
+                 {group: 4, python_version: '3.11'},
+                 {group: 5, python_version: '3.12'}]
 
     steps:
       - uses: actions/checkout@v4
@@ -31,4 +35,8 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest -v -m unit --durations=0 --splits 5 --group ${{ matrix.combos.group }} --splitting-algorithm least_duration
+          python -m pytest -v -m unit \
+            --durations=0 \
+            --splits 5 \
+            --group ${{ matrix.combos.group }} \
+            --splitting-algorithm least_duration

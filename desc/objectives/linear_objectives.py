@@ -267,20 +267,22 @@ class BoundaryRSelfConsistency(_Objective):
 
         self._dim_f = idx.size
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+        Js = []
+        surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.R_basis.modes):
             if eq.bdry_mode == "lcfs":
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
+                Js.append(j.flatten())
             else:
                 raise NotImplementedError(
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
-
+        Js = np.array(Js)
+        # Broadcasting at once is faster. We need to use np.arange to avoid
+        # setting the value to the whole row.
+        self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = zernike_radial(
+            surf, eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
+        )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -365,20 +367,22 @@ class BoundaryZSelfConsistency(_Objective):
 
         self._dim_f = idx.size
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+        Js = []
+        surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.Z_basis.modes):
             if eq.bdry_mode == "lcfs":
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
+                Js.append(j.flatten())
             else:
                 raise NotImplementedError(
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
-
+        Js = np.array(Js)
+        # Broadcasting at once is faster. We need to use np.arange to avoid
+        # setting the value to the whole row.
+        self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
+            surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
+        )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):

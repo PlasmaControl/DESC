@@ -1,6 +1,7 @@
 """Classes defining objectives for equilibrium and optimization."""
 
 from ._bootstrap import BootstrapRedlConsistency
+from ._coils import CoilCurvature, CoilLength, CoilTorsion
 from ._equilibrium import (
     CurrentDensity,
     Energy,
@@ -14,9 +15,6 @@ from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUs
 from ._geometry import (
     AspectRatio,
     BScaleLength,
-    CoilCurvature,
-    CoilLength,
-    CoilTorsion,
     Elongation,
     GoodCoordinates,
     MeanCurvature,

@@ -22,7 +22,19 @@ from .normalization import compute_scaling_factors
 
 
 class VacuumBoundaryError(_Objective):
-    """Target B*n = 0 and B^2_in - B^2_out = 0 on LCFS.
+    """Target for free boundary conditions on LCFS for vacuum equilibrium.
+
+    Computes the residuals of the following:
+
+    𝐁ₒᵤₜ ⋅ 𝐧 = 0
+    𝐁ₒᵤₜ² - 𝐁ᵢₙ² = 0
+
+    Where 𝐁ᵢₙ is the total field inside the LCFS (from fixed boundary calculation)
+    𝐁ₒᵤₜ is the total field outside the LCFS (from coils), and 𝐧 is the outward surface
+    normal. All residuals are weighted by the local area element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
+
+    (Technically for vacuum equilibria the second condition is redundant with the first,
+    but including it makes things more robust).
 
     Parameters
     ----------
@@ -45,8 +57,17 @@ class VacuumBoundaryError(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate error at.
+        Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
     field_grid : Grid, optional
         Grid used to discretize ext_field.
     name : str
@@ -57,7 +78,7 @@ class VacuumBoundaryError(_Objective):
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary Error: {:10.3e} "
-    _units = "(T)"
+    _units = "(T*m^2, T^2*m^2)"
     _coordinates = "rtz"
 
     def __init__(
@@ -69,6 +90,8 @@ class VacuumBoundaryError(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         grid=None,
         field_grid=None,
         name="Vacuum boundary error",
@@ -87,6 +110,8 @@ class VacuumBoundaryError(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -115,6 +140,11 @@ class VacuumBoundaryError(_Objective):
 
         pres = np.max(np.abs(eq.compute("p")["p"]))
         curr = np.max(np.abs(eq.compute("current")["current"]))
+        errorif(
+            not np.all(grid.nodes[:, 0] == 1.0),
+            ValueError,
+            "grid contains nodes not on rho=1",
+        )
         warnif(
             pres > 1e-8,
             UserWarning,
@@ -131,7 +161,7 @@ class VacuumBoundaryError(_Objective):
         self._eq_data_keys = [
             "B",
             "R",
-            "zeta",
+            "phi",
             "Z",
             "n_rho",
             "|e_theta x e_zeta|",
@@ -160,7 +190,11 @@ class VacuumBoundaryError(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+            Bn_norm = np.ones(grid.num_nodes) * scales["B"] * scales["R0"] * scales["a"]
+            B2_norm = (
+                np.ones(grid.num_nodes) * scales["B"] ** 2 * scales["R0"] * scales["a"]
+            )
+            self._normalization = np.concatenate([Bn_norm, B2_norm])
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -178,7 +212,8 @@ class VacuumBoundaryError(_Objective):
         Returns
         -------
         f : ndarray
-            Boundary force error (N).
+            Boundary error. First half is √g𝐁⋅𝐧 in T*m^2, second half is
+            √g[[B²]] in T^2*m^2.
 
         """
         if constants is None:
@@ -190,9 +225,9 @@ class VacuumBoundaryError(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        x = jnp.array([data["R"], data["zeta"], data["Z"]]).T
+        x = jnp.array([data["R"], data["phi"], data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(
-            x, grid=self._field_grid, basis="rpz"
+            x, source_grid=self._field_grid, basis="rpz"
         )
         Bex_total = Bext
         Bin_total = data["B"]
@@ -208,7 +243,7 @@ class VacuumBoundaryError(_Objective):
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
-        # this objective is really 3 residuals concatenated so its helpful to print
+        # this objective is really 2 residuals concatenated so its helpful to print
         # them individually
         f = self.compute_unscaled(*args, **kwargs)
         # try to do weighted mean if possible
@@ -220,7 +255,8 @@ class VacuumBoundaryError(_Objective):
 
         abserr = jnp.all(self.target == 0)
 
-        def _print(fmt, fmax, fmin, fmean, units):
+        def _print(fmt, fmax, fmin, fmean, norm, units):
+
             print(
                 "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
             )
@@ -235,19 +271,19 @@ class VacuumBoundaryError(_Objective):
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmax / self.normalization)
+                    + fmt.format(fmax / norm)
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmin / self.normalization)
+                    + fmt.format(fmin / norm)
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmean / self.normalization)
+                    + fmt.format(fmean / norm)
                     + "(normalized)"
                 )
 
@@ -255,9 +291,10 @@ class VacuumBoundaryError(_Objective):
             "Boundary normal field error: {:10.3e} ",
             "Boundary magnetic pressure error: {:10.3e} ",
         ]
-        units = ["(T)", "(T^2)"]
+        units = ["(T*m^2)", "(T^2*m^2)"]
         nn = f.size // 2
-        for i, (fmt, unit) in enumerate(zip(formats, units)):
+        norms = [self.normalization[0], self.normalization[nn]]
+        for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean
@@ -266,16 +303,34 @@ class VacuumBoundaryError(_Objective):
             fmax = jnp.max(fi)
             fmin = jnp.min(fi)
             fmean = jnp.mean(fi * wi) / jnp.mean(wi)
-            _print(fmt, fmax, fmin, fmean, unit)
+            _print(fmt, fmax, fmin, fmean, norm, unit)
 
 
 class BoundaryError(_Objective):
-    """Target B*n = 0 and B^2_plasma + p - B^2_ext = 0 on LCFS.
+    """Target for free boundary conditions on LCFS for finite beta equilibrium.
 
-    Uses virtual casing to find plasma component of B and penalizes
-    (B_coil + B_plasma)*n and jump in total pressure.
+    Computes the residual of the following:
 
-    Optionally includes sheet current term for finite beta equilibria.
+    𝐁ₒᵤₜ ⋅ 𝐧 = 0
+    𝐁ₒᵤₜ² - 𝐁ᵢₙ² - p = 0
+    μ₀∇Φ − 𝐧 × [𝐁ₒᵤₜ − 𝐁ᵢₙ]
+
+    Where 𝐁ᵢₙ is the total field inside the LCFS (from fixed boundary calculation)
+    𝐁ₒᵤₜ is the total field outside the LCFS (from coils and virtual casing principle),
+    𝐧 is the outward surface normal, p is the plasma pressure, and Φ is the surface
+    current potential on the LCFS. All residuals are weighted by the local area
+    element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
+
+    The third equation is only included if a sheet current is supplied by making
+    the ``equilibrium.surface`` object a FourierCurrentPotentialField, otherwise it
+    is trivially satisfied. If it is known that the external field accurately reproduces
+    the target equilibrium with low normal field error and pressure at the edge is zero,
+    then the sheet current will generally be negligible and can be omitted to save
+    effort.
+
+    This objective also works for vacuum equilibria, though in that case
+    VacuumBoundaryError will be much faster as it avoids the singular virtual casing
+    integral.
 
     Parameters
     ----------
@@ -283,10 +338,6 @@ class BoundaryError(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     ext_field : MagneticField
         External field produced by coils.
-    sheet_current : FourierCurrentPotentialField
-        Sheet current on the last closed flux surface. Not required for vacuum fields,
-        but generally needed to correctly solve at finite beta/current. Geometry will
-        be automatically constrained to be the same as the equilibrium LCFS.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
@@ -302,13 +353,23 @@ class BoundaryError(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     s, q : integer
         Hyperparameters for singular integration scheme, s is roughly equal to the size
         of the local singular grid with respect to the global grid, q is the order of
         integration on the local grid
-    src_grid, eval_grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at for source terms and where
-        to evaluate errors.
+    source_grid, eval_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at for source terms for Biot-
+        Savart integral and where to evaluate errors. source_grid should not be
+        stellarator symmetric, and both should be at rho=1.
     field_grid : Grid, optional
         Grid used to discretize ext_field.
     loop : bool
@@ -317,27 +378,45 @@ class BoundaryError(_Objective):
     name : str
         Name of the objective function.
 
+
+    Examples
+    --------
+    Assigning a surface current to the equilibrium:
+
+    .. code-block:: python
+
+        from desc.magnetic_fields import FourierCurrentPotentialField
+        # turn the regular FourierRZToroidalSurface into a current potential on the
+        # last closed flux surface
+        eq.surface = FourierCurrentPotentialField.from_suface(eq.surface,
+                                                              M_Phi=eq.M,
+                                                              N_Phi=eq.N,
+                                                              )
+        objective = BoundaryError(eq, ext_field)
+
     """
 
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary Error: {:10.3e} "
-    _units = "(T)"
+    _units = "(T*m^2, T^2*m^2, T*m^2)"
+
     _coordinates = "rtz"
 
     def __init__(
         self,
         eq,
         ext_field,
-        sheet_current=None,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         s=None,
         q=None,
-        src_grid=None,
+        source_grid=None,
         eval_grid=None,
         field_grid=None,
         loop=True,
@@ -345,18 +424,15 @@ class BoundaryError(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        self._src_grid = src_grid
+        self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._s = s
         self._q = q
         self._ext_field = ext_field
         self._field_grid = field_grid
         self._loop = loop
-        self._sheet_current = None
+        self._sheet_current = hasattr(eq.surface, "Phi_mn")
         things = [eq]
-        if sheet_current:
-            things += [sheet_current]
-            self._sheet_current = True
 
         super().__init__(
             things=things,
@@ -365,6 +441,8 @@ class BoundaryError(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -380,24 +458,26 @@ class BoundaryError(_Objective):
 
         """
         eq = self.things[0]
-        M_grid = eq.M_grid
-        N_grid = eq.N_grid if eq.N > 0 else M_grid
-        if self._src_grid is None:
-            src_grid = LinearGrid(
+
+        if self._source_grid is None:
+            # for axisymmetry we still need to know about toroidal effects, so its
+            # cheapest to pretend there are extra field periods
+            source_NFP = eq.NFP if eq.N > 0 else 64
+            source_grid = LinearGrid(
                 rho=np.array([1.0]),
-                M=M_grid,
-                N=N_grid,
-                NFP=int(eq.NFP),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=source_NFP,
                 sym=False,
             )
         else:
-            src_grid = self._src_grid
+            source_grid = self._source_grid
 
         if self._eval_grid is None:
             eval_grid = LinearGrid(
                 rho=np.array([1.0]),
-                M=M_grid,
-                N=N_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
                 NFP=int(eq.NFP),
                 sym=False,
             )
@@ -405,29 +485,39 @@ class BoundaryError(_Objective):
             eval_grid = self._eval_grid
 
         errorif(
-            src_grid.sym,
+            not np.all(source_grid.nodes[:, 0] == 1.0),
+            ValueError,
+            "source_grid contains nodes not on rho=1",
+        )
+        errorif(
+            not np.all(eval_grid.nodes[:, 0] == 1.0),
+            ValueError,
+            "eval_grid contains nodes not on rho=1",
+        )
+        errorif(
+            source_grid.sym,
             ValueError,
             "Source grids for singular integrals must be non-symmetric",
         )
         if self._s is None:
-            k = min(src_grid.num_theta, src_grid.num_zeta)
-            self._s = k // 2 + int(np.sqrt(k))
+            k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
+            self._s = k - 1
         if self._q is None:
-            k = min(src_grid.num_theta, src_grid.num_zeta)
+            k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
             self._q = k // 2 + int(np.sqrt(k))
 
         try:
-            interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = FFTInterpolator(eval_grid, source_grid, self._s, self._q)
         except AssertionError as e:
             warnings.warn(
                 "Could not built fft interpolator, switching to dft method which is"
                 " much slower. Reason: " + str(e)
             )
-            interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
+            interpolator = DFTInterpolator(eval_grid, source_grid, self._s, self._q)
 
         edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))
         warnif(
-            (edge_pres > 1e-6) and not self._sheet_current,
+            (edge_pres * mu_0 > 1e-6) and not self._sheet_current,
             UserWarning,
             f"Boundary pressure is nonzero (max {edge_pres} Pa), "
             + "a sheet current should be included.",
@@ -437,9 +527,8 @@ class BoundaryError(_Objective):
             "K_vc",
             "B",
             "|B|^2",
-            "B",
             "R",
-            "zeta",
+            "phi",
             "Z",
             "e^rho",
             "n_rho",
@@ -452,8 +541,8 @@ class BoundaryError(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        src_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=src_grid)
-        src_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=src_grid)
+        source_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=source_grid)
+        source_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=source_grid)
         eval_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eval_grid)
         eval_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=eval_grid)
 
@@ -462,30 +551,23 @@ class BoundaryError(_Objective):
         self._constants = {
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
-            "src_transforms": src_transforms,
-            "src_profiles": src_profiles,
+            "source_transforms": source_transforms,
+            "source_profiles": source_profiles,
             "interpolator": interpolator,
             "ext_field": self._ext_field,
             "quad_weights": np.sqrt(np.tile(eval_transforms["grid"].weights, neq)),
         }
 
         if self._sheet_current:
-            sheet_current = self.things[1]
-            assert (
-                (sheet_current.M == eq.surface.M)
-                and (sheet_current.N == eq.surface.N)
-                and (sheet_current.NFP == eq.surface.NFP)
-                and (sheet_current.sym == eq.surface.sym)
-            ), "sheet current must have same resolution as eq.surface"
             self._sheet_data_keys = ["K"]
             sheet_eval_transforms = get_transforms(
-                self._sheet_data_keys, obj=sheet_current, grid=eval_grid
+                self._sheet_data_keys, obj=eq.surface, grid=eval_grid
             )
-            sheet_src_transforms = get_transforms(
-                self._sheet_data_keys, obj=sheet_current, grid=src_grid
+            sheet_source_transforms = get_transforms(
+                self._sheet_data_keys, obj=eq.surface, grid=source_grid
             )
             self._constants["sheet_eval_transforms"] = sheet_eval_transforms
-            self._constants["sheet_src_transforms"] = sheet_src_transforms
+            self._constants["sheet_source_transforms"] = sheet_source_transforms
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -495,19 +577,28 @@ class BoundaryError(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+            Bn_norm = (
+                np.ones(eval_grid.num_nodes) * scales["B"] * scales["R0"] * scales["a"]
+            )
+            B2_norm = (
+                np.ones(eval_grid.num_nodes)
+                * scales["B"] ** 2
+                * scales["R0"]
+                * scales["a"]
+            )
+            self._normalization = np.concatenate([Bn_norm, B2_norm])
+            if self._sheet_current:
+                self._normalization = np.concatenate([self._normalization, Bn_norm])
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, sheet_params=None, constants=None):
+    def compute(self, eq_params, constants=None):
         """Compute boundary force error.
 
         Parameters
         ----------
         eq_params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        sheet_params : dict
-            Dictionary of sheet current degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -515,17 +606,19 @@ class BoundaryError(_Objective):
         Returns
         -------
         f : ndarray
-            Boundary force error (N).
+            Boundary error. First half is √g𝐁⋅𝐧 in T*m^2, second half is
+            √g[[B² + 2μ₀p]] in T^2*m^2. If sheet current is included, third half is
+            √g||μ₀𝐊 − 𝐧 × [𝐁]|| in T*m^2
 
         """
         if constants is None:
             constants = self.constants
-        src_data = compute_fun(
+        source_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
             params=eq_params,
-            transforms=constants["src_transforms"],
-            profiles=constants["src_profiles"],
+            transforms=constants["source_transforms"],
+            profiles=constants["source_profiles"],
         )
         eval_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
@@ -535,15 +628,18 @@ class BoundaryError(_Objective):
             profiles=constants["eval_profiles"],
         )
         if self._sheet_current:
-            assert sheet_params is not None
-            # enforce that they're the same surface
-            sheet_params["R_lmn"] = eq_params["Rb_lmn"]
-            sheet_params["Z_lmn"] = eq_params["Zb_lmn"]
-            sheet_src_data = compute_fun(
+            sheet_params = {
+                "R_lmn": eq_params["Rb_lmn"],
+                "Z_lmn": eq_params["Zb_lmn"],
+                "I": eq_params["I"],
+                "G": eq_params["G"],
+                "Phi_mn": eq_params["Phi_mn"],
+            }
+            sheet_source_data = compute_fun(
                 "desc.magnetic_fields.FourierCurrentPotentialField",
                 self._sheet_data_keys,
                 params=sheet_params,
-                transforms=constants["sheet_src_transforms"],
+                transforms=constants["sheet_source_transforms"],
                 profiles={},
             )
             sheet_eval_data = compute_fun(
@@ -553,22 +649,19 @@ class BoundaryError(_Objective):
                 transforms=constants["sheet_eval_transforms"],
                 profiles={},
             )
-            src_data["K_vc"] += sheet_src_data["K"]
+            source_data["K_vc"] += sheet_source_data["K"]
 
-        # this is in cartesian
-        Bplasma = -virtual_casing_biot_savart(
+        Bplasma = virtual_casing_biot_savart(
             eval_data,
-            constants["eval_transforms"]["grid"],
-            src_data,
-            constants["src_transforms"]["grid"],
+            source_data,
             constants["interpolator"],
             loop=self._loop,
         )
         # need extra factor of B/2 bc we're evaluating on plasma surface
-        Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"]) + eval_data["B"] / 2
-        x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
+        Bplasma = Bplasma + eval_data["B"] / 2
+        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(
-            x, grid=self._field_grid, basis="rpz"
+            x, source_grid=self._field_grid, basis="rpz"
         )
         Bex_total = Bext + Bplasma
         Bin_total = eval_data["B"]
@@ -602,7 +695,8 @@ class BoundaryError(_Objective):
 
         abserr = jnp.all(self.target == 0)
 
-        def _print(fmt, fmax, fmin, fmean, units):
+        def _print(fmt, fmax, fmin, fmean, norm, units):
+
             print(
                 "Maximum " + ("absolute " if abserr else "") + fmt.format(fmax) + units
             )
@@ -617,19 +711,19 @@ class BoundaryError(_Objective):
                 print(
                     "Maximum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmax / self.normalization)
+                    + fmt.format(fmax / norm)
                     + "(normalized)"
                 )
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmin / self.normalization)
+                    + fmt.format(fmin / norm)
                     + "(normalized)"
                 )
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
-                    + fmt.format(fmean / self.normalization)
+                    + fmt.format(fmean / norm)
                     + "(normalized)"
                 )
 
@@ -638,14 +732,20 @@ class BoundaryError(_Objective):
             "Boundary magnetic pressure error: {:10.3e} ",
             "Boundary field jump error: {:10.3e} ",
         ]
-        units = ["(T)", "(T^2)", "(T)"]
+        units = ["(T*m^2)", "(T^2*m^2)", "(T*m^2)"]
         if self._sheet_current:
             nn = f.size // 3
+            norms = [
+                self.normalization[0],
+                self.normalization[nn],
+                self.normalization[-1],
+            ]
         else:
             nn = f.size // 2
             formats = formats[:-1]
             units = units[:-1]
-        for i, (fmt, unit) in enumerate(zip(formats, units)):
+            norms = [self.normalization[0], self.normalization[nn]]
+        for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean
@@ -654,7 +754,7 @@ class BoundaryError(_Objective):
             fmax = jnp.max(fi)
             fmin = jnp.min(fi)
             fmean = jnp.mean(fi * wi) / jnp.mean(wi)
-            _print(fmt, fmax, fmin, fmean, unit)
+            _print(fmt, fmax, fmin, fmean, norm, unit)
 
 
 class BoundaryErrorNESTOR(_Objective):
@@ -665,6 +765,10 @@ class BoundaryErrorNESTOR(_Objective):
 
         1/2mu0*(B_vac + B_coil)^2 - 1/2mu0*B_plasma^2 - p
 
+    Residuals are weighted by the local area element ||𝐞_θ × 𝐞_ζ|| Δθ Δζ
+
+    Note: This objective is still experimental and may not work in all cases.
+    Recommend using ``BoundaryError`` or ``VacuumBoundaryError``
 
     Parameters
     ----------
@@ -693,6 +797,15 @@ class BoundaryErrorNESTOR(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
     name : str
         Name of the objective function.
 
@@ -701,7 +814,7 @@ class BoundaryErrorNESTOR(_Objective):
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary magnetic pressure error: {:10.3e} "
-    _units = "(T^2)"
+    _units = "(T^2*m^2)"
     _coordinates = "rtz"
 
     def __init__(
@@ -718,6 +831,8 @@ class BoundaryErrorNESTOR(_Objective):
         field_grid=None,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         name="NESTOR Boundary",
     ):
         if target is None and bounds is None:
@@ -735,6 +850,8 @@ class BoundaryErrorNESTOR(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
         )
 
@@ -796,7 +913,7 @@ class BoundaryErrorNESTOR(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+            self._normalization = scales["B"] ** 2 * scales["R0"] * scales["a"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -814,7 +931,7 @@ class BoundaryErrorNESTOR(_Objective):
         Returns
         -------
         f : ndarray
-            Boundary magnetic pressure error (T^2).
+            Boundary magnetic pressure error (T^2*m^2).
 
         """
         if constants is None:

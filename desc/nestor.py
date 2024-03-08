@@ -1,18 +1,16 @@
 """Neumann Solver for Toroidal Systems.
 
-Created on Mon Jun  7 13:15:05 2021
-
-@author: Jonathan Schilling (jonathan.schilling@ipp.mpg.de)
+Original python implementation by Jonathan Schilling (jonathan.schilling@ipp.mpg.de)
+Rewritten to use JAX by DESC team.
 """
 
 import numpy as np
-from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, put
 from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.utils import Index
+from desc.utils import Index, setdefault
 
 
 def copy_vector_periods(vec, zetas):
@@ -71,10 +69,7 @@ def eval_surface_geometry(
         dictionary of arrays of coordinates R,Z and derivatives on a regular grid
         in theta, zeta
     """
-    if sym:
-        ntheta_sym = ntheta // 2 + 1
-    else:
-        ntheta_sym = ntheta
+    ntheta_sym = ntheta // 2 + 1 if sym else ntheta
     phi = jnp.linspace(0, 2 * jnp.pi, nzeta, endpoint=False) / NFP
 
     R_2d = Rb_transform.transform(R_lmn, dt=0, dz=0).reshape((nzeta, ntheta)).T
@@ -136,10 +131,7 @@ def eval_axis_geometry(R_lmn, Z_lmn, Ra_transform, Za_transform, nzeta, NFP):
     axis : dict of ndarray
         dictionary of arrays of cylindrical coordinates of axis
     """
-    if nzeta == 1:
-        NFP_eff = 64
-    else:
-        NFP_eff = NFP
+    NFP_eff = 64 if (nzeta == 1) else NFP
     zeta_fp = 2.0 * jnp.pi / NFP_eff * jnp.arange(NFP_eff)
 
     raxis = Ra_transform.transform(R_lmn)
@@ -228,7 +220,6 @@ def compute_jacobian(coords, normal, NFP):
     return jacobian
 
 
-# TODO: vectorize this over multiple coils
 def biot_savart(eval_pts, coil_pts, current):
     """Biot-Savart law following [1].
 
@@ -267,7 +258,6 @@ def biot_savart(eval_pts, coil_pts, current):
     return jnp.sum(Bmag * vec, axis=-1)
 
 
-# model net toroidal plasma current as filament along the magnetic axis
 def modelNetToroidalCurrent(axis, current, coords, normal):
     """Compute field due to net toroidal current.
 
@@ -291,8 +281,6 @@ def modelNetToroidalCurrent(axis, current, coords, normal):
         field on the boundary due to net current at magnetic axis, in cartesian and
         cylindrical components
     """
-    # TODO: we can simplify this by evaluating the field directly in cylindrical
-    # coordinates convert to cartesian form
     axis = jnp.array(
         [axis["R"] * jnp.cos(axis["phi"]), axis["R"] * jnp.sin(axis["phi"]), axis["Z"]]
     )
@@ -331,7 +319,7 @@ def compute_T_S(jacobian, mf, nf, ntheta, nzeta, sym):
     Parameters
     ----------
     jacobian : dict of ndarray
-        jacobian elemnents on plasma surface
+        jacobian elements on plasma surface
     mf, nf : integer
         maximum poloidal and toroidal mode numbers
     ntheta, nzeta : integer
@@ -342,10 +330,7 @@ def compute_T_S(jacobian, mf, nf, ntheta, nzeta, sym):
     TS : dict of ndarray
         T^plus, T^minus, S^plus, S^minus
     """
-    if sym:
-        ntheta_sym = ntheta // 2 + 1
-    else:
-        ntheta_sym = ntheta
+    ntheta_sym = ntheta // 2 + 1 if sym else ntheta
 
     a = jacobian["g_tt"]
     b = jacobian["g_tz"]
@@ -498,7 +483,7 @@ def compute_analytic_integrals(
     normal : dict of ndarray
         cylindrical components of normal vector to surface
     jacobian : dict of ndarray
-        jacobian elemnents on plasma surface
+        jacobian elements on plasma surface
     TS : dict of ndarray
         T^plus, T^minus, S^plus, S^minus
     B_field : dict of ndarray
@@ -519,11 +504,7 @@ def compute_analytic_integrals(
     K_mntz : ndarray
         singular part of greens function kernel, indexed by m, n, theta, zeta
     """
-    if sym:
-        ntheta_sym = ntheta // 2 + 1
-    else:
-        ntheta_sym = ntheta
-    # analysum, analysum2 using FFTs
+    ntheta_sym = ntheta // 2 + 1 if sym else ntheta
     bexni = -weights * B_field["Bn"] * 4.0 * jnp.pi * jnp.pi
     T_p = (TS["T_p_l"] * bexni).reshape(-1, ntheta_sym, nzeta)
     T_m = (TS["T_m_l"] * bexni).reshape(-1, ntheta_sym, nzeta)
@@ -554,7 +535,6 @@ def compute_analytic_integrals(
         TS["S_m_l"].reshape(num_four, ntheta_sym, nzeta)[:, kt, kz],
     )
 
-    # TODO: figure out a faster way to do this, its very sparse
     S_p_4d = jnp.pad(S_p_4d, ((0, 0), (0, ntheta - ntheta_sym), (0, 0), (0, 0)))
     ft_S_p = jnp.fft.ifft(S_p_4d, axis=1) * ntheta
     ft_S_p = jnp.fft.fft(ft_S_p, axis=2)
@@ -637,7 +617,7 @@ def regularizedFourierTransforms(
     normal : dict of ndarray
         cylindrical components of normal vector to surface
     jacobian : dict of ndarray
-        jacobian elemnents on plasma surface
+        jacobian elements on plasma surface
     B_field : dict of ndarray
         external magnetic field
     tan_theta, tan_zeta : ndarray
@@ -658,15 +638,8 @@ def regularizedFourierTransforms(
     h_mn : ndarray
         regularized part of source term, indexed by m, n
     """
-    if sym:
-        ntheta_sym = ntheta // 2 + 1
-    else:
-        ntheta_sym = ntheta
-
-    if nzeta == 1:
-        NFP_eff = 64
-    else:
-        NFP_eff = NFP
+    ntheta_sym = ntheta // 2 + 1 if sym else ntheta
+    NFP_eff = 64 if (nzeta == 1) else NFP
     zeta_fp = 2.0 * jnp.pi / NFP_eff * jnp.arange(NFP_eff)
 
     # indices over regular and primed arrays
@@ -699,7 +672,7 @@ def regularizedFourierTransforms(
         * normal["Z_n"].reshape((ntheta_sym, nzeta))[kt_ip, kz_ip]
     )
 
-    # copy cartesial coordinates in first field period to full domain
+    # copy cartesian coordinates in first field period to full domain
     X_full, Y_full = copy_vector_periods(
         jnp.array(
             [
@@ -797,7 +770,7 @@ def regularizedFourierTransforms(
     kernel = jnp.sum(kernel, -1)
     source = jnp.sum(source, -1)
 
-    # greens function kernel, indexed by theta,zeta,thetaprime,zetaprime
+    # greens function kernel, indexed by theta,zeta,theta',zeta'
     # becomes g_mnm'n' from Merkel 1986
     # step 1: "fold over" contribution from (pi ... 2pi)
     # stellarator-symmetric first half-module is copied directly
@@ -874,10 +847,7 @@ def compute_scalar_magnetic_potential(
     phi_mn : ndarray
         scalar magnetic potential, indexed by m, n
     """
-    if sym:
-        ntheta_sym = ntheta // 2 + 1
-    else:
-        ntheta_sym = ntheta
+    ntheta_sym = ntheta // 2 + 1 if sym else ntheta
 
     # add in analytic part to get full kernel
     g_mntz = g_mntz + K_mntz
@@ -891,14 +861,14 @@ def compute_scalar_magnetic_potential(
         [g_mnmn[:, :, : mf + 1, : nf + 1].imag, g_mnmn[:, :, : mf + 1, -nf:].imag],
         axis=-1,
     )
-    # scale amatrix by (2 pi)^2 (#TODO: why ?)
+    # scale amatrix by (2 pi)^2 (#TODO: why ?) copied from fortran
     amatrix_4d *= (2.0 * jnp.pi) ** 2
     m, n = jnp.meshgrid(jnp.arange(mf + 1), jnp.arange(2 * nf + 1), indexing="ij")
-    # zero out (m=0, n<0, m', n') modes for all m', n' (#TODO: why ?)
+    # zero out (m=0, n<0, m', n') modes for all m', n' (#TODO: why ?) from fortran
     amatrix_4d = jnp.where(
         jnp.logical_and(m == 0, n > nf)[:, :, jnp.newaxis, jnp.newaxis], 0, amatrix_4d
     )
-    # add diagnonal terms (#TODO: why 4*pi^3 instead of 1 ?)
+    # add diagonal terms (#TODO: why 4*pi^3 instead of 1 ?) copied from fortran
     amatrix_4d = put(
         amatrix_4d, Index[m, n, m, n], amatrix_4d[m, n, m, n] + 4.0 * jnp.pi**3
     )
@@ -907,7 +877,7 @@ def compute_scalar_magnetic_potential(
 
     # combine with contribution from analytic integral; available here in I_mn
     bvec = h_mn + I_mn
-    # final fixup from fouri: zero out (m=0, n<0) components (#TODO: why ?)
+    # final fixup from fouri: zero out (m=0, n<0) components (#TODO: why ?) from fortran
     bvec = put(bvec, Index[0, nf + 1 :], 0.0).flatten()
 
     phi_mn = jnp.linalg.solve(amatrix, bvec).reshape([mf + 1, 2 * nf + 1])
@@ -917,7 +887,7 @@ def compute_scalar_magnetic_potential(
 def compute_vacuum_magnetic_field(
     coords, normal, jacobian, B_field, phi_mn, mf, nf, ntheta, nzeta, NFP, sym
 ):
-    """Computes vacum magnetic field on plasma boundary.
+    """Computes vacuum magnetic field on plasma boundary.
 
     Parameters
     ----------
@@ -926,7 +896,7 @@ def compute_vacuum_magnetic_field(
     normal : dict of ndarray
         cylindrical components of normal vector to surface
     jacobian : dict of ndarray
-        jacobian elemnents on plasma surface
+        jacobian elements on plasma surface
     B_field : dict of ndarray
         external magnetic field
     phi_mn : ndarray
@@ -943,10 +913,7 @@ def compute_vacuum_magnetic_field(
     Btot : dict of ndarray
         total field on plasma boundary from coils, plasma current, and scalar potential
     """
-    if sym:
-        ntheta_sym = ntheta // 2 + 1
-    else:
-        ntheta_sym = ntheta
+    ntheta_sym = ntheta // 2 + 1 if sym else ntheta
 
     potvac = phi_mn
     m_potvac = jnp.zeros([ntheta, nzeta])  # m*potvac --> for poloidal derivative
@@ -978,7 +945,7 @@ def compute_vacuum_magnetic_field(
     Btot["B_theta"] = Btot["Bpot_theta"] + Btot["Bex_theta"]
     Btot["B_zeta"] = Btot["Bpot_zeta"] + Btot["Bex_zeta"]
 
-    # TODO: for now, simply copied over from NESTOR code; have to understand what is
+    # TODO: for now, simply copied over from fortran code; have to understand what is
     # actually done here!
     h_tz = NFP * jacobian["g_tz"]
     h_zz = jacobian["g_zz"] * NFP**2
@@ -1021,42 +988,6 @@ def compute_vacuum_magnetic_field(
     return Btot
 
 
-def firstIterationPrintout(
-    Btot, ctor, rbtor, signgs, mf, nf, ntheta, nzeta, NFP, weights
-):
-    """Print some useful diagnostics."""
-    print(
-        "In VACUUM, NFP = %2d mf = %2d nf = %2d ntheta = %2d nzeta = %2d"
-        % (NFP, mf, nf, ntheta, nzeta)
-    )
-
-    # -plasma current/pi2
-    bsubuvac = np.sum(Btot["B_theta"] * weights) * signgs * 2.0 * np.pi
-    bsubvvac = np.sum(Btot["B_zeta"] * weights)
-
-    # currents in MA
-    fac = 1.0e-6 / mu_0
-
-    print(
-        "2*pi * a * -BPOL(vac) = {: 10.8e} \n".format(bsubuvac * fac)
-        + "TOROIDAL CURRENT      = {: 10.8e} \n".format(ctor * fac)
-        + "R * BTOR(vac)         = {: 10.8e} \n".format(bsubvvac)
-        + "R * BTOR(plasma)      = {: 10.8e} \n".format(rbtor)
-    )
-
-    if rbtor * bsubvvac < 0:
-        raise ValueError(
-            "poloidal current and toroidal field must have same sign, "
-            + "Psi may be incorrect"
-        )
-
-    if np.abs((ctor - bsubuvac) / rbtor) > 1.0e-2:
-        raise ValueError(
-            "Toroidal current and poloidal field mismatch, "
-            + "boundary may enclose external coil"
-        )
-
-
 class Nestor(IOAble):
     """Neumann Solver for Toroidal Systems.
 
@@ -1078,14 +1009,10 @@ class Nestor(IOAble):
         self, equil, ext_field, M=None, N=None, ntheta=None, nzeta=None, field_grid=None
     ):
 
-        if M is None:
-            M = equil.M + 1
-        if N is None:
-            N = equil.N
-        if ntheta is None:
-            ntheta = 2 * M + 6
-        if nzeta is None:
-            nzeta = 2 * N + 6
+        M = setdefault(M, equil.M + 1)
+        N = setdefault(N, equil.N)
+        ntheta = setdefault(ntheta, 2 * M + 6)
+        nzeta = setdefault(nzeta, 2 * M + 6)
 
         self.ext_field = ext_field
         self.field_grid = field_grid
@@ -1096,10 +1023,7 @@ class Nestor(IOAble):
         self.nzeta = nzeta
         self.NFP = int(equil.NFP)
         self.sym = False  # hard-coded for now, can be generalized later
-        if self.sym:
-            ntheta_sym = self.ntheta // 2 + 1
-        else:
-            ntheta_sym = self.ntheta
+        ntheta_sym = self.ntheta // 2 + 1 if self.sym else self.ntheta
 
         bdry_grid = LinearGrid(rho=1, theta=ntheta, zeta=nzeta, NFP=self.NFP)
         axis_grid = LinearGrid(rho=0, theta=0, zeta=nzeta, NFP=self.NFP)
@@ -1189,7 +1113,7 @@ class Nestor(IOAble):
         """Wrapper for handling fields from different coil types."""
         surf_coords = jnp.array([coords["R"], coords["phi"], coords["Z"]]).T
         B = self.ext_field.compute_magnetic_field(
-            surf_coords, params=params, grid=self.field_grid
+            surf_coords, params=params, source_grid=self.field_grid
         ).T
         B_ex = {}
         B_ex["BR"] = B[0]

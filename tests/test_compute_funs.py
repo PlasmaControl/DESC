@@ -185,8 +185,7 @@ def test_elongation():
     eq1 = Equilibrium()  # elongation = 1
     eq2 = Equilibrium(surface=surf2)  # elongation = 2
     eq3 = Equilibrium(surface=surf3)  # elongation = 3
-    rho = np.linspace(0, 1, 128)
-    grid = LinearGrid(M=eq3.M_grid, N=eq3.N_grid, NFP=eq3.NFP, sym=eq3.sym, rho=rho)
+    grid = LinearGrid(L=5, M=2 * eq3.M_grid, N=eq3.N_grid, NFP=eq3.NFP, sym=eq3.sym)
     data1 = eq1.compute(["a_major/a_minor"], grid=grid)
     data2 = eq2.compute(["a_major/a_minor"], grid=grid)
     data3 = eq3.compute(["a_major/a_minor"], grid=grid)
@@ -1654,3 +1653,20 @@ def test_iota_components(HELIOTRON_vac):
     data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
     np.testing.assert_allclose(data["iota"], data["iota vacuum"])
     np.testing.assert_allclose(data["iota current"], 0)
+
+
+@pytest.mark.unit
+def test_surface_equilibrium_geometry():
+    """Test that computing stuff from surface gives same result as equilibrium."""
+    names = ["DSHAPE", "HELIOTRON", "NCSX"]
+    data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
+    for name in names:
+        eq = get(name)
+        for key in data:
+            x = eq.compute(key)[key].max()  # max needed for elongation broadcasting
+            y = eq.surface.compute(key)[key].max()
+            if key == "a_major/a_minor":
+                rtol, atol = 1e-2, 0  # need looser tol here bc of different grids
+            else:
+                rtol, atol = 1e-8, 0
+            np.testing.assert_allclose(x, y, rtol=rtol, atol=atol, err_msg=name + key)

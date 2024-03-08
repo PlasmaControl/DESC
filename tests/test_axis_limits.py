@@ -65,6 +65,8 @@ not_finite_limits = {
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
     "D_current",
+    "n_rho_z",
+    "|e_theta x e_zeta|_z",
     "e^rho_rr",
     "e^theta_rr",
     "e^zeta_rr",
@@ -390,7 +392,7 @@ def test_reverse_mode_ad_axis(name):
     grid = LinearGrid(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
     eq.change_resolution(2, 2, 2, 4, 4, 4)
 
-    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid), verbose=0)
+    obj = ObjectiveFunction(GenericObjective(name, eq, grid=grid))
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))

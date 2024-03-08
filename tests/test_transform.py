@@ -37,9 +37,9 @@ class TestTransform:
         transf_32 = Transform(grid_3, basis_2)
         transf_32b = Transform(grid_3, basis_2)
 
-        assert not transf_11.eq(transf_21)
-        assert not transf_31.eq(transf_32)
-        assert transf_32.eq(transf_32b)
+        assert not transf_11.equiv(transf_21)
+        assert not transf_31.equiv(transf_32)
+        assert transf_32.equiv(transf_32b)
 
     @pytest.mark.unit
     def test_transform_order_error(self):
@@ -185,10 +185,10 @@ class TestTransform:
             transf_5 = Transform(grid_5, basis, method="fft")
 
         transf_3.grid = grid_5
-        assert transf_3.eq(transf_5)
+        assert transf_3.equiv(transf_5)
 
         transf_3.grid = grid_1
-        assert transf_3.eq(transf_1)
+        assert transf_3.equiv(transf_1)
 
         np.testing.assert_allclose(transf_3.nodes, grid_1.nodes)
 
@@ -206,10 +206,10 @@ class TestTransform:
         transf_31 = Transform(grid, basis_31, method="fft")
 
         transf_21.basis = basis_31
-        assert transf_21.eq(transf_31)
+        assert transf_21.equiv(transf_31)
 
         transf_21.basis = basis_20
-        assert transf_21.eq(transf_20)
+        assert transf_21.equiv(transf_20)
 
         np.testing.assert_allclose(transf_21.modes, basis_20.modes)
 
@@ -460,9 +460,22 @@ class TestTransform:
 
         g = LinearGrid(rho=2, theta=2, zeta=2, NFP=2)
         b = DoubleFourierSeries(M=2, N=2)
-        with pytest.warns(UserWarning, match="nodes complete 1 full field period"):
+        # this actually will emit 2 warnings, one for the NFP for
+        # basis and grid not matching, and one for nodes completing 1 full period
+        # we will catch the UserWarning generically then check each message
+        with pytest.warns(
+            UserWarning
+        ) as record:  # , match="nodes complete 1 full field period"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
+        NFP_grid_basis_warning_exists = False
+        nodes_warning_exists = False
+        for r in record:
+            if "Unequal number of field periods" in str(r.message):
+                NFP_grid_basis_warning_exists = True
+            if "nodes complete 1 full field period" in str(r.message):
+                nodes_warning_exists = True
+        assert NFP_grid_basis_warning_exists and nodes_warning_exists
 
         g = LinearGrid(rho=2, theta=2, zeta=2)
         b = DoubleFourierSeries(M=1, N=1)

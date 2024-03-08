@@ -7,51 +7,10 @@ from interpax import fft_interp2d
 
 from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec
+from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
+from desc.compute.utils import safediv, safenorm
 from desc.io import IOAble
 from desc.utils import isalmostequal, islinspaced
-
-
-def safediv(a, b, fill=0, threshold=0):
-    """Divide a/b with guards for division by zero.
-
-    Parameters
-    ----------
-    a, b : ndarray
-        Numerator and denominator.
-    fill : float, ndarray, optional
-        Value to return where b is zero.
-    threshold : float >= 0
-        How small is b allowed to be.
-    """
-    mask = jnp.abs(b) <= threshold
-    num = jnp.where(mask, fill, a)
-    den = jnp.where(mask, 1, b)
-    return num / den
-
-
-def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
-    """Like jnp.linalg.norm, but without nan gradient at x=0.
-
-    Parameters
-    ----------
-    x : ndarray
-        Vector or array to norm.
-    ord : {non-zero int, inf, -inf, ‘fro’, ‘nuc’}, optional
-        Order of norm.
-    axis : {None, int, 2-tuple of ints}, optional
-        Axis to take norm along.
-    fill : float, ndarray, optional
-        Value to return where x is zero.
-    threshold : float >= 0
-        How small is x allowed to be.
-
-    """
-    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
-    x = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = jnp.linalg.norm(x, ord=ord, axis=axis)
-    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
-    return n
 
 
 def _get_quadrature_nodes(q):
@@ -95,26 +54,26 @@ class _BIESTInterpolator(IOAble, ABC):
 
     Parameters
     ----------
-    eval_grid, src_grid : Grid
+    eval_grid, source_grid : Grid
         Evaluation and source points for the integral transform.
-        src_grid should be a LinearGrid
+        source_grid should be a LinearGrid
     s : int
-        Extent of polar grid in number of src grid points. Same as "M" in the
+        Extent of polar grid in number of source grid points. Same as "M" in the
         original Malhotra papers.
     q : int
         Order of quadrature in polar domain
 
     """
 
-    _io_attrs_ = ["_eval_grid", "_src_grid", "_q", "_s"]
+    _io_attrs_ = ["_eval_grid", "_source_grid", "_q", "_s"]
 
     @abstractmethod
-    def __init__(self, eval_grid, src_grid, s, q):
+    def __init__(self, eval_grid, source_grid, s, q):
         pass
 
     @property
     def s(self):
-        """int: Extent of polar grid in number of src grid points."""
+        """int: Extent of polar grid in number of source grid points."""
         return self._s
 
     @property
@@ -145,11 +104,11 @@ class FFTInterpolator(_BIESTInterpolator):
 
     Parameters
     ----------
-    eval_grid, src_grid : Grid
+    eval_grid, source_grid : Grid
         Evaluation and source points for the integral transform.
-        src_grid should be a LinearGrid
+        Both should be LinearGrid without stellarator symmetry.
     s : int
-        Extent of polar grid in number of src grid points. Same as "M" in the
+        Extent of polar grid in number of source grid points. Same as "M" in the
         original Malhotra papers.
     q : int
         Order of quadrature in polar domain
@@ -158,34 +117,36 @@ class FFTInterpolator(_BIESTInterpolator):
 
     _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_h_t", "_h_z", "_st", "_sz"]
 
-    def __init__(self, eval_grid, src_grid, s, q):
+    def __init__(self, eval_grid, source_grid, s, q):
         # current fft interpolating can't handle symmetric grids correctly
-        assert not src_grid.sym, "fft interpolator requires non-symmetric grid"
+        assert not source_grid.sym, "fft interpolator requires non-symmetric grid"
         assert not eval_grid.sym, "fft interpolator requires non-symmetric grid"
 
-        # need src_grid to be linearly spaced in theta, zeta,
+        # need source_grid to be linearly spaced in theta, zeta,
         # and contain only 1 rho value
         assert isalmostequal(
-            src_grid.nodes[:, 0]
+            source_grid.nodes[:, 0]
         ), "singular integration requires source grid on a single surface"
-        assert src_grid.num_nodes == (
-            src_grid.num_theta * src_grid.num_zeta
+        assert source_grid.num_nodes == (
+            source_grid.num_theta * source_grid.num_zeta
         ), "singular integration requires a tensor product grid in theta and zeta"
-        src_theta = src_grid.nodes[:, 1].reshape(
-            (src_grid.num_zeta, src_grid.num_theta)
+        source_theta = source_grid.nodes[:, 1].reshape(
+            (source_grid.num_zeta, source_grid.num_theta)
         )
-        src_zeta = src_grid.nodes[:, 2].reshape((src_grid.num_zeta, src_grid.num_theta))
+        source_zeta = source_grid.nodes[:, 2].reshape(
+            (source_grid.num_zeta, source_grid.num_theta)
+        )
         assert isalmostequal(
-            src_theta, axis=0
+            source_theta, axis=0
         ), "singular integration requires rectangular source grid in theta and zeta"
         assert isalmostequal(
-            src_zeta, axis=1
+            source_zeta, axis=1
         ), "singular integration requires rectangular source grid in theta and zeta"
         assert islinspaced(
-            src_theta, axis=1
+            source_theta, axis=1
         ), "singular integration requires source nodes be equally spaced in theta"
         assert islinspaced(
-            src_zeta, axis=0
+            source_zeta, axis=0
         ), "singular integration requires source nodes be equally spaced in zeta"
 
         # need eval_grid to be linearly spaced in theta, zeta,
@@ -193,6 +154,9 @@ class FFTInterpolator(_BIESTInterpolator):
         assert isalmostequal(
             eval_grid.nodes[:, 0]
         ), "singular integration requires eval grid on a single surface"
+        assert np.all(source_grid.nodes[:, 0] == eval_grid.nodes[0, 0]) and np.all(
+            eval_grid.nodes[:, 0] == source_grid.nodes[0, 0]
+        ), "singular integration requires source and eval grids on the same surface."
         assert eval_grid.num_nodes == (
             eval_grid.num_theta * eval_grid.num_zeta
         ), "singular integration requires a tensor product grid in theta and zeta"
@@ -216,17 +180,17 @@ class FFTInterpolator(_BIESTInterpolator):
         ), "singular integration requires eval nodes be equally spaced in zeta"
 
         self._eval_grid = eval_grid
-        self._src_grid = src_grid
+        self._source_grid = source_grid
         self._s = s
         self._q = q
 
         r, w, dr, dw = _get_quadrature_nodes(q)
 
-        src_dtheta = src_grid.spacing[:, 1]
-        src_dzeta = src_grid.spacing[:, 2] / src_grid.NFP
+        source_dtheta = source_grid.spacing[:, 1]
+        source_dzeta = source_grid.spacing[:, 2] / source_grid.NFP
 
-        self._h_t = jnp.mean(src_dtheta)
-        self._h_z = jnp.mean(src_dzeta)
+        self._h_t = jnp.mean(source_dtheta)
+        self._h_z = jnp.mean(source_dzeta)
 
         self._st = s / 2 * self._h_t * r * jnp.sin(w)
         self._sz = s / 2 * self._h_z * r * jnp.cos(w)
@@ -248,7 +212,7 @@ class FFTInterpolator(_BIESTInterpolator):
         """
         shp = f.shape[1:]
         f = f.reshape(
-            (self._src_grid.num_theta, self._src_grid.num_zeta, -1), order="F"
+            (self._source_grid.num_theta, self._source_grid.num_zeta, -1), order="F"
         )
         g = fft_interp2d(
             f,
@@ -267,11 +231,11 @@ class DFTInterpolator(_BIESTInterpolator):
 
     Parameters
     ----------
-    eval_grid, src_grid : Grid
+    eval_grid, source_grid : Grid
         Evaluation and source points for the integral transform.
-        src_grid should be a LinearGrid
+        source_grid should be a LinearGrid without stellarator symmetry.
     s : int
-        Extent of polar grid in number of src grid points. Same as "M" in the
+        Extent of polar grid in number of source grid points. Same as "M" in the
         original Malhotra papers.
     q : int
         Order of quadrature in polar domain
@@ -280,52 +244,59 @@ class DFTInterpolator(_BIESTInterpolator):
 
     _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_mat"]
 
-    def __init__(self, eval_grid, src_grid, s, q):
-        # need src_grid to be linearly spaced in theta, zeta,
+    def __init__(self, eval_grid, source_grid, s, q):
+        # need source_grid to be linearly spaced in theta, zeta,
         # and contain only 1 rho value
         assert isalmostequal(
-            src_grid.nodes[:, 0]
+            source_grid.nodes[:, 0]
         ), "singular integration requires source grid on a single surface"
-        assert src_grid.num_nodes == (
-            src_grid.num_theta * src_grid.num_zeta
+        assert source_grid.num_nodes == (
+            source_grid.num_theta * source_grid.num_zeta
         ), "singular integration requires a tensor product grid in theta and zeta"
-        src_theta = src_grid.nodes[:, 1].reshape(
-            (src_grid.num_zeta, src_grid.num_theta)
+        source_theta = source_grid.nodes[:, 1].reshape(
+            (source_grid.num_zeta, source_grid.num_theta)
         )
-        src_zeta = src_grid.nodes[:, 2].reshape((src_grid.num_zeta, src_grid.num_theta))
+        source_zeta = source_grid.nodes[:, 2].reshape(
+            (source_grid.num_zeta, source_grid.num_theta)
+        )
         assert isalmostequal(
-            src_theta, axis=0
+            source_theta, axis=0
         ), "singular integration requires rectangular source grid in theta and zeta"
         assert isalmostequal(
-            src_zeta, axis=1
+            source_zeta, axis=1
         ), "singular integration requires rectangular source grid in theta and zeta"
         assert islinspaced(
-            src_theta, axis=1
+            source_theta, axis=1
         ), "singular integration requires source nodes be equally spaced in theta"
         assert islinspaced(
-            src_zeta, axis=0
+            source_zeta, axis=0
         ), "singular integration requires source nodes be equally spaced in zeta"
+        assert np.all(source_grid.nodes[:, 0] == eval_grid.nodes[0, 0]) and np.all(
+            eval_grid.nodes[:, 0] == source_grid.nodes[0, 0]
+        ), "singular integration requires source and eval grids on the same surface."
 
         self._eval_grid = eval_grid
-        self._src_grid = src_grid
+        self._source_grid = source_grid
         self._s = s
         self._q = q
 
         r, w, dr, dw = _get_quadrature_nodes(q)
 
-        src_dtheta = src_grid.spacing[:, 1]
-        src_dzeta = src_grid.spacing[:, 2] / src_grid.NFP
+        source_dtheta = source_grid.spacing[:, 1]
+        source_dzeta = source_grid.spacing[:, 2] / source_grid.NFP
         eval_theta = eval_grid.nodes[:, 1]
         eval_zeta = eval_grid.nodes[:, 2]
 
-        h_t = jnp.mean(src_dtheta)
-        h_z = jnp.mean(src_dzeta)
+        h_t = jnp.mean(source_dtheta)
+        h_z = jnp.mean(source_dzeta)
 
         theta_q = eval_theta[:, None] + s / 2 * h_t * r * jnp.sin(w)
         zeta_q = eval_zeta[:, None] + s / 2 * h_z * r * jnp.cos(w)
 
-        basis = DoubleFourierSeries(M=src_grid.M, N=src_grid.N, NFP=src_grid.NFP)
-        A = basis.evaluate(src_grid.nodes)
+        basis = DoubleFourierSeries(
+            M=source_grid.M, N=source_grid.N, NFP=source_grid.NFP
+        )
+        A = basis.evaluate(source_grid.nodes)
         Ainv = jnp.linalg.pinv(A, rcond=None)
 
         B = jnp.zeros((*theta_q.shape, basis.num_modes))
@@ -364,12 +335,12 @@ class DFTInterpolator(_BIESTInterpolator):
 
 
 def _chi(rho):
-    """Partition of unity function."""
+    """Partition of unity function. Eq 39 in [2]."""
     return jnp.exp(-36 * jnp.abs(rho) ** 8)
 
 
 def _rho(theta, zeta, theta0, zeta0, dtheta, dzeta, s):
-    """Polar grid radial coordinate."""
+    """Polar grid radial coordinate. Argument of Chi in eq. 36 in [2]."""
     dt = abs(theta - theta0)
     dz = abs(zeta - zeta0)
     dt = jnp.minimum(dt, 2 * np.pi - dt)
@@ -377,42 +348,51 @@ def _rho(theta, zeta, theta0, zeta0, dtheta, dzeta, s):
     return 2 / s * jnp.sqrt((dt / dtheta) ** 2 + (dz / dzeta) ** 2)
 
 
-def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=False):
-    """Integrate kernel over non-singular points."""
-    assert isinstance(src_grid.NFP, int)
-    src_theta = src_grid.nodes[:, 1]
-    src_zeta = src_grid.nodes[:, 2]
-    src_dtheta = src_grid.spacing[:, 1]
-    src_dzeta = src_grid.spacing[:, 2] / src_grid.NFP
+def _nonsingular_part(
+    eval_data, eval_grid, source_data, source_grid, s, kernel, loop=False
+):
+    """Integrate kernel over non-singular points.
+
+    Generally follows sec 3.2.1 of [2].
+    """
+    assert source_grid.NFP == int(source_grid.NFP)
+    source_theta = source_grid.nodes[:, 1]
+    source_zeta = source_grid.nodes[:, 2]
+    source_dtheta = source_grid.spacing[:, 1]
+    source_dzeta = source_grid.spacing[:, 2] / source_grid.NFP
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
-    w = src_grid.weights * src_data["|e_theta x e_zeta|"] / src_grid.NFP
-    h_t = jnp.mean(src_dtheta)
-    h_z = jnp.mean(src_dzeta)
+    w = source_grid.weights * source_data["|e_theta x e_zeta|"] / source_grid.NFP
+    h_t = jnp.mean(source_dtheta)
+    h_z = jnp.mean(source_dzeta)
 
+    source_phi = source_data["phi"]
     keys = kernel.keys
 
     def nfp_loop(j, f_data):
-        # calculate effects at all eval pts from all src pts on a single field period,
-        # summing over field periods
-        f, src_data = f_data
-        src_data["zeta"] = (src_zeta + j * 2 * np.pi / src_grid.NFP) % (2 * np.pi)
+        # calculate effects at all eval pts from all source pts on a single field
+        # period, summing over field periods
+        f, source_data = f_data
+        source_data["zeta"] = (source_zeta + j * 2 * np.pi / source_grid.NFP) % (
+            2 * np.pi
+        )
+        source_data["phi"] = (source_phi + j * 2 * np.pi / source_grid.NFP) % (
+            2 * np.pi
+        )
 
-        # nest this def to avoid having to pass the modified src_data around the loop
+        # nest this def to avoid having to pass the modified source_data around the loop
         # easier to just close over it and let JAX figure it out
         def eval_pt_vmap(i):
             # this calculates the effect at a single evaluation point, from all others
             # in a single field period. vmap this to get all pts
             k = kernel(
                 {key: val[i] for key, val in eval_data.items() if key in keys},
-                src_data,
-            )
-            if kernel.ndim == 1:  # so that broadcasting works correctly
-                k = k[:, :, None]
+                source_data,
+            ).reshape((1, source_grid.num_nodes, kernel.ndim))
 
             rho = _rho(
-                src_theta,
-                src_data["zeta"],  # to account for different field periods
+                source_theta,
+                source_data["zeta"],  # to account for different field periods
                 eval_theta[i],
                 eval_zeta[i],
                 h_t,
@@ -420,16 +400,16 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
                 s,
             )
 
-            eta = _chi(rho)
+            eta = _chi(rho)  # from eq 36 of [2]
             k = (1 - eta)[None, :, None] * k
             f_temp = jnp.sum(k * w[None, :, None], axis=1)
-            return f_temp.squeeze()
+            return f_temp
 
         def eval_pt_loop(i, fj):
             # this calculates the effect at a single evaluation point, from all others
             # in a single field period. loop this to get all pts
             f_temp = eval_pt_vmap(i)
-            return put(fj, i, f_temp.squeeze())
+            return put(fj, i, f_temp.reshape(fj[i].shape))
 
         # vmap for inner part found more efficient than fori_loop, especially on gpu,
         # but for jacobian looped seems to be better and less memory
@@ -438,67 +418,89 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop=
         else:
             fj = vmap(eval_pt_vmap)(jnp.arange(eval_grid.num_nodes))
 
-        f += fj
-        return f, src_data
+        f += fj.reshape((eval_grid.num_nodes, kernel.ndim))
+        return f, source_data
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
-    f, _ = fori_loop(0, src_grid.NFP, nfp_loop, (f, src_data))
+    f, _ = fori_loop(0, int(source_grid.NFP), nfp_loop, (f, source_data))
 
+    # undo rotation of source_zeta
+    source_data["zeta"] = source_zeta
+    source_data["phi"] = source_phi
+    # we sum distance vectors, so they need to be in xyz for that to work
+    # but then need to convert vectors back to rpz
+    if kernel.ndim == 3:
+        f = xyz2rpz_vec(f, phi=eval_data["phi"])
     return f
 
 
 def _singular_part(
     eval_data,
     eval_grid,
-    src_data,
-    src_grid,
+    source_data,
+    source_grid,
     s,
     q,
     kernel,
     interpolator,
     loop=False,
 ):
-    """Integrate singular point by interpolating to polar grid."""
-    src_dtheta = src_grid.spacing[:, 1]
-    src_dzeta = src_grid.spacing[:, 2] / src_grid.NFP
+    """Integrate singular point by interpolating to polar grid.
+
+    Generally follows sec 3.2.2 of [2], with the following differences:
+
+    - hyperparameter M replaced by s
+    - density sigma / function f is absorbed into kernel.
+    """
+    source_dtheta = source_grid.spacing[:, 1]
+    source_dzeta = source_grid.spacing[:, 2] / source_grid.NFP
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
 
     r, w, dr, dw = _get_quadrature_nodes(q)
 
-    h_t = jnp.mean(src_dtheta)
-    h_z = jnp.mean(src_dzeta)
+    h_t = jnp.mean(source_dtheta)
+    h_z = jnp.mean(source_dzeta)
 
     eta = _chi(r)
+    # integrand of eq 38 in [2] except stuff that needs to be interpolated
     v = eta * s**2 * h_t * h_z / 4 * abs(r) * dr * dw
     keys = list(set(["|e_theta x e_zeta|"] + kernel.keys))
-    fsrc = [src_data[key] for key in keys]
+    if "phi" in keys:
+        keys += ["omega"]
+    fsource = [source_data[key] for key in keys]
 
     def polar_pt_vmap(i):
-        # evaluate the effect from a single polar node around each singular point
-        # on that singular point. Polar grids from other singularities have no effect
+        # evaluate the effect from a single polar node around each eval point
+        # on that eval point. Polar grids from other singularities have no effect
+        # See sec 3.2.2 of [2]
         dt = s / 2 * h_t * r[i] * jnp.sin(w[i])
         dz = s / 2 * h_z * r[i] * jnp.cos(w[i])
         theta_i = eval_theta + dt
         zeta_i = eval_zeta + dz
 
         # data interpolated to each eval pt offset by dt,dz
-        src_data_polar = {key: interpolator(val, i) for key, val in zip(keys, fsrc)}
+        source_data_polar = {
+            key: interpolator(val, i) for key, val in zip(keys, fsource)
+        }
 
-        src_data_polar["zeta"] = zeta_i
-        src_data_polar["theta"] = theta_i
+        # can't interpolate phi directly since its not periodic, so we interpolate
+        # omega and add it back in
+        source_data_polar["zeta"] = zeta_i
+        source_data_polar["theta"] = theta_i
+        if "phi" in keys:
+            source_data_polar["phi"] = zeta_i + source_data_polar["omega"]
 
-        # eval pts x src pts for 1 polar grid offset
+        # eval pts x source pts for 1 polar grid offset
         # only need diagonal term because polar grid points
         # don't contribute to other eval pts
         k = kernel(
             {key: val for key, val in eval_data.items() if key in keys},
-            src_data_polar,
+            source_data_polar,
             diag=True,
-        )
-        if kernel.ndim == 1:  # so that broadcasting works correctly
-            k = k[:, None]
-        dS = (v[i] * src_data_polar["|e_theta x e_zeta|"])[:, None]
+        ).reshape((eval_grid.num_nodes, kernel.ndim))
+
+        dS = (v[i] * source_data_polar["|e_theta x e_zeta|"])[:, None]
         fi = k * dS
         return fi
 
@@ -506,7 +508,7 @@ def _singular_part(
         # this calculates the effect at a single evaluation point, from all others
         # in a single field period. loop this to get all pts
         f_temp = polar_pt_vmap(i)
-        return f + f_temp.squeeze()
+        return f + f_temp.reshape((eval_grid.num_nodes, kernel.ndim))
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
     # vmap found more efficient than fori_loop, esp on gpu, but uses more memory
@@ -515,14 +517,17 @@ def _singular_part(
     else:
         f = vmap(polar_pt_vmap)(jnp.arange(v.size)).sum(axis=0)
 
+    # we sum distance vectors, so they need to be in xyz for that to work
+    # but then need to convert vectors back to rpz
+    if kernel.ndim == 3:
+        f = xyz2rpz_vec(f, phi=eval_data["phi"])
+
     return f
 
 
 def singular_integral(
     eval_data,
-    eval_grid,
-    src_data,
-    src_grid,
+    source_data,
     kernel,
     interpolator,
     loop=False,
@@ -531,30 +536,39 @@ def singular_integral(
 
     eg f(θ, ζ) = ∫ ∫ K(θ, ζ, θ', ζ') g(θ', ζ') dθ' dζ'
 
+    Where K(θ, ζ, θ', ζ') is the (singular) kernel and g(θ', ζ') is the metric on the
+    surface. See eq. 3.7 in [1]_, but we have absorbed the density σ into K
+
+    Uses method by Malhotra et. al. [1]_ [2]_
+
     Parameters
     ----------
     eval_data : dict
-        Dictionary of data at evaluation points. Keys should be those required by
-        kernel as kernel.keys
-    eval_grid : Grid
-        Points where integral transform is to be evaluated (eg unprimed coordinates).
-    src_data : dict
-        Dictionary of data at source points. Keys should be those required by
-        kernel as kernel.keys
-    src_grid : LinearGrid
-        Source points for integral (eg primed coordinates). Should be linearly spaced
-        rectangular grid in both theta, zeta.
+        Dictionary of data at evaluation points (eval_grid passed to interpolator).
+        Keys should be those required by kernel as kernel.keys. Vector data should be
+        in rpz basis.
+    source_data : dict
+        Dictionary of data at source points (source_grid passed to interpolator). Keys
+        should be those required by kernel as kernel.keys. Vector data should be in
+        rpz basis.
     kernel : str or callable
-        Kernel function to evaluate. Should take 3 arguments:
-            eval_data : dict of data at evaluation points
-            src_data : dict of data at source points
+        Kernel function to evaluate. If str, one of the following:
+            '1_over_r' : 1 / |𝐫 − 𝐫'|
+            'nr_over_r3' : 𝐧'⋅(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
+            'biot_savart' : μ₀/4π 𝐊'×(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
+            'biot_savart_A' : μ₀/4π 𝐊' / |𝐫 − 𝐫'|
+        If callable, should take 3 arguments:
+            eval_data : dict of data at evaluation points (primed)
+            source_data : dict of data at source points (unprimed)
             diag : boolean, whether to evaluate full cross interactions or just diagonal
         If a callable, should also have the attributes ``ndim`` and ``keys`` defined.
         ``ndim`` is an integer representing the dimensionality of the output function f,
         1 if f is scalar, 3 if f is a vector, etc.
         ``keys`` is a list of strings of what data is required to evaluate the kernel.
         The kernel will be called with dictionaries containing this data at source and
-        evaluation points
+        evaluation points.
+        If vector valued, the input to the kernel function will be in rpz and output
+        should be in xyz.
     interpolator : callable
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
@@ -566,81 +580,91 @@ def singular_integral(
     Returns
     -------
     f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
-        Integral transform evaluated at eval_grid.
+        Integral transform evaluated at eval_grid. Vectors are in rpz basis.
+
+    References
+    ----------
+    .. [1] Malhotra, Dhairya, et al. "Efficient high-order singular quadrature schemes
+       in magnetic fusion." Plasma Physics and Controlled Fusion 62.2 (2019): 024004.
+    .. [2] Malhotra, Dhairya, et al. "Taylor states in stellarators: A fast high-order
+       boundary integral solver." Journal of Computational Physics 397 (2019): 108791.
 
     """
     # sanitize inputs, we need everything as jax arrays so they can be indexed
     # properly in the loops
-    src_data = {key: jnp.asarray(val) for key, val in src_data.items()}
+    source_data = {key: jnp.asarray(val) for key, val in source_data.items()}
     eval_data = {key: jnp.asarray(val) for key, val in eval_data.items()}
 
     if isinstance(kernel, str):
         kernel = kernels[kernel]
 
     s, q = interpolator.s, interpolator.q
+    eval_grid, source_grid = interpolator._eval_grid, interpolator._source_grid
 
     out2 = _singular_part(
-        eval_data, eval_grid, src_data, src_grid, s, q, kernel, interpolator, loop
+        eval_data, eval_grid, source_data, source_grid, s, q, kernel, interpolator, loop
     )
-    out1 = _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel, loop)
+    out1 = _nonsingular_part(
+        eval_data, eval_grid, source_data, source_grid, s, kernel, loop
+    )
     return out1 + out2
 
 
-def _kernel_nr_over_r3(eval_data, src_data, diag=False):
+def _kernel_nr_over_r3(eval_data, source_data, diag=False):
     # n * r / |r|^3
-    src_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
     )
     eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T)
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
     )
     if diag:
-        dx = eval_x - src_x
+        dx = eval_x - source_x
     else:
-        dx = eval_x[:, None] - src_x[None]
-    n = rpz2xyz_vec(src_data["e^rho"], phi=src_data["zeta"])
+        dx = eval_x[:, None] - source_x[None]
+    n = rpz2xyz_vec(source_data["e^rho"], phi=source_data["phi"])
     n = n / jnp.linalg.norm(n, axis=-1)[:, None]
     r = safenorm(dx, axis=-1)
     return safediv(jnp.sum(n * dx, axis=-1), r**3)
 
 
 _kernel_nr_over_r3.ndim = 1
-_kernel_nr_over_r3.keys = ["R", "zeta", "Z", "e^rho"]
+_kernel_nr_over_r3.keys = ["R", "phi", "Z", "e^rho"]
 
 
-def _kernel_1_over_r(eval_data, src_data, diag=False):
+def _kernel_1_over_r(eval_data, source_data, diag=False):
     # 1/ |r|
-    src_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
     )
     eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T)
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
     )
     if diag:
-        dx = eval_x - src_x
+        dx = eval_x - source_x
     else:
-        dx = eval_x[:, None] - src_x[None]
+        dx = eval_x[:, None] - source_x[None]
     r = safenorm(dx, axis=-1)
     return safediv(1, r)
 
 
 _kernel_1_over_r.ndim = 1
-_kernel_1_over_r.keys = ["R", "zeta", "Z"]
+_kernel_1_over_r.keys = ["R", "phi", "Z"]
 
 
-def _kernel_biot_savart(eval_data, src_data, diag=False):
+def _kernel_biot_savart(eval_data, source_data, diag=False):
     # K x r / |r|^3
-    src_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
     )
     eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T)
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
     )
     if diag:
-        dx = eval_x - src_x
+        dx = eval_x - source_x
     else:
-        dx = eval_x[:, None] - src_x[None]
-    K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["zeta"])
+        dx = eval_x[:, None] - source_x[None]
+    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
     num = jnp.cross(K, dx, axis=-1)
     r = safenorm(dx, axis=-1)
     if diag:
@@ -651,22 +675,22 @@ def _kernel_biot_savart(eval_data, src_data, diag=False):
 
 
 _kernel_biot_savart.ndim = 3
-_kernel_biot_savart.keys = ["R", "zeta", "Z", "K_vc"]
+_kernel_biot_savart.keys = ["R", "phi", "Z", "K_vc"]
 
 
-def _kernel_biot_savart_A(eval_data, src_data, diag=False):
+def _kernel_biot_savart_A(eval_data, source_data, diag=False):
     # K  / |r|
-    src_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
     )
     eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T)
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
     )
     if diag:
-        dx = eval_x - src_x
+        dx = eval_x - source_x
     else:
-        dx = eval_x[:, None] - src_x[None]
-    K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["zeta"])
+        dx = eval_x[:, None] - source_x[None]
+    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
     r = safenorm(dx, axis=-1)
     if diag:
         r = r[:, None]
@@ -676,7 +700,7 @@ def _kernel_biot_savart_A(eval_data, src_data, diag=False):
 
 
 _kernel_biot_savart_A.ndim = 3
-_kernel_biot_savart_A.keys = ["R", "zeta", "Z", "K_vc"]
+_kernel_biot_savart_A.keys = ["R", "phi", "Z", "K_vc"]
 
 
 kernels = {
@@ -687,24 +711,41 @@ kernels = {
 }
 
 
-def virtual_casing_biot_savart(
-    eval_data, eval_grid, src_data, src_grid, interpolator, loop=True
-):
+def virtual_casing_biot_savart(eval_data, source_data, interpolator, loop=True):
     """Evaluate magnetic field on surface due to sheet current on surface.
+
+    The magnetic field due to the plasma current can be written as a Biot-Savart
+    integral over the plasma volume:
+
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ 𝐉(𝐫') × (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d³𝐫'
+
+    Where 𝐉 is the plasma current density, 𝐫 is a point on the plasma surface, and 𝐫' is
+    a point in the plasma volume.
+
+    This 3D integral can be converted to a 2D integral over the plasma boundary using
+    the virtual casing principle [1]_
+
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ (𝐧' ⋅ 𝐁(𝐫')) (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d²𝐫'
+            + μ₀/4π ∫ (𝐧' × 𝐁(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫'
+            + 𝐁(𝐫)/2
+
+    Where 𝐁 is the total field on the surface and 𝐧' is the outward surface normal.
+    Because the total field is tangent, the first term in the integrand is zero leaving
+
+    𝐁ᵥ(𝐫) = μ₀/4π ∫ K_vc(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫' + 𝐁(𝐫)/2
+
+    Where we have defined the virtual casing sheet current K_vc = 𝐧' × 𝐁(𝐫')
 
     Parameters
     ----------
     eval_data : dict
-        Dictionary of data at evaluation points. Keys should be those required by
-        kernel as kernel.keys
-    eval_grid : Grid
-        Points where integral transform is to be evaluated (eg unprimed coordinates).
-    src_data : dict
-        Dictionary of data at source points. Keys should be those required by
-        kernel as kernel.keys
-    src_grid : LinearGrid
-        Source points for integral (eg primed coordinates). Should be linearly spaced
-        rectangular grid in both theta, zeta.
+        Dictionary of data at evaluation points (eval_grid passed to interpolator).
+        Keys should be those required by kernel as kernel.keys. Vector data should be
+        in rpz basis.
+    source_data : dict
+        Dictionary of data at source points (source_grid passed to interpolator). Keys
+        should be those required by kernel as kernel.keys. Vector data should be in
+        rpz basis.
     interpolator : callable
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
@@ -716,14 +757,17 @@ def virtual_casing_biot_savart(
     Returns
     -------
     f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
-        Integral transform evaluated at eval_grid.
+        Integral transform evaluated at eval_grid. Vectors are in rpz basis.
+
+    References
+    ----------
+    .. [1] Hanson, James D. "The virtual-casing principle and Helmholtz’s theorem."
+       Plasma Physics and Controlled Fusion 57.11 (2015): 115006.
 
     """
     return singular_integral(
         eval_data,
-        eval_grid,
-        src_data,
-        src_grid,
+        source_data,
         _kernel_biot_savart,
         interpolator,
         loop,

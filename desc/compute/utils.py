@@ -66,7 +66,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     for name in names:
         if name not in data_index[p]:
             raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
-    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma", "basis"}
+    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma", "basis", "method"}
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
@@ -327,20 +327,33 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
     from desc.basis import DoubleFourierSeries
     from desc.transform import Transform
 
-    method = "jitable" if jitable else "auto"
+    method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys, obj, has_axis=grid.axis.size)
     transforms = {"grid": grid}
     for c in derivs.keys():
-        if hasattr(obj, c + "_basis"):
-            transforms[c] = Transform(
-                grid,
-                getattr(obj, c + "_basis"),
-                derivs=derivs[c],
-                build=True,
-                method=method,
-            )
-        elif c == "B":
+        if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
+            basis = getattr(obj, c + "_basis")
+            # first check if we already have a transform with a compatible basis
+            for transform in transforms.values():
+                if basis.equiv(getattr(transform, "basis", None)):
+                    ders = np.unique(
+                        np.vstack([derivs[c], transform.derivatives]), axis=0
+                    ).astype(int)
+                    # don't build until we know all the derivs we need
+                    transform.change_derivatives(ders, build=False)
+                    c_transform = transform
+                    break
+            else:  # if we didn't exit the loop early
+                c_transform = Transform(
+                    grid,
+                    basis,
+                    derivs=derivs[c],
+                    build=False,
+                    method=method,
+                )
+            transforms[c] = c_transform
+        elif c == "B":  # for fitting Boozer harmonics
             transforms["B"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -350,11 +363,11 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     sym=obj.R_basis.sym,
                 ),
                 derivs=derivs["B"],
-                build=True,
+                build=False,
                 build_pinv=True,
                 method=method,
             )
-        elif c == "w":
+        elif c == "w":  # for fitting Boozer toroidal stream function
             transforms["w"] = Transform(
                 grid,
                 DoubleFourierSeries(
@@ -364,12 +377,17 @@ def get_transforms(keys, obj, grid, jitable=False, **kwargs):
                     sym=obj.Z_basis.sym,
                 ),
                 derivs=derivs["w"],
-                build=True,
+                build=False,
                 build_pinv=True,
                 method=method,
             )
-        elif c not in transforms:
+        elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
+
+    # now build them
+    for t in transforms.values():
+        if hasattr(t, "build"):
+            t.build()
 
     return transforms
 
@@ -496,7 +514,7 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
     ----------
     x : ndarray
         Vector or array to norm.
-    ord : {non-zero int, inf, -inf, ‘fro’, ‘nuc’}, optional
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
         Order of norm.
     axis : {None, int, 2-tuple of ints}, optional
         Axis to take norm along.
@@ -507,10 +525,34 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
 
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
-    x = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = jnp.linalg.norm(x, ord=ord, axis=axis)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = jnp.linalg.norm(y, ord=ord, axis=axis)
     n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
     return n
+
+
+def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
+    """Normalize a vector to unit length, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
+    # return unit vector with equal components if norm <= threshold
+    return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
 
 
 def safediv(a, b, fill=0, threshold=0):

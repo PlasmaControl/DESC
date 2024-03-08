@@ -48,7 +48,6 @@ for n in range(1, eq.M + 1):
             ),
             AspectRatio(eq=eqfam[-1], target=8, weight=1e1, normalize=False),
         ),
-        verbose=0,
     )
     R_modes = np.vstack(
         (

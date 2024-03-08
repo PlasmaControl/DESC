@@ -1,14 +1,89 @@
 Changelog
 =========
 
+
+New Features
+
+- Adds new objectives for free boundary equilibria: ``BoundaryError`` and
+``VacuumBoundaryError``, along with a new tutorial notebook demonstrating their usage.
+- Objectives ``Volume``, ``AspectRatio``, ``Elongation`` now work for
+``FourierRZToroidalSurface`` objects as well as ``Equilibrium``.
+- ``MagneticField`` objects now have a method ``save_mgrid`` for saving field data
+in the MAKEGRID format for use with other codes.
+- ``SplineMagneticField.from_mgrid`` now defaults to using ``extcur`` from the mgrid file.
+- When converting a near axis solution from QSC/QIC to a desc ``Equilibrium``, the
+least squares fit is now weighted inversely with the distance from the axis to improve
+the accuracy for low aspect ratio.
+- Adds a bounding box to the `field_line_integrate` defined by `bounds_R` and `bounds_Z`
+keyword arguments, which form a hollow cylindrical bounding box. If the field line 
+trajectory exits these bounds, the RHS will be multiplied by an exponentially decaying 
+function of the distance to the box to stop the trajectory and prevent tracing the field 
+line out to infinity, which is both costly and unnecessary when making a Poincare plot, 
+the principle purpose of the function.
+
+
+Speed Improvements
+
+- ``CoilSet`` is now more efficient when stellarator or field period symmetry is used.
+- Improves the efficiency of ``proximal`` optimizers by reducing the number of objective
+derivative evaluations. Optimization steps should now be 2-5x faster.
+- Improved performance of Zernike polynomial evaluation.
+- Adds a bounding box to the `field_line_integrate` defined by `bounds_R` and `bounds_Z`
+keyword arguments, which form a hollow cylindrical bounding box. If the field line
+trajectory exits these bounds, the RHS will be multiplied by an exponentially decaying
+function of the distance to the box to stop the trajectory and prevent tracing the
+field line out to infinity, which is both costly and unnecessary when making a Poincare
+plot, the principle purpose of the function.
+
+
+Bug Fixes
+
+- Fix bug causing NaN in ``ForceBalance`` objective when the grid contained nodes at
+the magnetic axis.
+- When saving VMEC output, ``buco`` and ``bvco`` are now correctly saved on the half
+mesh. Previously they were saved on the full mesh.
+- Fixed a bug where hdf5 files were not properly closed after reading.
+- Fixed bugs relating to `Curve` objects not being optimizable.
+- Fixed incorrect rotation matrix for `FourierPlanarCurve`.
+- Fixed bug where ``plot_boundaries`` with a single ``phi`` value would return an
+empty plot.
+- Renames the method for comparing equivalence between DESC objects from `eq` to `equiv`
+to avoid confusion with the common shorthand for `Equilibrium`.
+
+
+v0.10.4
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.10.3...v0.10.4)
+
 - `Equilibrium.map_coordinates` is now differentiable.
 - Removes method `Equilibrium.compute_flux_coordinates` as it is now redundant with the
 more general `Equilibrium.map_coordinates`.
 - Allows certain objectives to target ``FourierRZToroidalSurface`` objects as well as
-``Equilibrium`` objects, such as ``MeanCurvature``, ``MeanCurvature``, and ``Volume``.
+``Equilibrium`` objects, such as ``MeanCurvature``, ``PrincipalCurvature``, and ``Volume``.
 - Allow optimizations where the only object being optimized is not an ``Equilibrium``
 object e.g. optimizing only a ``FourierRZToroidalSurface`` object to have a certain
 ``Volume``.
+- Many functions from ``desc.plotting`` now also work for plotting quantities from
+``Curve`` and ``Surface`` classes.
+- Adds method ``FourierRZToroidalSurface.constant_offset_surface`` which creates
+a  surface with a specified constant offset from the base surface.
+- Adds method ``FourierRZToroidalSurface.from_values``  to create a surface by fitting
+(R,phi,Z) points, along with a user-defined poloidal angle theta which sets the poloidal
+angle for the created surface
+- Adds new objective ``LinearObjectiveFromUser`` for custom linear constraints.
+- `elongation` is now computed as a function of zeta rather than a single global scalar.
+- Adds `beta_vol` and `betaxis` to VMEC output.
+- Reorder steps in `solve_continuation_automatic` to avoid finite pressure tokamak with
+zero current.
+- Fix error in lambda o(rho) constraint for near axis behavior.
+- Fix bug when optimizing with only a single constraint.
+- Fix some bugs causing NaN in reverse mode AD for some objectives.
+- Fix incompatible array shapes when user supplies initial guess for lagrange multipliers
+for augmented lagrangian optimizers.
+- Fix a bug caused when optimizing multiple objects at the same time and the order of
+the objects gets mixed up.
+
 
 v0.10.3
 -------

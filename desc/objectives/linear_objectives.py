@@ -371,7 +371,7 @@ class BoundaryZSelfConsistency(_Objective):
         self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
             surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
         )
-        
+
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):

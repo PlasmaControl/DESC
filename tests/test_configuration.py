@@ -415,8 +415,8 @@ class TestInitialGuess:
     @pytest.mark.unit
     def test_guess_from_file(self):
         """Test setting initial guess from saved equilibrium file."""
-        path = desc.examples.get("DSHAPE_CURRENT")
-        eq1 = Equilibrium(M=13, sym=True, spectral_indexing="fringe")
+        path = "tests//inputs//iotest_HELIOTRON.h5"
+        eq1 = Equilibrium(L=9, M=14, N=3, sym=True, spectral_indexing="ansi")
         eq1.set_initial_guess(path)
         eq2 = EquilibriaFamily.load(path)[-1]
 

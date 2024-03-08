@@ -24,9 +24,9 @@ from .utils import area_difference, compute_coords
 def test_compute_geometry():
     """Test computation of plasma geometric values."""
 
-    def test(stellarator):
+    def test(eq, vmec_file):
         # VMEC values
-        file = Dataset(str(stellarator["vmec_nc_path"]), mode="r")
+        file = Dataset(vmec_file, mode="r")
         V_vmec = float(file.variables["volume_p"][-1])
         R0_vmec = float(file.variables["Rmajor_p"][-1])
         a_vmec = float(file.variables["Aminor_p"][-1])
@@ -45,8 +45,7 @@ def test_compute_geometry():
         assert abs(a_vmec - a_desc) < 5e-3
         assert abs(ar_vmec - ar_desc) < 5e-3
 
-    eq = desc.examples.get("DSHAPE_CURRENT")
-    test(eq)
+    test(desc.examples.get("DSHAPE"), "tests//inputs//wout_DSHAPE.nc")
 
 
 @pytest.mark.unit

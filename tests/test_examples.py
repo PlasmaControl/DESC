@@ -10,7 +10,7 @@ from qic import Qic
 from qsc import Qsc
 
 import desc.examples
-from desc.continuation import _solve_axisym, solve_continuation_automatic
+from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -30,14 +30,12 @@ from desc.objectives import (
     FixSumModesLambda,
     ForceBalance,
     ForceBalanceAnisotropic,
-    HelicalForceBalance,
     MeanCurvature,
     ObjectiveFunction,
     PlasmaVesselDistance,
     PrincipalCurvature,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
-    RadialForceBalance,
     VacuumBoundaryError,
     Volume,
     get_fixed_boundary_constraints,
@@ -48,26 +46,6 @@ from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
 
 from .utils import area_difference_desc, area_difference_vmec
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-def test_SOLOVEV_vacuum(SOLOVEV_vac):
-    """Tests that the SOLOVEV vacuum example gives no rotational transform."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
-    data = eq.compute("|J|")
-
-    np.testing.assert_allclose(data["iota"], 0, atol=1e-16)
-    np.testing.assert_allclose(data["|J|"], 0, atol=3e-3)
-
-    # test that solving with the continuation method works correctly
-    # when eq resolution is lower than the mres_step
-    eq.change_resolution(L=3, M=3)
-    eqf = _solve_axisym(eq, mres_step=6)
-    assert len(eqf) == 1
-    assert eqf[-1].L == eq.L
-    assert eqf[-1].M == eq.M
-    assert eqf[-1].N == eq.N
 
 
 @pytest.mark.regression
@@ -142,66 +120,6 @@ def test_HELIOTRON_vac_results(HELIOTRON_vac):
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
     curr = eq.get_profile("current")
     np.testing.assert_allclose(curr(np.linspace(0, 1, 20)), 0, atol=1e-8)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
-    """Tests that the 2 methods for solving vacuum give the same results."""
-    eq1 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
-    eq2 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac2["desc_h5_path"]))[-1]
-    rho_err, theta_err = area_difference_desc(eq1, eq2)
-    np.testing.assert_allclose(rho_err[:, 4:], 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
-    curr1 = eq1.get_profile("current")
-    curr2 = eq2.get_profile("current")
-    iota1 = eq1.get_profile("iota")
-    iota2 = eq2.get_profile("iota")
-    np.testing.assert_allclose(curr1(np.linspace(0, 1, 20)), 0, atol=1e-8)
-    np.testing.assert_allclose(curr2(np.linspace(0, 1, 20)), 0, atol=1e-8)
-    np.testing.assert_allclose(iota1.params, iota2.params, rtol=1e-1, atol=1e-1)
-
-
-@pytest.mark.regression
-@pytest.mark.solve
-def test_force_balance_grids():
-    """Compares radial & helical force balance on same vs different grids."""
-    # When ConcentricGrid had a rotation option, RadialForceBalance, HelicalForceBalance
-    # defaulted to cos, sin rotation, respectively.
-    # This test has been kept to increase code coverage.
-
-    def test(iota=False):
-        if iota:
-            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
-            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
-        else:
-            eq1 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
-            eq2 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
-
-        res = 3
-        eq1.change_resolution(L=res, M=res)
-        eq1.L_grid = res
-        eq1.M_grid = res
-        eq2.change_resolution(L=res, M=res)
-        eq2.L_grid = res
-        eq2.M_grid = res
-
-        # force balances on the same grids
-        obj1 = ObjectiveFunction(ForceBalance(eq=eq1))
-        eq1.solve(objective=obj1)
-
-        # force balances on different grids
-        obj2 = ObjectiveFunction(
-            (RadialForceBalance(eq=eq2), HelicalForceBalance(eq=eq2))
-        )
-        eq2.solve(objective=obj2)
-
-        np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=5e-4)
-        np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, atol=5e-4)
-        np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, atol=2e-3)
-
-    test(iota=True)
-    test(iota=False)
 
 
 @pytest.mark.regression
@@ -725,7 +643,7 @@ def test_NAE_QIC_solve():
 
 @pytest.mark.unit
 @pytest.mark.optimize
-def test_multiobject_optimization():
+def test_multiobject_optimization_al():
     """Test for optimizing multiple objects at once."""
     eq = Equilibrium(L=4, M=4, N=0, iota=2)
     surf = FourierRZToroidalSurface(

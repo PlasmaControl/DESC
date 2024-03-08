@@ -260,11 +260,8 @@ def test_compute_magnetic_well():
             <= MAX_SIGN_DIFF
         )
 
-    test(
-        desc.examples.get("DSHAPE_CURRENT"),
-        ".//tests//inputs//wout_DSHAPE.nc",
-    )
-    test(desc.examples.get("HELIOTRON"), ".//tests//inputs//wout_HELIOTRON.nc")
+    test(desc.examples.get("DSHAPE_CURRENT"))
+    test(desc.examples.get("HELIOTRON"))
 
 
 @pytest.mark.unit

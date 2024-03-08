@@ -64,8 +64,7 @@ class TestConstrainCurrent:
         while names[-1] + "r" in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
             names += [names[-1] + "r"]
 
-        def test(stellarator, grid_type):
-            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        def test(eq, grid_type):
             kwargs = {"L": eq.L_grid, "M": eq.M_grid, "N": eq.N_grid, "NFP": eq.NFP}
             if grid_type != QuadratureGrid:
                 kwargs["sym"] = eq.sym
@@ -146,8 +145,7 @@ class TestConstrainCurrent:
         while names[-1] + "r" in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
             names += [names[-1] + "r"]
 
-        def test(stellarator, grid_type):
-            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        def test(eq, grid_type):
             kwargs = {"L": eq.L_grid, "M": eq.M_grid, "N": eq.N_grid, "NFP": eq.NFP}
             if grid_type != QuadratureGrid:
                 kwargs["sym"] = eq.sym

@@ -1985,7 +1985,7 @@ class Equilibrium(IOAble, Optimizable):
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
-        eq.xsection = eq.get_xsection_at(zeta=0)
+        eq.xsection = eq.get_poincare_xsection_at()
         eq.xsection.isgiven = False
 
         return eq

@@ -19,7 +19,6 @@ from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import load
 from desc.plotting import (
-    _find_idx,
     plot_1d,
     plot_2d,
     plot_3d,
@@ -31,7 +30,6 @@ from desc.plotting import (
     plot_coefficients,
     plot_coils,
     plot_comparison,
-    plot_field_lines_sfl,
     plot_fsa,
     plot_grid,
     plot_logo,
@@ -689,46 +687,6 @@ class TestPlotBasis:
         fig, ax, data = plot_basis(basis, return_data=True)
         for string in ["amplitude", "l", "rho", "m", "theta"]:
             assert string in data.keys()
-        return fig
-
-
-class TestPlotFieldLines:
-    """Tests for plotting field lines."""
-
-    @pytest.mark.unit
-    def test_find_idx(self):
-        """Test finding the index of the node closest to a given point."""
-        # pick the first grid node point, add epsilon to it, check it returns idx of 0
-        grid = LinearGrid(L=1, M=2, N=2, axis=False)
-        epsilon = np.finfo(float).eps
-        test_point = grid.nodes[0, :] + epsilon
-        idx = _find_idx(*test_point, grid=grid)
-        assert idx == 0
-
-    @pytest.mark.unit
-    @pytest.mark.solve
-    @pytest.mark.slow
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-    def test_plot_field_line(self, DSHAPE_current):
-        """Test plotting single field line over 1 transit."""
-        eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        fig, ax, data = plot_field_lines_sfl(
-            eq, rho=1, seed_thetas=0, phi_end=2 * np.pi, return_data=True
-        )
-        for string in ["R", "Z", "phi", "seed_thetas"]:
-            assert string in data.keys()
-        return fig
-
-    @pytest.mark.unit
-    @pytest.mark.solve
-    @pytest.mark.slow
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
-    def test_plot_field_lines(self, DSHAPE_current):
-        """Test plotting multiple field lines over 1 transit."""
-        eq = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        fig, ax = plot_field_lines_sfl(
-            eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
-        )
         return fig
 
 

@@ -3950,9 +3950,9 @@ def plot_regcoil_outputs(
         external_field = None
     # check if we can use existing quantities in data
     # or re-evaluate based off of the new grids passed-in
-    recalc_eval_grid_quantites = not eval_grid.eq(
+    recalc_eval_grid_quantites = not eval_grid.equiv(
         data["eval_grid"]
-    ) or not source_grid.eq(data["source_grid"])
+    ) or not source_grid.equiv(data["source_grid"])
 
     # TODO: if recalculating do we replace the data in the dict?
 

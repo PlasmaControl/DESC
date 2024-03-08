@@ -39,7 +39,6 @@ jobs:
           lscpu
           export PYTHONPATH=$(pwd)
           pytest -v --nbmake "./docs/notebooks" \
-            -n auto \
             --nbmake-timeout=1000 \
             --ignore=./docs/notebooks/zernike_eval.ipynb \
             --splits 2 \

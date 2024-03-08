@@ -45,7 +45,6 @@ jobs:
           pwd
           lscpu
           python -m pytest -v -m unit \
-            -n auto \
             --durations=0 \
             --cov-report xml:cov.xml \
             --cov-config=setup.cfg \

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 import desc.examples
-from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve
 from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.objectives import (
@@ -19,10 +19,9 @@ from desc.perturbations import optimal_perturb, perturb
 
 @pytest.mark.regression
 @pytest.mark.slow
-@pytest.mark.solve
-def test_perturbation_orders(SOLOVEV):
+def test_perturbation_orders():
     """Test that higher-order perturbations are more accurate."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = desc.examples.get("SOLOVEV")
 
     objective = get_equilibrium_objective(eq=eq)
     constraints = get_fixed_boundary_constraints(eq=eq)

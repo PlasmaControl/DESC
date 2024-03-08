@@ -21,8 +21,7 @@ from .utils import area_difference, compute_coords
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_compute_geometry(DSHAPE_current):
+def test_compute_geometry():
     """Test computation of plasma geometric values."""
 
     def test(stellarator):
@@ -35,7 +34,6 @@ def test_compute_geometry(DSHAPE_current):
         file.close()
 
         # DESC values
-        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         data = eq.compute("R0/a")
         V_desc = data["V"]
         R0_desc = data["R0"]
@@ -47,15 +45,14 @@ def test_compute_geometry(DSHAPE_current):
         assert abs(a_vmec - a_desc) < 5e-3
         assert abs(ar_vmec - ar_desc) < 5e-3
 
-    test(DSHAPE_current)
+    eq = desc.examples.get("DSHAPE_CURRENT")
+    test(eq)
 
 
-@pytest.mark.slow
 @pytest.mark.unit
-@pytest.mark.solve
-def test_compute_theta_coords(DSHAPE_current):
+def test_compute_theta_coords():
     """Test root finding for theta(theta*,lambda(theta))."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = desc.examples.get("DSHAPE_CURRENT")
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -172,10 +169,9 @@ def test_map_coordinates_derivative():
 
 @pytest.mark.slow
 @pytest.mark.unit
-@pytest.mark.solve
-def test_to_sfl(DSHAPE_current):
+def test_to_sfl():
     """Test converting an equilibrium to straight field line coordinates."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq = desc.examples.get("DSHAPE_CURRENT")
 
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())

@@ -43,8 +43,7 @@ class TestConstrainCurrent:
     """
 
     @pytest.mark.unit
-    @pytest.mark.solve
-    def test_iota_to_current_and_back(self, DSHAPE):
+    def test_iota_to_current_and_back(self):
         """Test we can recover the rotational transform in simple cases.
 
         Given ``iota``, compute ``I(iota)`` as defined in equation 6.
@@ -119,14 +118,14 @@ class TestConstrainCurrent:
                     err_msg=name,
                 )
 
+        eq = desc.examples.get("DSHAPE")
         # Only makes sense to test on configurations with fixed iota profiles.
-        test(DSHAPE, QuadratureGrid)
-        test(DSHAPE, ConcentricGrid)
-        test(DSHAPE, LinearGrid)
+        test(eq, QuadratureGrid)
+        test(eq, ConcentricGrid)
+        test(eq, LinearGrid)
 
     @pytest.mark.unit
-    @pytest.mark.solve
-    def test_current_to_iota_and_back(self, HELIOTRON_vac):
+    def test_current_to_iota_and_back(self):
         """Test we can recover the enclosed net toroidal current in simple cases.
 
         Given ``I``, compute ``iota(I)`` as defined in equation 18.
@@ -192,6 +191,7 @@ class TestConstrainCurrent:
                 )
 
         # Only makes sense to test on configurations with fixed current profiles.
-        test(HELIOTRON_vac, QuadratureGrid)
-        test(HELIOTRON_vac, ConcentricGrid)
-        test(HELIOTRON_vac, LinearGrid)
+        eq = desc.examples.get("ESTELL")
+        test(eq, QuadratureGrid)
+        test(eq, ConcentricGrid)
+        test(eq, LinearGrid)

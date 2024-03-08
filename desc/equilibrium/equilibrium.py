@@ -1903,6 +1903,7 @@ class Equilibrium(IOAble, Optimizable):
                     NFP=na_eq.nfp,
                 ),
                 "surface": None,
+                "xsection": None,
             }
         except AttributeError as e:
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
@@ -1970,6 +1971,8 @@ class Equilibrium(IOAble, Optimizable):
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
+        eq.xsection = eq.get_xsection_at(zeta=0)
+        eq.xsection.isgiven = False
 
         return eq
 

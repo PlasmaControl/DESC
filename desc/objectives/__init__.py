@@ -18,6 +18,7 @@ from ._geometry import (
     GoodCoordinates,
     MeanCurvature,
     PlasmaVesselDistance,
+    PlasmaVesselDistanceCircular,
     PrincipalCurvature,
     Volume,
 )

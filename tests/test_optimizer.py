@@ -36,6 +36,7 @@ from desc.objectives import (
     MeanCurvature,
     ObjectiveFunction,
     PlasmaVesselDistance,
+    PlasmaVesselDistanceCircular,
     QuasisymmetryTripleProduct,
     Volume,
     get_fixed_boundary_constraints,
@@ -1002,8 +1003,7 @@ def test_proximal_with_PlasmaVesselDistance():
     objective = ObjectiveFunction((obj,))
 
     optimizer = Optimizer("proximal-lsq-exact")
-    eq, result = optimizer.optimize(
-        eq,
+    eq.optimize(
         objective,
         constraints,
         verbose=3,
@@ -1022,6 +1022,75 @@ def test_proximal_with_PlasmaVesselDistance():
         verbose=3,
         maxiter=3,
     )
+
+
+@pytest.mark.slow
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_signed_PlasmaVesselDistance():
+    """Tests that signed distance works with surface optimization."""
+    eq = desc.examples.get("HELIOTRON")
+
+    constraints = (FixParameter(eq),)  # don't want eq to change
+    # circular surface
+    a = 0.5
+    R0 = 10
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    surf.change_resolution(M=2, N=2)
+
+    grid = LinearGrid(M=eq.M * 2, N=eq.N * 2)
+    obj = PlasmaVesselDistance(
+        surface=surf,
+        eq=eq,
+        target=0.5,
+        surface_grid=grid,
+        plasma_grid=grid,
+        use_signed_distance=True,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=60, ftol=1e-8, xtol=1e-6
+    )
+
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.5, atol=1e-2)
+
+    # test with circular surface and changing eq
+    a = 0.75
+    R0 = 10
+    surf = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[0.0, -a],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=True,
+        NFP=eq.NFP,
+    )
+    # not caring about force balance, just want the eq surface to become circular
+    constraints = (FixParameter(surf), FixPressure(eq), FixCurrent(eq), FixPsi(eq))
+    obj = PlasmaVesselDistanceCircular(
+        surface=surf,
+        eq=eq,
+        target=0.5,
+        plasma_grid=grid,
+        use_signed_distance=True,
+    )
+    objective = ObjectiveFunction((obj,))
+
+    optimizer = Optimizer("lsq-exact")
+    (eq, surf), result = optimizer.optimize(
+        (eq, surf), objective, constraints, verbose=3, maxiter=30, ftol=1e-4
+    )
+
+    np.testing.assert_allclose(obj.compute(*obj.xs(eq, surf)), 0.5, atol=1e-2)
 
 
 @pytest.mark.unit

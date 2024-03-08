@@ -15,11 +15,15 @@ in the MAKEGRID format for use with other codes.
 least squares fit is now weighted inversely with the distance from the axis to improve
 the accuracy for low aspect ratio.
 - Adds a bounding box to the `field_line_integrate` defined by `bounds_R` and `bounds_Z`
-keyword arguments, which form a hollow cylindrical bounding box. If the field line 
-trajectory exits these bounds, the RHS will be multiplied by an exponentially decaying 
-function of the distance to the box to stop the trajectory and prevent tracing the field 
-line out to infinity, which is both costly and unnecessary when making a Poincare plot, 
+keyword arguments, which form a hollow cylindrical bounding box. If the field line
+trajectory exits these bounds, the RHS will be multiplied by an exponentially decaying
+function of the distance to the box to stop the trajectory and prevent tracing the field
+line out to infinity, which is both costly and unnecessary when making a Poincare plot,
 the principle purpose of the function.
+- Adds ``PlasmaVesselDistanceCircular`` as an objective, which is a simpler
+way to calculate the plasma-vessel separation when the vessel is a circular
+axisymmetric torus
+- Add ``use_signed_distance`` flag to ``PlasmaVesselDistance`` and ``PlasmaVesselDistanceCircular`` which will use a signed distance as the target, which is positive when the plasma is inside of the vessel surface and negative if the plasma is outside of the vessel surface, to allow optimizer to distinguish if the equilbrium surface exits the vessel surface and guard against it by targeting a positive signed distance.
 
 
 Speed Improvements

@@ -829,6 +829,7 @@ class InputReader:
         from desc.grid import LinearGrid
         from desc.io.equilibrium_io import load
         from desc.profiles import PowerSeriesProfile
+        from desc.utils import copy_coeffs
 
         f = open(outfile, "w+")
 
@@ -907,11 +908,15 @@ class InputReader:
         pres_profile.change_resolution(L=L_profile)
         profile.change_resolution(L=L_profile)
 
+        prof_modes = np.zeros((L_profile, 3))
+        prof_modes[:, 0] = np.arange(L_profile)
+        p1 = copy_coeffs(pres_profile.params, pres_profile.basis.modes, prof_modes)
+        p2 = copy_coeffs(profile.params, profile.basis.modes, prof_modes)
         f.write("\n# pressure and rotational transform/current profiles\n")
         for l in range(L_profile):
             f.write(
                 "l: {:3d}  p = {:15.8E}  {} = {:15.8E}\n".format(
-                    int(l), pres_profile.params[l], char, profile.params[l]
+                    int(l), p1[l], char, p2[l]
                 )
             )
 

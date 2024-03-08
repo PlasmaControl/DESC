@@ -189,6 +189,7 @@ class InputReader:
         iota_flag = False
         pres_flag = False
         curr_flag = False
+        vac_flag = False
         inputs["output_path"] = self.output_path
 
         if self.args is not None and self.args.quiet:
@@ -359,11 +360,10 @@ class InputReader:
 
             # solver methods
             match = re.search(r"objective", argument, re.IGNORECASE)
-            vac_flag = False
             if match:
                 method = words[0].lower()
                 if method == "vacuum":
-                    method == "force"
+                    method = "force"
                     vac_flag = True
                 inputs["objective"] = method
                 flag = True
@@ -565,7 +565,7 @@ class InputReader:
 
         if vac_flag and (pres_flag or iota_flag or curr_flag):
             warnings.warn(
-                "Vacuum equilibrium does not use any profiles, "
+                "Vacuum objective does not use any profiles, "
                 + "ignoring pressure, iota, and current"
             )
             _ = inputs.pop("iota", None)

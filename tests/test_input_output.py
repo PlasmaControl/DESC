@@ -315,9 +315,11 @@ class TestInputReader:
         # load an input file with vacuum obj but also an iota profile specified
         with pytest.warns(UserWarning):
             ir = InputReader(input_path)
-        # ensure that a current profile instead of an iota profile is used
+        # ensure that no profiles used
         assert "iota" not in ir.inputs[0].keys()
-        assert "current" in ir.inputs[0].keys()
+        assert "current" not in ir.inputs[0].keys()
+        assert "pressure" not in ir.inputs[0].keys()
+        assert ir.inputs[0]["objective"] == "force"
 
     @pytest.mark.unit
     def test_node_pattern_warning(self):

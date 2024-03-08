@@ -136,25 +136,37 @@ def test_constrain_bdry_with_only_one_mode():
 def test_constrain_asserts():
     """Test error checking for incompatible constraints."""
     eqi = Equilibrium(iota=PowerSeriesProfile(0, 0), pressure=PowerSeriesProfile(0, 0))
-    eqc = Equilibrium(current=PowerSeriesProfile(0))
+    eqc = Equilibrium(current=PowerSeriesProfile(1))
+    obj_i = get_equilibrium_objective(eqi, "force")
+    obj_c = get_equilibrium_objective(eqc, "force")
+    obj_i.build()
+    obj_c.build()
     # nonexistent toroidal current can't be constrained
     with pytest.raises(RuntimeError):
-        eqi.solve(constraints=FixCurrent(eq=eqi))
+        con = FixCurrent(eq=eqi)
+        con.build()
     # nonexistent rotational transform can't be constrained
     with pytest.raises(RuntimeError):
-        eqc.solve(constraints=FixIota(eq=eqc))
+        con = FixIota(eq=eqc)
+        con.build()
     # toroidal current and rotational transform can't be constrained simultaneously
     with pytest.raises(ValueError):
-        eqi.solve(constraints=(FixCurrent(eq=eqi), FixIota(eq=eqi)))
-    with pytest.raises(AssertionError):
-        eqi.solve(
-            constraints=(FixPressure(eq=eqi, target=2), FixPressure(eq=eqi, target=1))
-        )
+        con = (FixCurrent(eq=eqi), FixIota(eq=eqi))
+        eqi.solve(constraints=con)
     # cannot use two incompatible constraints
     with pytest.raises(AssertionError):
         con1 = FixCurrent(target=eqc.c_l, eq=eqc)
         con2 = FixCurrent(target=eqc.c_l + 1, eq=eqc)
-        eqc.solve(constraints=(con1, con2))
+        con = ObjectiveFunction((con1, con2))
+        con.build()
+        _ = factorize_linear_constraints(obj_c, con)
+    # if only slightly off, should raise only a warning
+    with pytest.warns(UserWarning):
+        con1 = FixCurrent(target=eqc.c_l, eq=eqc)
+        con2 = FixCurrent(target=eqc.c_l * (1 + 1e-9), eq=eqc)
+        con = ObjectiveFunction((con1, con2))
+        con.build()
+        _ = factorize_linear_constraints(obj_c, con)
 
 
 @pytest.mark.regression

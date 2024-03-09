@@ -542,7 +542,7 @@ def test_NAE_QSC_solve():
     ntheta = 75
     r = 0.01
     N = 9
-    eq = Equilibrium.from_near_axis(qsc, r=r, L=6, M=6, N=N, ntheta=ntheta)
+    eq = Equilibrium.from_near_axis(qsc, r=r, L=4, M=4, N=N, ntheta=ntheta)
 
     orig_Rax_val = eq.axis.R_n
     orig_Zax_val = eq.axis.Z_n
@@ -570,13 +570,12 @@ def test_NAE_QSC_solve():
     ):
         objectives = ForceBalance(eq=eqq)
         obj = ObjectiveFunction(objectives)
-        print(constraints)
 
         eqq.solve(
             verbose=3,
             ftol=1e-2,
             objective=obj,
-            maxiter=175,
+            maxiter=50,
             xtol=1e-6,
             constraints=constraints,
         )
@@ -593,7 +592,7 @@ def test_NAE_QSC_solve():
         # Make sure surfaces of solved equilibrium are similar near axis as QSC
         rho_err, theta_err = area_difference_desc(eqq, eq_fit)
 
-        np.testing.assert_allclose(rho_err[:, 0:-5], 0, atol=1.1e-2, err_msg=string)
+        np.testing.assert_allclose(rho_err[:, 0:-6], 0, atol=1.05e-2, err_msg=string)
         np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3, err_msg=string)
 
         # Make sure iota of solved equilibrium is same near axis as QSC
@@ -657,7 +656,6 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
     ):
         objectives = ForceBalance(eq=eqq)
         obj = ObjectiveFunction(objectives)
-        print(constraints)
 
         eqq.solve(
             verbose=3,

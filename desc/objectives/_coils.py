@@ -1,9 +1,8 @@
 import numbers
 
-import jax
 import numpy as np
 
-from desc.backend import jnp, tree_flatten
+from desc.backend import jnp, tree_flatten, tree_map
 from desc.compute import get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
@@ -21,13 +20,13 @@ class _CoilObjective(_Objective):
         Coil for which the data keys will be optimized.
     data_keys : list of str
         data keys that will be optimized when this class is inherited.
-    target : {float, ndarray}, optional
+    target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f.
-    bounds : tuple of {float, ndarray}, optional
+    bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
-    weight : {float, ndarray}, optional
+    weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
@@ -46,8 +45,9 @@ class _CoilObjective(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+    grid : Grid, list, optional
+        Collocation grid containing the nodes to evaluate at. If list, has to adhere to
+        Objective.dim_f
     name : str, optional
         Name of the objective function.
 
@@ -107,15 +107,18 @@ class _CoilObjective(_Objective):
         # if using single coil, make coils and grid a list so they can be
         # used with tree_map
         coils = [coils[0]] if not is_coil_set else coils
+        if not isinstance(self._grid, list) and self._grid is not None:
+            self._grid = [self._grid]
 
         if self._grid is None:
-            NFP = self.NFP if hasattr(self, "NFP") else 1
-            grid = lambda x: LinearGrid(N=2 * x + 5, NFP=NFP, endpoint=False)
-            self._grid = [grid(coil.N) for coil in coils]
-        elif self._grid.num_rho > 1 or self._grid.num_theta > 1:
-            raise TypeError("Only use toroidal resolution for coil grids.")
+            get_grid = lambda x: LinearGrid(
+                N=2 * x.N + 5, NFP=getattr(x, "NFP", 1), endpoint=False
+            )
+            self._grid = [get_grid(coil) for coil in coils]
+        elif np.any([grid.num_rho > 1 or grid.num_theta > 1 for grid in self._grid]):
+            raise ValueError("Only use toroidal resolution for coil grids.")
         elif isinstance(self._grid, numbers.Integral):
-            raise TypeError("The inputted grid should be of type `Grid`.")
+            self._grid = LinearGrid(N=self._grid)
 
         self._dim_f = np.sum([grid.num_zeta for grid in self._grid])
 
@@ -124,7 +127,7 @@ class _CoilObjective(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        transforms = jax.tree_util.tree_map(
+        transforms = tree_map(
             lambda x, y: get_transforms(self._data_keys, obj=x, grid=y),
             coils,
             self._grid,
@@ -184,14 +187,14 @@ class CoilLength(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    target : {float, ndarray}, optional
+    target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If array, it has to
         be flattened according to the number of inputs.
-    bounds : tuple of {float, ndarray}, optional
+    bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
-    weight : {float, ndarray}, optional
+    weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
@@ -229,7 +232,6 @@ class CoilLength(_CoilObjective):
         grid=None,
         name=None,
     ):
-
         self._coils = coils
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -293,18 +295,21 @@ class CoilLength(_CoilObjective):
 class CoilCurvature(_CoilObjective):
     """Coil curvature.
 
+    Targets the local curvature value per grid node for each coil. A smaller curvature
+    value indicates straighter coils. All curvature values are positive.
+
     Parameters
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    target : {float, ndarray}, optional
+    target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If array, it has to
         be flattened according to the number of inputs.
-    bounds : tuple of {float, ndarray}, optional
+    bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
-    weight : {float, ndarray}, optional
+    weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
@@ -388,8 +393,8 @@ class CoilCurvature(_CoilObjective):
 
         Returns
         -------
-        f : float or array of floats
-            Coil curvature.
+        f : array of floats
+            1D array of coil curvature values.
         """
         data = super().compute(params, constants=constants)
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
@@ -400,18 +405,22 @@ class CoilCurvature(_CoilObjective):
 class CoilTorsion(_CoilObjective):
     """Coil torsion.
 
+    Targets the local torsion value per grid node for each coil. Indicative
+    of how much the coil goes out of the poloidal plane. e.g. a torsion
+    value of 0 means the coil is completely planar.
+
     Parameters
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    target : {float, ndarray}, optional
+    target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. If array, it has to
         be flattened according to the number of inputs.
-    bounds : tuple of {float, ndarray}, optional
+    bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
-    weight : {float, ndarray}, optional
+    weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
     normalize : bool, optional
@@ -480,7 +489,7 @@ class CoilTorsion(_CoilObjective):
         super().build(use_jit=use_jit, verbose=verbose)
 
         if self._normalize:
-            self._normalization = 1 / self._scales["a"] ** 2
+            self._normalization = 1 / self._scales["a"]
 
     def compute(self, params, constants=None):
         """Compute coil torsion.

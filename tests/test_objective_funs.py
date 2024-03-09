@@ -576,60 +576,66 @@ class TestObjectiveFunction:
     def test_coil_length(self):
         """Tests coil length."""
 
-        def test(coil):
-            obj = CoilLength(coil, weight=1)
+        def test(coil, grid=None):
+            obj = CoilLength(coil, grid=grid)
             obj.build()
             f = obj.compute(params=coil.params_dict)
             np.testing.assert_allclose(f, 2 * np.pi, rtol=1e-8)
+            assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=1)
         coils = CoilSet.linspaced_linear(coil, n=4)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
+        mixed_coils_grid = [LinearGrid(N=5)] * len(mixed_coils.coils)
         nested_coils = MixedCoilSet.from_symmetry(mixed_coils, NFP=4)
 
         test(coil)
         test(coils)
-        test(mixed_coils)
+        test(mixed_coils, grid=mixed_coils_grid)
         test(nested_coils)
 
     @pytest.mark.unit
     def test_coil_curvature(self):
         """Tests coil curvature."""
 
-        def test(coil):
-            obj = CoilCurvature(coil, weight=1)
+        def test(coil, grid=None):
+            obj = CoilCurvature(coil, grid=grid)
             obj.build()
             f = obj.compute(params=coil.params_dict)
             np.testing.assert_allclose(f, 1 / 2, rtol=1e-8)
+            assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil()
         coils = CoilSet.linspaced_linear(coil, n=4)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
+        mixed_coils_grid = [LinearGrid(N=5)] * len(mixed_coils.coils)
         nested_coils = MixedCoilSet.from_symmetry(mixed_coils, NFP=4)
 
         test(coil)
         test(coils)
-        test(mixed_coils)
+        test(mixed_coils, grid=mixed_coils_grid)
         test(nested_coils)
 
     @pytest.mark.unit
     def test_coil_torsion(self):
         """Tests coil torsion."""
 
-        def test(coil):
-            obj = CoilTorsion(coil, weight=1)
+        def test(coil, grid=None):
+            obj = CoilTorsion(coil, grid=grid)
             obj.build()
             f = obj.compute(params=coil.params_dict)
             np.testing.assert_allclose(f, 0, atol=1e-8)
+            assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil()
         coils = CoilSet.linspaced_linear(coil, n=4)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
+        mixed_coils_grid = [LinearGrid(N=5)] * len(mixed_coils.coils)
         nested_coils = MixedCoilSet.from_symmetry(mixed_coils, NFP=4)
 
         test(coil)
         test(coils)
-        test(mixed_coils)
+        test(mixed_coils, grid=mixed_coils_grid)
         test(nested_coils)
 
 

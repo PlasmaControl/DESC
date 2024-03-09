@@ -392,12 +392,12 @@ class TestObjectiveFunction:
 
         # symmetric grid
         grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             QuasisymmetryBoozer(eq=eq, grid=grid).build()
 
         # multiple flux surfaces
         grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, rho=[0.25, 0.5, 0.75, 1])
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             QuasisymmetryBoozer(eq=eq, grid=grid).build()
 
     @pytest.mark.unit

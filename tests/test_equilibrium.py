@@ -401,5 +401,5 @@ def test_backward_compatible_load_and_resolve():
     eq.N = 4
 
     f_obj = ForceBalance(eq=eq)
-    obj = ObjectiveFunction(f_obj)
+    obj = ObjectiveFunction(f_obj, use_jit=False)
     eq.solve(maxiter=1, objective=obj)

@@ -628,10 +628,12 @@ def test_derivative_modes():
 def test_generic_compute():
     """Test for gh issue #388."""
     eq = Equilibrium()
-    obj = ObjectiveFunction(AspectRatio(target=2, weight=1, eq=eq))
+    obj = ObjectiveFunction(AspectRatio(target=2, weight=1, eq=eq), use_jit=False)
     obj.build()
     a1 = obj.compute_scalar(obj.x(eq))
-    obj = ObjectiveFunction(GenericObjective("R0/a", target=2, weight=1, eq=eq))
+    obj = ObjectiveFunction(
+        GenericObjective("R0/a", target=2, weight=1, eq=eq), use_jit=False
+    )
     obj.build()
     a2 = obj.compute_scalar(obj.x(eq))
     assert np.allclose(a1, a2)
@@ -1379,7 +1381,7 @@ def test_jvp_scaled():
     weight = 3
     target = 5
     objective = ObjectiveFunction(
-        Volume(target=target, normalize=True, weight=weight, eq=eq)
+        Volume(target=target, normalize=True, weight=weight, eq=eq), use_jit=False
     )
     objective.build()
     x = objective.x(eq)
@@ -1415,7 +1417,7 @@ def test_vjp():
     weight = 3
     target = 5
     objective = ObjectiveFunction(
-        ForceBalance(target=target, normalize=True, weight=weight, eq=eq)
+        ForceBalance(target=target, normalize=True, weight=weight, eq=eq), use_jit=False
     )
     objective.build()
     x = objective.x(eq)
@@ -1438,7 +1440,7 @@ def test_objective_target_bounds():
     asp = AspectRatio(bounds=(2, 3), normalize=False, weight=3, eq=eq)
     fbl = ForceBalance(normalize=True, bounds=(-1, 2), weight=5, eq=eq)
 
-    objective = ObjectiveFunction((vol, asp, fbl))
+    objective = ObjectiveFunction((vol, asp, fbl), use_jit=False)
     objective.build()
 
     target = objective.target_scaled
@@ -1471,7 +1473,9 @@ def test_objective_target_bounds():
 
     eq = Equilibrium(L=8, M=2, N=2, iota=PowerSeriesProfile(0.42))
 
-    con = ObjectiveFunction(RotationalTransform(eq=eq, bounds=(0.41, 0.43)))
+    con = ObjectiveFunction(
+        RotationalTransform(eq=eq, bounds=(0.41, 0.43)), use_jit=False
+    )
     con.build()
 
     np.testing.assert_allclose(con.compute_scaled_error(con.x(eq)), 0)
@@ -1547,7 +1551,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(CurrentDensity(eq=eq, grid=grid))
+        obj = ObjectiveFunction(CurrentDensity(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=3e-2)
@@ -1562,7 +1566,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(Energy(eq=eq, grid=grid))
+        obj = ObjectiveFunction(Energy(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1577,7 +1581,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(ForceBalance(eq=eq, grid=grid))
+        obj = ObjectiveFunction(ForceBalance(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1592,7 +1596,9 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(ForceBalanceAnisotropic(eq=eq, grid=grid))
+        obj = ObjectiveFunction(
+            ForceBalanceAnisotropic(eq=eq, grid=grid), use_jit=False
+        )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1607,7 +1613,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(HelicalForceBalance(eq=eq, grid=grid))
+        obj = ObjectiveFunction(HelicalForceBalance(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-1)
@@ -1622,7 +1628,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(RadialForceBalance(eq=eq, grid=grid))
+        obj = ObjectiveFunction(RadialForceBalance(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-1)
@@ -1634,7 +1640,9 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(GenericObjective("<beta>_vol", eq=eq, grid=grid))
+        obj = ObjectiveFunction(
+            GenericObjective("<beta>_vol", eq=eq, grid=grid), use_jit=False
+        )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1649,7 +1657,9 @@ def test_compute_scalar_resolution():  # noqa: C901
             sym=eq.sym,
             axis=False,
         )
-        obj = ObjectiveFunction(GenericObjective("<J*B>", eq=eq, grid=grid))
+        obj = ObjectiveFunction(
+            GenericObjective("<J*B>", eq=eq, grid=grid), use_jit=False
+        )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1663,7 +1673,9 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(GenericObjective("sqrt(g)", eq=eq, grid=grid))
+        obj = ObjectiveFunction(
+            GenericObjective("sqrt(g)", eq=eq, grid=grid), use_jit=False
+        )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1674,7 +1686,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(AspectRatio(eq=eq, grid=grid))
+        obj = ObjectiveFunction(AspectRatio(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1683,7 +1695,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(BScaleLength(eq=eq, grid=grid))
+        obj = ObjectiveFunction(BScaleLength(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1694,7 +1706,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(Elongation(eq=eq, grid=grid))
+        obj = ObjectiveFunction(Elongation(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1703,7 +1715,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(MeanCurvature(eq=eq, grid=grid))
+        obj = ObjectiveFunction(MeanCurvature(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1719,6 +1731,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             PlasmaVesselDistance(
                 surface=surface, eq=eq, surface_grid=grid, plasma_grid=grid
             ),
+            use_jit=False,
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq, surface))
@@ -1728,7 +1741,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym)
-        obj = ObjectiveFunction(PrincipalCurvature(eq=eq, grid=grid))
+        obj = ObjectiveFunction(PrincipalCurvature(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1739,7 +1752,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = QuadratureGrid(
             L=int(eq.L * res), M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP
         )
-        obj = ObjectiveFunction(Volume(eq=eq, grid=grid))
+        obj = ObjectiveFunction(Volume(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1755,7 +1768,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             sym=eq.sym,
             axis=False,
         )
-        obj = ObjectiveFunction(RotationalTransform(eq=eq, grid=grid))
+        obj = ObjectiveFunction(RotationalTransform(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1771,7 +1784,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             sym=eq.sym,
             axis=False,
         )
-        obj = ObjectiveFunction(ToroidalCurrent(eq=eq, grid=grid))
+        obj = ObjectiveFunction(ToroidalCurrent(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=4e-2)
@@ -1786,7 +1799,7 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(Isodynamicity(eq=eq, grid=grid))
+        obj = ObjectiveFunction(Isodynamicity(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1796,7 +1809,7 @@ def test_compute_scalar_resolution():  # noqa: C901
     for i, res in enumerate((res_array + 4) * 2):
         grid = LinearGrid(M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP)
         obj = ObjectiveFunction(
-            QuasisymmetryBoozer(eq=eq, helicity=(1, -eq.NFP), grid=grid)
+            QuasisymmetryBoozer(eq=eq, helicity=(1, -eq.NFP), grid=grid), use_jit=False
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
@@ -1812,7 +1825,9 @@ def test_compute_scalar_resolution():  # noqa: C901
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        obj = ObjectiveFunction(QuasisymmetryTripleProduct(eq=eq, grid=grid))
+        obj = ObjectiveFunction(
+            QuasisymmetryTripleProduct(eq=eq, grid=grid), use_jit=False
+        )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=2e-2)
@@ -1829,6 +1844,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         )
         obj = ObjectiveFunction(
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, -eq.NFP), grid=grid),
+            use_jit=False,
         )
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
@@ -1841,7 +1857,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = LinearGrid(
             rho=rho, M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym
         )
-        obj = ObjectiveFunction(MagneticWell(eq=eq, grid=grid, target=0))
+        obj = ObjectiveFunction(MagneticWell(eq=eq, grid=grid, target=0), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1853,7 +1869,7 @@ def test_compute_scalar_resolution():  # noqa: C901
         grid = LinearGrid(
             rho=rho, M=int(eq.M * res), N=int(eq.N * res), NFP=eq.NFP, sym=eq.sym
         )
-        obj = ObjectiveFunction(MercierStability(eq=eq, grid=grid))
+        obj = ObjectiveFunction(MercierStability(eq=eq, grid=grid), use_jit=False)
         obj.build(verbose=0)
         f[i] = obj.compute_scalar(obj.x(eq))
     np.testing.assert_allclose(f, f[-1], rtol=1e-2)
@@ -1887,7 +1903,7 @@ class TestObjectiveNaNGrad:
         """PlasmaVesselDistance."""
         eq = Equilibrium(L=2, M=2, N=2)
         surf = FourierRZToroidalSurface()
-        obj = ObjectiveFunction(PlasmaVesselDistance(eq, surf))
+        obj = ObjectiveFunction(PlasmaVesselDistance(eq, surf), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(eq, surf))
         assert not np.any(np.isnan(g)), "plasma vessel distance"
@@ -1896,7 +1912,7 @@ class TestObjectiveNaNGrad:
     def test_objective_no_nangrad_anisotropy(self):
         """ForceBalanceAnisotropic."""
         eq = Equilibrium(L=2, M=2, N=2, anisotropy=FourierZernikeProfile())
-        obj = ObjectiveFunction(ForceBalanceAnisotropic(eq))
+        obj = ObjectiveFunction(ForceBalanceAnisotropic(eq), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), "anisotropic"
@@ -1912,7 +1928,7 @@ class TestObjectiveNaNGrad:
             electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
             current=PowerSeriesProfile([1, 0, -1]),
         )
-        obj = ObjectiveFunction(BootstrapRedlConsistency(eq))
+        obj = ObjectiveFunction(BootstrapRedlConsistency(eq), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), "redl bootstrap"
@@ -1933,7 +1949,7 @@ class TestObjectiveNaNGrad:
         )
 
         eq = Equilibrium(M=6, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
-        obj = ObjectiveFunction(BoundaryError(eq, ext_field))
+        obj = ObjectiveFunction(BoundaryError(eq, ext_field), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), "boundary error"
@@ -1955,7 +1971,7 @@ class TestObjectiveNaNGrad:
 
         eq = Equilibrium(M=6, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
 
-        obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field))
+        obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field), use_jit=False)
         with pytest.warns(UserWarning):
             obj.build()
         g = obj.grad(obj.x(eq))
@@ -1968,7 +1984,7 @@ class TestObjectiveNaNGrad:
     def test_objective_no_nangrad(self, objective):
         """Generic test for other objectives."""
         eq = Equilibrium(L=2, M=2, N=2)
-        obj = ObjectiveFunction(objective(eq))
+        obj = ObjectiveFunction(objective(eq), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), str(objective)

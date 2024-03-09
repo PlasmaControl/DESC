@@ -132,9 +132,10 @@ def test_optimal_perturb():
     objective = ObjectiveFunction(
         ToroidalCurrent(
             eq=eq1, grid=QuadratureGrid(eq1.L, eq1.M, eq1.N), target=0, weight=1
-        )
+        ),
+        use_jit=False,
     )
-    constraint = ObjectiveFunction(ForceBalance(eq=eq1, target=0))
+    constraint = ObjectiveFunction(ForceBalance(eq=eq1, target=0), use_jit=False)
 
     objective.build()
     constraint.build()

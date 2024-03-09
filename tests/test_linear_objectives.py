@@ -402,6 +402,7 @@ def test_correct_indexing_passed_modes():
             QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
+        use_jit=False,
     )
     objective.build()
 
@@ -423,7 +424,7 @@ def test_correct_indexing_passed_modes():
         BoundaryZSelfConsistency(eq=eq),
         FixPressure(eq=eq),
     )
-    constraint = ObjectiveFunction(constraints)
+    constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -455,6 +456,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
             QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
+        use_jit=False,
     )
     objective.build()
 
@@ -486,7 +488,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
         BoundaryZSelfConsistency(eq=eq),
         FixPressure(eq=eq),
     )
-    constraint = ObjectiveFunction(constraints)
+    constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -518,6 +520,7 @@ def test_correct_indexing_passed_modes_axis():
             QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
+        use_jit=False,
     )
     objective.build()
 
@@ -547,7 +550,7 @@ def test_correct_indexing_passed_modes_axis():
         FixSumModesZ(eq=eq, modes=np.array([[3, 3, -3], [4, 4, -4]]), normalize=False),
         FixPressure(eq=eq),
     )
-    constraint = ObjectiveFunction(constraints)
+    constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -581,6 +584,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
+        use_jit=False,
     )
     objective.build()
 
@@ -676,7 +680,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             normalize=False,
         ),
     )
-    constraint = ObjectiveFunction(constraints)
+    constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(

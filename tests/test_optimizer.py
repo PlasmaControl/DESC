@@ -420,7 +420,7 @@ def test_maxiter_1_and_0_solve():
         FixPsi(eq=eq),
     )
     objectives = ForceBalance(eq=eq)
-    obj = ObjectiveFunction(objectives)
+    obj = ObjectiveFunction(objectives, use_jit=False)
     for opt in ["lsq-exact", "fmintr-bfgs"]:
         eq, result = eq.solve(
             maxiter=1, constraints=constraints, objective=obj, optimizer=opt, verbose=3
@@ -447,7 +447,7 @@ def test_scipy_fail_message():
         FixPsi(eq=eq),
     )
     objectives = ForceBalance(eq=eq)
-    obj = ObjectiveFunction(objectives)
+    obj = ObjectiveFunction(objectives, use_jit=False)
 
     # should fail on maxiter, and should NOT throw an error
     for opt in ["scipy-trf"]:
@@ -464,7 +464,7 @@ def test_scipy_fail_message():
         assert "Maximum number of iterations has been exceeded" in result["message"]
     eq.set_initial_guess()
     objectives = Energy(eq=eq)
-    obj = ObjectiveFunction(objectives)
+    obj = ObjectiveFunction(objectives, use_jit=False)
     for opt in ["scipy-trust-exact"]:
         eq, result = eq.solve(
             maxiter=3,
@@ -1083,13 +1083,15 @@ def test_optimize_with_single_constraint():
     """Tests that Optimizer.optimize prints afterwards with a single constraint."""
     eq = Equilibrium()
     optimizer = Optimizer("lsq-exact")
-    objectective = ObjectiveFunction(GenericObjective("|B|", eq))
+    objectective = ObjectiveFunction(GenericObjective("|B|", eq), use_jit=False)
     constraints = FixParameter(  # Psi is not constrained
         eq, ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "p_l", "c_l"]
     )
 
     # test depends on verbose > 0
-    optimizer.optimize(eq, objective=objectective, constraints=constraints, verbose=2)
+    optimizer.optimize(
+        eq, objective=objectective, constraints=constraints, verbose=2, maxiter=1
+    )
 
 
 @pytest.mark.slow
@@ -1101,9 +1103,9 @@ def test_proximal_jacobian():
     eq1 = eq.copy()
     eq2 = eq.copy()
     eq3 = eq.copy()
-    con1 = ObjectiveFunction(ForceBalance(eq1))
-    con2 = ObjectiveFunction(ForceBalance(eq2))
-    con3 = ObjectiveFunction(ForceBalance(eq3))
+    con1 = ObjectiveFunction(ForceBalance(eq1), use_jit=False)
+    con2 = ObjectiveFunction(ForceBalance(eq2), use_jit=False)
+    con3 = ObjectiveFunction(ForceBalance(eq3), use_jit=False)
     obj1 = ObjectiveFunction(
         (
             QuasisymmetryTripleProduct(eq1, deriv_mode="fwd"),
@@ -1111,6 +1113,7 @@ def test_proximal_jacobian():
             Volume(eq1, deriv_mode="fwd"),
         ),
         deriv_mode="batched",
+        use_jit=False,
     )
     obj2 = ObjectiveFunction(
         (
@@ -1119,6 +1122,7 @@ def test_proximal_jacobian():
             Volume(eq2, deriv_mode="fwd"),
         ),
         deriv_mode="looped",
+        use_jit=False,
     )
     obj3 = ObjectiveFunction(
         (
@@ -1127,10 +1131,13 @@ def test_proximal_jacobian():
             Volume(eq3, deriv_mode="rev"),
         ),
         deriv_mode="blocked",
+        use_jit=False,
     )
-    prox1 = ProximalProjection(obj1, con1, eq1)
-    prox2 = ProximalProjection(obj2, con2, eq2)
-    prox3 = ProximalProjection(obj3, con3, eq3)
+    perturb_options = {"order": 1}
+    solve_options = {"maxiter": 1}
+    prox1 = ProximalProjection(obj1, con1, eq1, perturb_options, solve_options)
+    prox2 = ProximalProjection(obj2, con2, eq2, perturb_options, solve_options)
+    prox3 = ProximalProjection(obj3, con3, eq3, perturb_options, solve_options)
     prox1.build()
     prox2.build()
     prox3.build()
@@ -1213,9 +1220,15 @@ def test_LinearConstraint_jacobian():
     eq2 = eq.copy()
     eq3 = eq.copy()
 
-    obj1 = ObjectiveFunction(ForceBalance(eq1, deriv_mode="auto"), deriv_mode="batched")
-    obj2 = ObjectiveFunction(ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped")
-    obj3 = ObjectiveFunction(ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked")
+    obj1 = ObjectiveFunction(
+        ForceBalance(eq1, deriv_mode="auto"), deriv_mode="batched", use_jit=False
+    )
+    obj2 = ObjectiveFunction(
+        ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped", use_jit=False
+    )
+    obj3 = ObjectiveFunction(
+        ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked", use_jit=False
+    )
 
     con1 = ObjectiveFunction(get_fixed_boundary_constraints(eq1))
     con2 = ObjectiveFunction(get_fixed_boundary_constraints(eq2))

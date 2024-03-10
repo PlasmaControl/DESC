@@ -107,18 +107,21 @@ class _CoilObjective(_Objective):
         # if using single coil, make coils and grid a list so they can be
         # used with tree_map
         coils = [coils[0]] if not is_coil_set else coils
-        if not isinstance(self._grid, list) and self._grid is not None:
-            self._grid = [self._grid]
 
+        # check type
+        if isinstance(self._grid, numbers.Integral):
+            self._grid = LinearGrid(N=self._grid, endpoint=False)
         if self._grid is None:
             get_grid = lambda x: LinearGrid(
                 N=2 * x.N + 5, NFP=getattr(x, "NFP", 1), endpoint=False
             )
             self._grid = [get_grid(coil) for coil in coils]
-        elif np.any([grid.num_rho > 1 or grid.num_theta > 1 for grid in self._grid]):
+
+        if not isinstance(self._grid, (tuple, list)):
+            self._grid = [self._grid]
+
+        if np.any([grid.num_rho > 1 or grid.num_theta > 1 for grid in self._grid]):
             raise ValueError("Only use toroidal resolution for coil grids.")
-        elif isinstance(self._grid, numbers.Integral):
-            self._grid = LinearGrid(N=self._grid)
 
         self._dim_f = np.sum([grid.num_zeta for grid in self._grid])
 

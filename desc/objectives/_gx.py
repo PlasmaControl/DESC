@@ -66,7 +66,7 @@ class GX(_Objective):
     _units = "Q"
     _print_value_fmt = "Total heat flux: {:10.3e} "
  
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="GX", npol=1, nzgrid=32, alpha=0, psi=0.5, path='/global/homes/p/pkim18/gx/',path_in='/pscratch/sd/p/pkim18/DESC/GX/gx_nl',path_geo='/pscratch/sd/p/pkim18/DESC/GX/gxinput_wrap',t=0,bounds=None,normalize=False,normalize_target=False):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="GX", npol=1, nzgrid=32, alpha=0, psi=0.5, path='/global/homes/p/pkim18/gx_next/',path_in='/pscratch/sd/p/pkim18/DESC/GX/gx_nl',path_geo='/pscratch/sd/p/pkim18/DESC/GX/gxinput_wrap',t=0,bounds=None,normalize=False,normalize_target=False):
         
         if target is None and bounds is None:
             target = 0
@@ -230,10 +230,10 @@ class GX(_Objective):
         self.write_gx_io()
         self.run_gx()
 
-        out_file = self.path_in + '_' + str(self.t) + '.nc'
+        out_file = self.path_in + '_' + str(self.t) + '.out.nc'
         ds = nc.Dataset(out_file)
         
-        qflux = ds['Fluxes/qflux']
+        qflux = ds['Diagnostics/HeatFlux_st']
         qflux = qflux[int(len(qflux)/2):]
         qflux_avg = self.weighted_birkhoff_average(qflux) 
         print(qflux_avg)

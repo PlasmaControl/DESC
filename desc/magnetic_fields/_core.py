@@ -468,7 +468,7 @@ class _MagneticField(IOAble, ABC):
         nfp[:] = NFP
 
         nextcur = file.createVariable("nextcur", np.int32)
-        nextcur.long_name = "Number of coils."
+        nextcur.long_name = "Number of coils (external currents)."
         nextcur[:] = 1
 
         rmin = file.createVariable("rmin", np.float64)

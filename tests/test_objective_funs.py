@@ -5,6 +5,7 @@ that is done in test_compute_functions or regression tests.
 
 This module primarily tests the constructing/building/calling methods.
 """
+import warnings
 
 import numpy as np
 import pytest
@@ -817,8 +818,10 @@ def test_plasma_vessel_distance():
     eq = Equilibrium()
     surf = FourierRZToroidalSurface()
     obj = PlasmaVesselDistance(surface=surf, surface_grid=grid, plasma_grid=grid, eq=eq)
-    with pytest.warns(UserWarning):
-        obj.build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            obj.build()
 
     # test softmin, should give value less than true minimum
     surf_grid = LinearGrid(M=5, N=6)

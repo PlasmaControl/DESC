@@ -1,4 +1,5 @@
 """Regression tests for plotting functions, by comparing to saved baseline images."""
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -57,8 +58,10 @@ def test_kwarg_warning(DummyStellarator):
 def test_kwarg_future_warning(DummyStellarator):
     """Test that passing in deprecated kwargs throws a warning."""
     eq = load(load_from=str(DummyStellarator["output_path"]))
-    with pytest.warns(FutureWarning):
-        fig, ax = plot_surfaces(eq, zeta=2)
+    with pytest.raises(FutureWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            fig, ax = plot_surfaces(eq, zeta=2)
     return None
 
 

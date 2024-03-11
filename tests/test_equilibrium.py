@@ -203,16 +203,24 @@ def test_grid_resolution_warning():
     eq = Equilibrium(L=3, M=3, N=3)
     eqN = eq.copy()
     eqN.change_resolution(N=1, N_grid=0)
-    with pytest.warns(Warning):
-        eqN.solve(ftol=1e-2, maxiter=2)
+    # if we first raise warnings to errors then check for error we can avoid
+    # actually running the full solve
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eqN.solve(ftol=1e-2, maxiter=2)
     eqM = eq.copy()
     eqM.change_resolution(M=eq.M, M_grid=eq.M - 1)
-    with pytest.warns(Warning):
-        eqM.solve(ftol=1e-2, maxiter=2)
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eqM.solve(ftol=1e-2, maxiter=2)
     eqL = eq.copy()
     eqL.change_resolution(L=eq.L, L_grid=eq.L - 1)
-    with pytest.warns(Warning):
-        eqL.solve(ftol=1e-2, maxiter=2)
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            eqL.solve(ftol=1e-2, maxiter=2)
 
 
 @pytest.mark.unit

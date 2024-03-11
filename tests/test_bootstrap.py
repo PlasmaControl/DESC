@@ -1,5 +1,7 @@
 """Tests for bootstrap current functions."""
 
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -1448,14 +1450,18 @@ def test_bootstrap_objective_build():
         L=3, M=3, N=3, NFP=2, electron_temperature=1e3, electron_density=1e25
     )
     # density too high
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3, M=3, N=3, NFP=2, electron_temperature=1e5, electron_density=1e21
     )
     # electron temperature too high
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1466,8 +1472,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1e5,
     )
     # ion temperature too high
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1478,8 +1486,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1e3,
     )
     # density too low
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1490,8 +1500,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1e3,
     )
     # electron temperature too low
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1502,8 +1514,10 @@ def test_bootstrap_objective_build():
         ion_temperature=1,
     )
     # ion temperature too low
-    with pytest.warns(UserWarning):
-        BootstrapRedlConsistency(eq=eq).build()
+    with pytest.raises(UserWarning):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            BootstrapRedlConsistency(eq=eq).build()
 
     eq = Equilibrium(
         L=4,

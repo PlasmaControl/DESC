@@ -1900,6 +1900,7 @@ def test_asymmetric_normalization():
 def test_force_balance_axis_error():
     """Test that ForceBalance objective is not NaN if the grid contains axis."""
     eq = get("SOLOVEV")
+    eq.change_resolution(3, 3, 0, 6, 6, 0)
     grid = LinearGrid(L=2, M=2, N=2, axis=True)
     obj = ForceBalance(eq, grid=grid)
     obj.build()

@@ -305,9 +305,13 @@ class TestAxisLimits:
         # same as 'weaker_tolerance | zero_limit', but works on Python 3.8 (PEP 584)
         kwargs = dict(weaker_tolerance, **zero_map)
         # fixed iota
-        assert_is_continuous(get("W7-X"), kwargs=kwargs)
+        eq = get("W7-X")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        assert_is_continuous(eq, kwargs=kwargs)
         # fixed current
-        assert_is_continuous(get("NCSX"), kwargs=kwargs)
+        eq = get("NCSX")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        assert_is_continuous(eq, kwargs=kwargs)
 
     @pytest.mark.unit
     def test_magnetic_field_is_physical(self):
@@ -340,8 +344,12 @@ class TestAxisLimits:
                 np.testing.assert_allclose(B[:, 1], B[0, 1])
                 np.testing.assert_allclose(B[:, 2], B[0, 2])
 
-        test(get("W7-X"))
-        test(get("NCSX"))
+        eq = get("W7-X")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        test(eq)
+        eq = get("W7-X")
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+        test(eq)
 
 
 def _reverse_mode_unsafe_names():

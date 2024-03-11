@@ -128,7 +128,9 @@ def test_optimal_perturb():
     # particular solution. Here we do a simple test to ensure the interior and boundary
     # agree
     eq1 = desc.examples.get("DSHAPE")
+    eq1.change_resolution(3, 3, 0, 6, 6, 0)
     eq1.change_resolution(N=1, N_grid=5)
+    eq1.surface = eq1.get_surface_at(1.0)
     objective = ObjectiveFunction(
         ToroidalCurrent(
             eq=eq1, grid=QuadratureGrid(eq1.L, eq1.M, eq1.N), target=0, weight=1

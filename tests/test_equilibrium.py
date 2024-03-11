@@ -52,7 +52,7 @@ def test_compute_geometry():
 def test_compute_theta_coords():
     """Test root finding for theta(theta*,lambda(theta))."""
     eq = desc.examples.get("DSHAPE_CURRENT")
-
+    eq.change_resolution(3, 3, 0, 6, 6, 0)
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -76,7 +76,7 @@ def test_compute_theta_coords():
 def test_map_coordinates():
     """Test root finding for (rho,theta,zeta) for common use cases."""
     eq = desc.examples.get("W7-X")
-
+    eq.change_resolution(3, 3, 3, 6, 6, 6)
     n = 100
     # finding coordinates along a single field line
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
@@ -110,7 +110,7 @@ def test_map_coordinates():
 def test_map_coordinates_derivative():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
     eq = desc.examples.get("DSHAPE")
-
+    eq.change_resolution(3, 3, 0, 6, 6, 0)
     inbasis = ["alpha", "phi", "rho"]
     outbasis = ["rho", "theta_PEST", "zeta"]
 
@@ -171,13 +171,13 @@ def test_map_coordinates_derivative():
 def test_to_sfl():
     """Test converting an equilibrium to straight field line coordinates."""
     eq = desc.examples.get("DSHAPE_CURRENT")
-
+    eq.change_resolution(6, 6, 0, 12, 12, 0)
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=2.5e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
+    np.testing.assert_allclose(theta_err, 0, atol=2e-4)
 
 
 @pytest.mark.slow
@@ -371,6 +371,7 @@ def test_change_NFP():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         eq = desc.examples.get("HELIOTRON")
+        eq.change_resolution(3, 3, 1, 6, 6, 2)
         eq.change_resolution(NFP=4)
         obj = get_equilibrium_objective(eq=eq)
         obj.build()

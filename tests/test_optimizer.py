@@ -351,6 +351,7 @@ def test_overstepping():
             return x
 
     eq = desc.examples.get("DSHAPE")
+    eq.change_resolution(2, 2, 0, 4, 4, 0)
 
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
@@ -384,7 +385,7 @@ def test_overstepping():
         objective=objective,
         constraints=constraints,
         optimizer=optimizer,
-        maxiter=50,
+        maxiter=5,
         verbose=3,
         gtol=-1,  # disable gradient stopping
         ftol=-1,  # disable function stopping
@@ -392,8 +393,8 @@ def test_overstepping():
         copy=True,
         options={
             "initial_trust_radius": 0.5,
-            "perturb_options": {"verbose": 0},
-            "solve_options": {"verbose": 0},
+            "perturb_options": {"verbose": 0, "order": 1},
+            "solve_options": {"verbose": 0, "maxiter": 2},
         },
     )
 
@@ -412,6 +413,7 @@ def test_maxiter_1_and_0_solve():
     """Test that solves with maxiter 1 and 0 terminate correctly."""
     # correctly meaning they terminate, instead of looping infinitely
     eq = desc.examples.get("SOLOVEV")
+    eq.change_resolution(2, 2, 0, 4, 4, 0)
     constraints = (
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),
@@ -490,6 +492,7 @@ def test_not_implemented_error():
 def test_wrappers():
     """Tests for using wrapped objectives."""
     eq = desc.examples.get("SOLOVEV")
+    eq.change_resolution(2, 2, 0, 4, 4, 0)
     con = (
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),

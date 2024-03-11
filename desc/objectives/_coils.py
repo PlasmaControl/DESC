@@ -112,10 +112,14 @@ class _CoilObjective(_Objective):
         if isinstance(self._grid, numbers.Integral):
             self._grid = LinearGrid(N=self._grid, endpoint=False)
         if self._grid is None:
-            get_grid = lambda x: LinearGrid(
-                N=2 * x.N + 5, NFP=getattr(x, "NFP", 1), endpoint=False
+            self._grid = tree_map(
+                lambda x: LinearGrid(
+                    N=2 * x.N + 5, NFP=getattr(x, "NFP", 1), endpoint=False
+                ),
+                self.things[0],
+                is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
             )
-            self._grid = [get_grid(coil) for coil in coils]
+            print(self._grid)
 
         if not isinstance(self._grid, (tuple, list)):
             self._grid = [self._grid]
@@ -132,10 +136,11 @@ class _CoilObjective(_Objective):
 
         transforms = tree_map(
             lambda x, y: get_transforms(self._data_keys, obj=x, grid=y),
-            coils,
+            self.things[0],
             self._grid,
             is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, MixedCoilSet),
         )
+
         # tree map always returns a list so take first transform and grid
         # for when we are only using a single coil
         if not is_mixed_coils:

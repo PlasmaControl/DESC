@@ -587,7 +587,7 @@ class TestObjectiveFunction:
         coils = CoilSet.linspaced_linear(coil, n=4)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
         mixed_coils_grid = [LinearGrid(N=5)] * len(mixed_coils.coils)
-        nested_coils = MixedCoilSet.from_symmetry(mixed_coils, NFP=4)
+        nested_coils = MixedCoilSet(coils, coils)
 
         test(coil)
         test(coils)
@@ -609,7 +609,7 @@ class TestObjectiveFunction:
         coils = CoilSet.linspaced_linear(coil, n=4)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
         mixed_coils_grid = [LinearGrid(N=5)] * len(mixed_coils.coils)
-        nested_coils = MixedCoilSet.from_symmetry(mixed_coils, NFP=4)
+        nested_coils = MixedCoilSet(coils, coils)
 
         test(coil)
         test(coils)
@@ -631,7 +631,7 @@ class TestObjectiveFunction:
         coils = CoilSet.linspaced_linear(coil, n=4)
         mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
         mixed_coils_grid = [LinearGrid(N=5)] * len(mixed_coils.coils)
-        nested_coils = MixedCoilSet.from_symmetry(mixed_coils, NFP=4)
+        nested_coils = MixedCoilSet(coils, coils)
 
         test(coil)
         test(coils)

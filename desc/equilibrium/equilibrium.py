@@ -253,7 +253,6 @@ class Equilibrium(IOAble, Optimizable):
             setdefault(
                 L,
                 max(
-                    self.surface.L,
                     self.xsection.L,
                     self.M if (self.spectral_indexing == "ansi") else 2 * self.M,
                 ),
@@ -1497,15 +1496,6 @@ class Equilibrium(IOAble, Optimizable):
     @Lp_lmn.setter
     def Lp_lmn(self, Lp_lmn):
         self.xsection.L_lmn = Lp_lmn
-
-    @property
-    def Lp_basis(self):
-        """ndarray: Spectral coefficients of Lambda at the cross-section."""
-        return self.xsection.L_basis
-
-    @Lp_basis.setter
-    def Lp_basis(self, Lp_basis):
-        self.xsection.L_basis = Lp_basis
 
     @optimizable_parameter
     @property

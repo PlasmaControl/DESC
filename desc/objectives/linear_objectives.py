@@ -669,8 +669,8 @@ class SectionLambdaSelfConsistency(_Objective):
         L_modes = eq.L_basis.modes
         dim_L = eq.L_basis.num_modes
 
-        Lp_modes = eq.Lp_basis.modes
-        self._dim_f = eq.Lp_basis.num_modes
+        Lp_modes = eq.xsection.L_basis.modes
+        self._dim_f = eq.xsection.L_basis.num_modes
         self._A = np.zeros((self._dim_f, dim_L))
 
         if eq.xsection.zeta == 0:

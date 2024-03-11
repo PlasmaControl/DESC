@@ -116,7 +116,12 @@ def sgd(
     if g_norm != 0:
         alpha = options.pop("alpha", 2e-2 * x_norm / g_norm)
     else:
-        alpha = 0.001
+        alpha = options.pop("alpha", 0.001)
+
+    if g_norm > 50:
+        print("g too big!")
+        print("g_norm is " + str(g_norm))
+        alpha = alpha / 10
 #    alpha = options.pop("alpha", 5.0e-3 * x_norm/ g_norm)
     print("alpha is " + str(alpha))
     beta = options.pop("beta", 0.9)

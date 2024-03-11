@@ -2269,7 +2269,7 @@ class FourierCurrentPotentialField(
                 + f" got type {type(external_field)} "
             )
             data["external_field"] = external_field
-            data["external_field_grid"] = external_field
+            data["external_field_grid"] = external_field_grid
 
         if source_grid is None:
             source_grid = LinearGrid(M=30, N=30, NFP=int(eq.NFP))

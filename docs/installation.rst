@@ -39,7 +39,7 @@ Option 1: Using pip to install packages (this will only install DESC + JAX with 
 
 .. code-block:: sh
 
-    conda create --name desc-env 'python>=9, <=3.12'
+    conda create --name desc-env 'python>=3.9, <=3.12'
     conda activate desc-env
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)

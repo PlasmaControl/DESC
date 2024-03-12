@@ -128,8 +128,11 @@ class _CoilObjective(_Objective):
             else:
                 return coilset
 
-        is_mixed_coils = isinstance(self.things[0], MixedCoilSet)
         is_single_coil = lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
+        coil_structure = tree_structure(
+            self.things[0],
+            is_leaf=lambda x: is_single_coil(x),
+        )
 
         # check type
         if isinstance(self._grid, numbers.Integral):
@@ -143,22 +146,14 @@ class _CoilObjective(_Objective):
                 is_leaf=lambda x: is_single_coil(x),
             )
         elif isinstance(self._grid, LinearGrid):
-            treedef = tree_structure(
-                self.things[0],
-                is_leaf=lambda x: is_single_coil(x),
-            )
             leaves = tree_leaves(self.things[0], is_leaf=lambda x: is_single_coil(x))
             self._grid = [self._grid] * len(leaves)
-            self._grid = tree_unflatten(treedef, self._grid)
+            self._grid = tree_unflatten(coil_structure, self._grid)
         else:
             flattened_grid = tree_flatten(
                 self._grid, is_leaf=lambda x: isinstance(x, LinearGrid)
             )[0]
-            treedef = tree_structure(
-                self.things[0],
-                is_leaf=lambda x: is_single_coil(x),
-            )
-            self._grid = tree_unflatten(treedef, flattened_grid)
+            self._grid = tree_unflatten(coil_structure, flattened_grid)
 
         timer = Timer()
         if verbose > 0:
@@ -185,7 +180,7 @@ class _CoilObjective(_Objective):
 
         # tree map always returns a list so take first transform and grid
         # for when we are only using a single coil
-        if not is_mixed_coils:
+        if not isinstance(self.things[0], MixedCoilSet):
             transforms = transforms[0]
             self._grid = self._grid[0]
 

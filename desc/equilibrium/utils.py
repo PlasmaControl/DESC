@@ -150,20 +150,23 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
                 ],
                 NFP=NFP,
             )
-        elif isinstance(xsection, PoincareSurface) and xsection.isgiven:
+        elif isinstance(xsection, PoincareSurface):
             # FIXME: include m=0 l!=0 modes
             axis = FourierRZCurve(
                 R_n=xsection.R_lmn[
                     np.where(
-                        PoincareSurface,
-                        (xsection.R_basis.modes[:, 0] == 0)
-                        & (xsection.R_basis.modes[:, 1] == 0),
+                        np.logical_and(
+                            (xsection.R_basis.modes[:, 0] == 0),
+                            (xsection.R_basis.modes[:, 1] == 0),
+                        )
                     )
                 ].sum(),
                 Z_n=xsection.Z_lmn[
                     np.where(
-                        (xsection.Z_basis.modes[:, 0] == 0)
-                        & (xsection.Z_basis.modes[:, 1] == 0)
+                        np.logical_and(
+                            (xsection.Z_basis.modes[:, 0] == 0),
+                            (xsection.Z_basis.modes[:, 1] == 0),
+                        )
                     )
                 ].sum(),
                 modes_R=[0],
@@ -175,7 +178,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
     return axis
 
 
-def parse_section(xsection, sym=True):
+def parse_section(xsection=None, sym=True):
     """Parse section input into PoincareSurface object.
 
     Parameters
@@ -194,14 +197,12 @@ def parse_section(xsection, sym=True):
     """
     if isinstance(xsection, PoincareSurface):
         _xsection = xsection
-        _xsection.isgiven = True
     elif isinstance(xsection, (np.ndarray, jnp.ndarray)):
         # This is temporary, until we have a proper PoincareSurface constructor
         # from input file
         raise NotImplementedError("PoincareSurface from input file not implemented")
     else:
         _xsection = PoincareSurface(sym=sym)
-        _xsection.isgiven = False
     return _xsection
 
 

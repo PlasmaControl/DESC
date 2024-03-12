@@ -1095,21 +1095,6 @@ class PoincareSurface(ZernikeRZToroidalSection):
     def L_lmn(self, L_lmn):
         self._L_lmn = L_lmn
 
-    @property
-    def isgiven(self):
-        """bool: Cross-section is given as input or not."""
-        # True: Cross-section is given as input
-        # False: Cross-section is not given as input
-        try:
-            return self._isgiven
-        except AttributeError:
-            self._isgiven = False
-            return self._isgiven
-
-    @isgiven.setter
-    def isgiven(self, isgiven):
-        self._isgiven = isgiven
-
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""
         assert (

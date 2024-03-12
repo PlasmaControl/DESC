@@ -228,16 +228,21 @@ class Equilibrium(IOAble, Optimizable):
         self._R_sym = "cos" if self.sym else False
         self._Z_sym = "sin" if self.sym else False
 
-        # surface
-        self._surface = parse_surface(
-            surface, self.NFP, self.sym, self.spectral_indexing
-        )
-
-        # magnetic axis
-        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface, xsection)
-
-        # cross section
-        self._xsection = parse_section(xsection, self.sym)
+        # Parse surface, magnetic axis and cross-section
+        if (surface is not None or axis is not None) and xsection is None:
+            self._surface = parse_surface(
+                surface, self.NFP, self.sym, self.spectral_indexing
+            )
+            self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
+            self._xsection = parse_section(sym=self.sym)
+        elif xsection is not None and surface is None:
+            self._xsection = parse_section(xsection, self.sym)
+            self._surface = parse_surface(
+                surface, self.NFP, self.sym, self.spectral_indexing
+            )
+            self._axis = parse_axis(axis, self.NFP, self.sym, xsection=self.xsection)
+        else:
+            raise ValueError("Must specify either surface, axis or xsection")
 
         # resolution
         _assert_nonnegint(L, "L")
@@ -376,6 +381,11 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             "Surface and Equilibrium must have the same symmetry",
         )
+        errorif(
+            self.sym != self.xsection.sym,
+            ValueError,
+            "Cross-section and Equilibrium must have the same symmetry",
+        )
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
@@ -386,12 +396,14 @@ class Equilibrium(IOAble, Optimizable):
             self.Z_lmn = kwargs.pop("Z_lmn")
             self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
         else:
-            self.set_initial_guess(ensure_nested=ensure_nested)
-            if not self.xsection.isgiven:
+            if xsection is None:
                 # For none Poincare BC problems, we need to set the xsection
                 # from the initial guess.
+                self.set_initial_guess(ensure_nested=ensure_nested, lcfs_surface=True)
                 self._xsection = self.get_poincare_xsection_at()
-                self._xsection.isgiven = False
+            else:
+                self.set_initial_guess(ensure_nested=ensure_nested, lcfs_surface=False)
+                self._surface = self.get_surface_at(rho=1.0)
         if check_orientation:
             ensure_positive_jacobian(self)
         if kwargs.get("check_kwargs", True):
@@ -419,7 +431,6 @@ class Equilibrium(IOAble, Optimizable):
         if self._xsection is None:
             # eq.xsection property was added with Poincare BC support
             self._xsection = self.get_poincare_xsection_at()
-            self._xsection.isgiven = False
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
@@ -465,7 +476,7 @@ class Equilibrium(IOAble, Optimizable):
             )
         )
 
-    def set_initial_guess(self, *args, ensure_nested=True):
+    def set_initial_guess(self, *args, ensure_nested=True, lcfs_surface=True):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
         Parameters
@@ -526,7 +537,9 @@ class Equilibrium(IOAble, Optimizable):
         >>> equil.set_initial_guess(nodes, R, Z, lambda)
 
         """
-        set_initial_guess(self, *args, ensure_nested=ensure_nested)
+        set_initial_guess(
+            self, *args, ensure_nested=ensure_nested, lcfs_surface=lcfs_surface
+        )
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""
@@ -751,10 +764,6 @@ class Equilibrium(IOAble, Optimizable):
             spectral_indexing=Lp_basis.spectral_indexing,
             sym=self.sym,
         )
-        try:
-            xsection.isgiven = True if self.xsection.isgiven else False
-        except AttributeError:
-            xsection.isgiven = False
 
         return xsection
 
@@ -1976,7 +1985,6 @@ class Equilibrium(IOAble, Optimizable):
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
         eq.xsection = eq.get_poincare_xsection_at()
-        eq.xsection.isgiven = False
 
         return eq
 

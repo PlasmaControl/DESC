@@ -20,7 +20,9 @@ from desc.transform import Transform
 from desc.utils import copy_coeffs, warnif
 
 
-def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: simplify
+def set_initial_guess(  # noqa: C901 - FIXME: simplify
+    eq, *args, ensure_nested=True, lcfs_surface=True
+):
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
     Parameters
@@ -87,7 +89,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
             "set_initial_guess should be called with 4 or fewer arguments."
         )
     if nargs == 0 or nargs == 1 and args[0] is None:
-        if hasattr(eq, "_surface") and not eq.xsection.isgiven:
+        if hasattr(eq, "_surface") and lcfs_surface:
             # use whatever surface is already assigned
             if hasattr(eq, "_axis"):
                 axisR = np.array([eq._axis.R_basis.modes[:, -1], eq._axis.R_n]).T
@@ -110,7 +112,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: sim
                 axisZ,
                 coord,
             )
-        elif hasattr(eq, "_xsection") and eq.xsection.isgiven:
+        elif hasattr(eq, "_xsection") and not lcfs_surface:
             eq.R_lmn = _initial_guess_surface(
                 eq.R_basis,
                 eq.Rp_lmn,

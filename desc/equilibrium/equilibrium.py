@@ -228,21 +228,24 @@ class Equilibrium(IOAble, Optimizable):
         self._R_sym = "cos" if self.sym else False
         self._Z_sym = "sin" if self.sym else False
 
+        errorif(
+            surface is not None and xsection is not None,
+            ValueError,
+            "Cannot specify both surface and xsection",
+        )
         # Parse surface, magnetic axis and cross-section
-        if (surface is not None or axis is not None) and xsection is None:
-            self._surface = parse_surface(
-                surface, self.NFP, self.sym, self.spectral_indexing
-            )
-            self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
-            self._xsection = parse_section(sym=self.sym)
-        elif xsection is not None and surface is None:
+        if xsection is not None and surface is None:
             self._xsection = parse_section(xsection, self.sym)
             self._surface = parse_surface(
                 surface, self.NFP, self.sym, self.spectral_indexing
             )
             self._axis = parse_axis(axis, self.NFP, self.sym, xsection=self.xsection)
         else:
-            raise ValueError("Must specify either surface, axis or xsection")
+            self._surface = parse_surface(
+                surface, self.NFP, self.sym, self.spectral_indexing
+            )
+            self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
+            self._xsection = parse_section(sym=self.sym)
 
         # resolution
         _assert_nonnegint(L, "L")

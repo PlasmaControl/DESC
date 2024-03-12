@@ -371,7 +371,7 @@ class TestProfiles:
         np.testing.assert_allclose(mp(x), 0)
         np.testing.assert_allclose(zp(x), 0)
 
-    @pytest.mark.unit
+    @pytest.mark.regression
     def test_solve_with_combined(self):
         """Make sure combined profiles work correctly for solving equilibrium.
 

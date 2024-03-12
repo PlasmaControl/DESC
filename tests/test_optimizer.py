@@ -319,7 +319,7 @@ def test_no_iterations():
     np.testing.assert_allclose(x0, out2["x"])
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
 @pytest.mark.optimize
 def test_overstepping():
@@ -406,7 +406,7 @@ def test_overstepping():
     np.testing.assert_allclose(x0, x1, rtol=1e-14, atol=1e-14)
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
 @pytest.mark.solve
 def test_maxiter_1_and_0_solve():
@@ -435,7 +435,7 @@ def test_maxiter_1_and_0_solve():
         assert result["nit"] == 0
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.slow
 @pytest.mark.solve
 def test_scipy_fail_message():
@@ -676,7 +676,7 @@ def test_scipy_constrained_solve():
     assert eq2.is_nested()
 
 
-@pytest.mark.unit
+@pytest.mark.regression
 @pytest.mark.solve
 def test_solve_with_x_scale():
     """Make sure we can manually specify x_scale when solving/optimizing."""

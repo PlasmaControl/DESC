@@ -5,7 +5,7 @@ import warnings
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
@@ -121,10 +121,27 @@ class QuasisymmetryBoozer(_Objective):
         else:
             grid = self._grid
 
-        self._data_keys = ["|B|_mn_B"]
+        errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
+        errorif(
+            grid.num_rho != 1,
+            ValueError,
+            "QuasisymmetryBoozer grid must be on a single surface. "
+            "To target multiple surfaces, use multiple objectives.",
+        )
+        warnif(
+            grid.num_theta < 2 * eq.M,
+            RuntimeWarning,
+            "QuasisymmetryBoozer objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "QuasisymmetryBoozer objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
-        assert grid.sym is False
-        assert grid.num_rho == 1
+        self._data_keys = ["|B|_mn_B"]
 
         timer = Timer()
         if verbose > 0:
@@ -317,6 +334,19 @@ class QuasisymmetryTwoTerm(_Objective):
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
+
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            RuntimeWarning,
+            "QuasisymmetryTwoTerm objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "QuasisymmetryTwoTerm objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_C"]

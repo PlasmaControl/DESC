@@ -340,6 +340,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         title_fontsize: integer, font size of the title
         xlabel_fontsize: integer, font size of the x axis label
+        color: str or tuple, color to use for scatter plot
+        marker: str, marker to use for scatter plot
+
 
     Returns
     -------
@@ -377,19 +380,33 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     fig, ax = _format_ax(ax, rows=1, cols=3, figsize=kwargs.pop("figsize", None))
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    marker = kwargs.pop("marker", "o")
+    color = kwargs.pop("color", "b")
 
     assert (
         len(kwargs) == 0
     ), f"plot_coefficients got unexpected keyword argument: {kwargs.keys()}"
 
     ax[0, 0].semilogy(
-        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1), np.abs(eq.R_lmn), "bo"
+        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.R_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
     ax[0, 1].semilogy(
-        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1), np.abs(eq.Z_lmn), "bo"
+        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.Z_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
     ax[0, 2].semilogy(
-        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1), np.abs(eq.L_lmn), "bo"
+        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1),
+        np.abs(eq.L_lmn),
+        c=color,
+        marker=marker,
+        ls="",
     )
 
     ax[0, 0].set_xlabel(xlabel, fontsize=xlabel_fontsize)
@@ -1685,7 +1702,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     phi = (1 if eq.N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi + 1)  # +1 to include pi and 2pi
+        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
     phi = np.atleast_1d(phi)
     nphi = len(phi)
     # don't plot axis for FourierRZToroidalSurface, since it's not defined.
@@ -1708,15 +1725,15 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     )
 
     if colors is None:
-        colors = _get_cmap(cmap, nz)(np.linspace(0, 1, nz))
+        colors = _get_cmap(cmap)((phi * eq.NFP / (2 * np.pi)) % 1)
     if lw is None:
         lw = 1
     if isinstance(lw, int):
-        lw = [lw for i in range(nz - 1)]
+        lw = [lw for _ in range(nz)]
     if ls is None:
         ls = "-"
     if isinstance(ls, str):
-        ls = [ls for i in range(nz - 1)]
+        ls = [ls for _ in range(nz)]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -1726,7 +1743,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     fig, ax = _format_ax(ax, figsize=figsize, equal=True)
 
-    for i in range(nphi - 1):
+    for i in range(nphi):
         ax.plot(
             R[:, -1, i],
             Z[:, -1, i],
@@ -1757,7 +1774,9 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     return fig, ax
 
 
-def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kwargs):
+def plot_boundaries(
+    eqs, labels=None, phi=None, plot_axis=True, ax=None, return_data=False, **kwargs
+):
     """Plot stellarator boundaries at multiple toroidal coordinates.
 
     Parameters
@@ -1770,6 +1789,8 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         Values of phi to plot boundary surface at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
+    plot_axis : bool
+        Whether to plot the magnetic axis locations. Default is True.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -1791,6 +1812,8 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         * ``color``: list of colors to use for each Equilibrium
         * ``ls``: list of str, line styles to use for each Equilibrium
         * ``lw``: list of floats, line widths to use for each Equilibrium
+        * ``marker``: str, marker style to use for the axis plotted points
+        * ``size``: float, marker size to use for the axis plotted points
 
     Returns
     -------
@@ -1820,6 +1843,8 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     lw = kwargs.pop("lw", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    marker = kwargs.pop("marker", "x")
+    size = kwargs.pop("size", 36)
 
     phi = (1 if eqs[-1].N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
@@ -1849,7 +1874,11 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     plot_data["Z"] = []
 
     for i in range(neq):
-        grid_kwargs = {"NFP": eqs[i].NFP, "theta": 100, "zeta": phi}
+        # don't plot axis for FourierRZToroidalSurface, since it's not defined.
+        plot_axis_i = plot_axis and eqs[i].L > 0
+        rho = np.array([0.0, 1.0]) if plot_axis_i else np.array([1.0])
+
+        grid_kwargs = {"NFP": eqs[i].NFP, "theta": 100, "zeta": phi, "rho": rho}
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
@@ -1876,6 +1905,11 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
             (line,) = ax.plot(
                 R[:, -1, j], Z[:, -1, j], color=colors[i], linestyle=ls[i], lw=lw[i]
             )
+            if rho[0] == 0:
+                ax.scatter(
+                    R[0, 0, j], Z[0, 0, j], color=colors[i], marker=marker, s=size
+                )
+
             if j == 0:
                 line.set_label(labels[i])
 

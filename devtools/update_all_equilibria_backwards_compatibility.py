@@ -19,7 +19,26 @@ import os
 
 from desc.io import load
 
+os.chdir("../desc/examples")
 pwd = os.getcwd()
+print(f"Updating files in {pwd}")
+
+for fname in glob.glob(pwd + "/*.h5"):
+    foutputname = fname.split(".")[0].split("/")[-1]
+    print(f"\nUpdating the output file {foutputname} \n")
+    # load old output file
+    eqfam = load(fname)
+    print(eqfam)
+    for i, eq in enumerate(eqfam):
+        print(eq)
+        # update the output file
+        eq._set_up()
+    # save new output file
+    eqfam.save(fname)
+
+os.chdir("../../tests/inputs")
+pwd = os.getcwd()
+print(f"\nUpdating files in {pwd}")
 
 for fname in glob.glob(pwd + "/*.h5"):
     foutputname = fname.split(".")[0].split("/")[-1]

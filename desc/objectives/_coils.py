@@ -2,7 +2,14 @@ import numbers
 
 import numpy as np
 
-from desc.backend import jnp, tree_flatten, tree_map
+from desc.backend import (
+    jnp,
+    tree_flatten,
+    tree_leaves,
+    tree_map,
+    tree_structure,
+    tree_unflatten,
+)
 from desc.compute import get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
@@ -82,7 +89,7 @@ class _CoilObjective(_Objective):
             name=name,
         )
 
-    def build(self, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):  # noqa:C901
         """Build constant arrays.
 
         Parameters
@@ -96,17 +103,33 @@ class _CoilObjective(_Objective):
         # local import to avoid circular import
         from desc.coils import CoilSet, MixedCoilSet, _Coil
 
+        self._dim_f = 0
+
+        def get_dim_f(coilset):
+            """Turn a coilset into nested lists."""
+            if isinstance(coilset, list):
+                [get_dim_f(x) for x in coilset]
+            elif isinstance(coilset, MixedCoilSet):
+                [get_dim_f(x) for x in coilset]
+            elif isinstance(coilset, CoilSet):
+                get_dim_f(coilset.coils)
+            elif isinstance(coilset, LinearGrid):
+                self._dim_f += coilset.num_zeta
+
+        def to_list(coilset):
+            """Turn a coilset into nested lists."""
+            if isinstance(coilset, list):
+                return [to_list(x) for x in coilset]
+            if isinstance(coilset, MixedCoilSet):
+                return [to_list(x) for x in coilset]
+            if isinstance(coilset, CoilSet):
+                # use the same grid/transform for CoilSet
+                return to_list(coilset.coils[0])
+            else:
+                return coilset
+
         is_mixed_coils = isinstance(self.things[0], MixedCoilSet)
-        is_coil_set = isinstance(self.things[0], CoilSet)
-
-        coils = tree_flatten(
-            self.things[0],
-            is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
-        )[0]
-
-        # if using single coil, make coils and grid a list so they can be
-        # used with tree_map
-        coils = [coils[0]] if not is_coil_set else coils
+        is_single_coil = lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
 
         # check type
         if isinstance(self._grid, numbers.Integral):
@@ -117,17 +140,25 @@ class _CoilObjective(_Objective):
                     N=2 * x.N + 5, NFP=getattr(x, "NFP", 1), endpoint=False
                 ),
                 self.things[0],
-                is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
+                is_leaf=lambda x: is_single_coil(x),
             )
-            print(self._grid)
-
-        if not isinstance(self._grid, (tuple, list)):
-            self._grid = [self._grid]
-
-        if np.any([grid.num_rho > 1 or grid.num_theta > 1 for grid in self._grid]):
-            raise ValueError("Only use toroidal resolution for coil grids.")
-
-        self._dim_f = np.sum([grid.num_zeta for grid in self._grid])
+        elif isinstance(self._grid, LinearGrid):
+            treedef = tree_structure(
+                self.things[0],
+                is_leaf=lambda x: is_single_coil(x),
+            )
+            leaves = tree_leaves(self.things[0], is_leaf=lambda x: is_single_coil(x))
+            self._grid = [self._grid] * len(leaves)
+            self._grid = tree_unflatten(treedef, self._grid)
+        else:
+            flattened_grid = tree_flatten(
+                self._grid, is_leaf=lambda x: isinstance(x, LinearGrid)
+            )[0]
+            treedef = tree_structure(
+                self.things[0],
+                is_leaf=lambda x: is_single_coil(x),
+            )
+            self._grid = tree_unflatten(treedef, flattened_grid)
 
         timer = Timer()
         if verbose > 0:
@@ -138,8 +169,19 @@ class _CoilObjective(_Objective):
             lambda x, y: get_transforms(self._data_keys, obj=x, grid=y),
             self.things[0],
             self._grid,
-            is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, MixedCoilSet),
+            is_leaf=lambda x: is_single_coil(x),
         )
+
+        get_dim_f(self._grid)
+        self._grid = to_list(self._grid)
+        transforms = to_list(transforms)
+
+        if not isinstance(self._grid, (tuple, list)):
+            self._grid = [self._grid]
+            transforms = [transforms]
+
+        if np.any([grid.num_rho > 1 or grid.num_theta > 1 for grid in self._grid]):
+            raise ValueError("Only use toroidal resolution for coil grids.")
 
         # tree map always returns a list so take first transform and grid
         # for when we are only using a single coil
@@ -153,8 +195,12 @@ class _CoilObjective(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
+        flattened_coils = tree_flatten(
+            self.things[0],
+            is_leaf=lambda x: is_single_coil(x),
+        )[0]
         if self._normalize:
-            self._scales = compute_scaling_factors(coils[0])
+            self._scales = compute_scaling_factors(flattened_coils[0])
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -269,14 +315,24 @@ class CoilLength(_CoilObjective):
             Level of output.
 
         """
-        from desc.coils import CoilSet
+        from desc.coils import CoilSet, _Coil
 
         super().build(use_jit=use_jit, verbose=verbose)
 
         if self._normalize:
             self._normalization = self._scales["a"]
 
-        self._dim_f = len(self._coils.coils) if isinstance(self._coils, CoilSet) else 1
+        # TODO: repeated code but maybe it's fine
+        flattened_coils = tree_flatten(
+            self._coils,
+            is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
+        )[0]
+        flattened_coils = (
+            [flattened_coils[0]]
+            if not isinstance(self._coils, CoilSet)
+            else flattened_coils
+        )
+        self._dim_f = len(flattened_coils)
 
     def compute(self, params, constants=None):
         """Compute coil length.

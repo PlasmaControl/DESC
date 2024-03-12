@@ -80,7 +80,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.tree_util import (
         register_pytree_node,
         tree_flatten,
+        tree_leaves,
         tree_map,
+        tree_structure,
         tree_unflatten,
     )
 
@@ -400,6 +402,14 @@ else:  # pragma: no cover
 
     def tree_map(*args, **kwargs):
         """Map pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_structure(*args, **kwargs):
+        """Get structure of pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_leaves(*args, **kwargs):
+        """Get leaves of pytree for numpy backend."""
         raise NotImplementedError
 
     def register_pytree_node(foo, *args):

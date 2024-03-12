@@ -584,15 +584,19 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=1)
-        coils = CoilSet.linspaced_linear(coil, n=4)
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
-        mixed_coils_grid = [LinearGrid(N=5)] * len(mixed_coils.coils)
+        coils = CoilSet.linspaced_linear(coil, n=2)
+        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
         nested_coils = MixedCoilSet(coils, coils)
 
-        test(coil)
+        nested_grids = [
+            [LinearGrid(N=5), LinearGrid(N=5)],
+            [LinearGrid(N=5), LinearGrid(N=5)],
+        ]
+
+        test(coil, grid=LinearGrid(N=5))
         test(coils)
-        test(mixed_coils, grid=mixed_coils_grid)
-        test(nested_coils)
+        test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
+        test(nested_coils, grid=nested_grids)
 
     @pytest.mark.unit
     def test_coil_curvature(self):
@@ -606,15 +610,19 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil()
-        coils = CoilSet.linspaced_linear(coil, n=4)
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
-        mixed_coils_grid = [LinearGrid(N=5)] * len(mixed_coils.coils)
+        coils = CoilSet.linspaced_linear(coil, n=2)
+        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
         nested_coils = MixedCoilSet(coils, coils)
 
-        test(coil)
+        nested_grids = [
+            [LinearGrid(N=5), LinearGrid(N=5)],
+            [LinearGrid(N=5), LinearGrid(N=5)],
+        ]
+
+        test(coil, grid=LinearGrid(N=5))
         test(coils)
-        test(mixed_coils, grid=mixed_coils_grid)
-        test(nested_coils)
+        test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
+        test(nested_coils, grid=nested_grids)
 
     @pytest.mark.unit
     def test_coil_torsion(self):
@@ -628,15 +636,19 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil()
-        coils = CoilSet.linspaced_linear(coil, n=4)
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=4)
-        mixed_coils_grid = [LinearGrid(N=5)] * len(mixed_coils.coils)
+        coils = CoilSet.linspaced_linear(coil, n=2)
+        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2)
         nested_coils = MixedCoilSet(coils, coils)
 
-        test(coil)
+        nested_grids = [
+            [LinearGrid(N=5), LinearGrid(N=5)],
+            [LinearGrid(N=5), LinearGrid(N=5)],
+        ]
+
+        test(coil, grid=LinearGrid(N=5))
         test(coils)
-        test(mixed_coils, grid=mixed_coils_grid)
-        test(nested_coils)
+        test(mixed_coils, grid=[LinearGrid(N=5)] * len(mixed_coils.coils))
+        test(nested_coils, grid=nested_grids)
 
 
 @pytest.mark.unit

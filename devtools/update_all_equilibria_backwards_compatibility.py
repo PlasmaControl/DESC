@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Run this script to update all the DESC equilibria in desc/examples.
+Run this script to update all the DESC equilibria in desc/examples
+and tests/inputs.
 
 If you added a new IO attribute to the DESC equilibrium, this code
 will update output files to include the new attribute. Please make sure

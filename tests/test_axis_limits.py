@@ -389,7 +389,6 @@ def _reverse_mode_unsafe_names():
             unsafe_names.append(name)
 
     unsafe_names = sorted(unsafe_names)
-    print("Unsafe names: ", unsafe_names)
     return unsafe_names
 
 

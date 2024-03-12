@@ -16,7 +16,6 @@ from desc.vmec import VMECIO
 @pytest.fixture(scope="class", autouse=True)
 def clear_caches_before():
     """Automatically run before each test to clear caches and reduce OOM issues."""
-    jax.clear_backends()
     jax.clear_caches()
 
 

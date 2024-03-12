@@ -304,7 +304,7 @@ def _make_RZ_cons_order_rho(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         if not bounds:
@@ -327,7 +327,7 @@ def _make_RZ_cons_order_rho(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         if not bounds:
@@ -351,7 +351,7 @@ def _make_RZ_cons_order_rho(  # noqa: C901 - FIXME - simplify
             target = NAEcoeff * r
             for k in range(1, int((desc_eq.L + 1) / 2) + 1):
                 modes.append([2 * k - 1, -1, n])
-                sum_weights.append([(-1) ** k * k])
+                sum_weights.append((-1) ** k * k)
             modes = np.atleast_2d(modes)
             sum_weights = -np.atleast_1d(sum_weights)
             if not bounds:
@@ -374,7 +374,7 @@ def _make_RZ_cons_order_rho(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         if not bounds:
@@ -397,7 +397,7 @@ def _make_RZ_cons_order_rho(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
-            sum_weights.append([(-1) ** k * k])
+            sum_weights.append((-1) ** k * k)
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         if not bounds:
@@ -421,7 +421,7 @@ def _make_RZ_cons_order_rho(  # noqa: C901 - FIXME - simplify
             target = NAEcoeff * r
             for k in range(1, int((desc_eq.L + 1) / 2) + 1):
                 modes.append([2 * k - 1, 1, n])
-                sum_weights.append([(-1) ** k * k])
+                sum_weights.append((-1) ** k * k)
             modes = np.atleast_2d(modes)
             sum_weights = -np.atleast_1d(sum_weights)
             if not bounds:

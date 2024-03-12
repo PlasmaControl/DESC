@@ -154,6 +154,7 @@ Objective Functions
 
     desc.objectives.AspectRatio
     desc.objectives.BootstrapRedlConsistency
+    desc.objectives.BoundaryError
     desc.objectives.BScaleLength
     desc.objectives.CurrentDensity
     desc.objectives.Elongation
@@ -201,6 +202,7 @@ Objective Functions
     desc.objectives.RotationalTransform
     desc.objectives.Shear
     desc.objectives.ToroidalCurrent
+    desc.objectives.VacuumBoundaryError
     desc.objectives.Volume
 
 Optimize

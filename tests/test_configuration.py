@@ -172,6 +172,7 @@ class TestConstructor:
                 [1, -1, 0, 0.2, -1],
             ]
         )
+        inputs.pop("surface")
 
         with pytest.raises(NotImplementedError):
             eq = Equilibrium(**inputs)

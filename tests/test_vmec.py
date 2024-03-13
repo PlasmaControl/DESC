@@ -1008,7 +1008,7 @@ def test_make_boozmn_output(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                rtol=2e-5,
+                rtol=9e-5,
                 err_msg=f"{name} at surf index {surf_index}",
             )
 

@@ -85,18 +85,18 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         Parameters
         ----------
-            field (MagneticField or callable or ndarray): magnetic field to fit
-                if callable, must accept (num_nodes,3) array of rpz coords as argument
-                    and output (num_nodes,3) as the B field in cylindrical rpz basis.
-                if ndarray, must be an ndarray of the magnetic field in rpz,
-                    of shape (num_nodes,3) with the columns being (B_R, B_phi, B_Z)
-            coords (ndarray): shape (num_nodes,3) of R,phi,Z points to fit field at
-            max_m (int): maximum m to use for Dommaschk Potentials
-            max_l (int): maximum l to use for Dommaschk Potentials
-            sym (bool): if field is stellarator symmetric or not.
-                if True, only stellarator-symmetric modes will
-                be included in the fitting
-            verbose (int): verbosity level of fitting routine, > 0 prints residuals
+        field (MagneticField or callable or ndarray): magnetic field to fit
+            if callable, must accept (num_nodes,3) array of rpz coords as argument
+                and output (num_nodes,3) as the B field in cylindrical rpz basis.
+            if ndarray, must be an ndarray of the magnetic field in rpz,
+                of shape (num_nodes,3) with the columns being (B_R, B_phi, B_Z)
+        coords (ndarray): shape (num_nodes,3) of R,phi,Z points to fit field at
+        max_m (int): maximum m to use for Dommaschk Potentials
+        max_l (int): maximum l to use for Dommaschk Potentials
+        sym (bool): if field is stellarator symmetric or not.
+            if True, only stellarator-symmetric modes will
+            be included in the fitting
+        verbose (int): verbosity level of fitting routine, > 0 prints residuals
         """
         # We seek c in  Ac = b
         # A will be the BR, Bphi and BZ from each individual

@@ -680,6 +680,9 @@ def test_solve_with_x_scale():
                 + eq.Za_n.size
                 + eq.Rb_lmn.size
                 + eq.Zb_lmn.size
+                + eq.Rp_lmn.size
+                + eq.Zp_lmn.size
+                + eq.Lp_lmn.size
                 + 1
             ),
         ]

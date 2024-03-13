@@ -120,9 +120,9 @@ class _CoilObjective(_Objective):
             """Turn a MixedCoilSet container into a list of what it's containing."""
             if isinstance(coilset, list):
                 return [to_list(x) for x in coilset]
-            if isinstance(coilset, MixedCoilSet):
+            elif isinstance(coilset, MixedCoilSet):
                 return [to_list(x) for x in coilset]
-            if isinstance(coilset, CoilSet):
+            elif isinstance(coilset, CoilSet):
                 # use the same grid/transform for CoilSet
                 return to_list(coilset.coils[0])
             else:

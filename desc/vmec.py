@@ -20,6 +20,7 @@ from desc.objectives import (
     ObjectiveFunction,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
+    get_fixed_xsection_constraints,
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
@@ -155,6 +156,9 @@ class VMECIO:
         nax = np.arange(-nax, nax + 1)
         inputs["axis"] = np.vstack([nax, rax, zax]).T
 
+        # Cross-section
+        inputs["xsection"] = None
+
         file.close()
 
         # initialize Equilibrium
@@ -173,9 +177,11 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        constraints = get_fixed_axis_constraints(
-            profiles=False, eq=eq
-        ) + get_fixed_boundary_constraints(eq=eq)
+        constraints = (
+            get_fixed_axis_constraints(profiles=False, eq=eq)
+            + get_fixed_boundary_constraints(eq=eq)
+            + get_fixed_xsection_constraints(eq=eq)
+        )
         constraints = maybe_add_self_consistency(eq, constraints)
         objective = ObjectiveFunction(constraints)
         objective.build(verbose=0)

@@ -47,7 +47,6 @@ class TestConstructor:
             iota=iota,
             surface=surface,
             axis=axis,
-            xsection=xsection,
             N=1,
             sym=False,
         )
@@ -57,7 +56,6 @@ class TestConstructor:
         assert eq.spectral_indexing == "ansi"
         assert eq.NFP == 2
         assert eq.axis.NFP == 2
-        assert eq.xsection.eq(xsection)
 
         np.testing.assert_allclose(axis.R_n, eq.Ra_n)
         np.testing.assert_allclose(axis.Z_n, eq.Za_n)
@@ -70,6 +68,7 @@ class TestConstructor:
 
         eq3 = Equilibrium(xsection=xsection, axis=None)
         np.testing.assert_allclose(eq3.axis.R_n, [10])
+        assert eq3.xsection.equiv(xsection)
 
     @pytest.mark.unit
     def test_dict(self):

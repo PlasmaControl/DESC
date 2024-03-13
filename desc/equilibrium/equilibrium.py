@@ -224,7 +224,12 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"sym should be one of True, False, None, got {sym}",
         )
-        self._sym = setdefault(sym, getattr(surface, "sym", False))
+        if surface is not None:
+            self._sym = setdefault(sym, getattr(surface, "sym", False))
+        elif xsection is not None:
+            self._sym = setdefault(sym, getattr(xsection, "sym", False))
+        else:
+            self._sym = setdefault(sym, False)
         self._R_sym = "cos" if self.sym else False
         self._Z_sym = "sin" if self.sym else False
 

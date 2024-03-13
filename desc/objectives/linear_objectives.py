@@ -433,7 +433,6 @@ class AxisRSelfConsistency(_Objective):
         eq,
         name="axis R self consistency",
     ):
-
         super().__init__(
             things=eq,
             target=0,
@@ -520,7 +519,6 @@ class AxisZSelfConsistency(_Objective):
         eq,
         name="axis Z self consistency",
     ):
-
         super().__init__(
             things=eq,
             target=0,
@@ -992,7 +990,6 @@ class FixThetaSFL(_Objective):
     _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
     def __init__(self, eq, name="Theta SFL"):
-
         super().__init__(things=eq, target=0, weight=1, name=name)
 
     def build(self, use_jit=False, verbose=1):
@@ -1756,7 +1753,6 @@ class FixSumModesR(_FixedObjective):
         modes=True,
         name="Fix Sum Modes R",
     ):
-
         errorif(
             modes is None or modes is False,
             ValueError,
@@ -3433,3 +3429,393 @@ class FixCurveRotation(_FixedObjective):
 
         """
         return params["rotmat"]
+
+
+class FixNearAxisR(_FixedObjective):
+    """Fixes an equilibrium's near-axis behavior in R to specified order.
+
+        NOTE: does not also fix the axis R , for that
+        use the FixAxisR objectives.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    nae_eq : Qsc, optonal
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
+    order : int
+        order (in rho) of near-axis behavior to constrain
+        NOTE: if order=0 is specified, no constraints will be given,
+        as those are given by the FixAxisR objectives.
+    N : int
+        max toroidal resolution to constrain.
+        If `None`, defaults to equilibrium's toroidal resolution
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Unused for this objective as these will be
+        automatically set according to the ``nae_eq``
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+        Unused for this objective, as target will be automatically
+        set according to the ``nae_eq``
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        Unused by this objective
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _target_arg = "R_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
+    _units = "(m)"
+    _print_value_fmt = "Fixed-Near-Axis R Behavior error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        nae_eq=None,
+        order=1,
+        N=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="Fix Near Axis R Behavior",
+    ):
+        self._nae_eq = nae_eq
+        self._order = order
+        self._N = N
+
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from .getters import _get_NAE_constraints
+
+        eq = self.things[0]
+        cons = _get_NAE_constraints(
+            eq,
+            self._nae_eq,
+            order=self._order,
+            N=self._N,
+        )
+        for con in cons:
+            if con._target_arg == "R_lmn":
+                con.build(use_jit=use_jit, verbose=0)
+        self._A = np.stack([con._A for con in cons if con._target_arg == "R_lmn"])
+        self._target = np.concatenate(
+            [con.target for con in cons if con._target_arg == "R_lmn"]
+        ).squeeze()
+
+        self._dim_f = self.target.size
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed near axis R behavior errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed near axis behavior errors.
+
+        """
+        f = jnp.dot(self._A, params["R_lmn"]).squeeze()
+
+        return f
+
+
+class FixNearAxisZ(_FixedObjective):
+    """Fixes an equilibrium's near-axis behavior in Z to specified order.
+
+        NOTE: does not also fix the axis Z , for that
+        use the FixAxisZ objectives.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    nae_eq : Qsc, optonal
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
+    order : int
+        order (in rho) of near-axis behavior to constrain
+        NOTE: if order=0 is specified, no constraints will be given,
+        as those are given by the FixAxisR objectives.
+    N : int
+        max toroidal resolution to constrain.
+        If `None`, defaults to equilibrium's toroidal resolution
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Unused for this objective as these will be
+        automatically set according to the ``nae_eq``
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+        Unused for this objective, as target will be automatically
+        set according to the ``nae_eq``
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        Unused by this objective
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _target_arg = "Z_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
+    _units = "(m)"
+    _print_value_fmt = "Fixed-Near-Axis Z Behavior error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        nae_eq=None,
+        order=1,
+        N=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="Fix Near Axis Z Behavior",
+    ):
+        self._nae_eq = nae_eq
+        self._order = order
+        self._N = N
+
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from .getters import _get_NAE_constraints
+
+        eq = self.things[0]
+        cons = _get_NAE_constraints(
+            eq,
+            self._nae_eq,
+            order=self._order,
+            N=self._N,
+        )
+        for con in cons:
+            if con._target_arg == "Z_lmn":
+                con.build(use_jit=use_jit, verbose=0)
+        self._A = np.stack([con._A for con in cons if con._target_arg == "Z_lmn"])
+        self._target = np.concatenate(
+            [con.target for con in cons if con._target_arg == "Z_lmn"]
+        ).squeeze()
+
+        self._dim_f = self.target.size
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed near axis Z behavior errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed near axis behavior errors.
+
+        """
+        f = jnp.dot(self._A, params["Z_lmn"]).squeeze()
+
+        return f
+
+
+class FixNearAxisLambda(_FixedObjective):
+    """Fixes an equilibrium's near-axis behavior in lambda to specified order.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    nae_eq : Qsc, optonal
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
+    order : int
+        order (in rho) of near-axis lambda behavior to constrain
+    N : int
+        max toroidal resolution to constrain.
+        If `None`, defaults to equilibrium's toroidal resolution
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Unused for this objective as these will be
+        automatically set according to the ``nae_eq``
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+        Unused for this objective, as target will be automatically
+        set according to the ``nae_eq``
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        Unused by this objective
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _target_arg = "L_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
+    _units = "(dimensionless)"
+    _print_value_fmt = "Fixed-Near-Axis Lambda Behavior error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq,
+        nae_eq=None,
+        order=1,
+        N=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="Fix Near Axis Lambda Behavior",
+    ):
+        self._nae_eq = nae_eq
+        self._order = order
+        self._N = N
+        self._target_from_user = setdefault(bounds, target)
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from .getters import _get_NAE_constraints
+
+        eq = self.things[0]
+        cons = _get_NAE_constraints(
+            eq,
+            self._nae_eq,
+            order=self._order,
+            N=self._N,
+            fix_lambda=self._order,
+        )
+        for con in cons:
+            if con._target_arg == "L_lmn":
+                con.build(use_jit=use_jit, verbose=0)
+        self._A = np.vstack([con._A for con in cons if con._target_arg == "L_lmn"])
+        self._target = np.concatenate(
+            [con.target for con in cons if con._target_arg == "L_lmn"]
+        )
+
+        self._dim_f = self.target.size
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed near axis Lambda behavior errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed near axis Lambda behavior errors.
+
+        """
+        f = jnp.dot(self._A, params["L_lmn"]).squeeze()
+        return f

@@ -106,7 +106,7 @@ class _CoilObjective(_Objective):
         self._dim_f = 0
 
         def get_dim_f(coilset):
-            """Turn a coilset into nested lists."""
+            """Get dim_f."""
             if isinstance(coilset, list):
                 [get_dim_f(x) for x in coilset]
             elif isinstance(coilset, MixedCoilSet):
@@ -117,7 +117,7 @@ class _CoilObjective(_Objective):
                 self._dim_f += coilset.num_zeta
 
         def to_list(coilset):
-            """Turn a coilset into nested lists."""
+            """Turn a MixedCoilSet container into a list of what it's containing."""
             if isinstance(coilset, list):
                 return [to_list(x) for x in coilset]
             if isinstance(coilset, MixedCoilSet):
@@ -129,6 +129,8 @@ class _CoilObjective(_Objective):
                 return coilset
 
         is_single_coil = lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
+        # gives structure of coils, e.g. MixedCoilSet(coils, coils) would give a
+        # a structure of [[*, *], [*, *]] if n = 2 coils
         coil_structure = tree_structure(
             self.things[0],
             is_leaf=lambda x: is_single_coil(x),
@@ -137,7 +139,10 @@ class _CoilObjective(_Objective):
         # check type
         if isinstance(self._grid, numbers.Integral):
             self._grid = LinearGrid(N=self._grid, endpoint=False)
+        # all of these cases return a container MixedCoilSet that contains
+        # LinearGrids. i.e. MixedCoilSet.coils = list of LinearGrid
         if self._grid is None:
+            # map default grid to structure of inputted coils
             self._grid = tree_map(
                 lambda x: LinearGrid(
                     N=2 * x.N + 5, NFP=getattr(x, "NFP", 1), endpoint=False
@@ -146,10 +151,13 @@ class _CoilObjective(_Objective):
                 is_leaf=lambda x: is_single_coil(x),
             )
         elif isinstance(self._grid, LinearGrid):
+            # map inputted single LinearGrid to structure of inputted coils
             leaves = tree_leaves(self.things[0], is_leaf=lambda x: is_single_coil(x))
             self._grid = [self._grid] * len(leaves)
             self._grid = tree_unflatten(coil_structure, self._grid)
         else:
+            # this case covers an inputted list of grids that matches the size
+            # of the inputted coils. Can be a 1D list or nested list.
             flattened_grid = tree_flatten(
                 self._grid, is_leaf=lambda x: isinstance(x, LinearGrid)
             )[0]
@@ -168,6 +176,7 @@ class _CoilObjective(_Objective):
         )
 
         get_dim_f(self._grid)
+        # get only needed grids (1 per CoilSet)
         self._grid = to_list(self._grid)
         transforms = to_list(transforms)
 

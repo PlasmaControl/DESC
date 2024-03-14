@@ -2336,8 +2336,7 @@ def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    # TODO: pick a name
-    name="|B|_z constant rho alpha",
+    name="|B|_z|r,a",
     label="\\(partial_{\\zeta} |\\mathbf{B}|)_{\\rho, \\alpha}",
     units="T",
     units_long="Tesla",
@@ -2352,9 +2351,7 @@ def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
 def _B_mag_z_constant_rho_alpha(params, transforms, profiles, data, **kwargs):
     # ∂|B|/∂ζ (constant ρ and α) = ∂|B|/∂ζ (constant ρ and θ)
     #                            - ∂|B|/∂α (constant ρ and ζ) * ∂α/∂ζ (constant ρ and θ)
-    data["|B|_z constant rho alpha"] = (
-        data["|B|_z"] - data["|B|_alpha"] * data["alpha_z"]
-    )
+    data["|B|_z|r,a"] = data["|B|_z"] - data["|B|_alpha"] * data["alpha_z"]
     return data
 
 

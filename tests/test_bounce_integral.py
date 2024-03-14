@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+from interpax import Akima1DInterpolator
 
 from desc.backend import fori_loop, put, root_scalar
 from desc.compute.bounce_integral import (
@@ -81,6 +82,16 @@ def test_polyval():
         for k in range(poly.shape[2]):
             np.testing.assert_allclose(val[j, k], np.poly1d(poly[:, j, k])(x[j, k]))
 
+    y = np.arange(1, 6)
+    y = np.arange(y.prod()).reshape(*y)
+    x = np.arange(y.shape[-1])
+    a1d = Akima1DInterpolator(x, y, axis=-1)
+    primitive = polyint(a1d.c)
+    d = np.diff(x)
+    k = polyval(d.reshape(d.size, *np.ones(primitive.ndim - 2, dtype=int)), primitive)
+    primitive = primitive.at[-1, 1:].add(np.cumsum(k, axis=-1)[:-1])
+    np.testing.assert_allclose(primitive, a1d.antiderivative().c)
+
 
 # TODO: finish up details if deemed useful
 def bounce_point(
@@ -99,8 +110,8 @@ def bounce_point(
 
     def jac(zeta):
         grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
-        data = eq.compute(["|B|_z constant rho alpha"], grid=grid, data=data)
-        return data["|B|_z constant rho alpha"]
+        data = eq.compute(["|B|_z|r,a"], grid=grid, data=data)
+        return data["|B|_z|r,a"]
 
     # Compute |B| - lambda on a dense grid.
     # For every field line, find the roots of this linear spline.

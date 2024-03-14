@@ -600,6 +600,7 @@ else:  # pragma: no cover
             val = body_fun(val)
         return val
 
+    # TODO: generalize this, maybe use np.vectorize
     def vmap(fun, in_axes=0, out_axes=0):
         """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
 
@@ -630,7 +631,7 @@ else:  # pragma: no cover
         def fun_vmap(fun_inputs):
             if isinstance(fun_inputs, tuple):
                 raise NotImplementedError(
-                    "Backend implementation of vmap fails for multiple arguments."
+                    "Backend implementation of vmap fails for multiple args in tuple."
                 )
             return np.stack([fun(fun_input) for fun_input in fun_inputs], axis=out_axes)
 
@@ -676,7 +677,7 @@ else:  # pragma: no cover
         return carry, np.stack(ys)
 
     def bincount(x, weights=None, minlength=0, length=None):
-        """Numpy implementation of jnp.bincount."""
+        """A numpy implementation of jnp.bincount."""
         x = np.clip(x, 0, None)
         if length is None:
             length = max(minlength, x.max() + 1)
@@ -685,7 +686,7 @@ else:  # pragma: no cover
         return np.bincount(x, weights, minlength)[:length]
 
     def repeat(a, repeats, axis=None, total_repeat_length=None):
-        """Numpy implementation of jnp.repeat."""
+        """A numpy implementation of jnp.repeat."""
         out = np.repeat(a, repeats, axis)
         if total_repeat_length is not None:
             out = out[:total_repeat_length]
@@ -802,7 +803,7 @@ else:  # pragma: no cover
         return out.x, out
 
     def flatnonzero(a, size=None, fill_value=0):
-        """Numpy implementation of jnp.flatnonzero."""
+        """A numpy implementation of jnp.flatnonzero."""
         nz = np.flatnonzero(a)
         if size is not None:
             nz = np.append(nz, np.repeat(fill_value, max(size - nz.size, 0)))
@@ -818,7 +819,7 @@ else:  # pragma: no cover
         indices_are_sorted=False,
         fill_value=None,
     ):
-        """Numpy implementation of jnp.take."""
+        """A numpy implementation of jnp.take."""
         if mode == "fill":
             if fill_value is None:
                 # TODO: Interpret default fill value based on dtype of a.

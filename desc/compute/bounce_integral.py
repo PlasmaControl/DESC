@@ -1,21 +1,109 @@
 """Methods for computing bounce integrals."""
 
-from interpax import interp1d
-from scipy.interpolate import Akima1DInterpolator, CubicHermiteSpline
+from interpax import Akima1DInterpolator, CubicHermiteSpline
 
-from desc.backend import (
-    complex_sqrt,
-    flatnonzero,
-    fori_loop,
-    jnp,
-    put,
-    put_along_axis,
-    vmap,
-)
+from desc.backend import complex_sqrt, flatnonzero, jnp, put_along_axis, vmap
 from desc.compute.utils import mask_diff, mask_take, safediv
 from desc.grid import Grid, LinearGrid, _meshgrid_expand
 
 from .data_index import data_index
+
+NUM_ROOTS = 3  # max number of roots of a cubic polynomial
+# returns index of first nonzero element in a
+v_first_flatnonzero = vmap(lambda a: flatnonzero(a, size=1, fill_value=a.size))
+v_mask_diff = vmap(lambda a, mask: mask_diff(a, mask))
+v_mask_take = vmap(lambda a, mask: mask_take(a, mask, size=a.size, fill_value=jnp.nan))
+
+
+# TODO: fix up some logic with the periodic boundary bounce integral thing
+
+
+def _inmost(pitch, w, X, f, B_sup_z, B):
+    """Compute a single bounce integral.
+
+    Parameters
+    ----------
+    pitch : float
+        λ values.
+    w : ndarray, shape(w.size, )
+        Quadrature weights.
+    X : ndarray, shape(w.size, )
+        Quadrature points.
+    f : Akima1DInterpolator
+        Spline of function to compute bounce integral of.
+    B_sup_z : Akima1DInterpolator
+        Contravariant field-line following toroidal component of magnetic field.
+    B : CubicHermiteSpline
+        Norm of magnetic field.
+
+    """
+    assert jnp.size(pitch) == 1
+    assert w.shape == X.shape
+    return jnp.sum(w * f(X) / (B_sup_z(X) * jnp.sqrt(1 - pitch * B(X))))
+
+
+def _inner(pitch, w, X, f, B_sup_z, B):
+    """Compute bounce integrals along a particular field line and pitch.
+
+    Parameters
+    ----------
+    pitch : float
+        λ values.
+    w : ndarray, shape(w.size, )
+        Quadrature weights.
+    X : ndarray, shape(:, w.size, )
+        Quadrature points.
+    f : Akima1DInterpolator
+        Spline of function to compute bounce integral of.
+    B_sup_z : Akima1DInterpolator
+        Contravariant field-line following toroidal component of magnetic field.
+    B : CubicHermiteSpline
+        Norm of magnetic field.
+
+    """
+    assert jnp.size(pitch) == 1
+    assert w.shape == X.shape[1:]
+    return vmap(_inmost, in_axes=(None, None, 0, None, None, None))(
+        pitch, w, X, f, B_sup_z, B
+    )
+
+
+def _outer(knots, pitch, w, X, f, B_sup_z, B, B_z_ra):
+    """Compute bounce integrals for every pitch along a single field line.
+
+    Parameters
+    ----------
+    knots : ndarray, shape(knots.size, )
+        Field line-following ζ coordinates of spline knots.
+    pitch : ndarray, shape(pitch.size, )
+        λ values.
+    w : ndarray, shape(w.size, )
+        Quadrature weights.
+    X : ndarray, shape(pitch.size, :, w.size)
+        Quadrature points.
+    f : ndarray, shape(knots.size, )
+        Spline of function to compute bounce integral of.
+    B_sup_z : ndarray, shape(knots.size, )
+        Contravariant field-line following toroidal component of magnetic field.
+    B : ndarray, shape(knots.size, )
+        Norm of magnetic field.
+    B_z_ra : ndarray, shape(knots.size, )
+        Norm of magnetic field derivative with respect to field-line following label.
+
+    """
+    assert pitch.size == X.shape[0]
+    # FIXME: https://github.com/f0uriest/interpax/issues/26
+    f = Akima1DInterpolator(knots, f, check=False)
+    B_sup_z = Akima1DInterpolator(knots, B_sup_z, check=False)
+    B = CubicHermiteSpline(knots, B, B_z_ra, check=False)
+    return vmap(_inner, in_axes=(0, None, 0, None, None, None))(
+        pitch, w, X, f, B_sup_z, B
+    )
+
+
+# ...maybe there's a better way to do this with jnp.vectorize(..., excluded={...})?
+"""Compute bounce integrals for every pitch along every field line."""
+_compute_quad = vmap(_outer, in_axes=(None, None, None, 1, 0, 0, 0, 0))
 
 
 def polyint(c, k=jnp.array([0])):
@@ -27,7 +115,7 @@ def polyint(c, k=jnp.array([0])):
         First axis should store coefficients of a polynomial.
         For a polynomial given by ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[0] - 1``,
         coefficient cᵢ should be stored at ``c[n - i]``.
-    k : ndarray or float
+    k : ndarray
         Integration constants.
 
     Returns
@@ -92,14 +180,14 @@ def polyval(x, c):
     tests/test_compute_utils.py::TestComputeUtils::test_polyval.
 
     """
-    X = (x[jnp.newaxis].T ** jnp.arange(c.shape[0] - 1, -1, -1)).T
+    X = x[..., jnp.newaxis] ** jnp.arange(c.shape[0] - 1, -1, -1)
     alphabet = "abcdefghijklmnopqrstuvwxyz"
-    sub = alphabet[: c.ndim]
-    val = jnp.einsum(f"{sub},{sub}...->{sub[1:]}...", c, X)
+    s = alphabet[: c.ndim]
+    val = jnp.einsum(f"{s},{s[1:]}...{s[0]}->{s[1:]}...", c, X)
     return val
 
 
-def tanh_sinh_quadrature(N, quad_limit=3.16):
+def tanh_sinh_quadrature(N):
     """
     tanh_sinh quadrature.
 
@@ -112,9 +200,6 @@ def tanh_sinh_quadrature(N, quad_limit=3.16):
     ----------
     N: int
         Number of quadrature points, preferably odd
-    quad_limit: float
-        The range of quadrature points to be mapped.
-        Larger quad_limit implies better result but limited due to overflow in sinh
 
     Returns
     -------
@@ -124,8 +209,19 @@ def tanh_sinh_quadrature(N, quad_limit=3.16):
         Quadrature weights
 
     """
-    points = jnp.linspace(-quad_limit, quad_limit, N)
-    h = 2 * quad_limit / (N - 1)
+    # Copied from quadax.
+    # https://github.com/f0uriest/quadax/blob/main/quadax/utils.py#L166
+    def get_tmax(xmax):
+        """Inverse of tanh-sinh transform."""
+        tanhinv = lambda x: 1 / 2 * jnp.log((1 + x) / (1 - x))
+        sinhinv = lambda x: jnp.log(x + jnp.sqrt(x**2 + 1))
+        return sinhinv(2 / jnp.pi * tanhinv(xmax))
+
+    # inverse of tanh-sinh transformation for x = 1-eps with small buffer
+    tmax = get_tmax(jnp.array(1.0) - 10 * jnp.finfo(jnp.array(1.0)).eps)
+
+    points = jnp.linspace(-tmax, tmax, N)
+    h = 2 * tmax / (N - 1)
     sinh = jnp.sinh(points)
     x = jnp.tanh(0.5 * jnp.pi * sinh)
     w = 0.5 * jnp.pi * h * jnp.cosh(points) / jnp.cosh(0.5 * jnp.pi * sinh) ** 2
@@ -141,7 +237,7 @@ def cubic_poly_roots(coef, k=jnp.array([0]), a_min=None, a_max=None, sort=False)
         First axis should store coefficients of a polynomial. For a polynomial
         given by c₁ x³ + c₂ x² + c₃ x + c₄, ``coef[i]`` should store cᵢ.
         It is assumed that c₁ is nonzero.
-    k : ndarray, shape(constant.size, )
+    k : ndarray, shape(k.size, )
         Specify to instead find solutions to c₁ x³ + c₂ x² + c₃ x + c₄ = ``k``.
     a_min, a_max : ndarray
         Minimum and maximum value to return roots between.
@@ -167,7 +263,7 @@ def cubic_poly_roots(coef, k=jnp.array([0]), a_min=None, a_max=None, sort=False)
         a_max = jnp.inf
 
     a, b, c, d = coef
-    d = jnp.squeeze((d[jnp.newaxis].T - k).T)
+    d = jnp.squeeze(jnp.moveaxis(d[..., jnp.newaxis] - k, -1, 0))
     t_0 = b**2 - 3 * a * c
     t_1 = 2 * b**3 - 9 * a * b * c + 27 * a**2 * d
     C = ((t_1 + complex_sqrt(t_1**2 - 4 * t_0**3)) / 2) ** (1 / 3)
@@ -194,14 +290,14 @@ def cubic_poly_roots(coef, k=jnp.array([0]), a_min=None, a_max=None, sort=False)
     return roots
 
 
-def _get_bounce_points(pitch, zeta, poly_B, poly_B_z):
-    """Get the bounce points given |B| and 1 / λ.
+def _compute_bp(pitch, knots, poly_B, poly_B_z):
+    """Compute the bounce points given |B| and pitch λ.
 
     Parameters
     ----------
     pitch : ndarray
-        λ values representing the constant function 1 / λ.
-    zeta : ndarray
+        λ values.
+    knots : ndarray
         Field line-following ζ coordinates of spline knots.
     poly_B : ndarray
         Polynomial coefficients of the cubic spline of |B|.
@@ -210,70 +306,71 @@ def _get_bounce_points(pitch, zeta, poly_B, poly_B_z):
 
     Returns
     -------
-    intersect, bp1, bp2 : ndarray, ndarray, ndarray
-        The polynomials' intersection points with 1 / λ is given by ``intersect``.
-        In order to be JIT compilable, the returned array must have a shape that
-        accommodates the case where each cubic polynomial intersects 1 / λ thrice.
-        So ``intersect`` has shape (pitch.size * M * L, N * NUM_ROOTS),
-        where the last axis is padded with nan at the end to be JIT compilable.
-        The boolean masks ``bp1`` and ``bp2`` encode whether a given entry in
-        ``intersect`` is a valid starting and ending bounce point, respectively.
+    bp1, bp2 : ndarray, ndarray
+        Field line-following ζ coordinates of bounce points for a given pitch
+        along a field line. Has shape (pitch.size * M * L, N * NUM_ROOTS).
+        If there were less than N * NUM_ROOTS bounce points along a field line,
+        then the last axis is padded with nan.
 
     """
-    ML = poly_B.shape[1]
-    N = poly_B.shape[2]
-    NUM_ROOTS = 3
-    a_min = zeta[:-1]
-    a_max = zeta[1:]
+    ML = jnp.array(poly_B.shape[1:-1]).prod()
+    N = poly_B.shape[-1]
 
-    intersect = cubic_poly_roots(poly_B, 1 / pitch, a_min, a_max, sort=True).reshape(
-        pitch.size, ML, N, NUM_ROOTS
-    )
+    # The polynomials' intersection points with 1 / λ is given by ``intersect``.
+    # In order to be JIT compilable, this must have a shape that accommodates the
+    # case where each cubic polynomial intersects 1 / λ thrice.
+    # nan values in ``intersect`` denote a polynomial has less than three intersects.
+    intersect = cubic_poly_roots(
+        coef=poly_B, k=1 / pitch, a_min=knots[:-1], a_max=knots[1:], sort=True
+    ).reshape(pitch.size, *poly_B.shape[1:], NUM_ROOTS)
+    # Reshape to unsqueeze pitch axis.
+
+    # Reshape so that last axis enumerates intersects of a pitch along a field line.
+    # Condense the first and second axes to vmap over them.
     B_z = polyval(intersect, poly_B_z[:, jnp.newaxis]).reshape(
         pitch.size * ML, N * NUM_ROOTS
     )
     intersect = intersect.reshape(pitch.size * ML, N * NUM_ROOTS)
+    # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = ~jnp.isnan(intersect)
-    # Rearrange so that all the intersects along field line are contiguous.
-    contiguous = vmap(
-        lambda args: mask_take(*args, size=N * NUM_ROOTS, fill_value=jnp.nan)
-    )
-    intersect = contiguous((intersect, is_intersect))
-    B_z = contiguous((B_z, is_intersect))
-    # Check sign of derivative to determine whether root is a valid bounce point.
+
+    # Rearrange so that all intersects along a field line are contiguous.
+    intersect = v_mask_take(intersect, is_intersect)
+    B_z = v_mask_take(B_z, is_intersect)
+    # The boolean masks ``bp1`` and ``bp2`` will encode whether a given entry in
+    # ``intersect`` is a valid starting and ending bounce point, respectively.
+    # Sign of derivative determines whether an intersect is a valid bounce point.
     bp1 = B_z <= 0
     bp2 = B_z >= 0
+    # B_z <= 0 at intersect i implies B_z >= 0 at intersect i+1 by continuity.
 
-    # index of last intersect
-    idx = (
-        jnp.squeeze(
-            vmap(lambda a: flatnonzero(a, size=1, fill_value=a.size))(~is_intersect)
-        )
-        - 1
-    )
-    assert idx.shape == (pitch.size * ML,)
-    # Periodic boundary to compute bounce integrals of particles trapped outside
-    # this snapshot of the field lines.
+    # # TODO: fix the boundary logic,
+    #   extend bp1 and bp2 by single element and then test
+    # # index of last intersect along a field line
+    # idx = jnp.squeeze(v_first_flatnonzero(~is_intersect)) - 1  # noqa: E800
+    # assert idx.shape == (pitch.size * ML,)  # noqa: E800
+    # Consider the boundary to be periodic to compute bounce integrals of
+    # particles trapped outside this snapshot of the field lines.
     # Roll such that first intersect is moved to index of last intersect.
-    is_bp = bp1 & put_along_axis(jnp.roll(bp2, -1, axis=-1), idx, bp2[:, 0], axis=-1)
-    # B_z<=0 at intersect_i implies B_z>=0 at intersect_i+1 by continuity.
-    # I think this step is only needed to determine if the boundaries are bounce points.
-    bp1 = bp1 & is_bp
-    bp2 = bp2 & is_bp
-    return intersect, bp1, bp2
+
+    # Get ζ values of bounce points from the masks.
+    bp1 = v_mask_take(intersect, bp1)
+    bp2 = v_mask_take(intersect, bp2)
+    assert bp1.shape == bp2.shape == (pitch.size * ML, N * NUM_ROOTS)
+    return bp1, bp2
 
 
-def _get_bounce_points_include_knots(pitch, zeta, poly_B, poly_B_z):
-    """Get the bounce points given |B| and 1 / λ.
+def _compute_bp_include_knots(pitch, knots, poly_B, poly_B_z):
+    """Compute the bounce points given |B| and pitch λ.
 
-    Like ``_get_bounce_points`` but returns additional ingredients
-    needed by the algorithm in the direct method in ``bounce_integral``.
+    Like ``_compute_bp`` but returns ingredients needed by the
+    algorithm in the direct method in ``bounce_integral``.
 
     Parameters
     ----------
     pitch : ndarray
-        λ values representing the constant function 1 / λ.
-    zeta : ndarray
+        λ values.
+    knots : ndarray
         Field line-following ζ coordinates of spline knots.
     poly_B : ndarray
         Polynomial coefficients of the cubic spline of |B|.
@@ -282,91 +379,90 @@ def _get_bounce_points_include_knots(pitch, zeta, poly_B, poly_B_z):
 
     Returns
     -------
-    intersect_nan_to_right_knot, contiguous, is_intersect, is_bp
-        The polynomials' intersection points with 1 / λ is given by
-        ``intersect_nan_to_right_knot``.
-        In order to be JIT compilable, the returned array must have a shape that
-        accommodates the case where each cubic polynomial intersects 1 / λ thrice.
-        Rather than padding the nan values to the end, ``intersect_nan_to_right_knot``
-        replaces the nan values with the right knot of the splines. This array
-        has shape (pitch.size * M * L, N, NUM_ROOTS + 2).
-        The boolean mask ``is_bp`` encodes whether a given entry in
-
-        .. code-block:: python
-            contiguous(
-                (intersect_nan_to_right_knot.reshape(pitch.size * ML, -1), is_intersect)
-            )
-
-        is a valid bounce point.
+    intersect_nan_to_right_knot, is_intersect, is_bp
+        The boolean mask ``is_bp`` encodes whether a given pair of intersects
+        are the endpoints of a bounce integral.
 
     """
-    ML = poly_B.shape[1]
-    N = poly_B.shape[2]
-    NUM_ROOTS = 3
-    R = NUM_ROOTS + 2
-    a_min = zeta[:-1]
-    a_max = zeta[1:]
+    ML = jnp.array(poly_B.shape[1:-1]).prod()
+    N = poly_B.shape[-1]
+    a_min = knots[:-1]
+    a_max = knots[1:]
 
-    roots = cubic_poly_roots(poly_B, 1 / pitch, a_min, a_max, sort=True).reshape(
-        pitch.size, ML, N, 3
-    )
+    # The polynomials' intersection points with 1 / λ is given by ``roots``.
+    # In order to be JIT compilable, this must have a shape that accommodates the
+    # case where each cubic polynomial intersects 1 / λ thrice.
+    # nan values in ``roots`` denote a polynomial has less than three intersects.
+    roots = cubic_poly_roots(
+        coef=poly_B, k=1 / pitch, a_min=a_min, a_max=a_max, sort=True
+    ).reshape(pitch.size, *poly_B.shape[1:], NUM_ROOTS)
+    # Reshape to unsqueeze pitch axis.
+
+    # Include the knots of the splines along with the intersection points.
+    # This preprocessing makes the ``direct`` algorithm in ``bounce_integral`` simpler.
     roots = (roots[..., 0], roots[..., 1], roots[..., 2])
-    nan_to_right_knot = tuple(map(lambda r: jnp.where(jnp.isnan(r), a_max, r), roots))
     a_min = jnp.broadcast_to(a_min, shape=(pitch.size, ML, N))
     a_max = jnp.broadcast_to(a_max, shape=(pitch.size, ML, N))
-    # Include the knots of the splines along with the intersection points.
     intersect = jnp.stack((a_min, *roots, a_max), axis=-1)
-    intersect_nan_to_right_knot = jnp.stack(
-        (a_min, *nan_to_right_knot, a_max), axis=-1
-    ).reshape(pitch.size * ML, N, R)
 
-    B_z = polyval(intersect, poly_B_z[:, jnp.newaxis]).reshape(pitch.size * ML, N * R)
+    # Reshape so that last axis enumerates intersects of a pitch along a field line.
+    # Condense the first and second axes to vmap over them.
+    B_z = polyval(intersect, poly_B_z[:, jnp.newaxis]).reshape(
+        pitch.size * ML, N * (NUM_ROOTS + 2)
+    )
+    # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = jnp.reshape(
         jnp.array([False, True, True, True, False], dtype=bool) & ~jnp.isnan(intersect),
-        newshape=(pitch.size * ML, N * R),
+        newshape=(pitch.size * ML, N * (NUM_ROOTS + 2)),
     )
+
     # Rearrange so that all the intersects along field line are contiguous.
-    contiguous = vmap(lambda args: mask_take(*args, size=N * R, fill_value=jnp.nan))
-    B_z = contiguous((B_z, is_intersect))
-    # Check sign of derivative to determine whether root is a valid bounce point.
+    B_z = v_mask_take(B_z, is_intersect)
+    # The boolean masks ``bp1`` and ``bp2`` will encode whether a given entry in
+    # ``intersect`` is a valid starting and ending bounce point, respectively.
+    # Sign of derivative determines whether an intersect is a valid bounce point.
     bp1 = B_z <= 0
     bp2 = B_z >= 0
+    # B_z <= 0 at intersect i implies B_z >= 0 at intersect i+1 by continuity.
 
     # index of last intersect
-    idx = (
-        jnp.squeeze(
-            vmap(lambda a: flatnonzero(a, size=1, fill_value=a.size))(~is_intersect)
-        )
-        - 1
-    )
+    idx = jnp.squeeze(v_first_flatnonzero(~is_intersect)) - 1
     assert idx.shape == (pitch.size * ML,)
-    # Periodic boundary to compute bounce integrals of particles trapped outside
-    # this snapshot of the field lines.
+    # Consider the boundary to be periodic to compute bounce integrals of
+    # particles trapped outside this snapshot of the field lines.
     # Roll such that first intersect is moved to index of last intersect.
-    is_bp = bp1 & put_along_axis(jnp.roll(bp2, -1, axis=-1), idx, bp2[:, 0], axis=-1)
-    return intersect_nan_to_right_knot, contiguous, is_intersect, is_bp
+    is_bp = bp1 & put_along_axis(jnp.roll(bp2, -1, axis=-1), idx, bp2[..., 0], axis=-1)
+
+    # Returning this makes the ``direct`` algorithm in ``bounce_integral`` simpler.
+    # Replace nan values with right knots of the spline.
+    intersect_nan_to_right_knot = jnp.stack(
+        (a_min, *tuple(map(lambda r: jnp.where(jnp.isnan(r), a_max, r), roots)), a_max),
+        axis=-1,
+    ).reshape(pitch.size * ML, N, (NUM_ROOTS + 2))
+
+    return intersect_nan_to_right_knot, is_intersect, is_bp
 
 
 def _compute_bp_if_given_pitch(
-    pitch, zeta, poly_B, poly_B_z, get_bounce_points, *original, err=False
+    pitch, knots, poly_B, poly_B_z, compute_bp, *original, err=False
 ):
-    """Return the ingredients needed by the ``bounce_integrals`` function.
+    """Return the ingredients needed by the ``bounce_integral`` function.
 
     Parameters
     ----------
     pitch : ndarray
         λ values representing the constant function 1 / λ.
         If None, returns the given ``original`` tuple.
-    zeta : ndarray
+    knots : ndarray
         Field line-following ζ coordinates of spline knots.
     poly_B : ndarray
         Polynomial coefficients of the cubic spline of |B|.
     poly_B_z : ndarray
         Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
-    get_bounce_points : callable
-        Method to return bounce points.
+    compute_bp : callable
+        Method to compute bounce points.
     original : tuple
-        pitch, intersect, is_bp, bp1, bp2.
+        Whatever this method returned earlier.
     err : bool
         Whether to raise an error if ``pitch`` is None and ``original`` is empty.
 
@@ -377,7 +473,7 @@ def _compute_bp_if_given_pitch(
         return original
     else:
         pitch = jnp.atleast_1d(pitch)
-        return pitch, *get_bounce_points(pitch, zeta, poly_B, poly_B_z)
+        return pitch, *compute_bp(pitch, knots, poly_B, poly_B_z)
 
 
 def bounce_integral(
@@ -453,33 +549,22 @@ def bounce_integral(
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 20)
     rho = jnp.atleast_1d(rho)
     alpha = jnp.atleast_1d(alpha)
-    zeta = jnp.linspace(0, zeta_max, resolution)
+    knots = jnp.linspace(0, zeta_max, resolution)
     L = rho.size
     M = alpha.size
     N = resolution - 1  # number of piecewise cubic polynomials per field line
-    NUM_ROOTS = 3  # number of roots for cubic polynomial
 
-    grid, data = field_line_to_desc_coords(eq, rho, alpha, zeta)
-    data = eq.compute(
-        ["B^zeta", "|B|", "|B|_z constant rho alpha"], grid=grid, data=data
-    )
+    grid, data = field_line_to_desc_coords(eq, rho, alpha, knots)
+    data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid, data=data)
     B = data["|B|"].reshape(M * L, resolution)
-
-    # TODO: https://github.com/f0uriest/interpax/issues/19
-    poly_B = CubicHermiteSpline(
-        zeta,
-        B,
-        data["|B|_z constant rho alpha"].reshape(M * L, resolution),
-        axis=-1,
-        extrapolate="periodic",
-    ).c
-
+    B_z_ra = data["|B|_z|r,a"].reshape(M * L, resolution)
+    poly_B = CubicHermiteSpline(knots, B, B_z_ra, axis=-1, check=False).c
     poly_B = jnp.moveaxis(poly_B, 1, -1)
     poly_B_z = polyder(poly_B)
     assert poly_B.shape == (4, M * L, N)
     assert poly_B_z.shape == (3, M * L, N)
 
-    def _direct(name, pitch=None):
+    def direct(name, pitch=None):
         """Compute the bounce integral of the named quantity.
 
         Parameters
@@ -492,60 +577,61 @@ def bounce_integral(
 
         Returns
         -------
-        F : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 2)
+        F : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 3)
             The last axis iterates through every bounce integral performed
-            along that field line padded by zeros.
+            along that field line padded by nan.
 
         """
         (
             pitch,
             intersect_nan_to_right_knot,
-            contiguous,
             is_intersect,
             is_bp,
         ) = _compute_bp_if_given_pitch(
             pitch,
-            zeta,
+            knots,
             poly_B,
             poly_B_z,
-            _get_bounce_points_include_knots,
+            _compute_bp_include_knots,
             *original,
             err=True,
         )
 
         integrand = jnp.nan_to_num(
-            eq.compute(name, grid=grid, override_grid=False, data=data)[name]
+            eq.compute(name, grid=grid, data=data)[name]
             / (data["B^zeta"] * jnp.sqrt(1 - pitch[:, jnp.newaxis] * data["|B|"]))
         ).reshape(pitch.size * M * L, resolution)
-
-        # TODO: https://github.com/f0uriest/interpax/issues/19
-        integrand = Akima1DInterpolator(zeta, integrand, axis=-1).c
-
+        integrand = Akima1DInterpolator(knots, integrand, axis=-1, check=False).c
         integrand = jnp.moveaxis(integrand, 1, -1)
         assert integrand.shape == (4, pitch.size * M * L, N)
         # For this algorithm, computing integrals via differences of primitives
         # is preferable to any numerical quadrature. For example, even if the
         # intersection points were evenly spaced, a composite Simpson's quadrature
         # would require computing the spline on 1.8x more knots for the same accuracy.
-        R = NUM_ROOTS + 2
         primitive = polyval(intersect_nan_to_right_knot, polyint(integrand)).reshape(
-            pitch.size * M * L, N * R
+            pitch.size * M * L, N * (NUM_ROOTS + 2)
         )
         sums = jnp.cumsum(
             # Periodic boundary to compute bounce integrals of particles
             # trapped outside this snapshot of the field lines.
             jnp.diff(primitive, axis=-1, append=primitive[..., 0, jnp.newaxis])
-            # Multiply by mask that is false at shared knots of piecewise spline
+            # We didn't enforce continuity of the piecewise primitives, so
+            # multiply by mask that is false at shared knots of piecewise spline
             # to avoid adding difference between primitives of splines at knots.
-            * jnp.append(jnp.arange(1, N * R) % R != 0, True),
+            * jnp.append(
+                jnp.arange(1, N * (NUM_ROOTS + 2)) % (NUM_ROOTS + 2) != 0, True
+            ),
             axis=-1,
         )
-        F = jnp.nan_to_num(
-            fun((contiguous((sums, is_intersect)), is_bp)), posinf=0, neginf=0
+        F = jnp.reshape(
+            # Compute difference of ``sums`` between bounce points.
+            v_mask_diff(v_mask_take(sums, is_intersect), is_bp)[..., : N * NUM_ROOTS],
+            # Guaranteed to have at most N * NUM_ROOTS entries where is_bp is true.
+            newshape=(pitch.size, M, L, N * NUM_ROOTS),
         )
-        return F.reshape(pitch.size, M, L, N * R // 2)
+        return F
 
-    def _quad_sin(name, pitch=None):
+    def quad(name, pitch=None):
         """Compute the bounce integral of the named quantity.
 
         Parameters
@@ -558,60 +644,42 @@ def bounce_integral(
 
         Returns
         -------
-        F : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 2)
+        F : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 3)
             The last axis iterates through every bounce integral performed
-            along that field line padded by zeros.
+            along that field line padded by nan.
 
         """
-        pitch, intersect, bp1, bp2 = _compute_bp_if_given_pitch(
-            pitch, zeta, poly_B, poly_B_z, _get_bounce_points, *original, err=True
+        pitch, bp1, bp2 = _compute_bp_if_given_pitch(
+            pitch, knots, poly_B, poly_B_z, _compute_bp, *original, err=True
         )
-        bp1 = fun((intersect, bp1))
-        bp2 = fun((intersect, bp2))
+        bp1 = bp1.reshape(pitch.size, M * L, N * NUM_ROOTS)
+        bp2 = bp2.reshape(pitch.size, M * L, N * NUM_ROOTS)
+        # The last axis enumerates the quadrature points.
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
-        assert X.shape == (pitch.size * M * L, N * 2, x.size)
+        assert X.shape == (pitch.size, M * L, N * NUM_ROOTS, x.size)
 
-        def body(i, integral):
-            k = i % (N * 2)
-            j = i // (N * 2)
-            p = i // (M * L * N * 2)
-            v = j % pitch.size
-            # TODO: Add Hermite spline to interpax to pass in B_z[i].
-            integrand = interp1d(X[j, k], zeta, f[v]) / (
-                interp1d(X[j, k], zeta, B_sup_z[v])
-                * jnp.sqrt(1 - pitch[p] * interp1d(X[j, k], zeta, B[v]))
-            )
-            integral = put(integral, i, jnp.sum(w * integrand))
-            return integral
-
-        f = eq.compute(name, grid=grid, override_grid=False, data=data)[name].reshape(
-            M * L, resolution
-        )
+        f = eq.compute(name, grid=grid, data=data)[name].reshape(M * L, resolution)
         B_sup_z = data["B^zeta"].reshape(M * L, resolution)
-        F = jnp.nan_to_num(
-            # TODO: Vectorize interpax to do this with 1 call with einsum.
-            fori_loop(0, pitch.size * M * L * N * 2, body, jnp.zeros(X.shape[:-1]))
+        F = jnp.reshape(
+            _compute_quad(knots, pitch, w, X, f, B_sup_z, B, B_z_ra)
             * jnp.pi
             / (bp2 - bp1),
-            posinf=0,
-            neginf=0,
+            newshape=(pitch.size, M, L, N * NUM_ROOTS),
         )
-        return F.reshape(pitch.size, M, L, N * 2)
+        return F
 
     if method == "direct":
-        bi = _direct
-        fun = vmap(lambda args: mask_diff(*args)[::2])
-        get_bounce_points = _get_bounce_points_include_knots
+        original = _compute_bp_if_given_pitch(
+            pitch, knots, poly_B, poly_B_z, _compute_bp_include_knots, err=False
+        )
+        return direct
     else:
-        bi = _quad_sin
-        fun = vmap(lambda args: mask_take(*args, size=N * 2, fill_value=jnp.nan))
-        get_bounce_points = _get_bounce_points
+        original = _compute_bp_if_given_pitch(
+            pitch, knots, poly_B, poly_B_z, _compute_bp, err=False
+        )
         x, w = tanh_sinh_quadrature(resolution)
         x = jnp.arcsin(x) / jnp.pi - 0.5
-    original = _compute_bp_if_given_pitch(
-        pitch, zeta, poly_B, poly_B_z, get_bounce_points, err=False
-    )
-    return bi
+        return quad
 
 
 def bounce_average(
@@ -698,9 +766,9 @@ def bounce_average(
 
         Returns
         -------
-        G : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 2)
+        G : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 3)
             The last axis iterates through every bounce average performed
-            along that field line padded by zeros.
+            along that field line padded by nan.
 
         """
         return safediv(bi(name, pitch), bi("1", pitch))

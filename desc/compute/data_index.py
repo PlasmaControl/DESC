@@ -211,15 +211,15 @@ _class_inheritance = {
         "desc.geometry.curve.FourierPlanarCurve",
         "desc.geometry.core.Curve",
     ],
-    "desc.magnetic_fields.CurrentPotentialField": [
+    "desc.magnetic_fields._current_potential.CurrentPotentialField": [
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.core.Surface",
-        "desc.magnetic_fields.MagneticField",
+        "desc.magnetic_fields._core.MagneticField",
     ],
-    "desc.magnetic_fields.FourierCurrentPotentialField": [
+    "desc.magnetic_fields._current_potential.FourierCurrentPotentialField": [
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.core.Surface",
-        "desc.magnetic_fields.MagneticField",
+        "desc.magnetic_fields._core.MagneticField",
     ],
     "desc.coils.SplineXYZCoil": [
         "desc.geometry.curve.SplineXYZCurve",

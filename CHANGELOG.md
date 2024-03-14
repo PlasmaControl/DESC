@@ -15,11 +15,14 @@ in the MAKEGRID format for use with other codes.
 least squares fit is now weighted inversely with the distance from the axis to improve
 the accuracy for low aspect ratio.
 - Adds a bounding box to the `field_line_integrate` defined by `bounds_R` and `bounds_Z`
-keyword arguments, which form a hollow cylindrical bounding box. If the field line 
-trajectory exits these bounds, the RHS will be multiplied by an exponentially decaying 
-function of the distance to the box to stop the trajectory and prevent tracing the field 
-line out to infinity, which is both costly and unnecessary when making a Poincare plot, 
+keyword arguments, which form a hollow cylindrical bounding box. If the field line
+trajectory exits these bounds, the RHS will be multiplied by an exponentially decaying
+function of the distance to the box to stop the trajectory and prevent tracing the field
+line out to infinity, which is both costly and unnecessary when making a Poincare plot,
 the principle purpose of the function.
+- Adds a new class ``DommaschkPotentialField`` which allows creation of magnetic fields based
+off of the vacuum potentials detailed in Representations for Vacuum Potentials in Stellarators
+https://doi.org/10.1016/0010-4655(86)90109-8.
 
 
 Speed Improvements

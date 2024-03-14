@@ -1220,14 +1220,14 @@ def test_compute_everything():
             **elliptic_cross_section_with_torsion
         ),
         # magnetic fields
-        "desc.magnetic_fields.CurrentPotentialField": CurrentPotentialField(
+        "desc.magnetic_fields._current_potential.CurrentPotentialField": CurrentPotentialField(  # noqa:E501
             **elliptic_cross_section_with_torsion,
             potential=lambda theta, zeta, G: G * zeta / 2 / np.pi,
             potential_dtheta=lambda theta, zeta, G: np.zeros_like(theta),
             potential_dzeta=lambda theta, zeta, G: G * np.ones_like(theta) / 2 / np.pi,
             params={"G": 1e7},
         ),
-        "desc.magnetic_fields.FourierCurrentPotentialField": (
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField": (
             FourierCurrentPotentialField(
                 **elliptic_cross_section_with_torsion, I=0, G=1e7
             )
@@ -1251,7 +1251,7 @@ def test_compute_everything():
         ),
     }
     assert things.keys() == data_index.keys(), (
-        f"Missing the parameterizations {data_index.keys() - things.keys()}"
+        f"Missing the parameterization {data_index.keys() - things.keys()}"
         f" to test against master."
     )
     # use this low resolution grid for equilibria to reduce file size

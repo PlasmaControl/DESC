@@ -565,8 +565,8 @@ class InputReader:
 
         if vac_flag and (pres_flag or iota_flag or curr_flag):
             warnings.warn(
-                "Vacuum objective does not use any profiles, "
-                + "ignoring pressure, iota, and current"
+                "Vacuum objective assumes 0 pressure and 0 current, "
+                + "ignoring provided pressure, iota, and current profiles"
             )
             _ = inputs.pop("iota", None)
             _ = inputs.pop("current", None)

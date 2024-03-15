@@ -6,12 +6,25 @@ from interpax import Akima1DInterpolator
 
 from desc.backend import fori_loop, put, root_scalar
 from desc.compute.bounce_integral import (
+    bounce_integral,
     cubic_poly_roots,
     field_line_to_desc_coords,
     polyder,
     polyint,
     polyval,
 )
+from desc.continuation import solve_continuation_automatic
+from desc.equilibrium import Equilibrium
+from desc.geometry import FourierRZToroidalSurface
+from desc.grid import LinearGrid
+from desc.objectives import (
+    ObjectiveFromUser,
+    ObjectiveFunction,
+    get_equilibrium_objective,
+    get_fixed_boundary_constraints,
+)
+from desc.optimize import Optimizer
+from desc.profiles import PowerSeriesProfile
 
 
 @pytest.mark.unit
@@ -82,68 +95,141 @@ def test_polyval():
         for k in range(poly.shape[2]):
             np.testing.assert_allclose(val[j, k], np.poly1d(poly[:, j, k])(x[j, k]))
 
+    # integrate piecewise polynomial and set constants to preserve continuity
     y = np.arange(1, 6)
     y = np.arange(y.prod()).reshape(*y)
     x = np.arange(y.shape[-1])
     a1d = Akima1DInterpolator(x, y, axis=-1)
     primitive = polyint(a1d.c)
+    # choose evaluation points at d just to match choice made in a1d.antiderivative()
     d = np.diff(x)
-    k = polyval(d.reshape(d.size, *np.ones(primitive.ndim - 2, dtype=int)), primitive)
-    primitive = primitive.at[-1, 1:].add(np.cumsum(k, axis=-1)[:-1])
+    d = d.reshape(d.size, *np.ones(primitive.ndim - 2, dtype=int))
+    k = polyval(d, primitive)
+    # don't want to use jax.ndarray.at[].add() in case jax is not installed
+    primitive = np.array(primitive)
+    primitive[-1, 1:] += np.cumsum(k, axis=-1)[:-1]
     np.testing.assert_allclose(primitive, a1d.antiderivative().c)
 
 
-# TODO: finish up details if deemed useful
-def bounce_point(
-    self, eq, lambdas, rho, alpha, max_bounce_points=20, max_field_line=10 * np.pi
+@pytest.mark.unit
+def test_elliptic_integral_limit():
+    """Test bounce integral matches elliptic integrals.
+
+    In the limit of a low beta, large aspect ratio tokamak the bounce integral
+    should converge to the elliptic integrals of the first kind.
+    todo: would be nice to understand physics for why these are supposed
+        to be proportional to bounce integral. Is this discussed in any book?
+        Also, looking at
+        https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.ellipk.html
+        Are we saying that in this limit, we expect that |B| ~ sin(t)^2, with m as the
+        pitch angle? I assume that we want to add g_zz to the integrand in the
+        definition of the function in the scipy documentation above,
+        and after a change of variables the bounce points will be the integration.
+        So this test will test whether the quadrature is accurate
+        (and not whether the bounce points were accurate).
+
+    """
+    L, M, N, NFP, sym = 6, 6, 6, 1, True
+    surface = FourierRZToroidalSurface(
+        R_lmn=[1.0, 0.1],
+        Z_lmn=[0.0, -0.1],
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        sym=sym,
+        NFP=NFP,
+    )
+    eq = Equilibrium(
+        L=L,
+        M=M,
+        N=N,
+        NFP=NFP,
+        surface=surface,
+        pressure=PowerSeriesProfile([1e2, 0, -1e2]),
+        iota=PowerSeriesProfile([1, 0, 2]),
+        Psi=1.0,
+    )
+    eq = solve_continuation_automatic(eq)[-1]
+
+    def beta(grid, data):
+        return data["<beta>_vol"]
+
+    low_beta = 0.01
+    # todo: error that objective function has no linear attribute?
+    objective = ObjectiveFunction(
+        (ObjectiveFromUser(fun=beta, eq=eq, target=low_beta),)
+    )
+    constraints = (*get_fixed_boundary_constraints(eq), get_equilibrium_objective(eq))
+    opt = Optimizer("proximal-lsq-exact")
+    eq, result = eq.optimize(
+        objective=objective, constraints=constraints, optimizer=opt
+    )
+    print(result)
+
+    rho = 0.5
+    alpha = np.linspace(0, (2 - eq.sym) * np.pi, 20)
+    zeta = np.linspace(0, 10 * np.pi, 20)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    B = eq.compute(names="|B|", grid=grid)["|B|"]
+    pitch = np.linspace(1 / B.max(), 1 / B.min(), 10)
+    bi = bounce_integral(
+        eq, pitch=pitch, rho=rho, alpha=alpha, zeta_max=zeta[-1], resolution=zeta.size
+    )
+    name = "g_zz"
+    result = bi(name)
+    print(result.shape)
+    print(result)
+    assert np.isfinite(result).any()
+    # todo: look into GitHub pull request #934 and see if zero B-field issue resolved
+    grid, data = field_line_to_desc_coords(eq, rho, alpha, zeta)
+    g_zz = eq.compute(name, grid=grid, data=data)[name].reshape(alpha.size, zeta.size)
+    print(g_zz)
+    # todo: get bounce points from _compute_bp and compute elliptic integral
+
+
+# TODO: if deemed useful finish details using methods in desc.compute.bounce_integral
+def _compute_bounce_points_with_root_finding(
+    eq, pitch, rho, alpha, resolution=20, zeta_max=10 * np.pi
 ):
     """Find bounce points."""
-    # TODO:
-    #     1. make another version of desc.backend.root_scalar
-    #        to avoid separate root finding routines in residual and jac
-    #        and use previous desc coords as initial guess for next iteration
-    #     2. write docstrings and use transforms in api instead of eq
+    # TODO: avoid separate root finding routines in residual and jac
+    #       and use previous desc coords as initial guess for next iteration
     def residual(zeta, i):
         grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
         data = eq.compute(["|B|"], grid=grid, data=data)
-        return data["|B|"] - lambdas[i]
+        return data["|B|"] - pitch[i]
 
     def jac(zeta):
         grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
         data = eq.compute(["|B|_z|r,a"], grid=grid, data=data)
         return data["|B|_z|r,a"]
 
-    # Compute |B| - lambda on a dense grid.
+    # Compute |B| - 1/pitch on a dense grid.
     # For every field line, find the roots of this linear spline.
     # These estimates for the true roots will serve as an initial guess, and
     # let us form a boundary mesh around root estimates to limit search domain
     # of the root finding algorithms.
-    zeta = np.linspace(0, max_field_line, 3 * max_bounce_points)
+    zeta = np.linspace(0, zeta_max, 3 * resolution)
     grid, data = field_line_to_desc_coords(rho, alpha, zeta, eq)
     data = eq.compute(["|B|"], grid=grid, data=data)
     B_norm = data["|B|"].reshape(alpha.size, rho.size, -1)  # constant field line chunks
 
-    boundary_lt = np.zeros((lambdas.size, max_bounce_points, alpha.size, rho.size))
-    boundary_rt = np.zeros((lambdas.size, max_bounce_points, alpha.size, rho.size))
-    guess = np.zeros((lambdas.size, max_bounce_points, alpha.size, rho.size))
+    boundary_lt = np.zeros((pitch.size, resolution, alpha.size, rho.size))
+    boundary_rt = np.zeros((pitch.size, resolution, alpha.size, rho.size))
+    guess = np.zeros((pitch.size, resolution, alpha.size, rho.size))
     # todo: scan over this
-    for i in range(lambdas.size):
+    for i in range(pitch.size):
         for j in range(alpha.size):
             for k in range(rho.size):
                 # indices of zeta values observed prior to sign change
-                idx = np.nonzero(np.diff(np.sign(B_norm[j, k] - lambdas[i])))[0]
+                idx = np.nonzero(np.diff(np.sign(B_norm[j, k] - pitch[i])))[0]
                 guess[i, :, j, k] = grid.nodes[idx, 2]
                 boundary_lt[i, :, j, k] = np.append(zeta[0], guess[:-1])
                 boundary_rt[i, :, j, k] = np.append(guess[1:], zeta[-1])
-    guess = guess.reshape(lambdas.size, max_bounce_points, alpha.size * rho.size)
-    boundary_lt = boundary_lt.reshape(
-        lambdas.size, max_bounce_points, alpha.size * rho.size
-    )
-    boundary_rt = boundary_rt.reshape(
-        lambdas.size, max_bounce_points, alpha.size * rho.size
-    )
+    guess = guess.reshape(pitch.size, resolution, alpha.size * rho.size)
+    boundary_lt = boundary_lt.reshape(pitch.size, resolution, alpha.size * rho.size)
+    boundary_rt = boundary_rt.reshape(pitch.size, resolution, alpha.size * rho.size)
 
-    def body_lambdas(i, out):
+    def body_pitch(i, out):
         def body_roots(j, out_i):
             def fixup(z):
                 return np.clip(z, boundary_lt[i, j], boundary_rt[i, j])
@@ -154,11 +240,9 @@ def bounce_point(
             out_i = put(out_i, j, root)
             return out_i
 
-        out = put(out, i, fori_loop(0, max_bounce_points, body_roots, out[i]))
+        out = put(out, i, fori_loop(0, resolution, body_roots, out[i]))
         return out
 
-    bounce_points = np.zeros(
-        shape=(lambdas.size, alpha.size, rho.size, max_bounce_points)
-    )
-    bounce_points = fori_loop(0, lambdas.size, body_lambdas, bounce_points)
+    bounce_points = np.zeros(shape=(pitch.size, alpha.size, rho.size, resolution))
+    bounce_points = fori_loop(0, pitch.size, body_pitch, bounce_points)
     return bounce_points

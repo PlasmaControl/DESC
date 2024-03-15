@@ -15,7 +15,7 @@ v_mask_diff = vmap(mask_diff)
 v_mask_take = vmap(lambda a, mask: mask_take(a, mask, size=a.size, fill_value=jnp.nan))
 
 
-def _inner_product(knots, pitch, w, X, f, B_sup_z, B, B_z_ra):
+def _inner_product_quad(knots, pitch, w, X, f, B_sup_z, B, B_z_ra):
     """Compute bounce integrals for every pitch along a particular field line.
 
     Parameters
@@ -29,7 +29,7 @@ def _inner_product(knots, pitch, w, X, f, B_sup_z, B, B_z_ra):
     X : ndarray, shape(pitch.size, X.shape[1], w.size)
         Quadrature points.
     f : ndarray, shape(knots.size, )
-        Spline of function to compute bounce integral of.
+        Function to compute bounce integral of, evaluated at knots.
     B_sup_z : ndarray, shape(knots.size, )
         Contravariant field-line following toroidal component of magnetic field.
     B : ndarray, shape(knots.size, )
@@ -43,17 +43,19 @@ def _inner_product(knots, pitch, w, X, f, B_sup_z, B, B_z_ra):
         Bounce integrals for every pitch along a particular field line.
 
     """
+    assert pitch.ndim == 1
     assert X.shape == (pitch.size, X.shape[1], w.size)
     # FIXME: https://github.com/f0uriest/interpax/issues/26
     f = Akima1DInterpolator(knots, f, check=False)
     B_sup_z = Akima1DInterpolator(knots, B_sup_z, check=False)
     B = CubicHermiteSpline(knots, B, B_z_ra, check=False)
     pitch = pitch[:, jnp.newaxis, jnp.newaxis]
-    return jnp.dot(f(X) / (B_sup_z(X) * jnp.sqrt(1 - pitch * B(X))), w)
+    inner_product = jnp.dot(f(X) / (B_sup_z(X) * jnp.sqrt(1 - pitch * B(X))), w)
+    return inner_product
 
 
 """Compute bounce integrals for every pitch along every field line."""
-_compute_quad = vmap(_inner_product, in_axes=(None, None, None, 1, 0, 0, 0, 0))
+_compute_quad = vmap(_inner_product_quad, in_axes=(None, None, None, 1, 0, 0, 0, 0))
 
 
 def tanh_sinh_quadrature(resolution):
@@ -79,7 +81,7 @@ def tanh_sinh_quadrature(resolution):
 
     """
     # https://github.com/f0uriest/quadax/blob/main/quadax/utils.py#L166
-    # x = 1 - eps with some buffer
+    # x_max = 1 - eps with some buffer
     x_max = jnp.array(1.0) - 10 * jnp.finfo(jnp.array(1.0)).eps
     tanhinv = lambda x: 1 / 2 * jnp.log((1 + x) / (1 - x))
     sinhinv = lambda x: jnp.log(x + jnp.sqrt(x**2 + 1))
@@ -157,15 +159,15 @@ def polyval(x, c):
     Returns
     -------
     val : ndarray
-        ``val[j, k, ...]`` is the polynomial with coefficients ``c[:, j, k, ...]``
-        evaluated at the point ``x[j, k, ...]``.
+        ``val[j, k, ....]`` is the polynomial with coefficients ``c[:, j, k, ....]``
+        evaluated at the point ``x[j, k, ....]``.
 
     Notes
     -----
     This function does not perform the same operation as
     ``np.polynomial.polynomial.polyval(x, c)``.
     An example usage of this function is shown in
-    tests/test_compute_utils.py::TestComputeUtils::test_polyval.
+    tests/test_bounce_integral.py::test_polyval.
 
     """
     X = x[..., jnp.newaxis] ** jnp.arange(c.shape[0] - 1, -1, -1)
@@ -239,7 +241,7 @@ def cubic_poly_roots(coef, k=jnp.array([0]), a_min=None, a_max=None, sort=False)
 
 
 # TODO: fix up some logic with the periodic boundary bounce integral thing
-def _compute_bp(pitch, knots, poly_B, poly_B_z):
+def _compute_bounce_points(pitch, knots, poly_B, poly_B_z):
     """Compute the bounce points given |B| and pitch λ.
 
     Parameters
@@ -307,11 +309,11 @@ def _compute_bp(pitch, knots, poly_B, poly_B_z):
     return bp1, bp2
 
 
-def _compute_bp_include_knots(pitch, knots, poly_B, poly_B_z):
+def _compute_bounce_points_with_knots(pitch, knots, poly_B, poly_B_z):
     """Compute the bounce points given |B| and pitch λ.
 
-    Like ``_compute_bp`` but returns ingredients needed by the
-    algorithm in the direct method in ``bounce_integral``.
+    Like ``_compute_bounce_points`` but returns ingredients needed by the
+    algorithm in the ``direct`` method in ``bounce_integral``.
 
     Parameters
     ----------
@@ -391,7 +393,7 @@ def _compute_bp_include_knots(pitch, knots, poly_B, poly_B_z):
 
 
 def _compute_bp_if_given_pitch(
-    pitch, knots, poly_B, poly_B_z, compute_bp, *original, err=False
+    pitch, knots, poly_B, poly_B_z, compute_bounce_points, *original, err=False
 ):
     """Return the ingredients needed by the ``bounce_integral`` function.
 
@@ -406,7 +408,7 @@ def _compute_bp_if_given_pitch(
         Polynomial coefficients of the cubic spline of |B|.
     poly_B_z : ndarray
         Polynomial coefficients of the cubic spline of ∂|B|/∂_ζ.
-    compute_bp : callable
+    compute_bounce_points : callable
         Method to compute bounce points.
     original : tuple
         Whatever this method returned earlier.
@@ -420,7 +422,7 @@ def _compute_bp_if_given_pitch(
         return original
     else:
         pitch = jnp.atleast_1d(pitch)
-        return pitch, *compute_bp(pitch, knots, poly_B, poly_B_z)
+        return pitch, *compute_bounce_points(pitch, knots, poly_B, poly_B_z)
 
 
 def bounce_integral(
@@ -487,7 +489,7 @@ def bounce_integral(
     .. code-block:: python
 
         bi = bounce_integral(eq)
-        F = bi(name, pitch)
+        result = bi(name, pitch)
 
     """
     if rho is None:
@@ -496,17 +498,17 @@ def bounce_integral(
         alpha = jnp.linspace(0, (2 - eq.sym) * jnp.pi, 20)
     rho = jnp.atleast_1d(rho)
     alpha = jnp.atleast_1d(alpha)
-    knots = jnp.linspace(0, zeta_max, resolution)
+    zeta = jnp.linspace(0, zeta_max, resolution)
     L = rho.size
     M = alpha.size
     N = resolution - 1  # number of piecewise cubic polynomials per field line
 
-    grid, data = field_line_to_desc_coords(eq, rho, alpha, knots)
+    grid, data = field_line_to_desc_coords(eq, rho, alpha, zeta)
     data = eq.compute(["B^zeta", "|B|", "|B|_z|r,a"], grid=grid, data=data)
     B_sup_z = data["B^zeta"].reshape(M * L, resolution)
     B = data["|B|"].reshape(M * L, resolution)
     B_z_ra = data["|B|_z|r,a"].reshape(M * L, resolution)
-    poly_B = CubicHermiteSpline(knots, B, B_z_ra, axis=-1, check=False).c
+    poly_B = CubicHermiteSpline(zeta, B, B_z_ra, axis=-1, check=False).c
     poly_B = jnp.moveaxis(poly_B, 1, -1)
     poly_B_z = polyder(poly_B)
     assert poly_B.shape == (4, M * L, N)
@@ -525,23 +527,23 @@ def bounce_integral(
 
         Returns
         -------
-        F : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 3)
+        result : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 3)
             The last axis iterates through every bounce integral performed
             along that field line padded by nan.
 
         """
         pitch, bp1, bp2 = _compute_bp_if_given_pitch(
-            pitch, knots, poly_B, poly_B_z, _compute_bp, *original, err=True
+            pitch, zeta, poly_B, poly_B_z, _compute_bounce_points, *original, err=True
         )
         X = x * (bp2 - bp1)[..., jnp.newaxis] + bp2[..., jnp.newaxis]
         f = eq.compute(name, grid=grid, data=data)[name].reshape(M * L, resolution)
-        F = jnp.reshape(
-            _compute_quad(knots, pitch, w, X, f, B_sup_z, B, B_z_ra)
+        result = jnp.reshape(
+            _compute_quad(zeta, pitch, w, X, f, B_sup_z, B, B_z_ra)
             * jnp.pi
             / (bp2 - bp1),
             newshape=(pitch.size, M, L, N * NUM_ROOTS),
         )
-        return F
+        return result
 
     def direct(name, pitch=None):
         """Compute the bounce integral of the named quantity.
@@ -556,7 +558,7 @@ def bounce_integral(
 
         Returns
         -------
-        F : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 3)
+        result : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 3)
             The last axis iterates through every bounce integral performed
             along that field line padded by nan.
 
@@ -568,10 +570,10 @@ def bounce_integral(
             is_bp,
         ) = _compute_bp_if_given_pitch(
             pitch,
-            knots,
+            zeta,
             poly_B,
             poly_B_z,
-            _compute_bp_include_knots,
+            _compute_bounce_points_with_knots,
             *original,
             err=True,
         )
@@ -580,7 +582,7 @@ def bounce_integral(
             eq.compute(name, grid=grid, data=data)[name]
             / (data["B^zeta"] * jnp.sqrt(1 - pitch[:, jnp.newaxis] * data["|B|"]))
         ).reshape(pitch.size * M * L, resolution)
-        integrand = Akima1DInterpolator(knots, integrand, axis=-1, check=False).c
+        integrand = Akima1DInterpolator(zeta, integrand, axis=-1, check=False).c
         integrand = jnp.moveaxis(integrand, 1, -1)
         assert integrand.shape == (4, pitch.size * M * L, N)
         # For this algorithm, computing integrals via differences of primitives
@@ -602,22 +604,22 @@ def bounce_integral(
             ),
             axis=-1,
         )
-        F = jnp.reshape(
+        result = jnp.reshape(
             # Compute difference of ``sums`` between bounce points.
             v_mask_diff(v_mask_take(sums, is_intersect), is_bp)[..., : N * NUM_ROOTS],
             # Guaranteed to have at most N * NUM_ROOTS entries where is_bp is true.
             newshape=(pitch.size, M, L, N * NUM_ROOTS),
         )
-        return F
+        return result
 
     if method == "direct":
         original = _compute_bp_if_given_pitch(
-            pitch, knots, poly_B, poly_B_z, _compute_bp_include_knots, err=False
+            pitch, zeta, poly_B, poly_B_z, _compute_bounce_points_with_knots, err=False
         )
         return direct
     else:
         original = _compute_bp_if_given_pitch(
-            pitch, knots, poly_B, poly_B_z, _compute_bp, err=False
+            pitch, zeta, poly_B, poly_B_z, _compute_bounce_points, err=False
         )
         x, w = tanh_sinh_quadrature(resolution)
         x = jnp.arcsin(x) / jnp.pi - 0.5
@@ -690,7 +692,7 @@ def bounce_average(
     .. code-block:: python
 
         ba = bounce_average(eq)
-        G = ba(name, pitch)
+        result = ba(name, pitch)
 
     """
     bi = bounce_integral(eq, rho, alpha, zeta_max, pitch, resolution, method)
@@ -708,7 +710,7 @@ def bounce_average(
 
         Returns
         -------
-        G : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 3)
+        result : ndarray, shape(pitch, alpha, rho, (resolution - 1) * 3)
             The last axis iterates through every bounce average performed
             along that field line padded by nan.
 

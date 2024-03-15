@@ -26,14 +26,10 @@ print(f"Updating files in {pwd}")
 
 for fname in glob.glob(pwd + "/*.h5"):
     foutputname = fname.split(".")[0].split("/")[-1]
-    print(f"\nUpdating the output file {foutputname} \n")
+    print(f"Updating the output file {foutputname}")
     # load old output file
+    # this will automatically update it by calling _set_up
     eqfam = load(fname)
-    print(eqfam)
-    for i, eq in enumerate(eqfam):
-        print(eq)
-        # update the output file
-        eq._set_up()
     # save new output file
     eqfam.save(fname)
 
@@ -43,13 +39,9 @@ print(f"\nUpdating files in {pwd}")
 
 for fname in glob.glob(pwd + "/*.h5"):
     foutputname = fname.split(".")[0].split("/")[-1]
-    print(f"\nUpdating the output file {foutputname} \n")
+    print(f"Updating the output file {foutputname}")
     # load old output file
+    # this will automatically update it by calling _set_up
     eqfam = load(fname)
-    print(eqfam)
-    for i, eq in enumerate(eqfam):
-        print(eq)
-        # update the output file
-        eq._set_up()
     # save new output file
     eqfam.save(fname)

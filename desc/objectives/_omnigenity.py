@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer, errorif
+from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
@@ -122,10 +122,27 @@ class QuasisymmetryBoozer(_Objective):
         else:
             grid = self._grid
 
-        self._data_keys = ["|B|_mn"]
+        errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
+        errorif(
+            grid.num_rho != 1,
+            ValueError,
+            "QuasisymmetryBoozer grid must be on a single surface. "
+            "To target multiple surfaces, use multiple objectives.",
+        )
+        warnif(
+            grid.num_theta < 2 * eq.M,
+            RuntimeWarning,
+            "QuasisymmetryBoozer objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "QuasisymmetryBoozer objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
-        assert grid.sym is False
-        assert grid.num_rho == 1
+        self._data_keys = ["|B|_mn"]
 
         timer = Timer()
         if verbose > 0:
@@ -318,6 +335,19 @@ class QuasisymmetryTwoTerm(_Objective):
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
             grid = self._grid
+
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            RuntimeWarning,
+            "QuasisymmetryTwoTerm objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "QuasisymmetryTwoTerm objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_C"]
@@ -583,12 +613,12 @@ class Omnigenity(_Objective):
     eq_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for equilibrium data.
         Defaults to a linearly space grid on the rho=1 surface.
-        Must be a single flux suface without stellarator symmetry.
+        Must be a single flux surface without stellarator symmetry.
     field_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for omnigenous field data.
         The grid nodes are given in the usual (ρ,θ,ζ) coordinates, but θ is mapped to η
         and ζ is mapped to α. Defaults to a linearly space grid on the rho=1 surface.
-        Must be a single flux suface without stellarator symmetry.
+        Must be a single flux surface without stellarator symmetry.
     M_booz : int, optional
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
@@ -782,7 +812,7 @@ class Omnigenity(_Objective):
         if self._field_fixed:
             # precompute the field data since it is fixed during the optimization
             field_data = compute_fun(
-                "desc.magnetic_fields.OmnigenousField",
+                "desc.magnetic_fields._core.OmnigenousField",
                 self._field_data_keys,
                 params=self._field.params_dict,
                 transforms=self._constants["field_transforms"],
@@ -867,7 +897,7 @@ class Omnigenity(_Objective):
             field_data["zeta_B"] = booz[1, :]
         else:
             field_data = compute_fun(
-                "desc.magnetic_fields.OmnigenousField",
+                "desc.magnetic_fields._core.OmnigenousField",
                 self._field_data_keys,
                 params=field_params,
                 transforms=constants["field_transforms"],

@@ -359,7 +359,7 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
-    parameterization="desc.magnetic_fields.OmnigenousField",
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _eta(params, transforms, profiles, data, **kwargs):
     data["eta"] = transforms["h"].grid.nodes[:, 1]
@@ -378,7 +378,7 @@ def _eta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
-    parameterization="desc.magnetic_fields.OmnigenousField",
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
     data["alpha"] = transforms["h"].grid.nodes[:, 2]
@@ -397,7 +397,7 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["eta"],
-    parameterization="desc.magnetic_fields.OmnigenousField",
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _omni_angle(params, transforms, profiles, data, **kwargs):
     data["h"] = transforms["h"].transform(params["x_lmn"]) + 2 * data["eta"] + jnp.pi
@@ -417,7 +417,7 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["alpha", "h"],
     aliases=["zeta_B"],
-    parameterization="desc.magnetic_fields.OmnigenousField",
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
     helicity="helicity",
     iota="iota",
 )
@@ -455,7 +455,7 @@ def _omni_map(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["eta"],
-    parameterization="desc.magnetic_fields.OmnigenousField",
+    parameterization="desc.magnetic_fields._core.OmnigenousField",
 )
 def _B_omni(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_B, M_B)

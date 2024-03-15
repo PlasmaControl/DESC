@@ -1243,19 +1243,19 @@ def test_compute_everything():
             **elliptic_cross_section_with_torsion
         ),
         # magnetic fields
-        "desc.magnetic_fields.CurrentPotentialField": CurrentPotentialField(
+        "desc.magnetic_fields._current_potential.CurrentPotentialField": CurrentPotentialField(  # noqa:E501
             **elliptic_cross_section_with_torsion,
             potential=lambda theta, zeta, G: G * zeta / 2 / np.pi,
             potential_dtheta=lambda theta, zeta, G: np.zeros_like(theta),
             potential_dzeta=lambda theta, zeta, G: G * np.ones_like(theta) / 2 / np.pi,
             params={"G": 1e7},
         ),
-        "desc.magnetic_fields.FourierCurrentPotentialField": (
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField": (
             FourierCurrentPotentialField(
                 **elliptic_cross_section_with_torsion, I=0, G=1e7
             )
         ),
-        "desc.magnetic_fields.OmnigenousField": OmnigenousField(
+        "desc.magnetic_fields._core.OmnigenousField": OmnigenousField(
             L_B=0,
             M_B=4,
             L_x=0,
@@ -1285,7 +1285,7 @@ def test_compute_everything():
         ),
     }
     assert things.keys() == data_index.keys(), (
-        f"Missing the parameterizations {data_index.keys() - things.keys()}"
+        f"Missing the parameterization {data_index.keys() - things.keys()}"
         f" to test against master."
     )
     # use this low resolution grid for equilibria to reduce file size
@@ -1303,7 +1303,7 @@ def test_compute_everything():
         L=2,
         M=4,
         N=5,
-        NFP=things["desc.magnetic_fields.OmnigenousField"].NFP,
+        NFP=things["desc.magnetic_fields._core.OmnigenousField"].NFP,
         sym=False,
         axis=True,
     )
@@ -1313,7 +1313,7 @@ def test_compute_everything():
         "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
         "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
         "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
-        "desc.magnetic_fields.OmnigenousField": {"grid": fieldgrid},
+        "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }
 
     with open("tests/inputs/master_compute_data.pkl", "rb") as file:

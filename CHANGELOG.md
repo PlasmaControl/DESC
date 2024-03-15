@@ -21,6 +21,9 @@ trajectory exits these bounds, the RHS will be multiplied by an exponentially de
 function of the distance to the box to stop the trajectory and prevent tracing the field
 line out to infinity, which is both costly and unnecessary when making a Poincare plot,
 the principle purpose of the function.
+- Adds a new class ``DommaschkPotentialField`` which allows creation of magnetic fields based
+off of the vacuum potentials detailed in Representations for Vacuum Potentials in Stellarators
+https://doi.org/10.1016/0010-4655(86)90109-8.
 
 Speed Improvements
 

@@ -134,6 +134,7 @@ Magnetic Fields
     :recursive:
     :template: class.rst
 
+    desc.magnetic_fields.DommaschkPotentialField
     desc.magnetic_fields.OmnigenousField
     desc.magnetic_fields.PoloidalMagneticField
     desc.magnetic_fields.ScalarPotentialField

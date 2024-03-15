@@ -1064,28 +1064,32 @@ def test_single_coil_optimization():
 
     opt = Optimizer("fmintr")
     coil = FourierRZCoil()
-    # length
-    target = 60
-    obj = ObjectiveFunction(CoilLength(coil, target=target))
-    opt.optimize([coil], obj)
-    np.testing.assert_allclose(coil.compute("length")["length"], target)
-
-    # curvature
-    grid = LinearGrid(N=10)
-    target = 2 * coil.compute("curvature", grid=grid)["curvature"]
-    obj = ObjectiveFunction(CoilCurvature(coil, target=target, grid=grid))
-    opt.optimize([coil], obj, maxiter=300)
+    coil.change_resolution(N=1)
+    target_R = 9
+    # length and curvature
+    target_length = 2 * np.pi * target_R
+    target_curvature = 1 / target_R
+    grid = LinearGrid(N=2)
+    obj = ObjectiveFunction(
+        (
+            CoilLength(coil, target=target_length),
+            CoilCurvature(coil, target=target_curvature, grid=grid),
+        ),
+    )
+    opt.optimize([coil], obj, maxiter=200)
     np.testing.assert_allclose(
-        coil.compute("curvature", grid=grid)["curvature"], target, rtol=1e-3
+        coil.compute("length")["length"], target_length, rtol=1e-4
+    )
+    np.testing.assert_allclose(
+        coil.compute("curvature", grid=grid)["curvature"], target_curvature, rtol=1e-4
     )
 
     # torsion
-    coil.change_resolution(N=6)
     # initialize with some torsion
-    coil.Z_n = coil.Z_n.at[0:6].set(1)
-    target = 3
-    obj = ObjectiveFunction(CoilTorsion(coil, target=target, loss_function="max"))
-    opt.optimize([coil], obj, maxiter=300)
+    coil.Z_n = coil.Z_n.at[0].set(0.1)
+    target = 0
+    obj = ObjectiveFunction(CoilTorsion(coil, target=target))
+    opt.optimize([coil], obj, maxiter=200, ftol=0)
     np.testing.assert_allclose(
-        np.max(coil.compute("torsion", grid=grid)["torsion"]), target, rtol=1e-3
+        coil.compute("torsion", grid=grid)["torsion"], target, atol=1e-5
     )

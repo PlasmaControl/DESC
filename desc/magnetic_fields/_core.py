@@ -1490,10 +1490,7 @@ def field_line_integrate(
 class OmnigenousField(Optimizable, IOAble):
     """A magnetic field with perfect omnigenity (but is not necessarily analytic).
 
-    Notes
-    -----
-    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in
-    computational coordinates, not vector B in lab coordinates.
+    Uses parameterization from Dudt et. al. [1]_
 
     Parameters
     ----------
@@ -1522,6 +1519,15 @@ class OmnigenousField(Optimizable, IOAble):
         Omnigenity parameters describing h(ρ,η,α). The coefficients correspond to the
         modes in `x_basis`. If not supplied, `x_lmn` defaults to zero for all modes.
 
+    Notes
+    -----
+    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in
+    computational coordinates, not vector B in lab coordinates.
+
+    References
+    ----------
+    .. [1] Dudt, Daniel W., et al. "Magnetic fields with general omnigenity."
+       Journal of Plasma Physics (2024) doi:10.1017/S0022377824000151
     """
 
     _io_attrs_ = [

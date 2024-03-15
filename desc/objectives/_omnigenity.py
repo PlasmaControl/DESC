@@ -598,7 +598,7 @@ class Omnigenity(_Objective):
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-       Whether target and bounds should be normalized before comparing to computed
+        Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
     loss_function : {None, 'mean', 'min', 'max'}, optional
@@ -616,9 +616,10 @@ class Omnigenity(_Objective):
         Must be a single flux surface without stellarator symmetry.
     field_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for omnigenous field data.
-        The grid nodes are given in the usual (ρ,θ,ζ) coordinates, but θ is mapped to η
-        and ζ is mapped to α. Defaults to a linearly space grid on the rho=1 surface.
-        Must be a single flux surface without stellarator symmetry.
+        The grid nodes are given in the usual (ρ,θ,ζ) coordinates (with θ ∈ [0, 2π),
+        ζ ∈ [0, 2π/NFP)), but θ is mapped to η and ζ is mapped to α. Defaults to a
+        linearly space grid on the rho=1 surface. Must be a single flux surface without
+        stellarator symmetry.
     M_booz : int, optional
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional

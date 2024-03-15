@@ -275,6 +275,10 @@ class CoilLength(_CoilObjective):
         Name of the objective function.
     """
 
+    _scalar = False  # Not always a scalar, if a coilset is passed in
+    _units = "(m)"
+    _print_value_fmt = "Coil length: {:10.3e} "
+
     def __init__(
         self,
         coils,
@@ -400,6 +404,10 @@ class CoilCurvature(_CoilObjective):
         Name of the objective function.
     """
 
+    _scalar = False  # Not always a scalar, if a coilset is passed in
+    _units = "(m^-1)"
+    _print_value_fmt = "Coil curvature: {:10.3e} "
+
     def __init__(
         self,
         coil,
@@ -510,6 +518,10 @@ class CoilTorsion(_CoilObjective):
     name : str, optional
         Name of the objective function.
     """
+
+    _scalar = False  # Not always a scalar, if a coilset is passed in
+    _units = "(m^-1)"
+    _print_value_fmt = "Coil torsion: {:10.3e} "
 
     def __init__(
         self,

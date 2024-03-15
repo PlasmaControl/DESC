@@ -1081,8 +1081,8 @@ def test_single_coil_optimization():
 
     # torsion
     coil.change_resolution(N=6)
+    # initialize with some torsion
     coil.Z_n = coil.Z_n.at[0:6].set(1)
-    print(coil.compute("torsion", grid=grid)["torsion"])
     target = 3
     obj = ObjectiveFunction(CoilTorsion(coil, target=target, loss_function="max"))
     opt.optimize([coil], obj, maxiter=300)
